@@ -2414,3 +2414,232 @@ def test_measure_fine_correction_episodes_prints_the_librarys_refusal_and_return
 
     assert main(_fine_correction_arguments(inputs, output)) == 2
     assert measurement.CAL_FINE_EPISODE_OUT_OF_CORRIDOR in capsys.readouterr().err
+
+
+# --- measure-frame-contract and measure-skew --------------------------------------------------------
+
+TRANSPORT_PLUGIN_CONFIG = {
+    "/**": {
+        "ros__parameters": {
+            "mujoco_plugins": {
+                "mujoco_camera_plugin": {
+                    "type": "mujoco_ros2_control_plugins/CameraPlugin",
+                    "camera_publish_rate": 10.0,
+                    "head_camera": {
+                        "policy": "streaming",
+                        "frame_name": "head_camera_frame",
+                        "image_topic": "/head_camera/color",
+                        "info_topic": "/head_camera/camera_info",
+                    },
+                }
+            }
+        }
+    }
+}
+
+
+def _transport_inputs(tmp_path: Path, *, rate: float = 10.0) -> dict:
+    import yaml
+
+    document = json.loads(json.dumps(TRANSPORT_PLUGIN_CONFIG))
+    camera = document["/**"]["ros__parameters"]["mujoco_plugins"]["mujoco_camera_plugin"]
+    camera["camera_publish_rate"] = rate
+    plugin = tmp_path / "mujoco_plugins.yaml"
+    plugin.write_text(yaml.safe_dump(document, sort_keys=True), encoding="utf-8")
+    inputs = {"--plugin-config": plugin, "--output-dir": tmp_path / "measurement"}
+    for flag, name in (
+        ("--scene", "head_search_scene.xml"),
+        ("--geometry-seal", "head-camera-geometry.json"),
+        ("--controller-config", "ros2_controllers.yaml"),
+        ("--urdf", "so101.urdf"),
+        ("--frame-contract", "frame-contract.json"),
+    ):
+        path = tmp_path / name
+        path.write_text("{}", encoding="utf-8")
+        inputs[flag] = path
+    return inputs
+
+
+def test_measure_frame_contract_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
+    assert main(["measure-frame-contract"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+
+def test_measure_frame_contract_refuses_a_missing_input_and_an_existing_output(
+    tmp_path: Path, capsys
+) -> None:
+    import yaml
+
+    plugin = tmp_path / "mujoco_plugins.yaml"
+    output = tmp_path / "measurement"
+    arguments = [
+        "measure-frame-contract",
+        "--plugin-config",
+        str(plugin),
+        "--output-dir",
+        str(output),
+    ]
+    assert main(arguments) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    plugin.write_text(yaml.safe_dump(TRANSPORT_PLUGIN_CONFIG, sort_keys=True), encoding="utf-8")
+    output.mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_frame_contract_refuses_a_skew_document_that_is_not_there(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _transport_inputs(tmp_path)
+    rc = main(
+        [
+            "measure-frame-contract",
+            "--plugin-config",
+            str(inputs["--plugin-config"]),
+            "--output-dir",
+            str(inputs["--output-dir"]),
+            "--skew-measurements",
+            str(tmp_path / "absent.json"),
+        ]
+    )
+    assert rc == 2
+    assert "no such input" in capsys.readouterr().err
+
+
+def test_measure_frame_contract_writes_the_declaration_and_returns_zero(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _transport_inputs(tmp_path)
+    rc = main(
+        [
+            "measure-frame-contract",
+            "--plugin-config",
+            str(inputs["--plugin-config"]),
+            "--output-dir",
+            str(inputs["--output-dir"]),
+        ]
+    )
+
+    assert rc == 0
+    document = json.loads((inputs["--output-dir"] / "frame-contract.json").read_text("utf-8"))
+    assert document["frame_rate_hz"] == 10.0
+    assert document["measured_here"] is False
+    assert document["declared_by"]["sha256"]
+    assert "FRAME_CONTRACT_DECLARED" in capsys.readouterr().out
+
+
+def test_measure_frame_contract_prints_the_librarys_refusal_and_returns_two(
+    tmp_path: Path, capsys
+) -> None:
+    inputs = _transport_inputs(tmp_path, rate=5.0)
+    rc = main(
+        [
+            "measure-frame-contract",
+            "--plugin-config",
+            str(inputs["--plugin-config"]),
+            "--output-dir",
+            str(inputs["--output-dir"]),
+        ]
+    )
+
+    assert rc == 2
+    assert "CAL_FRAME_CONTRACT_CONTRADICTORY" in capsys.readouterr().err
+
+
+def test_measure_skew_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
+    assert main(["measure-skew"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+
+def test_measure_skew_refuses_a_missing_input_and_an_existing_output(tmp_path: Path, capsys) -> None:
+    arguments = ["measure-skew"]
+    for flag, name in (
+        ("--scene", "scene.xml"),
+        ("--geometry-seal", "seal.json"),
+        ("--plugin-config", "mujoco_plugins.yaml"),
+        ("--controller-config", "ros2_controllers.yaml"),
+        ("--urdf", "so101.urdf"),
+        ("--frame-contract", "frame-contract.json"),
+        ("--output-dir", "measurement"),
+    ):
+        arguments += [flag, str(tmp_path / name)]
+    assert main(arguments) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    for flag, name in (
+        ("--scene", "scene.xml"),
+        ("--geometry-seal", "seal.json"),
+        ("--plugin-config", "mujoco_plugins.yaml"),
+        ("--controller-config", "ros2_controllers.yaml"),
+        ("--urdf", "so101.urdf"),
+        ("--frame-contract", "frame-contract.json"),
+    ):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    (tmp_path / "measurement").mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_skew_hands_the_flight_to_the_library(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The CLI parses and validates; the capture itself belongs to the library module."""
+
+    from so101_demo.act import head_search_transport_measurement as measurement
+
+    inputs = _transport_inputs(tmp_path)
+    arguments = ["measure-skew"]
+    for flag, path in inputs.items():
+        arguments += [flag, str(path)]
+    arguments += ["--frames", "5", "--timeout-s", "3.5"]
+    seen = {}
+
+    def fake_write(**request):
+        seen.update(request)
+        return {
+            "measurement": {
+                "phase": "skew_measurements",
+                "sha256": "0" * 64,
+                "clock_resolution_s": 0.002,
+                "samples": [{}] * 5,
+                "observed": {"max_skew_s": 0.004, "inside_cap": True},
+                "capture": {"achieved_rate_hz": 9.98},
+            },
+            "receipt": {
+                "status": "MEASURED",
+                "sample_count": 5,
+                "measurement_sha256": "0" * 64,
+                "observed": {"max_skew_s": 0.004},
+            },
+        }
+
+    monkeypatch.setattr(measurement, "write_transport_measurements", fake_write)
+    rc = main(arguments)
+
+    assert rc == 0
+    assert seen["mode"] == "skew"
+    assert seen["frames"] == 5
+    assert seen["timeout_s"] == 3.5
+    assert seen["frame_contract_path"] == inputs["--frame-contract"]
+    assert seen["transport"] is not None
+    assert "SKEW_MEASURED" in capsys.readouterr().out
+
+
+def test_measure_skew_prints_the_librarys_refusal_and_returns_two(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from so101_demo.act import head_search_transport_measurement as measurement
+
+    inputs = _transport_inputs(tmp_path)
+    arguments = ["measure-skew"]
+    for flag, path in inputs.items():
+        arguments += [flag, str(path)]
+
+    def refuse(**request):
+        raise measurement.CalibrationInputsRefused(
+            measurement.CAL_SKEW_TRANSPORT_UNREACHABLE, "the transport never published a frame"
+        )
+
+    monkeypatch.setattr(measurement, "write_transport_measurements", refuse)
+
+    assert main(arguments) == 2
+    assert "CAL_SKEW_TRANSPORT_UNREACHABLE" in capsys.readouterr().err

@@ -1724,6 +1724,274 @@ def _verify_promoted_config(
     return 0
 
 
+# --- measure-frame-contract and measure-skew --------------------------------------------------------
+
+#: the frame contract declaration reads one production artefact; the skew measurement starts the running
+#: stack, so it declares the scene, the seal, the plugin and controller configurations, the URDF and the
+#: frame contract the capture is paced against
+FRAME_CONTRACT_FLAGS = (
+    ("plugin_config", "--plugin-config", True),
+    ("output_dir", "--output-dir", False),
+)
+SKEW_FLAGS = (
+    ("scene", "--scene", True),
+    ("geometry_seal", "--geometry-seal", True),
+    ("plugin_config", "--plugin-config", True),
+    ("controller_config", "--controller-config", True),
+    ("urdf", "--urdf", True),
+    ("frame_contract", "--frame-contract", True),
+    ("output_dir", "--output-dir", False),
+)
+
+
+def _frame_contract_parser() -> argparse.ArgumentParser:
+    """The `measure-frame-contract` entry: the production artefact that declares the head camera rate."""
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-frame-contract",
+        description=(
+            "Declare the 10 Hz head-search frame contract phase 7 expresses every cap in, citing the "
+            "production camera plugin configuration that declares the head camera stream and its rate, "
+            "into a brand-new output directory"
+        ),
+    )
+    parser.add_argument("--plugin-config", type=Path, help="the production MuJoCo plugin configuration")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the document owns")
+    parser.add_argument(
+        "--skew-measurements",
+        type=Path,
+        default=None,
+        help=(
+            "a measured skew document whose capture achieved rate is recorded beside the declaration; "
+            "the declared rate stays the value and the document says so"
+        ),
+    )
+    return parser
+
+
+def _validate_flight(parsed, flags) -> tuple[list[str], list[str]]:
+    """The declared inputs of one measurement flight: the flags it is missing and the paths that are not files."""
+
+    missing = [flag for name, flag, required in flags if required and getattr(parsed, name) is None]
+    if missing:
+        return missing, []
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag, required in flags
+        if required and not Path(getattr(parsed, name)).is_file()
+    ]
+    return [], absent
+
+
+def _measure_frame_contract(arguments: list[str]) -> int:
+    """Validate the declared production artefact, then hand the declaration to the library."""
+
+    parsed = _frame_contract_parser().parse_args(arguments)
+    missing, absent = _validate_flight(parsed, FRAME_CONTRACT_FLAGS)
+    if parsed.skew_measurements is not None and not parsed.skew_measurements.is_file():
+        absent.append(str(parsed.skew_measurements))
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_transport_measurement import write_transport_measurements
+
+    try:
+        result = write_transport_measurements(
+            mode="frame_contract",
+            plugin_config_path=parsed.plugin_config,
+            output_dir=parsed.output_dir,
+            measured_rate_from=parsed.skew_measurements,
+            command=_command_line(arguments, subcommand="measure-frame-contract"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    document, receipt = result["measurement"], result["receipt"]
+    print(
+        f"FRAME_CONTRACT_DECLARED {document['frame_rate_hz']} Hz "
+        f"declared_by={document['declared_by']['source']} "
+        f"sha256={document['declared_by']['sha256']} "
+        f"measured={document['measured_frame_rate_hz']} value_source={document['value_source']} "
+        f"output_dir={parsed.output_dir}"
+    )
+    return 0 if receipt["status"] == "DECLARED" else 2
+
+
+def _skew_parser() -> argparse.ArgumentParser:
+    """The `measure-skew` entry: the running MuJoCo head-camera transport, sampled for its stamps.
+
+    This flight starts the production MuJoCo simulation with the production camera plugin, the robot state
+    publisher and the joint-state broadcaster, subscribes to the image, CameraInfo and joint-state topics
+    exactly as `RosSearchAdapter` does, and records the paired stamps. It loads no detector and uses no
+    GPU, and it leaves no node behind.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-skew",
+        description=(
+            "Measure the image/CameraInfo/joint skew of the running head-camera transport, with the clock "
+            "resolution the capture itself observed, into a brand-new output directory"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the stack is started with")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--plugin-config", type=Path, help="the production MuJoCo plugin configuration")
+    parser.add_argument(
+        "--controller-config", type=Path, help="the production ros2_controllers.yaml the stack loads"
+    )
+    parser.add_argument("--urdf", type=Path, help="the ACT URDF template the stack's robot is built from")
+    parser.add_argument(
+        "--frame-contract", type=Path, help="the declaration the capture is paced against"
+    )
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the document owns")
+    parser.add_argument("--frames", type=int, default=300, help="the frames to pair (default 300)")
+    parser.add_argument(
+        "--timeout-s", type=float, default=180.0, help="the whole capture's budget (default 180 s)"
+    )
+    parser.add_argument(
+        "--startup-timeout-s",
+        type=float,
+        default=90.0,
+        help="the stack's readiness budget (default 90 s)",
+    )
+    parser.add_argument(
+        "--pair-window-s",
+        type=float,
+        default=0.15,
+        help="the causal pairing window of CameraInfo and joint state (default 0.15 s)",
+    )
+    return parser
+
+
+def _measure_skew(arguments: list[str]) -> int:
+    """Validate the declared stack inputs, start the running transport, and hand the flight to the library."""
+
+    parsed = _skew_parser().parse_args(arguments)
+    missing, absent = _validate_flight(parsed, SKEW_FLAGS)
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_transport_measurement import (
+        MujocoRosTransport,
+        RosTopicSkewCapture,
+        leave_nothing_running,
+        write_transport_measurements,
+    )
+
+    transport = MujocoRosTransport(
+        urdf_path=parsed.urdf,
+        scene_path=parsed.scene,
+        plugin_config_path=parsed.plugin_config,
+        controller_config_path=parsed.controller_config,
+        workspace=parsed.output_dir / "transport",
+        startup_timeout_s=parsed.startup_timeout_s,
+        logger=lambda message: print(f"transport: {message}", file=sys.stderr),
+    )
+    capture = RosTopicSkewCapture(
+        frames=parsed.frames,
+        timeout_s=parsed.timeout_s,
+        pair_window_s=parsed.pair_window_s,
+        startup_timeout_s=parsed.startup_timeout_s,
+    )
+    transport.capture = capture.capture
+    transport.frames = parsed.frames
+    try:
+        result = write_transport_measurements(
+            mode="skew",
+            plugin_config_path=parsed.plugin_config,
+            scene_path=parsed.scene,
+            controller_config_path=parsed.controller_config,
+            frame_contract_path=parsed.frame_contract,
+            transport=transport,
+            frames=parsed.frames,
+            timeout_s=parsed.timeout_s,
+            pair_window_s=parsed.pair_window_s,
+            output_dir=parsed.output_dir,
+            runtime_identity=_transport_runtime_identity(parsed),
+            command=_command_line(arguments, subcommand="measure-skew"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    finally:
+        leftovers = leave_nothing_running()
+        if leftovers:
+            print(
+                "TRANSPORT_LEFT_RUNNING: " + "; ".join(leftovers), file=sys.stderr
+            )
+    document = result["measurement"]
+    print(
+        f"SKEW_MEASURED samples={len(document['samples'])} "
+        f"max_skew_s={document['observed']['max_skew_s']} "
+        f"clock_resolution_s={document['clock_resolution_s']} "
+        f"achieved_rate_hz={document['capture'].get('achieved_rate_hz')} "
+        f"inside_cap={document['observed']['inside_cap']} "
+        f"output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _transport_runtime_identity(parsed) -> dict:
+    """What ran, for the document's provenance: never a measurement, and never allowed to fail the run."""
+
+    identity = {"ros_distro": os.environ.get("ROS_DISTRO"), "python": sys.executable}
+    try:
+        from ament_index_python.packages import get_package_prefix
+
+        identity["prefix_mujoco_ros2_control"] = get_package_prefix("mujoco_ros2_control")
+        identity["prefix_so101_demo_py"] = get_package_prefix("so101_demo_py")
+    except Exception as error:  # noqa: BLE001 - provenance is recorded, it never fails a measurement
+        identity["prefix_lookup_error"] = str(error)
+    for library in sorted(
+        Path(identity.get("prefix_mujoco_ros2_control", "/nonexistent")).glob(
+            "opt/mujoco_vendor/lib/libmujoco.so.*"
+        )
+    ):
+        identity["mujoco_c_library"] = str(library)
+    identity["stack_nodes"] = ["mujoco_ros2_control", "robot_state_publisher", "joint_state_broadcaster"]
+    identity["detector_loaded"] = False
+    identity["cuda_used"] = False
+    identity["motion_commanded"] = False
+    identity["frames_requested"] = parsed.frames
+    return identity
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     # `run` declares the inputs of the eight phases, so its entry is the run module's and not a stub
@@ -1766,6 +2034,12 @@ def main(argv: list[str] | None = None) -> int:
         return _measure_controller_submissions(arguments[1:])
     if arguments[:1] == ["measure-stop-proofs"]:
         return _measure_stop_proofs(arguments[1:])
+    # the running-topic frame contract declaration is the seventh measurement's declaration half; the
+    # skew measurement that paces itself against it is the eighth
+    if arguments[:1] == ["measure-frame-contract"]:
+        return _measure_frame_contract(arguments[1:])
+    if arguments[:1] == ["measure-skew"]:
+        return _measure_skew(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
