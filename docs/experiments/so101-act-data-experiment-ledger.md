@@ -49859,3 +49859,21 @@ live proof stays where it belongs, in the run.
 This is the third time in this stretch that a component looked reusable and turned out to be the live half of a pair
 (the palette, the broker's flags, and now this); each time, reading the signature settled it before any wiring was
 written.
+
+
+## CP-2633 — The QC is wired; the test still writes the key the schema refuses
+
+`endpoint_records_from_audit` now derives its poses through `pose_from_configuration` whenever the frozen inputs name a
+`scene_path` and an `endpoint_body`, and otherwise keeps using the rows' own pose keys - so both sources stay available
+and no existing test changes meaning. That is the wiring the red test needed.
+
+The red test itself, however, still appends rows carrying `cup_pose_world` **through the writer**, which the audit's
+closed schema refuses at 927 for the reason CP-2627 established: this repository has no seven-value pose key in a
+physics observation. So the test has to change shape rather than be nudged: it should append rows carrying **`model_qpos`**
+- a key the schema does admit, and the one the registered live sample writes - and pass `scene_path` and `endpoint_body`
+in its inputs so the QC takes the derivation path.
+
+That needs two things the test can obtain honestly: a scene the model can be loaded from (the worktree has the frozen
+`scene.xml`, and the suite already references a scene path elsewhere) and a configuration of the model's own length
+(`model.nq`), which the test can read from the model it loads. Neither is an invention - both are read - so the next
+round can write the test in its correct shape and expect it to go green, replacing the fabricated key with the real one.
