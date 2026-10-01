@@ -41356,3 +41356,26 @@ retention 裁决是否变化；⑤ 全程不改 `TASK_RETENTION_MARGIN`。
 
 **recorder 修复**：`grid/record_episodes7.py` 改为 `POINTS[c][dom]`（旧版对两个域都用 `operating_points["head"]`）。
 此前查过 A/B/C 的两域点**当前相同**，故这是卫生修复；一旦 C 的 task 点变为 0.35，它就成为**必须**的修复。
+
+## HS-266 — B/C 的训练数据与权重已上传到 HF 账号 `zjumty`（三个 private 仓库，已回下载校验）
+
+| 仓库 | 类型 | 内容 | 校验 |
+| --- | --- | --- | --- |
+| `zjumty/so101-yolo11n-seg-plastic-cup-head-only` | model | B `best.pt` + 模型卡 | **回下载 sha256 = `86c17b58c9c678ac…` 与记录一致 ✓** |
+| `zjumty/so101-yolo11n-seg-plastic-cup-head-task-mixed` | model | C `best.pt` + 模型卡 | **回下载 sha256 = `ef833f9c990292f5…` 与记录一致 ✓** |
+| `zjumty/so101-head-search-bc-training-data` | dataset | `head-dataset/`、`task-dataset/`、`candidate-b/`、`candidate-c/` | 抽查 `candidate-b/candidate-manifest.json`、`head-dataset/dataset-manifest.json`、`task-dataset/dataset-manifest.json` **哈希均与本地一致 ✓** |
+
+**上传前的必要动作**：`weights/*.pt` 是**符号链接**（142–168 字节），必须解引用到真实文件
+（`candidate-b/head-only/weights/best.pt` 等），否则上传的是链接文本；上传前逐个核对 sha256 与
+`candidate-manifest.json` 记录的 `best_weight_sha256` 一致才传。
+
+**模型卡内容**：基模与其 sha256、本权重 sha256、`plan_sha256`、训练契约快照、训练数据构成、两域静态 mAP 与 episode
+recall/F1，并**明确写出未被 promote**（`selection: null`、`promoted: false`、retention 0.01 门）与已知局限（四类条件标签不被像素支持、
+C 的 task 点 0.35 属回顾性选择、held-out 已被看过）。
+
+**过程中的一次失败（记录）**：后台串联上传里 `--exclude '*.pt'` 的调用**没有生效**（缺少 `--type dataset` 的那次、
+以及后台 shell 的转义），导致第一次只传上了 `head-dataset/` 与 `task-dataset/`，`candidate-b/`、`candidate-c/` 缺失；
+在前台重跑同样命令后补齐（提交 `d47d9ac5…`、`f8424da4…`）。**教训：`hf upload/download` 对 dataset 仓库必须显式 `--type dataset`，
+并且"✓ Uploaded"不能替代对仓库内容的实际列举与哈希核对。**
+
+**可见性**：三个仓库均为 **private**（保守默认，可一键转 public）。
