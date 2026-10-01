@@ -50323,3 +50323,35 @@ endpoint QC - which is precisely an independent recomputation over that sealed e
 its verdict belongs in whatever the verifier returns to the coordinator. It is an addition inside one method of one
 class, on the path the coordinator already takes for a verifying port, and it needs no new port, no new mode and no new
 document kind.
+
+
+## CP-2654 — The wiring recipe, exact: three lines and one constructor argument
+
+The verifier's tail, verbatim:
+
+```python
+        episode_bytes = _read_regular(episode_path)
+        if hashlib.sha256(episode_bytes).hexdigest() != document["episode_seal_sha256"]:
+            raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
+        episode = verify_episode_seal(episode_path)
+        if (episode["attempt_id"] != lease.attempt_id
+                or document["status"] != episode["status"]
+                or document["qc_passed"] is not episode["qc_passed"]):
+            raise ValueError("RESULT_EPISODE_MISMATCH")
+        _fsync_dir(workspace)
+        return {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest()}
+```
+
+So the endpoint QC joins after the episode has been verified and before the return: ask `endpoint_qc_document` for the
+verdict over the same episode, and carry it in the returned dict beside `status` and the result's digest. The design's
+distinction is preserved exactly - `status`/`qc_passed` remain the run's claim, the endpoint verdict is the fresh
+process's own recomputation, and a reader can tell them apart.
+
+One prerequisite, and it is the only one: `endpoint_qc_document` needs the frozen **inputs** (the two targets and the
+policy), which the verifier does not currently hold. So its constructor gains them - `worker_roots` plus an optional
+`endpoint_inputs` - and the milestone's own `run` passes what it already has. When `endpoint_inputs` is absent the
+verdict is simply omitted, so every existing construction and test keeps working, in the same spirit as the geometry's
+optional `source` field.
+
+That makes the change: one optional constructor argument, one attribute, three lines in `verify`, and no change to any
+existing branch - after which E2's wiring on the Worker consumer is done and its checkpoint has a real diff to review.
