@@ -50374,3 +50374,20 @@ whether anything in the diff is an invented value or a relaxed check the plan fo
 Per the review-period discipline this is not polled: the log's `EXIT=` marker on the last line is what will be read, and
 the verdict collected then. Meanwhile the E2 item stays in progress in the visible task list, because the checkpoint is
 part of what E2 requires.
+
+
+## CP-2656 — Removing the fabricated pose keys needs their dependent tests in the same edit
+
+The tidy-up was right in intent and wrong in shape: deleting `POSE_KEYS` and its loop broke **three** tests
+(3 failed, 4 passed), because those tests were written against the fabricated path when it existed - they wrote a
+`cup_pose_world` observation and expected the QC to read it. So the change is not a four-line deletion; it is a deletion
+plus the conversion of every dependent test to the pair the audit actually admits (`cup_position_world_m` +
+`cup_orientation_world_xyzw`, or a configuration through `pose_from_configuration`).
+
+Reverted from the backup: `POSE_KEYS` and its loop are back, and the QC suite is green again (7 passed). This is the
+same lesson as CP-2606's - a change that moves a closed surface has to move every producer and every consumer of that
+surface in one edit - and it is worth noting that the surface here is a test fixture's expectation rather than a schema,
+which makes it no less real.
+
+The next attempt does it in one pass: delete the fabricated path, convert the three tests to the pair, and run the QC
+suite before anything else.
