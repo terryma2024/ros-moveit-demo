@@ -50193,3 +50193,23 @@ three states keep "committed" separate from both.
 
 That is a much smaller change than the plan's wording suggests, and it is the third time in E2 that reading a module
 turned an apparent design question into a question of connecting two things that already exist.
+
+
+## CP-2648 — ValidRunFailure is declared and never raised, which is exactly the gap to fill
+
+The search is short and decisive: **`ValidRunFailure` appears once** - its own class definition at
+`application/qualification.py:93` - while **`InvalidRun` is raised in sixteen places**. So the qualification layer has
+the vocabulary for "a valid run failed" and **no producer for it**: every outcome that is not a success is currently
+expressed as an invalid run.
+
+That is the gap E2's wiring should fill, and it is the same shape as the rest of this work: not an invention, but making
+an existing category real. A run that begins with a full restart, holds the cup, stops for safety before its terminal
+phase, and whose endpoint poses nonetheless match the frozen targets - which is CP-2645's seventh negative - is precisely
+a **valid run that failed**, and today it would have to be reported as either a success or an invalid run, both of which
+are wrong.
+
+Two honest readings remain, and they are worth stating before any edit: either the category is **reserved for a purpose
+outside E2** (in which case the right output is a ledger note saying so, not a new producer), or E2 **is** its purpose.
+The design's three states and the amendment's rule that a report may judge endpoints but not quality both point at the
+second: the endpoint verdict is a claim about poses, and "the run was valid and failed" is the honest way to record a
+safety stop beside it.
