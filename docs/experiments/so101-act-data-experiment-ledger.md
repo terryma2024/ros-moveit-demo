@@ -55419,3 +55419,46 @@ audit would make the row look complete.
 The handover note carries the table of pieces, the attribute to set, and the two actions - `kill 3111252`, then re-run -
 so that the coordinator can act on it between other work. The objective's endpoint is unchanged: a real MuJoCo run, a
 recorded episode, an independent QC PASS and a real coordinator commit.
+
+
+## CP-2861 — Where a production episode actually runs, and therefore where the recording goes
+
+Six rounds of following the call chain instead of assuming it. The conclusion rewrites where the recording belongs, so it
+is recorded here rather than left in the narration.
+
+**The chain**, each link read rather than inferred:
+
+```
+parent process   runtime/parallel_worker_runtime.py:1212  consumer_argv -> (sys.executable, "-m",
+                                                             "so101_demo.cli.dynamic_cup_pick_place",
+                                                             "--backend", "mujoco", "--mode", "execute", "--execute", ...)
+child process    cli/dynamic_cup_pick_place.py:65         from ..ros.dynamic_runtime import run_dynamic_execute
+episode          ros/dynamic_runtime.py:323               run_dynamic_execute(options, *, event_emitter=..., _runtime=...)
+runtime seam     ros/dynamic_runtime.py:199               _dynamic_execute_runtime() -> the ROS adapters
+```
+
+**What the runtime seam exposes** - and this is what settles the question, because every fact the audit's thirteen names
+need is reachable inside this one process:
+
+| audit key | supplied by |
+|---|---|
+| `mujoco_truth`, `contacts` | `RosMujocoCupSceneObserver` (`ros/cup_scene_observer.py`), created as `truth_observer` at `dynamic_runtime.py:495` |
+| `planning_scene` | `RosTaskScenePort` (`control/planning_scene/task_scene.py`) |
+| `controller_state` | `RosJointStateReader`, `RosMoveGroupReachabilityPlanner` |
+| `phase`, the epochs | the shared state machine, `application/dynamic_execute.build_dynamic_actions` |
+| `physical_stamps`, `reference_*` | the sample (`source.get_one(...)`, `dynamic_runtime.py:487`) and the observers' receipts |
+
+**What this corrects.** The three call sites wired earlier (`point_initial_gate`, `_capture_fresh_rgb`, `capture_terminal`
+in `parallel_worker_runtime.py`) are in the **parent** process. They are correct code with green suites, but they see the
+parent's frames and boundaries, not the episode's physical facts - those live in the child. So either the recording moves
+into `run_dynamic_execute`, or the parent must consume evidence the child produced; the first is where the objects already
+are. It also means the `runtime_ports.physical_sources` handover asked for in the previous checkpoint is **not needed**: the
+recording can be self-contained inside the child, and the coordinator has nothing to hand over.
+
+**And it confirms from the other end what CP-2818 found:** none of the three layers - the worker runtime, the child CLI,
+or the dynamic runtime - mentions `episode`, `recorder` or `capture` at all. Production has never recorded an episode;
+the classes and the assembly exist, and the drive that would call them does not.
+
+**Next**: read `RosMujocoCupSceneObserver` and `RosDynamicMujocoExecution` for what they accept and what their receipts
+carry, then build `PointEpisode` inside `run_dynamic_execute` - using the same `_runtime` seam the module already documents
+as its test seam, so the regression test can inject a fake runtime and fail before the real one exists.
