@@ -46857,3 +46857,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   completion.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 9f2d7fdab; goal active.
+
+
+## CP-2480 — How the absent fields are represented, decided before writing them
+
+- Writing the twenty-two-field specification forces one explicit decision: `broker_image`, `yolo_weights`,
+  `yolo_weights_sha256` and the grounded pair have no source in a MuJoCo-only deployment. Two forms are available and
+  only one is honest: a **literal absence marker** in those slots, with the deployment's provenance verifier and the
+  run's own record stating that nothing there is claimed - or a path and a digest that look real but name nothing.
+- The marker is chosen, on the same rule this ledger has applied all along (never satisfy a check with something
+  invented): `broker_image` and the digest fields carry an explicit `ABSENT` marker, and the verifier this run uses
+  never reads them, so nothing downstream can mistake them for a real image or a real weights file. The run's record
+  already lists what is not claimed (CP-2479), which is what makes the marker legible to a later reader rather than
+  merely empty.
+- The one thing still to confirm while writing it is whether the composition merely carries those fields to the worker
+  or consults them itself; if it consults them, the honest answer is the run stopping with that refusal named, not a
+  marker shaped to slip past it.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 789593d98; goal active.
