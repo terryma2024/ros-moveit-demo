@@ -48702,3 +48702,20 @@ the verified manifest plus the directory it was verified against - which is also
 has, since it was handed the sealed episode's location to begin with.
 
 The revision-4 review is still running (`tail -1` empty, 238 lines and growing).
+
+
+## CP-2574 — The evaluator is pure, and its docstring is the amendment's point
+
+`evaluate_endpoint_pose(initial_pose, final_pose, initial_target, final_target, policy: dict) -> dict`
+(`endpoint_pose_acceptance.py:97`) describes itself as "the shared pure calculator: two poses against two frozen
+targets, answering only endpoint questions. **It performs no IO and touches no live port.**" And then states the
+amendment's whole point in one sentence: it "states what the endpoint rule can answer - the two poses match the two
+targets within the frozen thresholds - and **nothing about grasp quality, release or stability** ... a report may say
+'endpoint poses passed' and may not say 'grasp quality verified'".
+
+That gives E2 a clean division of labour, and it is the one the plan's interface implies: `endpoint_records_from_audit`
+does the **IO** - re-reading the sealed files a fresh process was pointed at - and this function does the **arithmetic**,
+so the QC's verdict is recomputed evidence plus a pure calculation, with no path by which a run's own claim about its
+endpoints can enter the answer.
+
+The revision-4 review is in progress (its log shows the reviewer taking up the project's own review workflow).
