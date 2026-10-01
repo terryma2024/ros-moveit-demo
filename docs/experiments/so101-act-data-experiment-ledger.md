@@ -49599,3 +49599,23 @@ runner already validates - which keeps the wiring on the same footing as K2's ca
 
 The runner also gains nothing it does not already have: `_event` is available, the audit is in hand, and the design's
 "pre-arm-gripper-dispatch" wording is satisfied by the position rather than by a new flag.
+
+
+## CP-2620 — E2's boundary sampling is satisfied by construction, with one honest caveat
+
+`begin`'s evidence has exactly `_BEGIN_KEYS` = `session_id`, `attempt_id`, `reset_epoch`, `release_epoch`,
+`full_restart` - five keys, **no pose**. So the initial endpoint cannot come from the begin call; it comes from a
+**pose row** written after it. And that is precisely what the QC already does: `endpoint_records_from_audit` takes
+`poses[0]` and `poses[-1]` from the sealed audit's physics stream (CP-2589/2590).
+
+Mapping that onto the design's wording: `begin` performs the reset and precedes every phase, so the first pose row is
+necessarily **after the real reset**, and `CLOSE` is the arm-gripper dispatch, so the first pose row is
+**pre-dispatch** as long as one exists before that phase - which the runner's first phase (SEARCH) is expected to
+produce, and which the design explicitly allows to precede collection ("formal Head search / neck dispatch may precede
+collection"). The final endpoint likewise comes from the last pose row, written before the run leaves through `_stop`
+or the loop's normal end.
+
+So E2's sampling wiring is not a new mechanism: the two boundaries are the first and last pose rows of the sealed audit,
+and the QC reads them there. The caveat worth recording honestly is the one the mapping exposes: if a run wrote no pose
+before CLOSE, `poses[0]` would be post-dispatch and the initial sample would not mean what the design says. That is a
+property to assert rather than to assume - and it is a test I can write against the fake port.
