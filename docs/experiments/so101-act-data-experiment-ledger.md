@@ -41959,3 +41959,35 @@ teleop 的 AF_UNIX 路径长度拒绝（`child_runtime.py` 拒绝 >103 字节，
 （畸形摘要自然无法匹配）。另有 1e-12 回退（HS-288）一并留待评审。
 
 **下一轮**：phase 2（几何与 required-domain 覆盖证明，含 coarse-step 候选生成与 per-target sweep-check receipts）。
+
+## HS-290 — phase 2（几何与 required-domain 覆盖证明）完成：18 个新测试 RED→GREEN，全套件零新增失败
+
+**提交** `ba1c7bb2`（两个新文件，+1025 行；`git status --porcelain` 为空）：
+
+- `src/so101_demo_py/src/act/head_search_calibration_geometry.py`（626 行）：`load_sealed_geometry`、**`generate_coarse_step_candidates`**、
+  `choose_coarse_step_candidate`、`prove_required_domain_coverage`、`sweep_check_receipts`、`require_sweep_check_receipts`、
+  `validate_head_search_calibration_geometry`；拒绝码复用/扩展为 `CAL_INPUT_UNSEALED`、**`CAL_DOMAIN_UNCOVERED`**、**`CAL_SWEEP_RECEIPT_MISSING`**；
+  **不发出任何运动**（只产出计划与 receipts，文档内记 `motion_commanded: false`）。
+- `src/so101_demo_py/test/test_act_head_search_calibration_geometry.py`（399 行，**18 用例**）。
+
+**消费的 seal 字段（实测值）**：`horizontal_fov_rad=1.3121067481206794`、`lock_valid_neck_rad=[-6.283175307179587, 6.283175307179587]`、
+`required_search_domain_rad=[-0.17559216195018026, 0.08047101126546086]`、`coarse_step_candidate_rad=0.3`、
+anchors `default/left/forward`（起始角 0.1/0.0/0.0，取 `in_frame_matrix[anchor]["neck_start_rad"]`）、`seal_sha256=7d963fdc…`（已复核 = `canonical_sha256(body 去掉 seal_sha256)`）。
+
+**真 seal 冒烟（无运动）**：候选 `0.65605 / 0.32803 / 0.3 / 0.16401 / 0.08201 / 0.04100`；选中 **`0.65605` = 半个 FOV**；
+3 anchors × 2 停点 = **6 个 receipts**，`coverage_complete=true`。**候选均 ≤ `horizontal_fov_rad/2`**（有测试钉住）。
+
+**验证链**：RED **18 failed, rc=1**（全部 ImportError）→ GREEN **18 passed, rc=0** → 回归
+`inputs+bounded_sweep+domain` **34 passed (16+6+12), rc=0** → 全套件 8 workers **175 failed / 5626 passed / 152 skipped / 86 errors, rc=1**，
+与基线（175/5608/152/86）**节点级 261 个 FAILED/ERROR `diff` 为空、+18 passed（正好新增）、0 新增失败/错误**。
+（本轮按 HS-289 的教训**使用基线 run-dir 布局**，避免了 103 字节 socket 路径混淆。）
+
+**它主动声明的推断（待评审）**：① anchors 的形状取"名字列表 + `in_frame_matrix[anchor]["neck_start_rad"]`"，同时兼容 `name→{neck_rad}`（沿用 `head_search_smoke` 的双读）；
+② `seal_sha256` 的口径是"去掉该字段后的 canonical sha256"；③ phase 2 复用 phase 1 的六名 seal 校验并链式重抛其拒绝；
+④ 输出字段命名为 **`chosen_candidate_rad`** 而非 `coarse_step_rad`（后者按计划 §3 属 phase 6，需 val sweep/lock 证据），并附
+`candidate_generation`、`selection_rule`、`motion_commanded:false`；⑤ 在"域落在安全区间 ± 半个 FOV 内"时覆盖与步长无关，故选中的通常是最大候选，
+`CAL_DOMAIN_UNCOVERED` 出现在域的触及范围超出安全区间半个 FOV 以上时；⑥ `require_sweep_check_receipts` 强制**双射**，
+畸形参数报普通 `ValueError`（不带码）。
+
+**下一轮**：phase 3（各候选感知 operating point 的 val 校准与冻结；把本 campaign 的先声明选点规则与录制语义搬进库模块）。
+证据 `scratch/hs290/` 保留；删除候选待授权。
