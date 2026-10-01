@@ -2633,6 +2633,9 @@ class ProductionBatchComposition:
         self.journal = None
         self._startup_stage = "constructor"
         try:
+            # the scope document the episodes of this run belong to (CP-2862). Optional: a composition told nothing about
+            # it produces workers whose specifications omit the field, which is the behaviour every existing caller has.
+            self._episode_scope_path = kwargs.get("episode_scope_path")
             self._initialize(spec, **kwargs)
         except BaseException as error:
             partial_cleanup = self._release_partial()
@@ -2865,6 +2868,8 @@ class ProductionBatchComposition:
             )
             worker_spec = {
                 "schema_version": 1,
+                **({} if self._episode_scope_path is None
+                   else {"episode_scope_path": str(self._episode_scope_path)}),
                 "batch_id": spec.request.batch_id,
                 "run_mode": spec.request.run_mode.value,
                 "config_path": str(spec.config_path),
