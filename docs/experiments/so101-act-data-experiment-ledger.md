@@ -41328,3 +41328,31 @@ task 域 truth: n=120  median=4502px  min=2607  max=5322      ← 两域已不�
 `head-toolchain-20260930T155706Z`（其 `install/setup.bash` mtime 变为 10-01 11:21），使该 root 的 `source-commit.txt`（`753561290a0c`）与内容不再一致。
 **影响评估**：`compare5` 的运行时间是 09:23–10:03，**早于** 11:21，所以那次运行的证据仍成立；但 `155706Z` **不可再**被引用为
 `753561290a0c` 的 root。后续一律使用 `20261001T032129Z`。这与 HS-196 是同一个坑（复制已替换的脚本），记在此处以免再犯。
+
+## HS-265 — task 域工作点选点规则（先声明后测量）与结果
+
+**规则（测量前写下，三个候选同一套程序）**：在候选 `min_confidence` 中，取 **calibration split 的 task 域 episode F1** 最高者；
+并列时取 recall 更高者；再并列取置信度更低者。**held-out 只作汇报，不参与选择**。
+按置信度过滤已录检出等价于用该置信度重跑 `predict`（NMS 先保留高分框，删掉低分框不会改变幸存者）。
+
+**结果**（`grid/select_task_point.py`，脚本已存证；`grid/task-point-selection.json` 为完整网格）：
+
+| 候选 | calibration 选中点 | calibration f1 / r / p / fp | held-out（仅汇报） |
+| --- | --- | --- | --- |
+| A | 0.25（不变） | 0.9500 / 0.9500 / 0.9500 / 3 | f1 1.0000, fp 0 |
+| B | 0.25（不变） | 0.9500 / 0.9500 / 0.9500 / 3 | f1 1.0000, fp 0 |
+| **C** | **0.35（新点）** | 0.9500 / 0.9500 / 0.9500 / 3 | f1 1.0000, fp 0 |
+
+即：**A、B 在 0.25 就已经干净，C 的 task 域在 0.25 不干净、到 0.35 才与 A/B 同档**——与 gpt-6.1-sol 的独立诊断一致（C 的 42 个
+FP 置信度 0.251–0.338，TP 从 0.955 起）。**这证实 C 的 f1 0.7407 是工作点产物**，不是模型在该域"看不见杯子"。
+
+**必须同时声明的两点**：
+1. held-out 已被本人与 reviewer 看过多轮，**它不再是未见数据**，所以上表 held-out 列只能算复核，不能算无偏验证；
+2. calibration 里三者仍各有 3 FP / 3 FN（两杯场景的匹配漏检与重复帧），这些**不随阈值消失**，未解决。
+
+**下一步（按序）**：① 等预热跑（compare6）结束并做等值校验；② 按新点重新冻结候选文档（`reselected/`，用 `--weights-dir`
+显式指向权重）；③ 用 recorder v7（已改为**按域取工作点**，见下一段）重录 `episodes7`；④ 重跑 gate，看静态 task mAP 与
+retention 裁决是否变化；⑤ 全程不改 `TASK_RETENTION_MARGIN`。
+
+**recorder 修复**：`grid/record_episodes7.py` 改为 `POINTS[c][dom]`（旧版对两个域都用 `operating_points["head"]`）。
+此前查过 A/B/C 的两域点**当前相同**，故这是卫生修复；一旦 C 的 task 点变为 0.35，它就成为**必须**的修复。
