@@ -48366,3 +48366,22 @@ F5's remaining work is therefore exact: mint the accepted reference at the grid 
 seal and the readback can be attempted against the same window.
 
 The re-review is still running (`tail -1` empty).
+
+
+## CP-2556 — Two results at once: the re-review finished, and the reference fixed the binding
+
+**The K2 re-review is done.** Its log's **last line** is `EXIT=0` - a real completion marker at the end, which is what
+CP-2546's corrected rule asks for - so the verdict is now readable and the next round's first action is to read it.
+
+**F5's fixture runs.** Adding the accepted reference at `round(1.0 + _GRID_S, 6)` - the instant `bind_row` demands -
+cleared `AUDIT_BINDING_REFERENCE_INVALID`, so the binding now succeeds and the test completes at `1 passed`. Two things
+are then visible in its own output, and they are the original F5 question in plain form:
+
+- `VERDICT False`: the window predicate still refuses this fixture's window when called directly on the writer;
+- `SEAL refused: AUDIT_FORMAL_COVERAGE_INCOMPLETE`: the seal's own refusal is the **coverage** check, not the window -
+  i.e. the six terms CP-2311 recorded (non-empty streams, an accepted reference with the expected raw or frame fields,
+  a `release` event, all `FORMAL_PHASES`, all `_PHYSICS_KINDS`, and an `observed` physics row carrying both nested
+  records) are not all present in a fixture that mints acquisitions, one physics row, one reference and a window.
+
+So F5's step two now has both halves named and separated: the **binding** is solved, and the remaining work is to give
+the fixture the coverage the seal requires - after which the seal can be attempted for real and the readback follows.
