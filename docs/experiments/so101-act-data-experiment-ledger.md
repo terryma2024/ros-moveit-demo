@@ -50391,3 +50391,22 @@ which makes it no less real.
 
 The next attempt does it in one pass: delete the fabricated path, convert the three tests to the pair, and run the QC
 suite before anything else.
+
+
+## CP-2657 — Restored from git, green, and the tidy-up is queued for one pass
+
+The hand-restore did not take (3 failed, 4 passed again), because reproducing the deleted lines by hand did not
+reproduce them exactly. The reliable restore was one command - `git checkout -- episode_qc.py` - since everything that
+belongs in that file is committed: the QC module, the endpoint reconstruction, the document and the geometry
+derivation. After it, the QC suite is green at **7 passed** and `git status --porcelain src` is back to the user's **35**
+entries, with nothing of mine uncommitted.
+
+So the state is clean and the tidy-up - deleting the fabricated pose keys and converting the three tests that depend on
+them to the pair the audit actually admits - is queued as a single edit for a later round, exactly as CP-2656 says it
+must be done.
+
+Two things worth keeping from this round: the first restore attempt failed because I reproduced lines from memory rather
+than from the repository, which is the same error in miniature as inventing a pose key; and `git checkout` is available
+precisely because every honest change in this stretch was committed before the next experiment began.
+
+E2's checkpoint continues in `dst:e2-checkpoint`; its verdict is read when the marker lands.
