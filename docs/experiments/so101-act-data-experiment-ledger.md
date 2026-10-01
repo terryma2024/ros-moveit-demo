@@ -50686,3 +50686,24 @@ That closes the investigation the reviewer's first correction opened: the missin
 site but a **sealing step that no layer performs**, and the place to add it is where a capture's summary becomes an
 episode's seal. The next round reads that higher level - the worker path that pairs a capture with a recorder - and adds
 the call with the audit manifest and the scope.
+
+
+## CP-2670 — Neither the capture nor the v2 seal is wired, so E2's remainder and E3 are the same work
+
+The class is `ContinuousEpisodeCapture` (`continuous_capture.py:44`), and a search across `src/` finds **no user of it
+anywhere** - not in the CLI, not in the worker path, not in the composition. Combined with CP-2667 (nothing calls
+`Recorder.finish`) and CP-2669 (the capture finishes itself but never the recorder), the picture is consistent and
+simple:
+
+- the **QC side** of E2 exists and is tested (the shared module, the document, the endpoint verdict, the negatives);
+- the **live episode path** that would produce the sealed episode those tests read **does not exist yet** - neither the
+  capture nor the recorder's v2 seal is connected to anything.
+
+That is why the reviewer's corrections 1, 2 and 4 all point at the same neighbourhood: a prescribed QC report, a
+seal-bound audit manifest, a verdict that affects terminal status, and the production/consumer wiring are facets of
+**building the live path**, not four independent fixes.
+
+And it means E2's remainder and E3 are the same work: E3 is "the frozen default production single FULL_RESTART episode",
+which is exactly the path that would drive a capture and a recorder to a seal. The dispatch's own staging put them in
+that order for this reason - E2 builds the pieces, E3 runs them - and the checkpoint has now shown that the pieces were
+built **around** a path that was never connected.
