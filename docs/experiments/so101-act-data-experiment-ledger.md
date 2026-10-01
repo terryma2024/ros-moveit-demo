@@ -53432,3 +53432,27 @@ supplied", not "is it the right phase", but "does the audit at the published loc
 The next step is to let that component say which stream it wanted - the same instrument as the last three rounds, one
 level deeper: catch and print, or call `verify_audit_manifest` on the published manifest directly and read the refusal it
 gives.
+
+
+## CP-2783 — The verifier wants the manifest one level above where the writer puts it
+
+The probe let the component speak, and it named its path:
+
+```
+E   FileNotFoundError: .../sealed/episode/audit-manifest.json
+```
+
+So `verify_audit_manifest` - called from inside `verify_episode_seal`'s block - resolves the manifest at
+**`<episode root>/audit-manifest.json`**, directly inside the episode directory, while the audit writer's `seal` returns
+**`<writer root>/audit/audit-manifest.json`** (`episode_audit.py:979`, read at CP-2772). The two conventions differ by
+exactly one directory, and this time the measurement says which side is being looked for rather than which side writes.
+
+So the chain has arrived at a real, small reconciliation: either the writer's root is meant to be the episode directory
+with its manifest at its own top level, or the verifier's resolution is meant to include the `audit/` segment. Everything
+else is settled. Which one to change is answerable by reading the two call sites together - `episode_audit.seal`'s target
+and `verify_audit_manifest`'s resolution - rather than by moving files again, and it is the same class of off-by-one that
+CP-2771 identified from the other direction.
+
+Round state: four production changes and the chain test uncommitted, two temporary prints (one in the store, two in the
+test) to remove with the fix, correction 2's test passing throughout, and correction 3's a single path convention from its
+assertion.
