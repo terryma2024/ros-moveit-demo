@@ -44531,3 +44531,19 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's two seal-side
 - blockers fixed and its diagnosis narrowed to the predicate's own locals; HEAD a66e6edac; goal active.
+
+## CP-2365 - The eleventh clause: the identity's two shapes, found by printing the predicate's own locals
+
+- CP-2364's inside-the-predicate probe paid off immediately: printing the locals showed initial 0 and epochs
+- [1, 1, 1] even on passing fixtures, so the declared-initial-epoch read added at CP-2363 was not working at all.
+- The cause, one grep away: the writer canonicalises self.identity straight into episode.json (files.episode, line
+- 718/727), so that file IS the identity document, while audit-manifest.json nests it under an identity key. The
+- read assumed the nested shape for both, so the episode's own file yielded nothing and initial fell to 0.
+- Both shapes are read now, and the predicate's own local is the proof that matters: the diagnostic pattern the
+- ledger recorded at CP-2244/CP-2247 (print the value, not a re-derivation of it) applies to booleans too.
+- Expected effect: the hybrid's pre-release rows (epoch 1, exempt once initial reads 1) and its post-release rows
+- (epoch 2, named by the runner's release event) should both satisfy the epoch clause, so the hybrid should seal.
+- GREEN 204 passed, wider gate recorded.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, and three seal-side blockers
+- fixed across CP-2362/CP-2363/CP-2365; HEAD f56af73d3; goal active.
