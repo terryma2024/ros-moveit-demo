@@ -653,3 +653,28 @@ def test_one_instant_becomes_one_row_audit_without_a_robot(tmp_path):
         contacts={}, physical_stamps={},
         reference={"time_s": 12.4, "source": "mujoco", "positions": [0.0, 0.0, 0.0]},
         controller_state={})) == set(PhysicalAuditAdapter.KEYS)
+
+
+def test_ending_an_episode_always_carries_the_window_that_seals_it():
+    """RED first: without a window the capture never seals, and that failure is silent until much later (CP-2831)."""
+    from so101_demo.act.episode_assembly import end_episode
+
+    class Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def finish(self, end_s, *, window, outcome):
+            self.calls.append((end_s, window, outcome))
+            return "sealed"
+
+    recorder = Recorder()
+    outcome = {"status": "FAILED", "reason": "search_failed", "task8_success": False, "stopped_confirmed": True}
+    assert end_episode(recorder, end_s=21.5, start_s=12.5, outcome=outcome) == "sealed"
+    end_s, window, passed = recorder.calls[0]
+    assert end_s == 21.5 and passed == outcome
+    assert set(window) == {"start_s", "end_s", "label_cutoff_s"}, window
+    assert window["start_s"] == 12.5 and window["end_s"] == 21.5 and window["label_cutoff_s"] == 21.5
+    # nothing to end is reported, not raised, and an end before the start is refused rather than sealed
+    assert end_episode(None, end_s=21.5, start_s=12.5, outcome=outcome) is None
+    with pytest.raises(ValueError, match="EPISODE_WINDOW_INVALID"):
+        end_episode(recorder, end_s=11.0, start_s=12.5, outcome=outcome)

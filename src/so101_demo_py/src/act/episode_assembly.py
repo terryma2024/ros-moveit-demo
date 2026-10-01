@@ -20,8 +20,9 @@ from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
-           "ProductionProducer", "assemble_episode_capture", "begin_episode", "episode_audit_pair",
-           "record_instant",
+           "ProductionProducer", "assemble_episode_capture", "begin_episode", "end_episode",
+           "episode_audit_pair",
+           "record_instant", "end_episode",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
 
@@ -506,3 +507,19 @@ def record_instant(recorder, observation, *, release_epoch: int, release_event: 
     if recorder is not None:
         recorder.set_physical_audit(audit)
     return audit
+
+
+def end_episode(recorder, *, end_s: float, start_s: float, outcome: dict):
+    """Seal the episode, always with the window that makes it seal.
+
+    `Recorder.finish` needs a window and does nothing without one - silently, which is why CP-2831 spent an attempt
+    chasing an episode root that held no seal. So the window is built here rather than left to each call site: it is
+    `[the instant the episode started at, this boundary]`, with the label cutoff at the same instant, and an end before
+    the start is refused rather than sealed as an empty window.
+    """
+    if float(end_s) < float(start_s):
+        raise ValueError(f"EPISODE_WINDOW_INVALID: end {end_s} precedes start {start_s}")
+    if recorder is None:
+        return None
+    return recorder.finish(float(end_s), window={"start_s": float(start_s), "end_s": float(end_s),
+                                                "label_cutoff_s": float(end_s)}, outcome=outcome)
