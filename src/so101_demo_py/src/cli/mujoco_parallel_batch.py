@@ -2413,73 +2413,9 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
-        # the episode recording seam (CP-2857): one sink both the capture port and the worker runtime can hold, and one
-        # callable that opens a point's episode from the frozen values. The extraction behind `physical_audit` is not
-        # written yet, and it says so by raising rather than by inventing the thirteen values an episode row needs -
-        # a fabricated one would make the endpoint verdict meaningless.
-        from so101_demo.act.collection_scope import build_collection_scope
-        from so101_demo.act.episode_assembly import (EpisodeSink, PhysicalAuditAdapter, PointEpisode,
-                                                     episode_audit_pair, physical_audit_from_captured,
-                                                     readback_from_frozen)
-        _episode_sink = EpisodeSink()
-        runtime_ports.episode_sink = _episode_sink
-
-        # the run's physical side owns the observers (world, scene, contacts, rgb, broker) and sets them here once it
-        # has built them, the same way the sink is handed over. Until it does, the extraction refuses by name rather
-        # than returning a half-filled audit - a partial physical audit is worse than a missing one, because the row
-        # would look complete.
-        def _extract_physical_evidence(_at_s):
-            sources = getattr(runtime_ports, "physical_sources", None)
-            if sources is None:
-                raise NotImplementedError(
-                    "EPISODE_EXTRACTION_PENDING: no physical sources yet - the run's observers are its own to build "
-                    "and hand over as runtime_ports.physical_sources")
-            readback = readback_from_frozen(
-                scene_model=scene_model, world=sources.world, scene=sources.scene, contacts=sources.contacts,
-                rgb=sources.rgb, broker=sources.broker, frozen=_frozen)
-            captured = readback.capture(session_id=spec.request.batch_id, attempt_id=lease.attempt_id,
-                                        reset_epoch=int(getattr(lease, "lease_generation", 1)))
-            return physical_audit_from_captured(
-                captured, reset_epoch=int(getattr(lease, "lease_generation", 1)), release_epoch=1,
-                release_event=False, release_time_s=0.0, phase="CLOSE", controller_state={})
-
-        def _open_episode(lease):
-            _key, point_root = runtime_ports._point_root(lease) if hasattr(runtime_ports, "_point_root") else (None, None)
-            if point_root is None:
-                return None
-            episode_root = point_root / "episode"
-            manifest, scope_path = episode_audit_pair(episode_root)
-            # the identity, the provenance and the frozen inputs are still to be filled from the run's own frozen
-            # set; until the extraction lands, opening an episode is only exercised by tests, and the audit it would
-            # need is refused at the sample rather than faked
-            # the scope's four values come from the frozen set itself: the mode and the inputs digest from the
-            # manifest's top level, the scene and the seed from the anchor scene role's identity - which is where the
-            # frozen set actually records them. A missing one is a refusal, not a default: a fabricated seed would
-            # make the episode's own provenance a lie.
-            _frozen = read_inputs_manifest(inputs)
-            _anchor = _frozen.get("roles", {}).get("anchor_scene", {}).get("identity", {})
-            for _name, _value in (("mode", _frozen.get("mode")), ("inputs_sha256", _frozen.get("inputs_sha256")),
-                                  ("scene_id", _anchor.get("scene_id")), ("seed", _anchor.get("seed"))):
-                if _value is None:
-                    raise RuntimeError(f"EPISODE_SCOPE_VALUE_MISSING: {_name}")
-            # the synchronizer's two knobs are the frozen set's own rgb_sync policy, not the defaults they happen to
-            # match: the sampler must refuse a frame for the reason the frozen set gives, not because a constant in a
-            # constructor agreed with it by coincidence
-            _rgb_sync = _frozen.get("runtime_policy", {}).get("rgb_sync", {})
-            for _name in ("max_age_s", "max_skew_s"):
-                if _rgb_sync.get(_name) is None:
-                    raise RuntimeError(f"EPISODE_SCOPE_VALUE_MISSING: rgb_sync.{_name}")
-            return PointEpisode(
-                identity={"session_id": spec.request.batch_id, "attempt_id": lease.attempt_id,
-                          "reset_epoch": int(getattr(lease, "lease_generation", 1)), "release_epoch": 1},
-                provenance={"source_commit": _frozen.get("source_commit"), "source_root": _frozen.get("source_root")},
-                inputs={"inputs_sha256": _frozen["inputs_sha256"]}, episode_root=episode_root,
-                scope=build_collection_scope(str(_frozen["mode"]), scene_id=str(_anchor["scene_id"]),
-                                             seed=int(_anchor["seed"]), inputs_sha256=str(_frozen["inputs_sha256"])),
-                scope_path=str(scope_path), physical_audit=PhysicalAuditAdapter(_extract_physical_evidence),
-                max_age_s=float(_rgb_sync["max_age_s"]), max_skew_s=float(_rgb_sync["max_skew_s"]))
-
-        runtime_kwargs["open_episode"] = _open_episode
+        # Recording happens in the episode's own process, not here (CP-2861): the physical facts the row audit
+        # needs live on the far side of a subprocess boundary, so an episode opened here would see the parent's
+        # frames and boundaries rather than the episode's. The parent still owns the result port and the commit.
         broker_proxy = _WorkerBrokerProxy(
             coordinator, document["broker_socket_path"], resources, config,
             broker_generation=document["broker_generation"],
