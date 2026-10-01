@@ -50873,3 +50873,36 @@ What the round establishes is narrower and solid: the 61 are **real** (they repr
 (the file and its subject are clean, and this stretch never touched `pick_place_search_port.py`), and the right next
 instrument is the same one that settled it here - read the actual error of one test at a time rather than reasoning from
 the family's name.
+
+
+## CP-2678 — The 61 split cleanly: the Task-8 family is pre-existing, one failure is mine
+
+Reading errors one at a time, as CP-2677 said to, gives a clean split.
+
+**The Task-8 family is a committed tests-versus-committed-source mismatch, and not mine:**
+
+```
+2 test_act_task8_search_boundary.py:151: AttributeError: 'PickPlaceSearchBoundary' object has no attribute 'search'
+2 test_act_task8_planning_scene_port.py:58: AttributeError: type object 'PickPlaceSearchBoundary' has no attribute 'planning_attached'
+2 test_act_task8_planning_scene_port.py:48: AttributeError: type object 'PickPlaceSearchBoundary' has no attribute 'planning_attached'
+1 test_act_task8_search_boundary.py:160: AttributeError: 'PickPlaceSearchBoundary' object has no attribute 'search'
+1 test_act_task8_search_boundary.py:139: AssertionError: Regex pattern did not match.
+1 test_act_task8_search_boundary.py:129: AttributeError: 'PickPlaceSearchBoundary' object has no attribute 'search'
+1 test_act_task8_search_boundary.py:117: AttributeError: 'PickPlaceSearchBoundary' object has no attribute 'search'
+```
+
+plus the `_gate_facts` one from CP-2677. Every one is the same shape: a test calls `search`, `planning_attached` or
+`_gate_facts` on `PickPlaceSearchBoundary` and the class does not have it - the class was refactored and these committed
+tests still expect the old surface. This stretch never touched that module, so these are the working tree's pre-existing
+condition.
+
+**One failure is mine, and it is small and specific:**
+
+```
+1 test_parallel_batch_cli.py:1013: AssertionError: assert '/tmp/so101-d...e-config.yaml' == '/runtime/runtime-config.yaml'
+```
+
+The line asserts `broker_spec["config_path"] == "/runtime/runtime-config.yaml"` - the **container-style** path - while my
+`_broker_command` work substituted **host** paths for the container-free route. So the substitution leaked into the
+**spec** where the container path is expected. That is a real bug of mine, in the route whose disposition the user has
+not yet decided (decision 1), and it is recorded as mine rather than folded into the family's pre-existing count.
