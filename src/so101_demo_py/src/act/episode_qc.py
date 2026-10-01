@@ -29,16 +29,44 @@ def read_verified_rows(root: Path, stream: str) -> list[dict]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+#: a pose is seven finite reals - xyz plus an xyzw quaternion - as E1's own `_pose` states (CP-2591). The
+#: registered live sample carries the model configuration; the MuJoCo summary rows carry only the cup's position,
+#: which is not a pose and is never promoted to one.
+POSE_KEYS = ("cup_pose_world", "cup_pose_m", "endpoint_pose", "cup_pose")
+POSITION_KEYS = ("cup_position_m", "cup_position_world_m")
+
+
+def observation_of(row) -> dict:
+    observation = row.get("observation")
+    return observation if isinstance(observation, dict) else {}
+
+
 def endpoint_poses(physics_rows) -> list[list[float]]:
-    """The cup poses the physics rows carry, in the order the rows were written."""
+    """The **poses** the physics rows carry, in the order the rows were written. Positions are not poses."""
 
     poses = []
     for row in physics_rows:
-        observation = row.get("observation")
-        pose = observation.get("cup_position_m") if isinstance(observation, dict) else None
-        if isinstance(pose, (list, tuple)) and len(pose) >= 3:
-            poses.append([float(value) for value in pose])
+        observation = observation_of(row)
+        for key in POSE_KEYS:
+            pose = observation.get(key)
+            if isinstance(pose, (list, tuple)) and len(pose) == 7:
+                poses.append([float(value) for value in pose])
+                break
     return poses
+
+
+def endpoint_positions(physics_rows) -> list[list[float]]:
+    """The cup positions the physics rows carry, kept only so their absence can be told from a pose's."""
+
+    positions = []
+    for row in physics_rows:
+        observation = observation_of(row)
+        for key in POSITION_KEYS:
+            position = observation.get(key)
+            if isinstance(position, (list, tuple)) and len(position) >= 3:
+                positions.append([float(value) for value in position])
+                break
+    return positions
 
 
 def endpoint_records_from_audit(audit, inputs) -> dict:
@@ -55,10 +83,19 @@ def endpoint_records_from_audit(audit, inputs) -> dict:
     listed = manifest.get("files") or {}
     if PHYSICS_STREAM not in listed:
         return {"status": "INCOMPLETE", "errors": ["ENDPOINT_PHYSICS_STREAM_ABSENT"], "passed": False}
-    poses = endpoint_poses(read_verified_rows(root, PHYSICS_STREAM))
+    rows = read_verified_rows(root, PHYSICS_STREAM)
+    poses = endpoint_poses(rows)
     if len(poses) < 2:
-        return {"status": "INCOMPLETE", "errors": ["ENDPOINT_POSES_ABSENT"], "passed": False, "poses": len(poses)}
+        # a source that publishes only the cup's position cannot answer an orientation question, so the absence is
+        # named for what it is instead of a point being passed off as a pose (CP-2590/2591)
+        positions = endpoint_positions(rows)
+        reason = "ENDPOINT_POSE_NOT_DERIVABLE" if positions else "ENDPOINT_POSES_ABSENT"
+        return {"status": "INCOMPLETE", "errors": [reason], "passed": False,
+                "poses": len(poses), "positions": len(positions)}
     verdict = evaluate_endpoint_pose(poses[0], poses[-1], list(inputs["initial_target"]),
                                      list(inputs["final_target"]), inputs["endpoint_policy"])
-    return {"status": verdict["status"], "errors": list(verdict["errors"]), "passed": verdict["passed"],
+    # E1 returns {"status": PASS|FAIL, "errors": {threshold: measured error}, "passed": {threshold: bool}} - both
+    # maps, not a list and not a single boolean - so they are passed through unchanged (CP-2593)
+    return {"status": verdict["status"], "errors": dict(verdict["errors"]), "passed": dict(verdict["passed"]),
+            "endpoint_passed": all(verdict["passed"].values()),
             "initial_pose": poses[0], "final_pose": poses[-1], "source": "verified-raw-audit"}
