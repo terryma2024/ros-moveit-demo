@@ -481,6 +481,8 @@ ANCHOR_APPROVAL_FILE = "src/so101_demo_py/config/act/task8-calibration-search-ca
 SCENE_FILE = "src/so101_demo_py/assets/mujoco/act/scene.xml"
 COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection_v3.yaml"
 RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+#: the design's section 5.1 document, which declares the two resource hard stops
+DEVELOPMENT_RUNTIME_FILE = "src/so101_demo_py/config/act/endpoint_pose_development_runtime_v1.yaml"
 RESET_RECIPE_FILE = "src/so101_demo_py/src/adapters/act/pick_place_reset.py"
 REFERENCE_FILE = "src/so101_demo_py/src/act/expert.py"
 
@@ -672,7 +674,8 @@ def anchor_identity_from_bytes(payload: bytes) -> dict:
             "measurement_experiment": document.get("measurement_experiment")}
 
 
-def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes) -> dict:
+def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes, *,
+                             development_runtime: Path | None = None) -> dict:
     """Derive the resource policy from the verified runtime and collection config bytes.
 
     Every value the plan requires must be present and of the right shape: a positive finite start
@@ -693,6 +696,15 @@ def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes) -> d
     guard = guard if isinstance(guard, dict) else {}
     hard = runtime.get("hard_stops")
     hard = hard if isinstance(hard, dict) else {}
+    if not hard and development_runtime is not None:
+        # the amendment's two stops live in the section 5.1 development runtime document, not in the batch runtime
+        # whose own contract is closed; reading them there keeps this file's digest untouched (CP-2434)
+        try:
+            amendment = yaml.safe_load(Path(development_runtime).read_text())
+        except (OSError, yaml.YAMLError):
+            amendment = None
+        section = amendment.get("hard_stops") if isinstance(amendment, dict) else None
+        hard = section if isinstance(section, dict) else {}
     recorder = collection.get("recorder")
     recorder = recorder if isinstance(recorder, dict) else {}
 
@@ -836,7 +848,9 @@ def _inspect_resource_thresholds(root: Path) -> dict:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "runtime/collection config absent",
                      None, candidates)
     try:
-        identity = resource_policy_identity(runtime.read_bytes(), collection.read_bytes())
+        identity = resource_policy_identity(
+            runtime.read_bytes(), collection.read_bytes(),
+            development_runtime=Path(root) / DEVELOPMENT_RUNTIME_FILE)
     except ValueError as error:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
                      f"no approved resource stop policy: {error}", None, candidates)

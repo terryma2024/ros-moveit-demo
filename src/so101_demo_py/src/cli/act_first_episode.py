@@ -121,6 +121,7 @@ def _run(arguments) -> int:
 
     from so101_demo.application.task_batch import BatchRequest
     from so101_demo.core.task_points import TaskPoint
+    from so101_demo.cli.mujoco_parallel_batch import SealedResultAdapter
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
 
@@ -133,14 +134,30 @@ def _run(arguments) -> int:
     point = TaskPoint(id=batch_id, label=arguments.mode, cup_position_world_m=tuple(target))
     request = BatchRequest(batch_id=batch_id, simulation_session_id=batch_id, points=(point,),
                            evidence_root=root.resolve())
+    # the production composition's first three pieces, the same objects the batch path builds around one point:
+    # the journal, the sealed-result adapter and the coordinator. The config is the frozen runtime document, parsed
+    # by the same loader the batch path uses, so nothing here re-reads a live file.
+    from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
+
+    config = load_runtime_config_any_schema(inputs / "runtime_config" / "parallel_batch_v3.yaml")
+    journal = CoordinatorJournal.create(root / "coordinator", batch_id)
+    worker_root = root / "worker-0"
+    worker_root.mkdir(parents=True, mode=0o700)
+    result_port = SealedResultAdapter({"worker-0": worker_root}, arguments.mode,
+                                      expected_final_cup_pose_world=tuple(target))
+    coordinator = BatchCoordinator(journal, request, config=config, result_port=result_port)
     log = root / "run.log"
     with log.open("w") as stream:
         stream.write(f"batch_id={batch_id}\nmode={arguments.mode}\nlifecycle={arguments.lifecycle}\n"
-                     f"final_cup_pose={target}\ninputs={inputs.resolve()}\n")
+                     f"final_cup_pose={target}\ninputs={inputs.resolve()}\n"
+                     f"config={type(config).__name__}\njournal={type(journal).__name__}\n"
+                     f"result_port={type(result_port).__name__}\ncoordinator={type(coordinator).__name__}\n")
         stream.flush()
         os.fsync(stream.fileno())
-    print(root)
-    return 0
+    print(f"act_first_episode: composed {type(journal).__name__}, {type(result_port).__name__} and "
+          f"{type(coordinator).__name__} for {batch_id}; the episode runner needs the approved MuJoCo stack and is "
+          f"not wired yet", file=sys.stderr)
+    return 2
 
 
 def main(argv=None) -> int:
