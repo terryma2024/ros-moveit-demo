@@ -48719,3 +48719,16 @@ so the QC's verdict is recomputed evidence plus a pure calculation, with no path
 endpoints can enter the answer.
 
 The revision-4 review is in progress (its log shows the reviewer taking up the project's own review workflow).
+
+
+## CP-2575 — The revision-4 review is alive, just long-running
+
+`collab: Wait` as the log's last line and only one new line in a whole round looked like a stall, so I checked rather
+than assumed: **twelve codex processes are alive**, the `k2-review` pane's last lines are still the running command (no
+shell prompt has returned), and the log contains **no `EXIT=`** at all. So the review is alive and working - it is the
+kind of run that spends a long time reading large files, which is what the previous two rounds' 6000-plus-line logs
+looked like from the inside.
+
+That is the third time in this stretch that a stalled-looking observation resolved into "still working" once the actual
+process state was read, and it is why the discipline is to check the session and the marker rather than infer from
+deltas: a log that grows slowly is not a log that has stopped.
