@@ -45630,3 +45630,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   as the rest: a failing command first, the smallest change at the right layer, then re-run.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's three
   commands verified end to end with zero blockers and a frozen input set. HEAD 4acaabec6; goal active.
+
+
+## CP-2418 — The single-episode run's route: delegate to the existing production composition
+
+- Read the existing execution entry: `run_cli(argv=None, *, provenance_verifier=verify_provenance,
+  composition_factory=ProductionBatchComposition) -> int` calls `prepare_batch(argv)` and then drives either an
+  adaptive runner or the batch runner. It is the **parallel-batch** path, and its production composition is exactly
+  where this ledger recorded item 5: `SealedResultAdapter(worker_roots, run_mode, expected_final_cup_pose_world=...)`
+  (2731) followed by `CoordinatorJournal.create(...)` and `BatchCoordinator(journal, request, config=...,
+  result_port=result_verifier)` (2742) - allocator, resource manifest, journal, coordinator and the sealed-result
+  adapter, all already wired to each other.
+- Therefore the first-episode `run` should **not** be a second implementation: the honest route the plan itself
+  describes ("the default production factory actually connects producer -> Writer -> seal -> the real verifier -> the
+  real Coordinator/aggregator") is to drive that same composition with a single-episode specification - the frozen
+  inputs, the requested mode and `FULL_RESTART` - so the live evidence comes from the production path rather than a
+  bespoke harness. That also keeps the milestone inside "reuse one approved MuJoCo stack".
+- What is still needed for that subcommand, in order: the spec's single-episode shape from the frozen inputs (worker
+  count and roots derived from `--root`), the mode and lifecycle mapped onto the existing request fields, and the
+  same rc discipline as the rest of this CLI - with the run's stdout, stderr, real rc, queue, resource, physics and
+  controller logs landing under the new LIVE_ROOT.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished and measured (inspect, prepare, preflight all rc=0). HEAD 04b1b9747; goal active.
