@@ -44965,3 +44965,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   `test_act_first_episode_inputs.py` with the prepare/preflight positives and the safety negatives.
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written. HEAD 84e089e92; goal active.
+
+
+## CP-2385 — The CLI that every remaining item hangs on does not exist yet
+
+- Read the production call chain as the plan requires (locate read-only, then record): `freeze_inputs` is defined at
+  `act/first_episode_inputs.py:377` and has **no caller anywhere under `src/`**, and `cli/act_first_episode.py` does
+  not exist. The only `prepare` in the tree is `cli/mujoco_parallel_batch.py:1135`'s `prepare_batch`, which is the
+  parallel-batch path, not the first-episode one.
+- Consequence, stated plainly: E1's remaining items (`prepare --runtime-policy`, `--mode`, `--endpoint-policy`, the
+  freezer's keyword-only `runtime_policy`) and **E3's entire command sequence** (`inspect`, `prepare`, `preflight`,
+  `run --lifecycle FULL_RESTART`, `qc`, `verify-commit`, `check-export`) all depend on creating that CLI - which the
+  plan lists as a file to create in E1 (`cli/act_first_episode.py` plus the installed configuration) and which item 5
+  of the original plan calls the installed entry point. The installed executable `ACT_FIRST_EPISODE` does not exist
+  yet either, so E3's `test -x "$ACT_FIRST_EPISODE"` guard would fail today.
+- So the next E1 pass is that module and its console entry: the subcommands over the existing freezer, the policy and
+  runtime loaders (both landed with their controls), and the input/CLI suite the plan names - with old calls keeping
+  their behaviour and no silent application of the new policy.
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written; E1's data, loaders and calculator are landed. HEAD fdd20055d; goal active.
