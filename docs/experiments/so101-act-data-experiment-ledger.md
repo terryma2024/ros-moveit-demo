@@ -45712,3 +45712,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   new LIVE_ROOT, the run mode from `--mode`, and a freshly minted batch id per run.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD d00c857e0; goal active.
+
+
+## CP-2422 — The one-worker specification's field list, and its two judgement points
+
+- `PreparedBatch` (`cli/mujoco_parallel_batch.py:177`) carries twenty-two fields: `start_guard`, `request` (one of
+  `BatchRequest`/`V2`/`V3`/`PoolRequest` or None), `adaptive_request`, `config`, `config_path`,
+  `adaptive_config_path`, `points_path`, `catalog`, `expected_final_cup_pose_world`, `catalog_sha256`,
+  `selection_sha256`, `broker_image`, `yolo_weights`, `yolo_weights_sha256`, `grounded_root`,
+  `grounded_manifest_sha256`, `provenance`, `manifest`, `provenance_inputs`, `provenance_verifier`,
+  `start_guard_evidence`, `resume`.
+- Three of them already have frozen counterparts in the input set this task produced: `points_path` and
+  `config_path` from `collection_config`/`runtime_config`, `grounded_root`/`grounded_manifest_sha256` from
+  `scene_model`/`anchor_scene`, and `yolo_weights`/`yolo_weights_sha256` from the sources role - with `catalog`,
+  `provenance`, `manifest` and their hashes read from the same frozen tree so the composition verifies what was
+  frozen rather than what is on disk now.
+- The two fields that need a judgement rather than a mapping are `broker_image` (no approved identity exists
+  anywhere, per CP-2421, so the honest treatment is a stated reason rather than an invented id) and
+  `expected_final_cup_pose_world`, which is precisely the quantity the amendment moves to the endpoint-pose policy:
+  the final target pose the acceptance rule compares against, not a quality expectation. Its source is therefore the
+  frozen endpoint policy plus the scenario's target pose, and E1's calculator is what consumes it.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD d767ef9fc; goal active.
