@@ -42555,3 +42555,137 @@ CLI 产出的运行目录只含 CLI 自己的 4 个文件（外加本轮的 `con
 `$EV/scratch/pytest-xdist8-hs301-{regression.49ffadce,final-demo.9cdedc1b,final-teleop.2ca81cc5,final.4e8f435c}`（门禁与无效调用式留证）、
 `$EV/reviews/phase6-7-measurement-inventory.md`（追加状态更新行）、工作树 `scratch/hs301/`（派生/运行/对照/
 收集探针脚本与日志）。以上**均为删除候选，未删除**；未触碰 HS-300 的 `sweep-timing-*` 两个目录（除只读引用）。
+
+## HS-302 — 清点项 #3 `deadband_candidates` 有源：真实闭环锁定试验（10 个候选、7 个零反转锁定），安装版 phase 6 算出 `center_deadband_px = 3.0`
+
+**提交** `5f58f87b3`（feat，4 文件 +2699/−6）+ `deb323d4e`（fix，2 文件 +78/−7）+ `2eb32528a`（fix，2 文件 +74/−3）；
+三个都是普通 `git commit`，钩子 rc=0。**后两个 fix 是真实运行逼出来的**（见下），这正是本轮最值钱的部分。
+
+**清点项 #3 的缺口闭合**：HS-299 清点里 `deadband_candidates`（phase 6，第 3 行）"缺 capability：闭环
+deadband 试跑"已由本轮生产者填上；其余 11 项仍无源、仍未伪造。
+
+**新增库模块** `src/so101_demo_py/src/act/head_search_deadband_measurement.py`（决策层零 MuJoCo／零检测器／零 CUDA）：
+
+| 层 | API | 作用 |
+| --- | --- | --- |
+| 边界 | `motion_corridor_rad` / `anchor_cup_start_m` | 走廊 = seal `required_search_domain_rad` ∩ `lock_valid_neck_rad`（不相交即 `CAL_TIMING_EVIDENCE_CONTRADICTORY`，缺一即 `_MISSING`）；每个 anchor 的杯子落点读 seal 的 `workspace_matrix.key_samples[].point_m` |
+| 声明 | `declared_candidates` / `detector_operating_point` | 候选列表去重、必须为正；检测器工作点取 frozen candidate 的 `operating_points.head`（缺即 `_MISSING`，绝不用 task 域那一份） |
+| 度量 | `lock_run` / `direction_reversals` / `candidate_record` | 锁定run = 连续帧满足"中心列在候选 deadband 内 ∧ 中心行在 `vertical_bounds_px` 内 ∧ 与前帧同一 track"（检测缺失/越界/换 track 各断一次，与控制器重置 `lock_count` 的三条路一一对应）；反转 = 命令位移序列的符号变化次数（单次过冲不算）；候选记录取各 anchor 的**最坏值**（最小 run、最大反转） |
+| 闭环 | `run_lock_trial`（plant/detector 注入，纯） | 生产 `HeadSearchController` 逐帧驱动：它给 target → plant 步进 seal 场景至 declare 的 settle 规则成立 → head 相机渲染 → 检测器找杯 → 该帧与 feedback 回喂控制器得下一个 target。**每个 target 与每个 settle 后的 yaw 都先查走廊**，越界即 `CAL_DEADBAND_OUT_OF_CORRIDOR`，**绝不 clamp** |
+| 复用 | `SettleTracker` / `classify_stop` / `verify_simulation_time_base` / `_declared_weights` / `controller_config` / `read_control_period` | 全部来自 timing 模块（HS-300）；其拒绝码原样复用，但按 phase 6 对 `CalibrationCoarseStepRefused` 的同一先例**换成本模块的异常类、码不变**（`_re_raised`） |
+| 文档 | `build_deadband_candidates` | `records` 恰为 phase 6 `_deadband_records` 读的三键；旁边留 `trials`（逐帧 h_err、centre、track、sim/monotonic 戳、逐停点、逐次修正、终态）、`frame_cadence`、`controller_thresholds`、`detector_operating_point`、自摘要 |
+| 执行 | `MujocoClosedLoopPlant`（唯一重层，函数内 import；renderer 首帧惰性开启）/ `ProductionHeadDetector` / `build_production_head_detector` | plant 按 seal 放 anchor 杯、按 sealed 周期命令 `neck_yaw_joint`、按 declare 的 settle 规则判定并持有到帧边界；检测器**就是生产那一个**（`HeadRgbDetector` over `YoloSegDetector`：同一 class 过滤、`min_bbox_aspect` 门、同一空间 track 关联、`allow_cpu_fallback=False`） |
+| 生产 | `write_head_search_deadband_measurement` | 先校验再跑：scene 摘要必须被 seal 钉住、控制周期必须整步、权重摘要必须等于所声明 production config 的 `weight_sha256`、frozen 的 `weight_sha256` 必须与之一致、声明 cuda 而无 CUDA 即 `CAL_TIMING_DEVICE_UNAVAILABLE`、每个 anchor 的 start 必须在走廊内；输出目录已存在即 `FileExistsError` |
+
+拒绝码（8 个，`REFUSAL_CODES` 有测试钉住）：本模块新增 `CAL_DEADBAND_CUP_LOST`（整场一次都没检出杯，或
+检测器自己抛错／解出多于一个杯——**不能把"没测到"写成 0**）与 `CAL_DEADBAND_OUT_OF_CORRIDOR`（目标或落点越界，
+含 `SEARCH_UNSAFE`），其余六个是 timing 模块的（`_MISSING`/`_CONTRADICTORY`/`_SWEEP_UNSETTLED`/`_STOP_UNSETTLED`/
+`_TIME_BASE_UNVERIFIED`/`_DEVICE_UNAVAILABLE`）。**区分**：杯在画面内但在候选 deadband 外 → 如实记 0，不拒绝。
+
+**CLI（薄解析/校验）**：安装入口新增子命令 `measure-deadband-candidates`（`--scene/--geometry-seal/
+--production-search-config/--controller-config/--frozen-candidate/--weights/--output-dir` 必填，`--candidate`
+可重复且至少一个；`--anchor` 可重复、`--device`、`--max-settle-s`、`--settle-consecutive-steps`、`--max-frames`）；
+缺输入/文件不存在/输出目录已存在/无 `--candidate` → `HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE` rc=2；
+库拒绝原样打印 rc=2；成功打印 `DEADBAND_CANDIDATES_MEASURED candidates=… anchors=… trials=… locking=… output_dir=…`。
+
+**(a) 一次真实运行（安装程序，rc=0，wall 6 s / 程序内 `elapsed_s` 4.513）**：
+
+```
+T=$EV/head-toolchain-20261001T092342Z          # 由 2eb32528a 构建，build rc=0，安装模块 sha256=源码 06c982a2…
+ros2 run so101_demo_py so101_head_search_calibration measure-deadband-candidates \
+  --scene $T/.../assets/mujoco/act/head_search_scene.xml --geometry-seal $EV/head-camera-probe11-…/head-camera-geometry.json \
+  --production-search-config $EV/…/deadband-20261001T092422Z.production-search-config-c2a.json \
+  --controller-config $T/.../config/mujoco/ros2_controllers.yaml \
+  --frozen-candidate $EV/…/reselected-c2a/frozen-c.json \
+  --weights $EV/…/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt \
+  --output-dir $EV/head-yolo-models-20260930T120608Z/deadband-20261001T092422Z \
+  --anchor left --device cuda --candidate 0.5 --candidate 1 --candidate 2 --candidate 3 --candidate 4 \
+  --candidate 6 --candidate 8 --candidate 12 --candidate 18 --candidate 24
+rc=0  DEADBAND_CANDIDATES_MEASURED candidates=10 anchors=left trials=10 locking=7 output_dir=…
+```
+
+* 输出：`$R/deadband-candidates.json`（file `567fc5ea…`，自摘要 `d78936a5…`）与 `$R/measurement-receipt.json`
+  （`46051512…`），`$R.console.log`、`$R.provenance.txt`（含运行前输入 sha256、派生配置 key 级 diff、运行后
+  `ps`/`nvidia-smi`）、派生配置 `$R.production-search-config-c2a.json`（`09fe03f7…`，与 HS-301 逐字节相同）。
+* **逐候选记录（`records`，phase 6 直接读的形状）**：`0.5/1.0/2.0 px → run=3, reversals=1`（不稳定）；
+  `3.0/4.0/6.0/8.0/12.0/18.0/24.0 px → run=3, reversals=0`（稳定）。10 个 trial 全部 `TARGET_LOCKED`，
+  100% 帧有检出（`head-cup-0`），**没有任何拒绝码触发**。
+* **机制（逐帧，OBSERVED）**：anchor `left`（`neck_start_rad=0.0`）首帧杯心 `h_err=+20.96 px`；
+  第一次修正 −0.06399 rad 后落到 −0.586 px；此后 0.5 px 候选仍要两次修正
+  （−0.2075 px、−0.0427 px → 1 次反转），2.0 px 候选一次反向修正（+0.00667 rad → 1 次反转），
+  **3.0 px 候选只修正一次**，−1.79/−2.09 px 的稳态偏差已落在 deadband 内 → 干净的三帧锁定、零反转；
+  24.0 px 候选连首帧的 20.96 px 都算"已居中"，颈部一次不动即锁定。帧节奏实测：首帧间隔 0.23 s（settle），
+  其后 0.1 s（帧周期下界），文档以 `frame_cadence` 明示"`frame_rate_hz` 是契约不是实测速率"。
+* 运行时身份（receipt）：`/usr/bin/python3` 3.12.3、MuJoCo 3.12.0、torch 2.13.0+cu130、
+  ultralytics 8.4.115、`cuda_available=true`、`NVIDIA GeForce RTX 5080`、驱动 595.84、
+  `so101_demo` 模块 = 该工具链根、`weights_sha256=2afd5506…`、`mujoco_neck_commanded=true`、
+  `ros_nodes_started=false`、`hardware_motion_commanded=false`、`transport_measured=false`、`tracking_measured=false`。
+
+**(b) 安装版 phase 6 接受该文档**（`$R/consumption-check.log`，`compute_center_deadband_px` 来自工具链安装树）：
+
+| 声明的 start | phase 6 结果 |
+| --- | --- |
+| 0 px（**主判**：零 jitter 是最弱的范围约束，不排除任何候选，故所选值只由实测锁定决定） | **`center_deadband_px = 3.0`** |
+| 1 / 2 / 3 px | 3.0 |
+| 4 / 6 / 8 / 12 / 18 px | 4.0 / 6.0 / 8.0 / 12.0 / 18.0 |
+
+`CAL_DEADBAND_OSCILLATES` 未触发；`3.0` 的 `safety_margin = {start 0.0, chosen−start 3.0, lock_frames 3}`，
+`input_evidence` 按 `path`+sha256 引用 camera 文档。**camera 文档是本次核查的 fixture**（其 `kind` 与
+`fixture_notice` 明写）：`horizontal_fov_rad`/`image_width_px` 取 seal 真值，`centre_jitter_rad` 由核查脚本
+按 `start_px × rad_per_px` 显式声明 —— 因为 `camera_measurements`（清点第 2 行，含 `centre_jitter_rad`）
+至今**没有生产者**，本轮不为它编造测量值。
+
+**(c) 真实运行逼出来的两个缺陷（两个 fix 提交，各自先 RED 后 GREEN）**：
+
+| # | 现象（真实运行，rc 与码） | 根因 | 回归测试（RED 现象） | 修复 |
+| --- | --- | --- | --- | --- |
+| 1 | 第 2 次尝试 rc=1：`AttributeError: 'MujocoClosedLoopPlant' object has no attribute 'mujoco'`（`_place_cup` 内） | `self.mujoco` 应为 `self._mujoco`；注入式假 plant 的用例根本走不到真 plant | `test_the_real_mujoco_plant_places_the_anchor_cup_and_settles`：**同一条 AttributeError 复现** | `deb323d4e`；顺带 renderer 改首帧惰性开启（只 settle/读几何的 plant 不需要 GL 上下文），`close()` 幂等，新增 `cup_position_m` 从步进后的模型回读杯位 |
+| 2 | 第 3 次尝试 rc=2：`CAL_DEADBAND_CUP_LOST: the detector failed … TypeError: HeadRgbDetector.detect() takes 2 positional arguments but 3 … were given` | 生产 `HeadRgbDetector.detect(rgb, *, session_id, attempt_id, source_stamp_ns, source_frame_id)` 收**裸图 + 关键字身份**并自建 `DetectionFrame`；包装器却按位置传了 frame/query | `test_the_deadband_detector_wrapper_drives_the_production_head_detector`：对**真** `HeadRgbDetector`（只 stub 其模型端口）调用包装器，**同一条 TypeError 复现**，并钉住 track 身份与 `reset()` | `2eb32528a` |
+
+另有一次**非缺陷**的失败值得记：第 1 次尝试 rc=1，`MODEL_UNAVAILABLE: weights are not a regular file` ——
+`weights-c2a/C.pt` 是**符号链接**，而生产 `verify_weights` 按设计拒绝 symlink（HS-300/301 的 harness 直接调
+`YOLO()` 所以从未碰到这条守卫）。本轮**不放宽守卫**，改为把 `--weights` 指向 symlink 解析后的真实文件
+（同一份字节、同一 sha256 `2afd5506…`），并在 provenance 里同时记下 symlink 及其指向。三次失败运行目录、
+console 与 provenance 全部保留（`deadband-20261001T091827Z`、`…T091845Z`、`…T092138Z`）。
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED（模块，文件不存在） | **rc=2，1 个 collection error**（`ImportError: cannot import name 'head_search_deadband_measurement'`），边界正确 |
+| RED（CLI，无新子命令） | **4 failed / 25 deselected, rc=1**（`invalid choice: 'measure-deadband-candidates'`） |
+| RED→GREEN（fix 1 / fix 2） | 各自 **1 failed**（原始 AttributeError / TypeError）→ 修复后 **65→66 passed, rc=0** |
+| GREEN（模块 + CLI） | **35 passed** 与 **31 passed**，rc=0；`ruff check` 干净（三个源文件） |
+| 回归（16 文件 = HS-288..301 各 phase + 新模块 + CLI，基线调用式，`-n 8`） | **426 passed / 0 failed / 0 error / 0 skipped, rc=0**（3.4 s；`$EV/scratch/pytest-xdist8-hs302-regression4.1264f19c`） |
+| 全量 `src/so101_demo_py/test`（基线调用式，`-n 8`，24 逻辑 CPU） | **tests 6389 / 175 failed / 5976 passed / 152 skipped / 86 errors, rc=1**；与基线 **节点集 diff 0 行**（261 节点，`…hs301-final-demo.9cdedc1b/nodes.txt`）、`passed +41`＝本轮新增（35+6）、失败集中 **0 个 head_search 节点**（`…hs302-final-demo.80a10670`） |
+| 无效调用式（留证，不计入） | 首个全量跑在**源码被改动中途**仍在运行，故 kill 并作废（`…hs302-final-demo.4378bac4`，未跑完）；随后两次 fix 前后各跑一次完整门禁（`…final-demo.0a86f1b8`：175/5975/152/86；`…final-demo.80a10670`：175/5976/152/86），三次的节点集**互 diff 0 行** |
+| 运行前后进程 | `ps`（mujoco/yolo/detector/ros2/pytest/so101 全空）、`nvidia-smi --query-compute-apps` 空、`ros2 node list` 空；`utilization.gpu=0%` |
+
+**本轮声明的主要推断（待评审）**：① **动作边界**取 seal 两个区间的**交集**（`required_search_domain_rad` ∩
+`lock_valid_neck_rad`），越界一律拒绝而**不 clamp**；据此只有 `left` anchor 可用 —— `default` 的
+`neck_start_rad=0.1` 本身就在 required 域外（域上限 0.08047），且 `default`/`forward` 的杯子只有转到
+0.2311/0.1882 rad 才居中，同样在域外（`preflight-corridor.log`，用渲染几何二分，逐位复现 seal 的
+`centre_angle_rad`）。**这一条最可能被评审推翻**：若认定 fine correction 可以离开 required 域（生产控制器
+本身不 clamp，只受 `max_fine_total_rad` 约束），则 `default`/`forward` 也应可测，本轮据此把结果限定在
+`left`。② `direction_reversals` 定义为**命令位移的符号变化**而非"测量误差变号"：后者在任何单次过冲上都会
+记 1 次，会把所有候选都判成振荡，与 phase 6"能停住"的意图相反；按本定义，3.0 px 起零反转、0.5–2.0 px 各
+一次反转，判据真正有区分度。③ 检测器工作点取 **frozen C2a 的 head 域**（`min_confidence` 0.25、
+tracker iou 0.5，recorder 的 per-domain 约定），而**控制器**的 `min_confidence` 0.4／`min_bbox_aspect` 0.5／
+`vertical_bounds_px` [110,370] 仍是 seal 生产配置自己的；测试用的 fixture 里 0.25/0.4 两组阈值给出**完全相同**
+的检测结果，故这一选择不构成 A/B 变量。④ 帧节奏：一帧**至多**每 `frame_period_s=0.1 s` 仿真时间一帧、
+且**不早于**目标 settle，实测首帧间隔 0.23 s、其后 0.1 s；`frame_rate_hz=10` 是它对照的**契约**而非实测速率，
+文档以 `frame_cadence` 与逐帧 `frame_interval_sim_s` 明示。⑤ harness **不做多目标跟踪**：`track_id` 由生产
+`HeadRgbDetector` 的空间 IoU 关联给出，`tracking_measured=false` 已声明；单杯场景里这不会放宽锁定判据
+（换 track 断 run 的逻辑仍有单测）。⑥ 未接 ROS 图像话题／无跨进程传输，`transport_measured=false`；
+`controller_submissions`、`stationary_measurements` 等仍归各自缺口的清点行。⑦ 检测器权重用**真实文件**而非
+`weights-c2a/C.pt` symlink（生产守卫拒绝 symlink），frozen 与派生配置的 `weight_sha256` 与它一致。⑧ 输出目录
+按任务原文取 `$CAMPAIGN/deadband-<UTC>/`，派生配置与 provenance/console 用 `$RUN.` 前缀同级存放，使 CLI 产出
+的目录只含 CLI 自己的 2 个文件（外加消费核查的 2 个文件）。
+
+**本轮证据与生命周期**：保留 `head-toolchain-20261001T091733Z`（由 `5f58f87b3` 构建，被取代）、
+`head-toolchain-20261001T092059Z`（由 `deb323d4e` 构建，被取代）、`head-toolchain-20261001T092342Z`（**最终**，
+由 `2eb32528a` 构建）、`$CAMPAIGN/deadband-20261001T092422Z{,.production-search-config-c2a.json,.console.log,.provenance.txt}`
+（**最终测量**）、三次失败运行 `$CAMPAIGN/deadband-{20261001T091827Z,20261001T091845Z,20261001T092138Z}{,.production-search-config-c2a.json,.console.log,.provenance.txt}`（留证，未删）、
+`$EV/scratch/pytest-xdist8-hs302-{regression,regression2,regression3,regression4,final-demo.4378bac4,final-demo.0a86f1b8,final-demo.80a10670}*`（门禁与作废调用式）、
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加状态更新节）、工作树 `scratch/hs302/`（探针、派生/运行/消费
+脚本、RED/GREEN/回归日志、pyshim、tmp）。以上**均为删除候选，未删除**；未触碰 HS-300/301 的产物（除只读引用）。
