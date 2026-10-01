@@ -49877,3 +49877,20 @@ That needs two things the test can obtain honestly: a scene the model can be loa
 `scene.xml`, and the suite already references a scene path elsewhere) and a configuration of the model's own length
 (`model.nq`), which the test can read from the model it loads. Neither is an invention - both are read - so the next
 round can write the test in its correct shape and expect it to go green, replacing the fabricated key with the real one.
+
+
+## CP-2634 — The scene the test should use, with the repository's own idiom
+
+`find` and a grep together settle two of the three things the corrected test needs:
+
+- **`src/so101_demo_py/assets/mujoco/act/scene.xml`** exists - the act variant of the scene - and
+  **`test_act_calibration_motion.py:13` already passes exactly `package / 'assets/mujoco/act/scene.xml'`** as a
+  `scene_path`, so the test can use the same idiom rather than inventing a path or reaching outside the package;
+- (the other two copies, `assets/mujoco/scene.xml` and `panda_mujoco_demo/mjcf/scene.xml`, are different scenes and not
+  what an SO-101 act test should load.)
+
+What remains is the **body name** the derivation should ask for, which is the one thing still unknown - and it is
+discoverable rather than guessable: the test loads this model anyway, so it can list the body names the model declares
+and pick the one the endpoint pose is about. That keeps the test honest even about the name: it asserts against a body
+the model actually has, instead of a string I hoped was right - the mistake that produced the fabricated
+`cup_pose_world` key in the first place.
