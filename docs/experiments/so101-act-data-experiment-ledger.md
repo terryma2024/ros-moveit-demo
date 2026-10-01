@@ -54757,3 +54757,21 @@ then remove both.
 The print is reverted so the tree is green (`7 passed` in the chain file and the unit file together), nothing of mine is
 uncommitted, and the next round does the two-part step in one go rather than leaving instrumentation in production code
 between rounds.
+
+
+## CP-2832 — The row's attempt_id comes from the physical audit, not from start
+
+`continuous_capture.py` mentions `attempt_id` in only three places: the attribute's initialisation (`:94`), `start`'s
+validation and assignment (`:112-124`), and the `sample_with_audit(session_id, attempt_id, at_s)` call (`:396`). So the
+capture's own coordinate is never what a row carries - the row's `attempt_id` comes from the **physical audit**, the
+`physical_audit(...)` callable's return, which the recorder then checks against its own.
+
+Which is exactly why E3's test failed and the chain test does not: the chain helper's `recorder_physical_audit(at_s)` is
+the recorder suite's `audit()` helper, and that **hardcodes `session_id="session-1"` and `attempt_id="attempt-1"`** (its
+docstring even says so). With a fixture lease that happens to use `attempt-1`, the two agree and everything passes; with a
+coordinator-granted lease of `scene-1-lease-1`, the physical audit keeps saying `attempt-1` and the recorder refuses.
+
+So the fix is one wrapper, not a design change: E3's test needs a `physical_audit` that reports the lease's identifiers -
+`recorder_physical_audit` with the identity overridden - and nothing in production has to move. Worth recording as the
+fourth time this stretch that a fixture's hardcoded coordinate hid a real dependency until a caller with different values
+drove the same path.
