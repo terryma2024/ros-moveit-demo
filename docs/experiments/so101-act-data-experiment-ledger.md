@@ -47934,3 +47934,22 @@ That makes the builder's substitution:
 with the frozen flags otherwise taken as they are - the detector identity and its digest untouched, which is what the
 broker verifies. One small edit, then a re-run, and the broker should either come up healthy or name the next thing it
 needs.
+
+
+## CP-2534 — The broker's frozen argument VALUES are a closed set, and that is the one place to touch
+
+The broker's own output names it: `error: argument --endpoint: invalid choice: '<the run's host path>'`, with a usage
+line showing `--endpoint` constrained to a literal set that includes `/runtime/perception.sock` and `--runtime-spec`
+constrained to `{/runtime/broker-spec.json}`. The parser is built from `broker_argv()`, whose comment says exactly why:
+"Exact frozen argument values prevent accidental fallback or threshold drift."
+
+So the container-free route's last obstacle is not a path substitution at all - it is that the broker **requires** the
+container's locations as literals, which a host run cannot supply. That is precisely the place CP-2515 anticipated the
+approved work might have to touch, and its scope is now exact and small: the frozen choice sets exist to stop accidental
+fallback and drift, so the honest change admits this deployment's locations **explicitly** (the run's own endpoint,
+input root, ready receipt and spec path, all derived from the composition) while keeping the *substantive* frozen values
+- the detector identity and its digest - exactly as they are. That is the same pattern as the approval widened at
+CP-2406: extend the closed set deliberately, with the reason recorded, rather than weaken the check.
+
+Everything else in the chain is proven: the composition builds, the drive runs, the supervisor starts the command, and
+the broker's only objection is these literals.
