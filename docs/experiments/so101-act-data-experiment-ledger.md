@@ -48859,3 +48859,24 @@ conditional, and declare `R.received_at_s`'s type, domain and nullability.
 
 Both reviews agree on the substance, both are reproducible, and the remaining work is editorial rather than
 architectural - which is the honest reading of a FAIL whose three items are all internal contradictions.
+
+
+## CP-2583 — Revision 6 fixes the artefacts, not the prose
+
+This time the three corrections were applied where a reader implements them:
+
+- **every one of the five fixed-key rows** now carries `clock_source` and `uncertainty_s`, and the instant fields of S,
+  A and Q are declared **float or null**, so the "instant iff `clock_source` non-null" rule lives in the table rather
+  than beside it;
+- **section 1's own sentence** is now conditional - "only for records whose `parent` is non-null; the source record's
+  `parent` is `null` and is exempt, having nothing to be ordered after";
+- **`R.received_at_s`** is declared as "**float, domain `>= 0`, non-nullable**", with `clock_source` ∈
+  `{published_step, sync_pair, null}` and `uncertainty_s` float ≥ 0 **or null**;
+- and revision 6's own section 6 answers the independent run's wider correction with facts: the manifest keeps
+  `kind: ACT_EPISODE_AUDIT` and `schema_version: 2` unchanged (its six keys and types restated from the builder), the
+  new records carry `record_schema_version: 1` in their own namespace, and the event envelope is unchanged with its keys
+  and types restated.
+
+Sent for review (`reviews/k2-protocol-recheck6.log`). Note for the record: the earlier attempt to patch section 1
+aborted on a failed assertion because my quoted text did not match the file's whitespace - which is exactly what those
+assertions are for, and why nothing was half-written.
