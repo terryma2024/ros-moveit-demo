@@ -54145,3 +54145,25 @@ says which of them a passing document already satisfies - a negative can only fl
 satisfying value).
 
 With that, correction 5 is one fixture, ten small negatives and three test corrections, and every piece of it is located.
+
+
+## CP-2810 — The base class is in the same file, and its evidence API differs from the override
+
+```
+test_act_release_boundary.py:26    class FakePort:
+test_act_release_boundary.py:420   class AlignedPort(FakePort):
+test_act_task8.py:20               class FakePort:            # the name again, in the family with the pre-existing failures
+```
+
+So the fixture's base is in the same file as the tests that use it, and `AlignedPort` is the thin wrapper CP-2809 read.
+The detail that matters for writing the negatives: `AlignedPort` overrides `evidence(self, phase, request)`, while a search
+for that exact signature in the file returns only the override - so `FakePort`'s own evidence API has a different shape
+(one argument, or a different name), and the negatives must call whichever the base actually offers.
+
+That is the last unknown before the ten negatives can be written, and it is one read of `FakePort`'s own methods. The rest
+is settled: the phases and predicates (CP-2806), the codes and their current coverage (CP-2807, where
+`BILATERAL_CONTACT_MISSING` has none at all), the file to write in, and the wrapper pattern to follow.
+
+Two things worth keeping in view while writing them: each negative flips exactly one field of a passing document, and
+`test_act_task8.py` must not be touched - its same-named `FakePort` belongs to the family with the pre-existing
+`AttributeError` failures, which is a separate line of work the coordinator has been offered.
