@@ -54030,3 +54030,47 @@ Also worth recording: the blocker this round found is a property of the composit
 composition derives its evidence root from its spec, and a second composition from the same spec collides
 (`ResourceAllocationError: DIRECTORY_CONFLICT`). That is a real fact about the production class, and it is why the two
 directions of this contract need two specs rather than one.
+
+
+## CP-2806 — Correction 5's subject: three phase groups, ten predicates, one error code each way
+
+`pick_place_runner.py:217` onwards builds each phase's safety requirement as a conjunction:
+
+```python
+        if phase == "CLOSE" and evidence["bilateral_contact"] is not True:
+            raise PickPlaceError("BILATERAL_CONTACT_MISSING")                       # 1 predicate
+
+        if phase in ("MICRO_LIFT", "TRANSPORT", "ALIGN") and not (
+            evidence["holding_state"] == "HOLDING"
+            and evidence["bilateral_contact"] is True
+            and evidence["micro_lift_confirmed"] is True
+            and evidence["cup_off_table"] is True
+            and evidence["cup_supported"] is False
+        ):
+            raise PickPlaceError("HOLD_NOT_CONFIRMED")                              # 5 predicates
+
+        if phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK") and not (
+            evidence["holding_state"] == "EMPTY"
+            and evidence["released"] is True
+            and evidence["cup_supported"] is True
+            and evidence["no_fingertip_contact"] is True
+        ):
+            raise PickPlaceError("HOLD_NOT_CONFIRMED" if ...)                       # 4 predicates
+```
+
+So "the predicate-by-predicate safety checklist" is exactly this: **ten predicates across three phase groups**, each of
+which must be shown to fail the phase **on its own**, because a conjunction raises one error code for many causes and a
+test that only exercises the aggregate cannot tell which predicate is load-bearing. That is the same shape as everything
+this stretch has found - a contract that holds in aggregate while no single clause is asserted.
+
+The checklist to satisfy, one test per line and one negative per line:
+
+- **CLOSE**: `bilateral_contact is not True` → `BILATERAL_CONTACT_MISSING`.
+- **MICRO_LIFT / TRANSPORT / ALIGN** (five, each alone): `holding_state != "HOLDING"`; `bilateral_contact is not True`;
+  `micro_lift_confirmed is not True`; `cup_off_table is not True`; `cup_supported is not False`.
+- **RELEASE / RADIAL_RETREAT / FINAL_CHECK** (four, each alone): `holding_state != "EMPTY"`; `released is not True`;
+  `cup_supported is not True`; `no_fingertip_contact is not True`.
+
+The three `test_act_episode_qc.py` corrections the checkpoint names (`:16`, `:50`, `:142`) are the other half: the QC-side
+tests whose fixtures assert a quality verdict where the rule is now that quality is not a precondition, so they need the
+same treatment - each predicate stated rather than implied.
