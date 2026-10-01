@@ -55585,3 +55585,20 @@ reservation event waits), which is checked by name and by file rather than assum
 `kill 3111252`, re-run, and the acceptance scripts have an episode to read - `verify-e3.sh` at rc=0 and the K1/E3
 negatives against whatever comes out. Until an episode exists, no claim about the objective's endpoint is warranted, and
 none is made.
+
+
+## CP-2865 — The acceptance script was blind to the wiring it was meant to accept
+
+Found by reading `handover/verify-e3.sh` rather than trusting that a green run means what it looks like. It ran seven
+suites, all of them the chain's own, and the run was green - but none of them covers the code this stretch actually
+changed: `ros/dynamic_runtime.py`, `ros/dynamic_mujoco_execution.py`,
+`runtime/parallel_worker_runtime.py`, `ros/parallel_ros_runtime.py` and the CLI. The script would have stayed green with
+the recording path broken in any of them, which is the exact failure mode it exists to catch, and it is the same shape as
+everything else this stretch has produced: a check that covers the thing being looked at rather than the thing being
+written.
+
+It now also runs `test_dynamic_execute`, `test_dual_cup_entrypoints`, `test_dynamic_scene_sync`,
+`test_pick_place_executor_adapter`, `test_parallel_batch_cli`, `test_parallel_batch_artifacts` and
+`test_parallel_batch_coordinator` - every suite that touches the wiring, and the ones whose stubs my signature change
+broke earlier. Rerun: `acceptance rc=0`, `638 passed`, `chain rc=0`, against roughly 230 before. The script lives under the
+plan's `handover/` rather than in the repository, so this note is the durable record of what it now covers.
