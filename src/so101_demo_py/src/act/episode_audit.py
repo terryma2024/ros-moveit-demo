@@ -945,7 +945,12 @@ class EpisodeAuditWriter:
     # -- helpers -----------------------------------------------------------
 
     def _window_matches_rows(self, window: dict) -> bool:
-        return _window_matches_observed(window, self._row_times, self._acquisitions)
+        # T3-F11 (eighth verdict): the readback passed the physics history and the seal did not, so the endpoint
+        # comparison was inert exactly where it mattered; both boundaries now supply the same arguments
+        return _window_matches_observed(
+            window, self._row_times, self._acquisitions,
+            [row["sim_time_s"] for row in _records(self.root / "audit" / "physics.jsonl",
+                                                   _PHYSICS_FIELDS, "AUDIT_PHYSICS_INVALID")])
 
     def _apply_epoch(self, epoch: int, kind: str, observation: dict) -> None:
         if self._release_epoch is None:
