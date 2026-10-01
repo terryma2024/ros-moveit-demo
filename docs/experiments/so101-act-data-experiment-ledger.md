@@ -47057,3 +47057,19 @@ round, and none reached a commit. Never satisfy a check with something invented:
 marker (CP-2480) and the deployment verifier states what it does and does not claim (CP-2479).
 
 **Goal**: `active`, `armed`, revision 10, round 533/1000. The objective is **not** achieved; do not claim it is.
+
+
+## CP-2489 — The fixture reproduces the same refusal, so the probe is the next step
+
+- Re-added the runner-backed fixture with CP-2376's derived window (schedule at 0.1/0.5/1.0, edges containing the run,
+  `first_command_s`/`physics_end_s` at the physics extremes, `label_cutoff_s` the bound row's instant) and ran it
+  alone: **`ValueError: AUDIT_WINDOW_INVALID`**, exactly as CP-2368/2374 left it. So the fixture is sound and
+  reproducible, and what remains is to have the run name **which call site** refuses - the seal's
+  `_window_matches_rows` or the readback's own check - which is what the CP-2485 wrapper probe prints.
+- Withdrawn again so the tree stays green (audit suite back to 74 passed, no dirty entry beyond the user's 35). The
+  fixture text is exactly the block appended before this entry, so re-adding it is one paste, and the probe recipe is
+  CP-2485's three lines (take the verdict, print `WIN-CALLSITE seal <verdict>`, return it - never a comment inside the
+  argument list, per CP-2484).
+- That combination - fixture plus probe in the same round - is the single remaining action for F5's step two.
+- F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; E1's input side green end to end;
+  the execution side waits on the container-free broker decision (CP-2481/2482). HEAD 393b9f77c; goal active.
