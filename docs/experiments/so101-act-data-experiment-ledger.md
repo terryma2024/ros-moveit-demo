@@ -46302,3 +46302,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   starting anything new.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 3f33ec39c; goal active.
+
+
+## CP-2452 — The description is rendered by the composition and passed as a parameter
+
+- `_configured_act_execution_stack_actions` calls `_mujoco_stack_actions(context, share, session_id,
+  sim_speed_factor=1.0)`, and that function computes `robot_description = _render_mujoco_robot_description(...)` and
+  hands it to a node as a **parameter** (`{"use_sim_time": True, "robot_description": robot_description}`), beside
+  `controllers = config / "ros2_controllers.yaml"`. So nothing external is expected to publish the description: the
+  stack's own composition renders it and injects it, and `controller_manager`'s "Waiting for data on
+  'robot_description' topic" means that injection never reached the node that needs it.
+- That reframes CP-2451: the missing simulator half is not necessarily a foreign package; the launch may simply be
+  failing partway. The decisive evidence is the **full** `launch3.log`, not the two warning lines sampled so far -
+  the next read is to search it for errors, aborted nodes and any traceback, which will say whether a package is
+  missing (the fork-workspace hypothesis) or whether a node died after starting (a different fix).
+- Unchanged and worth repeating: the two `ros2_control_node` processes seen earlier belong to
+  `ws_mujoco_ros2_control_fork` and were **not** killed; they are not mine to touch, and my own launch is the only
+  stack this task starts.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD ebab3f0f8; goal active.
