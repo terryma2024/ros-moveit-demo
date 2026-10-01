@@ -45465,3 +45465,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   reports, then run `inspect` expecting zero blockers and `prepare` end to end.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 8b02237e4;
   goal active.
+
+
+## CP-2410 — Four blockers became one, measured on the installed CLI
+
+- `_inspect_calibration_role` now accepts the amendment's artifact: a document whose `kind` is
+  `ACT_NONHEAD_EMPIRICAL_AUTHORIZATION` with `approval: user_empirical_default` and a `roles` map is a candidate for
+  the role being inspected, stamped with that provenance, while a historical `checks`-bearing report keeps
+  `nonhead_calibration`. `EMPIRICAL_AUTHORIZATION_KIND` names the constant rather than repeating the string.
+- Measured end to end on the installed CLI after a rebuild: `inspect` exits 0 with **twelve roles and exactly ONE
+  blocker** (down from four). `path_policy`, `rgb_skew` and `placement_qc` each resolve to
+  `.../nonhead-empirical-authorization-policy.json` with `approval: user_empirical_default`.
+- The remaining blocker is `resource_thresholds`, and it is a different route by design: it is built by
+  `_inspect_resource_thresholds(root)`, and the design says its candidate is the newly generated effective
+  runtime/collection configuration - based on the current `config/mujoco/parallel_batch_v3.yaml` and
+  `config/act/parallel_collection_v3.yaml` with the two hard-stops made explicit - not either historical candidate.
+  That is the next piece, and it is also what produces the effective-config hash the amendment requires.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD c592d569a;
+  goal active.
