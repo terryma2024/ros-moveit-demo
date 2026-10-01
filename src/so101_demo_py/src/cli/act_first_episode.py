@@ -125,6 +125,23 @@ def _nonhead_provenance(inputs: dict) -> dict:
     }
 
 
+def _broker_command(composition):
+    """The deployment's container-free broker command.
+
+    The composition starts whatever this returns through its supervisor, exactly as it starts the containerised
+    default, and every container-specific step is guarded by `_uses_production_broker_container`, which is false as
+    soon as a builder is supplied (CP-2511/2516). So this is the whole of the approved container-free route: the
+    broker's own module entry point, with the roots the composition already holds.
+    """
+
+    spec = composition.spec
+    return [sys.executable, "-m", "so101_demo.cli.parallel_perception_broker",
+            "--evidence-root", str(spec.request.evidence_root),
+            "--runtime-ipc-root", str(composition.runtime_ipc_root),
+            "--input-root", str(composition.broker_input_root),
+            "--batch-id", str(spec.request.batch_id)]
+
+
 def _run(arguments) -> int:
     """One episode: the production pieces composed around a single-point request.
 
