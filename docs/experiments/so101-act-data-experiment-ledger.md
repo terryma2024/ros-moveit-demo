@@ -48880,3 +48880,14 @@ This time the three corrections were applied where a reader implements them:
 Sent for review (`reviews/k2-protocol-recheck6.log`). Note for the record: the earlier attempt to patch section 1
 aborted on a failed assertion because my quoted text did not match the file's whitespace - which is exactly what those
 assertions are for, and why nothing was half-written.
+
+
+## CP-2584 — Checking before re-running kept this round from making a second duplicate
+
+Last round's reading was "flat at 1247 lines", and I said that if it stayed flat I would re-run the same request in a
+fresh window - the move that produced a duplicate last time. Re-checking first was therefore the whole point, and it
+paid: the log has advanced to **1417 lines**, so the conditional re-run did not fire and no duplicate was launched.
+
+Two rounds in a row now, "flat" has meant "between the reviewer's long reads" rather than "stopped". The lesson is not
+that flatness is meaningless - it is that flatness is a *hypothesis* to test against the process and the next reading,
+not a conclusion to act on, and that a conditional action is a better shape than a decision made on one sample.
