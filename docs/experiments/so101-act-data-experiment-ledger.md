@@ -44389,3 +44389,20 @@ coverage complete 义务，其余一律非 pass；⑤ Teleop 验收的 `qualific
 （a）先查清三个消费者各自期望的 frame 名（尤其 scenario 代码里硬编码的那个标签），
 （b）按新理解改写修订（`ray_origin_frame_id = head_camera_frame`），
 （c）再送审；通过后才动配置，并按"从 Step 1 重做 + 重新审批"的路径推进。
+
+## HS-320 — frame 身份修订 v3 获 **APPROVE WITH FINDINGS（非阻塞）**；并记录我自己的一次误判
+
+**复审判决（全文存 `reviews/frame-identity-amendment/verdict-v3.md`）**：变更集完整；夹具清单只是**示例**，我承诺的分类必须覆盖**每一处**夹具出现；
+书面分类（含理由）即可，但**故意的错配与拒绝断言必须保留**，且不要求新增重复的具名测试；**必须重新呈现全部 17 值及其证据与身份、就新的精确 bundle 摘要取得批准、发出新的晋级记录**——
+"仅引用上一次批准是不够的"，且 **Task 14 必须整段重跑**。
+
+**我在 v2 里的错误（已承认并写入修订 §0）**：我曾断言 `head_camera_optical_frame` "只出现在配置与测试夹具里"——**错**。
+生产代码里有一处硬编码：`src/so101_demo_py/src/act/head_search_scenarios.py:1966`。
+**根因是我自己的检索方式**：我按名字逐一 `head -4` 截断输出，却据此下了全仓结论。复审抓到了这一点。复核（不加截断）确认：该名字在生产代码中**仅此一处**。
+
+**已批准的变更集（下一步执行）**：① 配置两个键 → `head_camera_frame`；② `head_search_scenarios.py:1966` 的硬编码 → `head_camera_frame`；
+③ 正常路径夹具（示例：`test_act_head_search_scenarios.py:139`、`test_act_head_search_camera_measurement.py:98/845`、`test_act_head_search_calibration_run_orchestration.py:441`）
+——但**分类须覆盖全部夹具出现**，且保留故意的错配与拒绝断言；④ 其余一律不动（无阈值、无 seal、无 URDF/插件/TF 改动）。
+
+**随后的路径**：Task 13 **从 Step 1 重做**（全新 run root）→ 新 bundle → **再次请你精确批准（呈现全部 17 值+证据+身份）** → 新晋级记录 →
+新 commit-stamped 冻结运行时 → **Task 14 整段重跑**。
