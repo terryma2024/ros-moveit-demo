@@ -47973,3 +47973,41 @@ weights than the ones admitted.
 So the change is: let the parser accept this run's locations while keeping the substantive literals closed. One small
 edit in the broker's argument construction, one rebuild, and the supervisor should see a broker that comes up instead
 of exiting 2.
+
+
+## CP-2536 — K2's Codex checkpoint returned: static, evidence-listed, and corrective
+
+The review finished (`EXIT=0`, 6332 lines, log `reviews/k2-protocol-checkpoint.log`) and its own closing line is honest
+about its limits: "This was a static review. Sandbox restrictions prevented tmux inspection; no live producer acceptance
+was claimed."
+
+Its substantive findings, field by field, against what the real chain can supply:
+
+- **source physics stamp/step**: MuJoCo supplies these, but `pick_place_scene_geometry()` **discards their provenance**
+  when returning geometry;
+- **apply event identity**: **missing today** - `_apply()` returns `{applied: True}` with no event sequence or timing;
+- **query window/sequence**: **missing today**, though client query identity and invocation/response bounds can be
+  instrumented;
+- **readback receipt**: a response exists but no receipt sequence/timing is retained; a monotonic receipt is
+  implementable;
+- **verified world/attached content**: the service supplies geometry and `verify_task_scene()` checks it, but the table
+  retains only membership;
+- **fence proof**: **"no existing cross-MuJoCo/MoveIt snapshot proof was established"** - the physics fence proves a
+  MuJoCo step, not the provenance the table needs;
+- **session/reset/attempt/lease**: available upstream, but must be **propagated and checked against the journal**, not
+  merely copied into the record.
+
+And its required corrections: the **containment rule is wrong for the normal advancing chain** (`source capture ->
+geometry derivation -> apply -> query`), so a concrete causal protocol with separate **source / apply / query / receipt**
+boundaries must be selected and documented, with the clock mapping and uncertainty stated; the versioned schema is sound
+in principle but **incomplete** (exact nested keys, sequence namespaces, journal references and geometry must be
+frozen); the change must move **together** with the producer/receipt contracts and source propagation
+(`pick_place_scene.py`, `ports/planning_scene.py`, `task_scene.py`, `pick_place_search_segment.py`), the record carriage
+and gate derivation (`pick_place_search_port.py`, `pick_place_runner.py`), the closed scene/event schemas with writer,
+serializer, coverage, seal and independent verification (`episode_audit.py`), and the Recorder/seal plus result
+verification. New event kinds must enter the closed event schema - and the existing verifier is
+**`verify_audit_manifest()`**, not `verify_episode_audit()`, correcting the plan's own wording.
+
+So K2's checkpoint is complete and it did **not** pass the table as written: it named what is missing, why the fence
+route needs a documented causal protocol rather than a containment rule, and the exact set of files that must move
+together. That is the input K2's implementation was waiting for, and it goes into the ledger as such.
