@@ -1419,3 +1419,14 @@ def test_a_window_naming_an_unacquired_instant_is_refused_as_a_window(tmp_path):
     writer, window = _self_consistent_formal(tmp_path / "win")
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         writer.seal({**window, "source_schedule": {"head": [1.0, 1.15, 1.2], "wrist": [1.0, 1.1, 1.2]}})
+
+
+def test_win(tmp_path):
+    """T3-F5: the suite's own sealable fixture seals and verifies, with the minimal window form."""
+
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    print("SEALED", path.is_file())
+    manifest = verify_audit_manifest(path)
+    print("VERIFY kind:", manifest["kind"], "| files:", len(manifest["files"]))
+    print("WINDOW", window)
