@@ -41926,3 +41926,36 @@ teleop 的 AF_UNIX 路径长度拒绝（`child_runtime.py` 拒绝 >103 字节，
 真正未覆盖的计划仍返回撞边界。这是我关于规划器舍入的推断，**不是 seal 的明文规定**，评审可推翻。
 
 **下一轮**：`search.py` 已 GREEN；接着按计划推进 phase 1/2（输入验证、几何与覆盖证明）的库模块，并把上面 1e-12 回退留待评审。
+
+## HS-289 — phase 1（输入验证）完成：16 个新测试 RED→GREEN，全套件零新增失败
+
+**提交** `feb93087`（两个新文件，+634 行；`git status --porcelain` 为空）：
+
+- `src/so101_demo_py/src/act/head_search_calibration_inputs.py` —— 库模块（无 CLI/argparse）：
+  `validate_sealed_inputs(...)`（六个 sealed 依赖的 path+sha256+size 与 `manifest_sha256`）、
+  `decide_calibration_admission(..., role='calibration')`（复用既有 `CalibrationMeasurementAdmission`/`ADMISSIBLE_OPERATIONS`/`REFUSED_OPERATIONS`）、
+  `CalibrationResourceBinder.bind(...)`（`bound_at_entry`、一次绑定）、
+  `validate_head_search_calibration_inputs(...)`（编排三者，只在 `output_path` 写入）；
+  三个拒绝码：`CAL_INPUT_UNSEALED`、`CAL_ADMISSION_REFUSED`、`CAL_BINDING_REBOUND`。
+- `src/so101_demo_py/test/test_act_head_search_calibration_inputs.py` —— **16 个用例**（happy path、三种拒绝、
+  release/recorder 无条件拒绝、被拒时**不产生任何绑定**、除 `output_path` 外不写任何文件）。
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED | **16 failed, rc=1**，全部为 `ImportError: cannot import name 'head_search_calibration_inputs'`（日志 `scratch/hs289/hs289-red-pytest.log`） |
+| GREEN | **16 passed, rc=0**（提交后复跑仍 rc=0） |
+| 回归 | `test_act_head_search_domain.py` + `test_act_head_search_bounded_sweep.py` → **18 passed (12+6), rc=0** |
+| 全套件（8 workers） | **175 failed / 5608 passed / 152 skipped / 86 errors, rc=1** |
+| 与 HS-288 基线（175/5592/152/86）对照 | **+16 passed（正好是新增 16 例）、0 新增失败、0 新增错误、skipped 不变**；261 个 FAILED/ERROR 节点 ID **逐字节相同** |
+
+**一处混杂因素被自我纠正（值得记下）**：首次全套件把 run dir 放在 `scratch/hs289/` 下，使 IPC 根从 `<EV>/ipc` 变成
+`<EV>/scratch/ipc`，**超出客户端 103 字节 socket 路径上限**，于是多出 15 个失败（全在 `test_controller_reservation_client.py`，
+与本次改动无关）；改回基线布局后**逐节点复现基线**。这条与 HS-288 记的 teleop AF_UNIX 路径长度问题是同一根源。
+
+**待评审的推断（未由 seal 明文规定）**：① six-name sealed 集合与其线格式 `name -> {path, sha256}` 是我对计划 §2b 的解读
+（那里只列依赖名、未给文档形状）；② 只定义了三个拒绝码，绑定参数畸形时报普通 `ValueError`（不带码）；③ 摘要格式未做前置校验
+（畸形摘要自然无法匹配）。另有 1e-12 回退（HS-288）一并留待评审。
+
+**下一轮**：phase 2（几何与 required-domain 覆盖证明，含 coarse-step 候选生成与 per-target sweep-check receipts）。
