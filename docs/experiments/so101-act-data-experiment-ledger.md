@@ -52044,3 +52044,27 @@ recorder-compatible harness, one reads the episode back through the endpoint QC,
 
 That file is left in place as the record of where this stands - it is RED, and it is RED for a named reason with a
 measured difference rather than a hypothesis.
+
+
+## CP-2727 — The recorder reads the acquisitions from the audit's own stream, so the capture's two keys are the defect
+
+```python
+            acquisitions = {record["acquisition_id"]: record
+                            for record in (json.loads(line) for line in
+                                           (audit_manifest.parent / "acquisitions.jsonl")
+                                           .read_text().splitlines())}
+```
+
+So the recorder's acquisition identifiers come from the **audit's `acquisitions.jsonl` stream**, not from the audit
+dictionary it is handed on each row. Its `_AUDIT_KEYS` is closed at sixteen and does not contain
+`head_acquisition_id`/`wrist_acquisition_id`, and the capture adds exactly those two at
+`continuous_capture.py:412-413` - which is the whole of `EPISODE_AUDIT_SCHEMA` on this path and therefore the whole of
+the integration defect the new tests record.
+
+The fix is on the capture's side, and it is small: do not put the acquisition identifiers into the audit the recorder
+validates, since the recorder already learns them from the audit's own stream. Whether anything else needs them from that
+dictionary - the audit writer's per-row callback receives `row["audit"]` - is the one thing to check before removing
+them, so that the information is not lost, only moved off the channel whose schema is closed.
+
+That is the reviewer's correction 3 unblocked and correction 4's neighbourhood: the live path connects components that
+were each written to a contract, and the contracts meet at exactly this kind of seam.
