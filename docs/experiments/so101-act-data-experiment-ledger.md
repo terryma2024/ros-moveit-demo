@@ -53281,3 +53281,28 @@ two files fails `is_file()` at that moment rather than about locations or owners
 Round state, for the record: the writer accepts an existing root (CP-2773's ownership decision, applied); the verifier
 takes the audit pair like the store does; three production fixes and the chain test are uncommitted; correction 2's chain
 test passes and correction 3's is one path away.
+
+
+## CP-2777 — Both files exist at seal time, so the refusal is after the rename
+
+```
+PAIR manifest: .../working/episode/audit/audit-manifest.json True
+     scope:    .../working/episode/audit/source.json          True
+```
+
+Both are files when the store seals - and the audit directory is gone from `working/` immediately afterwards, which is the
+publish itself (`os.rename(working, sealed)`, CP-2776). So `EPISODE_SEAL_AUDIT_INVALID` cannot be about the store's own
+verification: that one succeeds. It is about the **later** call, the verifier's, and the reason is the rename itself:
+
+- `manifest_path` is computed before the seal, so it names **`<workspace>/working/episode/audit/audit-manifest.json`**;
+- after the store publishes, the same file lives at **`<workspace>/sealed/episode/audit/audit-manifest.json`**;
+- the test hands the verifier the pre-rename path, and by the time the verifier asks `is_file()`, that path no longer
+  exists.
+
+Which is a fact about the publish rather than about either class: **a store's pair is only valid while the store is
+working, and anything downstream has to name the published location**. The fix is therefore in the test and in what it
+will mean for E3 - the verifier is handed the sealed location, which is what `sealed/episode/audit/…` is.
+
+That also means the two chain tests are finally distinguished by exactly one real thing: the first exercises the episode
+directly (pre-publish), and the second exercises it through the store (post-publish), and each needs the pair named for the
+phase it is in.
