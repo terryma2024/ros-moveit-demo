@@ -47273,3 +47273,19 @@ honest way left to name the refuser.
 
 The fixture has been withdrawn (tree back to the user's 35 entries, audit suite at 74 passed), and the 10 Hz version is
 recorded above in full for the next round to re-apply alongside that probe.
+
+
+### CP-2496 — The line-number probe was not inert, and was reverted at once
+
+Replaced every `return False` in `_window_matches_observed` with `return _no(<line>)` (ten clauses) plus a local
+printer, verified the module parsed, and ran the audit suite: **5 failed, 69 passed**, with 4791 probe lines emitted.
+So the probe changed behaviour - a replaced `return False` somewhere in that body is not equivalent to the original,
+most likely because a rewrite landed inside a nested definition or a comprehension - and it was reverted from
+`/tmp/p550.py` in the same round: the marker count is zero, the tree shows only the user's 35 entries, and the audit
+suite is back to 74 passed.
+
+Recorded because it is the fourth mechanical slip of the stretch and the first that changed test outcomes rather than
+merely failing to parse; the guard that saved it was running the suite before trusting the probe, which is the same
+order this ledger keeps prescribing. For the next attempt: instrument by **reading** each clause's inputs into a
+single dictionary at the end of the predicate (or print at the top with the clause names written out by hand), rather
+than by rewriting returns mechanically.
