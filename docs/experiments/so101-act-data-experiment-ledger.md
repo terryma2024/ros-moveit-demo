@@ -48820,3 +48820,19 @@ reproducible rather than idiosyncratic - and the union is what revision 6 must s
 keys and types** and the **event envelope's**, which is the genuinely new demand in `4b`'s second correction.
 
 The main review of revision 5 is still running (344 lines), so revision 6 waits for it and then answers the union.
+
+
+## CP-2581 — The manifest's real keys, and a version collision revision 6 must resolve
+
+Reading the builder rather than guessing its keys: `manifest = {"kind": MANIFEST_KIND, "schema_version": 2, ...}` at 947,
+with `MANIFEST_KIND = "ACT_EPISODE_AUDIT"` at 28, and the reader checking `kind`, `schema_version`, `files`,
+`identity` (a dict), `window` (a dict) and - a key I did not know - **`scope_sha256`**, compared against
+`_sha256(audit / "source.json")` at 1046.
+
+Two consequences for revision 6. First, `4b`'s wider correction can now be answered with facts rather than guesses: the
+manifest's keys and types are those six. Second, and more important, **the audit manifest is already at
+`schema_version: 2`** - so revision 5's naming (`ACT_EPISODE_AUDIT_K2` at `schema_version: 2`) collides with the
+existing document's version, and a schema that claims version 2 while adding record kinds the current version-2 reader
+would refuse is exactly the kind of internal inconsistency the reviews keep finding. Revision 6 must state the version
+the **new records** carry and how the manifest's own version relates to it - most plausibly by leaving the manifest's
+version alone and versioning the K2 record kinds separately, since the manifest's shape is not what changes.
