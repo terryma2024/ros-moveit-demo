@@ -42442,3 +42442,116 @@ hs300-final.6d73f10e,hs300-regression.23a8baf4}`（三次基线调用式门禁�
 `fine_correction_episodes`、`skew_measurements`、`frame_contract`(独立声明)、`controller_submissions`、
 `stationary_measurements`、`feedback_measurements`、`controller_stop_config`、`stop_proofs`，
 以及 phase 3 的 operating point 帧）。
+
+## HS-301 — 用**选中模型 C2a** 重测 `search_timing` 与 `frame_age_measurements`：settle 逐停点完全相同，p99 frame 6.0269→6.4607 ms，phase 6/7 照常接受（`search_timeout_s` 0.70692、`max_age_s` 0.014736）
+
+**本轮要闭合的不一致（HS-300 自己写下的）**：HS-300 的真实时序测量用的是 sealed production
+config `head_search_v2.json`（`d3c4ef9b…`）里 `weight_sha256` 钉住的权重 `f281d252…`（候选 A），
+而 HS-276/298 的**模型 of record 是 C2a**（`2afd550694abfbe6…`）。帧时间依赖模型，所以时序证据必须用 C2a
+重测。**本轮无代码改动**（未发现缺陷），只有本条目与清点文档的一行状态更新。运行时基线：worktree HEAD
+`c2417b5ea`（HS-300 的文档提交），工具链根 `$EV/head-toolchain-20261001T083846Z`（由 `0385a5f77` 构建，
+`source-commit.txt` 一致），安装模块与源码逐字节相同（`head_search_timing_measurement.py` 双方均
+`8c780c9daff2742a…`，`head_search_search_params.py` `17219f17…`，`head_search_timing_params.py` `2caeb874…`，
+CLI `6f900f68…`）；`ros2 pkg prefix so101_demo_py` = 该根；无 ROS 节点、`ros2 run` 只跑本测量，故无
+`ROS_DOMAIN_ID`/`GZ_PARTITION`（运行前后 `ps` 与 `nvidia-smi --query-compute-apps` 均为空）。
+
+**唯一变量与它带来的必然派生（推断①，重要）**：安装模块的 `_declared_weights` 守卫要求 `--weights` 的
+sha256 **等于所声明 production config 的 `weight_sha256`**，否则 `CAL_TIMING_EVIDENCE_CONTRADICTORY`；
+而把 C2a 写进 `head_search_v2.json` 是计划 §2a 审批**之后**的 promotion 步骤。因此本轮给测量一份
+**派生文档** `sweep-timing-c2a-20261001T085532Z.production-search-config-c2a.json`（`09fe03f7…`）：与 sealed
+配置**只差两个 detector 身份字段**（`weight_sha256` `f281d252…`→`2afd5506…`；`weight_path`
+`models/head-search/yolo11n-seg-best.pt`→本次 `--weights` 的绝对路径），其余全部键（含 17 值的
+`min_confidence` 0.4、`tracker.iou_threshold` 0.3、motion/camera 块、`runtime_id`、
+`candidate_identity_sha256`）逐键不变；派生脚本 `scratch/hs301/make-c2a-config.py` 断言"sealed 原文 ==
+sort_keys/indent=2 规范化"并打印 key 级 diff，`changed_keys` 恰为 `["weight_path","weight_sha256"]`。
+注意 `min_confidence`/`tracking_iou` 是**生产配置自己的**、不是 HS-265 选的工作点（0.25/0.5）：本轮把变量
+压到"哪个权重"一个，工作点差异见推断②。
+
+**(a) 真实运行（安装程序，rc=0，wall 3 s / 程序内 2.669 s）**：
+
+```
+T=$EV/head-toolchain-20261001T083846Z
+EV=/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m
+ros2 run so101_demo_py so101_head_search_calibration measure-search-timing \
+  --scene $T/install/so101_demo_py/share/so101_demo_py/assets/mujoco/act/head_search_scene.xml \
+  --geometry-seal $EV/head-camera-probe11-20260930T101722Z/head-camera-geometry.json \
+  --production-search-config $EV/head-yolo-models-20260930T120608Z/sweep-timing-c2a-20261001T085532Z.production-search-config-c2a.json \
+  --controller-config $T/install/so101_demo_py/share/so101_demo_py/config/mujoco/ros2_controllers.yaml \
+  --weights $EV/head-yolo-models-20260930T120608Z/weights-c2a/C.pt --device cuda \
+  --output-dir $EV/head-yolo-models-20260930T120608Z/sweep-timing-c2a-20261001T085532Z
+rc=0  SEARCH_TIMING_MEASURED p99_settle_s=0.34600000000000025 p99_frame_s=0.006460675998823717 stops=6 frames=25 anchors=default,forward,left
+```
+
+- 运行脚本 `scratch/hs301/run-c2a.sh`（只改 HS-300 `real-run.sh` 的三个输入路径：派生配置、C2a 权重、输出目录名）；
+  provenance `…sweep-timing-c2a-20261001T085532Z.provenance.txt`（含运行前输入 sha256、派生 diff、frozen
+  `frozen-c.json` `f50b8d92…`、运行后 `ps`/`nvidia-smi` 与安装/源码模块 sha256），stdout/stderr
+  `…sweep-timing-c2a-20261001T085532Z.console.log`；rc=0、wall 3 s（`elapsed_s=2.6692402362823486`、
+  `sweep_wall_time_s=1.8855201580154244`、`warmup.wall_s=1.1603057970060036`）。
+- 运行时身份（receipt）：`python /usr/bin/python3` 3.12.3、MuJoCo 3.12.0、torch 2.13.0+cu130、
+  ultralytics 8.4.115、`cuda_available=true`、`NVIDIA GeForce RTX 5080`、驱动 595.84、
+  `so101_demo` 模块 = 该工具链根，`weights_sha256=2afd5506…`，`ros_nodes_started=false`、
+  `hardware_motion_commanded=false`、`mujoco_neck_commanded=true`、`transport_measured=false`。
+- 运行后 `ps -eo pid,etime,cmd | grep -Ei 'mujoco|yolo|detector|ros2 run|so101_head_search'` 与
+  `nvidia-smi --query-compute-apps` **均为空**，无残留进程、无 CUDA 占用（本条于全部测试跑完后复核）。
+
+**(b) 安装版 phase 6 / phase 7 接受新文档（同一脚本 `scratch/hs301/consumption-check.py`，bounded sweep 重建
+方式与 HS-300 逐字相同；对照：同一脚本复跑 HS-300 文档得到与 HS-300 逐位相同的两个值）**：
+
+| 消费方 | HS-300 文档（A，`08334a6b…`/`d8b4e2eb…`） | 本轮 C2a 文档（`e153d3c6…`/`c44cc191…`） | 差 |
+| --- | --- | --- | --- |
+| phase 6 `compute_search_timeout_s`（`max_fine_corrections=1`） | 0.7060537260081624 | **0.7069213519976479** | +0.000868 s（+0.123%） |
+| phase 7 `compute_max_age_s` | 0.014581009008688852 | **0.014736005008453503** | +0.000155 s（+1.06%） |
+| phase 7 余量（cap 0.15 s = 1.5 帧周期） | headroom 0.13541899099131116 | headroom 0.1352639949915465 | −0.000155 s |
+
+两者都按 `path`+sha256 引用本文档与 seal（phase 6 另引 `head-camera-geometry.json` `0db2eb4c…`），
+`CAL_TIMEOUT_UNBOUNDED`/`CAL_FRESHNESS_EXCEEDED` 均未触发；`consumption-check.log` 落在各自运行目录。
+
+**(c) 与 HS-300 的逐项对照（同一场景 `aea2df3b…`、同一 seal `0db2eb4c…`、同一控制器配置
+`499d471a…`、同样 3 anchor、`--device cuda`、同样 settle 规则与 `max_settle_s=5.0`）**：
+
+| 量 | HS-300（A） | 本轮（C2a） | 结论 |
+| --- | --- | --- | --- |
+| 稳定停点数 / 帧数 | 6 / 25 | 6 / 25 | 相同 |
+| **p99 settle（仿真时间）** | 0.34600000000000025 | 0.34600000000000025 | **逐位相同** |
+| 逐停点 settle（plan，6 个） | 0.122/0.346、0.252/0.344、0.252/0.344 s（steps 61/173/126/172/126/172） | 同上，逐位相同 | **完全相同** |
+| anchor 定位停点（不计入，3 个） | 0.266/0.310/0.310 s | 同上 | 完全相同 |
+| `sweep_sim_time_s` | 2.545999999999941 | 2.545999999999941 | 相同 |
+| `p99_frame_s`（= `decision−frame`，含渲染） | 0.006026863004080951 | **0.006460675998823717** | ＋0.4338 ms（+7.20%，**预期内**） |
+| 帧时间范围/均值 | 4.0576–6.0269 ms / 4.31575 ms | 3.9838–6.4607 ms / 4.31925 ms | 均值几乎不变 |
+| 其中渲染均值 | 0.618012 ms | 0.637484 ms | +0.019 ms |
+| 其中推理均值 | 3.697742 ms | 3.681770 ms | −0.016 ms（C2a 略快） |
+| 帧年龄（`decision−received`）范围 | 3.5045–4.5810 ms | 3.4340–4.7360 ms | 最大值 +0.155 ms |
+| 每帧检测数 / `sim_age_s` | 全 1 / 全 0 | 全 1 / 全 0 | 相同 |
+
+**判读（OBSERVED）**：settle 完全不受模型影响——它由 sealed MuJoCo 物理与 sealed 控制器决定，两次运行的
+每停点 settle、`steps`、`sim_end_s` 均逐位相同，因此**没有任何 settle 差异需要解释**；唯一变化的
+`p99_frame_s` 也几乎全部来自 25 帧中**第 1 帧**的渲染/上下文成本（6.0269→6.4607 ms 的 p99 就是该帧，
+HS-300 该帧 6.027 ms 同样是它的最大值），推理均值反而略降。传导到 17 值只有两个数变动：
+`search_timeout_s` +0.87 ms、`max_age_s` +0.155 ms，前者仍在 phase 6 公式内、后者距 0.15 s 上限余量
+0.1353 s。**结论：用选中的 C2a 重测不改变任何"实质性"结论，只把两个受帧时间影响的参数按其真实模型重新钉住。**
+
+**未发现缺陷 → 未修改任何测量/phase 代码**（`git status --porcelain` 为空；本轮无 RED→GREEN）。
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| 回归（15 文件 = HS-288..300 各 phase + 新模块 + CLI + calibration，基线调用式，`-n 8`） | **385 passed / 0 failed / 0 error / 0 skipped, rc=0**（3.5 s；`$EV/scratch/pytest-xdist8-hs301-regression.49ffadce`，与 HS-300 的 385 一致） |
+| 全量 `src/so101_demo_py/test`（基线调用式，`-n 8`，24 逻辑 CPU） | **tests 6348 / 175 failed / 5935 passed / 152 skipped / 86 errors, rc=1**；节点集与 `hs299.nodes.txt` 及 HS-300 final **均 diff 0 行**（261 节点）；`passed +32`＝HS-300 新增（29+3）；失败集中 **0 个 head_search 节点**（`…hs301-final-demo.9cdedc1b`） |
+| 全量 `src/so101_teleop/test`（同一调用式，`-n 8`） | **tests 1321 / 37 failed / 1241 passed / 43 skipped, rc=1**；节点集与 teleop 基线（`…teleop.uafS55hX`/`zQKzl6SS`）**diff 0 行**（`…hs301-final-teleop.2ca81cc5`） |
+| 无效调用式（留证，不计入） | 首个全量跑把两个模块塞进**同一次** pytest 调用（`…hs301-final.4e8f435c`，7660 收集、300 节点），收集范围超出基线，**不作为门禁**；随后按模块各跑一次即为上两行 |
+
+**本轮声明的主要推断（待评审）**：① 时序证据要用 C2a，但安装守卫要求权重与所声明 production config 一致，
+故用只改两个 detector 身份字段的**派生配置**作为测量输入（不是改 `head_search_v2.json`，也不改代码），
+派生脚本可审计、digest 已记录；② 派生配置保留了生产配置里的 `min_confidence` 0.4 / `tracker.iou_threshold`
+0.3，而非 HS-265/276 选的 0.25/0.5 工作点——这是为了让 A/B 只有一个变量（权重），代价是帧时间是"生产阈值下
+的 C2a"；`min_confidence` 只影响 `predict` 的后过滤，对 settle 无影响、对帧时间影响远小于首帧噪声（本轮
+逐帧检测数与 HS-300 同为全 1）；③ 输出目录放在 `$EV/head-yolo-models-20260930T120608Z/` 下与 HS-300 的
+`sweep-timing-*` 并列（"campaign root 之下"取此解释），派生配置与 provenance 用 `$RUN.` 前缀同级存放，以保持
+CLI 产出的运行目录只含 CLI 自己的 4 个文件（外加本轮的 `consumption-check.log`，与 HS-300 同样的位置）；
+④ 阈值/工作点的最终值仍归 phase 3/6 的 bundle，本测量只提供 `p99_settle_s`/`p99_frame_s`/帧年龄分布。
+
+**本轮证据与生命周期**：保留 `$EV/head-yolo-models-20260930T120608Z/sweep-timing-c2a-20261001T085532Z{,.production-search-config-c2a.json,.provenance.txt,.console.log}`（本轮最终测量）、
+`$EV/scratch/pytest-xdist8-hs301-{regression.49ffadce,final-demo.9cdedc1b,final-teleop.2ca81cc5,final.4e8f435c}`（门禁与无效调用式留证）、
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加状态更新行）、工作树 `scratch/hs301/`（派生/运行/对照/
+收集探针脚本与日志）。以上**均为删除候选，未删除**；未触碰 HS-300 的 `sweep-timing-*` 两个目录（除只读引用）。
