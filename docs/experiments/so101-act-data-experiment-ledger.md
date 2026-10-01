@@ -42689,3 +42689,130 @@ tracker iou 0.5，recorder 的 per-domain 约定），而**控制器**的 `min_c
 `$EV/scratch/pytest-xdist8-hs302-{regression,regression2,regression3,regression4,final-demo.4378bac4,final-demo.0a86f1b8,final-demo.80a10670}*`（门禁与作废调用式）、
 `$EV/reviews/phase6-7-measurement-inventory.md`（追加状态更新节）、工作树 `scratch/hs302/`（探针、派生/运行/消费
 脚本、RED/GREEN/回归日志、pyshim、tmp）。以上**均为删除候选，未删除**；未触碰 HS-300/301 的产物（除只读引用）。
+
+## HS-303 — 清点项 #2 `camera_measurements` 有源：`centre_jitter_rad` 实测（0.310944 px / 0.000637488 rad，3 停点 × 12 帧），`safety_margin_px` 无任何 artefact 声明 → 写 `null` 并拒绝
+
+**提交** `45ea54c221d4f12557d4f99ffdc07653a941b773`（feat，4 文件 +2650/−7；普通 `git commit`，钩子 rc=0；
+`git status --porcelain` 为空）。**本轮要闭合的缺口**是 HS-299 清点第 2 行：phase 6 的两个字段
+（`centre_jitter_rad` → `compute_center_deadband_px`；`safety_margin_px` → `compute_vertical_bounds_px`）
+此前无任何来源，HS-302 只能用 fixture 代替相机文档。其余 11 项仍无源、仍未伪造。
+
+**(a) 开工前定下的字段溯源（先写进 `$EV/reviews/phase6-7-measurement-inventory.md` 的 HS-303 节，再实现）**：
+
+| 字段 | 判定 | 依据（全部为只读 sweep） |
+| --- | --- | --- |
+| `horizontal_fov_rad` / `image_width_px` / `image_height_px` | **声明**（`measured_here:false` + `declared_by{path,sha256,keys}`） | seal `head-camera-geometry.json` `0db2eb4c…` 的 `horizontal_fov_rad`/`image_width`/`image_height`；另与生产配置 `values.horizontal_fov_rad` 及渲染相机自身 `cam_fovy` 交叉校验 |
+| `centre_jitter_rad` | **本轮实测**（`measured_here:true`） | seal 不含 jitter；`head-search-calibration-contract-v1.json` 的 17 参数无 jitter（全文不含该串）；`$T/config/**`、`$T/assets/**` 无声明；`$EV` 下非 install/build 的键只出现在 HS-302 的 consumption fixture（其 `fixture_notice` 自述为核查用声明）；40 个 `episodes8/*.json` 只有三个固定角度的单帧检出，没有重复帧中心分布 |
+| `safety_margin_px` | **无 artefact 声明 → 拒绝，绝不默认**（`null` + `CAL_CAMERA_SAFETY_MARGIN_UNDECLARED`） | `grep -rn safety_margin_px` 于 `$T/install/so101_demo_py/share/so101_demo_py/{config,assets}` **0 命中**；calibration contract 的 17 参数不含它；`head_search_v2.json` 只声明 `values.vertical_bounds_px=[110,370]`、`min_area_px2=64`；seal 的 `min_anchor_visible_pixels`/`min_rendered_visible_pixels`（6216）与 geometry contract 的 `visible_pixel_minimum`（64）是**可见像素计数**，而 phase 6 把该值当**图像边框内缩**用（`[margin, height-margin]`），语义不同故不替代；`$EV` 下非 install/build 的该键仍只有 HS-302 的 fixture（`0.0`） |
+
+**实测定义（代码无法自行决定的部分）**：停点 = 每个 anchor 的 `neck_start_rad` + 其 bounded plan 的停点
+（`planned_stops`），去重后逐个过**同一条**走廊 `required_search_domain_rad ∩ lock_valid_neck_rad`；每停点
+`--frames-per-pose` 帧，一帧 = 在**同一目标**上再调一次 `settle_to`（持位一个 `frame_period_s`=0.1 s 仿真时间），
+由生产 settle 规则判定；统计量 = 检出框中心**列**的样本标准差（ddof=1），经 seal 角分辨率
+`horizontal_fov_rad/image_width_px` 换算成 rad，headline 取**最坏停点**。列而非行：`lock_run` 把
+`center_deadband_px` 用在列差上，phase 6 除以的也是水平分辨率（round-trip 有测试钉住）。
+
+**(b) 新增库模块** `src/so101_demo_py/src/act/head_search_camera_measurement.py`（决策层零 MuJoCo／零检测器／零 CUDA）：
+
+| 层 | API | 作用 |
+| --- | --- | --- |
+| 分辨率/统计 | `rad_per_px` / `spread` | seal 的角分辨率；样本标准差（ddof=1）+ mean/min/max/p2p/max-abs-dev；<2 样本或非有限值即 `ValueError`（绝不丢观测） |
+| 声明 | `read_declared_safety_margin` / `undeclared_safety_margin` / `declared_camera_geometry` | 从真正声明该键的 artefact 读值（JSON 先、YAML 后；顶层或下一层块），记 `measured_here:false` + 声明路径/sha256/键名；缺键/负数/非有限 → `CAL_CAMERA_SAFETY_MARGIN_UNDECLARED`；seal 的三个相机数按 key 级改名记录 |
+| 停点与观测 | `measure_anchor_frames`（plant/detector 注入，纯） | 逐停点：`settle_to` → `classify_stop`（timing 模块）→ 渲染 → 生产检测器 → 恰好一个杯的中心；逐帧记 sim/墙钟戳、`neck_yaw_rad`、`neck_velocity_rad_s`、bbox、图像 sha256；每停点记 `pose_drift_rad`、`images_identical`、列/行 spread；最后过 `verify_simulation_time_base` |
+| 文档 | `build_camera_measurements` | phase 6 读的 5 个键 + `angular_resolution`/`declared_fields`/`centre_jitter`（逐 anchor、逐停点）/`safety_margin`/`refusals`/`measurements`（逐帧原始证据）/自摘要 |
+| 生产 | `write_head_search_camera_measurement` | 先校验再跑：scene 摘要必须被 seal 钉住、控制周期整步、权重摘要等于所声明 production config 的 `weight_sha256`、frozen 的 `weight_sha256` 必须与之一致、声明 cuda 而无 CUDA 即 `CAL_TIMING_DEVICE_UNAVAILABLE`、每个停点必须在走廊内、输出目录已存在即 `FileExistsError`；只写文档与 receipt 两个文件 |
+
+拒绝码（9 个，`REFUSAL_CODES` 有测试钉住）：本模块新增 `CAL_CAMERA_CUP_LOST`（0 个检出/多于一个杯/检测器抛错，
+**不把未检出的帧写成 0 spread**）、`CAL_CAMERA_POSE_OUT_OF_CORRIDOR`（越界拒绝、**不 clamp**）、
+`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED`；其余六个是 timing 模块的（`_MISSING`/`_CONTRADICTORY`/`_STOP_UNSETTLED`/
+`_SWEEP_UNSETTLED`/`_TIME_BASE_UNVERIFIED`/`_DEVICE_UNAVAILABLE`），按 HS-302 先例**换成本模块异常类、码不变**。
+
+**CLI（薄解析/校验）**：安装入口新增子命令 `measure-camera`（`--scene/--geometry-seal/--production-search-config/
+--controller-config/--frozen-candidate/--weights/--output-dir` 必填，`--safety-margin-declaration` 可选，
+`--anchor` 可重复、`--device`、`--frames-per-pose`、`--max-settle-s`、`--settle-consecutive-steps`）；缺输入/
+文件不存在/输出目录已存在 → `HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE` rc=2；**无声明 artefact 时先写文档、
+打印 `CAL_CAMERA_SAFETY_MARGIN_UNDECLARED` 到 stderr 并以 rc=2 退出**（测量本身完成，receipt 记
+`MEASURED_WITH_REFUSED_FIELD`），有声明时 rc=0。
+
+**(c) 一次真实运行（安装程序，工具链 `head-toolchain-20261001T093801Z` 由 `45ea54c22` 构建，build rc=0，
+安装模块 == 源码 `3cc17e36…`）**：
+
+```
+T=$EV/head-toolchain-20261001T093801Z
+ros2 run so101_demo_py so101_head_search_calibration measure-camera \
+  --scene $T/.../assets/mujoco/act/head_search_scene.xml --geometry-seal $EV/head-camera-probe11-…/head-camera-geometry.json \
+  --production-search-config $EV/…/camera-measurements-20261001T093905Z.production-search-config-c2a.json \
+  --controller-config $T/.../config/mujoco/ros2_controllers.yaml \
+  --frozen-candidate $EV/…/reselected-c2a/frozen-c.json \
+  --weights $EV/…/candidate-c2a/head-task-mixed-taskweighted/weights/best.pt \
+  --output-dir $EV/…/camera-measurements-20261001T093905Z --anchor left --device cuda --frames-per-pose 12
+rc=2  wall 3 s (elapsed_s=2.6784842014312744)
+CAMERA_MEASUREMENTS_MEASURED centre_jitter_px=0.31094426888056453 centre_jitter_rad=0.0006374876148244371
+  poses=3 frames=36 rad_per_px=0.0020501667939385616 safety_margin_px=None
+stderr: CAL_CAMERA_SAFETY_MARGIN_UNDECLARED: no retained artefact declares safety_margin_px: …
+```
+
+* 输出 `$R/camera-measurements.json`（file `1fc56be660c03df0…`，canonical 自摘要 `d9a15972abdebab5…`）与
+  `$R/measurement-receipt.json`（`3d4c27aaf8696fd8…`，`status=MEASURED_WITH_REFUSED_FIELD`、
+  `fields_refused=["safety_margin_px"]`）、`$R.console.log`、`$R.provenance.txt`（含运行前输入 sha256、派生配置
+  key 级 diff、运行后 `ps`/`nvidia-smi`）、派生配置 `$R.production-search-config-c2a.json`（`dfe7165656f2d9a1…`，
+  与 HS-301/302 逐字节相同）。
+* **逐停点（OBSERVED）**：anchor 停点 `0.0`（已长期静止，drift 0）std **0.000680 px**、p2p 0.002045 px；
+  plan 停点 `+0.08047101126546086` std **0.310944 px**、p2p 1.084900 px、**drift 3.468e-3 rad**；
+  plan 停点 `-0.17559216195018024` std **0.205120 px**、p2p 0.670776 px、drift 3.470e-3 rad；行轴 spread 最大
+  0.168679 px。**结论**：新鲜命令到的 plan 停点上，1.2 s 持位内的中心游走由驱动器**残余爬行**主导
+  （3.47 mrad ≈ 1.44 px@focal，与 p2p 同量级），而早已静止的 anchor 停点上只剩亚千分之一像素的渲染/检测抖动
+  —— 这正是搜索在"停住等待/锁定"期间看到的中心游走，故 headline 取最坏停点。运行时身份：`/usr/bin/python3`
+  3.12.3、MuJoCo 3.12.0、torch 2.13.0+cu130、ultralytics 8.4.115、`cuda_available=true`、RTX 5080、
+  `so101_demo` 模块 = 该工具链根、`weights_sha256=2afd5506…`、`mujoco_neck_commanded=true`、
+  `ros_nodes_started=false`、`hardware_motion_commanded=false`、`transport_measured=false`。
+* **一次必须报备的跑法修正**：第 1 次调用（`camera-measurements-20261001T093847Z`，rc=2，jitter
+  0.3111514317440824 px）由运行脚本发起，而该脚本用 Python 风格 docstring（含反引号）当头部，bash 把反引号
+  当命令替换执行、刷出 12 行 `command not found`。**测量本身完成且产物完整**；把 docstring 改成 `#` 注释后
+  重跑一次得到本轮 of record 的 `…T093905Z`。两次**都保留**：headline std 差 0.067%（0.311151 vs 0.310944 px），
+  差值只落在千分之一像素级的渲染/检测位（两次的物理量 drift 3.468e-3 rad 前 4 位相同），故这是同一次测量的
+  可复现性证据，不是"重摇"选值。
+
+**(d) 安装版 phase 6 接受该文档**（`$R/consumption-check.log`，`compute_center_deadband_px` 来自工具链安装树）：
+
+| 项 | 结果 |
+| --- | --- |
+| `centre_jitter_rad` → start | **`start_deadband_px = 1.0`**（`ceil(0.310944/0.00205017)`，`rad_per_px` 与文档一致） |
+| 候选取 HS-302 的**真实** `deadband-candidates.json`（`567fc5ea…`，只读引用） | **`center_deadband_px = 3.0`**，`safety_margin={start 1.0, chosen−start 2.0, lock_frames 3}` |
+| `input_evidence` | 按 `path`+sha256 引用本文档（`d9a15972…`）；`CAL_DEADBAND_OSCILLATES` 未触发 |
+| `compute_vertical_bounds_px` | **拒绝**：`ValueError: the camera measurements declares no finite safety_margin_px`（普通 ValueError，因为该字段是 `null` 而不是被默认的数） |
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED（新测试文件，模块缺失） | **rc=2，1 个 collection error**（`ImportError: cannot import name 'head_search_camera_measurement'`），边界正确 |
+| RED（CLI，无新子命令） | **5 failed / 31 deselected, rc=1** |
+| GREEN（模块 / CLI） | **47 passed** 与 **5 passed**，rc=0；`ruff check` 三个源文件干净，两个**新**文件另过 `ruff format`（两个既有文件与 HS-300..302 一样只保证 `ruff check`） |
+| 回归（17 文件 = HS-288..302 各 phase + 新模块 + CLI + calibration，基线调用式，`-n 8`） | **478 passed / 0 failed / 0 error / 0 skipped, rc=0**（3.82 s；`$EV/scratch/pytest-xdist8-hs303-regression.00226254`） |
+| 全量 `src/so101_demo_py/test`（基线调用式，`-n 8`，24 逻辑 CPU） | **tests 6441 / 175 failed / 6028 passed / 152 skipped / 86 errors, rc=1**（64 s）；与父基线 `…hs302-final-demo.80a10670`（6389/175/5976/152/86）**节点集 diff 0 行（261 节点）**、`passed +52`＝本轮新增（47+5）、失败集中 **0 个 head_search 节点**（`…hs303-final-demo.3f000d92`） |
+| 运行前后进程 | `ps`（mujoco/yolo/detector/ros2 run/so101 全空）、`nvidia-smi --query-compute-apps` 空（provenance 内含运行前后两份） |
+
+**本轮声明的主要推断（待评审）**：① `centre_jitter_rad` 取**列**轴（`lock_run` 用列差、phase 6 除水平分辨率），
+行轴 spread 单独记录、不换算成角；② headline 取**最坏停点**（最大 std）而非均值，因为 deadband 必须覆盖漂移最大的
+停点；③ "固定停点"由生产 settle 规则 + 同目标重复 `settle_to` 定义，故新到停点的**残余爬行计入** jitter（这是
+搜索真实看到的量），文档逐帧留 `neck_yaw_rad`/`neck_velocity_rad_s`/`pose_drift_rad` 供评审自行判断，**本轮不做**
+"机械爬行 vs 渲染噪声"的分离归因；④ `safety_margin_px` 判为**无声明**并因此拒绝该字段（race：不默认、不替代
+`visible_pixel_minimum`），`--safety-margin-declaration` 只是为将来真正声明该键的 artefact 预留的入口，本轮
+**没有**用它；⑤ 无声明时 CLI 仍以 **rc=2** 退出（测量完成、字段被拒），这是刻意选择：部分被拒的文档不应以 0
+退出，而 (d) 要求的"phase 6 接受该文档"仍成立（`compute_center_deadband_px` 只读另三个键）；⑥ 单帧必须**恰好
+一个**杯，否则 `CAL_CAMERA_CUP_LOST`；⑦ 停点集合 = anchor 起点 + bounded plan 停点（去重），未加任何别的角度；
+⑧ 复用 HS-302 的 `MujocoClosedLoopPlant`/`build_production_head_detector`/`detector_operating_point`/
+`motion_corridor_rad` 及其私有 `_anchor_requests`/`_plant_request`，并复用 timing 模块的 settle/时基/权重守卫；
+**唯一**与 HS-302 不同的复用处：本模块用 `setdefault("time_base", …)` 而不是覆盖，故 plant 自报 wall 时基会被
+时基证明拒绝（有测试钉住）；⑨ `--frames-per-pose` 默认 12（1.2 s 仿真时间 @10 Hz 契约）、下限 3；⑩ 输出目录取
+`$CAMPAIGN/camera-measurements-<UTC>/`，派生配置/provenance/console 用 `$RUN.` 前缀同级存放，测量目录只含 CLI
+的 2 个文件（外加消费核查的 `consumption-check.log`）；⑪ **phase 6 仍算不完** `vertical_bounds_px` —— 这是本轮
+的结论：除非有 artefact 真正声明 `safety_margin_px`，否则 phase 8 的 bundle 在这一个参数上仍然缺源。
+
+**本轮证据与生命周期**：保留 `head-toolchain-20261001T093801Z`（**最终**，由 `45ea54c22` 构建）、
+`$CAMPAIGN/camera-measurements-20261001T093905Z{,.production-search-config-c2a.json,.console.log,.provenance.txt}`
+（**最终测量** + `consumption-check.log`）、`$CAMPAIGN/camera-measurements-20261001T093847Z{,…}`（脚本引号缺陷的
+首次调用，测量完成、留证）、`$EV/scratch/pytest-xdist8-hs303-{regression.00226254,final-demo.3f000d92}*`（门禁）、
+`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-303 节）、工作树 `scratch/hs303/`（RED/GREEN/回归日志、
+派生/运行/消费脚本、pyshim、tmp）。以上**均为删除候选，未删除**；未触碰 HS-300/301/302 的产物（除只读引用）。
