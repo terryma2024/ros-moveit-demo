@@ -1146,9 +1146,17 @@ def _formal_coverage_ok(audit: Path) -> bool:
     epochs = [row["release_epoch"] for row in physics]
     # F5 (eighth verdict): the episode's own declared initial epoch is exempt from transition naming — only the
     # epochs a release actually entered must be named — while the sequence itself never goes backwards
-    try:
-        initial = json.loads((audit / "audit-manifest.json").read_bytes())["identity"]["release_epoch"]
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+    # T3-F5 (eighth verdict): the declared initial epoch lives in the manifest once sealed, but at SEAL time that
+    # file does not exist yet and the episode's own identity is what states it - so read whichever is present, or
+    # every positive epoch looks unnamed and a real run cannot be sealed at all
+    initial = None
+    for name in ("audit-manifest.json", "episode.json"):
+        try:
+            initial = json.loads((audit / name).read_bytes())["identity"]["release_epoch"]
+            break
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError):
+            continue
+    if type(initial) is not int:
         initial = 0
     if type(initial) is not int:
         initial = 0
