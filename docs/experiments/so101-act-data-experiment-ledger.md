@@ -49286,3 +49286,20 @@ That makes K2's implementation, as measured rather than as listed: the geometry 
 task-level sequence (about seven lines, hook identified), and the new record kinds for the K2 events - which are the
 only genuinely new documents, and which the passed table defines key by key. The review's file list remains the map for
 who consumes these, but the tree has already absorbed more of it than the list's wording suggests.
+
+
+## CP-2606 — The task-level sequence broke 65 tests, so it was reverted in the same round
+
+Wiring `task_sequence` through the writer failed loudly and precisely: **65 failed, 15 passed**, with
+`AttributeError: 'Acquisition' object has no attribute 'task_sequence'`. The cause is my own incomplete edit - adding
+the key to `_ACQUISITION_FIELDS` while only teaching the `_closed` check to subtract it means the **reader**, which
+iterates the field set and reads each key off the record, now expects a key the acquisition path never writes. The four
+source appends were handled; the acquisition append was not.
+
+Reverted from the backup taken before the edit: marker count zero, tree back to the user's 35 entries, and the audit and
+QC suites green again (75 and 6). The lesson is the one this stretch has recorded before in another form - a change that
+moves a closed field set has to move **every** producer of that set in the same edit, and the acquisition path is a
+producer too.
+
+Next round: do it in one complete edit - the four source appends **and** the acquisition append - and run the two suites
+before anything else.
