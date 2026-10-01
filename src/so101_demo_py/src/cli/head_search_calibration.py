@@ -1,16 +1,17 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
-`measure-mujoco`, `measure-search-timing` and `measure-deadband-candidates` are the measurement flights
-the run cannot take itself - the run declares documents, it does not render, read a sealed model, step a
-simulator or close a control loop - so they are their own installed entries, validated here and produced by
-`so101_demo.act.head_search_coarse_step_measurement`,
+`measure-mujoco`, `measure-search-timing`, `measure-deadband-candidates` and `measure-camera` are the
+measurement flights the run cannot take itself - the run declares documents, it does not render, read a
+sealed model, step a simulator or close a control loop - so they are their own installed entries, validated
+here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `so101_demo.act.head_search_mujoco_measurements`,
-`so101_demo.act.head_search_timing_measurement` and
-`so101_demo.act.head_search_deadband_measurement`.
+`so101_demo.act.head_search_timing_measurement`,
+`so101_demo.act.head_search_deadband_measurement` and
+`so101_demo.act.head_search_camera_measurement`.
 """
 
 from __future__ import annotations
@@ -176,6 +177,24 @@ DEADBAND_REQUIRED_FLAGS = (
     ("output_dir", "--output-dir"),
 )
 DEADBAND_CANDIDATE_FLAG = ("candidate", "--candidate")
+
+
+#: the `measure-camera` entry: the sealed scene the frames are rendered in, the sealed geometry whose
+#: field of view and image size are the declared camera, the production search configuration, the sealed
+#: controller period, the selected candidate's frozen document, the selected model's weights and the
+#: brand-new directory the documents own. `--safety-margin-declaration` is optional: it names the artefact
+#: that declares `safety_margin_px`, and without it that field is written as null and refused rather than
+#: defaulted
+CAMERA_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("production_search_config", "--production-search-config"),
+    ("controller_config", "--controller-config"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("weights", "--weights"),
+    ("output_dir", "--output-dir"),
+)
+CAMERA_OPTIONAL_FILE_FLAGS = (("safety_margin_declaration", "--safety-margin-declaration"),)
 
 
 def _measurement_parser() -> argparse.ArgumentParser:
@@ -475,6 +494,134 @@ def _measure_deadband_candidates(arguments: list[str]) -> int:
         f"locking={len(locking)} output_dir={parsed.output_dir}"
     )
     return 0
+
+
+def _camera_parser() -> argparse.ArgumentParser:
+    """The `measure-camera` entry: it declares the sealed inputs and the frame budget.
+
+    This is the flight the run cannot take itself: the installed program holds the production controller's
+    own settled poses in the sealed MuJoCo scene, renders the head camera once per frame period, detects
+    the cup with the selected model and measures the spread of the detected centre, which is the
+    `centre_jitter_rad` phase 6 starts `center_deadband_px` from. It measures that field and only that
+    field: the image safety margin is a declaration, so it is read from `--safety-margin-declaration` or
+    refused, never defaulted.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-camera",
+        description=(
+            "Hold every sealed anchor's settled poses in the sealed MuJoCo scene, measure the detected "
+            "cup centre's spread frame by frame, and write the camera measurements document phase 6 reads"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the frames are rendered in")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-search-config", type=Path, help="the sealed production search configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration (the control period)"
+    )
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the documents own")
+    parser.add_argument(
+        "--safety-margin-declaration",
+        type=Path,
+        help="the artefact that declares safety_margin_px; without one the field is refused, not defaulted",
+    )
+    parser.add_argument("--anchor", action="append", help="measure only these sealed anchors")
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--frames-per-pose", type=int, default=None, help="how many repeated frames each pose is held for"
+    )
+    parser.add_argument("--max-settle-s", type=float, default=None, help="the per-pose settle budget")
+    parser.add_argument(
+        "--settle-consecutive-steps", type=int, default=None, help="the consecutive quiet control steps"
+    )
+    return parser
+
+
+def _measure_camera(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the pose holds to the library.
+
+    The measurement itself is complete when the jitter has been measured; a field no artefact declares is
+    a refusal this entry reports with the library's own code and exit status 2, even though the document
+    carrying the measured jitter is on disk - a caller must never read a defaulted margin out of it.
+    """
+
+    parsed = _camera_parser().parse_args(arguments)
+    missing = [flag for name, flag in CAMERA_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in CAMERA_REQUIRED_FLAGS + CAMERA_OPTIONAL_FILE_FLAGS
+        if getattr(parsed, name) is not None
+        and name != "output_dir"
+        and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_camera_measurement import (
+        DEFAULT_FRAMES_PER_POSE,
+        SETTLE_CONSECUTIVE_STEPS,
+        write_head_search_camera_measurement,
+    )
+
+    optional = {
+        "frames_per_pose": DEFAULT_FRAMES_PER_POSE,
+        "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS,
+    }
+    for key in ("frames_per_pose", "max_settle_s", "settle_consecutive_steps"):
+        if getattr(parsed, key) is not None:
+            optional[key] = getattr(parsed, key)
+    try:
+        result = write_head_search_camera_measurement(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            production_search_config_path=parsed.production_search_config,
+            controller_config_path=parsed.controller_config,
+            frozen_candidate_path=parsed.frozen_candidate,
+            weights_path=parsed.weights,
+            output_dir=parsed.output_dir,
+            safety_margin_declaration_path=parsed.safety_margin_declaration,
+            anchors=parsed.anchor,
+            device=parsed.device,
+            command=_command_line(arguments, subcommand="measure-camera"),
+            **optional,
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"CAMERA_MEASUREMENTS_MEASURED centre_jitter_px={receipt['centre_jitter_px']!r} "
+        f"centre_jitter_rad={receipt['centre_jitter_rad']!r} "
+        f"poses={receipt['pose_count']} frames={receipt['frame_count']} "
+        f"rad_per_px={receipt['rad_per_px']!r} "
+        f"safety_margin_px={receipt['safety_margin_px']!r} output_dir={parsed.output_dir}"
+    )
+    for refusal in receipt["refusals"]:
+        print(f"{refusal['code']}: {refusal['detail']}", file=sys.stderr)
+    return 2 if receipt["refusals"] else 0
 
 
 def _timing_parser() -> argparse.ArgumentParser:
@@ -928,6 +1075,10 @@ def main(argv: list[str] | None = None) -> int:
     # the closed-loop deadband lock trials are the fourth flight the run cannot take
     if arguments[:1] == ["measure-deadband-candidates"]:
         return _measure_deadband_candidates(arguments[1:])
+    # the camera's centre jitter is the fifth flight the run cannot take; its safety margin is a
+    # declaration this entry reads or refuses, never a number it makes up
+    if arguments[:1] == ["measure-camera"]:
+        return _measure_camera(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
