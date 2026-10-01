@@ -48261,3 +48261,19 @@ fixture and read the traceback's `file:line` pairs in full rather than a snippet
 CP-2504 turned a contradiction into two file measurements.
 
 The re-review is still running (`tail -1` empty).
+
+
+## CP-2550 — The traceback's own locals, and the one unread line inside bind_row
+
+The older failing log carries the frames in full, and pytest printed the call's locals:
+`row_index = 0`, `sim_time_s = 1.0`, `head_id = 's/1/head/10'`, `wrist_id = 's/1/wrist/10'`,
+`reference_sequence = 1`, against `self = <so101_demo.act.episode_audit.EpisodeAuditWriter>`. The call site is exactly
+`writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id, frames[("wrist", 1.0)].acquisition_id, 1)`, and the
+raise happens inside `bind_row` after `self._require_open()`.
+
+With CP-2548 and CP-2549 showing that `_integer(0)`, `_finite(1.0, nonnegative=True)`, `_integer(1)` and
+`_closed(record, _ROW_FIELDS)` all accept these values, the raiser must be a line between `_require_open()` and the
+record construction - which is the one part of the method this stretch has never printed verbatim. So the next read is
+`bind_row`'s opening lines with their whitespace made visible, and no further reasoning from memory.
+
+The re-review is still running (`tail -1` empty).
