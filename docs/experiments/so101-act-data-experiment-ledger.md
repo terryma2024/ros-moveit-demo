@@ -51557,3 +51557,23 @@ Rather than a third attempt at the constructor, the test is reverted (worktree c
 next round's first act. The count is now explicit: this one test has cost five shapes read (outcome, recipe, harness,
 writer signature, document shapes), two refusals diagnosed, and one line of real evidence about how a root is created -
 which is the honest price of not guessing, and it is still cheaper than the two guesses already made.
+
+
+## CP-2705 — The writer uses exactly the root it is given, and the failing path was truncated by my own reader
+
+```python
+    def __init__(self, root: Path, scope: dict, identity: dict, inputs: dict) -> None:
+        self.root = Path(root)
+        if (not self.root.is_absolute() or ".." in self.root.parts ...):
+            raise ValueError("AUDIT_ROOT_INVALID")
+```
+
+So `self.root` **is** the argument - no appended segment, no derivation - and the two `mkdir` frames I read in the
+traceback (`> self.root.mkdir(parents=False, exist_ok=False)` and `> os.mkdir(self, mode)`) are **pathlib's own** frames,
+not the writer's. Which means the `FileExistsError` is about the path I passed, and its full value is the thing I have
+still not seen: every reading of it has been cut off by the `cut -c1-165` in my own command.
+
+That is worth naming as the mistake it is: two rounds of reasoning about *why* a path existed, while the instrument I was
+using hid which path it was. The next attempt prints the error's path in full before theorising about it - and the
+constructor question is now closed anyway, since the writer takes the root verbatim and the recorder tolerates an
+existing directory, so the only open item is the path itself.
