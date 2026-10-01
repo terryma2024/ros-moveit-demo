@@ -44288,3 +44288,18 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation one clean edit behind CP-2332; F5's regression fixed with step one landed and step two handed off;
 - HEAD b3245063c; goal active.
+
+## CP-2351 - F5's per-kind tightening also needs the fixture surgery, measured again
+
+- Attempted the smallest green-safe tightening of the per-kind rule - each kind may not repeat an instant - on the
+- reasoning that the fixtures hold one row per kind. Ten tests refused, so they do not: several audits carry two or
+- more physics rows of one kind at the same instant, which is exactly the summary shape the verdict objects to.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- What this adds to CP-2330 and CP-2342: F5's two remaining items and F11's derivation all land in the same pass,
+- because they all need those fixtures to stop being one-instant summaries and start carrying the history a run
+- produces. The runner-backed fixture (Task A) is the fixture that does that, which is why it is the entry point
+- the index names rather than a side quest.
+- Until that pass happens, the honest state is: three items (F5's per-kind history, F5's runner-backed fixture,
+- F11's derivation) are one shared fixture upgrade away, and F11's half of it is behind the CP-2332 ruling.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed;
+- F5's regression fixed with step one landed; HEAD e886d2fb3; goal active.
