@@ -241,8 +241,21 @@ def _run(arguments) -> int:
     # the collection mode (diagnostic or formal) is not the run mode: driving the approved stack is an execute run,
     # and the mode stays recorded in the run's own log and in the frozen manifest
 
-    result_port = SealedResultAdapter({"worker-0": worker_root}, RunMode.EXECUTE,
-                                      expected_final_cup_pose_world=tuple(target))
+    # the endpoint inputs the port needs to judge endpoints, read from the frozen manifest before the port is built
+    # (they are bound into the inputs hash chain, which is why preflight can account for them)
+    _frozen = read_inputs_manifest(inputs / "inputs-manifest.json")
+    _endpoint_inputs = None
+    if "endpoint_policy" in _frozen:
+        _endpoint_inputs = {"endpoint_policy": _frozen["endpoint_policy"], "final_target": list(target)}
+    if _endpoint_inputs is None:
+        result_port = SealedResultAdapter({"worker-0": worker_root}, RunMode.EXECUTE,
+                                          expected_final_cup_pose_world=tuple(target))
+    else:
+        # the class the coordinator's ACT gate selects by the contract the port implements, so an episode whose
+        # endpoint verdict is not PASS cannot be committed as a success (CP-2802/CP-2828)
+        from so101_demo.act.result_store import ActCollectionResultVerifier
+        result_port = ActCollectionResultVerifier({"worker-0": worker_root},
+                                                  endpoint_inputs=_endpoint_inputs)
     coordinator = BatchCoordinator(journal, request, config=config, result_port=result_port)
     # the two artefacts the specification needs, both written under this run's own root: a one-point TaskPointList
     # (the sweep catalogue reduced to this episode) and a copy of the frozen provenance inputs, so the composition
@@ -310,11 +323,6 @@ def _run(arguments) -> int:
     # the frozen inputs carry the endpoint policy the QC compares against (they are bound into the inputs hash
     # chain, which is why preflight can account for them), so the composition can build a port that judges
     # endpoints - the class the coordinator's ACT gate selects by the contract the port implements (CP-2798/2802)
-    _frozen = read_inputs_manifest(inputs / "inputs-manifest.json")
-    _endpoint_inputs = None
-    if "endpoint_policy" in _frozen:
-        _endpoint_inputs = {"endpoint_policy": _frozen["endpoint_policy"],
-                            "final_target": list(spec.expected_final_cup_pose_world)}
     # the broker runs in its image, which is the route the coordinator approved (CP-2760): the composition's
     # own default builds that command from the spec, so the container-free builder is not passed here
     composition = ProductionBatchComposition(spec, endpoint_inputs=_endpoint_inputs)
