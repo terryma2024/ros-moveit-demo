@@ -47739,3 +47739,20 @@ The next read is the construction site: how `prepare_batch` or the composition b
 production path (the grep is printed beside this entry), which gives the exact arguments to reproduce in `run`. With
 that, the guard joins the catalogue, the start-guard policy and the container-free broker as a piece whose shape is
 known rather than guessed.
+
+
+## CP-2523 — The guard's construction is a factory over a state root and the policy
+
+Both construction sites are in the same module and both are factory returns:
+`return EpochStartGuard(ProbeCoordinator(state_root), policy, ...)` at 898 and 947. So the guard is not built from
+thin air: it needs a **state root** - the directory the probe coordinator keeps its state in - plus a `StartGuardPolicy`,
+which the dataclass already defaults to exactly the approved values (CP-2521).
+
+For the single-episode run that means `state_root` belongs under the run's own evidence root (the same way the journal,
+the worker root and the broker input root do), and the guard can be constructed exactly as the factories do. The
+factory function names and any additional keyword arguments are the last detail, printed beside this entry; after that
+the guard joins the catalogue, the policy and the container-free broker as a piece whose shape is known.
+
+Six layers of this integration have now been cleared by running it and reading the refusal rather than by reading the
+source: the input guard, the run mode, the trusted seven-value pose, the versioned request, the start-guard policy and
+now the guard class itself.
