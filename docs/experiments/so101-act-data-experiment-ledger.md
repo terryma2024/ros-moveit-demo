@@ -45568,3 +45568,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   is itself evidence that the gate is live rather than bypassed.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 5fcb1be5c;
   goal active.
+
+
+## CP-2415 — prepare writes the whole frozen set; one post-write validator still refuses
+
+- Landed the plan's E1 split at `first_episode_inputs.py:377`: `require_nonhead_gate` now runs only for a candidate
+  whose approval is the historical `nonhead_calibration`, so a document carrying `user_empirical_default` is not
+  forced through the calibration report contract - the five process-quality fields stop being a precondition, no
+  blanket `nonhead_ready` is introduced, and every real safety check stays. The manifest's closed field set was
+  widened to acknowledge the three bindings the freezer now writes (`mode`, `endpoint_policy`, `runtime_policy`).
+- Measured after the rebuild, in order: `inspect` rc=0 with twelve roles and zero blockers; `preflight` rc=0
+  reporting `prepared_mode: preselected_target_diagnostic`, twelve roles and `rule: endpoint_pose_v1` - which is
+  itself proof that the freeze wrote a manifest the reader accepts; and `prepare` still exits 1 with
+  `INPUTS_MANIFEST_INVALID` **after** writing the whole `inputs/` tree (the twelve role directories and
+  `inputs-manifest.json` are on disk).
+- So one post-write validator still disagrees with what the writer produced, and its raise sites are the next read
+  (`INPUTS_MANIFEST_INVALID` appears several times in this module). The likely candidates are the manifest's role
+  entries (`_MANIFEST_ROLE_FIELDS = {path, sha256, bytes, approval, identity}`) and any comparison of the written
+  manifest against the candidate registry - the same closed-contract pattern that produced the previous refusal, and
+  the amendment's rule applies: a new field is a versioned change with its consumers moved together.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 730b21252;
+  goal active.
