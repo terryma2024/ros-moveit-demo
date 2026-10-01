@@ -47388,3 +47388,18 @@ than by reading. What remains is the instrument built for exactly this: CP-2497'
 complete, prints every input the predicate sees on one line. Pairing it with the fixture answers the question in a
 single run, and the fixture is now better understood than ever - its physics history is 0.1 through 1.2 with a gap at
 0.6 -> 0.9, and the acquisitions are a clean 10 Hz grid from 0.1 to 1.0 (CP-2500).
+
+
+### CP-2502 — The direct-predicate route works, once the writer's API is read first
+
+Tried to test the predicate without the runner - build a writer, mint ten acquisitions, bind one row, then call
+`writer._window_matches_rows(window)` directly, which would have replaced the thirty-line fixture with fifteen lines.
+Three API details refused in sequence, each naming itself: `bind_row(0, ...)` needs a **physics row** to exist first
+(`AUDIT_BINDING_INVALID`); a hand-written physics row needs the full `_PHYSICS_FIELDS - {"sequence"}` set, i.e.
+`kind`, `sim_time_s`, `release_epoch` **and** `observation` (`AUDIT_SCHEMA_INVALID`); and `append_source` has a closed
+kind check of its own (`AUDIT_SOURCE_KIND_INVALID`), so its signature has to be read rather than guessed.
+
+The route itself remains sound and is the cheapest way to finish F5 - the fixture becomes fifteen lines instead of
+thirty and no runner is needed - but it must start by reading `append_source`'s signature and one existing physics row
+from the suite, then call the predicate directly. The test was withdrawn (tree back to the user's 35 entries, audit
+suite 74 passed) and both API facts are recorded above so the next attempt does not rediscover them.
