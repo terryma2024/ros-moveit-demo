@@ -1327,6 +1327,13 @@ class ParallelWorkerRuntime:
         except ValueError as error:
             raise RuntimeError("terminal capture boundary is required") from error
         capture = self._capture_fresh_rgb(lease, "terminal-rgb.png", boundary)
+        # the episode ends here: the boundary the caller passes is the run's own end instant, and the window
+        # the capture needs is built from the instant it started at. Sealing goes through the sink because the
+        # outcome belongs to whoever knows the run's decision - a recorder that invented one would make the
+        # episode's own status worthless (CP-2857).
+        _sink = getattr(self, "episode_sink", None)
+        if _sink is not None and _sink.current is not None:
+            _sink.finish(boundary)
         return (capture.path,)
 
     def cancel_motion(self, lease: Any) -> bool:
