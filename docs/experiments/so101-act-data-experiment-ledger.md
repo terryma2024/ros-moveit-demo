@@ -49217,3 +49217,19 @@ consumer moves because the default keeps the current construction valid.
 That is K2's geometry item reduced to its minimum, found by measuring rather than by reading the review's list as a
 work order: one field, one construction site, and a derivation that already holds the values. The remaining K2 items
 are the ordering sequence and the new record kinds, which are additions rather than repairs.
+
+
+## CP-2602 — K2's first difference is in: the geometry carries its source facts
+
+Committed as **67e12c918**, width gate green at **242 passed** - i.e. nothing that consumed `TaskGeometry` moved, which
+is what the optional-default design was for. Two edits, both minimal:
+
+- `core/task_geometry.py`: `TaskGeometry` gains `source: dict | None = None`, documented as "the source-side facts this
+  geometry was derived from - the producer's session, reset epoch and simulation step, and the stamp it was evaluated
+  at", with `None` meaning "not recorded" rather than a fabricated value. The single construction site is untouched.
+- `adapters/act/pick_place_scene.py`: the derivation now builds `derived_from` from the `world` record it **already**
+  validated for scope and step, and passes it through the existing `replace(...)` return.
+
+So the provenance the first review found discarded on return now travels with the geometry it describes, and nothing is
+re-read or re-derived to get it. That is K2's geometry item done; the remaining items are the single-namespace ordering
+sequence and the new record kinds, which are additions to the audit rather than repairs to what is there.
