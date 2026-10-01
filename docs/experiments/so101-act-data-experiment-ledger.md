@@ -50529,3 +50529,30 @@ record is that several earlier "environment-shaped" observations in this work ma
 next round re-runs the failing Task-8 suite under `zsh -c` with the underlays sourced and this worktree's install
 sourced last - and if the COLCON_IGNORE still governs, the test that follows is whether the main worktree's share dir
 gains the asset (by installing there) or whether these suites are simply not runnable from this worktree.
+
+
+## CP-2663 — Resolved: the 129 failures were the bash-versus-zsh sourcing, nothing else
+
+Under `zsh -c`, with the underlays sourced and this worktree's install last:
+
+```
+AMD = /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a/install/so101_demo_py
+rc = 0
+35 passed in 2.79s
+```
+
+So `AMENT_PREFIX_PATH`'s first entry becomes **this worktree's** install once the scripts are sourced by the shell they
+are written for, `get_package_share_directory` resolves the act scene correctly, and the suite that contributed
+thirty-two of the failures passes in full. The 129 failures were therefore **entirely** the sourcing fact of CP-2662 -
+not my changes, not the user's tests, and not the `COLCON_IGNORE` (which stops colcon from writing there but does not
+stop an already-built tree from being sourced).
+
+That also means the numbers in CP-2659 were a measurement of the *harness*, not of the code: "129 failed, 5925 passed"
+is what this package looks like when half the environment is missing. The honest conclusion is that the full-sweep gate
+must be run under `zsh -c`, and until it is, no claim about the package's overall state - mine or anyone's - is
+supported by those numbers.
+
+Two corrections stand as the record of this stretch: my gate was too narrow (CP-2659), my prediction about the cause was
+wrong twice (CP-2658's and CP-2660's readings), and the actual cause was a detail about the shell. The remedy is the
+recipe, recorded here so the next run starts from it: **`zsh -c 'source /opt/ros/jazzy/setup.zsh; source <underlays>;
+source <this worktree>/install/setup.zsh; source env.zsh; ...'`**.
