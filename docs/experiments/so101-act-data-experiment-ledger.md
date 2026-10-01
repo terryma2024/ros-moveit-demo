@@ -48541,3 +48541,29 @@ Reading E2 in the dispatch plan rather than guessing its identifiers:
 
 That last point is the standing instruction for the list I updated this round, and it is why the update touched statuses
 rather than reshaping entries.
+
+
+## CP-2565 — E2's brief in full, with its real interface and sampling sites
+
+Reading E2's section whole gives what guessing could not:
+
+- **Files**: `act/episode_audit.py`, **`act/episode_qc.py`**, `act/pick_place_runner.py`, the real source/broker adapters,
+  `act/result_store.py` and the production factory.
+- **Interfaces**: **`endpoint_records_from_audit(audit: dict, inputs: dict) -> dict`**, defined in the **shared
+  `episode_qc.py`**, returning the design's records **from the verified raw history** - so the QC side reads the sealed
+  records and recomputes, rather than trusting anything the runner asserted.
+- **RED first**: a `producer -> Writer -> seal -> fresh-process QC` positive chain whose endpoints are legal and whose
+  **quality fields are absent**, with the old conditions required **not** to refuse it.
+- **Sampling sites**: after the real reset and **before the arm-gripper dispatch**, and after normal completion or
+  **controller-stop**; the formal Head search and neck dispatch may precede collection.
+- **Per-terminal-state checklist**: for every existing terminal/physical predicate, a safety-and-quality list, and the
+  removal is **quality only** - grip stability, lift amplitude, whole-run holding score, post-release contact.
+- **Consistency**: QC recomputes from the frozen targets and policy against the sealed raw records, and the Coordinator
+  commit's verifier and aggregator use the same result and version.
+- **Negatives to add**: missing endpoint; wrong cup/frame; old reset; future/expired; best frame before termination;
+  target rewritten afterwards; safety stop whose endpoint matches; and diagnostic turned formal.
+- **Its own Codex checkpoint** on the exact diff, the E1/E2 tests and the real producer/default-factory wiring.
+
+So E2's first concrete artefact is `endpoint_records_from_audit` in `episode_qc.py`, with the RED test that a
+fresh-process QC accepts a legal-endpoint, quality-absent chain - and the review of K2 revision 3 is still running
+(`tail -1` empty).
