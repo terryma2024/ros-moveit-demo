@@ -48836,3 +48836,26 @@ existing document's version, and a schema that claims version 2 while adding rec
 would refuse is exactly the kind of internal inconsistency the reviews keep finding. Revision 6 must state the version
 the **new records** carry and how the manifest's own version relates to it - most plausibly by leaving the manifest's
 version alone and versioning the K2 record kinds separately, since the manifest's shape is not what changes.
+
+
+## CP-2582 — Revision 5: FAIL with the same three, because the fixes went into prose and not the tables
+
+The verdict (359 lines, real `EXIT=0`, tokens 15,682): **FAIL**, and all three corrections are places where
+revision 5's *prose* was fixed while the artefact a reader implements was not:
+
+1. "**Reconcile the fixed-key table with the clock rule: include `clock_source` and `uncertainty_s` in S/G/A/Q, allow
+   null instants and uncertainty**" - I wrote the "instant iff `clock_source` non-null" rule as a paragraph **below** the
+   five-row table and left the table's key lists for S/G/A/Q unchanged, so the document still says two different things.
+2. "**Make section 1's ordering assertion conditional on `parent != null`; its current 'every record' requirement still
+   contradicts S's `parent: null`**" - I corrected section 3's sentence and left section 1's "Every record asserts..."
+   standing.
+3. "**Declare `R.received_at_s`'s type, valid domain, and nullability explicitly**" - still absent.
+
+That is the same failure the previous review named in different words - prose outrunning tables - and it is my own
+repetition of it, which is worth recording plainly rather than dressing up. Revision 6 therefore has a precise
+completion list, and this round's addition to it (the manifest and version section) is only part: revision 6 must also
+put `clock_source`/`uncertainty_s` into S/G/A/Q's key lists with nullable instants, make section 1's ordering sentence
+conditional, and declare `R.received_at_s`'s type, domain and nullability.
+
+Both reviews agree on the substance, both are reproducible, and the remaining work is editorial rather than
+architectural - which is the honest reading of a FAIL whose three items are all internal contradictions.
