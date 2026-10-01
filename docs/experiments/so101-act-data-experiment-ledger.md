@@ -40855,56 +40855,6 @@ until the user decides.
 operating point on the criterion the design names, before looking at the retention verdict, versus choosing it until the verdict
 turns green. The first was always owed; the second would be the one thing this task has refused throughout.
 
-## RESUME POINT (rewritten at HS-247; supersedes every earlier one)
-
-**Tasks:** 1-11 completed (Task 11 approved with findings, 16 verdicts). **12 in_progress.** 13-14 pending. Goal budget 3000.
-
-**Task 12 state:** Steps 1-3 complete and verified (pinned A weights sha256 `f281d252…`; 1200-image head dataset `rc=0` +
-verified; B and C trained serially `rc=0`, `device=cuda`, shared frozen base, distinct weights, C at 800/800 1:1). **Step 4**:
-18-cell val grid measured (margin 0.0 - non-discriminating), three `frozen-*.json` written and accepted by the real
-`load_frozen_candidate`. **Step 5 has run to completion** and refused on model grounds, not on a contract error:
-
-```
-EVALUATION_TASK_RETENTION_LOST: the mixed model gives up 0.011 mask mAP on the task domain
-TASK_RETENTION_MARGIN = 0.01        (head_search_models.py:33, check at :468)
-```
-
-So the honest outcome so far is **no challenger selected**, and C misses by **0.001**.
-
-**Next actions, in order:**
-1. re-select C's operating point on **val images + calibration episodes** (design line 220) - the half of Step 4 not yet done, and
-   the only fix that is not gate-shopping: the current point came from a flat grid (HS-213) and is a tie-break, not a choice.
-   Calibration episodes are already recorded at `$MODEL_RUN/episodes5/calibration` (20 seeds x 3 angles x 2 domains, 12 frames per
-   condition class). If a faithfully chosen point brings C within 0.01, that is the design's own procedure; if not,
-   "no challenger selected" stands and Task 13's input is unresolved;
-2. re-run Step 5: `ros2 run so101_demo_py evaluate_head_search_yolo_candidates compare` with the flags in `$MODEL_RUN/grid/compare3.sh`
-   (the working invocation), then Step 6's checkpoint;
-3. Task 13 - **pause for the user's exact 17-value approval** before promotion.
-
-**Gate invocation that works** (nine contract requirements each found by running it): `--output` (path); weights resolved as
-`<weights-dir>/<ID>.pt` (symlinks `A.pt`/`B.pt`/`C.pt` exist in `$MODEL_RUN`); absolute `--episode-partitions` path;
-`--episode-records`; frames need `latency_ms` (not `latency`), `domain` (head **and** task), `split`, `scenario` (else every frame
-counts as no-cup), and `detections[<ID>]` must be a **list** (a dict's keys get counted as detections); venv on `PYTHONPATH` so
-ultralytics imports under `ros2 run`.
-
-**Recorder:** `$MODEL_RUN/grid/record_episodes.py` (a script, not toolchain code). Environment recipe: source ROS + workspace +
-the **toolchain** `install/setup.bash` (LD_LIBRARY_PATH - without it EGL context creation fails), `MUJOCO_GL=egl`. It reuses
-`MuJoCoDatasetRenderer._prepare` once per seed, writes `neck_yaw_joint` qpos (qposadr 6) and captures `head_camera` + `task_camera`.
-
-**Open limitation to carry forward:** the seed->condition mapping does not exist in any artefact; a declared plan (two seeds per
-class in the file's order; `no_cup`->0 cups, `two_cups`->2, else 1) is recorded as an assumption in HS-243, and the renderer can
-only express cup counts, so `low_light`/`partial_occlusion`/`fast_interruption`/`reacquire_after_stop` are labelled but not
-rendered differently.
-
-**Environment facts:** `TOOLCHAIN_RUN=$HEAD_EVIDENCE/head-toolchain-20260930T125445Z` (built rc=0; its `source-commit.txt` is
-stale, rebuild from scratch before citing it as frozen); `GEOMETRY_RUN=$HEAD_EVIDENCE/head-camera-probe11-20260930T101722Z`
-(seal `7d963fdc…`); campaign root `$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; `HF_ROOT` with the token passed in from
-`/data/models/huggingface/token` (never printed); `no_proxy` needs the bracketed `[::1]` removed for `hf`/`httpx` (HS-181);
-training needs `--training-contract --head-dataset-root --head-manifest --task-dataset-root --task-manifest` **together**.
-
-**Deletion candidates (pending user authorization):** empty roots `head-toolchain-20260930T125637Z`/`…T125856Z`; superseded
-success roots `…T115640Z`/`…T115927Z`/`…T120204Z`; episode generations `episodes`, `episodes2`, `episodes3`, `episodes4` (each
-superseded by `episodes5`); `probe-calibration-*`; ~130 scratch dirs under the evidence root.
 
 ## HS-248 — Re-selection rule for C, declared before measuring
 
@@ -41408,3 +41358,51 @@ C 的 task 点 0.35 属回顾性选择、held-out 已被看过）。
 **当前完整结论**：在**干净且两族齐全**的测量下，B、C 在 head 域两族都胜过 A（episode recall 1.0 对 0.9167；
 静态 mAP 0.741/0.743 对 0.704），但被保留模型 C 在 task 域静态 mAP 上比最好的候选低 0.0105 > 0.01，
 且该差距**与工作点无关**，所以 `promoted: false` 是**关于训练配方**的结论，而不是关于阈值或录制的结论。
+
+## RESUME POINT (rewritten at HS-267; supersedes every earlier one)
+
+**Tasks**: 1-11 completed (Task 11 approved with findings). **12 completed** - all six steps ran; Step 5's outcome is
+**no supportable selection** (the retention rule kept the retained model). **13 in_progress but inapplicable by result**: there is no
+selected candidate to promote, and its calibration runtime's six phases are stubs (HS-233). **14 pending, likewise dependent** on
+Task 13's approved bundle and frozen runtime (HS-256). Goal active/armed, budget 3000.
+
+**Canonical roots** (do not use older ones):
+- toolchain: `$HEAD_EVIDENCE/head-toolchain-20261001T032129Z` (commit `1c142f5fae36`; contains the verdict-artefact patch **and**
+  the per-scene memoisation). **Do not cite `…T155706Z`**: it was overwritten after its recorded run, so its `source-commit.txt`
+  no longer matches its content (HS-264).
+- campaign: `$HEAD_EVIDENCE/head-yolo-models-20260930T120608Z`; geometry seal root `…head-camera-probe11-20260930T101722Z`.
+
+**Latest clean comparison** (`compare7`, output `evaluation-reselected/`, failures/verdicts also in `evaluation/` from the earlier run):
+
+| candidate | episode head r/f1 | episode task r/f1 | static head mAP | static task mAP |
+| --- | --- | --- | --- | --- |
+| A | 0.917 / 0.948 | 1.000 / 1.000 | 0.7042 | **0.9737** |
+| B | 1.000 / 1.000 | 1.000 / 1.000 | 0.7410 | 0.9653 |
+| C (retained) | 1.000 / 1.000 | 1.000 / 1.000 | **0.7434** | 0.9631 |
+
+Verdict `selection: null / retained_model: "C" / promoted: false`, refusal `EVALUATION_TASK_RETENTION_LOST` (C is 0.0105 below
+the best task mAP against a 0.01 margin). **That gap is operating-point invariant**: Ultralytics `mask_map50-95` integrates over
+confidence, so the frozen `conf` cannot move it (HS-267 disproved my earlier claim in HS-265).
+
+**Where the campaign stands**: B and C beat A on the head domain in *both* families, but the retained mixed model loses the task
+domain by more than the margin, so nothing is promoted. The next lever is the **training recipe for C** (`domain_train` mix,
+`epochs`, `checkpoint_score`), which needs the user's authorization; changing the contract changes `plan_sha256` and must be
+declared.
+
+**Recorder** (`grid/record_episodes7.py`, a campaign-root script, not in the repo): five defects found and fixed in sequence -
+no `truth`; truth per geom instead of per body; truth reused across cameras (`_segmentation()` hardcodes the config camera,
+`mujoco_dataset.py:1863`); detection keys `cx/cy` instead of `x/y`; operating point read from `head` for both domains.
+Current truth semantics: per visible cup **body**, centre = visible-pixel centroid, per camera; `match_radius_px` left at the gate
+default 8.0 (declared, changeable only by re-running).
+
+**Gate performance**: 600 single-image Ultralytics validations dominated a ~40 min run. Memoisation keyed by
+`sha256(weights)+operating point+scene+image hashes` makes a warm re-run **10.9 s** with byte-identical output (HS-264). Changing a
+candidate's operating point necessarily recomputes that candidate's head cells.
+
+**Evidence already published to HF (private repos, `zjumty`)**: `so101-yolo11n-seg-plastic-cup-head-only` (B),
+`…-head-task-mixed` (C), `so101-head-search-bc-training-data` (head-dataset, task-dataset, candidate-b, candidate-c). Both weights
+verified by re-download sha256; sample manifests verified by hash.
+
+**Deletion candidates (need explicit authorization)**: superseded episode generations `episodes`…`episodes6`; empty toolchain roots
+`…T125637Z`, `…T125856Z`; superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`, and the polluted `…T155706Z`; `probe-calibration-*`;
+scratch trees under `evaluation/measure-*/by-scene`; the review's `reviews/c-task-domain-f1/scratch-cache`.
