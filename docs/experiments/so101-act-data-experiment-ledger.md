@@ -45801,3 +45801,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   under a new LIVE_ROOT.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD 32646bd99; goal active.
+
+
+## CP-2426 — The request is four fields, so one episode is one point
+
+- `BatchRequest` (`application/task_batch.py`) is small: `batch_id`, `simulation_session_id`,
+  `points: tuple[TaskPoint, ...]` and an absolute `evidence_root`, with `__post_init__` refusing an empty id, session
+  or point tuple, duplicate point ids and a relative root. So the "points catalogue" that CP-2423 found missing from
+  the frozen tree is not a gap after all: a single non-Head episode is a request carrying **exactly one** `TaskPoint`,
+  which the run constructs from the frozen scenario rather than reading from a sweep catalogue.
+- That closes the last structural question before writing code. The remaining unknown is `TaskPoint`'s own field list,
+  and it is a single read: once known, the run reads the frozen target from the scenario, builds one point plus the
+  four-field request, makes the four composition calls (journal, sealed-result adapter, coordinator, runner) and
+  writes its stdout, stderr and real rc under a new LIVE_ROOT.
+- Nothing in that plan invents a value: the point's identity and target come from the frozen scenario, the request's
+  ids are minted per run, and the fields with no frozen source (`broker_image`, `yolo_weights`) are absent by
+  construction rather than filled with placeholders.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD 0de1dd3cb; goal active.
