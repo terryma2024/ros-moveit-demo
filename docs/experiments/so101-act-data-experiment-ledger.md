@@ -53662,3 +53662,25 @@ The production fixes this chain surfaced, each a step no layer performed before 
 Remaining to finish this piece: remove three temporary prints (store, callee, test), run the gate, and commit the five
 changes together. Then E2's corrections 4 and 5, K1's forward half, and E3 - which the coordinator's decision of CP-2760
 has unblocked by approving reuse of the existing broker image.
+
+
+## CP-2792 — The gate catches two regressions my own change introduced, and does not commit
+
+With the temporary prints removed the chain test still passes (`2 passed`), so the piece is genuinely done. The ten-file
+gate, however, reports **2 failed, 413 passed**, and both failures are mine:
+
+```
+FAILED test_act_continuous_capture.py::test_tail_rows_without_a_reference_stay_audit_only
+FAILED test_act_continuous_capture.py::test_a_refusing_tail_writer_is_reported_by_every_later_call
+```
+
+Both are about the tail, and both encode the contract my production change altered: the audit writer used to be offered
+rows **only** at the tail (for the evidence that never became a row), and it is now also called where a row is recorded -
+which is exactly what the seal requires (`len(bindings) == record_count`, CP-2759) and exactly what those two tests were
+written against the absence of.
+
+So this is the same lesson as CP-2606 and CP-2731, at a larger scale and caught earlier: **a change that moves a contract
+has to move every test that asserts it**, and the gate is what noticed - the single chain test passing was not evidence
+that the change was safe, only that it worked for the one path I was staring at. Nothing is committed; the working tree
+holds the five changes and the two failures, and the next round reconciles the two tail tests with the new contract -
+reading what they assert and updating them with the reason, since the new behaviour is the one the seal demands.
