@@ -113,9 +113,10 @@ def test_a_slow_phase_joins_each_row_to_its_accepted_future_reference():
     assert capture.drain() == 2
     rows = capture.recorder.rows
     assert [row["observation"]["sim_time_s"] for row in rows] == [1.0, 1.1]
-    ids = {(row["audit"]["head_acquisition_id"], row["audit"]["wrist_acquisition_id"])
-           for row in rows}
-    assert len(ids) == 2
+    # the identifiers belong to the audit's row-bindings records, and the channel the recorder validates is closed at
+    # its own sixteen keys - so they must not appear here (CP-2727/2728)
+    assert all("head_acquisition_id" not in row["audit"] and "wrist_acquisition_id" not in row["audit"]
+               for row in rows)
     assert all(row["audit"]["reference_time_s"]
                == round(row["observation"]["sim_time_s"] + 0.1, 6) for row in rows)
     assert capture.pending_rows == 2

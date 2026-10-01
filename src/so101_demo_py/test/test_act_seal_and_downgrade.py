@@ -70,7 +70,7 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.2):
     return audit_root / "audit" / "audit-manifest.json", recorder.root / "seal.json"
 
 
-@pytest.mark.xfail(reason="capture/recorder audit-key integration defect (CP-2726)", strict=True)
+@pytest.mark.xfail(reason="chain-test setup: the recorder refuses the row with EPISODE_SCOPE_INVALID (CP-2732)", strict=True)
 def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_path):
     """Correction 2: the episode carries the audit, and a fresh process can read it back."""
 
@@ -85,7 +85,7 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     assert document["rule_version"] == "endpoint_pose_v1" and "endpoint_pose" in document["checks"]
 
 
-@pytest.mark.xfail(reason="capture/recorder audit-key integration defect (CP-2726)", strict=True)
+@pytest.mark.xfail(reason="chain-test setup: the recorder refuses the row with EPISODE_SCOPE_INVALID (CP-2732)", strict=True)
 def test_a_run_claiming_success_cannot_survive_a_failing_endpoint_verdict(tmp_path):
     """Correction 3: the coordinator reads result['status'], so a failing verdict must change it."""
 

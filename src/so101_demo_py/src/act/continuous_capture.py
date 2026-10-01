@@ -42,6 +42,9 @@ class CaptureSummary:
     audit_files: tuple
 
 
+_RECORDER_LOCAL_KEYS = frozenset({"head_acquisition_id", "wrist_acquisition_id"})
+
+
 class ContinuousEpisodeCapture:
     def __init__(self, *, recorder, sampler, physical_audit, guard=None, audit_writer=None,
                  audit=None, scope=None,
@@ -447,7 +450,11 @@ class ContinuousEpisodeCapture:
             try:
                 # the row leaves pending work only once the recorder accepted it, so a refusal
                 # cannot silently drop evidence
-                self.recorder.append(row["observation"], entry["positions"], audit)
+                # the recorder's audit channel is a closed sixteen-key set, while the acquisition identifiers
+                # belong to the audit's row-bindings records (CP-2727/2728): the row keeps them for the audit
+                # writer, and the recorder is handed the dictionary without them
+                self.recorder.append(row["observation"], entry["positions"],
+                                     {k: v for k, v in audit.items() if k not in _RECORDER_LOCAL_KEYS})
             except Exception as error:  # noqa: BLE001 - a refusing writer is terminal
                 self._reject(self._reason(error, "CAPTURE_RECORD_FAILED"))
             row["audit"] = audit
