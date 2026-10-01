@@ -51792,3 +51792,22 @@ actually reach the recorder. Everything else in both tests has been exercised - 
 Worth noting the contrast with the previous four unknowns in these two tests: those were contracts (roots, scope types,
 byte-equality, prescribed field sets) and this one is a call the test forgot to make. The distinction is why the remedy is
 a line rather than another round of reading.
+
+
+## CP-2717 — Drain was necessary but not sufficient, and the two candidates left
+
+The test still refuses with `EPISODE_TIME_GAP` after calling `drain()`, so the rows now reach the recorder but its times
+are not on the grid. Two candidates, and the suite's own fixture commentary points at the second:
+
+- the capture's monotonic clock, which I pinned to `lambda: 0.0` - if that is what the recorder records, three identical
+  instants cannot be a grid;
+- **one frame per camera per instant**: `complete_audit` in the audit suite says exactly that - "one frame per camera per
+  instant: a row binds the head frame to the head slot and the wrist frame to the wrist slot" - and `frames_at(capture,
+  minter, stamps)` feeds a single camera by default, so my three instants may be producing rows the recorder cannot
+  assemble into a grid at all.
+
+The second is the more likely and the more interesting: it would mean the record's unit is not "a frame" but "an instant
+with every camera", which is consistent with everything else this stretch has read about the audit's binding rules. The
+next attempt feeds both cameras at each instant, and if that still refuses, the clock becomes the suspect.
+
+Test reverted, worktree clean at 35 entries.
