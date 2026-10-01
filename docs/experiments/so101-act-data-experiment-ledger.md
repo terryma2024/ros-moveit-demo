@@ -45274,3 +45274,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
   E1's data, loaders, calculator, controls and freezer binding landed, its CLI written and awaiting this build.
   HEAD c83dff2c0; goal active.
+
+
+## CP-2401 — The first build failed on a missing underlay, not on the source
+
+- Job bash-1556's launcher exited 0 but its log says the build itself failed in 0.19s: `Failed to find the following
+  files:` naming `<worktree>/install/so101_mujoco_support/share/.../package.sh`, `mujoco_ros2_control`,
+  `mujoco_ros2_control_msgs`, `mujoco_ros2_control_plugins` and `mujoco_3d_lidar`, with `Check that the following
+  packages have been built:` listing exactly those five, and a warning that `mujoco_vendor` is coming from
+  `/opt/ros/jazzy`. That is the AGENTS distinction between a missing underlay and a source regression - it is the
+  former: `so101_demo_py` is an ament_python package whose declared dependencies are present in the workspace's `src`
+  but not built in this worktree's `install`.
+- The repository's own layout points at the remedy: the main worktree's `install/` already carries
+  `so101_mujoco_support` (and the other four), and `environment.md` documents the flow as "overlay after
+  `source install/setup.zsh`" with `ros2 pkg prefix so101_demo_py` resolving inside the worktree. So the second
+  attempt sources that install as the underlay and ignores the five dependency packages by name, building only
+  `so101_demo_py` - which is also what the plan means by reusing one approved MuJoCo stack instead of building a
+  second one (job bash-1560, log `logs/task3-cli-build2.log`).
+- No claim about the outcome yet, and none about the CLI: CP-2399's correction stands until the installed entry has
+  been run with its argv recorded.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 079ac9932;
+  goal active.
