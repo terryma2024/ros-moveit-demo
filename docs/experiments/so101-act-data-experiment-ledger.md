@@ -46693,3 +46693,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   config-derived values.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD b479b4907; goal active.
+
+
+## CP-2472 — The default provenance verifier is detector-and-container shaped
+
+- `verify_provenance(spec)` requires, in order: `yolo_weights` to be an absolute non-symlink **file**,
+  `grounded_root` an absolute non-symlink **directory**, `<grounded_root>/manifest.json` a file, `sha256(yolo)` to
+  equal `yolo_weights_sha256`, `sha256(manifest)` to equal `grounded_manifest_sha256`, and `spec["broker_image"]` to
+  equal a single `_BROKER_IMAGE` constant. Its docstring says what it is for: "Verify exact local model and image
+  inputs before creating the batch root."
+- None of those three exist for a MuJoCo-only non-Head episode: there is no detector role, no grounded-SAM root and
+  no broker container, which CP-2421/CP-2460 already established from the other direction. So the **default** verifier
+  cannot pass here, and the honest treatments are the two the plan itself allows: pass a provenance verifier
+  appropriate to this deployment - `run_cli` takes one as a keyword argument, which is exactly the seam for it - or
+  report the gap precisely instead of fabricating a weights file, a grounded manifest or an image id.
+- That is the same choice this ledger has made consistently: name the boundary, never satisfy a check with something
+  invented. The next pass decides which of the two, and if it takes the first it must say in the run's own record what
+  that verifier establishes, in the same spirit as the frozen-artefact rule.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD facd061b8; goal active.
