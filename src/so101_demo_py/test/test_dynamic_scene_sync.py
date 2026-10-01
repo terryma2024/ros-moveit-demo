@@ -534,7 +534,7 @@ def _runtime(
     return SimpleNamespace(
         rclpy=_FakeRclpy(events, faults),
         parameter=lambda name, value: (name, value),
-        get_package_share_directory=lambda _name: str(PACKAGE),
+        get_package_share_directory=lambda _name, **kwargs: str(PACKAGE),
         load_policy=lambda _share, backend: loaded,
         load_geometry=load_geometry,
         cup_pose_source=source_factory,

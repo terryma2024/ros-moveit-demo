@@ -42,7 +42,7 @@ def test_dynamic_mujoco_execute_dispatches_only_with_explicit_live_provenance(
     monkeypatch.setattr(
         dynamic_runtime,
         "run_dynamic_execute",
-        lambda options: calls.append(options) or 23,
+        lambda options, **kwargs: calls.append(options) or 23,
         raising=False,
     )
 
@@ -74,7 +74,7 @@ def test_dynamic_execute_enabled_profiling_passes_and_closes_runtime_profiler(
 
     calls = []
 
-    def run(options, *, profiler) -> int:
+    def run(options, *, profiler, **kwargs) -> int:
         calls.append((options, profiler))
         return 0
 
@@ -125,7 +125,7 @@ def test_dynamic_cli_removes_launch_injected_ros_arguments(monkeypatch, tmp_path
     monkeypatch.setattr(
         dynamic_runtime,
         "run_dynamic_execute",
-        lambda options: calls.append(options) or 29,
+        lambda options, **kwargs: calls.append(options) or 29,
         raising=False,
     )
 

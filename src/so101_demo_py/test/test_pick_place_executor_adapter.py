@@ -68,7 +68,7 @@ def test_context_is_frozen_and_adapter_calls_runner_once_with_only_whitelisted_o
     context = _context(tmp_path)
     executor = DynamicCupPickPlaceExecutor(
         context,
-        runner=lambda options: calls.append(options) or 0,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
     )
 
     with pytest.raises(FrozenInstanceError):
@@ -111,7 +111,7 @@ def test_executor_emits_runtime_started_before_the_real_runtime_boundary(
     )
     executor = DynamicCupPickPlaceExecutor(
         context,
-        runner=lambda options: order.append(("runtime", options)) or 0,
+        runner=lambda options, **kwargs: order.append(("runtime", options)) or 0,
     )
 
     result = executor.dispatch(_request())
@@ -153,14 +153,14 @@ def test_executor_rejects_unpaired_or_cross_bound_workflow_emitter(
     emitter = (
         None
         if emitter_workflow_id is None or component is None
-        else EventEmitter(emitter_workflow_id, component, lambda _line: None, lambda: 100)
+        else EventEmitter(emitter_workflow_id, component, lambda _line, **kwargs: None, lambda: 100)
     )
     calls: list[object] = []
     context = replace(
         _context(tmp_path), workflow_id=workflow_id, event_emitter=emitter
     )
     executor = DynamicCupPickPlaceExecutor(
-        context, runner=lambda options: calls.append(options) or 0
+        context, runner=lambda options, **kwargs: calls.append(options) or 0
     )
 
     with pytest.raises(ExecutorDispatchError) as captured:
@@ -175,7 +175,7 @@ def test_adapter_forwards_explicit_cup_pose_timeout(tmp_path: Path) -> None:
     executor = DynamicCupPickPlaceExecutor(
         _context(tmp_path),
         cup_pose_timeout_s=42.5,
-        runner=lambda options: calls.append(options) or 0,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
     )
 
     result = executor.dispatch(_request())
@@ -211,7 +211,7 @@ def test_invalid_typed_request_is_rejected_without_runner_or_ros_import(
     monkeypatch.setattr(builtins, "__import__", reject_rclpy)
     executor = DynamicCupPickPlaceExecutor(
         _context(tmp_path),
-        runner=lambda options: calls.append(options) or 0,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
     )
 
     result = executor.dispatch(_request(**changes))
@@ -301,7 +301,7 @@ def test_invalid_context_is_redacted_before_runner_or_default_runtime_import(
     monkeypatch.delitem(sys.modules, "so101_demo.ros.dynamic_runtime", raising=False)
     executor = DynamicCupPickPlaceExecutor(
         DynamicRuntimeContext(**values),  # type: ignore[arg-type]
-        runner=lambda options: calls.append(options) or 0,
+        runner=lambda options, **kwargs: calls.append(options) or 0,
     )
 
     with pytest.raises(ExecutorDispatchError) as captured:
@@ -398,7 +398,7 @@ def test_runner_result_must_be_an_exact_integer(
 ) -> None:
     executor = DynamicCupPickPlaceExecutor(
         _context(tmp_path),
-        runner=lambda _options: runner_result,
+        runner=lambda _options, **kwargs: runner_result,
     )
 
     with pytest.raises(ExecutorDispatchError) as captured:
