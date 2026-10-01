@@ -45938,3 +45938,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   with the corrected resource route.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0e9017c8f;
   goal active.
+
+
+## CP-2433 — The revert is exact, and the single blocker is the one step two addresses
+
+- Removing the two stops from `parallel_batch_v3.yaml` restored its digest to `991b5c1b...` - the original value the
+  collection config had recorded - and the `parallel_runtime` binding was synced to it in the same change, so the
+  identity mismatch does not return. The file's top-level keys are back to `execution`, `schema_version`,
+  `start_guard`.
+- `inspect` then reports exactly one blocker, `resource_thresholds` with `NONHEAD_INPUT_BINDING_REQUIRED`, which is the
+  pre-CP-2411 state and precisely what the corrected route has to fix: the two stops come from the amendment's runtime
+  document, so `_inspect_resource_thresholds` (and the `resource_policy_identity` it calls) must read them there -
+  merging that document's `hard_stops` with the batch runtime's `start_guard` and the collection's `recorder` - rather
+  than expecting them in a file whose schema is closed.
+- So the next increment is small and well-defined, and after it the whole input half is READY again with the stops in
+  the document the design names; then the frozen `prepare` and the `run` whose composition wiring is already in the
+  working tree can both be re-run.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 93dbf7be2;
+  goal active.
