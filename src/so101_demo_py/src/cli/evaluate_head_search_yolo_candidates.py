@@ -552,10 +552,32 @@ def _measure_static_per_scene(
         scene = str(sample.get("scene_group_id") or sample.get("seed"))
         by_scene.setdefault(scene, []).append(sample)
     cells: dict[str, dict[str, float]] = {}
+    # Memoisation (HS-264): a per-scene value depends only on the weights file, the operating point
+    # and that scene's images, and each call costs one whole Ultralytics validation. Re-running with
+    # an unchanged head point must therefore not pay ~200 val calls again. The key covers all three
+    # inputs, so a changed weight, point or image can never reuse a stale cell.
+    import hashlib as _hashlib
+
+    cache_dir = scratch.parent / "scene-cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    digest = _hashlib.sha256()
+    with Path(weights).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    weight_sha = digest.hexdigest()
+    point_key = json.dumps(operating_point, sort_keys=True, default=str)
     for index, scene in enumerate(sorted(by_scene)):
+        images = "|".join(sorted(str(item.get("image_sha256")) for item in by_scene[scene]))
+        key = _hashlib.sha256(
+            "\n".join((weight_sha, point_key, scene, images)).encode("utf-8")
+        ).hexdigest()[:32]
+        cached = cache_dir / f"{key}.json"
+        if cached.is_file():
+            cells[scene] = json.loads(cached.read_text(encoding="utf-8"))
+            continue
         scene_scratch = scratch / f"scene-{index:04d}"
         scene_scratch.mkdir(parents=True, exist_ok=True)
-        cells[scene] = _measure_static(
+        value = _measure_static(
             weights,
             dataset_root,
             by_scene[scene],
@@ -564,6 +586,8 @@ def _measure_static_per_scene(
             scene_scratch,
             document=document,
         )
+        cached.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        cells[scene] = value
     return cells
 
 
