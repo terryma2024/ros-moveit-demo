@@ -30,7 +30,7 @@ def assemble_episode_capture(
     provenance: dict,
     inputs: dict,
     episode_root: Path,
-    scope: Path,
+    scope: dict,
     guard=None,
     audit_writer=None,
 ) -> ContinuousEpisodeCapture:
@@ -38,8 +38,11 @@ def assemble_episode_capture(
 
     `episode_root` is created by the recorder and owned by it; the audit writer roots at the same directory - it accepts
     an existing one for exactly that reason - so its manifest sits at `<episode_root>/audit/audit-manifest.json`, which
-    is where `verify_episode_seal` and the endpoint QC resolve it. `scope` is the path of the audit writer's own
-    `source.json` document, which the recorder checks byte for byte against `<audit manifest parent>/source.json`.
+    is where `verify_episode_seal` and the endpoint QC resolve it.
+
+    `scope` is the audit's scope **document**, not a path: the writer takes the document, while `Recorder.finish` takes
+    the path of the file the writer puts it in (`<root>/audit/source.json`). Passing a `Path` here raises
+    `AUDIT_ROOT_INVALID` - the writer validating its arguments - which is how this signature was corrected.
     """
     episode_root = Path(episode_root)
     recorder = EpisodeRecorder(
@@ -49,7 +52,7 @@ def assemble_episode_capture(
         reset_epoch=identity["reset_epoch"],
         provenance=provenance,
     )
-    audit = EpisodeAuditWriter(episode_root, Path(scope), identity, inputs)
+    audit = EpisodeAuditWriter(episode_root, scope, identity, inputs)
     return ContinuousEpisodeCapture(
         recorder=recorder,
         sampler=sampler,
