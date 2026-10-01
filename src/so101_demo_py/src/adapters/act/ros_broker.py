@@ -183,6 +183,9 @@ class RosBrokerDriver:
         except (KeyError,ValueError):return
         with self._lock:
             self._velocity=ordered;self._positions=positions;self._received=self.monotonic()
+            # T3-F13 (eighth verdict): the caches record which epoch filled them, so a reader can tell a value
+            # produced before a reset from one produced by the epoch it is being read for
+            self._joint_epoch=getattr(self,'_reference_epoch_identity',None)
             # T3-F13: the callback's own stamp is the measured source time of these values, so it is kept beside
             # the arrival time instead of being discarded; a receiver clock alone cannot say when the arm moved
             stamp=message.header.stamp
@@ -270,6 +273,9 @@ class RosBrokerDriver:
             # T3-F13 (eighth verdict): the measured source stamp was retained but never consumed, so a delayed
             # callback from before a reset could sit beside fresh receipt ages and be read as current. A record
             # whose arm measurement is not from the instant it is for is not this instant's measurement.
+            if (getattr(self,'_joint_epoch',None)
+                    != getattr(self,'_reference_epoch_identity',None)):
+                raise RuntimeError('CONTROLLER_FEEDBACK_STALE')
             measured_stamp=getattr(self,'_joint_stamp',None)
             if (measured_stamp is not None
                     and abs(measured_stamp-when)>self.max_age):
