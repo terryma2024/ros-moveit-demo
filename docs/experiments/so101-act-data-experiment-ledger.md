@@ -45734,3 +45734,30 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   frozen endpoint policy plus the scenario's target pose, and E1's calculator is what consumes it.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD d767ef9fc; goal active.
+
+
+## CP-2423 — The frozen tree read file by file, and the second field with no frozen source
+
+- The frozen set the three commands produced contains exactly twelve role files plus the manifest:
+  `anchor_scene/task8-live-anchors.yaml` (91bbecbfd0...), `collection_config/parallel_collection_v3.yaml`
+  (9d3b2ab790...), `contact_activation/activation-receipt.json`, `contact_proposal/proposal-pass2.json`,
+  `path_policy/`, `placement_qc/` and `rgb_skew/` each holding `nonhead-empirical-authorization-policy.json`,
+  `reference_interpolation/expert.py`, `reset_recipe/pick_place_reset.py`,
+  `resource_thresholds/parallel_batch_v3.yaml`, `runtime_config/parallel_batch_v3.yaml` (ba8ddefdb4...) and
+  `scene_model/scene.xml` (4db48e35df...). The manifest carries the three amendment bindings - `mode`,
+  `endpoint_policy`, `runtime_policy` - exactly as CP-2415 widened it, so the run can read the effective policy from
+  the frozen document rather than from the live file.
+- The second field with no frozen counterpart, beside `broker_image`: there is **no detector role** among the twelve
+  (`anchor_scene`, `scene_model`, `collection_config`, `runtime_config`, `path_policy`, `placement_qc`, `rgb_skew`,
+  `resource_thresholds`, `contact_proposal`, `contact_activation`, `reset_recipe`, `reference_interpolation`), so the
+  batch specification's `yolo_weights` and its hash have nothing to map from. That is consistent rather than
+  surprising: the amendment is MuJoCo-only and the container/detector stack is outside it, so the single-episode run
+  needs neither field - and it must say so in its own output rather than carry a placeholder that would imply a
+  detector was involved.
+- So the construction is now fully specified for the fields that exist: the three pairs from the frozen tree
+  (`points_path`/`config_path`, `grounded_root`/its hash, `yolo_weights` excluded by the above), `catalog`,
+  `provenance`, `manifest` and their hashes read from the same tree, a one-worker `request` with the mode and
+  `FULL_RESTART`, `expected_final_cup_pose_world` from the scenario's frozen target, and `evidence_root` from a new
+  LIVE_ROOT.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD 6c938d893; goal active.
