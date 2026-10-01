@@ -44844,3 +44844,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written (CP-2375); F11's
   derivation still open with the window contract fully read; F5's regression fixed, step one landed, step two one
   traceback from its fix; HEAD 298462464; goal active.
+
+
+## CP-2379 — E1 started: both configuration artifacts exist with the authorized values
+
+- `src/so101_demo_py/config/act/endpoint_pose_acceptance_v1.yaml` (commit 3601546d4): closed keys
+  `kind/schema_version/rule_version/thresholds` with `ACT_ENDPOINT_POSE_POLICY`, `1`, `endpoint_pose_v1` and the five
+  authorized thresholds 0.010 m, 0.15 rad, 0.020 m, 0.010 m, 0.15 rad; parsed and asserted.
+- `src/so101_demo_py/config/act/endpoint_pose_development_runtime_v1.yaml`: `ACT_ENDPOINT_DEVELOPMENT_RUNTIME`, `1`,
+  and section 5.1's values - `path_step_s 0.002`, `path_clearance_m 0.002`, `max_age_s 0.1`, `max_skew_s 0.1`,
+  `support_distance_max_m 0.002`, `hard_stops.rtf_min 0.90`, `disk_free_min_bytes 53687091200`; parsed and asserted.
+  Both files state in comments that they are development defaults, that a CLI-specified run configuration takes
+  precedence, and that each run records the effective values with their hash.
+- What E1 still needs per the plan: `load_endpoint_policy`/`evaluate_endpoint_pose` in
+  `act/endpoint_pose_acceptance.py` with the plan's verbatim RED test and its boundary cases; the same policy role in
+  both real input registries; `load_development_runtime` and the `user_empirical_default` approval with a real
+  effective-config artifact; `prepare --runtime-policy`, the freezer's keyword-only `runtime_policy`, and
+  `--mode`/`--endpoint-policy`; the input/CLI suite; and the negative coverage the plan lists.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2's protocol table written); F11's derivation open
+  with the window contract read; F5's step two one traceback from its fix; E1's data artifacts landed; HEAD
+  1aa4847cb; goal active.
