@@ -17,6 +17,7 @@ from collections import deque
 from dataclasses import dataclass
 import math
 import time
+from pathlib import Path
 
 from .acquisition import Acquisition, AcquisitionGuard, pixel_digest
 from .deadline import ACT_TIMEOUT_S
@@ -67,8 +68,12 @@ class ContinuousEpisodeCapture:
         self.audit_writer = audit_writer
         # the raw controller reference history goes to the episode audit when one is wired
         self.audit = audit
-        #: the scope document the freezer wrote, the second half of a v2 seal's binding (CP-2667/2672)
-        self.scope = scope
+        #: the **path** of the scope document the freezer wrote - the recorder's `finish` requires an absolute
+        #: regular file there and cross-checks it against the episode, while the audit writer was handed the
+        #: document itself at construction (CP-2711/2712)
+        self.scope = Path(scope) if scope is not None else None
+        if self.scope is not None and (not self.scope.is_absolute() or ".." in self.scope.parts):
+            raise ValueError("CAPTURE_SCOPE_INVALID")
         self.guard = guard if guard is not None else AcquisitionGuard()
         self.dt_s = dt_s
         self.max_source_age_s = max_source_age_s
