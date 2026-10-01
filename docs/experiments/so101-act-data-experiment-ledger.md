@@ -53235,3 +53235,23 @@ line or the wrong attribute: the store's working directory is `sealed`, which is
 So the pieces are now consistent rather than contradictory, and `EPISODE_SEAL_AUDIT_INVALID` is about a file that does
 not exist rather than about ownership: the audit manifest and its streams are produced where the store expects the
 episode, and the pair the test hands to the store and the verifier has to name those actual files.
+
+
+## CP-2775 — The contradiction and its most likely resolution
+
+The source says `self.working = self.workspace / "working"` and `self.episode_root = self.working / "episode"`, yet the
+test that uses the store produced its files under **`sealed/episode`**. Both cannot be true unless the directory is
+renamed between construction and sealing - which is exactly the pattern such a class would use: work in `working/` and
+publish to `sealed/` atomically, so a half-written episode is never visible as a sealed one.
+
+That hypothesis fits every observation: the store's `seal` requires `<workspace>/sealed/episode/seal.json` (the published
+location, CP-2762's `EPISODE_LOCATION_MISMATCH` came from exactly that path), the audit writer rooted at the store's
+`episode_root` ends up under `sealed/` after the rename, and the first test - which never touches the store - keeps its
+files in `working/` because nothing renamed them.
+
+The next read is one line: how the store publishes `working` as `sealed`. With it, the pair the test hands to the store
+and verifier is a matter of naming the files where they end up, and both chain tests should pass - correction 2's test
+already does, and correction 3's is the one that uses the store.
+
+Round state: three production fixes and the chain test are uncommitted; the writer now accepts an existing root (the
+ownership decision of CP-2773, applied); and the remaining failure is a path the test names rather than a contract.
