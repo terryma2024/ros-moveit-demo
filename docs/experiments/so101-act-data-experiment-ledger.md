@@ -49197,3 +49197,23 @@ the geometry type or a companion return - while the verification that already ha
 CP-2599's finding that the scene observation already carries `source`, this puts the K2 implementation on a
 comparison footing: two of the review's items are already partly satisfied, and the rest are additions rather than
 repairs.
+
+
+## CP-2601 — The minimal landing point for K2's geometry provenance, measured
+
+`core/task_geometry.py:80` defines `TaskGeometry` as a frozen dataclass with exactly two fields - `frame_id: str` and
+`objects: tuple[TaskGeometryObject, ...]` - plus derived properties (`object_ids`, `primitive_counts`, `object(id)`).
+A tree-wide search finds **one** construction site:
+
+```python
+    return TaskGeometry(frame_id=frame_id, objects=objects)      # core/task_geometry.py:171
+```
+
+So giving the geometry a place to carry its provenance is a **one-site change with a safe default**: add an optional
+field (absent means "not recorded", which is the honest value for the geometry the amendment's older paths build), have
+`pick_place_scene_geometry` populate it from the `world`/`scene`/`contact` records it already validates, and no existing
+consumer moves because the default keeps the current construction valid.
+
+That is K2's geometry item reduced to its minimum, found by measuring rather than by reading the review's list as a
+work order: one field, one construction site, and a derivation that already holds the values. The remaining K2 items
+are the ordering sequence and the new record kinds, which are additions rather than repairs.
