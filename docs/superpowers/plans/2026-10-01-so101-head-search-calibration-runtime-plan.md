@@ -1,9 +1,10 @@
-# Head Search calibration runtime - implementation plan (revision 2)
+# Head Search calibration runtime - implementation plan (revision 4)
 
 Implements the eight fixed `run` phases (design §8.2) so `so101_head_search_calibration run` produces
 `head-search-calibration-bundle.json` carrying the 17 parameters. Today the CLI writes only `run-receipt.json` and a
-378-byte `calibration-state.json` (ledger HS-233). Revision 1 was rejected by review (ledger HS-279); this revision
-answers its five findings and adds the runtime contract that revision 1 omitted (ledger HS-280).
+378-byte `calibration-state.json` (ledger HS-233). Reviews: revision 1 rejected (HS-279), revision 2 rejected (HS-281), revision 3
+rejected with two items closed and three partial (HS-282); **revision 4 was approved with findings** - all three partial items
+closed, no implementation blocker (HS-285, verdict in `reviews/task13-runtime-plan/verdict-rev4.md`).
 
 ## 0. Precondition, gated before any neck motion (outside the eight phases)
 

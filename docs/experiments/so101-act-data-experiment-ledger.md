@@ -41805,3 +41805,23 @@ tracker 算法、10 Hz frame contract；Step 4 恢复计划原文的 `head_test 
    （有界停点轨迹，gate 在任何 neck 运动之前）。
 
 **在取得判决或被授权前，我仍不写实现代码。**
+
+## HS-285 — 计划复审通过：revision 4 **APPROVE WITH FINDINGS**，无实现阻塞
+
+新会话 `codex-plan-review`（GPT-6.1-Sol high，1m23s）判决，全文存 `$HEAD_EVIDENCE/reviews/task13-runtime-plan/verdict-rev4.md`：
+
+> • APPROVE WITH FINDINGS
+> All three items are closed: approval binds to the bundle, promotion uses apply_patch plus verification; all five controlled dependencies are re[corded];
+> exact head_test -n 8 commands are restored.
+> No implementation blocker remains.
+> Nonblocking: lines 1-6 still identify revision 2 and describe revision 1's review history.
+
+**三条 PARTIAL 全部关闭，且明确"无实现阻塞"**；唯一的 finding 是**非阻塞**的页眉过期（仍写着 revision 2 / revision 1 的历史）——
+已就地修正为 revision 4，并把四轮判决写进计划开头（rev1 拒、rev2 拒、rev3 拒+两关闭三部分、**rev4 通过**）。
+
+**为什么换了会话**：原复审会话在 rev4 上无响应（HS-284：两轮之间计时仅从 2m13s 走到 2m29s，墙钟却过数分钟，补发回车与极短请求均无新时间戳）。
+新会话复用同一模型与同一 prompt 结构，判决正常产出——**这说明问题在旧会话，不在请求内容**。
+
+**下一步（可以开始写实现代码了）**：按计划 §0 前置先行——把生产 controller 的**正向累计 `2*pi` 轨迹**按 **RED/GREEN** 改成
+**有界停点序列**，因为该前置 gate 在**任何 neck 运动之前**，且 `run` 在入口检查、不满足即
+`CAL_TRAJECTORY_CONTRACT_UNSATISFIED` 且不发任何运动。随后才是 phase 1/2 的库模块。
