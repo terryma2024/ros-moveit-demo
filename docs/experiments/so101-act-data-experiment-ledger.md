@@ -42816,3 +42816,127 @@ stderr: CAL_CAMERA_SAFETY_MARGIN_UNDECLARED: no retained artefact declares safet
 首次调用，测量完成、留证）、`$EV/scratch/pytest-xdist8-hs303-{regression.00226254,final-demo.3f000d92}*`（门禁）、
 `$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-303 节）、工作树 `scratch/hs303/`（RED/GREEN/回归日志、
 派生/运行/消费脚本、pyshim、tmp）。以上**均为删除候选，未删除**；未触碰 HS-300/301/302 的产物（除只读引用）。
+
+## HS-304 — 清点项 #9/#11/#12/#13/#14 有源：controller 停止容差是**声明**（0.002），量化分辨率**无任何 artefact 声明**（写 null 并拒绝），静止噪声 0.03936 rad/s、提交 lead 0.004 s、停车延迟 0.070124 s 被 phase 7 接受
+
+**提交**（普通 `git commit`，钩子 rc=0，树干净）：`31c262d91`（feat，4 文件：库模块 + CLI 5 个入口 + 2 个测试文件）、
+`73f991e42`（fix：第一次真实运行发现的 MuJoCo 调用错序 + 真实 plant 回归）、`a0d34345e`（fix：每个停车证明记录窗口自身的实时因子）。
+
+**新增库模块** `src/so101_demo_py/src/act/head_search_stop_measurement.py`，五个安装入口
+`measure-controller-stop-config / measure-feedback / measure-stationary / measure-controller-submissions /
+measure-stop-proofs`（CLI 只解析与校验，5 个新的必填 flag 组）。三层结构：
+
+| 层 | API | 作用 |
+| --- | --- | --- |
+| 声明 | `read_controller_stop_declaration` / `declared_controller_stop_tolerance` / `read_feedback_declarations` / `declared_quantisation` / `undeclared_quantisation` | 从**安装版**控制器头文件解析 `ControllerStopWitness` 的四个常量（`stop_velocity_rad_s` 0.002、`required_samples` 51、`step_ns` 2e6、`max_age_ns` 2e8），要求源码树同一文件字节相同、窗口步长等于 sealed controller period，否则 `CAL_CONTROLLER_STOP_TOLERANCE_CONTRADICTORY`；无可引用的 `stop_velocity_rad_s` 即 `CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED`。`feedback` 的 `period_s` 取 `joint_state_broadcaster.update_rate: 100`（＝停车路径自己消费的回执速率），同时记录 controller_manager 500 Hz 周期；`quantisation_rad` 只在调用者显式声明（直接 `quantisation_rad`，或 `joint_travel_rad / counts_per_revolution`）时才写数值，否则写 `null` + `CAL_FEEDBACK_QUANTISATION_UNDECLARED`（rc=2），绝不默认 |
+| 飞行 | `MujocoStopFlight`（继承既有 `MujocoClosedLoopPlant`）/ `run_stationary_flight` / `run_submission_flight` / `run_stop_proof_flight` / `confirm_stop` / `controller_stop_criterion` / `MeasurementClock` / `ControllerFeedbackTransport` / `joint_state_message` | 唯一 MuJoCo 导入点。7 个受监控关节（六个臂关节 + neck，与 Task-8 协议的 `max(abs(v))` 口径和 cadence-correct history 的 7 个 dof 索引一致）在 sealed 场景里被按住；提交经 mailbox 端口每控制周期排空一次并记录 `submit_snapshot_sim_s`/`first_target_sim_s`/`plant_consumed_sim_s`；停车由**安装版** `RosControllerPort.stopped()` 逐回执判定，第三次**连续**合格回执即证明成立；plant 以单调时钟定速（`realtime`，与生产 MuJoCo 回路一致），记录实时因子与最大滞后 |
+| 文档 | `build_controller_stop_config` / `build_feedback_measurements` / `build_stationary_measurements` / `build_controller_submissions` / `build_stop_proofs` / `verify_submission_time_base` | 产出 phase 7 精确读取的形状（`stopped_tolerance_rad_s`；`period_s`+`quantisation_rad`；`samples[].velocity_rad_s`；`samples[].{time_base,submit_snapshot_sim_s,first_target_sim_s}`；`samples[].{stop_request_monotonic_s,third_confirming_receive_monotonic_s}`）＋每份 `path` 与自摘要 |
+
+**仿真时基证明**（`verify_submission_time_base`，phase 7 的 `CAL_SUBMIT_LEAD_UNVERIFIED` 规则）：每条提交的
+`time_base=="simulation"`、两个 sim 戳都是 sealed timestep 的整数倍、`lead == first - snapshot`、
+**plant 自己回报的消费戳**与记录一致、且 `lead <= 一个控制周期 + 一个 timestep`；任一不成立即拒绝，
+不会写出墙钟提交。
+
+**验证链**：
+
+| 步骤 | 命令要点 | 结果 |
+| --- | --- | --- |
+| RED（新测试文件，模块缺失） | `pytest -q test_act_head_search_stop_measurement.py` | **rc=2，1 collection error**（只缺新模块，边界正确） |
+| RED（CLI 新子命令） | 同文件 `-k "stop_measurements or stop_config or ..."` | **9 failed / 36 deselected, rc=1**（`invalid choice: 'measure-stationary'`） |
+| GREEN | 库 + CLI | **17 passed** rc=0、**45 passed**（CLI 全文件，含既有 36 例）rc=0；`ruff check` 干净 |
+| 真实运行发现 bug ① | `measure-stationary` 首次运行 | **TypeError: mj_name2id() invoked with (mjtObj.mjOBJ_ACTUATOR, '1')**（漏传 model）；新增真实 plant 回归测试先 RED（同一条 TypeError）→ 修 `73f991e42` 后 **18 passed** rc=0 |
+| 真实运行发现 bug ② | `stop-proofs` 首次运行 | 12 个证明里 #0/#1 的窗口实时因子 1.53/69.1（墙钟区间被"追赶"压缩），不是实时量；新增 `window_real_time_factor`/`pacing_faithful` + 文档级 `pacing_faithful_proof_count`/`off_schedule_sample_indices` 先 RED（KeyError）→ 修 `a0d34345e` 后 **19 passed** rc=0 |
+| 回归（HS-288..303 的 17 个 phase 测试文件 + 新库测试 + CLI 测试） | 同基线调用式 | **506 passed, rc=0**（4.8 s） |
+| 全套件（8 workers，HS-299 基线调用式逐字重建，`$EV/scratch/pytest-xdist8-hs304-final.198b460f`） | `src/so101_demo_py/test` | **175 failed / 6056 passed / 152 skipped / 86 errors, rc=1, 122 s**；与父提交基线 `pytest-xdist8-hs303-final-demo.3f000d92`（175/6028/152/86）**节点级 diff 0 行（261 相同）**；passed **+28 = 新增 19 + CLI 9**；0 个新增失败，失败集里 **0 个 head_search/calibration 节点** |
+
+**一次真实运行（安装程序，toolchain `head-toolchain-20261001T095901Z`，由 `a0d34345e` 构建，build rc=0）**：
+五份文档各一次运行，命令与 rc：
+
+```
+ros2 run so101_demo_py so101_head_search_calibration measure-controller-stop-config \
+  --controller-declaration $T/install/so101_mujoco_support/include/so101_mujoco_support/controller_stop_witness.hpp \
+  --source-declaration $ROOT/src/so101_mujoco_support/include/so101_mujoco_support/controller_stop_witness.hpp \
+  --controller-config $T/.../config/mujoco/act/ros2_controllers.yaml --output-dir $C/controller-stop-config-20261001T095956Z
+rc=0  CONTROLLER_STOP_CONFIG_DECLARED stopped_tolerance_rad_s=0.002 window_samples=51 window_step_s=0.002 measured_here=False
+
+ros2 run ... measure-feedback --controller-config …/ros2_controllers.yaml --output-dir $C/feedback-20261001T095958Z
+rc=2  FEEDBACK_MEASUREMENTS_MEASURED period_s=0.01 feedback_rate_hz=100.0 controller_cycle_period_s=0.002 quantisation_rad=None
+      stderr: CAL_FEEDBACK_QUANTISATION_UNDECLARED: no retained artefact declares a joint or encoder resolution: …
+
+ros2 run ... measure-stationary --scene …/head_search_scene.xml --geometry-seal …/head-camera-geometry.json \
+  --production-search-config …/head_search_v2.json --controller-config …/ros2_controllers.yaml \
+  --output-dir $C/stationary-20261001T100000Z --anchor left --samples-per-pose 200
+rc=0  wall 8 s  STATIONARY_MEASUREMENTS_MEASURED p99_9_velocity_rad_s=0.039360504642138236 poses=3 samples=600
+
+ros2 run ... measure-controller-submissions (同上 sealed 输入) --output-dir $C/controller-submissions-20261001T100010Z --anchor left
+rc=0  wall 2 s  CONTROLLER_SUBMISSIONS_MEASURED minimum_lead_s=0.002 maximum_lead_s=0.0020000000000000018 lead_spread_s=1.7e-18 submissions=3 time_base=simulation
+
+ros2 run ... measure-stop-proofs (同上) --output-dir $C/stop-proofs-20261001T100014Z --anchor left
+rc=0  wall 2 s  STOP_PROOFS_MEASURED p99_9_latency_s=0.0601235399954021 slowest_latency_s=0.0601235399954021 proofs=12 exceedances=2
+```
+
+`$T` = `$EV/head-toolchain-20261001T095901Z`，`$C` = `$EV/head-yolo-models-20260930T120608Z`，`$ROOT` = 本 worktree。
+产物（文件 sha256 / 文档自摘要）：`controller-stop-config.json` `b59ad594ee035af3…` / `225f204de2110ca1…`；
+`feedback-measurements.json` `550bcaea8ef7a994…` / `b7d24f20b7f85a0c…`；`stationary-measurements.json`
+`52f9eb2de3ec8783…` / `a4acd960ad4bb8ca…`；`controller-submissions.json` `e43d7cdc46ec19ed…` /
+`37a607d46b195ee8…`；`stop-proofs.json` `3495035e8fd6162c…` / `6468609e1fc23947…`；每目录另有
+`measurement-receipt.json`；每个运行目录的 console/provenance 是同级文件（`<dir>.console.log` /
+`.provenance.txt` / `.supplementary-provenance.txt`，含 toolchain root/commit、scene sha256、五个输入摘要、
+MuJoCo/torch/CUDA 版本、elapsed、运行后进程计数）。
+
+**测得的值（逐项）**：
+
+* `controller_stop_config`：`stopped_tolerance_rad_s` **0.002**，声明来自安装头
+  `1780493e41e2d172…`（＝源码树同一文件，两处必须字节相同），窗口 51 × 2 ms = 0.102 s，`measured_here:false`。
+  既有 JTC 默认 0.01 只在测试夹具里出现过，未被当作声明。
+* `stationary`：三停点各 200 样本（0.01 s 周期、共 1.99 s sim/停点）：anchor 0.0 → p99.9 **0.026604**（settle 5 周期后
+  完全静止）；plan +0.080471 → **0.039345**；plan −0.175592 → **0.039361**；总 p99.9 **0.039360504642138236**。
+  该值由**每个停点 settle 判据成立后的第一个样本**主导（≈ 声明阈值 0.05 rad/s 的尾部），0.2 s 之后各停点速度
+  ≤ 0.0031 rad/s（数值下限）——两者都逐样本留在文档里，评审可自行取"含过渡"或"纯静止"口径。
+* `controller_submissions`：3 条（anchor 定位 + 两个 plan 停点），lead 全为 **1 个 timestep = 0.002 s**
+  （500 Hz 控制周期与 2 ms timestep 重合，提交经端口在下一个周期排空、该周期步进消耗），spread 1.7e-18。
+* `stop_proofs`：6 个声明 revoke 偏移（0.01/0.03/0.06/0.10/0.15/0.50 s）× 2 个 plan 停点 = **12 个证明**；
+  10 个在 3 个回执（0.03 s）内完成，2 个需 6 个回执（0.0601 s）；p99.9 = 最慢 = **0.0601235399954021 s**；
+  10/12 窗口实时因子 ≈1.0，**#0/#1 的实时因子 1.53/69.1 → `pacing_faithful=false`**（两者都低于 p99.9，
+  即校准值由忠实窗口决定）；另有 **2 个证明超出现行生产声明 `stop_latency_s=0.06`**（超出 0.124 ms / 0.062 ms）。
+
+**消费验证（安装版 phase 7，`$C/stop-measurements-consumption-check-20261001T100022Z.log`）**：
+
+| 调用 | 结果 |
+| --- | --- |
+| 六份文档（含 HS-299 的 `mujoco-measurements.json`）经 run 自己的 loader `_json_document` | 全部 accepted，`kind` 正确，**自摘要逐份重算一致** |
+| `compute_submit_lead_s(submissions=…, mujoco=…)` | **接受**：`submit_lead_s = 0.004`（min lead 0.002 + 1 timestep 0.002），并各自按 path+sha256 引用两份证据 |
+| `compute_stop_velocity_rad_s(stationary=…, feedback=…, controller=…)` | **拒绝**：`ValueError: the controller feedback declares no finite quantisation_rad`——这正是量化分辨率无声明的诚实后果（与 HS-303 的 `safety_margin_px` 同类） |
+| `compute_stop_latency_s(stop_proofs=…, feedback=…)` | **接受**：`stop_latency_s = 0.07012353999540209`（p99.9 0.0601235399954021 + 1 个反馈周期 0.01），`CAL_STOP_LATENCY_EXCEEDED` 未触发（n=12 时最近秩 p99.9 即最大值，该规则需 >1000 个样本才会因单个慢样本触发；单样本超限的能力在库测试里用 1001 个样本夹具钉住） |
+
+**本轮声明的主要推断（待评审）**：① `stopped_tolerance_rad_s` 取**控制器自己的**停止速度容差
+（`ControllerStopWitness::stop_velocity_rad_s`，即决定"这一帧算不算停住"的阈值），而不是 JTC 的
+`stopped_velocity_tolerance` 默认 0.01（后者只出现在测试夹具，且不是本控制器停止证明的判据）；
+② `feedback.period_s` 取 100 Hz 广播速率（`RosControllerPort.stopped()` 消费的回执来自 `/joint_states`），
+控制器的 500 Hz 自身上报周期并列记录；③ `quantisation_rad` **不从**浮点精度、像素当量或可见像素计数推导，
+无声明即 null + 拒绝；④ "第三个连续合格反馈"的**合格**判据直接用安装版 `RosControllerPort.stopped()`
+（新鲜度 + 七个关节速度 ≤ 生产配置声明的 `stop_velocity_rad_s`），库测试用脚本化 plant 钉住"两个安静样本不算证明"；
+⑤ 提交的**目标**取自安装版 `HeadSearchController` 的 bounded plan 与 anchor 声明起点，但**不**编码
+`FollowJointTrajectory` wire goal（sealed 生产配置没有声明 neck 目标时长），文档以
+`transport.dds_transport_measured=false`、`wire_goal_encoded=false` 明示；⑥ lead 的时基证明比"声明 sim 时基"
+更强（整数倍 timestep、plant 自报消费戳、一个控制周期 + 一个 timestep 上界）；⑦ plant 按单调钟定速
+（生产 MuJoCo 回路的行为），使单调停车延迟是实时量；⑧ 停车证明的确认预算 1.0 s，超出即整轮拒绝；
+⑨ 生产 `stop_latency_s` 的超出只**记录并标记**（`exceeds_declared_production_latency_s`、`exceedance_count`），
+不使本轮拒绝——否则拿不到文档；"单样本超限即失败"的能力留在 phase 7 与其数据里；⑩ `measured_here` 在
+两个声明文档上为 `false`，在三个飞行文档上为 `true`；⑪ 五个飞行/声明**都不加载检测器**（无权重、无 CUDA、
+不涉及 `allow_cpu_fallback`），故本轮无需 HS-301 的 derived-config 绕行，sealed `head_search_v2.json`
+中钉住候选 A 权重的 `weight_sha256` 也未被触及；⑫ `scratch/hs304/`（RED/GREEN/回归日志、pyshim、
+run/consumption 脚本）仍在本地忽略的 `scratch/` 下。
+
+**本轮证据与生命周期**：保留三个本轮 toolchain：`head-toolchain-20261001T095412Z`（`31c262d91`，
+含 bug ①，被取代）、`head-toolchain-20261001T095629Z`（`73f991e42`，被取代）、
+`head-toolchain-20261001T095901Z`（`a0d34345e`，**最终**，五份文档由它产出）；保留运行目录
+`controller-stop-config-20261001T095510Z`、`feedback-20261001T095514Z`（旧 root，被取代）、
+`stationary-20261001T095518Z`（rc=1，**发现 bug ① 的那次失败运行**，未删）、
+`{controller-stop-config-20261001T095720Z,feedback-20261001T095722Z,stationary-20261001T095726Z,
+controller-submissions-20261001T095736Z,stop-proofs-20261001T095740Z}`（旧 root，被取代）以及最终五目录；
+保留消费日志 `stop-measurements-consumption-check-{20261001T095752Z,20261001T100022Z}.log`
+与 `$EV/scratch/pytest-xdist8-hs304-final.198b460f`（全套件）。以上**均为删除候选，未删除**。
+
+**运行后进程**：`ps`（mujoco/ros2 run/yolo/ultralytics）为空，`nvidia-smi --query-compute-apps` 为空，
+`ros2 daemon status` 报 daemon 未运行（本轮未启动任何 ros2 daemon）。
