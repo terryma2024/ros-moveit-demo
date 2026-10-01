@@ -44357,3 +44357,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two two booleans from
 - diagnosis; HEAD c5c6b2333; goal active.
+
+## CP-2355 - observed_row is proved satisfied by reading _physics; ref_group is the last suspect
+
+- The runner's _physics does `raw = dict(evidence["physical_observation"])` - a shallow copy of the WHOLE
+- observation - so every key the port's evidence carries, including planning_scene_observation and
+- controller_feedback from CP-2339, lands in the physics row the audit stores. observed_row is therefore satisfied
+- for the hybrid, proved by reading rather than by probing.
+- That leaves ref_group, which the fixture should also satisfy: it appends joint_names, sim_stamp_ns,
+- received_monotonic_ns and velocities together with accepted True, which is the legacy alternative the check
+- accepts (and the exclusive-alternative rule is satisfied because it carries no packed key).
+- Both clauses therefore appear to hold while the seal still refuses AUDIT_FORMAL_COVERAGE_INCOMPLETE - which
+- means my enumeration of the predicate is incomplete somewhere, and the way to end that is not another inference
+- but a probe that prints the predicate's OWN clauses verbatim, one per line, copied from the source rather than
+- summarised by me. That is the next write: read the predicate, print each top-level term's value, run once.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two one verbatim print from
+- diagnosis; HEAD 35d94b2bc; goal active.
