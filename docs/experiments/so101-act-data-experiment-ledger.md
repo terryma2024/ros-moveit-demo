@@ -45672,3 +45672,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   negatives - remains the main line, to be built and verified one failing command at a time.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0e2dd1440;
   goal active.
+
+
+## CP-2420 — The eight required fields the single-episode run must supply, and one tension
+
+- Read from the batch parser: the **required** arguments are `--points`, `--config`, `--batch-id`,
+  `--evidence-root`, `--broker-image`, `--yolo-weights` with `--yolo-weights-sha256`, `--grounded-root` with
+  `--grounded-manifest-sha256`, and `--run-mode`; `--batch-kind` defaults to `FIRST_PASS`, so `FULL_RESTART` is a
+  value of the lifecycle/kind axis rather than a separate switch.
+- Each has a frozen counterpart in the input set this task just produced: `--config` and `--points` from
+  `runtime_config`/`collection_config`, `--grounded-root` and its manifest hash from `scene_model`/`anchor_scene`,
+  `--yolo-weights` and its hash from the detector identity the sources role carries, `--evidence-root` from the new
+  LIVE_ROOT, `--run-mode` from `--mode`, and `--batch-id` newly minted per run. So the synthesis is a mapping, not an
+  invention - which is what makes it a bounded first version rather than a rewrite.
+- One tension to record rather than paper over: `--broker-image` is required by the batch path, while this amendment
+  explicitly does not implement or stand up containers. The honest options are to pass the **identity** of an
+  already-approved broker image if one exists in the controlled configuration, or to relax that requirement for the
+  single-episode path with a stated reason - never to invent a placeholder image id that would make a log claim
+  something untrue.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished (inspect, prepare, preflight rc=0). HEAD 7273e38d4; goal active.
