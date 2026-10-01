@@ -54243,3 +54243,30 @@ check runs after, so `opened` is empty for one set of cases and non-empty for th
 So correction 5's release half is **eight predicates across two gates**, not four across one, and each gate needs its own
 negatives with its own code. That is a larger but unambiguous job, and it is now stated rather than guessed - which is what
 this checklist was for.
+
+
+## CP-2814 — The three QC sites, read: one is already the right test and one carries a discredited key
+
+```python
+:16    def test_a_legal_endpoint_episode_without_quality_fields_is_not_refused(tmp_path):
+:50            {"kind": "support", ... "observation": {..., "cup_pose_world": pose}}),
+               {"kind": "retract", ... "observation": {..., "cup_pose_world": pose}})]
+:142       assert set(check) == {"status", "policy_sha256", "initial_sequence", "final_sequence",
+                                 "initial_pose", "final_pose", "initial_target", "final_target"}
+```
+
+Read side by side, the three are not three instances of one mistake:
+
+- **`:16` is already the test the rule asks for** - its name states it, and it asserts that a legal endpoint episode
+  without quality fields is not refused, which is exactly "quality is not a precondition";
+- **`:50` writes `cup_pose_world`** into a `support` and a `retract` row - the key this stretch already discredited once
+  (CP-2635: the real pair is `cup_position_world_m` plus `cup_orientation_world_xyzw`, and submitting the invented one
+  raises `AUDIT_SCHEMA_INVALID`). If that test passes, the physics reader must be reconstructing the pair from it, which
+  would make the fabricated name load-bearing in a fixture - worth resolving rather than assuming;
+- **`:142` asserts the prescribed report's exact closed key set**, which is the shape this stretch implemented (CP-2746)
+  and which the design document prescribes, so it is a statement of the contract rather than a violation of it.
+
+So the checkpoint's three line numbers point at three different things, and the honest next step is not to "correct" all
+three but to check each against the rule: `:16` needs nothing, `:142` needs nothing, and `:50` needs the question answered
+of whether `cup_pose_world` is read as a convenience or whether the fixture is feeding the runner a key the writer would
+reject.
