@@ -48198,3 +48198,20 @@ together, including the reviewer's factual correction: the verifier is **`verify
 
 Next: run this revision past the same checkpoint before any implementation, since the review's remaining three findings
 are about exactly this document.
+
+
+## CP-2546 — A false positive of my own: the EXIT= I matched was my prompt, not a completion
+
+Last round I read `grep -c 'EXIT='` on `reviews/k2-protocol-recheck.log` as one and concluded the re-review had
+finished. It had not. The single match is at **line 227**, inside the prompt text I sent - which quotes the earlier
+run's `EXIT=0` - and the log's actual end is a list of files the session has been reading, with no completion marker at
+all. So the re-review is still running, and the `EXIT=` count was a false positive produced by grepping anywhere in a
+file whose first half contains my own words.
+
+The correction matters twice: the verdict is not in yet, and the check itself has to be narrowed - a completion marker
+is only a marker when it is the **last** line, the way the earlier review's was (`6332:EXIT=0`, which really was the
+end). Everywhere else in these logs, `EXIT=` appears in prompts and in quoted evidence. So the rule for next time:
+`tail -1` the log, or anchor the search to the end, and never treat a mid-file match as an ending.
+
+No other change this round: the revision 2 document stands, the queue in the `k2-review` window is still working on it,
+and the three options from CP-2543 remain open with the user.
