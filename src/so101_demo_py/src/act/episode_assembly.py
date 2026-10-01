@@ -21,7 +21,7 @@ from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "episode_audit_pair",
-           "physical_audit_from_captured"]
+           "physical_audit_from_captured", "readback_from_frozen"]
 
 
 def assemble_episode_capture(
@@ -381,3 +381,50 @@ def physical_audit_from_captured(captured: dict, *, reset_epoch: int, release_ep
         "reference_positions": reference["positions"], "mujoco_truth": world,
         "contacts": contact, "planning_scene": scene, "controller_state": dict(controller_state),
     }
+
+
+def readback_from_frozen(*, scene_model, world, scene, contacts, rgb, broker, frozen, monotonic=None):
+    """Build the physical readback the audit draws on, from the frozen set's own expectations.
+
+    Every constant comes from the frozen manifest rather than from a default that agrees with it today (CP-2858): the
+    model digest and the MuJoCo version from `roles.scene_model.identity`, the two rgb-sync tolerances from
+    `runtime_policy.rgb_sync`, the release tolerance from `runtime_policy.safety_release`. A missing one is a refusal -
+    the whole point of `expected_model_sha256` is to prove the run is driving the model the frozen set names, and a
+    check fed from a default proves nothing.
+
+    The five collaborators are made by the caller, because each belongs to a different layer of the run: the MuJoCo
+    world observer, the scene-state observer, the contact observer, the rgb sampler and the broker port. What this
+    function owns is the part that must not be got wrong - which frozen values those collaborators are judged by.
+    """
+    identity = frozen.get("roles", {}).get("scene_model", {}).get("identity", {})
+    policy = frozen.get("runtime_policy", {})
+    rgb_sync = policy.get("rgb_sync", {})
+    safety = policy.get("safety_release", {})
+    needed = {
+        "roles.scene_model.identity.model_sha256": identity.get("model_sha256"),
+        "roles.scene_model.identity.mujoco_version": identity.get("mujoco_version"),
+        "runtime_policy.rgb_sync.max_age_s": rgb_sync.get("max_age_s"),
+        "runtime_policy.rgb_sync.max_skew_s": rgb_sync.get("max_skew_s"),
+        "runtime_policy.safety_release.support_distance_max_m": safety.get("support_distance_max_m"),
+    }
+    for name, value in needed.items():
+        if value is None:
+            raise ValueError(f"READBACK_EXPECTATION_MISSING: {name}")
+
+    from ..adapters.act.pick_place_readback import PickPlacePhysicalReadback
+
+    import mujoco
+
+    model = mujoco.MjModel.from_xml_path(str(scene_model))
+    kwargs = {} if monotonic is None else {"monotonic": monotonic}
+    readback = PickPlacePhysicalReadback(
+        world, scene, contacts, rgb, broker, model=model,
+        expected_model_sha256=str(needed["roles.scene_model.identity.model_sha256"]),
+        expected_mujoco_version=str(needed["roles.scene_model.identity.mujoco_version"]),
+        max_source_skew_s=float(needed["runtime_policy.rgb_sync.max_skew_s"]),
+        max_wall_age_s=float(needed["runtime_policy.rgb_sync.max_age_s"]),
+        joint_tolerance_rad=float(policy.get("joint_tolerance_rad", 0.0)),
+        cup_pose_tolerance_m=float(policy.get("cup_pose_tolerance_m", 0.0)),
+        cup_orientation_tolerance=float(policy.get("cup_orientation_tolerance", 0.0)),
+        **kwargs)
+    return readback

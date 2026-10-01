@@ -7,6 +7,7 @@ the capture and the recorder together before this file, which is why the defect 
 """
 
 import pytest
+import re
 
 import json
 import sys
@@ -18,7 +19,7 @@ from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_assembly import (EpisodeSink, LiveSampler, PhysicalAuditAdapter,
                                               PointEpisode, ProductionProducer,
                                               assemble_episode_capture, episode_audit_pair,
-                                              physical_audit_from_captured)
+                                              physical_audit_from_captured, readback_from_frozen)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -530,3 +531,25 @@ def test_the_capture_and_the_run_together_supply_exactly_the_thirteen_keys():
         physical_audit_from_captured({k: v for k, v in captured.items() if k != "world"},
                                      reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
                                      phase="CLOSE", controller_state={})
+
+
+def test_the_readback_refuses_a_frozen_set_that_does_not_state_its_expectations():
+    """The constants the readback judges the run by come from the frozen set, never from a default (CP-2858/CP-2859)."""
+    complete = {"roles": {"scene_model": {"identity": {"model_sha256": "3c" * 32, "mujoco_version": "3.12.0"}}},
+                "runtime_policy": {"rgb_sync": {"max_age_s": 0.1, "max_skew_s": 0.1},
+                                   "safety_release": {"support_distance_max_m": 0.002}}}
+    # all five are consulted before the model is ever loaded, so a gap is named rather than discovered late
+    for drop, path in (("mujoco_version", "roles.scene_model.identity.mujoco_version"),
+                       ("max_skew_s", "runtime_policy.rgb_sync.max_skew_s"),
+                       ("support_distance_max_m", "runtime_policy.safety_release.support_distance_max_m")):
+        import copy
+        broken = copy.deepcopy(complete)
+        if drop == "mujoco_version":
+            del broken["roles"]["scene_model"]["identity"][drop]
+        elif drop == "max_skew_s":
+            del broken["runtime_policy"]["rgb_sync"][drop]
+        else:
+            del broken["runtime_policy"]["safety_release"][drop]
+        with pytest.raises(ValueError, match=f"READBACK_EXPECTATION_MISSING: {re.escape(path)}"):
+            readback_from_frozen(scene_model="/nonexistent/scene.xml", world=None, scene=None, contacts=None,
+                                 rgb=None, broker=None, frozen=broken)
