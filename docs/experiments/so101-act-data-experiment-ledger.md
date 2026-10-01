@@ -47403,3 +47403,15 @@ The route itself remains sound and is the cheapest way to finish F5 - the fixtur
 thirty and no runner is needed - but it must start by reading `append_source`'s signature and one existing physics row
 from the suite, then call the predicate directly. The test was withdrawn (tree back to the user's 35 entries, audit
 suite 74 passed) and both API facts are recorded above so the next attempt does not rediscover them.
+
+
+### CP-2503 — append_source's kind set, the last API detail before the direct test
+
+`append_source(self, kind, record)` (line 821) refuses any kind outside `SOURCE_KINDS` with
+`AUDIT_SOURCE_KIND_INVALID` and special-cases `"events"` beyond that. The kind set is printed alongside this entry, so
+the direct-predicate test of CP-2502 can be written correctly on the first attempt: a physics row through
+`append_source(<the physics kind>, {"kind": ..., "sim_time_s": ..., "release_epoch": ..., "observation": {...}})`,
+then `bind_row`, then `writer._window_matches_rows(window)` with the CP-2495 window.
+
+That test replaces the runner-backed fixture with roughly fifteen lines and needs no port, no runner and no 10 Hz
+minting loop beyond a handful of `minter.mint` calls - and it is the shortest remaining path to naming F5's refuser.
