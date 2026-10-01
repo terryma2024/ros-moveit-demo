@@ -49894,3 +49894,26 @@ discoverable rather than guessable: the test loads this model anyway, so it can 
 and pick the one the endpoint pose is about. That keeps the test honest even about the name: it asserts against a body
 the model actually has, instead of a string I hoped was right - the mistake that produced the fabricated
 `cup_pose_world` key in the first place.
+
+
+## CP-2635 — The summary rows already carry a full pose, so no forward kinematics was needed
+
+The full field set, read at last, contains both halves of a seven-value cup pose:
+
+- **`cup_position_world_m`** - the cup's position, which I had already found and used for the three-value
+  "position" path;
+- **`cup_orientation_world_xyzw`** - its orientation, in exactly the `xyzw` order the endpoint policy wants.
+
+So the pair is `xyz_xyzw`, and `endpoint_poses` should have read those two keys from the start. Instead I went looking
+for a single pose key (`cup_pose_world`, which no producer writes), then for a forward-kinematics path through
+`held_cup_state`, and wrote `pose_from_configuration` to do the kinematics - when the rows the audit actually admits
+already carry the answer in two fields.
+
+That is worth recording plainly rather than burying: the whole detour came from reading a **subset** of a closed field
+set and concluding from it that the capability was missing. The set's own comment said the MuJoCo summary fields "stay
+admissible for sources that only publish them", and `cup_orientation_world_xyzw` was sitting in that list the whole time.
+
+The honest repair is therefore small: `endpoint_poses` reads the position and orientation pair and concatenates them,
+with `pose_from_configuration` left in place but unused by that path (it is a correct function, and the configuration
+route is real for sources that publish `model_qpos` and nothing else). The test then appends summary rows - the shape the
+suite already uses - and the red goes green without any kinematics.
