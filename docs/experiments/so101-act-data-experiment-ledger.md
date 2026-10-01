@@ -47881,3 +47881,20 @@ The first lines of `main` are printed beside this entry and settle it. If it tak
 `broker_command_builder` becomes `[sys.executable, "-m", "so101_demo.cli.parallel_perception_broker",
 str(composition.broker_spec_path)]` - one argument, the document the composition prepared - and the container-free
 route is complete, which would also explain why the composition prepares that spec before asking for a command.
+
+
+## CP-2531 — The broker's frozen flags, and the container paths inside them
+
+`broker_argv()` returns the complete argument list the broker parses:
+`--endpoint /runtime/perception.sock`, `--input-root /inputs`, `--ready-receipt /runtime/ready.json`,
+`--runtime-spec /runtime/broker-spec.json`, `--yolo-weights /models/yolo/best.pt` with its sha256, and more. Two things
+follow. First, the flags I guessed (`--evidence-root`, `--runtime-ipc-root`, `--batch-id`) are not among them, which is
+exactly why the broker exited 2. Second, the paths in that frozen list are **container** paths (`/runtime`, `/inputs`,
+`/models`) because the default route runs this argv inside the image, with those directories mounted - so a
+plain-process run must substitute host paths for them.
+
+The important one is `--runtime-spec`, which on the default route points at the broker spec document the composition
+itself writes (`composition.broker_spec_path`, prepared by `_prepare_broker_generation`). If the spec carries the run's
+roots - as the composition's own `broker_input_root` and the ipc root suggest - then the host command is the frozen
+flags with the container paths replaced by the composition's host paths, and the ready receipt written where the
+supervisor expects it. That is the last thing to read before the builder is corrected, and then the episode can run.
