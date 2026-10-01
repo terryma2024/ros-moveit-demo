@@ -41415,3 +41415,41 @@ scratch trees under `evaluation/measure-*/by-scene`; the review's `reviews/c-tas
 
 **处置**：整体 `mv` 到 `$MODEL_RUN/worktree-runs/runs-<UTC>`（89 MB），**未删除**；随后 `git status --porcelain` 为空。
 **这不是源码改动**：未跟踪目录移出后工作树干净，仓库无提交内容变化，因此不影响任何 provenance。
+
+## HS-269 — PLANNED（未执行）：重训 C 以消除 task 域 0.0105 的静态 mAP 缺口
+
+**状态：PLANNED，等待授权。不执行任何训练。** 按仓库纪律，长程实验必须先写条目再跑，本条目即为此用。
+
+**背景（OBSERVED）**：`selection: null / promoted: false` 的**唯一**原因是被保留模型 C 的 task 域静态 mask mAP = 0.9631，
+比最好者 A 的 0.9737 低 **0.0105 > TASK_RETENTION_MARGIN 0.01**；且该差距**与工作点无关**（mAP 对置信度积分，HS-267）。
+head 域两族 B/C 都胜 A，task 域 episode 三方都 1.0。
+
+**竞争假设**：
+- H-a：1:1 的 head:task 混合**稀释了 task 域容量**（A 只见过 task 数据）→ 可通过调配比修复；
+- H-b：差距来自**训练时长/收敛**（60 epochs、patience 20）而非配比 → 可通过增加 epochs 修复；
+- H-c：差距来自 **task 数据集本身**（含 300 干扰物 + 300 靠瓶场景），A 在同一数据上也只到 0.9737，属数据上限附近的小差 →
+  不可通过配比修复，需要重新界定"保留"要求或接受现状。
+
+**单一变量（只改一项）**：`domain_train` 的**配比**，总每 epoch 图数保持 1600、head 与 task **同时缩小/放大**：
+`head 400 : task 1200`（即 task 权重 ×3），其余（epochs 60、batch 32、seed 20260930、deterministic、amp off、
+`checkpoint_score` 公式、基模 `f281d252…`）**全部不变**。新候选记作 **C2**，权重与文档写入新目录，**不覆盖** C。
+
+**判据（先声明后测量，全部满足才算通过）**：
+1. `static task mask mAP` 与最好者之差 **≤ 0.01**（当前 0.0105）；
+2. `static head mask mAP` **≥ 0.7434 − 0.005**（不允许为 task 域牺牲超过 0.005 的 head 能力）；
+3. task/head 两域的 episode recall/F1 不低于当前（当前均 1.000）；
+4. `no_cup_false_candidates == 0`；
+5. 重跑 `compare7` 同参数、同 episodes 口径，`promoted` 变为 true 或明确证否（写入 verdict）。
+
+**证否路径**：若 (1) 仍不满足而 (2) 也下降，则 H-a 被否证，转 H-b（同一配比下 epochs 60→120 单独一个变量）；
+若 (1)(2) 同时满足则 H-a 成立，C2 取代 C 进入比较。**三种情况都必须如实记录，包括失败。**
+
+**代价**：① 一次训练（60 epochs，按 B/C 实测为分钟到十几分钟量级，见本条目上方记录的耗时）；
+② 新权重的 gate 冷启动（C2 的 200 个 head 场景格需重算，约 4–13 分钟；A/B 命中缓存）；
+③ 重录 40 seed（约 1 分钟）。**总代价约半小时**，不含等待。
+
+**影响面**：改 `domain_train` 会改变 `plan_sha256`（C 现为 `ad0d157f5048ead3…`），因此 **B/C 可比性必须重新建立**——
+B 也必须以同一契约重训一次（B2），否则"同一契约、同一基模、只有采样不同"这一前提被破坏。这一点是本条目**最大的代价**，
+必须在动手前讲明。
+
+**需要授权的原因**：它产生**新的候选身份**并可能替换被保留模型，属于计划里"改变候选"的动作，而不是测量动作。
