@@ -48487,3 +48487,18 @@ source (`publish_clock()` published per physics step, with the CPU/sim synchroni
 CP-2558).
 
 Written to `reviews/k2-protocol-table-v3.md`, to be extended with the clock section and the defined schema.
+
+
+## CP-2562 — K2 revision 3's clock section names the real mechanism
+
+Section 2 of revision 3 replaces revision 2's invented "/clock mapping" with the two mechanisms the source actually
+has, read at CP-2558: `publish_clock()` called **once per physics step** from the step callback (defined 2424, called
+2179, right after `publish_control_state()` and `refresh_data_snapshot()`), and the **CPU/simulation synchronisation
+pair** `syncCPU`/`syncSim` held by `physics_loop()`. The protocol now says which of the two each claim uses: per-step
+publication for a record's simulation instant (carrying the step index as well as the instant, with same-step records
+ordered by section 1's sequence rather than by their stamps), and the synchronisation pair only across the interval the
+loop actually maintained it, with the observed deviation carried as uncertainty and no relation claimed outside it.
+
+It restates the four things never done - manufactured equality, a receipt-time clock read, a receipt timestamp used as
+evidence about the simulation, and a stamp used as an ordering device - the last of which section 1 exists to make
+unnecessary.
