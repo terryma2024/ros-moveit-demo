@@ -41858,3 +41858,32 @@ self.target = self.config["search_start_rad"] + self.coarse_angle
 
 **下一步**：写上述测试并**先跑出 RED**（证据：失败输出 + 退出码），再改 `search.py` 至 GREEN，然后跑
 `head_test -n 8 src/so101_demo_py/test -q` 与 `head_test -n 8 src/so101_teleop/test -q` 两个完整套件。
+
+## HS-287 — RED 达成：有界停点测试 4 失败 / 2 通过（rc=1），并暴露真正成因是**字段名不匹配**
+
+新增 `src/so101_demo_py/test/test_act_head_search_bounded_sweep.py`（6 个用例）；运行：
+
+```
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 TMPDIR=…/scratch/hs286 PYTHONPATH=…/scratch/hs286/shim \
+  python3 -m pytest src/so101_demo_py/test/test_act_head_search_bounded_sweep.py -q
+-> 4 failed, 2 passed, rc=1        （原始日志 scratch/hs286/hs286-red-pytest.log）
+```
+
+逐条失败证据（逐字）：
+
+- `test_01`：required 域 `(-0.2915, 0.5404)`、`coarse_step_rad=0.2` 下**32 个停点里有 30 个越界**，首个 `0.7000`、最远 **`6.383185307179586` = 0.1 + 2π** ——正是累计一整圈；
+- `test_02`：首个停点 `0.3000` **没有朝较近端点 `-0.2915` 移动**（另一端点是 `0.5404`）；
+- `test_04`：无目标时返回的是 **`TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL`**（撞到 2π 边界），而非 `TARGET_NOT_FOUND`；
+- `test_06`：`ContractError: FIELDS_INVALID`。
+- `test_03`（确定性）与 `test_05`（安全区间钳制）**今天就通过**，说明 RED 精确落在轨迹形状上，没有误伤既有正确行为；既有 `test_act_head_search_domain.py` 仍 **12 passed**。
+
+**更精确的成因（比 HS-286 的"没有有界实现"更准）**：`search.py:74-85` **已经存在有界规划路径**，但它只在配置**同时**声明
+`required_domain_rad` 与 `lock_valid_neck_rad` 时启用；而几何 seal 用的拼写是 **`required_search_domain_rad`** ——
+字段名对不上，于是掉到 254-258 的累计分支。**所以真正的缺陷是词汇不匹配，而不只是缺实现。**
+
+**GREEN 的两个 API 决定（必须先定，再改）**：
+1. 控制器必须**同时接受** `required_search_domain_rad`（seal 拼写）与既有的 `required_domain_rad`（有测试钉着它）；
+2. 只声明 required 域、未声明安全区间的 plan，**仍必须有界**（有安全区间就用它钳制，没有就用 required 域本身钳制）。
+
+**下一步**：按上述两条改 `search.py` 至 GREEN，跑本测试、`test_act_head_search_domain.py`，再跑两个完整套件
+`head_test -n 8 src/so101_demo_py/test -q` 与 `head_test -n 8 src/so101_teleop/test -q`。
