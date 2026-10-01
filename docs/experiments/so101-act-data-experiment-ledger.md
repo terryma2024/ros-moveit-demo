@@ -42198,3 +42198,91 @@ GREEN **27 passed** + **28 passed**（提交后三文件复跑 55 passed, rc=0�
 **Task 13 现在的状态**：八个 phase 的模块与编排**全部就位**（累计 **225** 个新用例）；**唯一缺口是 `coarse_step_rad` 的
 "获选模型 val sweep/lock 证据"**——补上它，`run` 就能真正产出 bundle，随后进入**你要求的 17 值精确审批**暂停点。
 证据：`scratch/hs297/` 与两个 8-worker run dir，列为删除候选，未删除。
+
+## HS-298 — `coarse_step_rad` 的 val 扫描与锁定证据完成：真实测量 200 个 val 场景选出 `0.6560533740603397`，`run` 首次能走完 phase 8
+
+**提交** `f8950057c`（9 文件，+3573/−66；**普通 `git commit`**，钩子 rc=0；`git status --porcelain` 为空）。
+本轮的**唯一缺口**（HS-295/HS-297 反复记的"获选模型 val sweep/lock 证据"）已闭合：phase 6 现在能算出第六项参数，
+phase 8 不再因它拒绝 bundle。
+
+**新增库模块** `src/so101_demo_py/src/act/head_search_coarse_step_measurement.py`（决策层零 MuJoCo/零检测器，重依赖全部函数内 import）：
+
+| 层 | API | 作用 |
+| --- | --- | --- |
+| 计划 | `sweep_plan(coarse_step_rad, geometry)` | **复用仓库自己的** `bounded_search_stops` + `coverage_is_complete` + `independent_sweep_check`，逐 anchor 产出有界双向停点；域超出安全区间 ± 半 FOV 时**无计划并带原因** |
+| 匹配 | `match_stop(truth, detections, radius_px)` | gate 的贪心最近匹配（按 conf 降序、`match_radius_px=8.0`），返回 TP/FP/matched/missed |
+| 校验 | `validate_raw_sweep(...)` | 原始文档自摘要（`sha256 = canonical_sha256(body 去掉 sha256)`）、split（`CAL_SPLIT_LEAK`）、domain、sealed geometry 四字段、selected weights、候选集与生成集**逐值相等** |
+| 决策 | `choose_coarse_step_rad(...)` | 取"覆盖 ∧ 每个 required-visible val 场景零漏杯 ∧ 各 pass 一致"的**最大**候选；并列按首次锁定停点最短（设计 §7.1） |
+| 证据 | `validate_head_search_coarse_step_measurement(...)` | 产出 phase-6 文档 + phase-8 形状的 `parameter_evidence.coarse_step_rad`（`PATH+sha256` 指向 seal 与原始文档） |
+| 生产 | `plan_coarse_step_val_sweep` / `load_selected_candidate` / `measure_coarse_step_val_sweep` / `parse_driver_version` / `runtime_identity` | 纯预检可无 GPU 测试；重层重建 val 场景（`render()` 的确定 attempt）并**逐场景与数据集 PNG 比对**（≤1 灰阶），再逐停点渲染 + C2a 检测 + 按相机分割真值 |
+
+拒绝码：`CAL_SWEEP_EVIDENCE_MISSING` / `_PARTIAL` / `_CONTRADICTORY` / `CAL_SWEEP_UNSTABLE`，并复用 phase 3 的
+`CAL_SPLIT_LEAK` 与 phase 8 的 `CAL_EFFECTIVE_VALUE_MISMATCH`（共 6 个，`REFUSAL_CODES` 有测试钉住）。
+
+**CLI（薄解析/校验）**：`run` 新增**第 15 个** measurement flag `--coarse-step-observations`（与 HS-297 的 14 个同构，
+`document` 形状，缺省即在入口以 `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE` 拒绝、不认领 root）；新增子命令
+`measure-coarse-step`（六个必填路径 + `--scene-limit/--passes/--device/--split/--domain`，缺输入报
+`HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE`），只调用库模块，CLI 自身不计算。
+
+**phase 6 归属**：`_coarse_step_parameter` 把 val sweep 的拒绝**以 phase 6 自己的异常类、同码**重抛（不泄漏别的模块类型），
+并要求 `coarse_step_rad == geometry_coverage.chosen_candidate_rad`——否则 `CAL_SWEEP_UNSTABLE`（"receipt 不能为运行不使用的步长背书"）。
+未声明 sweep 时仍记 `uncomputed_parameter`（该路径有测试钉住），声明后 `uncomputed_parameter: null`。
+
+**真实测量（安装程序，一次成功）**：
+
+```
+T=/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-toolchain-20261001T080947Z   # 由 f8950057c 构建
+ros2 run so101_demo_py so101_head_search_calibration measure-coarse-step \
+  --geometry-seal …/head-camera-probe11-20260930T101722Z/head-camera-geometry.json \
+  --head-dataset …/head-dataset/dataset-manifest.json \
+  --dataset-config $T/install/so101_demo_py/share/so101_demo_py/config/perception/head_camera_yolo_seg.yaml \
+  --weights …/weights-c2a/C.pt --frozen-candidate …/reselected-c2a/frozen-c.json \
+  --output-dir …/coarse-step-20261001T081028Z --device cuda --passes 2
+rc=0  程序内 43.1 s（进程 45 s）
+COARSE_STEP_MEASURED 0.6560533740603397 scenes=200 candidates=6 passes=2
+```
+
+- 规模：200 个 val 场景（150 个 required-visible + 50 `no_cup`）× 6 个候选 × 9 个唯一停点 × 2 passes = **3600 次检测**；
+  200/200 场景的重建与数据集 PNG **max abs 差 = 1**（`RECONSTRUCTION_PIXEL_TOLERANCE=1`，先期探针 200/200 实测）；
+  `passes_agree=True`（6 个候选全部两 pass 一致）；真值 = 该相机分割（HS-260/261 语义）。
+- 结果：**6 个候选全部覆盖 required domain、150 个 required-visible 场景零漏杯（`missed_scenes=[]`）**；停点数
+  6/6/6/9/15/26，FP 0/0/0/3/3/33；`worst_case_first_lock_stop=0`（每个候选的首个停点即检出）。按"最大"规则选中
+  **`coarse_step_rad = 0.6560533740603397` = `horizontal_fov_rad / 2`**（index 0），与 phase 2 的 `chosen_candidate_rad`（HS-290）一致。
+- 运行时身份（receipt）：`toolchain_root` 如上、`source_commit=f8950057c`、`weights_sha256=2afd550694abfbe6…`、
+  `driver_version=595.84`、`cuda 13.0`、`mujoco 3.12.0`、`torch 2.13.0+cu130`、`ultralytics 8.4.115`、
+  GPU RTX 5080、`mujoco_only=true`、`ros_nodes_started=false`、`motion_commanded=false`。
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED（新测试文件，模块缺失） | **rc=1, 1 collection error**（`ModuleNotFoundError`；只缺新模块） |
+| RED（producer 预检、loader、driver 三处） | 各 **rc=1, ImportError**（分别隐藏 `plan_coarse_step_val_sweep` / 未实现的 `load_selected_candidate` / `parse_driver_version`） |
+| GREEN | **44 passed, rc=0**（新文件）；phase 6 **43 passed**、编排 **30 passed**、CLI **18 passed**；`ruff check` 干净 |
+| 回归（13 文件：HS-288/289..297 各 phase + 新模块 + CLI + calibration） | **331 passed, rc=0** |
+| 全套件（8 workers，基线 run-dir 布局） | **175 failed / 5881 passed / 152 skipped / 86 errors, rc=1** |
+| 与 HS-297 基线（175/5821/152/86）对照 | **节点级 261 个 FAILED/ERROR `diff` 为空（0 行）**、**+60 passed**（= 43 新文件 + 1 + 3 编排 + 9 phase 6 + 4 CLI）、失败/跳过/错误数不变；失败集里 **0 个** head_search 节点 |
+
+**一次真实运行暴露的 producer 缺陷（值得单独记）**：第一个提交 `943e2b341` 通过了 RED/GREEN、回归与全套件，但真实运行时
+在 `measure_coarse_step_val_sweep` 里 **`ImportError: cannot import name 'load_frozen_candidate' from head_search_candidate_freeze`**
+——正确入口是 `perception_benchmark.head_search_models.load_frozen_candidate`。补了 `load_selected_candidate`（用仓库自己的 loader）
+并以 **RED→GREEN** 修复后 `--amend`；随后又发现 `driver_version` 解析对 `NVRM version: … Open Kernel Module for x86_64  595.84`
+不匹配（receipt 记 `null`），同样 RED→GREEN 修 `parse_driver_version` 并再次 `--amend`。**结论：只有真实运行能覆盖生产者的 import/环境层**；
+三次 commit 依次为 `943e2b341`（被替代）、`4b6d1bf7a`（被替代）、**`f8950057c`（最终，已在三个门禁与真实测量上验证）**。
+
+**它声明的推断（待评审，逐条照录）**：① `sha256 = canonical_sha256(body 去掉 sha256)` 是沿用 geometry seal / selection rule 的口径，
+并由本模块**自行复核**；② `run` 的第 15 个 flag 与 `measure-coarse-step` 子命令的划分（run 声明文档、不渲染）是我对"安装程序产出值"的落地方式；
+③ `CAL_SWEEP_UNSTABLE` 复用为"完整证据但无候选既覆盖又零漏"以及"val 证据支持的步长 ≠ phase 2 receipt 的步长"，
+`CAL_SWEEP_EVIDENCE_MISSING/_PARTIAL/_CONTRADICTORY` 三个码为自拟；④ "required-visible" = 该候选扫描中某停点的**按相机真值**有杯子，
+或数据集声明 `visible_instance_count>0`（后者即使扫描中从未看见也算漏）；⑤ 漏检判定按 **cup body**（不是帧）计数；
+⑥ "deterministic" = 同一场景同一候选多 pass 的 matched/missed 集合必须一致，不一致即 `CONTRADICTORY`（渲染本身非逐位确定，
+两 pass 的检测坐标可差 ~1e-3 px）；⑦ 并列时取首次锁定停点最短（生成候选步长互不相同，故实际不可达，仅有测试钉住）；
+⑧ `sweep_plan` 对超半 FOV 的步长抛普通 `ValueError`（候选由生成器保证 ≤ 半 FOV）；
+⑨ val 场景重建的"与数据集 PNG 比对"容差取 1 灰阶（实测 200/200 均 ≤1，3 个为 0）；
+⑩ 显式 `--passes 2`（而非默认 1）是本轮为确定性证据做的选择。
+
+**Task 13 现在的状态**：§0 + 八个 phase + `coarse_step_rad` **全部就位**（累计新用例 **225+44=269**）。**合成 fixture 下 `run` 现在
+走到 `SUCCEEDED` 并写出 17 值 bundle**（编排测试钉住，含 `coarse_step_rad=0.2` 与 block 逐字进入 bundle）。**真实端到端 `run` 仍不可执行**：
+它还需要另外 14 个测量文档（phase 3 的 operating point 帧、phase 6 的 4 个、phase 7 的 9 个）与六个 sealed 输入，这些**目前没有生产者**；
+所以下一步仍是"为其余测量文档建生产者"，之后才是 17 值审批暂停点。
+证据：`scratch/hs298/`（含 RED/GREEN/回归/全套件日志、工具链 root 记录、测量 runner）与三个工具链 root、三个测量 run dir，**均列为删除候选，未删除**。
