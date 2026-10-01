@@ -51043,3 +51043,22 @@ non-container behaviour they exercise, or their expectation is the contract and 
 
 That judgement is the next round's work, and it needs the two tests' own bodies read the same way the `config_path`
 test's was - so that the choice comes from their intent rather than from whichever value turns them green.
+
+
+## CP-2684 — The two tests' own builders settle it: their brokers are host commands
+
+The judgement CP-2683 left open is answered by what the tests actually build:
+
+- the test at `:1628` passes **`supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",)`** - a **host**
+  command, not a container runtime;
+- the test at `:3098` passes a builder too (its command continues onto the next lines);
+- and **the file mentions `container_brokers` zero times**, so both of them inherited the new default of `True` where
+  before my change the inference gave them `False` (`broker_command_builder is None` was False for them).
+
+So these two are **affected by my change**, and the correct declaration follows from their intent rather than from
+greenness: a broker whose command is the bare host program `broker` does **not** run in a container, so these tests
+should say `container_brokers=False` - the same declaration the container-free CLI path now makes, for the same reason.
+
+That also completes the picture CP-2683 drew: one boolean cannot be inferred from "a builder exists", because two tests
+with builders want opposite things **for good reasons** - one runs a docker container, the other a host process. The
+explicit flag expresses both, and each caller now states which it is.
