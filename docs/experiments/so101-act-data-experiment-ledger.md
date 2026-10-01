@@ -41406,3 +41406,12 @@ verified by re-download sha256; sample manifests verified by hash.
 **Deletion candidates (need explicit authorization)**: superseded episode generations `episodes`…`episodes6`; empty toolchain roots
 `…T125637Z`, `…T125856Z`; superseded success roots `…T115640Z`, `…T115927Z`, `…T120204Z`, and the polluted `…T155706Z`; `probe-calibration-*`;
 scratch trees under `evaluation/measure-*/by-scene`; the review's `reviews/c-task-domain-f1/scratch-cache`.
+
+## HS-268 — 工作树里再次出现未跟踪 `runs/`（89 MB）：已移出，未删除
+
+`git status --porcelain` 报 `?? runs/`。内容是 Ultralytics 的 `runs/segment/val-36/`（置信度/PR 曲线、混淆矩阵等），
+时间戳 **2026-09-30 23:54**，即 compare3/4 那一代运行——那时 runner 还没有 `cd "$M/grid"`，所以 Ultralytics 把输出写进了 worktree
+（与 HS-211/212 同一成因，那次我加了 `cd`；本次是更早遗留的目录直到现在才被 `git status` 照到）。
+
+**处置**：整体 `mv` 到 `$MODEL_RUN/worktree-runs/runs-<UTC>`（89 MB），**未删除**；随后 `git status --porcelain` 为空。
+**这不是源码改动**：未跟踪目录移出后工作树干净，仓库无提交内容变化，因此不影响任何 provenance。
