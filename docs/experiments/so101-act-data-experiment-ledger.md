@@ -47647,3 +47647,18 @@ with the three image gates belonging to the default branch that is not taken, an
 scheduler or the recorder. The only thing left to read is the broker's own plain-process entry point in
 `so101_demo.cli.parallel_perception_broker` - the grep for it is printed beside this entry - after which the `run`
 subcommand can supply the builder and the composition can be driven for a real episode.
+
+
+## CP-2517 — The container-free route's first code is in, and it is small
+
+`_broker_command(composition)` is written into `cli/act_first_episode.py` (commit recorded this round): it returns
+`[sys.executable, "-m", "so101_demo.cli.parallel_perception_broker", "--evidence-root", ..., "--runtime-ipc-root",
+..., "--input-root", ..., "--batch-id", ...]`, built only from what the composition already holds. That is the whole of
+the user-approved work on this axis - no fork of the broker, the scheduler or the recorder, and the container machinery
+left to a default branch that this configuration does not take.
+
+Verified: the package rebuilds clean (build22) and the scope and endpoint-pose suites pass together at **59 passed**.
+
+Next: pass it as `broker_command_builder=_broker_command` where `_run` instantiates `ProductionBatchComposition`, then
+drive the composition for one episode and let the run name the next layer - the same pattern that has cleared four
+layers of this integration so far (the guard, the run mode, the trusted pose, the versioned request).
