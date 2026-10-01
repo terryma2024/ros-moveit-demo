@@ -43975,3 +43975,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
 - choice; F5's regression fixed with two items behind the same surgery; F12 two of three with its edit localized;
 - HEAD 1bdc8a0f7; goal paused.
+
+## CP-2337 - F12 closed: the replacement observation travels from the boundary into the port's document
+
+- search() at line 906 delegated directly to segment.run, so the records the verifier chain caches in
+- self._controller_feedback sat beside the observation while _search_evidence built the port's document from the
+- observation itself. It now captures the segment's observation and returns dataclasses.replace(observed,
+- controller_feedback=tuple(records)) whenever records were cached and the object is a dataclass - so the
+- replacement the verdict asks for travels through the same return value the port already reads, and the chain's
+- `or` contract, the port's signature and every other consumer are untouched.
+- First attempt failed on whitespace alone (the assert compared an indent the awk print had stripped) and the
+- second patched by line with the file's own indentation. With CP-2317 (normalised records) and CP-2318 (the pose
+- carrier's registered measurement) this closes all three items of F12's residual.
+- GREEN 238 passed, wider gate recorded with the commit.
+- Remaining across the verdict: F5's per-kind history and hybrid fixture, F11's endpoint derivation - both behind
+- the contract choice CP-2332 records - and F13's scene production behind CP-2285.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed; F5's regression fixed;
+- HEAD 8fd763d8a; goal paused.
