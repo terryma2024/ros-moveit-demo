@@ -49070,3 +49070,20 @@ correct.
 
 Sent for review (`reviews/k2-protocol-recheck8.log`). If it passes, K2's protocol is settled and its implementation -
 the eight files the first review listed, moving together - becomes the next piece of work, which is F13's fourth item.
+
+
+## CP-2595 — E2's first two negatives from the plan's list
+
+Two entries of the plan's negative list are now tests (committed as 2a5988267, width gate 241 passed):
+
+- a sealed audit whose manifest **omits `physics.jsonl`** yields `ENDPOINT_PHYSICS_STREAM_ABSENT` rather than reading
+  whatever else happens to be present;
+- an audit whose rows carry exactly **one** derivable pose yields `ENDPOINT_POSE_NOT_DERIVABLE` with `poses: 1`, because
+  two endpoints cannot come from one observation.
+
+Both assert the named absence **and** `passed is False`, which is the distinction the plan's quality-versus-safety split
+depends on: a caller must be able to tell "this source cannot answer" from "the endpoints were judged and failed".
+E2 now has five tests - the legal-endpoint, quality-absent positive; the full-pose positive; and three absences - all
+measured against sealed audits rather than hand-built dictionaries.
+
+The review of K2 revision 8 (a one-word change) continues; its verdict is read when the marker lands.
