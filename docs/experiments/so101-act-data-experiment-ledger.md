@@ -49144,3 +49144,25 @@ it, exactly as the review's file list says. The scope document (`_SCOPE_FIELDS`,
 neighbourhood and is untouched by this table.
 
 The checkpoint passed, so this work is not gated; the tree still holds only the user's thirty-five entries.
+
+
+## CP-2599 — K2's schema groundwork is partly already in the tree
+
+The scene observation's closed key set, read in full:
+
+```python
+_SCENE_OBSERVATION_FIELDS = frozenset({"scene_revision", "attached_objects", "world_object_ids",
+                                       "is_diff", "sim_time_s", "source"})
+# the eighth key is the owner's amendment (CP-2217, F13): the source-side instant the record was evaluated
+# from, beside `sim_time_s`, which stays the instant the record is *for* and the join its parent observation uses
+```
+
+So the **`source`** key - the source-side instant the record was evaluated from, distinct from the instant the record
+is *for* - is already carried, added by the owner's amendment at CP-2217. That is a piece of exactly what K2's protocol
+requires, and it means the remaining work is narrower than the review's file list, which was written from the revision-1
+table rather than from the current tree.
+
+The honest next step is therefore a **comparison rather than a rewrite**: for each of the eight files the review listed,
+read what is already there against what the passed protocol now demands - `source` propagation exists, geometry is the
+question, ordering and the K2 record kinds are new - and implement the difference. That keeps the change as small as
+the tree allows instead of rebuilding what the amendment already landed.
