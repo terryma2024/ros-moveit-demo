@@ -48891,3 +48891,16 @@ paid: the log has advanced to **1417 lines**, so the conditional re-run did not 
 Two rounds in a row now, "flat" has meant "between the reviewer's long reads" rather than "stopped". The lesson is not
 that flatness is meaningless - it is that flatness is a *hypothesis* to test against the process and the next reading,
 not a conclusion to act on, and that a conditional action is a better shape than a decision made on one sample.
+
+
+## CP-2585 — mtime is the better instrument; the line count was measuring the wrong thing
+
+`wc -l` said 2426 twice in a row, which reads as flat. `stat -c %y` said the file was modified at **11:58:17**, and the
+clock said **11:58:29** - twelve seconds earlier. So the review was writing the whole time, and the line count was flat
+because the reviewer was building one very long line (a wide table or a long cited path), not because nothing was
+happening.
+
+That corrects the instrument rather than the conclusion: from here, "is the reviewer alive" is answered by comparing
+the log's mtime against the current time, with the process count and the absence of `EXIT=` as corroboration. The line
+count is still useful for noticing when a run has *finished*, because the marker is a line - but it is a poor liveness
+signal, and both of this stretch's false "flat" readings came from treating it as one.
