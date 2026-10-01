@@ -52329,3 +52329,32 @@ burst, so the first service pass mints 1.0 and the rest are treated as future fr
 serviced - which they would be, if the drain were given a chance between them, and my loop does drain between them.
 
 So the read is the minting caller, and with it the reason one row came out of three.
+
+
+## CP-2738 — The minting loop, and the one rule left inside it
+
+```python
+    def _mint_rows(self) -> None:
+        while True:
+            at_s = round(self._next_grid_s, 6)
+            if self._physical_end_s is not None and at_s > self._physical_end_s + _TOLERANCE_S:
+                break
+            head = self._causal("head", at_s)
+            wrist = self._causal("wrist", at_s)
+            if head is None or wrist is None:
+                if not self._frames["head"] and not self._frames["wrist"]:
+                    break                       # both sources dry: a genuine terminal tail
+                self._fail("NO_NEW_ACQUISITION")  # frames exist but cannot serve this instant
+            self._mint(at_s, head, wrist)
+            self._frames["head"].remove(head)
+            self._frames["wrist"].remove(wrist)
+```
+
+So the loop walks the grid from `_next_grid_s` (seeded at `start`), mints an instant when `_causal` can serve it from both
+cameras, removes those frames, and repeats; it breaks when both queues are empty, and refuses when frames exist that
+cannot serve the instant - which is how a hole in the 10 Hz grid is caught rather than papered over.
+
+With frames at 1.0, 1.1 and 1.2 and a drain between each, the loop should mint three rows: at each pass `_next_grid_s`
+equals the instant whose frames just arrived, `_causal` finds them, and the next `_causal` returns None on dry queues and
+breaks. The probe measured one row instead, so the remaining rule is `_causal`'s own - what it accepts as serving a given
+instant - and that is the last unread line of this loop.
