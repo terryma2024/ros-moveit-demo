@@ -44697,3 +44697,22 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
   K1's legal-window construction available; F5's regression fixed, step one landed, step two past the coverage gate
   with its window one level-up probe away; HEAD dbc29d567; goal active.
+
+
+## CP-2372 — `_row_times` settled, and the window's remaining refusal is still unnamed
+
+- `self._row_times` is appended once per bound row (`episode_audit.py:813`), so it holds exactly the `bind_row`
+  instants - the single 1.0 the hybrid binds - and the seal's `label_cutoff_s` must therefore be 1.0, which is what
+  the fixture had. Both candidate values for that field (1.0 against the physics maximum, 1.2 against the camera
+  maximum) are now settled: 1.0 is the right one, and the window predicate's four printed comparisons together with
+  `_window_ok`'s schema, schedule, cadence, gaps and outcome rules all hold for the hybrid.
+- So the `AUDIT_WINDOW_INVALID` that remains at the hybrid's seal is still unnamed, and what names it is the
+  level-up probe CP-2371 specifies: print `_window_ok`'s verdict beside the window predicate's arguments, in the same
+  run as the fixture. Three of this stretch's four diagnostic breakthroughs came from exactly that pattern
+  (CP-2359/2360 for the coverage terms, CP-2365 for the identity's shape), and this is the fourth.
+- This item is the session's long pole: F5's step two has consumed many rounds, each of which removed one named clause
+  (coverage gate cleared at CP-2368, three seal-side blockers at CP-2362/2363/2365) and the ledger now carries every
+  value the window compares, so a fresh context finishes it in one or two runs.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
+  K1's legal-window construction available; F5's regression fixed, step one landed, step two past the coverage gate;
+  HEAD 9fc45c392; goal active.
