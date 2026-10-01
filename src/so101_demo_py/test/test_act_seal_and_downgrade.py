@@ -583,3 +583,16 @@ def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
             _obs(epoch=None), release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
             contacts={}, physical_stamps={},
             reference={"time_s": 1.0, "source": "mujoco", "positions": [0.0]}, controller_state={})
+
+
+def test_the_episode_process_can_be_given_a_recorder():
+    """RED first: the episode runs in its own process (CP-2861), so that process needs somewhere to record through."""
+    import inspect
+
+    from so101_demo.ros import dynamic_runtime
+
+    signature = inspect.signature(dynamic_runtime.run_dynamic_execute)
+    assert "episode_recorder" in signature.parameters, (
+        "run_dynamic_execute must accept the recorder the episode records through, the way it already accepts the "
+        "profiler and the event emitter")
+    assert signature.parameters["episode_recorder"].default is None

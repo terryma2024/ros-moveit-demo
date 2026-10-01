@@ -325,9 +325,16 @@ def run_dynamic_execute(
     *,
     profiler: SemanticProfiler | None = None,
     event_emitter: EventEmitter | None = None,
+    episode_recorder=None,
     _runtime=None,
 ) -> int:
-    """Run the MuJoCo dynamic strategy through the shared state machine."""
+    """Run the MuJoCo dynamic strategy through the shared state machine.
+
+    `episode_recorder` is where this episode is recorded. It belongs here rather than in the process that spawned this
+    one (CP-2861): the physical facts the audit's thirteen names need - the simulator's pose beside MoveIt's, the
+    attachment, the contacts, the stamps, the phase - are all reachable in this process and none of them cross the
+    boundary intact. Optional, so a run that records nothing is unchanged.
+    """
 
     status_stream = sys.stderr if event_emitter is not None else sys.stdout
     terminal_emitted = False
