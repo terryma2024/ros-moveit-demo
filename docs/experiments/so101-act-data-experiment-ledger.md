@@ -54469,3 +54469,33 @@ from what this class already owns. And the recorder side is the one the chain te
 That also removes the concern CP-2820 raised about the file being off limits: the change is not necessarily *in* this file.
 The class already exposes what the capture needs, so the capture can be constructed by whoever holds one of these - and if
 it must be built here, the edit is the addition of two objects to an existing constructor rather than new machinery.
+
+
+## CP-2822 — The evidence class is itself unwired, and this area is the coordinator's work in progress
+
+```
+pick_place_sources.py:21     class PickPlaceRosEvidence:
+pick_place_sources.py:196        def __init__(self, sources: PickPlaceRosEvidence, broker, cancelled: ...)
+pick_place_sources.py:252    Task8RosEvidence = PickPlaceRosEvidence
+physics_clock_bounds.py:5    "not yet wired into `PickPlaceRosEvidence`, and no goal, permit or sample ma..."
+test_act_task8_contact_pairs.py:256    from ...pick_place_sources import PickPlaceRosEvidence
+```
+
+Three things follow, and the third changes what the next step should be:
+
+- the class that holds the capture's three inputs is **`PickPlaceRosEvidence`**, and it has an alias (`Task8RosEvidence`) -
+  so a search for its construction sites has to use both names;
+- with both names searched, **it is constructed nowhere in `src/` either** - the only references are its own definition, the
+  alias, a class that *takes* one (`PickPlaceHazardDispatcher`), a test import, and a module docstring;
+- and that docstring is explicit: `physics_clock_bounds.py` says something is **"not yet wired into
+  `PickPlaceRosEvidence`"**. This is the coordinator's area, and it is visibly mid-work - a note like that is what a
+  developer writes while holding the pieces.
+
+So the assembly I described at CP-2821 has an owner already: the same work that is building `PickPlaceRosEvidence` and the
+physics clock bounds around it. Building a second assembly of my own in that area would be exactly the parallel-stack
+mistake the rules forbid, and touching those seven files is off limits in any case.
+
+What that means for the objective is worth stating plainly. **K1's forward half and E3 both want the same wire, and that
+wire is being built by the coordinator** - so the honest move is to keep my side ready and let theirs land, or to ask which
+side builds it, rather than to start a competing version. Everything else this stretch found is committed and green; this is
+a coordination question, not a technical one.
