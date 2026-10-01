@@ -44830,3 +44830,17 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2's protocol table is written, CP-2375); F11's
   derivation still open with the window contract fully read; F5's regression fixed, step one landed, step two one
   traceback from its fix; HEAD 0156657f7; goal active.
+
+
+## CP-2378 — One more candidate excluded: both window call sites see the same shapes
+
+- `append_acquisition` stores a plain dict (`{field: getattr(frame, field) for field in _ACQUISITION_FIELDS}` plus a
+  list shape), and `self._acquisitions` is keyed by `acquisition_id` (line 755/757), so the seal's
+  `self._acquisitions` and the readback's `{row["acquisition_id"]: row}` carry the same dict shape with `camera` and
+  `stamp_s` - the camera map is populated in both, and the endpoint comparison cannot misfire for that reason.
+- That closes the last candidate that could be settled by reading. The refusal at the hybrid's window is one of two
+  call sites (`_window_matches_rows` at 961 or the readback's check near 1036), every value either compares is
+  recorded in CP-2370..CP-2377, and the three-line traceback is what names it - exactly as the previous entry states.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written (CP-2375); F11's
+  derivation still open with the window contract fully read; F5's regression fixed, step one landed, step two one
+  traceback from its fix; HEAD 298462464; goal active.
