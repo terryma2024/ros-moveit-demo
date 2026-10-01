@@ -44157,3 +44157,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Everything else is closed or owned elsewhere: F1/F14/F3/F12 closed, F13 three of four, F5 step one landed, and the
 - objective's own path runs through the owner's nine input values and plan items 5-8.
 - HEAD 07d47894c; fourteen-suite baseline 446 passed (CP-2343); goal paused.
+
+## CP-2345 - F11's alignment landed as its own half, fixtures only
+
+- Three sites now describe the histories they hold: _window() at 1.1/1.2 for the relabelled-coverage fixture's rows
+- [1.1, 1.2]; _self_consistent_formal returns a window of its own at 1.1/1.1 for its five rows at 1.1; and the
+- coverage control's seals use that same 1.1/1.1 for their single-row audits.
+- The endpoint derivation is deliberately NOT in this commit, which is the point: the half is green on its own
+- (204 passed), and the shared-literal tangle that broke every earlier attempt - satisfying one fixture while
+- moving another - is gone, because each fixture now states its own numbers.
+- What remains of task B is therefore one edit with a clean base: change the endpoint relation from enclosure to
+- |endpoint - extreme| <= tolerance and run the four suites. CP-2331's four sites are now already aligned, so that
+- edit is the only variable left.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- alignment landed and its derivation one clean edit away; F5's regression fixed with step one landed and step two
+- handed off; HEAD 3c8f55a08; goal paused.
