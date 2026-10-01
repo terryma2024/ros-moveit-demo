@@ -52171,3 +52171,28 @@ So the next attempt is smaller than the last: apply the strip, change line 116 t
 (its closed set, or simply that the identifiers are absent from that channel), unmark the two chain tests, and run the
 three files together - with the lesson from this round: change one thing at a time, and read the failure list rather than
 the count.
+
+
+## CP-2732 — Two steps forward on the chain tests, and the third one is not what it looked like
+
+Reading the frames of the chain tests' refusal named the check exactly:
+
+```
+>               self.recorder.append(row["observation"], entry["positions"], ...      continuous_capture.py:456
+>       self._audit(checked, label, audit)                                          recorder.py:221
+>           raise ValueError("EPISODE_SCOPE_INVALID")                               recorder.py:152
+```
+
+So the recorder refuses the row because the **audit** does not agree with its own coordinates - and the recorder suite's
+`audit()` helper defaults to `reset_epoch=2` while my chain tests ran in epoch 1. Setting that produced the next refusal
+in the chain, `ACQUISITION_RESET_MISMATCH`, which says the **frames** carry the reset epoch too: `feed()` defaults to
+`reset_epoch=1`, so moving the episode to epoch 2 moved it out from under the frames.
+
+Reverting to epoch 1 everywhere and passing `reset_epoch=1` to the audit helper restored `EPISODE_SCOPE_INVALID`, which
+means `:152`'s condition is not the epoch alone - the audit's other epoch fields (`release_epoch`, or the episode-level
+`reset_epoch` the writer records) are just as likely, and my guess that one keyword would settle it was wrong.
+
+So the two facts this round adds are: the refusal is about the audit's agreement with the recorder (not the frames), and
+`ACQUISITION_RESET_MISMATCH` is what the frames say when an episode's epoch moves. The chain-test file is back at its
+committed state with its two `xfail(strict)` marks, the capture fix from `b47532954` is untouched, and the next read is
+`recorder.py:145-155` - the condition itself - rather than another attempt at the value it tests.
