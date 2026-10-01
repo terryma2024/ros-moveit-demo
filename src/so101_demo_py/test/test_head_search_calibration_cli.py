@@ -1286,6 +1286,60 @@ def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path)
     plant.close()
 
 
+def test_the_real_episode_plant_captures_the_prepared_cup_after_it_enters_the_scene(
+    tmp_path: Path,
+) -> None:
+    """The prepared-cup capture has to happen *after* the prepared state is in the model.
+
+    The real run's first document reported a 0.066-0.140 m drift for every episode: the capture was taken
+    before `mj_forward`, so it recorded the anchor placement the base plant had put the cup at instead of
+    the one the dataset preparation had. This builds the real plant on the fixture scene, hands it a
+    prepared state that moves the cup, and pins which position is reported as the prepared one.
+    """
+
+    import mujoco
+    from so101_demo.act.head_search_fine_correction_episodes import MujocoEpisodePlant
+
+    inputs = _fine_correction_inputs(tmp_path)
+    request = {
+        "scene_path": str(inputs["scene"]),
+        "camera_name": "head_camera",
+        "image_width": 640,
+        "image_height": 480,
+        "fovy_rad": 1.0471975511965976,
+        "control_period_s": 0.002,
+        "frame_period_s": 0.1,
+        "max_settle_s": 5.0,
+        "settle_consecutive_steps": 5,
+        "settle_velocity_rad_s": 0.05,
+        "goal_tolerance_rad": 0.05,
+        "start_rad": 0.0,
+        "cup_start_m": [-0.08, -0.28, 0.165],
+        "cup_joint": "cup_free_joint",
+        "cup_body": "cup",
+    }
+    plain = MujocoEpisodePlant(request)
+    assert plain.prepared_cup_position_m == [-0.08, -0.28, 0.165]
+    prepared_cup = [0.05, -0.30, 0.165]
+    joint = mujoco.mj_name2id(plain._model, mujoco.mjtObj.mjOBJ_JOINT, "cup_free_joint")
+    address = int(plain._model.jnt_qposadr[joint])
+    state = {
+        "qpos": [float(value) for value in plain._data.qpos],
+        "qvel": [0.0] * int(plain._model.nq),
+        "cam_pos": [[float(value) for value in row] for row in plain._model.cam_pos],
+        "mat_rgba": [[float(value) for value in row] for row in plain._model.mat_rgba],
+    }
+    state["qpos"][address : address + 3] = prepared_cup
+    plain.close()
+
+    plant = MujocoEpisodePlant({**request, "scene_state": state})
+
+    assert plant.prepared_cup_position_m == pytest.approx(prepared_cup)
+    assert plant.cup_position_m == pytest.approx(prepared_cup)
+    assert plant.prepared_cup_position_m != request["cup_start_m"]
+    plant.close()
+
+
 def test_measure_deadband_candidates_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
     assert main(["measure-deadband-candidates"]) == 2
     assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err

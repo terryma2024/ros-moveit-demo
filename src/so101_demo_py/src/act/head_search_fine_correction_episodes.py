@@ -1264,12 +1264,22 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
             )
         self._data.qpos[:] = qpos
         self._data.qvel[:] = 0.0
-        self._model.cam_pos[:] = [
-            [float(value) for value in row] for row in state["cam_pos"]
-        ]
-        self._model.mat_rgba[:] = [
-            [float(value) for value in row] for row in state["mat_rgba"]
-        ]
+        # a scene may declare no material at all (`nmat` 0), so an empty snapshot is copied as nothing
+        # rather than broadcast into a (0, 4) array; a non-empty one that does not fit is a refusal
+        for name, values, count in (
+            ("cam_pos", state["cam_pos"], int(self._model.ncam)),
+            ("mat_rgba", state["mat_rgba"], int(self._model.nmat)),
+        ):
+            snapshot = [[float(value) for value in row] for row in values]
+            if not snapshot and count == 0:
+                continue
+            if len(snapshot) != count:
+                raise _refuse(
+                    CAL_FINE_EPISODE_SCENE_CONTRADICTORY,
+                    f"the prepared scene carries {len(snapshot)} {name} rows and the sealed scene "
+                    f"{count}, so these frames would be rendered from another model",
+                )
+            getattr(self._model, name)[:] = snapshot
         self._data.qpos[self._qpos_address] = float(self._start_rad)
         self._prepared_qpos = [float(value) for value in self._data.qpos]
         self._arm_joints = [
@@ -1278,7 +1288,6 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
             if int(self._model.actuator_trntype[actuator]) == int(mujoco.mjtTrn.mjTRN_JOINT)
             and int(self._model.actuator_trnid[actuator, 0]) != self._neck
         ]
-        self._prepared_cup_position_m = list(self.cup_position_m)
         for actuator in range(self._model.nu):
             if int(self._model.actuator_trntype[actuator]) != int(mujoco.mjtTrn.mjTRN_JOINT):
                 continue
@@ -1291,6 +1300,9 @@ class MujocoEpisodePlant(MujocoClosedLoopPlant):
                 value = min(max(value, low), high)
             self._data.ctrl[actuator] = value
         mujoco.mj_forward(self._model, self._data)
+        # the capture has to follow `mj_forward`: `xpos` only holds the prepared scene once the model has
+        # been forwarded with it, and a capture taken before that records the anchor placement instead
+        self._prepared_cup_position_m = list(self.cup_position_m)
 
     @property
     def prepared_cup_position_m(self) -> list[float] | None:
