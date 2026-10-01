@@ -47,10 +47,13 @@ What this harness cannot measure yet, and will not invent:
   age is therefore the perception cost, not the perception cost plus transport; the documents say so
   (``transport_measured: false``), and the running-topic freshness measurement remains a separate
   capability.
-* **the simulation is paused while a frame is produced.** The neck is not moving in wall-clock time while
-  the renderer and the detector work, so ``sim_age_s`` is zero by construction and the recorded
-  ``real_time_factor`` is below one: this is the cost of the perception pipeline, not the residual lag of a
-  pipeline coupled to a real-time clock.
+* **the simulation is paused while a frame is produced.** The neck does not advance in wall-clock time
+  while the renderer and the detector work, so ``sim_age_s`` is zero by construction and the wall-clock age
+  is the whole perception cost. The recorded ``real_time_factor`` says how fast the harness actually stepped
+  the sealed scene, and it is a measurement rather than an assumption: in the one real run recorded by
+  ledger HS-300 it was above one, because the sealed physics steps faster than wall clock while a frame
+  costs a few milliseconds. What is measured is the cost of the perception pipeline, not the residual lag
+  of a pipeline coupled to a real-time clock.
 
 This module is written so that everything except :class:`MujocoNeckSweepRunner` is a pure, independently
 testable decision layer: the sweep executor is injected into
@@ -1346,7 +1349,7 @@ def write_head_search_timing_measurement(
         "steps_per_period": int(round(steps_per_period)),
         "declared_by": "the sealed controller configuration",
     }
-    geometry_reference_path = output / SEARCH_TIMING_ARTIFACT
+    timing_path = output / SEARCH_TIMING_ARTIFACT
     identity = (
         result.get("runtime_identity")
         if runner is not None
@@ -1367,7 +1370,7 @@ def write_head_search_timing_measurement(
             json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
     timing = build_search_timing(
-        path=geometry_reference_path,
+        path=timing_path,
         command=command,
         request=request,
         result=result,
@@ -1384,7 +1387,7 @@ def write_head_search_timing_measurement(
         weights_sha256=weights_sha256,
         runtime_identity=identity,
     )
-    geometry_reference_path.write_text(
+    timing_path.write_text(
         json.dumps(timing, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     frame_age_path = None
@@ -1410,7 +1413,7 @@ def write_head_search_timing_measurement(
         "status": "SUCCEEDED",
         "command": command,
         "output_dir": str(output),
-        "search_timing_path": str(geometry_reference_path),
+        "search_timing_path": str(timing_path),
         "search_timing_sha256": timing["sha256"],
         "frame_age_path": None if frame_age_path is None else str(frame_age_path),
         "frame_age_sha256": None if frame_age is None else frame_age["sha256"],
@@ -1456,7 +1459,7 @@ def write_head_search_timing_measurement(
         "frame_age": frame_age,
         "frame_contract": contract,
         "receipt": receipt,
-        "search_timing_path": geometry_reference_path,
+        "search_timing_path": timing_path,
         "frame_age_path": frame_age_path,
         "frame_contract_path": contract_path,
         "output_dir": output,
