@@ -2413,6 +2413,11 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
+        # The run's scope document belongs here, written once and named to every worker, but this file has no
+        # frozen manifest to build it from: `_frozen` is act_first_episode.py's name and lives in that
+        # process, not this one. Whether the batch path is given the frozen set, or the composition that
+        # already reads it writes the document, is the one question left before the last wire is complete
+        # (CP-2862). Until then the port is absent, which is the state every existing caller is in.
         # Recording happens in the episode's own process, not here (CP-2861): the physical facts the row audit
         # needs live on the far side of a subprocess boundary, so an episode opened here would see the parent's
         # frames and boundaries rather than the episode's. The parent still owns the result port and the commit.
