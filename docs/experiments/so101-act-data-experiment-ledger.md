@@ -46361,3 +46361,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   moving past "waiting for robot_description". The fork workspace's own processes stay untouched.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 4ad783fd2; goal active.
+
+
+## CP-2455 — Root cause: the frozen scene cannot resolve the include the model needs
+
+- The plugin's own output names it: `MujocoSimulation: Loading model...` then
+  `XML Error: Error opening file 'so101.xml'`, `Element 'include', line 2`, then
+  `[FATAL] MuJoCo failed to load the model` and only then `Failed to initialize hardware 'RobotSystem'`. Everything
+  upstream is healthy - the plugins scan, the lidar library registers, the simulation initializes and creates its
+  services - and the model load is the single failure.
+- The reason is the freeze's own shape: `inputs/scene_model/` contains **only** `scene.xml`, whose line 2 is an
+  `include` of `so101.xml`, so the include resolves relative to a directory that does not have it. That is a real
+  defect of this task's freeze rather than of the stack: it verified and copied one file where the artefact needs its
+  include closure.
+- Two honest fixes, and the design's rule picks between them: either `mujoco_scene` points at the source scene (which
+  sits beside its includes, but is then not the verified artefact), or the freeze copies the scene's **include
+  closure** so the episode runs the scene the freeze verified - which is what CP-2447 already committed to in words.
+  The second is the one to implement; the first would quietly weaken the "runs what was frozen" property that this
+  whole stretch has been building.
+- Worth recording as the shape of the whole stretch: five layers were named one at a time - the coverage gate, three
+  seal-side blockers, the identity's shape, the window's rules, the ignored package set, the source order, and now the
+  model's include - each by a run that named it, never by guessing.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 93d073aa6; goal active.
