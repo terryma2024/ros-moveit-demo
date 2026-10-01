@@ -52125,3 +52125,26 @@ making it silently to turn a test green would be the one thing this ledger has c
 My strip is reverted and the worktree is clean at 35 entries plus the new test file. What this round establishes is the
 good half: the chain works, and the only thing standing between it and a passing pair of corrections is a contract
 decision about two keys.
+
+
+## CP-2730 — The conflict located to its line, and the resolution that follows from it
+
+```python
+    ids = {(row["audit"]["head_acquisition_id"], row["audit"]["wrist_acquisition_id"]) ...}   # test_act_continuous_capture.py:116
+```
+
+That test reads the identifiers from the dictionary its **`FakeRecorder` received** - that is, from the recorder's
+channel, not from the capture's internal row. So it encoded the behaviour that existed before this round's strip, and the
+strip broke it because a fake recorder accepts anything while the real one does not.
+
+Which makes the resolution follow from the evidence rather than from convenience:
+
+- the capture **keeps** the identifiers in its own row, where the audit writer and its own bookkeeping want them;
+- the **recorder's** channel does not carry them, because its `_AUDIT_KEYS` is closed at sixteen and it reads the
+  identifiers from the audit's `acquisitions.jsonl` instead;
+- and the capture's test at `:116` is **updated** to read them from where they now legitimately live, with the reason in
+  the commit - because a test that asserts a fake's leniency is testing the fake.
+
+That is the second time in this stretch that a passing test turned out to assert a permissive stand-in rather than a
+contract (the first was `FakeRecorder` itself, which is why the extra `source_received_wall_s` key went unnoticed for so
+long). The remedy is the same both times: assert what the real component requires.
