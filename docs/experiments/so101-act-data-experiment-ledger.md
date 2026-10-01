@@ -53583,3 +53583,28 @@ is one round of instrumentation, not another hypothesis.
 
 State unchanged: four production changes and the chain test uncommitted, three temporary prints (store, test, callee) to
 remove when it goes green, correction 2's test passing, correction 3's one call away from its assertion.
+
+
+## CP-2789 — Three distinct values reach the callee, and the third one is the wrong shape
+
+Sorting the callee's own print output across the whole run gives exactly three inputs:
+
+```
+.../test_a_capture_driven_to_its_s0/.../working/episode/audit/audit-manifest.json      correct
+.../test_a_run_claiming_success_ca0/.../working/episode/audit/audit-manifest.json       correct
+.../test_a_run_claiming_success_ca0/.../sealed/episode/audit/audit-manifest.json        correct
+.../test_a_run_claiming_success_ca0/.../sealed/episode/audit-manifest.json              WRONG (no audit segment)
+```
+
+So the failing test does reach `verify_audit_manifest` - my earlier "it never gets there" reading was wrong because I
+looked at only the first four lines of a twelve-line output, the same truncation error this stretch has made before - and
+one of the calls carries a path with the `audit` segment missing: `<sealed>/episode` + `/audit-manifest.json`.
+
+That value is composed by someone from the **episode directory** rather than from the manifest inside `audit/`, and none
+of the three pairs the test configures produces it (all three are visible above and all are correct). So the composer is a
+callee-side expression - most plausibly a component that takes the episode's root and appends the manifest's name - and
+finding it is a `grep` for `"audit-manifest.json"` across the modules this chain touches, which is one command and the
+next round's first act.
+
+The round also corrects its own predecessor: CP-2788's deduction was based on truncated output, and the honest record of
+that is this entry rather than an edit to the other.
