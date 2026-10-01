@@ -44444,3 +44444,21 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two one rehearsed probe from
 - diagnosis; HEAD b737c1c65; goal active.
+
+## CP-2360 - Decisive: all six terms are True on the hybrid, so the refuser is one of the four guards
+
+- The rehearsed probe (CP-2359) ran against the runner-backed fixture and printed:
+-   PROBE1 True PROBE2 True PROBE3 True PROBE4 True PROBE5 True PROBE6 True   counts 10 11 1
+-   PROBE seal refused: AUDIT_FORMAL_COVERAGE_INCOMPLETE
+- So the streams, the accepted reference group, the release event, all nine phases, all four kinds and the observed
+- row are ALL satisfied on a real runner's stream - which is the good news for Task A: the hybrid is genuinely
+- close. The refusal therefore comes from one of the four guards CP-2357 enumerated: the three file reads (the
+- files exist, so no), the completion list's order and length, the per-kind loop, or the epoch clause.
+- My reasoning says those hold too - nine completions in order, typed non-decreasing per-kind times, epochs 1 and 2
+- with 2 named and 1 exempt - so a model of the predicate is still wrong somewhere, and the next probe prints those
+- four instead of the six. It is the same instrumentation pattern, ~15 lines, one run.
+- Both files restored (zero dirty entries). This is the last measured fact this stretch adds; the next context's
+- first action is the four-guard print, and its second is the one-line fix that follows from it.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two six-of-ten clauses
+- cleared and four guards left to print; HEAD cc5cf9977; goal active.
