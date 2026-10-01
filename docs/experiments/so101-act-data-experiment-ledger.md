@@ -51191,3 +51191,32 @@ already derives, and return the prescribed shape - `rule_version`, `status`, `ch
 the surface they assert on is the one being changed (the lesson this stretch has now learned three times).
 
 Recorded so the next round writes it in one pass, with both sources named rather than assumed.
+
+
+## CP-2690 — Correction 3's exact shape: the verdict must be able to downgrade the status the coordinator reads
+
+Both sites, read:
+
+```python
+        verdict = {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest()}
+        if self.endpoint_inputs is not None:
+            from so101_demo.act.episode_qc import endpoint_qc_document
+            verdict["endpoint"] = endpoint_qc_document(episode_path.parent, self.endpoint_inputs)
+        return verdict                                                          # result_store.py 357-363
+
+        result = self.result_port.verify(lease, str(location), self.request.run_mode)
+        status = (ValidationStatus if validation else AttemptStatus)(result['status'])   # coordinator.py 800
+```
+
+So the coordinator's terminal status comes from **`result['status']` alone**, and the endpoint verdict I added travels beside
+it unread. Correction 3 asks for the opposite: the fresh process's finding must be able to change the outcome, which is
+also what the design's own discipline implies - the run's `qc_passed` is a **claim**, and a claim may not survive a
+failing judgement by the process that checked it.
+
+The fix is therefore in the verifier: when an endpoint verdict is present and its `status` is not `PASS`, the status it
+returns must be a failing one, so that the coordinator - which reads exactly that field, and persists it through
+`discover` into the attempt's terminal state - records the failure rather than the run's own opinion. The run's claim
+stays visible in the episode's seal; what changes is that it no longer decides.
+
+One thing still to read before writing: the failing status's exact name in `AttemptStatus`/`ValidationStatus`, so the
+downgrade uses the vocabulary the coordinator already understands rather than a string I invent.
