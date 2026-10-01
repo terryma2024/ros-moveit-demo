@@ -46041,3 +46041,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   old assertions; the next pass updates those assertions, runs all four suites, and commits the two together.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 565c5c114;
   goal active.
+
+
+## CP-2439 — Attribution corrected again: the failing import is the plan root's stale pypath copy
+
+- The single-test run printed the traceback's own path:
+  `.../nonhead-first-episode-plan.hKhvkON3/pypath/so101_demo/act/first_episode_inputs.py:218` - so the scope suite
+  imports the package from a **pypath copy inside the plan root**, not from the worktree source. That copy predates
+  my CP-2415/2416 changes, so the writer it exercises and the reader that refuses are two different generations of the
+  same module: the failure is the stale overlay, not the source change by itself.
+- This supersedes CP-2438's attribution, which named my commits as the cause. They are the reason the two generations
+  differ, but the mechanism is the overlay, and the fix is to bring that copy in step with the worktree source (or to
+  run the suite without the overlay) rather than to rewrite assertions that are, in the worktree's own generation,
+  already correct.
+- The honest sequence to keep in view: CP-2415/2416 changed the manifest contract and were committed after running
+  four suites; the scope suite was last run before them, and every run since has imported the plan root's stale copy,
+  which is why the same eight tests keep failing no matter what the worktree says. Syncing the overlay and re-running
+  the four suites is the decisive check, and the guards from this round stay uncommitted until it passes.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 1fcd91f87;
+  goal active.
