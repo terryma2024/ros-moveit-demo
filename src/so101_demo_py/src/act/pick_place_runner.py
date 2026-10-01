@@ -349,10 +349,13 @@ class PickPlaceRunner:
                         # T3-F3(c): the epoch advances here, so the event that names it is emitted here — the
                         # formal seal tie refuses a stream whose release step no release event names
                         self._event("release", "RELEASE", latest_step,
+                                    # T3-F3 (eighth verdict): the flags are stated, not coerced or defaulted - an
+                                    # absent measurement may not be turned into a True claim, and `is True` can only
+                                    # ever refuse a gate, never falsely satisfy one
                                     payload={"release_epoch": release_epoch,
-                                             "supported": bool(evidence.get("cup_supported")),
-                                             "no_fingertip_contact": bool(
-                                                 evidence.get("no_fingertip_contact", True))})
+                                             "supported": evidence.get("cup_supported") is True,
+                                             "no_fingertip_contact":
+                                                 evidence.get("no_fingertip_contact") is True})
                     latest_step = self._verify_phase(
                         phase, evidence, request, reset_epoch, release_epoch, latest_step,
                     )
