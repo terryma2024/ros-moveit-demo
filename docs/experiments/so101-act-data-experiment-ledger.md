@@ -42106,3 +42106,35 @@ phase 6/7/8 未跑、无 bundle/manifest、**无 `--resume` 路径**。
 
 **Task 13 内部进度**：§0 + phase **1/2/3/4/5/8** 就位（累计新用例 **16+18+38+22+31+21 = 146**）；**phase 6/7 未实现**，
 `run` 会在那里如实失败——这正是"安装入口"与"空壳"的分界。
+
+## HS-295 — phase 6（搜索参数）完成：34 个新用例 RED→GREEN，节点级零差异
+
+**提交** `069d2274`（两个新文件；普通 `git commit`，钩子 rc=0；`git status --porcelain` 为空）：
+
+`src/so101_demo_py/src/act/head_search_search_params.py` 实现五项参数的公式（各自带 phase 8 所需证据块）：
+
+| 参数 | 实现的公式（要点） |
+| --- | --- |
+| `search_timeout_s` | `最大稳定停点数 × (p99 settle + p99 frame) + max_fine_corrections × control_period`；停点数取自 phase 2 的覆盖证明，p99 取自时序测量文档；无停点/缺 p99/无精调上界 → `CAL_TIMEOUT_UNBOUNDED` |
+| `center_deadband_px` | 起点 `ceil(中心抖动 / (水平FOV / 图像宽))`，再取**最小的**满足"连续三帧锁定且零方向反转"的候选；范围内没有 → `CAL_DEADBAND_OSCILLATES` |
+| `vertical_bounds_px` | 由**投影后的合法拾取工作区**与图像安全边距相交；**只要出现 `detection_extremes` 即拒绝** → `CAL_VERTICAL_BOUNDS_UNPROJECTED`（结构上杜绝从检测极值回填） |
+| `max_fine_corrections` | `成功 held-out episode 的最大次数 + 1` 次恢复余量；预算不得越过安全区间，否则 `CAL_SWEEP_UNSTABLE` |
+| `max_fine_total_rad` | `成功 episode 的最大累计精调 + 已观测最大单次精调`，同样受安全区间约束 |
+
+**验证链**：RED（collection error，rc=1）→ GREEN **34 passed, rc=0**（提交后复跑同）→ 回归 **174 passed, rc=0**
+（六个 phase 测试 + CLI 测试 + `test_act_head_search_calibration.py`）→ 全套件 **175 failed / 5776 passed / 152 skipped / 86 errors**，
+与基线**节点级 261 个 FAILED/ERROR `diff` 为空、+34 正好新增、0 新增失败**。
+
+**一次一次性 flake 被它自证为既有问题（值得记下）**：早先一轮全套件多出 1 个失败
+`test_act_composition_lifecycle::test_canonical_goal_digest_and_uuid_bind_the_handle`。它证明：
+`sha256(serialize_message(FollowJointTrajectory.Goal()))` 对**同一个未变对象**在分配器抖动下会给出 **3 个不同摘要**
+（脚本 `hs295-serialize-nondeterminism.py`，不 import 我的任何代码），并把我的两个文件移开做 A/B，复现出与基线相同的
+175/5742/152/86 与相同的 261 个节点。**结论：与本次改动无关**；但它同时暴露了一个**测试层面的真实脆弱点**（该用例依赖摘要稳定性），值得列入待评审。
+
+**它声明的主要推断（待评审）**：① `CAL_VERTICAL_BOUNDS_UNPROJECTED` 为自拟码；错 split 一律复用 phase 3 的 `CAL_SPLIT_LEAK`（而非计划 §4.7 未落地的 `CAL_HELDOUT_MISUSE`）；
+② 两个精调参数只取 held-out/validation episode；③ 无成功的 episode、或每 episode 次数/量级对不上，也报 `CAL_SWEEP_UNSTABLE`；
+④ 缺失的启动回读会记 `observed_value = 计算值` 且 `observation:"declared_by_phase_6", verified:false`；
+⑤ **`coarse_step_rad` 故意未计算**，记为 `uncomputed_parameter`，等待"获选模型的 val sweep/lock 证据"——因此**phase 8 目前仍无法仅凭本文件完成 bundle**，这是有意保留的缺口，不是遗漏。
+
+**Task 13 内部进度**：§0 + phase **1/2/3/4/5/6/8** 就位（累计新用例 **180**）；**phase 7**（时序与停车参数）与
+**`coarse_step_rad` 的 val sweep/lock 证据**仍缺——`run` 仍会在 phase 6 之后/之内如实失败。
