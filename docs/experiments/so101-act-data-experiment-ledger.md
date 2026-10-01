@@ -53503,3 +53503,29 @@ the one place that satisfies all of them is the parent.
 
 I have not applied it: my context for this round is spent, and the change is a single argument at the writer's call site
 plus the removal of two temporary prints and the four production changes committed together. The next round applies it.
+
+
+## CP-2786 — Every pair in the test carries the audit segment, so the failing call belongs to another object
+
+Read back from the test, both pairs are exactly what CP-2785's arithmetic predicted:
+
+```python
+    store.audit_manifest = manifest_path                      # .../working/episode/audit/audit-manifest.json
+    store.scope = manifest_path.parent / "source.json"
+    ...
+        audit_manifest=sealed / "episode" / "audit" / "audit-manifest.json",
+        scope=sealed / "episode" / "audit" / "source.json",
+```
+
+Both contain the `audit` segment; the `FileNotFoundError` path did not. And `verify_episode_seal` passes
+`verify_audit_manifest(audit_manifest)` the path it was handed, with no composition of its own. So the failing call is one
+whose `self.audit_manifest` is **not** either of these - which leaves the third call site, `result_store.py:159`, in a
+different method and possibly a different object than the store the test configured.
+
+That is the last candidate, and it is checkable by reading which class owns line 159 and what sets its attributes. Every
+other possibility this chain has raised - ownership, publish phase, overlay, stale assignment, existence, the writer's
+layout - has been measured and eliminated, and the arithmetic of `<root>/audit/` versus `<episode root>/audit-manifest.json`
+said the same thing three different ways.
+
+Round state unchanged: four production changes and the chain test uncommitted, two temporary prints to remove, correction
+2's test passing throughout, correction 3's one call site from its assertion.
