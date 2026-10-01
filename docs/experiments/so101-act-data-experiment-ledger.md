@@ -47444,3 +47444,17 @@ or it wraps `append_source` with its own check.
 The next read is therefore `_formal_writer` itself, one grep away, and the fifteen-line direct test follows immediately
 after - using whatever physics-source route that helper's writer actually offers (a construction the suite's other
 formal fixtures already use, since they append physics rows successfully).
+
+
+### CP-2506 — Two kinds, and the record's own kind is the one that was refused
+
+The refusal is explained: `append_source(kind, record)` has a **source** kind - `"physics"`, valid, as CP-2505
+established - and the **record** carries its own `"kind"`, which the writer validates too, raising
+`AUDIT_SOURCE_KIND_INVALID` for a value outside its set. The suite's own test at line 156 relies on exactly that, using
+`{"kind": "unknown_kind", ...}` to provoke it. So my hand-written row was refused for its `"kind": "pose"` - not
+because `pose` is unknown in general (line 63's row uses it) but because the set is checked per source, or because the
+value the physics branch expects differs from what I guessed.
+
+The correct values are in the suite: lines 63 and 68 append physics rows through the same call and pass, so one grep of
+those two records gives the exact shape - which is the last thing needed before the fifteen-line direct test of CP-2502
+can run and return the predicate's verdict.
