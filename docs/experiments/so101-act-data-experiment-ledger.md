@@ -49917,3 +49917,20 @@ The honest repair is therefore small: `endpoint_poses` reads the position and or
 with `pose_from_configuration` left in place but unused by that path (it is a correct function, and the configuration
 route is real for sources that publish `model_qpos` and nothing else). The test then appends summary rows - the shape the
 suite already uses - and the red goes green without any kinematics.
+
+
+## CP-2636 — The observation's validation is group-based, so the row must be a complete shape
+
+`AUDIT_SCHEMA_INVALID` at 927 persists even with the summary keys, and the reason is in the validator's own comment
+(read at CP-2636's predecessor, line 1116): "F3: exactly one complete group out of the alternatives, or none; a partial
+group and a mixture of two are refused, so a partial history still cannot pass as complete". So the physics observation
+is not a flat set: there are required fields, optional ones, and **alternative groups** of which a row must contain
+exactly one in full - or none at all.
+
+My hand-built row satisfies neither shape: it carries some summary keys, not all of a group, and adds the pose pair on
+top. The suite's own rows (`support` at 1.1, `retract` at 1.2 in `complete_audit`) are accepted, so they are a complete
+legal shape, and the correct move is to **copy that shape and extend it only with keys that belong to the same group** -
+which requires reading the group structure rather than guessing which keys go together.
+
+That is the next read, and it is the fourth time in this test alone that the honest step has been to read the literal
+rather than to adjust the input until it is accepted - the discipline the whole stretch keeps re-learning.
