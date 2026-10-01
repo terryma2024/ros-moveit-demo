@@ -52358,3 +52358,30 @@ With frames at 1.0, 1.1 and 1.2 and a drain between each, the loop should mint t
 equals the instant whose frames just arrived, `_causal` finds them, and the next `_causal` returns None on dry queues and
 breaks. The probe measured one row instead, so the remaining rule is `_causal`'s own - what it accepts as serving a given
 instant - and that is the last unread line of this loop.
+
+
+## CP-2739 — _causal's rule, and a contradiction worth stating plainly
+
+```python
+    def _causal(self, camera: str, at_s: float):
+        for frame in reversed(self._frames[camera]):
+            if frame.stamp_s > at_s + _TOLERANCE_S:
+                continue
+            if at_s - frame.stamp_s > self.max_source_age_s + _TOLERANCE_S:
+                return None
+            return frame
+        return None
+```
+
+So a frame serves an instant if it is not in the future and not more than `max_source_age_s` (0.1) old. By that rule the
+probe should have minted three rows: at drain 1 the grid is at 1.0 with the 1.0 frames present, minting advances it to
+1.1, `_causal` then finds no frame (queues dry) and the loop breaks; at drain 2 the 1.1 frames are present and the grid
+is at 1.1; and so on to 1.2. Three drains, three mints.
+
+It measured one. So one of the three things I believe about that loop is false - the probe's own interleaving, `feed()`
+and how it records stamps for the sampler versus the capture's `_frames`, or something in `_service_pending` consuming a
+state the mint loop depends on. The value of this round is that the contradiction is now explicit and narrow: not "the
+grid is hard" but "these three lines predict three rows and the instrument sees one".
+
+The next step is a probe that prints `len(self._frames["head"])` and `_next_grid_s` before and after each drain, which
+distinguishes the three candidates in a single run instead of a round each.
