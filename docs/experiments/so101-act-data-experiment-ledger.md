@@ -47866,3 +47866,18 @@ journal, one worker, a broker built without a container, and the frozen inputs.
 For the record, the run's own evidence lives under the LIVE_ROOT: `run-output.txt` carries this attempt's stdout and
 stderr, and the composition had already created `run/ipc`, `run/workers`, `run/coordinator`, `run/broker-inputs` and
 `run/resource_manifest.json`.
+
+
+## CP-2530 — The broker has no flags, so it likely takes a spec path like the worker does
+
+The flag grep came back empty: `parallel_perception_broker` defines no `add_argument` calls, so my guessed flags are
+not merely wrong names - there is no flag parser at all. Its entry is `main(argv=None, *, transport=None)`, which in
+this repository is the shape used for a **spec-driven** entry: the batch CLI's worker path is
+`_run_worker_spec(path)` and the broker, being its sibling process, most plausibly reads a broker spec document whose
+path is its argument - the same `broker_spec.json` the composition already writes for the containerised default
+(`self.broker_spec_path`, built by `_prepare_broker_generation`).
+
+The first lines of `main` are printed beside this entry and settle it. If it takes a spec path, the
+`broker_command_builder` becomes `[sys.executable, "-m", "so101_demo.cli.parallel_perception_broker",
+str(composition.broker_spec_path)]` - one argument, the document the composition prepared - and the container-free
+route is complete, which would also explain why the composition prepares that spec before asking for a command.
