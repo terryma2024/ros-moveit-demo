@@ -713,3 +713,64 @@ def test_the_capture_forwards_the_ratified_packed_reference_shape():
     assert recorded["frames"]["arm"]["evaluation"]["requested_sim_time_s"] == 1.1
     assert recorded["frames"]["arm"]["published_positions"] == \
         recorded["frames"]["arm"]["evaluated_positions"]
+
+
+def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_path):
+    """E2 correction 2 end to end: the capture seals its audit and the episode carries it (CP-2706..CP-2712).
+
+    Three things the earlier attempts lacked: the writer and the recorder get different roots (each creates its own
+    with exist_ok=False), the frozen scope document is written to a file first, and the recorder is handed that file's
+    path because its finish() converts its arguments with Path(...) and cross-checks the file against the episode.
+    """
+
+    import json
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+    from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
+    from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
+    from so101_demo.act.episode_qc import endpoint_qc_document
+    from so101_demo.act.recorder import EpisodeRecorder
+    from test_act_recorder import PROVENANCE
+
+    scope = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "preselected_target_diagnostic",
+             "scene_id": "default", "seed": 0, "inputs_sha256": "a" * 64}
+    identity = {"session_id": "s", "attempt_id": "attempt-1", "reset_epoch": 1, "release_epoch": 1,
+                "scene_id": "default", "seed": 0, "mode": "preselected_target_diagnostic"}
+    sealed = []
+
+    class RecordingAudit(EpisodeAuditWriter):
+        def seal(self, window):
+            path = super().seal(window)
+            sealed.append(path)
+            return path
+
+    audit_root = tmp_path / "audit-root"
+    audit = RecordingAudit(audit_root, scope, identity, {"inputs_sha256": "a" * 64})
+    # the recorder cross-checks the scope file against the audit's own payload byte for byte, so the file it is
+    # handed IS the audit's source.json (CP-2713)
+    scope_path = audit_root / "audit" / "source.json"
+    assert scope_path.is_file()
+    recorder = EpisodeRecorder(tmp_path / "episode", session_id="s", attempt_id="attempt-1",
+                               reset_epoch=1, provenance=PROVENANCE)
+    capture = ContinuousEpisodeCapture(
+        recorder=recorder, sampler=FakeSampler(), guard=AcquisitionGuard(),
+        physical_audit=physical_audit, audit=audit, scope=str(scope_path),
+        deadline_s=120.0, monotonic=lambda: 0.0)
+    minter = AcquisitionMinter()
+    capture.start("s", "attempt-1", 1, 1.0)
+    frames_at(capture, minter, (1.0, 1.1, 1.2))
+    capture.finish(1.2, window={"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.2},
+                   outcome={"status": "FAILED", "reason": "search_failed",
+                            "task8_success": False, "stopped_confirmed": True})
+    print("SEALED audit:", [str(p) for p in sealed])
+    assert sealed, "the capture must seal the audit it was given"
+    manifest_path = Path(sealed[0])
+    assert verify_audit_manifest(manifest_path)["kind"] == "ACT_EPISODE_AUDIT"
+    document = endpoint_qc_document(manifest_path.parent, {
+        "initial_target": [0.0] * 7, "final_target": [0.0] * 7,
+        "endpoint_policy": load_endpoint_policy(Path(__file__).resolve().parents[1]
+                                                / "config/act/endpoint_pose_acceptance_v1.yaml")})
+    print("EPISODE QC:", document["status"], "| checks:", sorted(document["checks"]))
+    assert document["rule_version"] == "endpoint_pose_v1" and "endpoint_pose" in document["checks"]

@@ -108,8 +108,15 @@ def endpoint_records_from_audit(audit, inputs) -> dict:
         # named for what it is instead of a point being passed off as a pose (CP-2590/2591)
         positions = endpoint_positions(rows)
         reason = "ENDPOINT_POSE_NOT_DERIVABLE" if positions else "ENDPOINT_POSES_ABSENT"
+        # the absence is reported with the same fields a computed verdict carries, so the report's prescribed
+        # entry does not depend on which of the two happened (CP-2714)
         return {"status": "INCOMPLETE", "errors": [reason], "passed": False,
-                "poses": len(poses), "positions": len(positions)}
+                "poses": len(poses), "positions": len(positions),
+                "initial_sequence": rows[0].get("task_sequence") if rows else None,
+                "final_sequence": rows[-1].get("task_sequence") if rows else None,
+                "initial_pose": None, "final_pose": None,
+                "initial_target": list(inputs["initial_target"]), "final_target": list(inputs["final_target"]),
+                "policy_sha256": _document_digest(inputs["endpoint_policy"])}
     verdict = evaluate_endpoint_pose(poses[0], poses[-1], list(inputs["initial_target"]),
                                      list(inputs["final_target"]), inputs["endpoint_policy"])
     # E1 returns {"status": PASS|FAIL, "errors": {threshold: measured error}, "passed": {threshold: bool}} - both
