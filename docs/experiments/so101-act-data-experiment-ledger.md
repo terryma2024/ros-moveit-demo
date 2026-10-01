@@ -43509,7 +43509,7 @@ stderr: HEAD_SEARCH_RUN_INPUTS_INCOMPLETE: a run declares --admission --selectio
 
 | 输入 | 为什么今天无法诚实产出 |
 | --- | --- |
-| `--admission` | 需要 Task-8 生产组合（`CalibrationMeasurementContext`）给出的 generation / `controller_generation` / `broker_generation`；`$EV` 全境（除 install/test）无 `broker_generation` 键；本任务不允许起超出 run 所需的 ROS 栈 |
+| `--admission` | 需要 Task-8 生产组合（`CalibrationMeasurementContext`）给出的 generation / `controller_generation` / `broker_generation`；`$EV` 下该键（`grep -rl '"broker_generation"'`，排除 `install`/`build`/`models`/`dataset`/`images`/`labels`）**只**出现在 `scratch/head-test-20261001T084503Z-…/tmp/pytest-of-lenovo/**` 的**合成 pytest fixture** 里，没有一份真实文档；本任务不允许起超出 run 所需的 ROS 栈 |
 | `--selection-rule` | `record_selection_rule` **无任何调用者、无 CLI 入口**；规则必须先于测量存在（`CAL_RULE_AFTER_MEASUREMENT`），事后补记即失真 |
 | `--operating-point-measurements` | phase 3 的帧测量没有安装入口；campaign 的 `episodes8` 是 `record_episodes7.py`（campaign 脚本，设计禁止其产出最终参数）的开环录制 |
 | `--bundle-inputs` | phase 2/3 的文档**不含** `parameters`（`grep -c '"parameters"'`：geometry 0、operating_point 0；search/timing 各 1），6 个参数块只能由声明提供；块内 `startup_readback.observed_value` 必须是"运行中的系统确实用了该值"的读数，今天没有这样的运行，手写即伪造 |
