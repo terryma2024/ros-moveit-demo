@@ -45003,3 +45003,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   existing `freeze_inputs`, a `main` returning the code, and the `console_scripts` entry.
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written. HEAD 4e08ac437; goal active.
+
+
+## CP-2387 — The exact registration line, and the state the next pass starts from
+
+- `setup.py`'s `console_scripts` list follows one convention throughout: `act_<name> = so101_demo.cli.act_<name>:main`
+  (`act_command_broker`, `act_preflight`, `act_capture_synchronized_rgb`, `act_capture_task6`, ...). The new entry is
+  therefore exactly `act_first_episode = so101_demo.cli.act_first_episode:main`, which is also the executable the
+  plan's E3 sequence guards with `test -x "$ACT_FIRST_EPISODE"`.
+- So the next pass is a transcription with nothing left to discover: create `src/cli/act_first_episode.py` with the
+  house shape (argparse with a `_Parser` subclass, `build_parser()`, `main(argv=None) -> int`), wire `inspect`,
+  `prepare` (`--candidates --mode --endpoint-policy --runtime-policy --output`, calling the existing `freeze_inputs`
+  and the landed `load_endpoint_policy`/`load_development_runtime`) and `preflight` (`--inputs --mode --output`), add
+  the console_scripts line, install, and run the plan's directed RED/GREEN with the real argv, rc and JUnit recorded
+  under a fresh scratch.
+- Everything else in the ledger stands as recorded: F1/F14/F3/F12 closed; K1's two negatives landed with the
+  coverage/window attribution; K2's protocol table written and awaiting the checkpoint before implementation; E1's
+  data files, both loaders and the calculator landed with twenty-one controls; F5's step two one traceback from its
+  fix; F11's derivation one clean edit behind K1's landed alignment; F13's scene item behind K2.
+- HEAD 726c88dab; goal active.
