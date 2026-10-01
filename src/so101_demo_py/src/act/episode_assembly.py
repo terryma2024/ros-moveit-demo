@@ -19,7 +19,8 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["ProductionProducer", "assemble_episode_capture", "episode_audit_pair"]
+__all__ = ["PhysicalAuditAdapter", "ProductionProducer", "assemble_episode_capture",
+           "episode_audit_pair"]
 
 
 def assemble_episode_capture(
@@ -156,3 +157,38 @@ def episode_audit_pair(episode_root: Path) -> tuple[Path, Path]:
     """
     audit_dir = Path(episode_root) / "audit"
     return audit_dir / "audit-manifest.json", audit_dir / "source.json"
+
+
+class PhysicalAuditAdapter:
+    """Present the run's physical evidence as the capture's `physical_audit` callable.
+
+    The capture builds each row's audit from three pieces and then requires the recorder's closed sixteen keys
+    (`continuous_capture.py:419-422`): what this callable returns, the sampler's `source_stamps`, and the two
+    acquisition ids the capture adds. So this callable owes exactly the remaining thirteen -
+
+        reset_epoch  release_epoch  release_event  release_time_s  physical_stamps  phase
+        reference_time_s  reference_source  reference_positions
+        mujoco_truth  contacts  planning_scene  controller_state
+
+    - and that is the whole of its job: take the values the extraction produces for an instant, insist that all thirteen
+    are present, and hand them over. A missing one fails at the sample as `CAPTURE_PHYSICAL_AUDIT_INVALID`, which is
+    where a wiring mistake should surface, not at the seal after an episode has been recorded.
+
+    The extraction itself - reading those values out of the capture path - is the coordinator's side of the divided work;
+    this class exists so that whatever it produces is checked against the contract in one place.
+    """
+
+    KEYS = ("reset_epoch", "release_epoch", "release_event", "release_time_s", "physical_stamps", "phase",
+            "reference_time_s", "reference_source", "reference_positions",
+            "mujoco_truth", "contacts", "planning_scene", "controller_state")
+
+    def __init__(self, evidence) -> None:
+        #: a callable taking `at_s` and returning the thirteen physical values for that instant
+        self.evidence = evidence
+
+    def __call__(self, at_s: float) -> dict:
+        values = self.evidence(at_s)
+        missing = [key for key in self.KEYS if key not in values]
+        if missing:
+            raise ValueError(f"PHYSICAL_AUDIT_INCOMPLETE: {sorted(missing)}")
+        return {key: values[key] for key in self.KEYS}

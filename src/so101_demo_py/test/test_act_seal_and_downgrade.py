@@ -15,8 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import (ProductionProducer, assemble_episode_capture,
-                                              episode_audit_pair)
+from so101_demo.act.episode_assembly import (PhysicalAuditAdapter, ProductionProducer,
+                                              assemble_episode_capture, episode_audit_pair)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -355,3 +355,14 @@ def test_the_producer_keeps_the_receipt_mapping_out_of_the_recorded_row():
     assert set(row_audit) == {"source_stamps"}
     received = producer.source_received_monotonic_s()
     assert set(received) == {"head", "wrist", "arm", "neck"}
+
+
+def test_the_physical_audit_adapter_owes_exactly_thirteen_keys():
+    """The contract the extraction fills: thirteen keys, checked where a wiring mistake should surface (CP-2845)."""
+    complete = {key: None for key in PhysicalAuditAdapter.KEYS}
+    adapter = PhysicalAuditAdapter(lambda at_s: complete)
+    assert set(adapter(1.0)) == set(PhysicalAuditAdapter.KEYS)
+
+    incomplete = {key: None for key in PhysicalAuditAdapter.KEYS if key != "phase"}
+    with pytest.raises(ValueError, match="PHYSICAL_AUDIT_INCOMPLETE"):
+        PhysicalAuditAdapter(lambda at_s: incomplete)(1.0)
