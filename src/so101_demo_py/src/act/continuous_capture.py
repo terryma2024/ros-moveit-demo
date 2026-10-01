@@ -340,7 +340,8 @@ class ContinuousEpisodeCapture:
         elif existing is None:
             if len(self._references) >= self._reference_capacity:
                 self._fail("CAPTURE_REFERENCE_OVERFLOW")
-            self._references[key] = {"positions": values,
+            self._reference_ordinal = getattr(self, "_reference_ordinal", 0) + 1
+            self._references[key] = {"sequence": self._reference_ordinal, "positions": values,
                                      "accepted": accepted, "revoked": not accepted}
         self._reference_horizon_s = max(self._reference_horizon_s or 0.0, key)
 
@@ -377,6 +378,11 @@ class ContinuousEpisodeCapture:
             self._next_grid_s = at_s + self.dt_s
 
     def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
+        if self.audit is not None:
+            # the audit's acquisition stream is written from the frames themselves, and this is the layer that holds
+            # them: the row callback only ever sees the observation and the audit (CP-2745)
+            self.audit.append_acquisition(head)
+            self.audit.append_acquisition(wrist)
         try:
             self.guard.accept(head)
             self.guard.accept(wrist)
@@ -457,12 +463,20 @@ class ContinuousEpisodeCapture:
                                      {k: v for k, v in audit.items() if k not in _RECORDER_LOCAL_KEYS})
             except Exception as error:  # noqa: BLE001 - a refusing writer is terminal
                 self._reject(self._reason(error, "CAPTURE_RECORD_FAILED"))
+            index = self._written
             row["audit"] = audit
             row["reference"] = entry
             row["labelled"] = True
             self._pending.popleft()
             self._completed.append(row)
             self._written += 1
+            if self.audit is not None and entry.get("sequence") is not None:
+                # the seal requires every recorded row to be bound to the acquisitions it consumed, and that binding
+                # goes to the episode's audit writer directly - `audit_writer` stays the tail's callback for the
+                # evidence that never became a row (CP-2757/CP-2793)
+                self.audit.bind_row(index, row["observation"]["sim_time_s"],
+                                    audit["head_acquisition_id"], audit["wrist_acquisition_id"],
+                                    entry["sequence"])
             self._last_labelled_target_s = row["target_s"]
             written += 1
         if self._pending:

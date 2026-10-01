@@ -80,6 +80,7 @@ class ActCollectionResultStore:
     """One writer at the workspace reserved by a Coordinator lease."""
 
     def __init__(self, workspace: Path, lease: LeaseIdentity, *, clock,
+                 audit_manifest=None, scope=None,
                  expected_session_id: str | None = None,
                  expected_reset_epoch: int | None = None) -> None:
         self.workspace = _safe(workspace)
@@ -92,6 +93,10 @@ class ActCollectionResultStore:
         self.clock = clock
         self.expected_session_id = expected_session_id
         self.expected_reset_epoch = expected_reset_epoch
+        #: a v2 seal is verified only when the caller supplies both artifacts (CP-2765), so the store
+        #: carries the pair rather than assuming a convention about where an episode's audit lives
+        self.audit_manifest = None if audit_manifest is None else _safe(Path(audit_manifest))
+        self.scope = None if scope is None else _safe(Path(scope))
         self.workspace.mkdir(parents=True, exist_ok=True)
         self.working = self.workspace / "working"
         self.working.mkdir(exist_ok=False)
@@ -101,7 +106,8 @@ class ActCollectionResultStore:
         if _safe(episode_seal_path) != self.episode_root / "seal.json":
             raise ValueError("EPISODE_LOCATION_MISMATCH")
         try:
-            episode = verify_episode_seal(episode_seal_path)
+            episode = verify_episode_seal(episode_seal_path,
+                                          audit_manifest=self.audit_manifest, scope=self.scope)
             if episode["attempt_id"] != self.lease.attempt_id:
                 raise ValueError("LEASE_IDENTITY_MISMATCH")
             if (self.expected_session_id is not None
@@ -150,7 +156,8 @@ class ActCollectionResultStore:
         if episode_path is None or _safe(Path(episode_path)) != self.episode_root / "seal.json":
             raise ValueError("EPISODE_LOCATION_MISMATCH")
         try:
-            episode = verify_episode_seal(episode_path)
+            episode = verify_episode_seal(episode_path, audit_manifest=self.audit_manifest,
+                                          scope=self.scope)
         except (OSError, ValueError, TypeError) as error:
             raise ResultInfraError("RESULT_EPISODE_INVALID") from error
         if episode["status"] != status.value:
@@ -305,12 +312,16 @@ class ActCollectionResults:
 class ActCollectionResultVerifier:
     """Coordinator port: verify only its registered Worker and exact lease path."""
 
-    def __init__(self, worker_roots: Mapping[str, Path], *, endpoint_inputs: dict | None = None) -> None:
+    def __init__(self, worker_roots: Mapping[str, Path], *, endpoint_inputs: dict | None = None,
+                 audit_manifest=None, scope=None) -> None:
         self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
         self.run_mode = RunMode.EXECUTE
         #: the frozen inputs the independent endpoint QC needs (the two targets and the policy). Absent means the
         #: verdict is simply not carried, so every existing construction keeps working (CP-2654).
         self.endpoint_inputs = endpoint_inputs
+        #: a v2 seal is verified only when both artifacts are supplied (CP-2765)
+        self.audit_manifest = None if audit_manifest is None else _safe(Path(audit_manifest))
+        self.scope = None if scope is None else _safe(Path(scope))
 
     def _expected(self, lease: LeaseIdentity) -> Path:
         _identity(lease)
@@ -348,7 +359,8 @@ class ActCollectionResultVerifier:
         episode_bytes = _read_regular(episode_path)
         if hashlib.sha256(episode_bytes).hexdigest() != document["episode_seal_sha256"]:
             raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
-        episode = verify_episode_seal(episode_path)
+        episode = verify_episode_seal(episode_path, audit_manifest=self.audit_manifest,
+                                          scope=self.scope)
         if (episode["attempt_id"] != lease.attempt_id
                 or document["status"] != episode["status"]
                 or document["qc_passed"] is not episode["qc_passed"]):
@@ -359,7 +371,9 @@ class ActCollectionResultVerifier:
             # the episode has just been verified, so this is the place to recompute its endpoints in this process
             from so101_demo.act.episode_qc import endpoint_qc_document
 
-            endpoint = endpoint_qc_document(episode_path.parent, self.endpoint_inputs)
+            # the QC resolves the manifest by appending its name, so the base it is given must be the directory
+            # the manifest sits in - the episode's audit/ - not the episode root itself (CP-2790)
+            endpoint = endpoint_qc_document(episode_path.parent / "audit", self.endpoint_inputs)
             verdict["endpoint"] = endpoint
             if verdict["status"] == "PASSED" and endpoint["status"] != "PASS":
                 # the run's own status is a claim, and a claim may not survive a failing judgement by the process

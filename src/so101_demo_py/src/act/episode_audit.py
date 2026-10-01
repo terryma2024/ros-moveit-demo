@@ -737,7 +737,14 @@ class EpisodeAuditWriter:
         if not _hex64(digest):
             # the audit always names the frozen inputs it belongs to
             raise ValueError("AUDIT_INPUTS_INVALID")
-        self.root.mkdir(parents=False, exist_ok=False)
+        # the episode's directory is owned by the recorder, which creates it and refuses to reuse one; the audit
+        # writer roots at that same directory so its manifest sits where verification resolves it, and accepts an
+        # existing root for exactly that reason - it still refuses anything that is not a directory (CP-2773)
+        if self.root.exists():
+            if not self.root.is_dir():
+                raise ValueError("AUDIT_ROOT_INVALID")
+        else:
+            self.root.mkdir(parents=False, exist_ok=False)
         audit = self.root / "audit"
         audit.mkdir()
         self.files = _Files(audit / "source.json", audit / "inputs.json", audit / "episode.json",
