@@ -45546,3 +45546,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the coordinator commit.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 67ecf350f;
   goal active.
+
+
+## CP-2414 — prepare's refusal is the plan's own E1 item, not a bug
+
+- Measured: with the installed policy (digest identical to the source file, one unique digest) and the installed
+  runtime, `inspect` exits 0 into the new plan root `experiments/nonhead-first-episode-closure.hK7mQ2pL` with zero
+  blockers, and `prepare --mode preselected_target_diagnostic` reaches the freezer and is refused by
+  `NONHEAD_SAFETY_NOT_READY`. `ros2 pkg prefix` returned nothing in that shell, so the two installed paths were used
+  literally; both files are published by the package under
+  `install/so101_demo_py/share/so101_demo_py/config/act/`, which is what the plan's "the installed YAML must ship with
+  the package" asks for.
+- The gate is `require_nonhead_gate(report)` (`first_episode_inputs.py:95`), which requires every non-Head safety
+  measurement and deliberately requires nothing of the two Head checks (`fov`, `search`) - and the plan's E1 item says
+  exactly what to do about it: remove the loop that demands the post-hoc release/retreat **quality** reports, verify
+  the safety roles by the evidence they actually need, and do **not** replace it with a blanket `nonhead_ready=True`
+  or a fabricated quality PASS.
+- So the remaining E1 code change is that split, and it is the design's section 5 rule applied to this gate: the five
+  process-quality fields stop being preconditions anywhere, while the real safety gates (collision/force interlock,
+  controller admission, stop/hold, support confirmation) stay. Until it is done, `prepare` correctly refuses - which
+  is itself evidence that the gate is live rather than bypassed.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 5fcb1be5c;
+  goal active.
