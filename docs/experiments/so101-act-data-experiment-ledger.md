@@ -47492,3 +47492,26 @@ read.
 camera on a 10 Hz grid, one physics row, the binding, then `writer._window_matches_rows(window)` with the CP-2495
 window. With the field set in hand the verdict is one run away, and the test was withdrawn again so the tree stays at
 the user's 35 entries with the audit suite at 74 passed.
+
+
+## CP-2509 — Both authorised workstreams are open
+
+**User decisions received.** The container-free broker path is approved as its own piece of work, and the Codex
+checkpoint may run in a window of `dst`. Both are now in motion.
+
+**K2's checkpoint is running.** Launched `codex exec -c model="gpt-6.1-sol" -c model_reasoning_effort="high"` in a new
+`dst` window named `k2-review`, with the prompt asking it to judge CP-2375's protocol table against the plan's K2
+requirements - whether a real producer can supply each field, whether the fence route is implementable or needs its own
+design, whether the table avoids the forbidden shortcuts, and which consumers must move with the versioned schema.
+Output goes to `reviews/k2-protocol-checkpoint.log` under the plan root, ending with an `EXIT=` marker. Per the
+review-period discipline this is not to be polled; it will be collected when it settles.
+
+**The container-free broker path's seam is located.** `_start_broker()` is at line 3094, the broker's liveness probe
+runs `["docker", "inspect", "--type", "container", container_id]` at 3145, the image constant `_BROKER_IMAGE` is at
+110, and the image is gated in **three** places - the default provenance verifier (599), a readback check (729) and
+`prepare_batch` (1263) - with `container.cid` recorded at 2796 and 3028. So a container-free route has to address the
+launch, the liveness probe and all three gates rather than only the launcher.
+
+Next: read `_start_broker` in full, then design the smallest change that lets the same broker run as a plain process
+while keeping every real check (the three image gates become a deployment-appropriate identity rather than a docker
+image tag), per the design's section 4 requirement to use the real components in a one-worker configuration.
