@@ -44373,3 +44373,19 @@ coverage complete 义务，其余一律非 pass；⑤ Teleop 验收的 `qualific
 **证据**：`$CAMPAIGN/qualification-restarts-20261001T152045Z/{restart-receipts.json,measurement-receipt.json,<anchor>/{restart-<anchor>.json,stdout.log,stderr.log,stack/{transport-stack.log,ros2-control-node.params.yaml}}}`；`$EV/head-qualification-restarts-ownership-20261001T152045Z/exclusive-ownership.json`；`$EV/head-qualification-restarts-agg-ownership-20261001T152503Z/exclusive-ownership.json`；`$EV/head-qualification-restarts-agg-20261001T152503Z/{qualification-verdict.json,calibration-state.json}`；`$EV/reviews/task14-gap-audit.md`（第 7 行改判 + §9 新增）；工作树 `scratch/hs318/`（`run-tests.sh`、`real-run.sh`、`aggregate.sh`、`run-fullsuite.sh`、`regression-files.txt`、`logs/`、`tmp-*`、`real-work-*`）。
 被取代但仍保留的运行（每一次 refusal 都是后一次修复的证据，**未删除**）：`$CAMPAIGN/qualification-restarts-20261001T14{2922,3037,3133,3414,3658,3943,4356,4729,50512,5143,51550}Z*`。
 以上**均为删除候选，未删除**；HS-300..317 的产物只读引用。
+
+## HS-319 — frame 身份修订被复审 **REJECT**：三处纠正，其中一条把路径升级为"Task 13 从 Step 1 重做 + 重新审批"
+
+复审（GPT-6.1-Sol high，3m21s）全文存 `$HEAD_EVIDENCE/reviews/frame-identity-amendment/verdict.md`。三处纠正：
+
+1. **`ray_origin_frame_id` 我改错了**：应**也是 `head_camera_frame`**（其坐标轴是光学的），`base` 是**另一个 TF 目标**，不是射线原点。
+   我原提案改成 `base` 是错的——这正是"先送审再动手"救下的一次实打实的错误。
+2. **路径升级**：Section 3 必须要求 **Task 13 从 Step 1 重做**（全新 run root、**新的精确 bundle 审批**、新的晋级记录），然后才完成 Task 14。
+   理由原文："**数值未变并不保留审批身份**"（unchanged numerical values do not preserve approval identity）。
+   → 也就是说，**你此前对 17 值的批准不能顺延到新配置**；修好 frame 后必须重新跑校准、产出新 bundle、**再请你审批一次**。
+3. **消费者未查全**：① legacy binding 约束相机原点；② scenario 代码**硬编码了旧的 optical-frame 标签**；③ config/report 校验比较的是**完整相机身份**。
+
+**我的处理**：不按被拒的提案改任何配置；把三条纠正写进账本与修订文件；下一步按纠正后的路径执行——
+（a）先查清三个消费者各自期望的 frame 名（尤其 scenario 代码里硬编码的那个标签），
+（b）按新理解改写修订（`ray_origin_frame_id = head_camera_frame`），
+（c）再送审；通过后才动配置，并按"从 Step 1 重做 + 重新审批"的路径推进。
