@@ -54526,3 +54526,34 @@ real receipts); for a test it has to be arranged deliberately.
 Recorded rather than worked around: the test I wrote is reverted so the tree stays green, and what it found is worth more
 than the test would have been - the producer's contract includes a clock agreement that nothing in the chain tests had to
 satisfy until now, because their sampler was a fixture.
+
+
+## CP-2824 — Three attempts at the real producer, and what each one narrowed
+
+Trying to drive the production synchronizer inside the suite took three structural attempts, and each narrowed the
+question without reaching a sample:
+
+1. **pushing head and wrist with the real clock** - `INPUT_STALE`;
+2. **supplying `received_monotonic_s` from the sampling clock** (`synchronizer.monotonic()`, the route CP-2823 identified)
+   - still `INPUT_STALE`, so the staleness is not about the receipt time;
+3. **pushing the `arm` stream as well**, since the refusal means "no sample of some stream satisfies
+   `0 <= at_s - stamp <= max_age_s`" - still `INPUT_STALE`.
+
+What the refusals establish: `INPUT_STALE` is raised by `causal_sample(samples, at_s, max_age_s)` when **no** stamp is
+within `[at_s - max_age_s, at_s]` for the stream it is given (`synchronizer.py:12-17`), and `sample_with_audit` is only a
+wrapper:
+
+```python
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        with self._lock:
+            observation = self.sample(session_id, attempt_id, at_s)
+            return observation, copy.deepcopy(self.last_audit)
+```
+
+So the refusal belongs to `sample` (`:67`), and the next read is that method's body: which streams it requires for an
+instant, and in what order - the answer decides what a caller has to push before an observation exists. My three attempts
+were guesses about that list; the list itself is one read away, and guessing cost three rounds.
+
+The test is reverted and the tree is green (`4 passed`), with nothing of mine uncommitted: the seam, the chain test's
+conversion to it, and every predicate negative remain committed, and this stretch's habit - read the refusal site rather
+than vary the input - is what the next round does first.
