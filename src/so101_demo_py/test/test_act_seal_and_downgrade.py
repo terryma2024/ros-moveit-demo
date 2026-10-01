@@ -618,3 +618,38 @@ def test_beginning_an_episode_needs_the_runs_own_identity():
     assert recorder.started == [12.5]
     # a run with nothing to record through is not an error, and is reported rather than assumed
     assert begin_episode(None, Options(), start_s=12.5) is False
+
+
+def test_one_instant_becomes_one_row_audit_without_a_robot(tmp_path):
+    """RED first: the per-instant step composes the row from an observation, and a fake observation is enough (CP-2862)."""
+    from so101_demo.act.episode_assembly import record_instant
+    from so101_demo.ports.cup_scene_observation import CupSceneObservation
+    from so101_demo.ports.evidence import PoseEvidence
+
+    class Recorder:
+        def __init__(self):
+            self.audits = []
+
+        def set_physical_audit(self, audit):
+            self.audits.append(audit)
+
+    observation = CupSceneObservation(
+        simulator_pose_world=PoseEvidence((0.02, -0.28, 0.165), (0.0, 0.0, 0.0, 1.0)),
+        simulator_received_monotonic_s=12.5,
+        moveit_pose_world=PoseEvidence((0.02, -0.28, 0.165), (0.0, 0.0, 0.0, 1.0)),
+        moveit_received_monotonic_s=12.6, moveit_attached=True,
+        simulation_session_id="session-1", reset_epoch=2, paused=False)
+    recorder = Recorder()
+    audit = record_instant(
+        recorder, observation, release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
+        contacts={"held": True}, physical_stamps={"head": 12.4},
+        reference={"time_s": 12.4, "source": "mujoco", "positions": [0.0, 0.0, 0.0]},
+        controller_state={"active": True})
+    assert set(audit) == set(PhysicalAuditAdapter.KEYS)
+    assert recorder.audits == [audit], "the episode must be told what this instant's row says"
+    # and a run with nothing to record through still composes the audit, so the caller can log it
+    assert set(record_instant(
+        None, observation, release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
+        contacts={}, physical_stamps={},
+        reference={"time_s": 12.4, "source": "mujoco", "positions": [0.0, 0.0, 0.0]},
+        controller_state={})) == set(PhysicalAuditAdapter.KEYS)

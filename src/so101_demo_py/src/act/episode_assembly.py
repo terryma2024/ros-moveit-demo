@@ -21,6 +21,7 @@ from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "begin_episode", "episode_audit_pair",
+           "record_instant",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
 
@@ -258,10 +259,17 @@ class PointEpisode:
         # the synchronizer refuses a push whose session does not match the one it was reset for, so the reset is part
         # of beginning an episode rather than something the caller has to remember
         self.synchronizer.reset(self.identity["session_id"])
+        # the capture asks its physical_audit for a row as it samples, and that callable was fixed at construction -
+        # so the latest audit lives in a holder the callable reads rather than being baked in
+        self._audit: dict | None = None
         self._minter = None
         self._started = False
         self._start_s = 0.0
         self._latest_s = None
+
+    def set_physical_audit(self, audit: dict) -> None:
+        """Publish the audit for the instant about to be sampled; the capture's own callable reads it."""
+        self._audit = dict(audit)
 
     def push(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> None:
         """Record one captured frame: mint its acquisition, hand it to the capture, and push it for sampling.
@@ -479,3 +487,22 @@ def begin_episode(recorder, options, *, start_s: float) -> bool:
         return False
     recorder.start(float(start_s))
     return True
+
+
+def record_instant(recorder, observation, *, release_epoch: int, release_event: bool, release_time_s: float,
+                   phase: str, contacts, physical_stamps: dict, reference: dict,
+                   controller_state: dict) -> dict:
+    """Turn one observation into one row's audit, and tell the episode what it says.
+
+    The composition itself is `physical_audit_from_observation`; this adds the handover, which is the step that has to
+    happen before the capture samples for that instant - the row is assembled from the audit the capture asks for, so
+    telling the episode after sampling would date the row from the previous instant. A run with no recorder still gets
+    the audit back, so a caller can log or assert on it.
+    """
+    audit = physical_audit_from_observation(
+        observation, release_epoch=release_epoch, release_event=release_event, release_time_s=release_time_s,
+        phase=phase, contacts=contacts, physical_stamps=physical_stamps, reference=reference,
+        controller_state=controller_state)
+    if recorder is not None:
+        recorder.set_physical_audit(audit)
+    return audit
