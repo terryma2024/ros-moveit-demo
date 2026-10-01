@@ -44335,3 +44335,41 @@ coverage complete 义务，其余一律非 pass；⑤ Teleop 验收的 `qualific
 `logs/{red.txt,green.txt,regression.txt,real-run.txt,real-run-record.txt,ownership-*.txt}`、`record-utc.txt`、`tmp-*`）、
 `$EV/reviews/task14-gap-audit.md`（第 4/8 行改判 + §4 增补 + 新增 §8）。
 以上**均为删除候选，未删除**；HS-300..316 的产物只读引用，未改动。工作树 `git status --porcelain`：见本轮提交后的 `?? runs/`（既有未跟踪）。
+
+## HS-318 — Task 14 Step 4「三个 anchor 各一次独立 FULL_RESTART」有安装了的生产者：逐 anchor 起/停一套生产组合并各自出 receipt，**gate 从 MISSING 变为 VIOLATED（原因可复算）**，并首次测出提升版配置声明的相机坐标系在生产插件里根本不存在
+
+**提交** `6f512cc51`（4 文件，+4474/-6；普通 `git commit`，钩子 rc=0）。`git status --porcelain` 见本节末。本轮是**加性源码改动**（冻结 root 早于该模块），运行记录仍用标准 `so101_demo` shim 把工作树源码放在 `PYTHONPATH` 最前，其余包/配置/资产/console script 全部来自 `$EV/head-toolchain-20261001T130437Z`（`ros2 pkg prefix so101_demo_py` 断言），冻结 root 下未写入任何文件。
+
+**（a）生产者的形状。** `src/so101_demo_py/src/act/head_search_restarts.py`（`so101_demo.act.head_search_restarts`）+ 安装入口
+`so101_head_search_calibration measure-restarts --run-root --ownership-receipt --final-run --production-config --approved-bundle --geometry-seal --scene --urdf --plugin-config --controller-config --weights --frozen-candidate --reservation-root --workdir [--device --anchors --max-settle-s --expected-*]`。
+每个 anchor 的顺序固定且不可跳过：读 Step 1 的独占所有权 receipt（refuse `RESTART_OWNERSHIP_*`）→ **起栈前**再探一次进程表/ROS graph/GPU（有第二个 owner 即 `RESTART_FOREIGN_OWNER_ACTIVE`）→ 写三个 role provision（冻结的 `ControllerReservationProvisions`）→ 起**一套** ACT 生产组合（`ros2_control_node` + `robot_state_publisher` + 四个 spawner，环境里带 reservation scope，EGL headless）→ 等**稳态** graph（四个 owner 节点 + 每个 controller 一个节点；spawner 进程必须退出、spawner 节点必须消失，否则不算稳态）→ `list_controllers` 四个全 active → 探 `/head_camera/color` 速率与 `/clock` → 用模拟器自己的 `~/set_free_joint_state` 把该 anchor 的杯子放到 seal 声明的点 → 装**一个** CUDA 检测器（提升版权重）→ 经 `RosNeckSearchPort` 的 admission 动作驱动生产 `RosSearchAdapter` + `HeadSearchController` → 保持并采 3 个连续 `/joint_states` 停车样本 → `stop()` 后再探一次进程表/graph/GPU（不空即 `RESTART_TEARDOWN_UNPROVEN`/`RESTART_GPU_NOT_RELEASED`）→ 写 receipt。**teardown 类 refusal 立即中止整轮**（绝不在可能还活着的栈后面再起一个）；**其余 refusal 逐 anchor 记录并继续**，三个 receipt 都落盘后整轮 rc=2 —— 计划要的 manifest 正是「default/left/forward 各一次」。
+
+**（b）颈部动作的生产 admission。** neck controller 是 `so101_mujoco_support/BrokerOwnedTrajectoryController`，未带 bound reservation 的 goal 一律 REJECT。生产者按冻结协议自证身份：写自己的 `.provision`（uid/pid/start-ticks + 随机 capability）→ `SOGR` op3 arm 一个 generation → `SOIA` 读回 controller 自己的 incarnation/boot → 每个 goal 用同一个 goal UUID 发一帧 `SOGB` v2（digest = 该 goal 的 CDR sha256）。`encode_bound_reservation_frame` 在单测里与安装版 `controller_reservation_client._encode_bound_frame` **逐字节相等**。这是**声明的角色**（计划：「qualifier owns every start and teardown」），不是第二个 broker；三次运行的 arm/identity 都成功，`transport_retries` 全为 0（协议层失败只在**传输层**错误时有界重试，协议拒绝从不重试）。
+
+**（c）真实运行** `$CAMPAIGN/qualification-restarts-20261001T152045Z`（`$CAMPAIGN=$EV/head-yolo-models-20260930T120608Z`；Step 1 receipt `$EV/head-qualification-restarts-ownership-20261001T152045Z/exclusive-ownership.json`，rc=0；reservation socket 落在登记 root 的短 `ipc/` 命名空间，`gripper.sock` 全路径 104 B ≤ 107 B）：
+
+| anchor | elapsed | graph | 相机速率 | 时钟 | 检测器 | search | lock | stop | teardown | receipt |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `default` | 113.5 s | PASS（8 节点，0 foreign） | 10.0000 Hz / 46 帧 | +4.972 s | PASS（1×CUDA，`2afd5506…`） | `SEARCH_TIMEOUT`，24 accepted frames，0 detections | 0 | PASS（3/3） | 四项 + GPU 全部证明 | `restart-default.json`（REFUSED） |
+| `left` | 25.8 s | PASS | 9.9864 Hz / 45 帧 | +4.512 s | PASS | `SEARCH_TIMEOUT`，0 accepted | 0 | PASS（3/3） | 同上 | `restart-left.json`（REFUSED） |
+| `forward` | 29.5 s | PASS | 9.9778 Hz / 46 帧 | +4.616 s | PASS | `SEARCH_TIMEOUT`，0 accepted | 0 | PASS（3/3） | 同上 | `restart-forward.json`（REFUSED） |
+
+**（d）本轮真正测出的缺陷（这才是重点）。** 每一个被闭环消费的帧都以 `INPUT_STALE` 结束，而 receipt 直接点名原因：生产插件发布 `published_frame_id = head_camera_frame`（`mujoco_plugins.yaml` 的 `frame_name`，正是 URDF `assets/mujoco/act/so101.urdf:645` 的 link），而**提升版生产配置**声明 `declared_frame_id = head_camera_optical_frame` —— 该 frame 在机器人描述里**根本不存在**（URDF 只有名叫 `head_camera_optical_joint` 的 *joint*）。同一份配置还声明 `ray_origin_frame_id = base_link`，而 URDF 根 link 是 `base`。`HeadSearchController.tick` 用 `frame["frame_id"] != config["frame_id"]` 判 `INPUT_STALE`，所以按该配置生产闭环**永远消费不了一帧**。这是受控配置缺陷；Task 14 禁止改配置，因此只记录并如实拒绝，不打补丁。
+
+同一轮另外三条如实记录：① **adapter 自己的 buffer 起手是空的**——第一版飞行在 `RosSearchAdapter.reset()` 返回后立刻 tick，结果 `image_count: 0`、一帧都没消费；现在的实现先等 1 s，再把 adapter 自己的 buffer 与本阶段独立订阅对照，若「adapter 静默而探针收到帧」就以 `RESTART_ADAPTER_SILENT` 点名拒绝，记录到的存活行是 `executor_spinning: True, adapter_image_count: 10, probe_frames_last_second: 11`。② **stale 帧会被重复消费**：`HeadSearchController` 在 stale 时**不推进** `last_frame_s`，于是 `default` 的 24 个「accepted frames」只有 6 个不同时间戳（`duplicate_count: 17`，`cadence_continuous: false`）——节拍门如实报告，不做平均掩盖。③ **`search_timeout_s` 是仿真时间预算、却与墙钟比较**：phase 6 的公式 `max_stable_stop_points*(p99_settle_s+p99_frame_s)+max_fine_corrections*control_period_s` 取的是**仿真秒**（`timing-calibration.json` 的 `time_base: simulation`，`p99_settle_s=0.346 s`），而 `advance_deadline` 拿 `time.monotonic` 比。在进程内 plant（HS-316）墙钟远小于仿真时间，预算从不生效；在实时栈上两者相等，两个 stop 的 0.346 s settle 就已吃掉整个 0.7089 s。**这是推断，本轮没有做 A/B**。
+
+**（e）聚合重跑**（`$EV/head-qualification-restarts-agg-20261001T152503Z/qualification-verdict.json`，rc=2，自身 Step 1 receipt `$EV/head-qualification-restarts-agg-ownership-20261001T152503Z`）：
+
+| 门 | HS-317 | HS-318 |
+| --- | --- | --- |
+| `anchor_restarts` | MISSING | **VIOLATED**（三份 receipt 全被消费并逐字段复算，12 条具名 violation） |
+| `missing` | 4 项（`runtime_readback`、`restart_receipts`、`production_smoke journal`、`teleop_acceptance_receipt`） | **3 项**（`runtime_readback`、`production_smoke_root`、`teleop_acceptance_receipt`）——`restart_receipts` 已从 missing 消失 |
+| `violations` | 2（HS-316 的两个场景终态） | 14（那两个 + 12 条 restart 项） |
+| citations | 无 restart root | `restart_default` / `restart_left` / `restart_forward`，各带 receipt 路径与 sha256 |
+| 其余门 | `exclusive_ownership`/`runtime_identity`/`scenario_journal`/`frame_cadence`/`stop_proofs` HOLDS；`approved_values_readback`/`production_smoke`/`teleop_acceptance` MISSING；`scenario_terminals` VIOLATED | **完全相同的其余门** |
+
+**（f）门禁**：`ruff check` 干净（两个新文件另过 `ruff format`）；新模块 RED（1 collection error，只缺新模块）→ GREEN **46 passed**；CLI 入口 RED（`invalid choice: 'measure-restarts'`，4 failed）→ GREEN **4 passed**；提交后阶段回归（HS-288..318 的 37 文件，`-n 8`）**1004 passed, rc=0**（HS-317 的 954 + 新模块 46 + CLI 4）；全量 `src/so101_demo_py/test`（8 workers，baseline run-dir 布局，`$EV/scratch/pytest-xdist8-hs318-demo-suite-committed.f8a1TzN8`）**175 failed / 6490 passed / 152 skipped / 86 errors，rc=1，88.27 s**；与最新基线 `pytest-xdist8-hs317-demo-suite-committed.e9f9690f`（175/6440/152/86）**逐节点 diff = 0 行**（`FAILED` 175 行逐字相同、`ERROR` 17 个模块 86 节点逐字相同，见该 run dir 的 `failed-node-diff-vs-hs317.txt` / `error-node-diff-vs-hs317.txt`），`passed +50` 正好是新增（46+4）。运行后 `ps` 无任何 ros2/MuJoCo/spawner 残留、`nvidia-smi --query-compute-apps` 为空、未启动 `ros2 daemon`（`ros2 node list --no-daemon`），`ros2 node list` 为空。
+
+**证据**：`$CAMPAIGN/qualification-restarts-20261001T152045Z/{restart-receipts.json,measurement-receipt.json,<anchor>/{restart-<anchor>.json,stdout.log,stderr.log,stack/{transport-stack.log,ros2-control-node.params.yaml}}}`；`$EV/head-qualification-restarts-ownership-20261001T152045Z/exclusive-ownership.json`；`$EV/head-qualification-restarts-agg-ownership-20261001T152503Z/exclusive-ownership.json`；`$EV/head-qualification-restarts-agg-20261001T152503Z/{qualification-verdict.json,calibration-state.json}`；`$EV/reviews/task14-gap-audit.md`（第 7 行改判 + §9 新增）；工作树 `scratch/hs318/`（`run-tests.sh`、`real-run.sh`、`aggregate.sh`、`run-fullsuite.sh`、`regression-files.txt`、`logs/`、`tmp-*`、`real-work-*`）。
+被取代但仍保留的运行（每一次 refusal 都是后一次修复的证据，**未删除**）：`$CAMPAIGN/qualification-restarts-20261001T14{2922,3037,3133,3414,3658,3943,4356,4729,50512,5143,51550}Z*`。
+以上**均为删除候选，未删除**；HS-300..317 的产物只读引用。
