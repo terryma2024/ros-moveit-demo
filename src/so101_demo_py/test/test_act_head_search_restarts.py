@@ -1081,3 +1081,196 @@ def test_producer_refuses_a_runtime_that_never_falls_back_to_the_cpu():
     with pytest.raises(RestartRefused) as refusal:
         module.require_runtime_of_record(runtime_identity(allow_cpu_fallback=True))
     assert refusal.value.code == RESTART_RUNTIME_UNVERIFIED
+
+
+# --- HS-326: the commanded-target record the smoke's bounded-command gate reads -----------------------
+
+
+def test_the_command_record_collapses_repeated_ticks_into_one_target():
+    """The bounded-command claim is a record of what was commanded, not an assertion about it."""
+
+    consumed = [
+        {"frame": {"sim_time_s": 12.0}, "decision": {"neck_target_rad": 0.1, "stop": False}},
+        {"frame": {"sim_time_s": 12.1}, "decision": {"neck_target_rad": 0.1, "stop": False}},
+        {
+            "frame": {"sim_time_s": 12.2},
+            "decision": {"neck_target_rad": 0.231, "stop": False, "status": "CENTER_CUP"},
+        },
+        {
+            "frame": {"sim_time_s": 12.3},
+            "decision": {"neck_target_rad": 0.231, "stop": False, "status": "CENTER_CUP"},
+        },
+        {
+            "frame": {"sim_time_s": 12.4},
+            "decision": {"neck_target_rad": 0.231, "stop": True, "status": "INPUT_STALE"},
+        },
+    ]
+
+    record = module.command_targets(consumed, initial_target_rad=0.1)
+
+    assert [entry["target_rad"] for entry in record["targets"]] == [0.1, 0.231]
+    assert record["initial_target_rad"] == 0.1
+    assert record["distinct_target_count"] == 2
+    assert record["targets"][0]["kind"] == "start"
+    # the reset target is counted only by the ticks that re-commanded it
+    assert record["targets"][0]["ticks"] == 2
+    # three ticks held the corrected target, and the last of them was a stop at the same angle
+    assert record["targets"][1]["ticks"] == 3
+    assert record["targets"][1]["first_frame_sim_s"] == 12.2
+    assert record["targets"][1]["statuses"] == ["CENTER_CUP", "INPUT_STALE"]
+    assert record["tick_count"] == 5
+    assert record["definition"]
+
+
+def test_the_command_record_ignores_a_decision_that_commanded_no_target():
+    record = module.command_targets(
+        [
+            {"frame": {"sim_time_s": 1.0}, "decision": {"status": "TARGET_LOCKED", "found": True}},
+            {"frame": {"sim_time_s": 1.1}, "decision": {"neck_target_rad": None, "stop": True}},
+            {"frame": {"sim_time_s": 1.2}, "decision": {"neck_target_rad": 0.05, "stop": True}},
+        ],
+        initial_target_rad=0.0,
+    )
+
+    assert [entry["target_rad"] for entry in record["targets"]] == [0.0, 0.05]
+    assert record["targets"][1]["kind"] == "hold"
+    assert record["targets"][1]["statuses"] == []
+
+
+def test_the_flight_node_runs_on_the_stacks_clock():
+    """HS-326, found by the production smoke: a wall-clock flight node refuses every neck command.
+
+    ``RosNeckSearchPort.command_neck`` compares ``node.get_clock().now()`` against the ``/joint_states``
+    header stamp, and the stack's nodes run on the simulator's clock. A flight node left on the wall clock
+    therefore raises ``NECK_FEEDBACK_STALE`` on the first command - which is exactly what the real smoke
+    run recorded, because the restart phase never got that far (its frames were refused first).
+    """
+
+    import inspect
+
+    overrides = module.flight_node_overrides()
+    assert [(parameter.name, parameter.value) for parameter in overrides] == [("use_sim_time", True)]
+
+    assert module.flight_node_name("default") == "head_search_restart_default"
+    for anchor in ANCHORS:
+        assert f"/{module.flight_node_name(anchor)}" in module.RUNNER_NODE_NAMES
+
+    # the node the flight really builds is the one that carries the override
+    source = inspect.getsource(module.measure_and_search)
+    assert "flight_node_overrides()" in source
+    assert "Node(flight_node_name(anchor)" in source
+
+
+def test_the_neck_port_diagnostic_records_both_clocks_a_command_is_judged_with():
+    """A refused command must be attributable: the wall age and the node-clock age are different clocks."""
+
+    class _Clock:
+        def now(self):
+            class _Stamp:
+                nanoseconds = int(111.9e9)
+
+            return _Stamp()
+
+    class _Parameter:
+        value = True
+
+    class _Node:
+        def get_clock(self):
+            return _Clock()
+
+        def get_name(self):
+            return "head_search_restart_default"
+
+        def get_parameter(self, name):
+            assert name == "use_sim_time"
+            return _Parameter()
+
+    class _Neck:
+        _received = 1000.0
+        _stamp = 111.86
+        max_age = 0.014736005008453503
+
+    diagnostic = module.neck_port_diagnostic(_Neck(), _Node(), 1000.004)
+
+    assert diagnostic["use_sim_time"] is True
+    assert diagnostic["node_name"] == "head_search_restart_default"
+    assert diagnostic["feedback_wall_age_s"] == pytest.approx(0.004)
+    assert diagnostic["feedback_clock_age_s"] == pytest.approx(0.04)
+    assert diagnostic["feedback_stamp_sim_s"] == 111.86
+    assert diagnostic["node_clock_s"] == 111.9
+    assert diagnostic["max_age_s"] == 0.014736005008453503
+    assert diagnostic["definition"]
+
+
+def test_the_neck_port_diagnostic_survives_a_node_without_the_parameter():
+    class _Clock:
+        def now(self):
+            class _Stamp:
+                nanoseconds = 0
+
+            return _Stamp()
+
+    class _Node:
+        def get_clock(self):
+            return _Clock()
+
+        def get_name(self):
+            return "probe"
+
+        def get_parameter(self, name):
+            raise KeyError(name)
+
+    class _Neck:
+        _received = None
+        _stamp = None
+        max_age = 0.01
+
+    diagnostic = module.neck_port_diagnostic(_Neck(), _Node(), 5.0)
+
+    assert diagnostic["use_sim_time"] is None
+    assert diagnostic["feedback_wall_age_s"] is None
+    assert diagnostic["feedback_clock_age_s"] is None
+
+
+def test_the_reserved_port_reserves_the_wire_message_the_controller_digests(socket_root):
+    """HS-326, found by the production smoke: the reservation must cover the *message*, not the dict.
+
+    ``RosNeckSearchPort`` hands its port a goal dict; ``RosControllerPort`` turns that dict into a
+    ``control_msgs/FollowJointTrajectory`` goal and sends it under a caller supplied action goal UUID. The
+    installed ``ControllerReservationClient.reserve`` serialises that message. The first version of this
+    port serialised the dict instead, so the first goal it ever really sent raised
+    ``AttributeError: ... '_TYPE_SUPPORT'`` - and no restart had ever sent one.
+    """
+
+    from control_msgs.action import FollowJointTrajectory
+    from rclpy.serialization import serialize_message
+    from so101_demo.adapters.act.ros_execution import trajectory_message
+
+    authority, servers = reservation_authority(socket_root)
+    port = FakeControllerPort()
+    reserved = ReservedControllerPort(port, authority=authority, role="neck")
+    goal = {
+        "joint_names": ("neck_yaw_joint",),
+        "header_stamp_s": 10.0,
+        "time_from_start_s": (0.0, 0.1),
+        "positions": ((0.1,), (0.2,)),
+    }
+    try:
+        assert reserved.send(goal) == "goal-1"
+        sent_goal, goal_uuid = port.sent[0]
+        message = FollowJointTrajectory.Goal()
+        message.trajectory = trajectory_message(goal)
+        payload = serialize_message(message)
+
+        assert sent_goal is goal
+        assert reserved.reservations[0]["goal_sha256"] == goal_digest(payload).hex()
+        assert bytes(goal_uuid.uuid) == authority.reserved[0]["goal_uuid"]
+        # the bytes really reached the controller's admission socket
+        assert servers["neck"].socket_state.reserved
+        # and the defect this pins: the goal dict itself carries no ROS type support, which is what the
+        # first version of this port tried to serialise
+        with pytest.raises(AttributeError):
+            serialize_message(goal)
+    finally:
+        for server in servers.values():
+            server.stop()

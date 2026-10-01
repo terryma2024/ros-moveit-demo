@@ -57,7 +57,7 @@ class RosControllerPort:
         except (ValueError,KeyError): return
         with self._lock:self._velocity=values;self._received=self.monotonic()
 
-    def send(self,goal):
+    def send(self,goal,*,goal_uuid=None):
         wire=trajectory_message(goal)
         if tuple(wire.joint_names)!=self.names: raise ValueError('CONTROLLER_JOINT_ORDER_INVALID')
         message=FollowJointTrajectory.Goal();message.trajectory=wire
@@ -66,7 +66,10 @@ class RosControllerPort:
                     cancel_ack=False,error=None,goal=goal)
         with self._lock:self._goals[gid]=record
         try:
-            response=self.client.send_goal_async(message)
+            options={}
+            if goal_uuid is not None:
+                options['goal_uuid']=goal_uuid
+            response=self.client.send_goal_async(message,**options)
             response.add_done_callback(lambda future:self._accepted(gid,future))
         except Exception as error:
             with self._lock:record['accepted']=None;record['error']=repr(error)

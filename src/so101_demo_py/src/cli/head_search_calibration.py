@@ -3112,6 +3112,243 @@ def _check_ownership(arguments: list[str]) -> int:
     return 2
 
 
+#: the `measure-production-smoke` entry: Task 14 Step 3's production smoke. It declares Step 1's receipt,
+#: the frozen runtime of record, the promoted configuration and bundle, and the sealed inputs the one
+#: production composition is started from; `--run-root` is the brand-new phase root the journal owns and
+#: `--reservation-root` is the registered root's short `ipc/` namespace the AF_UNIX sockets live in.
+PRODUCTION_SMOKE_REQUIRED_FLAGS = (
+    ("ownership_receipt", "--ownership-receipt"),
+    ("run_root", "--run-root"),
+    ("final_run", "--final-run"),
+    ("production_config", "--production-config"),
+    ("approved_bundle", "--approved-bundle"),
+    ("geometry_seal", "--geometry-seal"),
+    ("scene", "--scene"),
+    ("urdf", "--urdf"),
+    ("plugin_config", "--plugin-config"),
+    ("controller_config", "--controller-config"),
+    ("weights", "--weights"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("reservation_root", "--reservation-root"),
+    ("workdir", "--workdir"),
+)
+
+#: the entry as it is recorded in the journal, one name per script that can run it
+PRODUCTION_SMOKE_ENTRY = "so101_head_search_calibration measure-production-smoke"
+PRODUCTION_SMOKE_SCRIPT_ENTRY = "so101_head_search_smoke --run-root"
+
+
+def _production_smoke_parser() -> argparse.ArgumentParser:
+    """The `measure-production-smoke` entry: one owned stack, one bounded search, one sealed journal."""
+
+    from so101_demo.act.head_search_production_smoke import ANCHORS as SMOKE_ANCHORS
+    from so101_demo.act.head_search_production_smoke import CONDITION_CLASS
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-production-smoke",
+        description=(
+            "Run Task 14 Step 3's production smoke: take the Step 1 ownership receipt, start the one "
+            "production composition, place the anchor's cup where the seal declares it, run the bounded "
+            "search through the real adapter and controller, prove the lock, the 10 Hz cadence, the "
+            "bounded commands and the three-sample stop, then stop the stack and prove it is gone. The "
+            "success condition is the sealed journal the aggregate phase consumes, not the planning "
+            "coverage proof, which is written beside it"
+        ),
+    )
+    parser.add_argument("--run-root", type=Path, help="the brand-new phase root the journal owns")
+    parser.add_argument(
+        "--ownership-receipt",
+        type=Path,
+        help="Step 1's exclusive-ownership receipt for this run root",
+    )
+    parser.add_argument("--final-run", type=Path, help="the frozen runtime of record")
+    parser.add_argument(
+        "--production-config", type=Path, help="the promoted production search config"
+    )
+    parser.add_argument("--approved-bundle", type=Path, help="the approved calibration bundle")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the stack steps")
+    parser.add_argument(
+        "--urdf", type=Path, help="the ACT URDF the stack's robot description is built from"
+    )
+    parser.add_argument(
+        "--plugin-config", type=Path, help="the production MuJoCo plugin configuration"
+    )
+    parser.add_argument(
+        "--controller-config", type=Path, help="the sealed controller configuration"
+    )
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument(
+        "--frozen-candidate", type=Path, help="the selected frozen candidate document"
+    )
+    parser.add_argument(
+        "--reservation-root",
+        type=Path,
+        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
+    )
+    parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
+    parser.add_argument(
+        "--anchor",
+        default=SMOKE_ANCHORS[0],
+        help=f"the seal anchor to search, one of {','.join(SMOKE_ANCHORS)}",
+    )
+    parser.add_argument(
+        "--scenario",
+        dest="condition_class",
+        default=CONDITION_CLASS,
+        help=(
+            "the declared condition class the terminal is judged against (the flag Task 11's smoke "
+            "accepted and never read); plan Step 3's smoke is the legal single cup, `nominal`"
+        ),
+    )
+    parser.add_argument(
+        "--device", default="cuda", help="the detector device (never a CPU fallback)"
+    )
+    parser.add_argument(
+        "--expected-source-commit",
+        help="the frozen runtime's source commit the identity must match",
+    )
+    parser.add_argument(
+        "--expected-production-config-sha256",
+        help="the promoted config digest the identity must match",
+    )
+    parser.add_argument(
+        "--expected-values-sha256", help="the 17 values' digest the identity must match"
+    )
+    parser.add_argument(
+        "--expected-weights-sha256", help="the detector weights digest the identity must match"
+    )
+    parser.add_argument(
+        "--expected-package-prefix",
+        help="the `ros2 pkg prefix so101_demo_py` the gate must observe",
+    )
+    return parser
+
+
+def _measure_production_smoke(arguments: list[str], *, entry: str = PRODUCTION_SMOKE_ENTRY) -> int:
+    """Validate the declared inputs, then hand the one smoke flight to the library.
+
+    The CLI is thin on purpose: the library owns the order (class, runtime, receipt, seal, root, flight,
+    seal the journal, aggregate it) and this entry owns the flag surface and the exit code.
+    """
+
+    parsed = _production_smoke_parser().parse_args(arguments)
+    missing = [
+        flag for name, flag in PRODUCTION_SMOKE_REQUIRED_FLAGS if getattr(parsed, name) is None
+    ]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a production smoke declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in PRODUCTION_SMOKE_REQUIRED_FLAGS
+        if name not in ("run_root", "workdir") and not Path(getattr(parsed, name)).exists()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.run_root.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.run_root} exists; a qualification run "
+            f"is never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from functools import partial
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_production_smoke import (
+        read_runtime_of_record,
+        run_smoke_flight,
+        write_head_search_production_smoke,
+    )
+
+    production = json.loads(parsed.production_config.read_text(encoding="utf-8"))
+    values = production.get("values") if isinstance(production.get("values"), Mapping) else {}
+    if not values:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.production_config} declares no values "
+            f"block",
+            file=sys.stderr,
+        )
+        return 2
+    seal = json.loads(parsed.geometry_seal.read_text(encoding="utf-8"))
+    command = _command_line(arguments, subcommand="measure-production-smoke")
+    try:
+        runtime = read_runtime_of_record(parsed.final_run, parsed.production_config)
+        expected: dict = {}
+        for key, attribute in (
+            ("source_commit", "expected_source_commit"),
+            ("production_config_sha256", "expected_production_config_sha256"),
+            ("values_sha256", "expected_values_sha256"),
+            ("weight_sha256_declared", "expected_weights_sha256"),
+        ):
+            value = getattr(parsed, attribute)
+            if value:
+                expected[key] = value
+        for key, wanted in sorted(expected.items()):
+            if runtime.get(key) != wanted:
+                raise CalibrationInputsRefused(
+                    "SMOKE_RUNTIME_UNVERIFIED",
+                    f"{key}: the run declares {wanted!r} and the frozen runtime reads "
+                    f"{runtime.get(key)!r}",
+                )
+        result = write_head_search_production_smoke(
+            run_root=parsed.run_root,
+            ownership_receipt=parsed.ownership_receipt,
+            runtime=runtime,
+            seal=seal,
+            workdir=parsed.workdir,
+            anchor=parsed.anchor,
+            condition_class=parsed.condition_class,
+            values=values,
+            approved_bundle_sha256=hashlib.sha256(parsed.approved_bundle.read_bytes()).hexdigest(),
+            producer={
+                "entry": entry,
+                "argv_sha256": hashlib.sha256(" ".join(command.split()).encode()).hexdigest(),
+                "command": command,
+                "pid": os.getpid(),
+            },
+            run_flight=partial(
+                run_smoke_flight,
+                urdf_path=parsed.urdf,
+                scene_path=parsed.scene,
+                plugin_config_path=parsed.plugin_config,
+                controller_config_path=parsed.controller_config,
+                production_config_path=parsed.production_config,
+                weights_path=parsed.weights,
+                frozen_candidate_path=parsed.frozen_candidate,
+                reservation_root=parsed.reservation_root,
+                production=production,
+                device=parsed.device,
+                excluded_pids=process_ancestry(),
+            ),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    document = result["document"]
+    print(
+        f"production_smoke: anchor={document['anchor']} scenario={document['condition_class']} "
+        f"terminal_status={document['terminal_status']} status={document['status']} "
+        f"gates={json.dumps(document['gates'], sort_keys=True)} "
+        f"elapsed_s={document.get('elapsed_s')} journal={result['journal']}"
+    )
+    for refusal in result["refusals"]:
+        print(f"{refusal['code']}: {refusal['detail']}", file=sys.stderr)
+    print(
+        f"SMOKE_MEASURED status={document['status']} run_root={result['run_root']} "
+        f"sealed_journal={result['sealed_journal']} frames={document['frame_cadence']['frame_count']} "
+        f"rate_hz={document['frame_cadence']['achieved_rate_hz']}"
+    )
+    return 0 if document["status"] == "PASS" else 2
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     # Step 1's gate is stack-free and runs before any run root is claimed: it must not be routed through
@@ -3145,6 +3382,10 @@ def main(argv: list[str] | None = None) -> int:
     # qualification seed, the per-scenario journal, and the honest aggregate that claims no verdict
     if arguments[:1] == ["measure-scenarios"]:
         return _measure_scenarios(arguments[1:])
+    # Task 14 Step 3's production smoke is its own installed flight: one owned stack, the production
+    # closed loop, the sealed journal and the aggregator the qualification gate consumes
+    if arguments[:1] == ["measure-production-smoke"]:
+        return _measure_production_smoke(arguments[1:])
     # Task 14 Step 4's three restarts are their own installed flight: one owned stack per anchor, the
     # production admission for every neck goal, and a teardown the phase proves before the next anchor
     if arguments[:1] == ["measure-restarts"]:

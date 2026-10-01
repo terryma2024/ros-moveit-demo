@@ -1,22 +1,29 @@
-"""Prove the bounded head-search plan against the sealed camera geometry.
+"""Prove the bounded head-search plan against the sealed camera geometry, and fly the production smoke.
 
-This is the entry point Task 11 runs: it reads the geometry seal, builds the bounded stop plan for one
-anchor, proves coverage from the field-of-view intervals, records the plan and its statuses, and fails
-closed when the safe interval cannot cover the required domain.
+Two modes, one entry name, because the plan names this script for both of them:
+
+* **Planning coverage** (this command with no ``--run-root``): read the geometry seal, build the bounded
+  stop plan for one anchor, prove coverage from the field-of-view intervals, record the plan and its
+  statuses, and fail closed when the safe interval cannot cover the required domain. This is the entry
+  Task 11 runs and it is unchanged.
+* **The production smoke** (``--run-root`` present): Task 14 Step 3's smoke. Every other flag is the
+  ``measure-production-smoke`` surface of ``so101_head_search_calibration`` and is forwarded to it
+  verbatim, so there is one implementation of the flight, the sealed journal and the aggregator. In this
+  mode the coverage proof is still written into the run root - it is the plan the flight walks - but the
+  command's success condition is the journal the ``aggregate`` phase's ``production_smoke`` gate reads,
+  and the ``--scenario`` flag the planning path accepted and never read now names the condition class
+  whose terminal the smoke must end on.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from so101_demo.act.head_search_domain import (
-    TARGET_NOT_FOUND,
-    TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL,
-    HeadSearchDomainError,
-    bounded_search_stops,
-)
+from so101_demo.act.head_search_domain import HeadSearchDomainError, bounded_search_stops
+from so101_demo.act.head_search_production_smoke import coverage_proof_document
 
 
 def _path(value: str) -> Path:
@@ -24,6 +31,18 @@ def _path(value: str) -> Path:
 
 
 def main(arguments: list[str] | None = None) -> int:
+    # the production smoke is the calibration CLI's own subcommand: intercept before the coverage
+    # parser sees flags it does not declare, and forward the invocation verbatim
+    forwarded = list(sys.argv[1:] if arguments is None else arguments)
+    if "--run-root" in forwarded:
+        from so101_demo.cli.head_search_calibration import (
+            PRODUCTION_SMOKE_SCRIPT_ENTRY,
+            _measure_production_smoke,
+        )
+
+        # the subcommand's own parser owns the flags, so the token itself is not forwarded
+        return _measure_production_smoke(forwarded, entry=PRODUCTION_SMOKE_SCRIPT_ENTRY)
+    arguments = forwarded
     parser = argparse.ArgumentParser(
         prog="head_search_smoke",
         description="Plan and prove the bounded head search for one anchor",
@@ -117,20 +136,7 @@ def main(arguments: list[str] | None = None) -> int:
         print(json.dumps({"failure": str(error), "status": "ERROR"}, sort_keys=True))
         return 2
 
-    document = {
-        "schema_version": 1,
-        "anchor": parsed.anchor,
-        "anchor_rad": anchor,
-        "targets_rad": list(plan.targets_rad),
-        "stop_count": len(plan.targets_rad),
-        "coverage_complete": plan.coverage_complete,
-        "required_domain_rad": list(plan.required_domain_rad),
-        "safe_interval_rad": list(plan.safe_interval_rad),
-        "horizontal_fov_rad": plan.horizontal_fov_rad,
-        "coarse_step_rad": plan.coarse_step_rad,
-        "statuses": [TARGET_NOT_FOUND, TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL],
-        "seal_sha256": seal.get("seal_sha256"),
-    }
+    document = coverage_proof_document(seal, parsed.anchor, anchor_rad=anchor, plan=plan)
     if parsed.output is not None:
         parsed.output.mkdir(parents=True, exist_ok=True)
         plan_path = parsed.output / f"head-search-plan-{parsed.anchor}.json"

@@ -44780,3 +44780,91 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 - 测试：`$EV/scratch/pytest-xdist8-hs325-demo-suite.OcoBV4MT`（全量）、`$EV/scratch/pytest-xdist8-hs325-regression.*`（若生成）。
 - 工作树 `scratch/hs325/`：`env.sh`、`run-tests.sh`、`run-fullsuite.sh`、`run-e2e-stub.sh`、`real-acceptance.sh`、`aggregate.sh`、`regression-files.txt`、`logs/`（RED/GREEN/回归/全量/验收/聚合/替身 e2e 全部日志）、`e2e-dev/`（替身 e2e 的 5 个 run dir）、`pyshim/`、`tmp*`。
 - 以上**均为删除候选，未删除**；HS-300..324 的产物只读引用，未改动。工作树 `git status --porcelain`：本轮 8 个文件 + `?? runs/`（既有未跟踪）+ 全量/回归测试在工作树根留下的 `broker-*/`、`ipc/` 测试副产物（已移入 `scratch/hs325/litter/`）。
+
+## HS-326 — Task 14 Step 3 的生产 smoke 第一次真的起飞：新模块 + 两个安装版入口 + 密封 journal 与聚合器，途中修掉组合根里三个从未被执行过的缺陷；`production_smoke` 门从 **MISSING 变为 VIOLATED（按名拒绝）**，bundle 字节未变
+
+**目标与边界**：本轮只做 Task 14 Step 3 缺的那一段。开工前用 HS-315 的 ownership gate（新 root `head-toolchain-20261001T170212Z`，commit `d8d1b5f8b`，配置 `3fb9f276…`）确认无第二所有者（进程表 / ROS graph / GPU / tmux / evidence root 全空），全程 MuJoCo-only、一次一个 CUDA detector、串行。**未晋级、未改任何 config 或测量文档、未重新生成 bundle、未重跑三次 restart**；待用户第二次精确批准的 bundle（文件 `0563bada…`）在开工与收工时**逐字节相同**。
+
+**为什么需要新生产者**：计划 Step 3 要求 "producer → sealed journal → actual aggregator、正确的 `TARGET_LOCKED`、10 Hz 连续性、有界命令、三采样停止证明与精确 runtime 身份"；而安装版 `so101_head_search_smoke` 只证明**规划覆盖**（`--scenario` 收了不用，HS-179），不起 stack、不开 detector、不写 journal。本轮把它补成一个**真的飞**的生产 smoke。
+
+### (a) 新生产者
+
+| 项 | 值 |
+|---|---|
+| 模块 | `src/so101_demo_py/src/act/head_search_production_smoke.py`（`so101_demo.act.head_search_production_smoke`） |
+| API | `write_head_search_production_smoke(...)`（生产者）、`run_smoke_flight(...)`（真飞行，逐字调用 `head_search_restarts.run_anchor_restart`，起/停/图/拆除全靠它）、`aggregate_production_smoke(sealed_journal, ...)`（**从磁盘读回**密封 journal 再重新推导每一道门）、`sealed_journal_document(...)`、`validate_smoke_journal(...)`（把聚合门读的字段形状变成运行时不变式）、`smoke_cadence(...)`/`smoke_commands(...)`/`classify_terminal(...)`（分别是 scenarios 模块的 `check_frame_cadence`、有界命令判据、`classify_scenario` 规则的薄命名）、`coverage_proof_document(...)`/`write_coverage_proof(...)`（Task 11 的覆盖证明，与旧 smoke 共用同一份构造） |
+| 安装版入口 | `so101_head_search_calibration measure-production-smoke …`；以及 `so101_head_search_smoke --run-root …`（把整个 argv 原样转给上面那个子命令——计划自己写的入口名现在跑生产路径；不带 `--run-root` 时行为一字未变，仍写 `coverage-proof.json`） |
+| 拒绝码 | `SMOKE_*`：`RUN_ROOT_EXISTS`/`OWNERSHIP_REFUSED`/`OWNERSHIP_MISMATCH`/`RUNTIME_UNVERIFIED`/`CLASS_UNDECLARED`/`ANCHOR_UNDECLARED`/`STACK_START_FAILED`/`CUP_NOT_PLACED`/`DETECTOR_FAILED`/`LOCK_UNPROVEN`/`CADENCE_BROKEN`/`COMMANDS_UNBOUNDED`/`STOP_UNPROVEN`/`TEARDOWN_UNPROVEN`/`GPU_NOT_RELEASED`/`COVERAGE_UNPROVEN`/`PROBE_FAILED`/`JOURNAL_UNREADABLE`/`SEAL_MISMATCH`/`JOURNAL_INVALID`；飞行自身以 `RESTART_*` 拒绝时，原码逐字留在 detail 里 |
+| journal 形状 | `production-smoke-journal.json`（`kind=head_search_production_smoke_journal`、`phase=production_smoke`、`producer{entry,argv_sha256,stack_owned}`、`journal{path,sha256,body_sha256}` 指向密封件、`aggregator{entry,journal_sha256,status=SUCCEEDED}`、`runtime{source_commit,production_config_sha256,values_sha256,weight_sha256_declared,weight_sha256_observed}`、`terminal_status`、`zero_wrong_locks`、`frame_cadence{continuous,duplicate_count,backward_count,undeclared_gap_count}`、`commands{bounded,outside_corridor_count}`、`stop_proof{proven,qualifying_samples}`、`detector{count,device,allow_cpu_fallback}`、`gates`、`refusals`、`sha256`）；另有 `sealed-journal.json`（原始帧/命令/停止采样/图/拆除，自封 body digest）、`measurement-receipt.json`、`coverage-proof.json`、`head-search-plan-<anchor>.json`、`<anchor>/{stdout,stderr}.log`、`<anchor>/stack/` |
+| 聚合器读哪里 | `head_search_aggregate._gate_smoke` 读 run root 下的 `production-smoke-journal.json`，再核对 `journal.sha256` == 密封件文件的 sha256、`aggregator.journal_sha256` == 同一摘要、`aggregator.status == SUCCEEDED`；`qualify --production-smoke-root` 就是这个 run root |
+
+### (b)(c) TDD 与门禁
+
+| 项 | 命令 | rc | 结果 |
+|---|---|---|---|
+| 新模块 RED | `run-tests.sh red-smoke -q …/test_act_head_search_production_smoke.py` | 1 | **37 failed**（模块不存在） |
+| 新模块 GREEN | 同上 green 系列 | 0 | **44 passed** |
+| CLI RED（去掉 dispatch） | `-k "production_smoke or plan_smoke_entry"` | 1 | **5 failed**：`invalid choice: 'measure-production-smoke'`（4 例）+ `unrecognized arguments: --run-root`（1 例） |
+| CLI GREEN | 同上 | 0 | **6 passed** |
+| 时钟钉 RED→GREEN | `test_the_flight_node_runs_on_the_stacks_clock` | 1→0 | 回退时钟修复即失败（结构钉 `measure_and_search` 经 `flight_node_overrides()` 建节点） |
+| 保留载荷 RED→GREEN | `test_the_reserved_port_reserves_the_wire_message_the_controller_digests` | 1→0 | 回退即 `AttributeError: … '_TYPE_SUPPORT'` |
+| 转发钉 RED→GREEN | `test_the_flight_forwards_the_producer_call_to_the_restart_module` | 1→0 | 回退即 `got multiple values for keyword argument 'anchor'`；该测试用 `inspect.signature(...).bind(**kwargs)` 绑真签名，缺参/多参在这里就失败 |
+| 阶段回归（HS-324 的 39 文件 + HS-325 的 teleop 验收文件 + 本轮新文件 = 41，`-n 8`） | `bash scratch/hs326/run-tests.sh regression -q -n 8 $(cat scratch/hs326/regression-files.txt)` | 1 | **4 failed / 1150 passed**；4 个失败与 HS-325 的控制运行**逐节点相同**（`test_act_task8_search_port.py` 既有 4 条，diff 空）；passed +56 = 本轮 44+6+6 条新测试 |
+| 全量 `src/so101_demo_py/test`（8 worker，baseline run-dir 布局） | `bash scratch/hs326/run-fullsuite.sh` | 1 | **175 failed / 6576 passed / 152 skipped / 86 errors，78.6 s**；与最新基线 `$EV/scratch/pytest-xdist8-hs325-demo-suite.OcoBV4MT`（175/6520/152/86）**逐节点 diff = 0 行**（FAILED/ERROR 各 261 节点逐字相同，见该 run dir 的 `node-delta-vs-hs325.txt`），passed +56 恰为本轮新增 |
+| 静态检查 | `ruff check --config src/so101_demo_py/ruff.toml`（7 个改动文件） | 0 | 全通过；新文件另过 `ruff format`（`head_search_calibration.py` 与 CLI 测试文件在 HEAD 就非 format-clean，故只格式化本轮新增块，避免无关 diff）；`adapters/act/ros_execution.py` 是既有 E7xx 遗留文件，改动前后 lint 计数 **39 → 39**，未新增违规 |
+
+### 真实运行：`$CAMPAIGN/production-smoke-20261002T050000Z`
+
+`$CAMPAIGN` = `$EV/head-yolo-models-20260930T120608Z`；Step 1 receipt `$EV/head-qualification-smoke-ownership-20261002T050000Z/exclusive-ownership.json`（rc=0）；命令 = 安装版 `so101_head_search_smoke --run-root …`（`--anchor default --scenario nominal`，sealed 输入全部来自 `$T`），**rc=2，136 s**。
+
+| 事实 | 值 |
+|---|---|
+| 图 | 8/8 声明节点（`/controller_manager`、`/robot_state_publisher`、`/mujoco_ros2_control_node`、`/robotsystem`、四个 controller），0 foreign |
+| 相机 | **9.9889 Hz**（`/head_camera/color`，48 帧，sim 跨度 4.98 s，`published_frame_id=head_camera_frame`） |
+| 杯子 | 放在 seal 自己声明的 `default` 点 `[0.02, -0.28, 0.165]`，经 `/mujoco_ros2_control_node/set_free_joint_state` |
+| detector | 恰好 1 个、CUDA、`allow_cpu_fallback=false`、权重 `2afd5506…` |
+| adapter 活性 | `executor_spinning=true`、adapter 自己 9 图 / 32 feedback、探针同秒 9 帧 |
+| 命令 | `bounded=true`、`outside_corridor_count=0`、`targets_rad=[0.1]`（seal 的 lock_valid 走廊内；`outside_required_domain_count=1` 是 HS-316 已记录的「default 起点在 required domain 之外」） |
+| 停止证明 | `proven=true`、3 个连续合格样本、限值 `0.04136050464213824` |
+| 拆除证明 | `previous_stack_stopped / controller_owner_stopped / children_exited / graph_clear / gpu_released` 全 true，探针 0 进程 0 节点 0 GPU |
+| runtime | commit `d8d1b5f8b`、config `3fb9f276…`、17 值 `3c787fd7…`、权重 `2afd5506…`、approved bundle `e21899c2…`、seal `7d963fdc…` |
+| **拒绝** | terminal `RESTART_SEARCH_TICK_FAILED`，detail `RESTART_RESERVATION_REFUSED: the neck controller rejected the bound reservation for the goal 7aa3cee4e56a4fd5926eca59159ba3dc`；`lock.consecutive_frames=0`；消费帧 2（间隔 0.09999999999999432 s，`duplicate/backward/undeclared_gap = 0/0/0`，`frames_short=true`）；`SMOKE_LOCK_UNPROVEN ×2 + SMOKE_CADENCE_BROKEN` |
+| 产物 | `production-smoke-journal.json`（`1bb7970f…`）、`sealed-journal.json`（`3ea963a5…`）、`measurement-receipt.json`、`coverage-proof.json`、`head-search-plan-default.json`、`default/{stdout,stderr}.log`、`default/stack/` |
+
+### (d) 途中修掉的三个真实缺陷（都在本轮之前从未被执行过的路径上）
+
+1. **飞行节点用的是墙钟**。`RosNeckSearchPort.command_neck` 拿 `node.get_clock().now()` 与 `/joint_states` 的 header stamp 比，而栈自己的节点跑在仿真时钟上，于是第一条颈部命令就被 `PermissionError('NECK_FEEDBACK_STALE')` 拒掉（`production-smoke-20261002T030000Z`）。修法：`flight_node_overrides()` 给飞行节点加 `use_sim_time: true`（与冻结的 transport 探针 `head_search_transport_measurement.py:709` 完全一致），节点名走 `flight_node_name()`。
+2. **`ReservedControllerPort.send` 序列化的是 goal 字典**。`RosControllerPort` 会把字典变成 `control_msgs/FollowJointTrajectory` 消息，安装版 `ControllerReservationClient.reserve` 序列化的也是**消息**；保留帧必须覆盖真正到达 controller 的字节。第一版把它送进 `rclpy.serialization.serialize_message`，于是这个端口**第一次真的发 goal** 时抛 `AttributeError: type object 'type' has no attribute '_TYPE_SUPPORT'`（`production-smoke-20261002T043000Z` 的 `terminal.traceback` 逐帧可读）。修法：`_default_serialize` 先构造 wire message 再序列化。
+3. **`RosControllerPort.send` 无法按调用方给的 action goal UUID 发送**，而保留帧绑定的正是这个 UUID。HS-318 的假端口一直声明 `send(goal, *, goal_uuid=None)`，所以这个漂移在真的发出 goal 之前不可见。修法：给安装版端口加**关键字-only** 可选参数 `goal_uuid=None`，有值时按生产 broker（`ros_broker._send_goal`）同样的方式传给 `send_goal_async`；对既有调用方零行为变化。
+
+**仍未解决的那一个（按名记录，未定位根因）**：三处修好后，帧能构造、能被 controller 解析，但**被拒**——bound reservation 交换回来的是格式正确的 `SOGA` REJECT（极性按 `ReservationReplyStatus{ACK=0, REJECT=1}` 重读）。紧邻的握手全部成功：`SOGR` arm（generation 63614751644038757）与 `SOIA` 身份（incarnation/boot 回填进帧），说明 capability、magic/version/op、role（3）、generation、incarnation、boot 都对；解析布局由 C++ fixture 测试与安装版客户端编码器双向钉住。剩下两个**未做 A/B** 的假设：(i) `compute_goal_digest` 的 `rclcpp::Serialization<Goal>` 往返与 `rclpy.serialization.serialize_message` 不是逐字节相同 → `DENY_DIGEST_MISMATCH`；(ii) gate 已被更早的某次交换 fault-close → `DENY_CLOSED`。区分它们需要能对活 controller 逐个字段做 A/B 的探针，本轮没有做；smoke 把精确拒绝留在盘上，下一次从那开始。
+
+**同一批运行另外测到三条事实（证据，非结论）**：① **`/joint_states` 在仿真时间里约 25–38 Hz，而不是配置的 100 Hz**，于是晋级的 `max_age_s = 0.014736 s`（相机帧契约）对颈部反馈门是**边缘值**：两次运行测到 `node_clock − header.stamp` 分别 26 ms 与 8 ms，限值 14.7 ms；smoke 现在把两个时钟都写进 `neck_port.at_liveness`，让下一次的拒绝可归因。② **detector 构造占约 65–70 s**（CUDA 上的 `TimedHeadDetector.build`），这解释了本 phase 约 135 s 的耗时。③ `search_timeout_s = 0.7089 s` 被 `_drive_search` 与 `HeadSearchController.advance_deadline` 拿墙钟比较（HS-318 推断 3），整个闭环必须在约 0.7 s 墙钟内 lock——10 Hz 下约七帧；本轮没走到那一步，仍是记录在案的推断。
+
+### (e) 聚合复跑（**未重跑任何 restart**）
+
+两次裁决，唯一差别是呈现的冻结 root，各自有 Step 1 receipt：
+
+| 门 | HS-325 | HS-326 控制（旧 root `…T130437Z`） | HS-326（最新 root `…T170212Z`） |
+|---|---|---|---|
+| `exclusive_ownership` | HOLDS | HOLDS | HOLDS |
+| `runtime_identity` | HOLDS | HOLDS | HOLDS |
+| `approved_values_readback` | MISSING | MISSING | MISSING |
+| `scenario_journal` | HOLDS | HOLDS | VIOLATED（2，runtime of record） |
+| `scenario_terminals` | VIOLATED(2) | VIOLATED(2) | VIOLATED(2) |
+| `frame_cadence` | HOLDS | HOLDS | HOLDS |
+| `stop_proofs` | HOLDS | HOLDS | HOLDS |
+| `anchor_restarts` | VIOLATED(12) | VIOLATED(12) | VIOLATED(18，+6 runtime of record) |
+| **`production_smoke`** | **MISSING** | **VIOLATED(5)** | **VIOLATED(3)** |
+| `teleop_acceptance` | VIOLATED(1) | VIOLATED(1) | VIOLATED(2，+1 runtime) |
+| `missing`/`violations` | 2/15 | **1/20** | 1/27 |
+
+控制运行（`$EV/head-qualification-smoke-agg-20261002T061500Z`，声明与 HS-325 **完全相同**、只多 smoke root）是同口径对比：`production_smoke` 从 **MISSING（根本没有生产者）** 变成 **VIOLATED（journal 被消费并被引用，门按名给出 3 条实质原因 + smoke 自己的新 runtime）**，missing 从 2 项降到 **1 项**（只剩 `runtime_readback`），其余门一个没变。最新 root 的那次（`…T060000Z`）给出同样 3 条实质原因，多出来的条目是更早 receipt 与「新 runtime of record」的失配——这正是门在正确工作：那些生产者跑的是 commit `956b5b74b`/配置 `dfa0af9b…`。
+
+**当前每道门的状态（控制运行，未重跑任何 restart）**：HOLDS = `exclusive_ownership`、`runtime_identity`、`scenario_journal`、`frame_cadence`、`stop_proofs`；VIOLATED = `scenario_terminals`（HS-316 的两个场景）、`anchor_restarts`（HS-318 的 frame 身份 + 本轮测到的 `max_age_s` 边缘）、`production_smoke`（上面的 neck 保留拒绝）、`teleop_acceptance`（没有已关闭的 head-only report 可作起点）；MISSING = `approved_values_readback`（还没有 during-qualification readback）。
+
+**受保护产物**：待批准 bundle `$CAMPAIGN/head-search-calibration-20261001T160314Z/head-search-calibration-bundle.json` **开工与收工均 `0563bada4fa6c8017ccc3b91118069412508269261338411f736c1bce5d04c01`**（六次真实运行的 provenance 文件里逐次记录 before/after，全部相同）；已批准 bundle `e21899c2…` 未变；`head_search_v2.json` **`3fb9f276…` 前后相同**；未跑 `verify-promoted-config`、未写任何 approval 字段、未晋级。
+
+**提交**：`<commit>`（`feat: production smoke journal through the owned stack (RED->GREEN)`，9 个文件：2 新增（新模块 + 新测试）+ 4 源码改动 + 2 测试改动 + 本条目所在的账本；普通 `git commit`）。
+
+**证据（全部保留，未删除）**：`$CAMPAIGN/production-smoke-20261002T050000Z/`（本轮 of record）与八次被取代尝试 `…T{010000,021500,023000,024500,030000,033000,040000,043000}Z*`（每一次的拒绝都是其后那处修复的证据）；`$EV/head-qualification-smoke-ownership-20261002T050000Z/exclusive-ownership.json`；`$EV/head-qualification-smoke-agg-20261002T060000Z/qualification-verdict.json`（最新 root）与 `$EV/head-qualification-smoke-agg-20261002T061500Z/qualification-verdict.json`（控制）及各自 ownership receipt；`$EV/scratch/pytest-xdist8-hs326-demo-suite.DyTKU26R`（全量 + `node-delta-vs-hs325.txt`）；`<worktree>/scratch/hs326/{env.sh,run-tests.sh,run-fullsuite.sh,real-run.sh,aggregate.sh,regression-files.txt,logs/,pyshim}`。审计更新：`$EV/reviews/task14-gap-audit.md` §11。工作树 `git status --porcelain`：6 个修改 + 2 个新增（源码/测试）+ 测试运行留下的未跟踪 scratch（`broker-27c83b/`、`broker-997d39/`、`ipc/`、`runs/`）——**未删除、未提交**，与 HS-325 留下的 `?? runs/` 同类。开工前观察到 HS-325 遗留的孤儿进程 `ros_child --socket-root scratch/hs325/tmp-probe/probe-r6hsqjdg`（pid 3755080，ppid 1，state S，0% CPU，无 ROS 节点、无 GPU），**不是本轮产物，未处理**，仅记录。

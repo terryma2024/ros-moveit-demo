@@ -58,6 +58,7 @@ import struct
 import subprocess
 import sys
 import time
+import traceback
 import uuid
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -1491,9 +1492,24 @@ class ReservedControllerPort:
 
 
 def _default_serialize(goal) -> bytes:
-    from rclpy.serialization import serialize_message
+    """The wire bytes the controller digests: the ``FollowJointTrajectory`` goal, not the goal dict.
 
-    return serialize_message(goal)
+    ``RosNeckSearchPort`` hands its port a *goal dict*; ``RosControllerPort`` turns that dict into a
+    ``control_msgs/FollowJointTrajectory`` goal with ``trajectory_message`` and sends it under a caller
+    supplied action goal UUID. The bound reservation must cover exactly the bytes that arrive at the
+    controller, and the installed ``ControllerReservationClient.reserve`` serialises the *message* (it
+    type-checks it), so the same construction is used here. Serialising the dict raised
+    ``AttributeError: type object 'type' has no attribute '_TYPE_SUPPORT'`` the first time a goal was
+    really sent - which no restart had ever done, because no frame was ever accepted.
+    """
+
+    from control_msgs.action import FollowJointTrajectory
+    from rclpy.serialization import serialize_message
+    from so101_demo.adapters.act.ros_execution import trajectory_message
+
+    message = FollowJointTrajectory.Goal()
+    message.trajectory = trajectory_message(goal)
+    return serialize_message(message)
 
 
 def _new_goal_uuid():
@@ -1777,6 +1793,63 @@ def _stamp_s(message) -> float:
     return float(message.header.stamp.sec) + float(message.header.stamp.nanosec) * 1e-9
 
 
+def flight_node_overrides():
+    """The flight node's clock is the **stack's** clock, because the production ports compare both.
+
+    ``RosNeckSearchPort.command_neck`` judges the neck feedback with two ages: the wall-clock age of the
+    last ``/joint_states`` receipt, and ``node.get_clock().now() - message.header.stamp``. The stack's own
+    nodes run on the simulator's clock (``use_sim_time: true``, which is what
+    ``head_search_transport_measurement`` sets on its node and what the ACT composition sets on
+    ``ros2_control_node``), so a flight node left on the wall clock sees a ``sim_time`` stamp about
+    279 000 s in the past and refuses every neck command with ``NECK_FEEDBACK_STALE``. The smoke found
+    this: the restart phase never reached it only because its frames were refused before any motion.
+    """
+
+    from rclpy.parameter import Parameter
+
+    return [Parameter("use_sim_time", value=True)]
+
+
+def flight_node_name(anchor: str) -> str:
+    """One node name per anchor, so a graph probe can tell this phase's participant from the stack's."""
+
+    return f"head_search_restart_{anchor}"
+
+
+def neck_port_diagnostic(neck, node, now) -> dict:
+    """The two ages ``RosNeckSearchPort.command_neck`` judges a command with, read before it is asked.
+
+    The port refuses a neck command when the wall-clock age of its last ``/joint_states`` receipt exceeds
+    ``max_age_s``, and again when the *node clock's* age of that message's header stamp does. The two are
+    different clocks, so a flight that never commands cannot tell which one refused it; this records both,
+    the node's own clock reading and the effective ``use_sim_time``, in the flight's evidence.
+    """
+
+    node_now = node.get_clock().now().nanoseconds * 1e-9
+    received = getattr(neck, "_received", None)
+    stamp = getattr(neck, "_stamp", None)
+    try:
+        use_sim_time = bool(node.get_parameter("use_sim_time").value)
+    except Exception:  # noqa: BLE001 - a node without the parameter is exactly what this records
+        use_sim_time = None
+    return {
+        "node_name": node.get_name(),
+        "use_sim_time": use_sim_time,
+        "monotonic_now_s": now,
+        "node_clock_s": node_now,
+        "feedback_received_monotonic_s": received,
+        "feedback_wall_age_s": None if received is None else now - received,
+        "feedback_stamp_sim_s": stamp,
+        "feedback_clock_age_s": None if stamp is None else node_now - stamp,
+        "max_age_s": getattr(neck, "max_age", None),
+        "definition": (
+            "command_neck refuses when the port's last /joint_states receipt is older than max_age_s on "
+            "the wall clock, or when node.get_clock().now() - message.header.stamp exceeds max_age_s; the "
+            "stack's own nodes run on the simulator's clock, so the flight node must too"
+        ),
+    }
+
+
 def measure_and_search(
     *,
     anchor: str,
@@ -1824,7 +1897,7 @@ def measure_and_search(
 
     observations: dict = {}
     rclpy.init()
-    node = Node(f"head_search_restart_{anchor}")
+    node = Node(flight_node_name(anchor), parameter_overrides=flight_node_overrides())
     executor = MultiThreadedExecutor(num_threads=4)
     executor.add_node(node)
     spinner = threading.Thread(target=executor.spin, daemon=True, name=f"restart-{anchor}-spin")
@@ -2029,6 +2102,29 @@ def measure_and_search(
             ),
         }
         log(f"adapter liveness: {observations['adapter_liveness']}")
+        # the two clocks a neck command is judged with, recorded before the first command is attempted
+        observations["neck_port"] = {
+            "at_liveness": neck_port_diagnostic(neck, node, clock()),
+            "last_joint_stamp_sim_s": joints[-1]["sim_s"] if joints else None,
+            "last_joint_wall_s": joints[-1]["wall_s"] if joints else None,
+            "probe_joint_count": len(joints),
+            "probe_joint_rate_hz": (
+                None
+                if len(joints) < 2
+                else (len(joints) - 1) / max(1e-9, joints[-1]["wall_s"] - joints[0]["wall_s"])
+            ),
+            "probe_joint_sim_period_s": (
+                None
+                if len(joints) < 2
+                else (joints[-1]["sim_s"] - joints[0]["sim_s"]) / (len(joints) - 1)
+            ),
+            "probe_joint_sim_rate_hz": (
+                None
+                if len(joints) < 2 or joints[-1]["sim_s"] <= joints[0]["sim_s"]
+                else (len(joints) - 1) / (joints[-1]["sim_s"] - joints[0]["sim_s"])
+            ),
+        }
+        log(f"neck port clocks: {observations['neck_port']['at_liveness']}")
         if not adapter.images and images:
             raise _refuse(
                 RESTART_ADAPTER_SILENT,
@@ -2084,6 +2180,18 @@ def measure_and_search(
             ][:16],
             "motion_corridor_rad": list(motion_corridor_rad(geometry_seal=seal)),
             "fine_corridor_rad": list(fine_corridor_rad(geometry_seal=seal)),
+            "commands": {
+                **command_targets(consumed, initial_target_rad=float(config["search_start_rad"])),
+                "corridor_rad": list(fine_corridor_rad(geometry_seal=seal)),
+                "required_search_domain_rad": list(
+                    (controller.plan.required_domain_rad if controller.plan else ())
+                ),
+                "corridor_definition": (
+                    "the corridor is the seal's own lock_valid_neck_rad (fine_corridor_rad); the required "
+                    "search domain is reported beside it because the seal's own anchor start lies outside "
+                    "it (HS-316), and the anchor's declared start is not an unbounded command"
+                ),
+            },
         }
         observations["lock"] = {
             "consecutive_frames": int(controller.lock_count),
@@ -2346,6 +2454,7 @@ def _drive_search(*, adapter, controller, consumed, values, clock, sleep, warn) 
                 terminal = {
                     "status": "RESTART_SEARCH_TICK_FAILED",
                     "detail": repr(error),
+                    "traceback": traceback.format_exc(),
                     "neck_target_rad": None,
                     "stop": True,
                 }
@@ -2395,6 +2504,66 @@ def _accepted_frames(consumed, *, detector, clock) -> list[dict]:
             }
         )
     return rows
+
+
+def command_targets(consumed, *, initial_target_rad) -> dict:
+    """Every neck target the production controller really commanded, re-derived from its own decisions.
+
+    A bounded command is a claim about what was commanded, so it has to be a record rather than an
+    assertion: each consumed frame carries the controller's own decision, and this collapses the ticks
+    that repeat one target into a single record with the count and the statuses that produced it. The
+    first record is the target the controller was reset to, which the neck is already holding.
+    """
+
+    targets: list[dict] = [
+        {
+            "index": 0,
+            "target_rad": float(initial_target_rad),
+            "statuses": [],
+            "ticks": 0,
+            "first_frame_sim_s": None,
+            "kind": "start",
+        }
+    ]
+    for entry in consumed:
+        decision = entry.get("decision") if isinstance(entry, Mapping) else None
+        decision = decision if isinstance(decision, Mapping) else {}
+        target = decision.get("neck_target_rad")
+        if type(target) not in (int, float) or not math.isfinite(float(target)):
+            continue
+        target = float(target)
+        status = decision.get("status")
+        current = targets[-1]
+        if abs(target - current["target_rad"]) <= 1e-12:
+            current["ticks"] += 1
+            if status is not None and status not in current["statuses"]:
+                current["statuses"].append(status)
+            if current["first_frame_sim_s"] is None:
+                frame = entry.get("frame") if isinstance(entry.get("frame"), Mapping) else {}
+                current["first_frame_sim_s"] = frame.get("sim_time_s")
+            continue
+        frame = entry.get("frame") if isinstance(entry.get("frame"), Mapping) else {}
+        targets.append(
+            {
+                "index": len(targets),
+                "target_rad": target,
+                "statuses": [] if status is None else [status],
+                "ticks": 1,
+                "first_frame_sim_s": frame.get("sim_time_s"),
+                "kind": "hold" if decision.get("stop") is True else "command",
+            }
+        )
+    return {
+        "initial_target_rad": float(initial_target_rad),
+        "targets": targets,
+        "distinct_target_count": len(targets),
+        "tick_count": sum(int(record["ticks"]) for record in targets),
+        "definition": (
+            "one record per distinct neck target the production controller's own decisions commanded, "
+            "in the order it commanded them, with the ticks that repeated it; the first record is the "
+            "target the controller was reset to"
+        ),
+    }
 
 
 def _wrong_locks(*, terminal: Mapping, frames: Sequence[Mapping]) -> int:
