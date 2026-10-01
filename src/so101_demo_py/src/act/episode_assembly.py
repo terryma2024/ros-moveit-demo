@@ -20,7 +20,7 @@ from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
-           "ProductionProducer", "assemble_episode_capture", "episode_audit_pair",
+           "ProductionProducer", "assemble_episode_capture", "begin_episode", "episode_audit_pair",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
 
@@ -465,3 +465,17 @@ def physical_audit_from_observation(observation, *, release_epoch: int, release_
                            "attached": bool(observation.moveit_attached), "paused": observation.paused},
         "controller_state": dict(controller_state),
     }
+
+
+def begin_episode(recorder, options, *, start_s: float) -> bool:
+    """Begin the episode at the run's own start instant, and say whether there was anything to begin.
+
+    Kept as a function rather than inlined at the call site so the step can be tested without standing up the state
+    machine: what it does is narrow - hand the recorder the instant the episode starts at - and what it must not do is
+    guess that instant. Which instant that is belongs to the run (`options` and the reset boundary it was given), and a
+    run that records nothing passes no recorder, which is a normal state rather than a failure.
+    """
+    if recorder is None:
+        return False
+    recorder.start(float(start_s))
+    return True

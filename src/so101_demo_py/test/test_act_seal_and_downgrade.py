@@ -596,3 +596,25 @@ def test_the_episode_process_can_be_given_a_recorder():
         "run_dynamic_execute must accept the recorder the episode records through, the way it already accepts the "
         "profiler and the event emitter")
     assert signature.parameters["episode_recorder"].default is None
+
+
+def test_beginning_an_episode_needs_the_runs_own_identity():
+    """RED first: the episode's start instant and identity come from the options the run was given (CP-2862 step 1)."""
+    from so101_demo.act.episode_assembly import begin_episode
+
+    class Recorder:
+        def __init__(self):
+            self.started = []
+
+        def start(self, start_s):
+            self.started.append(start_s)
+
+    class Options:
+        session_id = "session-1"
+        expected_reset_epoch = 2
+
+    recorder = Recorder()
+    assert begin_episode(recorder, Options(), start_s=12.5) is True
+    assert recorder.started == [12.5]
+    # a run with nothing to record through is not an error, and is reported rather than assumed
+    assert begin_episode(None, Options(), start_s=12.5) is False
