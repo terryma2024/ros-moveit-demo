@@ -43802,3 +43802,18 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F13's only remaining item is scene production, which waits on the owner's CP-2285 ruling.
 - F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
 - F12 two of three; F13 three of four with the third two-sided; HEAD 34d55aafc; goal paused.
+
+## CP-2327 - F11's two probes: one fixture measured, the other's window is diagnostic-shaped
+
+- The self-consistent fixture reported again exactly: window 1.0/1.2 against five rows all at 1.1, so aligning its
+- two endpoints to 1.1 is right - and with the derivation in place that fixture seals.
+- The relabelled-coverage fixture then raised KeyError: 'first_command_s' while being probed: complete_audit's
+- window is diagnostic-shaped, so it has neither the formal field set nor those endpoints. That explains the two
+- earlier failures precisely - applying the derivation with the shared _window() helper changed the window this
+- fixture REWRITES INTO its manifest, and the readback (which decides formality from source.json) then judged that
+- rewritten window against the rows and refused it, which is AUDIT_WINDOW_INVALID and not the change being wrong.
+- The one probe left is therefore narrow: print the relabelled fixture's physics row times alone, without touching
+- its window, then give each fixture the endpoints its own history supports. Both probes together cost one run.
+- Reverted (probe withdrawn); the audit suite is green (72 passed).
+- F1 and F14 closed; F3 closed; F13 three of four; F11's divergence fixed with this item one probe from alignment;
+- F5's regression fixed; F12 two of three; HEAD 058912422; goal paused.
