@@ -51905,3 +51905,33 @@ grid then follows the frames' stamps - which are already the 0.1 steps the recor
 
 This is the seventh fact this one test has surfaced, and the first that is about the *flow* rather than about a document:
 frames queue, references release.
+
+
+## CP-2722 — The capture assembles the audit from three sources, so neither audit shape works alone
+
+```python
+            physical = self.physical_audit(at_s)
+        audit = dict(physical)
+        audit.update(source_audit)
+        audit.update({"head_acquisition_id": head.acquisition_id, ...
+```
+
+So the audit the recorder receives is the union of the **physical** half (from the injected `physical_audit`), the
+**source** half (from the sampler's own `source_audit`), and the capture's own identifiers. The recorder then requires
+that union to be exactly its sixteen `_AUDIT_KEYS`:
+
+```
+session_id, attempt_id, reset_epoch, release_epoch, release_event, release_time_s, physical_stamps,
+phase, reference_time_s, reference_source, reference_positions, source_stamps,
+mujoco_truth, contacts, planning_scene, controller_state
+```
+
+which is why neither shape I tried works on its own: the five-key `physical_audit` in this harness lacks the identifiers
+the capture does not add, and the recorder suite's full sixteen-key `audit()` duplicates what the capture adds (and lacks
+`head_acquisition_id`/`wrist_acquisition_id`, which the capture supplies). The next read is the rest of that `update` -
+its complete key list - and what `FakeSampler.sample_with_audit` returns as `source_audit`, since together they and the
+physical half must sum to exactly the recorder's set.
+
+Test reverted, worktree clean at 35 entries. This is the eighth fact this one correction has surfaced, and it is the one
+that explains why the correction-2 test passed with a FAILED outcome: with a five-key physical half and no references, no
+row was ever written at all, so no audit ever had to satisfy the recorder's schema.
