@@ -47574,3 +47574,24 @@ input roots, and the uid - which the composition already holds as `self.spec.req
 The remaining detail is the spawn site: where `command` is handed to the launcher and what shape it expects (argv list
 versus a small record), which is the next read. After that the approved route is complete - a builder returning that
 command - and the composition can be driven with one worker, no container, and every real check intact.
+
+
+## CP-2513 — The builder returns an argv list; the contract is complete
+
+The spawn sites settle the shape: at 3443 the worker launcher receives `"worker", command,
+environment=dict(resources.environment)` and at 3789 the broker launcher receives `command` in the same manner. A
+command handed to a process launcher beside an environment is an **argv list**, which matches the name of the default
+builder `container_run_argv`. So the contract for the approved container-free route is:
+
+    broker_command_builder(composition) -> [<executable>, <arg>, ...]
+
+built from what the composition already holds - `spec.request.evidence_root`, `broker_runtime_root`,
+`runtime_ipc_root`, `broker_input_root`, and the uid - with no image id, no detector weights and no GPU groups, since
+those exist only for the containerised default. That is a small function in `cli/act_first_episode.py`, passed to the
+composition as `broker_command_builder=...`, and it closes the route the user approved without forking the broker, the
+scheduler or the recorder.
+
+What the function's executable should be is the last open question: the broker's own entry point in
+`so101_demo.cli.parallel_perception_broker`, which the default branch imports for `container_run_argv` and which must
+therefore also expose a plain-process entry - one grep of that module answers it, and then the `run` subcommand can be
+finished.
