@@ -19,7 +19,7 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["ProductionProducer", "assemble_episode_capture"]
+__all__ = ["ProductionProducer", "assemble_episode_capture", "episode_audit_pair"]
 
 
 def assemble_episode_capture(
@@ -126,3 +126,19 @@ class ProductionProducer:
             self._pushed += 1
         observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
         return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+
+def episode_audit_pair(episode_root: Path) -> tuple[Path, Path]:
+    """The manifest and scope a sealed episode's audit lives at, given the episode's own directory.
+
+    The audit writer roots at the episode directory and puts its document at `<root>/audit/`, which is where the
+    recorder, `verify_episode_seal` and the endpoint QC all resolve it by convention - measured, not assumed (CP-2768).
+    Callers that seal an episode and then hand it to a store or a verifier need exactly this pair, and nothing about it
+    is obvious from either side, so it lives here beside the seam rather than in each of them.
+
+    Note the phase: a store renames `working/` to `sealed/` when it publishes, so a caller verifying *before* the
+    publish uses the working path and one verifying *after* uses the published one (CP-2777) - this function names the
+    pair inside whichever root it is given, and the caller supplies the right one.
+    """
+    audit_dir = Path(episode_root) / "audit"
+    return audit_dir / "audit-manifest.json", audit_dir / "source.json"

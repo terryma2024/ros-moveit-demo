@@ -15,7 +15,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import ProductionProducer, assemble_episode_capture
+from so101_demo.act.episode_assembly import (ProductionProducer, assemble_episode_capture,
+                                              episode_audit_pair)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -253,3 +254,11 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
     verdict = json.loads(completed.stdout.strip().splitlines()[-1])
     assert verdict["checks"] == ["endpoint_pose"]
     assert verdict["status"] in ("PASS", "FAIL", "INCOMPLETE")
+
+
+def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
+    """The convention the store, the seal's verification and the endpoint QC all share (CP-2768), named once."""
+    episode_root = tmp_path / "episode"
+    manifest, scope = episode_audit_pair(episode_root)
+    assert manifest == episode_root / "audit" / "audit-manifest.json"
+    assert scope == episode_root / "audit" / "source.json"
