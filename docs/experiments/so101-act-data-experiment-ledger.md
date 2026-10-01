@@ -51577,3 +51577,29 @@ That is worth naming as the mistake it is: two rounds of reasoning about *why* a
 using hid which path it was. The next attempt prints the error's path in full before theorising about it - and the
 constructor question is now closed anyway, since the writer takes the root verbatim and the recorder tolerates an
 existing directory, so the only open item is the path itself.
+
+
+## CP-2706 — The probe: the writer takes a fresh root happily and creates both it and its audit directory
+
+A ten-line probe, with nothing truncated:
+
+```
+base exists: True | root exists before: False
+writer ok; root now: True | audit dir: True
+```
+
+So `EpisodeAuditWriter(fresh_base / "episode", scope, identity, {"inputs_sha256": "a" * 64})` **succeeds**, and it creates
+**both** the root and `<root>/audit/`. There is no `FileExistsError` in the writer's contract at all - which means the
+one my test hit came from its own context, most plausibly the recorder (which also creates a root) rather than the
+writer.
+
+And it settles the layout: with the writer given `root`, the manifest is at **`<root>/audit/audit-manifest.json`** - which
+is exactly where my **first** attempt looked for it, before I "corrected" myself twice. So the correct form is:
+
+- **writer first**, given `root`;
+- the manifest at **`<root>/audit/audit-manifest.json`**;
+- **recorder second**, given the same `root` - and that is the one thing still to confirm, since the recorder is the
+  remaining candidate for the `FileExistsError`.
+
+Three attempts, and the shape that was right at the first try is the one the evidence now supports: the two "fixes" I
+applied were both corrections to things that were not broken.
