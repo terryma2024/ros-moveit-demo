@@ -46162,3 +46162,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   choice should follow whichever keeps the live evidence closest to the production path the plan names.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 24e000117; goal active.
+
+
+## CP-2445 — The composition also stands up a broker, so a live run needs a real environment
+
+- Reading past the coordinator in `ProductionBatchComposition`: it builds `self.results = _ArtifactResults(worker_roots,
+  spec.request.run_mode)`, consults `spec.resume`, and then - for every run mode except `RunMode.DRY_RUN` - prepares a
+  **broker** with its own spec path, its own prior-generation handling and an input root under
+  `evidence_root / "broker-inputs"`. So a production episode is not one process: it is a coordinator, a broker and at
+  least one worker, the last two being separate processes that need a live MuJoCo/ROS environment.
+- That is consistent with everything the plan says about reusing one approved stack, and with this session's
+  reconnaissance at round 470: nothing is running now, so a live run has to start that environment **once** - and the
+  honest next step is a launch plan rather than more code: identify the repository's approved way to bring up the
+  MuJoCo stack (the launch files and entries `so101-dev` routes to), start it once, record its argv, logs and real rc
+  under the new LIVE_ROOT, and only then drive the composition.
+- Two constraints carry over unchanged: no second stack may be started at any point, and the existing tmux sessions
+  belonging to the user are not mine to touch. The run's own evidence directory is the place for every log this
+  produces.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end (inspect, prepare, preflight rc=0; four suites 236 passed). HEAD ca3220771; goal active.
