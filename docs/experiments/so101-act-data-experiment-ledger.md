@@ -46466,3 +46466,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   placeholders that would imply a detector or a container was involved.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 84fe4b5f3; goal active.
+
+
+## CP-2460 — Those four fields are config-derived, not invented
+
+- Read their uses: `grounded_manifest_sha256` is verified against the worker's manifest at 596, echoed into the
+  worker spec at 746 and into the broker spec at 2999, and - decisively - **checked against the config itself** at
+  1261 (`options.grounded_manifest_sha256 != config.grounded_sam_manifest_sha256`), with `yolo_weights_sha256`
+  appearing beside it in the same broker spec at 2998. So these values are not free inputs at all: the frozen runtime
+  configuration already carries the grounded-SAM manifest digest and the detector's identity, and the specification is
+  expected to agree with it.
+- That removes CP-2459's worry: the "no frozen role" observation was about the twelve **input roles**, and these
+  fields come from the **config** instead - a document this task already froze, parsed and bound into `inputs_sha256`.
+  So filling them means reading them out of the same frozen runtime document the composition is already being handed,
+  not inventing anything, and the honest-absence route is not needed for them.
+- `broker_image` remains the one field with no source anywhere (CP-2421) - and for a headless MuJoCo-only stack there is
+  no broker container to name - so it is the single value that has to be stated as absent in the run's record rather
+  than derived.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 949b09780; goal active.
