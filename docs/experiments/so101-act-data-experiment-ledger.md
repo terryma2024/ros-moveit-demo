@@ -43718,3 +43718,90 @@ untracked、未纳入提交，列为删除候选。
 工具链 `$EV/head-toolchain-20261001T121042Z`、`$EV/head-toolchain-20261001T121911Z`、`$EV/scratch/pytest-xdist8-hs311-suite.fa18958f`、
 `$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-311 节）、工作树 `scratch/hs311/`（env/common/runner 脚本、pyshim、pristine、logs、tmp*、regression-files.txt）、
 工作树 `runs/`（Ultralytics 输出，605 目录）。以上**均为删除候选，未删除**；HS-300..310 的产物只读引用，未改动。
+
+## HS-312 — 11 项 measured 参数有**运行时 readback**：构造消费该值的生产组件并记录观测，17/17 全部 `verified:true`；**未重签、未晋级、pending bundle 字节未变**
+
+**提交**：`630c2237f`（feat，普通 `git commit`，rc=0，RED→GREEN）。**未重跑**任何测量、**未启动** ROS/MuJoCo/CUDA detector、**未改** pending run 目录、sealed 生产配置或任何 frozen 候选。
+环境沿用 HS-311 的 `$EV/head-toolchain-20261001T121911Z`（`--symlink-install`：`$T/build/so101_demo_py/so101_demo` → 本 worktree `src/so101_demo_py/src`，
+所以新模块**无需重建**即为安装代码；provenance 里 `readlink -f` 留证）。
+
+### (a) readback entry：`so101_demo.act.head_search_measured_readback.observe_measured_readbacks`
+
+`observe_measured_readbacks(*, values, configuration, controller_factory=None, neck_port_factory=None, stop_criterion_factory=None) -> {name: readback}`。
+`values` 是调用方要证明的 measured 参数子集（phase 6 问自己的 6 个，phase 7 问自己的 5 个），`configuration` 是运行控制器被构造用的平面配置；
+measured 键覆盖其上的 8 个 controller 键，其余键保持声明值。**每个值都由"用记录值构造生产组件、再读组件自己代码读的那一项"得到**：
+
+| 组 | 安装版组件 | 观测项 |
+| --- | --- | --- |
+| 8 个 controller 键 | `so101_demo.act.search.HeadSearchController` | `controller.config[name]`；`coarse_step_rad` 另读 `plan.coarse_step_rad`（bounded stop plan 实际用的步长） |
+| `submit_lead_s` / `stop_latency_s` / `max_age_s` | `so101_demo.adapters.act.ros_neck.RosNeckSearchPort`（harness 只替 transport、broker、`goal_duration_s`、command_guard，全部记进 readback 的 `harness`） | `.lead` / `.stop_timeout` / `.max_age` |
+| `stop_velocity_rad_s` / `max_age_s` | `so101_demo.adapters.act.ros_execution.RosControllerPort`（经 `head_search_stop_measurement.controller_stop_criterion`，与 HS-304..308 同一个 harness） | `.stop_velocity` / `.max_age` |
+
+三条 clock 阈值另有**精确边界行为观测**（不是采样统计）：`search_timeout_s` 在恰好阈值处 `SEARCH_TIMEOUT` 而 `nextafter(t,0)` 不是；
+`max_age_s` 恰好等于时判 fresh、`nextafter(age,inf)` 判 `INPUT_STALE`；`max_skew_s` 同法用帧/反馈 stamp 之差。记录形状：
+`{observed_value, observation:"constructed_production_component"|"not_observable", verified, component, source, configuration, configuration_sha256, also_observed?, behavioural?, harness?, reason?}`。
+两条诚实规则：**构造出来但持有别的值** → 记录实际观测值（`verified:false`），phase 照旧以 `CAL_EFFECTIVE_VALUE_MISMATCH` 拒绝；
+**构造不出来** → 记 `not_observable` + 原样异常文本 + 记录值，绝不编造读数（某个值的任一消费者没被问到，就不给 proof）。
+
+**接线**：phase 6/7/coarse-step 的 `_readback` 见 `OBSERVED_OBSERVATIONS` 即**保留调用方自己的 observation/verified**（只有"纯报告"才标 `reported_by_caller`）；
+`CalibrationPhaseInputs.readback_observer`（新字段，缺省 `None` = 旧行为）；run 的 phase 6/7 runner 先 `compute()` 一次（不写文件）拿到值，观测后**再跑一次**该 phase 并落盘，
+所以 `CAL_EFFECTIVE_VALUE_MISMATCH` 仍是 phase 自己的检查；CLI 的 `_phase_inputs` 无条件传 `observe_measured_readbacks`（plan §2b 的默认行为）。
+
+### (b) demonstration：`$CAMPAIGN/readback-demonstration-20261001T124726Z/`
+
+脚本 `scratch/hs312/demonstrate_readback.py`，runner `scratch/hs312/run-demonstration.sh`。只读 run-of-record 的**声明输入**（逐字解析其 provenance 里的 `run` 命令行），
+不写 run 目录。步骤与结果：phase 2/6/7 用安装版**重算**并与 run 已写文档逐值相同（`recomputation_reproduces_the_run` 三项全 true；
+phase 2 必须重算而不能读回其文件，因为写盘用 `sort_keys=True`，而 phase 6 的 val-sweep 检查比较 anchor **顺序**，读回会得到另一顺序）；
+11 项观测后带 readback 重跑 phase 6/7；phase 8 用 run 自己的 `--bundle-inputs`（几何/感知 6 块 + runtime_identity + 4 个 also_recorded）、
+`calibration-inputs.json` 的 manifest（6 个 controlled dependency）与 phase 7 的 frame contract **在内存里**装配（`output_dir=None`，**不写 bundle**）。
+
+**11/11 verified**（观测来源见上表；`stop_velocity_rad_s` → `stop_criterion.stop_velocity`、`submit_lead_s` → `neck_port.lead`、`stop_latency_s` → `neck_port.stop_timeout`，
+其余 8 项 → `HeadSearchController(...).config[...]`，`search_timeout_s`/`max_age_s`/`max_skew_s` 另有 behavioural 节）。
+加上 run-of-record 里 phase 2/3 生产者已 `verified:true` 的 6 项，**17/17 全部有 startup readback 证明**。
+内存 bundle canonical sha256 `3d088a60…` vs pending `f85b78f6…`；**差异只在 `parameters.<名字>.startup_readback.*`**（85 条路径，全部以 `parameters.` 开头，
+没有一条落在 `parameters.`/`startup_readback` 之外），即 11 个 `verified` 由 false→true、`observation` 由 `declared_by_phase_6/7`→`constructed_production_component`、
+去掉 `detail` 并加上 `component/source/configuration/configuration_sha256/also_observed/behavioural/harness`。**没有产出任何 bundle 文件。**
+产物：`readback-demonstration.json`（48dc19e7…）、`-receipt.json`（3be6e2e5…，记 pending bundle 前后同摘要、`files_written_under_the_run_of_record: []`、`cuda_detector_used:false`）、
+`search-parameters-readback.json`（d4cd0672…）、`timing-stop-parameters-readback.json`（6d495e7d…）、`measured-readback-observations.json`（832fa573…），
+外加 `….console.log`、`….provenance.txt`（含 `rc=0`、工具链 commit、`readlink -f`、前后进程/GPU 检查、逐文件 digest）。
+
+**pending bundle 文件 sha256**：工作开始前 `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974`（86896 B），
+demonstration 之后仍为同值（receipt 的 `unmodified:true` + 独立 `sha256sum` 复核）。
+
+### (c) 门禁
+
+RED（`git archive HEAD~1` → `scratch/hs312/pristine` + 本轮 5 个测试文件，`run-red.sh` 独立 shim）：`test_act_head_search_measured_readback.py`
+rc=2 / 1 collection error（`ModuleNotFoundError: so101_demo.act.head_search_measured_readback`）、`test_act_head_search_search_params.py` **2 failed**、
+`test_act_head_search_timing_params.py` **2 failed**、`test_act_head_search_calibration_run_orchestration.py` **25 failed**（`CalibrationPhaseInputs.__init__() got an unexpected
+keyword argument 'readback_observer'`，因为这个共享 fixture 被所有 run 用例使用）、`test_head_search_calibration_cli.py` **1 failed**（日志 `scratch/hs312/logs/red-*.log`）。
+GREEN：**15 / 45 / 45 / 32 / 74** 全 rc=0（`scratch/hs312/logs/green-*.log`）。回归（HS-288..311 的 32 个 phase/CLI/calibration 文件 + 本轮新文件，`-n 8`）**814 passed, rc=0**
+（HS-311 是 792，+22 = 本轮 15+2+2+1 新用例 + 既有 CLI 文件新增 3 例）。另单跑 `coarse_step_measurement`/`camera_measurement`/`bundle_inputs`(+CLI) **129 passed, rc=0**。
+全量 `src/so101_demo_py/test`（8 workers，`$EV/scratch/pytest-xdist8-hs312-suite.2335665f`，TMPDIR/TMP/TEMP 均为该 run dir 下新建 `tmp`，`tempfile.gettempdir()` 落在其中）
+**175 failed / 6300 passed / 152 skipped / 86 errors, rc=1**，与基线 `pytest-xdist8-hs311-suite.fa18958f` **节点级 diff 0 行（261 节点相同）、0 新增失败**，
++22 passed 恰为本轮新增用例；耗时 137 s（基线 76 s，机器负载差异，非断言差异）。运行与测试后 `ps` 无 ros2/MuJoCo/pytest 残留、`nvidia-smi --query-compute-apps` 为空。
+
+### 本轮声明的推断（待评审，逐条照录）
+
+① `max_age_s` 有**三个**消费者（controller / neck port / stop criterion），任一构造失败即 `verified:false` 并写明原因，即使另外两个观测到的值相同——
+"一个消费者没被问到就不给 proof"是本轮自定的偏严规则，设计文本只要求"有 readback 证明"，未规定多消费者时的合成方式。
+② `RosNeckSearchPort`/`RosControllerPort` 用 harness 替身构造（订阅 transport、broker、`goal_duration_s=1.0`、`command_guard` 恒真、readback 身份），
+理由：安装版构造函数需要它们而校准 run 没有真实 stack；这与 `head_search_stop_measurement.ControllerFeedbackTransport` 的既有做法一致（"criterion 是安装版，只有 transport 是 harness 的"），
+且全部替身逐条记进 readback 的 `harness` 字段，不冒充观测。
+③ `stop_latency_s` 的运行时归属取 `RosNeckSearchPort.stop_timeout`（`pick_place_search_binding.py:94` 就是这样把 bundle 的 `stop_latency_s` 交给 neck port 的），
+而 phase 7 的 `production_owner` 字符串写的是 `task8_measurement_formulas`；两者不冲突（前者是消费者，后者是复核算式），但 owner 文案未同步修改。
+④ `configuration` 只携带 controller 的键集（`fields()` 要求精确键集），`stop_velocity_rad_s`/`submit_lead_s`/`stop_latency_s` 不在其中，所以这三项的
+`configuration_sha256` 是**端口配置**（声明配置 + 本次 `values`）的摘要；记录里 `configuration` 字段因此按参数分两类。
+⑤ clock 阈值探针在阈值与 `search_timeout_s`/`max_age_s` 关系不成立时**跳过**并写 `skipped`（`verified:null`，不影响该值的 config 观测）；
+本 run 的 11 个值不触发跳过。
+⑥ run 的 phase 6/7 现在各**计算两次**（一次只算不写、一次带 readback 落盘），代价是纯 CPU 重复计算（run 实测未因此变慢到超时）；
+换来的好处是 mismatch 检查仍由 phase 自己拥有，而不是在 run 里复制一个码。
+⑦ 演示中 phase 2 用 `validate_head_search_calibration_geometry` 重算而非读回 `geometry-measurements.json`（见 (b) 的 anchor 顺序理由）；
+这暴露一个既有脆弱点：phase 2 文档写盘 `sort_keys=True` 后，`geometry.anchors_rad` 的键序与内存序不同，读回再喂 phase 6 会被
+`CAL_SWEEP_EVIDENCE_PARTIAL` 拒绝（顺序敏感，集合其实相同）。本轮**未修**这个既有行为（超出范围，且 run 内不经过文件往返）。
+⑧ run 的 CLI 现在**无条件**开启观测：真实 run 若观测失败会 fail-closed 停在 phase 6/7。既有 CLI 用例只走到 phase 4，未受影响。
+
+**17 值 bundle 状态**：pending bundle **未重签、未晋级、字节未变**（见 (b) 的摘要）；sealed `head_search_v2.json` 未动；未写任何 approval 字段。
+
+**本轮证据与生命周期**：`$CAMPAIGN/readback-demonstration-20261001T124726Z{,.console.log,.provenance.txt}`、
+`$EV/scratch/pytest-xdist8-hs312-suite.2335665f`、工作树 `scratch/hs312/`（env/common/runner 脚本、pyshim、pyshim-red、pristine、logs、regression-files.txt、tmp*、
+`demonstrate_readback.py`、`run-demonstration.sh`、`run-red.sh`）。以上**均为删除候选，未删除**；HS-300..311 的产物只读引用，未改动。
