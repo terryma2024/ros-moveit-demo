@@ -49,11 +49,13 @@ EMPIRICAL_AUTHORIZATION_KIND = "ACT_NONHEAD_EMPIRICAL_AUTHORIZATION"
 _ROLE_FIELDS = frozenset({"status", "candidates", "selected", "identity", "blocker"})
 _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
                               "config_sha256", "evidence_root", "roles"})
-# the amendment's freezer binds the collection mode, the endpoint policy and the development runtime into the
-# manifest as well, so the closed field set acknowledges what the writer now writes (CP-2415)
-_MANIFEST_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_commit",
-                              "config_sha256", "evidence_root", "roles", "inputs_sha256",
-                              "mode", "endpoint_policy", "runtime_policy"})
+#: every manifest carries these
+_MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source_commit",
+                                "config_sha256", "evidence_root", "roles", "inputs_sha256"})
+#: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
+#: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
+_MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy"})
+_MANIFEST_FIELDS = _MANIFEST_REQUIRED | _MANIFEST_OPTIONAL
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
 _APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation",
                         "nonhead_calibration", "user_empirical_default"})
@@ -214,7 +216,8 @@ def read_inputs_manifest(path: Path) -> dict:
         document = json.loads(Path(path).read_bytes())
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("INPUTS_MANIFEST_INVALID") from error
-    if not isinstance(document, dict) or set(document) != _MANIFEST_FIELDS:
+    if (not isinstance(document, dict) or not _MANIFEST_REQUIRED <= set(document)
+            or not set(document) <= _MANIFEST_FIELDS):
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if document["kind"] != MANIFEST_KIND or document["schema_version"] != SCHEMA_VERSION:
         raise ValueError("INPUTS_MANIFEST_INVALID")
@@ -341,8 +344,12 @@ def _verify_roles(registry: dict) -> dict:
             asserted_anchor.get(key) != value for key, value in derived_anchor.items()):
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
-    derived_resource = resource_policy_identity(payloads["runtime_config"],
-                                                payloads["collection_config"])
+    # the two resource stops come from the design's section 5.1 document when the registry's own root carries it,
+    # and an older registry whose root does not keeps the call it always had (CP-2437's guard)
+    development = Path(registry["source_root"]) / DEVELOPMENT_RUNTIME_FILE
+    derived_resource = resource_policy_identity(
+        payloads["runtime_config"], payloads["collection_config"],
+        **({"development_runtime": development} if development.is_file() else {}))
     if (registry["roles"]["resource_thresholds"]["selected"]["sha256"]
             != derived_resource["runtime_config_sha256"]):
         # the resource role must own the verified runtime config, not an unrelated file
@@ -848,9 +855,10 @@ def _inspect_resource_thresholds(root: Path) -> dict:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED", "runtime/collection config absent",
                      None, candidates)
     try:
+        development = Path(root) / DEVELOPMENT_RUNTIME_FILE
         identity = resource_policy_identity(
             runtime.read_bytes(), collection.read_bytes(),
-            development_runtime=Path(root) / DEVELOPMENT_RUNTIME_FILE)
+            **({"development_runtime": development} if development.is_file() else {}))
     except ValueError as error:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
                      f"no approved resource stop policy: {error}", None, candidates)
