@@ -47541,3 +47541,21 @@ What the next read must establish is the builder's contract - how it is passed i
 command (argv list, environment, working directory) it must return - after which the single-episode run can supply it
 and the approved route is complete. This also satisfies the design's section 4 wording precisely: the real Coordinator,
 Worker and result interfaces, one worker, and a broker started without a container.
+
+
+## CP-2511 — The container-free route is first-class in the code, and the checkpoint is mid-flight
+
+Two readings. First, the composition's constructor names the hook directly: `broker_command_builder=None` at 2642,
+stored at 2776, used at 3106, and - decisively - `self._uses_production_broker_container = broker_command_builder is
+None` at 2682. The composition therefore **models** the container-free case as a supported mode rather than an
+exception to be hacked in, which means the user's approval can be carried out by supplying a builder and nothing else:
+no fork of the broker, no second scheduler, and the three image gates stay where they belong, in the default branch
+that this configuration simply does not take.
+
+Second, the K2 Codex checkpoint is still working: its window `k2-review` is alive and the log stands at 3567 lines
+with **no** `EXIT=` marker yet. Per the review-period discipline that is the only thing worth observing - the session
+is alive, the marker is absent, and the verdict is collected when it lands rather than inferred from successive tails.
+
+Next for the approved route: read what a builder must return (the command's shape, where `_start_broker` consumes it)
+and then have the single-episode `run` supply a plain-process broker command, which closes the container-free path and
+lets the composition be driven for real.
