@@ -44462,3 +44462,23 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two six-of-ten clauses
 - cleared and four guards left to print; HEAD cc5cf9977; goal active.
+
+## CP-2361 - The four guards read one by one, and each appears to hold too
+
+- Guard 1, the file reads: all three files exist (the counts 10/11/1 came from them), so no.
+- Guard 2, the completion list: eleven events are nine phase_completes plus the release plus one more, which is the
+- runner's terminal event (run_complete or a sibling) and not a phase_complete, so the list is exactly the nine
+- registered phases in order with integer steps. Holds.
+- Guard 3, the per-kind loop: the port stamps each row from its own incrementing step and each kind's times
+- therefore rise, typed and non-decreasing. Holds.
+- Guard 4, the epoch clause - and this read produced a real datum: the port's run_phase passes a literal 1 to
+- _evidence for its phases, so every physics row declares epoch 1, while the runner's release event names the epoch
+- it entered, which is initial 1 plus one, so 2. The writer's own identity declares 1, so that epoch is exempt as
+- the declared initial and the rows are within it. Holds.
+- So all ten checks appear to hold while the seal still refuses, which means the predicate I have been reading is
+- not the one raising, or it has a clause outside both enumerations. The way to settle that is to have the probe
+- print, in addition to the six terms, the four guards AND let the refusal's traceback name its line - the last of
+- which the earlier probes never captured for this function.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two all ten checks cleared
+- on paper and four to print with a traceback line; HEAD f60f2488c; goal active.
