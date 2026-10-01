@@ -46341,3 +46341,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   rebuilt and no second stack is started; the fork workspace's own running processes remain untouched.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 744d60dd5; goal active.
+
+
+## CP-2454 — The approved stack is the fork workspace: it is the only one carrying the hardware plugin
+
+- Read-only check of both installs: `/home/matianyi/Projects/ros-moveit-demo/install` has **no**
+  `mujoco_ros2_control_plugins` package at all, while `/home/matianyi/Projects/ws_mujoco_ros2_control_fork/install`
+  carries it - `share/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml` and, decisively,
+  `share/mujoco_ros2_control/mujoco_system_interface_plugin.xml` with `include/mujoco_ros2_control/
+  mujoco_system_interface.hpp`, which is the `RobotSystem` hardware interface whose initialization failed in CP-2453.
+- So the environment a production episode needs is ROS, then **that fork workspace's install**, then **this
+  worktree's** overlay last so its `so101_demo_py` and launch file still win - and explicitly **not** the main
+  worktree's install, which lacks the plugin. This is what "reuse one approved MuJoCo stack" means in practice, and it
+  explains every observation in this stretch: the interface nodes came up from this worktree, the hardware plugin was
+  nowhere to be found, and the two surviving `ros2_control_node` processes were already running out of that same fork
+  workspace.
+- Next: stop **my** launch by its recorded pid (never by a pattern that could match my own shell, per CP-2450),
+  restart it with that source order, and read the new log for `RobotSystem` initializing and `controller_manager`
+  moving past "waiting for robot_description". The fork workspace's own processes stay untouched.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 4ad783fd2; goal active.
