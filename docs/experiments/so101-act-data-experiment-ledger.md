@@ -41305,3 +41305,26 @@ task 域 truth: n=120  median=4502px  min=2607  max=5322      ← 两域已不�
 
 **移交时状态**：无其他 stack 在跑（gate 的 compare5 已结束，无可执行进程）；`selection: null`、
 `retained_model: "C"`、`promoted: false` 未变；仓库工作树干净。
+
+## HS-264 — gate 提速：按场景记忆化（数值不变），新 root `head-toolchain-20261001T032129Z`
+
+**问题（OBSERVED）**：gate 单次约 **40 分钟**（`compare5.sh` 09:23:32 → `compare5.log` 10:03:57）。日志显示
+**600 次** `Scanning …test... 1 images` + 3 次 `200 images`：head 域走 `_measure_static_per_scene`
+（`evaluate_head_search_yolo_candidates.py:346`），因为 Ultralytics `val` 只给整批聚合值，所以"逐场景单元格"= **每场景一次 val**，
+代价是 3 候选 × 200 场景 = 600 次调用，每次都要重建 dataloader、扫描/写标签 cache、跑 NMS 与指标聚合。
+
+**改法（不动指标语义）**：在 `_measure_static_per_scene` 内加**哈希键记忆化** —— 键 =
+`sha256(权重文件字节) + operating_point 规范化 JSON + scene id + 该场景各图的 image_sha256`，命中则直接读回单元格，
+未命中才真跑 `val` 并把结果写盘。任何一项变化都会换键，因此**不可能用到过期值**（防止"缓存掩盖变更"）。
+
+**新 root**：`head-toolchain-20261001T032129Z`，`source_commit=1c142f5fae36`，`build rc=0`，
+`prefix_demo` 正确，`assertions` 记录 `retention_patch_lines=1`，且**安装产物内**含 `scene-cache` 标记（确认改的是被执行的代码）。
+
+**验收计划（先声明，后测量）**：第一次跑会真算 600 格（约 40 分钟）并落缓存；其 `model-comparison.json` 必须与
+`grid/baseline-model-comparison.json`（改动前的快照）**逐值相同**；第二次跑应命中缓存并显著变快，且数值同样相同。
+两者都满足才算"提速且未改结论"。
+
+**事故（自己造成，已记录）**：我把**已被替换过 `__T__` 的**旧 root 的 `build.sh` 复制给新 root，导致那次构建实际写回了
+`head-toolchain-20260930T155706Z`（其 `install/setup.bash` mtime 变为 10-01 11:21），使该 root 的 `source-commit.txt`（`753561290a0c`）与内容不再一致。
+**影响评估**：`compare5` 的运行时间是 09:23–10:03，**早于** 11:21，所以那次运行的证据仍成立；但 `155706Z` **不可再**被引用为
+`753561290a0c` 的 root。后续一律使用 `20261001T032129Z`。这与 HS-196 是同一个坑（复制已替换的脚本），记在此处以免再犯。
