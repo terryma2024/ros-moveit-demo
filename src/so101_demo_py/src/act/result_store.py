@@ -356,11 +356,15 @@ class ActCollectionResultVerifier:
         _fsync_dir(workspace)
         verdict = {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest()}
         if self.endpoint_inputs is not None:
-            # the episode has just been verified, so this is the place to recompute its endpoints in this process:
-            # the seal's status stays the run's claim, and the endpoint verdict sits beside it (CP-2653/2654)
+            # the episode has just been verified, so this is the place to recompute its endpoints in this process
             from so101_demo.act.episode_qc import endpoint_qc_document
 
-            verdict["endpoint"] = endpoint_qc_document(episode_path.parent, self.endpoint_inputs)
+            endpoint = endpoint_qc_document(episode_path.parent, self.endpoint_inputs)
+            verdict["endpoint"] = endpoint
+            if verdict["status"] == "PASSED" and endpoint["status"] != "PASS":
+                # the run's own status is a claim, and a claim may not survive a failing judgement by the process
+                # that checked it: the coordinator reads this field as the terminal state (CP-2690)
+                verdict["status"] = "FAILED"
         return verdict
 
     def discover(self, lease: LeaseIdentity, workspace: Path) -> str | None:
