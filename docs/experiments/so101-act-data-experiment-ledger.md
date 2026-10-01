@@ -51273,3 +51273,33 @@ path that needs the audit (the endpoint inputs), not on the plain result path.
 
 So the test is: a passing episode plus a mismatching sealed audit plus `endpoint_inputs` ⇒ the verifier returns
 `FAILED`. The audit part is the only substantial piece, and the QC's own test file already builds exactly such an audit.
+
+
+## CP-2693 — A passing episode needs a time grid, so the downgrade test needs a fixture that builds one
+
+Two refusals, read from the recorder's own rules rather than guessed:
+
+```
+        if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:
+            raise ValueError("EPISODE_OUTCOME_SCHEMA")
+        if (outcome["status"] not in ("PASSED", "FAILED")
+                or not isinstance(outcome["reason"], str) or not outcome["reason"]
+                or type(outcome["task8_success"]) is not bool
+                or outcome["stopped_confirmed"] is not True
+                or outcome["task8_success"] != (outcome["status"] == "PASSED")):
+            raise ValueError("EPISODE_OUTCOME_INVALID")
+        if outcome["status"] == "PASSED":
+            require_grid(self._times, self.dt_s)
+```
+
+So a passing outcome needs a **non-empty reason** (my first attempt passed `None`), `task8_success` agreeing with the
+status, and - the part that stops a hand-made fixture - **a well-formed time grid**: without recorded times at the
+recorder's own cadence the seal refuses with `EPISODE_TIME_GAP`.
+
+That is a good rule and it means the downgrade test needs a helper that records acquisitions on the grid before sealing,
+not just a different status string. The pattern exists in `test_act_recorder.py` (the file that names `require_grid`), so
+the next attempt starts from there rather than from a second guess.
+
+My half-written test was reverted rather than left red: the worktree's `src` count is back to the user's 35 entries, and
+what remains from this round is the knowledge - both refusal codes, their exact conditions, and where the working
+pattern lives.
