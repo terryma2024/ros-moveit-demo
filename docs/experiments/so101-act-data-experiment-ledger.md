@@ -51241,3 +51241,35 @@ coordinator drive would be many.
 
 The two enums recorded alongside it: `AttemptStatus{PASSED, FAILED, INVALID, INDETERMINATE}` and
 `ValidationStatus{VALIDATION_PASSED, VALIDATION_FAILED, VALIDATION_INVALID}`.
+
+
+## CP-2692 — The fixture's shape, and what the downgrade test needs beyond it
+
+`test_act_result_commit.py` builds its worlds the same way every time:
+
+```python
+def failed_episode(store):
+    recorder = EpisodeRecorder(store.episode_root, session_id="session-1",
+                               attempt_id=store.lease.attempt_id, reset_epoch=2, provenance=PROVENANCE)
+    return recorder.finish({"status": "FAILED", "reason": "search_failed", ...})
+
+    worker_root = tmp_path / "w00"
+    current = lease()
+    workspace = worker_root / "attempts" / current.point_id / current.attempt_id
+    store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
+    sealed = store.seal(failed_episode(store))
+    verifier = ActCollectionResultVerifier({"w00": worker_root})
+    result = verifier.verify(current, str(sealed), RunMode.EXECUTE)
+```
+
+Two things follow for the downgrade test. It needs a **`passed_episode`** sibling of `failed_episode` (a two-line variant,
+since the status is the only difference) and it needs an **episode whose endpoints mismatch the frozen targets** - which
+means a sealed audit the QC can read, so that `endpoint_inputs` yields a verdict of `FAIL` while the episode claims
+`PASSED`.
+
+Also worth recording from the same read: these fixtures call `recorder.finish({...})` with **no** `audit_manifest` or
+`scope`, and they verify fine - which is consistent with the reviewer's finding that the missing binding surfaces on the
+path that needs the audit (the endpoint inputs), not on the plain result path.
+
+So the test is: a passing episode plus a mismatching sealed audit plus `endpoint_inputs` ⇒ the verifier returns
+`FAILED`. The audit part is the only substantial piece, and the QC's own test file already builds exactly such an audit.
