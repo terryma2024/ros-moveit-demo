@@ -54190,3 +54190,27 @@ That completes the location work for correction 5. Everything it needs is now kn
 
 The negatives themselves are mechanical from here, and the reason to write them remains what it was: the code is right and
 nothing states what it guarantees.
+
+
+## CP-2812 — The exact shape of a negative, read from the file's own tests
+
+```python
+    with pytest.raises(PickPlaceError, match="DETACH_NOT_CONFIRMED"):
+        PickPlaceRunner(port).run(request())
+    assert port.opened == []
+    assert port.stops == ["TASK8_ABORT"]
+```
+
+So a negative is three lines and two assertions: build the port, drive `PickPlaceRunner(port).run(request())` and expect
+`PickPlaceError` matching the code, then state the safety consequence - the gripper was never opened and the stop reason is
+`TASK8_ABORT`. The last two lines are the part worth copying exactly, because they say what the refusal *protects*, not
+merely that it happened; that is the "checklist" the checkpoint asked for, and it is already this file's idiom.
+
+One mechanism question remains and is small: the predicates live in the evidence document that `run_phase` builds through
+`_evidence(phase, epoch, **overrides)` (CP-2811), so a negative has to inject its single override where the runner will read
+it - either by monkeypatching the port's builder for that phase, or by a knob the port already exposes. The three DETACH /
+RELEASE / SET_DOWN negatives above show the file has no objection to building a port per test, so a per-test subclass or a
+monkeypatched builder both fit its style.
+
+With the shape known and every value located, the ten negatives are writing rather than discovery - the last step of
+correction 5, after which K1's forward half and E3 are what remain of the objective.
