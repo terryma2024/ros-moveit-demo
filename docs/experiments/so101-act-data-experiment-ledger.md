@@ -49056,3 +49056,17 @@ Committed as **0b996b36d** with the width gate at **239 passed**. Both halves ar
 fixtures that agree with the code: a summary-only sealed episode yields `ENDPOINT_POSE_NOT_DERIVABLE` (poses 0,
 positions 2), and a sealed episode carrying full `xyz_xyzw` poses yields a genuine endpoint verdict. E2's first
 artefact is therefore complete and its RED is green, which is what the plan asked for before any wiring.
+
+
+## CP-2594 — Revision 7: FAIL on one word, with the rest confirmed corrected
+
+The verdict (728 lines, real `EXIT=0`, tokens 20,115) opens by confirming the bulk of the work: "**The version fields,
+nullable instants, and envelope are corrected.**" Its single remaining correction is a word: section 6's manifest
+`files` type says `bytes: int`, and the repository writes **`size`** and requires exactly `{path, size, sha256}`.
+
+So revision 8 changes that one word and nothing else. The convergence across revisions is now plain: 4 findings, 3, 2,
+3, 4, 1 - and the last is a naming error rather than a structural one, in a section the reviewer read as otherwise
+correct.
+
+Sent for review (`reviews/k2-protocol-recheck8.log`). If it passes, K2's protocol is settled and its implementation -
+the eight files the first review listed, moving together - becomes the next piece of work, which is F13's fourth item.
