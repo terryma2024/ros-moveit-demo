@@ -54557,3 +54557,24 @@ were guesses about that list; the list itself is one read away, and guessing cos
 The test is reverted and the tree is green (`4 passed`), with nothing of mine uncommitted: the seam, the chain test's
 conversion to it, and every predicate negative remain committed, and this stretch's habit - read the refusal site rather
 than vary the input - is what the next round does first.
+
+
+## CP-2825 — What wiring the real producer into the chain drive actually requires
+
+The chain test's drive feeds frames through the capture's own harness (`feed(capture, minter, camera=..., stamp_s=...)`,
+imported from `test_act_continuous_capture`), while the sampler is consulted separately - the capture calls
+`self.sampler.sample_with_audit(...)` at `:395`. Those are two paths, and today only the first is exercised: the chain
+helper hands the capture a `RecorderSampler` that answers the second with synthetic receipts.
+
+So replacing the fixture sampler with the production synchronizer is not a one-line swap: **the harness has to push into
+the synchronizer at the same instants it feeds the capture**, for all four streams (`head`, `wrist`, `arm`, `neck` -
+CP-2824), with a receipt time from the sampling clock (CP-2823). The good news is that the requirement is now known
+exactly rather than guessed, and the standalone test committed at `c7c0c6015` proves the synchronizer can be driven that
+way in this environment.
+
+The shape of the change is therefore: a small adapter in the test harness that owns a real synchronizer, implements
+`sample_with_audit` by delegating to it, and offers a `push` the frame-feeding loop calls alongside `feed`. The chain
+helper then constructs that adapter instead of `RecorderSampler`, and every assertion it already makes - the seal, the
+independent read-back, the endpoint QC, the downgrade - runs on a producer that is the production class.
+
+That is the last step of K1's forward half, and it is bounded: one adapter, one loop, four streams.
