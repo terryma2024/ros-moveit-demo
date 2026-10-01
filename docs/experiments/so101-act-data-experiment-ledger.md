@@ -47790,3 +47790,21 @@ The factory's name is printed beside this entry, which is the last token the gua
 has asked for in sequence - the versioned request, the frozen config and provenance, the pinned catalogue, the
 container-free broker builder, and now a real guard - and the next refusal, if any, names itself as all six before it
 have.
+
+
+## CP-2526 — compose_default_start_guard is the name, and the guard layer's recipe is complete
+
+The factory is `compose_default_start_guard(policy: StartGuardPolicy, *, state_root: Path | None = None,
+accelerator: object | None = None) -> EpochStartGuard` at `start_guard_probe.py:889`, whose body is
+`EpochStartGuard(ProbeCoordinator(state_root), policy, accelerator=accelerator)` and whose docstring says the installed
+composition uses one task-level state root and one shared lock, with `accelerator` left None for schema v3 - the
+NVML-backed snapshot guard, which is this platform.
+
+So the two-line edit is exact:
+
+    from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard
+    ... start_guard=compose_default_start_guard(StartGuardPolicy()), request=request, ...
+
+with `state_root` and `accelerator` at their defaults. The composition then holds every piece it has asked for in
+sequence, and the next refusal - if the run reaches one - will name itself exactly as the six before it have: the input
+guard, the run mode, the trusted seven-value pose, the versioned request, the start-guard policy and the guard class.
