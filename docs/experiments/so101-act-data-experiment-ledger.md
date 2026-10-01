@@ -52919,3 +52919,29 @@ With that, both tests should be green: the first proving correction 2 (already p
 Also recorded: the coordinator's decision of this round's predecessor (CP-2760) is in the ledger - reuse the existing
 broker image `so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1` (present as `010dca70ce3c`) for E3, with the
 container-free route's host substitutions kept as a capability rather than the milestone's path.
+
+
+## CP-2763 — The location is fixed and the store's own episode check is next
+
+Restructuring the test so the store owns the episode root (`<workspace>/working/episode`, into which the recorder is
+built) cleared `EPISODE_LOCATION_MISMATCH`, and the failure moved one level in:
+
+```
+E   ValueError: EPISODE_SEAL_AUDIT_INCOMPLETE
+test_act_seal_and_downgrade.py:139: in test_a_run_claiming_success_cannot_survive_a_failing_endpoint_verdict
+E   so101_demo.act.result_store.ResultInfraError: RESULT_EPISODE_INVALID
+```
+
+So the store, when it seals the result, re-verifies the episode and refuses it with `EPISODE_SEAL_AUDIT_INCOMPLETE` - the
+recorder's own "both the audit manifest and the scope, or neither" requirement (CP-2666) - wrapped as
+`RESULT_EPISODE_INVALID`. The first test, which reaches the endpoint QC without going through the store, passes; the
+second is the one that exercises the store's seal, and that is where this refusal lives.
+
+The next read is the store's `seal` around its `verify_episode_seal` call: what it passes or requires, and why an episode
+the recorder accepted would be judged incomplete there. It is the same shape as everything else this chain has taught -
+a second component re-checking the first's work against a stricter or differently-parameterised contract - and the first
+test's success says the episode itself is sound.
+
+State: correction 2's end-to-end proof passes (CP-2761), correction 3's test is one store-level check away, and the
+uncommitted work holds two genuine production fixes (acquisitions appended from the frames; row bindings produced where
+rows are recorded) plus the chain test and its adapter.
