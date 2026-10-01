@@ -53406,3 +53406,29 @@ For the record, the chain's state: correction 2's test passes throughout; four p
 acquisition stream from frames, bindings where rows are recorded, the store supplying the v2 pair at three sites, and the
 audit writer accepting an existing episode root); and the store still carries a temporary print that will be removed with
 the fix.
+
+
+## CP-2782 — The verifier's manifest is a file and the tree is right, so the refusal is deeper in
+
+```
+VERIFIER pair: .../sealed/episode/audit/audit-manifest.json True | ...
+TREE .../sealed/episode/seal.json
+TREE .../sealed/episode/audit/audit-manifest.json
+TREE .../sealed/episode/audit/source.json
+```
+
+So the published episode contains exactly what it should, at exactly the paths the verifier was handed, and the manifest
+resolves as a file. The refusal is `AUDIT_MANIFEST_INVALID` arriving from a `FileNotFoundError`, and given that the two
+paths `verify_episode_seal` checks first are both present, it must come from **deeper inside** that verification - most
+plausibly from `verify_audit_manifest(audit_manifest)`, which the block calls after the digest agreements and which reads
+the audit's *streams* relative to the manifest's directory.
+
+Which is a different question from every one this chain has asked so far, and a much more specific one: not "is the pair
+supplied", not "is it the right phase", but "does the audit at the published location still verify as an audit" - and
+`verify_audit_manifest` is the component that answers it, with its own set of required streams
+(`acquisitions.jsonl`, `row-bindings.jsonl`, `events.jsonl`, `references.jsonl`, `physics.jsonl`, `source.json`,
+`inputs.json`, `episode.json`) in the manifest's directory.
+
+The next step is to let that component say which stream it wanted - the same instrument as the last three rounds, one
+level deeper: catch and print, or call `verify_audit_manifest` on the published manifest directly and read the refusal it
+gives.
