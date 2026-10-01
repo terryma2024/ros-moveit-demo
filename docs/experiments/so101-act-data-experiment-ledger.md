@@ -45403,3 +45403,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   is expected to report zero blockers and `prepare` runs end to end.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 517a592a4;
   goal active.
+
+
+## CP-2407 — Step 4's exact landing point: one discovery function, three edits
+
+- `inspect_inputs` builds eleven roles through their own helpers and then, for `path_policy`, `placement_qc` and
+  `rgb_skew`, calls `_inspect_calibration_role(role, referenced)`. That function is the whole discovery for those
+  three: it scans the referenced paths whose names contain `calibration`, `report` or `policy`, parses them as JSON,
+  skips anything without a `checks` key, refuses those that fail `require_nonhead_gate`, and stamps every accepted
+  candidate with `"approval": "nonhead_calibration"` - which is the single line the amendment makes wrong, since the
+  values it authorized must carry `user_empirical_default`.
+- So step 4 is three bounded edits: accept the amendment's documents by their own `kind`
+  (`ACT_ENDPOINT_POSE_POLICY`, `ACT_ENDPOINT_DEVELOPMENT_RUNTIME`) beside the historical `checks`-bearing ones;
+  stamp an accepted amendment document with `user_empirical_default` while a historical report keeps
+  `nonhead_calibration`; and make sure the two landed files are among `referenced` - which is the one thing still to
+  read, since `referenced` is assembled earlier in `inspect_inputs`.
+- The anchor document (`config/act/task8-calibration-search-candidate-v1.json`) is a different thing: it holds
+  `anchors`, `search_values`, a detector identity and a `status`, not the three roles, so nothing there needs to
+  change - its anchors carry `requires_approved_value: false` and are consumed by the anchor role instead.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's provenance
+  collision resolved with both kinds accepted (CP-2406), its CLI verified, and `inspect` reporting exactly these four
+  roles as blockers. HEAD 245d0b09f; goal active.
