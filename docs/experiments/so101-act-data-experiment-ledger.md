@@ -52518,3 +52518,37 @@ committed as b47532954 puts that separation in place, and this adapter is what i
 That is the last piece of the chain, and with it the seal's rows and bindings should agree, `EPISODE_SEAL_ROWS_MISMATCH`
 should disappear, and both of E2's corrections will be proven end to end on real components - a capture, a recorder, an
 audit writer, a seal, a verifier and the endpoint QC, all of them the production classes.
+
+
+## CP-2745 — Acquisitions are appended from frames, and the capture's row callback never sees them
+
+```python
+    def append_acquisition(self, frame) -> None:
+        self._require_open()
+        record = {field: getattr(frame, field) for field in _ACQUISITION_FIELDS - {"task_sequence"}}
+        record["shape"] = list(record["shape"])
+        record["task_sequence"] = self._next_task()
+        ...
+        if record["acquisition_id"] in self._acquisitions:
+            raise ValueError("AUDIT_ACQUISITION_DUPLICATE")
+        self._acquisitions[record["acquisition_id"]] = record
+        self._append("acquisitions", record)
+    def bind_row(self, row_index, sim_time_s, head_id, wrist_id, reference_sequence) -> None:
+        self._require_open()
+        record = {"row_index": ..., "sim_time_s": ..., "head_acquisition_id": head_id, ...}
+```
+
+So `append_acquisition` takes a **frame** - it reads the acquisition's own fields off it - and `bind_row` then refers to
+those acquisitions by identifier. That is why the adapter's binding alone gives `AUDIT_BINDING_UNKNOWN`: nothing had
+appended the acquisitions the binding names.
+
+And that names a **production gap** rather than a test one. The capture's `audit_writer` callback receives
+`(observation, audit)` - the observation carries the two images and the sim time, and the audit carries the identifiers,
+but **neither carries the frames** that `append_acquisition` needs. The frames exist where the capture handles
+acquisitions (`on_acquisition`, and `_mint` which reads them off `_frames`), so the audit's acquisition stream is written
+from a place the current wiring does not reach, exactly as the recorder's v2 seal was written but never called before
+`0ca35cc93`.
+
+This is the fifth integration seam this stretch has found between components that were each written to a contract:
+the audit writer's acquisition stream, like the row-bindings and the v2 seal before it, is a step that no layer currently
+performs on the live path - and each one was invisible until something drove the components together.
