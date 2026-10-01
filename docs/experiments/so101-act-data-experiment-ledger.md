@@ -55550,3 +55550,38 @@ baf7650ca feat(act): where the audit's thirteen names come from, as a pure funct
 a156a66d9 feat(cli): the composition gives the runtime its episode seam, extraction still pending
 5a7095096 feat(runtime): the episode is sealed at the terminal capture, completing the runtime side
 3ef81cdc4 feat(act): the sink carries the episode's outcome, and refuses to seal without one
+
+
+## CP-2864 — The verification loop closed, and the recording path is whole
+
+Two things finished this round, both worth having written down rather than remembered.
+
+**The recording path is complete end to end on the production path.** The entry point writes the run's scope document -
+
+one per run, because its four values are the same for every episode - and hands the path down:
+
+```
+act_first_episode            writes episode-scope.json, passes episode_scope_path
+ProductionBatchComposition   puts it in every worker specification it writes
+_build_worker_from_spec      reads it into runtime_kwargs
+ParallelWorkerRuntime        the port; consumer_argv appends --episode-scope
+dynamic_cup_pick_place       reads the document, builds the PointEpisode
+run_dynamic_execute          begins at :518, every instant via _record, seals at :682 or in the finally
+```
+
+Each episode's own audit source stays a different path under its own root - the distinction that cost a commit when I
+collapsed the run's scope file and the episode's audit source into one pair.
+
+**The full package gate, and the method that made it useful.** At the last baseline it was 79 failed; after this stretch of
+wiring it was 81. The count is what raised the question, and answering it rather than shrugging at "mostly pre-existing" is
+what found the two that were mine: `test_dynamic_execute.py` builds `RosDynamicMujocoExecution` without going through
+`__init__`, so the `episode_recorder` attribute the hook reads was never set and the hook raised on a path every narrower
+suite had missed. Fixed with `getattr`, and the gate is back to exactly its baseline - **79 failed, 6051 passed, 163
+skipped**, with `passed` up by ten from the tests this stretch added and no `test_dynamic_execute` failure anywhere. Every
+remaining failure belongs to the coordinator's in-flight task8 work (`PickPlaceSearchBoundary`'s gates and the controller
+reservation event waits), which is checked by name and by file rather than assumed.
+
+**Where that leaves the objective.** The code is not the blocker: a real run is, and only the coordinator can start one.
+`kill 3111252`, re-run, and the acceptance scripts have an episode to read - `verify-e3.sh` at rc=0 and the K1/E3
+negatives against whatever comes out. Until an episode exists, no claim about the objective's endpoint is warranted, and
+none is made.
