@@ -48652,3 +48652,23 @@ the real source records**. So the audit's physics rows can carry the cup's posit
 is what `endpoint_records_from_audit` needs to derive an endpoint record at each of the two boundaries the design names -
 post-reset/pre-arm-gripper-dispatch and post-completion/post-controller-stop - with the targets coming from the frozen
 inputs and `evaluate_endpoint_pose` doing the arithmetic.
+
+
+## CP-2571 — K2 revision 3: FAIL, with two corrections, both narrower than before
+
+The verdict is **FAIL** (tokens 50,311) and its two corrections are the closest yet:
+
+1. **Clock contract.** "`publish_clock()` **attempts** publication after each successful physics step; it publishes
+   simulation time, **without a step index** or consistent..." - so section 2 over-claimed twice: the publication is an
+   *attempt* (it can be skipped, which the protocol must carry as a risk rather than assume away), and it publishes a
+   **time only**, so requiring a step index in the record is a demand the mechanism cannot satisfy. That is the same
+   class of correction as the first review's, and it is a fact about this repository that the source settles.
+2. **Frozen schema.** "Supply **one complete, internally consistent schema**. The 'exact' record keys **omit the required
+   `schema_version`**; several `kind` literals..." - i.e. section 3 says the version is carried on every record and then
+   lists record keys that do not include it, and its `kind` literals disagree with each other. The demand is
+   self-consistency: one schema, complete, that a reader could implement without resolving contradictions.
+
+The convergence is worth noting: four findings, then three, then two - each round's corrections are narrower and more
+specific than the last, and both of this round's are in the two sections the earlier rounds asked for. Revision 4
+therefore has a small brief: correct the clock claim to what `publish_clock()` actually does, and make the schema
+internally consistent - including `schema_version` in every record's key list and agreeing on the `kind` literals.
