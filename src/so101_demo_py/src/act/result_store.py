@@ -333,6 +333,24 @@ class ActCollectionResultVerifier:
         return _safe(_safe(self.worker_roots[lease.worker_id]) / collection / lease.point_id
                      / lease.attempt_id)
 
+    def discover(self, lease: LeaseIdentity, workspace) -> str | None:
+        """Return a fully verified seal only at the location the lease reserves.
+
+        The same contract the generic production adapter implements, so a composition can drive either port through
+        the same call: a deterministic lookup under the trusted worker root, restricted to the execution parent the
+        journal reserved, and None for anything else (CP-2801).
+        """
+        try:
+            parent = (Path(self.worker_roots[lease.worker_id]) / "attempts"
+                      / lease.point_id / lease.attempt_id)
+            if _safe(Path(workspace)) != parent:
+                return None
+            location = str(parent / "sealed")
+            self.verify(lease, location, RunMode.EXECUTE)
+            return location
+        except (KeyError, OSError, ValueError, TypeError):
+            return None
+
     def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict:
         if run_mode is not RunMode.EXECUTE:
             raise ValueError("WRONG_RUN_MODE")

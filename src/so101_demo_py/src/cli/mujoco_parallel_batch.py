@@ -2739,11 +2739,23 @@ class ProductionBatchComposition:
         worker_roots = {
             worker.worker_id: worker.worker_root for worker in self.resource_manifest.workers
         }
-        self.result_verifier = SealedResultAdapter(
-            worker_roots,
-            spec.request.run_mode,
-            expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
-        )
+        if self._endpoint_inputs is None:
+            # no endpoint inputs: the generic production adapter keeps its own paths, as the coordinator's gate
+            # requires (its comment in _commit says the ACT gate is "selected by the result contract the port
+            # implements - the generic production adapter must keep its own paths")
+            self.result_verifier = SealedResultAdapter(
+                worker_roots,
+                spec.request.run_mode,
+                expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
+            )
+        else:
+            # endpoint inputs present: build the port that judges endpoints, so the ACT gate fires on a real ACT
+            # episode. It takes the same worker_roots, and its verify() has the same signature as the adapter's
+            # (CP-2796/CP-2801)
+            from so101_demo.act.result_store import ActCollectionResultVerifier
+            self.result_verifier = ActCollectionResultVerifier(
+                worker_roots, endpoint_inputs=self._endpoint_inputs,
+            )
         self._startup_stage = "coordinator_journal"
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
