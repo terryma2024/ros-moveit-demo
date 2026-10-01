@@ -46584,3 +46584,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   repository already makes in its campaign path.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 31ae4076b; goal active.
+
+
+## CP-2466 — The route resolver, and profiles as named constants
+
+- `resolve_execution_route` lives at `parallel_batch/contracts.py:2218`. The campaign path passes named constants
+  rather than enum members: `macos_w2_campaign.py` uses `execution_profile=MPS_W2_FIRST_PASS`,
+  `batch_kind=W2_FIRST_PASS_BATCH_KIND` (line 236) and later reads `plan.execution_profile` / `plan.batch_kind` back
+  off the returned plan (147/148), which is how it reports what it resolved.
+- So the next read is the constant table: which (profile, batch kind) pairs exist, which of them describes a single
+  diagnostic episode - the shape this milestone needs - and what the composer returns for it. With that pairing the
+  fourth piece becomes, finally, a call the repository already makes elsewhere, with this task's frozen inputs and one
+  point id as its arguments.
+- Continuity: the tree's fourth-piece work remains uncommitted and stops at the `selected_point_ids` refusal; four
+  layers are cleared (the guard, the run mode, the trusted seven-value pose, the frozen artefacts), and the shape is
+  now "call the composer" rather than "build a request".
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 37988c478; goal active.
