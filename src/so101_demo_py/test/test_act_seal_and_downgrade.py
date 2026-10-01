@@ -409,3 +409,49 @@ def test_the_live_sampler_only_delegates_and_leaves_feeding_to_the_run():
     assert observation["sim_time_s"] == 1.0
     assert set(row_audit) == {"source_stamps"}
     assert set(sampler.source_received_monotonic_s()) == {"head", "wrist", "arm", "neck"}
+
+
+def test_the_live_shape_assembles_and_seals(tmp_path):
+    """The wiring's shape, exercised without a robot.
+
+    A real `RgbObservationSynchronizer` fed by a stand-in for the run's observation adapter (which pushes each camera
+    frame as it arrives), presented through `LiveSampler` - the class the live path takes - and assembled by the seam.
+    `feed` cannot be used here: it writes `sampler.stamps`, which only the harness's feeder has, so the acquisitions are
+    handed to the capture directly, the way a run's own loop would.
+    """
+    import numpy as np
+
+    from so101_demo.act.synchronizer import RgbObservationSynchronizer
+
+    synchronizer = RgbObservationSynchronizer(max_age_s=0.1, max_skew_s=0.1)
+    synchronizer.reset("session-1")
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+
+    def push(stamp):
+        # what RosObservationAdapter does with each arriving frame, plus the arm and neck the sampler requires
+        receipt = synchronizer.monotonic()
+        for camera in ("head", "wrist"):
+            synchronizer.push(camera, "session-1", stamp, frame, received_monotonic_s=receipt)
+        synchronizer.push("arm", "session-1", stamp, [0.0] * 6, received_monotonic_s=receipt)
+        synchronizer.push("neck", "session-1", stamp, 0.0, received_monotonic_s=receipt)
+
+    episode_root = tmp_path / "episode"
+    capture = assemble_episode_capture(
+        sampler=LiveSampler(synchronizer), physical_audit=recorder_physical_audit,
+        identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
+        episode_root=episode_root, scope=SCOPE,
+        scope_path=str(episode_audit_pair(episode_root)[1]), deadline_s=120.0, monotonic=lambda: 0.0)
+    minter = AcquisitionMinter()
+    capture.start("session-1", "attempt-1", 2, 1.0)
+    for stamp in (1.0, 1.1, 1.2, 1.3):
+        push(stamp)
+        for camera in ("head", "wrist"):
+            capture.on_acquisition(minter.mint(camera, session_id="session-1", reset_epoch=2, stamp_s=stamp,
+                                               received_monotonic_ns=int(stamp * 1e9) + 1, pixels=frame), frame)
+        capture.on_reference(reference(stamp + 0.1))
+        capture.drain()
+    summary = capture.finish(1.4, window={"start_s": 1.0, "end_s": 1.4, "label_cutoff_s": 1.4},
+                             outcome={"status": "PASSED", "reason": "completed",
+                                      "task8_success": True, "stopped_confirmed": True})
+    assert summary.sample_count >= 1
+    assert (episode_root / "seal.json").is_file()
