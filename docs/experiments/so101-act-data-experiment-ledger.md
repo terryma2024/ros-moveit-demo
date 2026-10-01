@@ -51336,3 +51336,23 @@ the run's own - while the fresh process's endpoint verdict comes out `FAIL`, and
 
 For the record, that is the third shape this stretch has now read before writing (the outcome schema, the grid
 requirement, and the recipe), and the reason the previous attempt was reverted rather than patched.
+
+
+## CP-2695 — Where the downgrade test belongs, and the helper sets of the two files
+
+Comparing the two suites settles the question without duplicating anything:
+
+| file | has | lacks |
+| --- | --- | --- |
+| `test_act_recorder.py` | `PROVENANCE`, `observation(at_s)`, `audit(at_s, *, release_epoch, release_event, ...)`, and the passing-episode recipe | `ActCollectionResultStore`, `ActCollectionResultVerifier` |
+| `test_act_result_commit.py` | `PROVENANCE` (identical), `lease()`, `failed_episode(store)`, the store and the verifier | `observation()`, `audit()` |
+
+So the downgrade test belongs in `test_act_result_commit.py`, where the store and the verifier already are, and it takes
+`observation` and `audit` from the recorder suite by import rather than copying them - both files are in the same test
+package, and duplicating a helper that encodes the recorder's own grid and audit shape is how two versions of one rule
+start to drift.
+
+One thing still unread before the test can be written correctly: the keys `audit()` produces, since the test has to make
+the cup's recorded world pose **mismatch** the frozen targets while leaving everything else valid - and getting that
+wrong would produce a verdict of `INCOMPLETE` rather than the `FAIL` the correction is about. That read is the next
+round's first act, and then the test is short.
