@@ -51,12 +51,15 @@ _MANIFEST_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_c
                               "config_sha256", "evidence_root", "roles", "inputs_sha256"})
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
 _APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation",
-                        "nonhead_calibration"})
+                        "nonhead_calibration", "user_empirical_default"})
 _ROLE_APPROVAL = {"contact_proposal": "disabled_proposal",
                   "contact_activation": "user_activation",
-                  "path_policy": "nonhead_calibration",
-                  "placement_qc": "nonhead_calibration",
-                  "rgb_skew": "nonhead_calibration"}
+                  # the amendment replaces the calibration report these three used to demand with the values the
+                  # user authorized this round; both kinds are accepted so an old record keeps its reading and a
+                  # new candidate carries the authorized provenance
+                  "path_policy": ("user_empirical_default", "nonhead_calibration"),
+                  "placement_qc": ("user_empirical_default", "nonhead_calibration"),
+                  "rgb_skew": ("user_empirical_default", "nonhead_calibration")}
 _STATUS_BLOCKERS = {"MISSING": "NONHEAD_INPUT_BINDING_REQUIRED",
                     "AMBIGUOUS": "INPUT_CANDIDATE_AMBIGUOUS",
                     "UNAPPROVED": "INPUT_NOT_APPROVED",
@@ -311,7 +314,8 @@ def _verify_roles(registry: dict) -> dict:
             raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
         if entry["approved"] is not True:
             raise ValueError("INPUT_NOT_APPROVED")
-        if _ROLE_APPROVAL.get(role, "source_controlled") != entry["approval"]:
+        required = _ROLE_APPROVAL.get(role, "source_controlled")
+        if entry["approval"] not in (required if isinstance(required, tuple) else (required,)):
             raise ValueError("INPUT_NOT_APPROVED")
         if entry["approval"] == "source_controlled":
             if not Path(entry["path"]).is_relative_to(Path(registry["source_root"])):
@@ -369,7 +373,8 @@ def _verify_roles(registry: dict) -> dict:
     if documents["contact_activation"]["evidence_root"] != registry["evidence_root"]:
         raise ValueError("INPUT_ACTIVATION_STALE")
     for role in INPUT_ROLES:
-        if registry["roles"][role]["selected"]["approval"] == "nonhead_calibration":
+        if registry["roles"][role]["selected"]["approval"] in ("nonhead_calibration",
+                                                              "user_empirical_default"):
             require_nonhead_gate(documents[role])
     return payloads
 
