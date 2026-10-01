@@ -44716,3 +44716,22 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
   K1's legal-window construction available; F5's regression fixed, step one landed, step two past the coverage gate;
   HEAD 9fc45c392; goal active.
+
+
+## CP-2373 — Found it: the window's own ordering rule, and the fixture's derived value broke it
+
+- `_window_ok`'s tail carries the ordering rules I had not read:
+  `start <= physics <= end` for `collection_start_s`, `physics_end_s`, `collection_end_s`, every schedule instant
+  inside `[start, end]`, every permitted gap inside the same interval, and for `outcome == complete` the pair
+  `start <= first_command_s <= physics_end_s` and `start <= label_cutoff_s <= physics_end_s` (with a further
+  `cutoff + 0.1 <= physics + tolerance`).
+- The runner-backed fixture derived `first_command_s = min(physics times) = 0.1` while its window's
+  `collection_start_s` is 1.0, so `start <= first` reads `1.0 <= 0.1` and the seal refuses - the refusal was the
+  window's own consistency, exactly where the level-up probe would have pointed.
+- The correct derivation from this run's history: every one of the three fields must lie inside `[start, physics]`,
+  which for a window starting at 1.0 and physics ending at 1.0 means all three are **1.0** - `first_command_s = 1.0`,
+  `physics_end_s = 1.0`, `label_cutoff_s = 1.0`. That is a one-line fixture fix, and it is also the construction
+  K1's legal window uses, so F11's derivation inherits the same knowledge.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
+  this window contract now fully read; F5's regression fixed, step one landed, step two past the coverage gate and one
+  line from sealing; HEAD 64db7aa28; goal active.
