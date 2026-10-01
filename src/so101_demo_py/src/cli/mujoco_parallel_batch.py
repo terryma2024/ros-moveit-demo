@@ -2413,6 +2413,39 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
+        # the episode recording seam (CP-2857): one sink both the capture port and the worker runtime can hold, and one
+        # callable that opens a point's episode from the frozen values. The extraction behind `physical_audit` is not
+        # written yet, and it says so by raising rather than by inventing the thirteen values an episode row needs -
+        # a fabricated one would make the endpoint verdict meaningless.
+        from so101_demo.act.collection_scope import build_collection_scope
+        from so101_demo.act.episode_assembly import (EpisodeSink, PhysicalAuditAdapter, PointEpisode,
+                                                     episode_audit_pair)
+        _episode_sink = EpisodeSink()
+        runtime_ports.episode_sink = _episode_sink
+
+        def _extract_physical_evidence(_at_s):
+            raise NotImplementedError(
+                "EPISODE_EXTRACTION_PENDING: the per-instant values live_evidence_sample needs are not extracted yet")
+
+        def _open_episode(lease):
+            _key, point_root = runtime_ports._point_root(lease) if hasattr(runtime_ports, "_point_root") else (None, None)
+            if point_root is None:
+                return None
+            episode_root = point_root / "episode"
+            manifest, scope_path = episode_audit_pair(episode_root)
+            # the identity, the provenance and the frozen inputs are still to be filled from the run's own frozen
+            # set; until the extraction lands, opening an episode is only exercised by tests, and the audit it would
+            # need is refused at the sample rather than faked
+            return PointEpisode(
+                identity={"session_id": spec.request.batch_id, "attempt_id": lease.attempt_id,
+                          "reset_epoch": int(getattr(lease, "lease_generation", 1)), "release_epoch": 1},
+                provenance={}, inputs={}, episode_root=episode_root,
+                scope=build_collection_scope("preselected_target_diagnostic",
+                                             scene_id=str(getattr(lease, "point_id", "scene-1")),
+                                             seed=0, inputs_sha256="0" * 64),
+                scope_path=str(scope_path), physical_audit=PhysicalAuditAdapter(_extract_physical_evidence))
+
+        runtime_kwargs["open_episode"] = _open_episode
         broker_proxy = _WorkerBrokerProxy(
             coordinator, document["broker_socket_path"], resources, config,
             broker_generation=document["broker_generation"],
