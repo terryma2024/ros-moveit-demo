@@ -44394,3 +44394,20 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two six booleans from
 - diagnosis; HEAD f005688bd; goal active.
+
+## CP-2357 - Ten booleans, all apparently satisfied, so only the print can name the refuser
+
+- What the hybrid supplies, term by term, from the probe's counts and the code read since:
+-   the three streams (10/11/1); a reference with accepted True and all four legacy keys; eleven events, which is
+-   nine completions plus at least one release (and one more, likely run_complete); all nine phases; all four
+-   kinds; and observed, proved by _physics's shallow copy. The four earlier guards are equally plausible: the file
+-   reads succeed, the completion list is nine long with non-decreasing steps, each kind's times are typed and
+-   non-decreasing, and the epochs are 1 and 2 with 2 named and 1 exempt as the declared initial.
+- Every one of those ten checks therefore appears to hold while the seal refuses AUDIT_FORMAL_COVERAGE_INCOMPLETE -
+- which means an appearance is wrong and no amount of further reading will say which. The instrumentation is
+- therefore the only way forward: print those ten booleans verbatim, one per line, and one run names the refuser.
+- The enumeration is complete now (CP-2356 for the final expression, this entry for the guards), so the probe's
+- print list is written down rather than assembled again each round.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two ten booleans from
+- diagnosis; HEAD 522bc8c27; goal active.
