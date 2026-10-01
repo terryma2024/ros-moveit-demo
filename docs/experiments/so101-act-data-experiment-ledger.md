@@ -52624,3 +52624,29 @@ be the grid instants 1.0/1.1/1.2 - so by my reading they line up, which means on
 The instrument that settles it in one run is a probe printing both sides: the audit's `_references` mapping (sequence ->
 `reference_time_s`) and each row's `sim_time_s` as the binding sees it. That is two lines of print, and it removes the
 last guess from this chain.
+
+
+## CP-2751 — Both sides measured: the ordinal is exactly right, and the probe wrote no rows at all
+
+```
+audit references (seq -> time): {1: 1.1, 2: 1.2, 3: 1.3, 4: 1.4}
+row sim_time_s seen by bind  : []
+```
+
+Two conclusions, one settling and one opening:
+
+- **the references map is `{1: 1.1, 2: 1.2, 3: 1.3, 4: 1.4}`** - sequence N is the reference for instant N + 0.1 - so
+  `reference_sequence = index + 1` is **exactly** the right value, and the binding's reference clause is now satisfied by
+  construction. That closes the question this round's predecessor opened.
+- **`seen` is empty**, so in this probe the `audit_writer` callback was never called: no row left `_pending`, and
+  therefore no binding was attempted. The difference from the earlier probe (which wrote exactly one row) is the recorder:
+  here it is the real `EpisodeRecorder`, there it was a stub - so something in the real recorder's `append` is being
+  refused and caught by `_service_pending`'s own handler, which latches the failure and leaves the row pending.
+
+That is consistent with the chain test's own behaviour: it reports the *seal's* refusal rather than the capture's, which
+means in that run at least one row did get written. So the probe and the test diverge, and the divergence is the thing to
+understand - most likely the probe's recorder is missing something the test's supplies, or the probe's script-level
+`drain()` swallows a rejection the test would surface at `finish`.
+
+One read closes it: print `cap._failure` after each drain in this same probe. If it names a reason, the rows were refused
+and the reason is the last fact this chain needs.
