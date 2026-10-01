@@ -45218,3 +45218,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   then the plan's directed RED/GREEN with real argv, rc and JUnit.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
   HEAD a7a78ab86; goal active.
+
+
+## CP-2398 — The first-episode CLI exists, with its rc contract verified
+
+- `src/cli/act_first_episode.py` (commit 5f554bbde) follows the house shape: `_Parser` prints usage and exits rc 2 on
+  a refused argument, `build_parser()` declares the three subcommands, and `main(argv=None) -> int` returns the code.
+  `prepare` takes `--candidates --mode --endpoint-policy --runtime-policy --output`, parses both documents before
+  writing anything, then calls the extended `freeze_inputs` so the policy and runtime enter the inputs hash chain.
+  `preflight` re-reads a frozen set and writes a report of its `inputs_sha256`, roles, effective policy and runtime.
+  `inspect` returns rc 2 with a named message instead of inventing a candidate registry - it is the next piece, and
+  the plan's E3 sequence depends on it. `setup.py` now registers
+  `act_first_episode = so101_demo.cli.act_first_episode:main` beside the other console scripts.
+- Verified by driving `main(argv)` directly: `inspect` returns 2 and prints the named message; an unknown flag and an
+  unknown `--mode` both exit 2 through argparse; and `preflight` refuses a set with no manifest rather than reporting
+  a fabricated one.
+- So the freezer finally has a production caller, which was CP-2385's finding. Remaining for E1: `inspect`'s candidate
+  discovery, the `user_empirical_default` approval and the immutable effective-config artifact, the policy role in
+  both real input registries, and `test_act_first_episode_inputs.py` with the plan's positives and safety negatives;
+  then the install so `ACT_FIRST_EPISODE` exists for E3.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
+  HEAD ed6335086; goal active.
