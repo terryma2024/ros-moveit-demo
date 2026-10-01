@@ -32,10 +32,12 @@ class HeadSearchController:
             "frame_id",
             "ray_origin_frame_id",
         )
-        # the sealed domain is optional: a config without it keeps the legacy revolution behaviour
+        # the sealed domain is optional: a config without it keeps the legacy revolution behaviour.
+        # The seal spells the declaration `required_search_domain_rad`, while `required_domain_rad`
+        # is the legacy spelling the controller shipped with; both name the same required interval
         optional = {
             key: config[key]
-            for key in ("required_domain_rad", "lock_valid_neck_rad")
+            for key in ("required_search_domain_rad", "required_domain_rad", "lock_valid_neck_rad")
             if key in config
         }
         fields({key: value for key, value in config.items() if key not in optional}, keys)
@@ -71,15 +73,29 @@ class HeadSearchController:
         self.terminal = None
         self.last_feedback = None
         self.state = "SAFE_OBSERVE"
-        # when the config carries the sealed domain the controller walks the bounded plan instead of
-        # accumulating a full revolution, which could command angles past the safe interval
+        # when the config carries the declared required domain the controller walks the bounded plan
+        # instead of accumulating a full revolution, which could command angles past the safe bound
         self.plan = None
         self.plan_index = 0
-        if len(optional) == 2:
+        required_domain = optional.get(
+            "required_search_domain_rad", optional.get("required_domain_rad")
+        )
+        if required_domain is not None:
+            # without a declared safe interval the required domain itself bounds the sweep, so a
+            # plan that spells the domain only in the seal still cannot walk past it
+            safe_interval = optional.get("lock_valid_neck_rad")
+            if safe_interval is None:
+                # a clamped endpoint is commanded as `current + direction * travel`, which can land
+                # one float ulp short of the bound; the 1e-12 allowance absorbs only that round-off,
+                # so a domain the stops do cover still earns the clean negative, not a refusal
+                safe_interval = (
+                    float(required_domain[0]) - 1e-12,
+                    float(required_domain[1]) + 1e-12,
+                )
             self.plan = bounded_search_stops(
                 anchor_rad=config["search_start_rad"],
-                required_domain_rad=config["required_domain_rad"],
-                safe_interval_rad=config["lock_valid_neck_rad"],
+                required_domain_rad=required_domain,
+                safe_interval_rad=safe_interval,
                 horizontal_fov_rad=config["horizontal_fov_rad"],
                 coarse_step_rad=config["coarse_step_rad"],
             )
