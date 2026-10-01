@@ -556,6 +556,7 @@ def run_dynamic_execute(
         if reachability.status.value != "REACHABLE":
             raise RuntimeError("DYNAMIC_TARGET_REACHABILITY_UNKNOWN")
         execution = runtime.execution(
+
             node,
             loaded.template,
             targets,
@@ -569,6 +570,10 @@ def run_dynamic_execute(
             request_id=getattr(options, "request_id", None),
             parallel_lease_identity=parallel_lease_identity,
         )
+        # the recorder the CLI handed in reaches the object whose _record publishes each state's row: without
+        # this the hook reads an attribute that is always None, which is the quietest way for a whole recording
+        # path to be present and inert at once (CP-2866's concern, found by looking rather than by running)
+        execution.episode_recorder = episode_recorder
         actions = profile_actions(
             runtime.build_actions(execution, targets),
             profiler,
