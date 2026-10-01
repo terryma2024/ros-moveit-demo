@@ -54214,3 +54214,32 @@ monkeypatched builder both fit its style.
 
 With the shape known and every value located, the ten negatives are writing rather than discovery - the last step of
 correction 5, after which K1's forward half and E3 are what remain of the objective.
+
+
+## CP-2813 — The release half is two conjunctions with two codes, which is why the cases disagreed
+
+```python
+    def _release_preflight(self, request, reset_epoch, release_epoch, after_step):
+        evidence = self.port.release_preflight(request)
+        ...
+        if not (evidence["holding_state"] == "HOLDING" and evidence["cup_supported"] is True
+                and evidence["fresh"] is True and evidence["planning_attached"] is True):
+            raise PickPlaceError("RELEASE_UNSUPPORTED")
+```
+
+So the release half of the run is guarded **twice**, by two different conjunctions with two different codes:
+
+- **`_release_preflight`**, before the gripper opens (`RELEASE_UNSUPPORTED`): `holding_state == "HOLDING"`,
+  `cup_supported is True`, `fresh is True`, `planning_attached is True`;
+- **the release phase itself**, checked through `run_phase` (`RELEASE_NOT_CONFIRMED`): `holding_state == "EMPTY"`,
+  `released is True`, `cup_supported is True`, `no_fingertip_contact is True`.
+
+That explains every disagreement the twelve write-attempts produced. Flipping `cup_supported` to False or `released` to
+False makes the **preflight** refuse first for the phases that go through it, so those cases carry `RELEASE_UNSUPPORTED`
+rather than the phase's code - not a failure of the tests' mechanism but the runner having two gates where the checklist
+assumed one. And it explains the split around the opening: the preflight runs before the gripper opens and the phase's own
+check runs after, so `opened` is empty for one set of cases and non-empty for the other.
+
+So correction 5's release half is **eight predicates across two gates**, not four across one, and each gate needs its own
+negatives with its own code. That is a larger but unambiguous job, and it is now stated rather than guessed - which is what
+this checklist was for.
