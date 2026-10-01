@@ -1,4 +1,4 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, measure-selection-rule, measure-operating-point, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
@@ -13,7 +13,10 @@ here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `so101_demo.act.head_search_timing_measurement`,
 `so101_demo.act.head_search_deadband_measurement`,
 `so101_demo.act.head_search_camera_measurement` and
-`so101_demo.act.head_search_workspace_projection`.
+`so101_demo.act.head_search_workspace_projection`. `measure-selection-rule` and
+`measure-operating-point` are phase 3's two inputs: the first writes the rule record before any
+measurement can exist, the second measures the frames that rule consumes and has the installed phase 3
+select every candidate's point (`so101_demo.act.head_search_operating_point_measurement`).
 """
 
 from __future__ import annotations
@@ -125,6 +128,34 @@ RUN_OPTIONAL_DIRECTORY_FLAGS = (
     "head_dataset_root",
     "task_dataset_root",
 )
+
+#: the two `measure-selection-rule` inputs: the sealed production search configuration the grid and the
+#: two fixed geometric values come from, the directory the measurement will own (which must not exist
+#: yet - a rule written after its measurement is exactly what the ordering forbids) and the brand-new
+#: directory the rule records own
+SELECTION_RULE_REQUIRED_FLAGS = (
+    ("production_search_config", "--production-search-config"),
+    ("measurements_output_dir", "--measurements-output-dir"),
+    ("output_dir", "--output-dir"),
+)
+
+#: the `measure-operating-point` inputs: the sealed geometry (its camera and required search domain),
+#: the two sealed datasets, the dataset profile, the sealed production configuration (the grid and the
+#: two fixed geometric values), the sealed partitions, the two rule records written before this
+#: measurement, the three frozen candidates, the directory their `<candidate>.pt` weights live in and the
+#: brand-new directory the measurement owns
+OPERATING_POINT_REQUIRED_FILE_FLAGS = (
+    ("geometry_seal", "--geometry-seal"),
+    ("head_dataset", "--head-dataset"),
+    ("task_dataset", "--task-dataset"),
+    ("dataset_config", "--dataset-config"),
+    ("production_search_config", "--production-search-config"),
+    ("episode_partitions", "--episode-partitions"),
+    ("selection_rule", "--selection-rule"),
+    ("task_selection_rule", "--task-selection-rule"),
+    ("frozen_candidate", "--frozen-candidate"),
+)
+OPERATING_POINT_REQUIRED_DIRECTORY_FLAGS = (("weights_dir", "--weights-dir"),)
 
 #: the `measure-coarse-step` entry: the sealed geometry, the sealed head dataset and its profile, the
 #: selected model's weights and frozen candidate, and the brand-new directory the measurement owns
@@ -1407,6 +1438,243 @@ def _measure_search_timing(arguments: list[str]) -> int:
     return 0
 
 
+def _selection_rule_parser() -> argparse.ArgumentParser:
+    """The `measure-selection-rule` entry: the sealed config, the future measurement and the output.
+
+    The rule of record has to exist before its measurement, so this entry takes the directory the
+    measurement will own and refuses to write anything when that directory already exists; it never
+    measures, renders or detects, and `so101_demo.act.head_search_operating_point_measurement` is the
+    only library it calls.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-selection-rule",
+        description=(
+            "Record the phase-3 selection rule (the declared grid, the splits it selects on and the "
+            "tie-break chain) into a brand-new output directory, before any measurement exists"
+        ),
+    )
+    parser.add_argument(
+        "--production-search-config",
+        type=Path,
+        help="the sealed production search configuration the grid and its two fixed values come from",
+    )
+    parser.add_argument(
+        "--measurements-output-dir",
+        type=Path,
+        help="the directory the operating-point measurement will own; it must not exist yet",
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, help="the brand-new directory the rule records own"
+    )
+    parser.add_argument(
+        "--generation", help="the generation the rule binds to, when one is declared"
+    )
+    parser.add_argument(
+        "--measurement-plan-sha256",
+        help="the digest of the measurement plan the rule binds to, when one is declared",
+    )
+    return parser
+
+
+def _measure_selection_rule(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the rule record to the library module."""
+
+    parsed = _selection_rule_parser().parse_args(arguments)
+    missing = [
+        flag for name, flag in SELECTION_RULE_REQUIRED_FLAGS if getattr(parsed, name) is None
+    ]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in SELECTION_RULE_REQUIRED_FLAGS
+        # the measurement directory is the one path that must NOT exist yet: it is what proves the rule
+        # was written before its measurement
+        if name not in ("output_dir", "measurements_output_dir")
+        and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_operating_point_measurement import (
+        record_selection_rule_documents,
+    )
+
+    config_path = Path(parsed.production_search_config)
+    try:
+        result = record_selection_rule_documents(
+            production_config=json.loads(config_path.read_text(encoding="utf-8")),
+            measurements_output_dir=parsed.measurements_output_dir,
+            output_dir=parsed.output_dir,
+            generation=parsed.generation,
+            measurement_plan_sha256=parsed.measurement_plan_sha256,
+            provenance={
+                "production_search_config_path": str(config_path),
+                "production_search_config_sha256": _digest(config_path),
+                "command": _command_line(arguments, subcommand="measure-selection-rule"),
+            },
+            command=_command_line(arguments, subcommand="measure-selection-rule"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"SELECTION_RULE_RECORDED points={receipt['point_count']} "
+        f"splits={','.join(receipt['selection_splits'])} "
+        f"domains={','.join(receipt['domains'])} "
+        f"rule_sha256={receipt['rule_sha256']['head']} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _operating_point_parser() -> argparse.ArgumentParser:
+    """The `measure-operating-point` entry: every sealed input, the rules and the three candidates.
+
+    Nothing is computed here beyond parsing and validating what the caller declared: the measurement is
+    one library call, and the point it selects is the installed phase 3's own choice, not this entry's.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-operating-point",
+        description=(
+            "Measure the phase-3 operating-point frames (both domains' val images and calibration "
+            "episodes) for the three frozen candidates, into a brand-new output directory, and let the "
+            "installed phase 3 select each candidate's point"
+        ),
+    )
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--head-dataset", type=Path, help="the sealed head dataset manifest")
+    parser.add_argument("--task-dataset", type=Path, help="the sealed task dataset manifest")
+    parser.add_argument(
+        "--dataset-config", type=Path, help="the dataset profile the scenes are rendered from"
+    )
+    parser.add_argument(
+        "--production-search-config",
+        type=Path,
+        help="the sealed production search configuration the grid and its two fixed values come from",
+    )
+    parser.add_argument("--episode-partitions", type=Path, help="the sealed scenario partitions")
+    parser.add_argument(
+        "--selection-rule", type=Path, help="the head-domain rule record, written first"
+    )
+    parser.add_argument(
+        "--task-selection-rule", type=Path, help="the task-domain rule record, written first"
+    )
+    parser.add_argument(
+        "--frozen-candidate",
+        type=Path,
+        action="append",
+        help="one frozen candidate document; the measurement covers exactly A, B and C",
+    )
+    parser.add_argument("--weights-dir", type=Path, help="the directory holding <candidate>.pt")
+    parser.add_argument(
+        "--output-dir", type=Path, help="the brand-new directory the measurement owns"
+    )
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--seed-limit",
+        type=int,
+        help="measure only the first N calibration seeds (a declared subset, never a silent one)",
+    )
+    return parser
+
+
+def _measure_operating_point(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the whole measurement to the library module."""
+
+    parsed = _operating_point_parser().parse_args(arguments)
+    declared = OPERATING_POINT_REQUIRED_FILE_FLAGS + OPERATING_POINT_REQUIRED_DIRECTORY_FLAGS
+    missing = [flag for name, flag in declared if getattr(parsed, name) is None]
+    if parsed.frozen_candidate is None:
+        missing.append("--frozen-candidate")
+    if parsed.output_dir is None:
+        missing.append("--output-dir")
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in OPERATING_POINT_REQUIRED_FILE_FLAGS
+        if not _has_file(getattr(parsed, name))
+    ] + [
+        str(getattr(parsed, name))
+        for name, _flag in OPERATING_POINT_REQUIRED_DIRECTORY_FLAGS
+        if not Path(getattr(parsed, name)).is_dir()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_operating_point_measurement import (
+        measure_operating_point_measurements,
+    )
+
+    try:
+        result = measure_operating_point_measurements(
+            geometry_seal_path=parsed.geometry_seal,
+            head_dataset_manifest_path=parsed.head_dataset,
+            task_dataset_manifest_path=parsed.task_dataset,
+            dataset_config_path=parsed.dataset_config,
+            production_config_path=parsed.production_search_config,
+            episode_partitions_path=parsed.episode_partitions,
+            selection_rule_path=parsed.selection_rule,
+            task_selection_rule_path=parsed.task_selection_rule,
+            weights_dir=parsed.weights_dir,
+            frozen_candidate_paths=list(parsed.frozen_candidate),
+            output_dir=parsed.output_dir,
+            device=parsed.device,
+            seed_limit=parsed.seed_limit,
+            command=_command_line(arguments, subcommand="measure-operating-point"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    chosen = ",".join(
+        f"{domain}:{candidate}:{point['min_confidence']}/{point['tracking_iou']}"
+        for domain in sorted(receipt["chosen"])
+        for candidate, point in sorted(receipt["chosen"][domain].items())
+    )
+    print(
+        f"OPERATING_POINTS_MEASURED frames={receipt['frame_count']} "
+        f"candidates={receipt['candidate_count']} points={receipt['grid_point_count']} "
+        f"chosen={chosen} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _has_file(value) -> bool:
+    """Every declared file must exist: a repeated flag declares one file per candidate."""
+
+    values = value if isinstance(value, list) else [value]
+    return bool(values) and all(Path(item).is_file() for item in values)
+
+
 def _run_parser() -> argparse.ArgumentParser:
     """The `run` entry: the six sealed inputs, the phase inputs and the gate's own arguments.
 
@@ -2040,6 +2308,13 @@ def main(argv: list[str] | None = None) -> int:
         return _measure_frame_contract(arguments[1:])
     if arguments[:1] == ["measure-skew"]:
         return _measure_skew(arguments[1:])
+    # phase 3's two inputs are the two flights whose ordering is part of the evidence: the rule record is
+    # written before the measurement it governs can own a directory, and the measurement is the one the
+    # rule consumes
+    if arguments[:1] == ["measure-selection-rule"]:
+        return _measure_selection_rule(arguments[1:])
+    if arguments[:1] == ["measure-operating-point"]:
+        return _measure_operating_point(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
