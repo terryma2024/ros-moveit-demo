@@ -707,3 +707,43 @@ def test_a_recording_world_observer_records_every_instant_it_is_asked_for():
     # the runner takes a WorldObserver and must not be able to tell the difference: the protocol has two methods
     for name in ("snapshot", "snapshot_with_receipt"):
         assert callable(getattr(wrapper, name))
+
+
+def test_the_executions_own_facts_compose_the_thirteen_names():
+    """RED first: the third composer, for the process where the episode actually runs (CP-2862)."""
+    from so101_demo.act.episode_assembly import physical_audit_from_execution
+
+    class Evidence:
+        step = 41
+        def document(self):
+            return {"step": self.step}
+
+    class _World:
+        values = (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
+
+    class Pose:
+        # the shape CupPoseSample actually has: the pose lives one level down, as dynamic_mujoco_execution.py:184 reads
+        pose_world = _World()
+        frame_id = "world"
+        source_stamp_ns = 12_400_000_000
+
+    audit = physical_audit_from_execution(
+        phase="CLOSE", reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
+        evidence=Evidence(), contacts=[{"geom1": "a", "geom2": "b"}],
+        joint_state_source_stamp_ns=12_500_000_000, joint_state_received_monotonic_s=12.51,
+        joint_state_generation=7, attached=True, scene_readback={"objects": ["cup"]},
+        input_pose=Pose(), source_stamps_s={"head": 12.4, "wrist": 12.4})
+    assert set(audit) == set(PhysicalAuditAdapter.KEYS)
+    assert audit["phase"] == "CLOSE" and audit["reset_epoch"] == 2 and audit["release_epoch"] == 1
+    assert audit["reference_source"] == "world" and audit["reference_time_s"] == 12.4
+    assert audit["reference_positions"] == list(_World.values)
+    assert audit["planning_scene"]["attached"] is True and audit["planning_scene"]["readback"] == {"objects": ["cup"]}
+    assert audit["controller_state"]["generation"] == 7 and audit["controller_state"]["received_monotonic_s"] == 12.51
+    assert audit["physical_stamps"] == {"head": 12.4, "wrist": 12.4, "joint_states": 12_500_000_000}
+    # a missing phase is refused rather than defaulted: a row without a phase cannot be placed in the sequence
+    with pytest.raises(ValueError, match="PHASE_MISSING"):
+        physical_audit_from_execution(
+            phase="", reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
+            evidence=Evidence(), contacts=[], joint_state_source_stamp_ns=None,
+            joint_state_received_monotonic_s=None, joint_state_generation=0, attached=False,
+            scene_readback=None, input_pose=Pose(), source_stamps_s={})

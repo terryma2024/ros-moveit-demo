@@ -23,6 +23,7 @@ __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "begin_episode", "end_episode",
            "episode_audit_pair",
            "record_instant", "end_episode", "RecordingWorldObserver",
+           "physical_audit_from_execution",
            "physical_audit_from_captured", "physical_audit_from_observation",
            "readback_from_frozen"]
 
@@ -553,3 +554,40 @@ class RecordingWorldObserver:
         # anything the wrapped observer offers beyond the protocol - close(), counters, its own diagnostics - is the
         # inner object's business, and swallowing it here would turn a missing method into a confusing AttributeError
         return getattr(self._inner, name)
+
+
+def physical_audit_from_execution(*, phase: str, reset_epoch: int, release_epoch: int, release_event: bool,
+                                  release_time_s: float, evidence, contacts, joint_state_source_stamp_ns,
+                                  joint_state_received_monotonic_s, joint_state_generation: int, attached: bool,
+                                  scene_readback, input_pose, source_stamps_s: dict) -> dict:
+    """Compose one row's physical audit from the facts the episode's own execution holds.
+
+    The third of three composers, and the one that runs where the episode does (CP-2861/CP-2862). Its inputs are all
+    things `RosDynamicMujocoExecution` already keeps: the per-state evidence it hands to `_record`, the joint-state
+    receipt trio, its planning-scene readback and attachment flag, and the input pose it was given. Nothing is fetched
+    from another process, and nothing is defaulted - a row without a phase could not be placed in the sequence, so an
+    empty one is refused rather than treated as "no phase yet".
+
+    Why not reuse the other two: `physical_audit_from_captured` reads a readback on the parent side of the process
+    boundary, and `physical_audit_from_observation` reads a `CupSceneObservation`; neither is what this layer holds,
+    and bending one of them to fit would have hidden which facts a row was actually built from.
+    """
+    if not phase:
+        raise ValueError("PHASE_MISSING: a row without a phase cannot be placed in the sequence")
+    stamps = dict(source_stamps_s)
+    if joint_state_source_stamp_ns is not None:
+        stamps["joint_states"] = int(joint_state_source_stamp_ns)
+    return {
+        "reset_epoch": int(reset_epoch), "release_epoch": int(release_epoch),
+        "release_event": bool(release_event), "release_time_s": float(release_time_s),
+        "physical_stamps": stamps, "phase": str(phase),
+        "reference_time_s": float(input_pose.source_stamp_ns) / 1_000_000_000.0,
+        "reference_source": str(input_pose.frame_id),
+        "reference_positions": list(input_pose.pose_world.values),
+        "mujoco_truth": evidence.document(),
+        "contacts": contacts,
+        "planning_scene": {"attached": bool(attached), "readback": scene_readback},
+        "controller_state": {"generation": int(joint_state_generation),
+                             "source_stamp_ns": joint_state_source_stamp_ns,
+                             "received_monotonic_s": joint_state_received_monotonic_s},
+    }
