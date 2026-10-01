@@ -46241,3 +46241,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   become active before any episode is driven.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 77f1e1acc; goal active.
+
+
+## CP-2449 — The stack is half up: the simulator half is the package set I ignored
+
+- Read-only readiness check: `/robot_description`, `/robot_description_semantic`, `/joint_states` and `/clock` exist
+  as topics, but `controller_manager` keeps logging "Waiting for data on 'robot_description' topic", and
+  `ros2 control list_controllers` cannot reach `/controller_manager/list_controllers`. So the interface nodes are up
+  (move_group, moveit, robot_state_publisher, controller_manager) while **nothing is publishing the robot
+  description** - and the node list from CP-2448 has no MuJoCo simulator node in it.
+- The cause follows from CP-2401's build: the five dependency packages I ignored
+  (`mujoco_ros2_control`, `mujoco_ros2_control_msgs`, `mujoco_ros2_control_plugins`, `mujoco_3d_lidar`,
+  `so101_mujoco_support`) are the ones that carry the simulator, and they are **built in the main worktree's install**
+  rather than in this one. Sourcing only this worktree's overlay therefore gives the launch file and the interface
+  nodes but not the simulator behind them.
+- The fix is the environment ordering, not new code: source ROS, then the **main worktree's** install (which has the
+  five packages), then **this worktree's** overlay last so its `so101_demo_py` and launch file still win - the same
+  precedence CP-2402 established for python, applied in the right order for `ros2 launch`. Nothing is rebuilt and no
+  second stack is started.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 30e7e06ef; goal active.
