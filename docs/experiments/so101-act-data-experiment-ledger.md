@@ -53875,3 +53875,27 @@ that judges endpoints.
 
 Recorded rather than implemented because the round's context is spent; the change is small and now fully specified:
 construct the judging port with the frozen policy and the spec's final target, and resolve the initial target per episode.
+
+
+## CP-2800 — Correction 4's implementation plan, in the four places it touches
+
+The change is small but it crosses four files, so it is written down before it is made:
+
+1. **`ProductionBatchComposition.__init__`** - already takes `broker_command_builder` and (this stretch's addition)
+   `container_brokers`; it gains an optional `endpoint_inputs` (the frozen policy and the final target, which the spec
+   already carries) and passes it where it builds the result port at `:2737`.
+2. **The port it builds** - when endpoint inputs are present the composition must build a port that performs the
+   endpoint judgement (`ActCollectionResultVerifier`, the class the coordinator's gate checks for by `isinstance`), and
+   keep `SealedResultAdapter` when they are absent, so the generic parallel-batch path is untouched.
+3. **`ActCollectionResultVerifier`** - already takes `endpoint_inputs`, `audit_manifest` and `scope`; the **initial
+   target** is the one input that is per-episode, so either it is resolved from the episode's own records at verify time
+   or the verifier accepts a resolver. The former is smaller and keeps the construction pure.
+4. **`act_first_episode.py`** - reads the frozen `endpoint_policy` from the inputs manifest it already validates, and
+   passes it with the spec's final target into the composition, so E3's path constructs the judging port.
+
+The test that proves it belongs where the chain's tests live: a composition built from a spec whose inputs carry an
+endpoint policy must construct a port the coordinator's gate recognises, and one built without must not - the same
+"selected by the result contract the port implements" rule the coordinator's own comment states (CP-2796).
+
+Each of the four is a small edit, and the third is the only one with a design choice left in it. The next round makes
+them, starting with the constructor and the port choice, which is where the behaviour is decided.
