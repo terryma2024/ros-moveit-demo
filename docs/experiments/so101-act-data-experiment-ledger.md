@@ -48767,3 +48767,23 @@ missed defect costs the milestone.
 
 The revision-4 verdict, when it lands, will therefore be read from `k2-protocol-recheck4.log` first (it is further
 along), with `...4b.log` as the independent second opinion.
+
+
+## CP-2578 — Revision 4: FAIL, with three internal-consistency corrections
+
+The verdict, read from the lines before its `EXIT=0` (tokens 17,145): **FAIL**, and all three corrections are
+contradictions I introduced rather than facts I got wrong about the repository:
+
+1. **"Reconcile missing-clock handling with the schema: section 2 requires `clock_source: "none"` and no instant, but
+   S/A/Q require float timestamps"** - so my honest "no publication, no instant" rule collides with the schema's
+   mandatory float timestamps: either every record carries an instant, or the rule about a missing publication needs a
+   shape the schema can express.
+2. **"Apply `sequence(parent) < sequence(self)` only to records with a parent; S requires `parent: null`"** - the
+   ordering assertion cannot be global, because the source record has no parent to be ordered after.
+3. **"Complete the field types: declare `sequence` as an integer for every record and specify the type/domain/nullability
+   of `R.received_at_s`"** - the type declarations are incomplete exactly where a reader would need them.
+
+Each is small, each is mine, and together they say the same thing the previous round said in different words: the
+document has to be **one internally consistent schema**, and my prose has been outrunning my tables. The convergence
+continues (4 findings, then 3, then 2, then 3 - the third round's drop was partly luck as the schema section was newly
+written), and the duplicate review `4b` is still running as an independent second opinion.
