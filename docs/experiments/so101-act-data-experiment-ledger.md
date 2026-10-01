@@ -52094,3 +52094,34 @@ corrections are about and E3 has to close.
 
 The tests in `test_act_seal_and_downgrade.py` are `xfail(strict=True)`, so when this is fixed they will report XPASS as a
 failure until they are unmarked - which is the intended signal, not an accident.
+
+
+## CP-2729 — The strip works for the chain and breaks the capture's own contract: a real conflict, not a bug
+
+With the two identifiers stripped from the recorder's channel, the first of the new tests gets all the way through the
+seal and the QC:
+
+```
+EPISODE QC: INCOMPLETE | checks: ['endpoint_pose']
+```
+
+So the sealing path, the audit binding, `verify_audit_manifest` and the prescribed report shape all work together end to
+end - which is E2's correction 2 demonstrated on real components. But the same change breaks an existing test of the
+capture with `KeyError: 'head_acquisition_id'`, because **that test asserts the identifiers ARE in the dictionary handed
+to the recorder**.
+
+So this is not a bug with one right answer; it is a **contract conflict between two components, each of which has a test
+of its own**:
+
+- the capture's test expects its per-row audit to carry the acquisition identifiers;
+- the recorder's closed `_AUDIT_KEYS` does not admit them, and it reads them from the audit's `acquisitions.jsonl` stream
+  instead.
+
+Resolving it means choosing which contract is the real one - either the capture stops putting them in that channel (and
+its test is updated, with the reason stated), or the recorder's set widens deliberately (and its own closed-set test is
+updated, with the reason stated). That is a design decision of exactly the kind the reviewer's correction 4 is about, and
+making it silently to turn a test green would be the one thing this ledger has consistently refused to do.
+
+My strip is reverted and the worktree is clean at 35 entries plus the new test file. What this round establishes is the
+good half: the chain works, and the only thing standing between it and a passing pair of corrections is a contract
+decision about two keys.
