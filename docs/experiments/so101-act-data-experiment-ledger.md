@@ -45875,3 +45875,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   three pieces is one short increment away and will be measured the same way.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished, and run's own contract, guards and identity are verified. HEAD b309019cd; goal active.
+
+
+## CP-2430 — The run surfaced a real contract seam: the runtime schema does not know hard_stops
+
+- With the three composition calls wired and the frozen runtime document parsed by
+  `load_runtime_config_any_schema`, the subcommand fails with
+  `so101_demo.parallel_batch.contracts.ContractError: UNKNOWN_CONFIG_FIELD: ['hard_stops']` - because
+  `parallel_batch_v3.yaml`'s contract is **closed** and does not admit the key the design instructed this task to add
+  there (CP-2411). So the field the design wants and the schema the reader enforces disagree, which is a real seam
+  rather than a mistake in either: the amendment's own rule covers it - a new field is a versioned change with its
+  consumers moved together.
+- Two honest routes, and the design points at the first: extend the runtime config's closed schema to admit
+  `hard_stops` with the two values (a positive finite RTF floor and an integer free-disk floor) and bump its version
+  with the consumers that read it; or, if the schema is deliberately frozen for this file, place the two stops in a
+  document whose schema already carries them and record that choice. What must not happen is a silent tolerance of
+  unknown fields, which would make every config contract weaker to satisfy one milestone.
+- Worth noting for the record: this failure is exactly the kind the skill's loop is for - the run reached a named
+  layer (`contracts.ContractError`), named the field, and left the two honest options. The next pass reads that
+  schema, makes the versioned change with its consumers, rebuilds and runs again.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; run's guards,
+  contract and run identity are verified, and its three composition calls are wired. HEAD ae4218454; goal active.
