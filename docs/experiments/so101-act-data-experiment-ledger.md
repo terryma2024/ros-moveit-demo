@@ -44223,3 +44223,51 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed with step one landed and step two handed off;
 - HEAD b363ba92b; goal paused.
+
+
+---
+
+# Index for the next worker (one page)
+
+**Head at hand-off:** run `git rev-parse --short HEAD`; the last entries of this ledger name it. The tree is green:
+fourteen suites, 446 passed, pointer in the plan root's `logs/task3-baseline-round401.run`, xdist 8 workers, NVMe
+scratch, tempfile proof. Nothing is half-applied and the 35-entry dirty status is the user's pre-existing work.
+
+**The eighth verdict** is `reviews/task3-rereview7-verdict.md`; **the plan and packet directory** is the plan root
+(`env.zsh`, `logs/`, `reviews/`). The seventh verdict sits beside it.
+
+## Closed
+
+| Finding | Evidence |
+| --- | --- |
+| T3-F1, T3-F14 | closed by the eighth verdict itself (CP-2307) |
+| T3-F3 | `863285e16` (initial epoch exempt), `1356d57cb` (flags stated), `cc2338185` (event after verification) |
+| T3-F12 | `72b09f36a` (records normalised), `117d4e2ca` (pose measurement), `f42a8e85b` (replacement travels) |
+
+## Open, with the entry point for each
+
+**Task A - F5's runner-backed fixture.** Recipe CP-2338; parts CP-2301/2302; prerequisite landed CP-2339; measured
+stream CP-2341 (four kinds across ten instants); three refusals named CP-2342. Next: instrument
+`_formal_coverage_ok` to print each clause, re-add the fixture as CP-2342 describes, and the print names the
+unsatisfied clause in one run.
+
+**Task B - F11's endpoint derivation.** Alignment LANDED (`e25843f01`, CP-2345) so every fixture states its own
+history; the derivation itself is one edit in `_window_matches_observed` (enclosure -> `abs(endpoint - extreme) <=
+tolerance`) and its only obstruction is CP-2332 (proven on a clean base, CP-2346).
+
+**Task C - the two rulings.** CP-2285 (may the caller stamp the scene instant?) and CP-2332 (which gate owns
+"coverage is incomplete"?). Both are one-line decisions, both the plan owner's, both recorded with their costs in
+CP-2332/CP-2344.
+
+## The objective's own path, none of which waits on Task 3
+
+Nine input values and one selection (CP-2232, with `rgb_skew` implied by code in CP-2234) -> `freeze_inputs` once
+(CP-2347) -> plan items 5-8, whose composition site is `src/cli/mujoco_parallel_batch.py:2731/2742` and whose
+installed CLI does not exist yet (CP-2348) -> a ninth review after F5 and F11 close.
+
+## The failures that taught the most, if a round is short
+
+The ledger records every attempt, including these: `episode_audit.py:1235` then `:1196` (CP-2244/2247, the tie and
+the copied sequence), the four fences of the formal writer (CP-2258), the appended row's sequence (CP-2248), the
+inverted endpoint directions (CP-2267), the shared `_window()` literal (CP-2327/2329), and the four attempts the
+both-kinds rule took (CP-2321/2324). Each names the run that settled it.
