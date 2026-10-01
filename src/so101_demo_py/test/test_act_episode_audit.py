@@ -749,6 +749,10 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
+                 # T3-F13: the action has two controllers, so the collection carries one record for each
+                 {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
+                  "measured_positions": [0.0], "measured_velocities": [0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
@@ -845,6 +849,10 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
+                 # T3-F13: the action has two controllers, so the collection carries one record for each
+                 {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
+                  "measured_positions": [0.0], "measured_velocities": [0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     complete.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
@@ -1147,6 +1155,10 @@ def _self_consistent_formal(tmp_path):
               "sim_time_s": 1.1, "source": "scene_port"}
     _feedback = [{"controller": "arm", "joint_names": ["1", "2", "3", "4", "5"], "commanded_positions": [0.0, 0.0, 0.0, 0.0, 0.0],
                   "measured_positions": [0.0, 0.0, 0.0, 0.0, 0.0], "measured_velocities": [0.0, 0.0, 0.0, 0.0, 0.0],
+                  "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1},
+                 # T3-F13: the action has two controllers, so the collection carries one record for each
+                 {"controller": "gripper", "joint_names": ["6"], "commanded_positions": [0.0],
+                  "measured_positions": [0.0], "measured_velocities": [0.0],
                   "status_sequence": 1, "sim_time_s": 1.1, "source_sim_time_s": 1.1}]
     writer.append_source("physics", {"kind": "pose", "sim_time_s": 1.1,
                                               "release_epoch": 1,
