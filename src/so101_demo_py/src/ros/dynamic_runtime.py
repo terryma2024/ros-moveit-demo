@@ -338,6 +338,11 @@ def run_dynamic_execute(
 
     status_stream = sys.stderr if event_emitter is not None else sys.stdout
     terminal_emitted = False
+    # bound before the try so the finally block can consult them on every exit path, including the early refusals
+    # that never reach the reset - the same trap as primary_failure, checked this time before the tests found it
+    episode_start_s = None
+    episode_last_receipt = None
+    episode_sealed = False
 
     def emit_failure(candidate: object) -> None:
         nonlocal terminal_emitted
@@ -514,11 +519,9 @@ def run_dynamic_execute(
         # own session and epoch, so `initial` is a state the run accepts and its receipt time is the instant the
         # episode started at. Opening the episode before that validation would mean creating one for a reset that is
         # about to be rejected - an abandoned episode root, and a seal over a run that never began (CP-2862).
-        episode_start_s = None
-        # whether this episode has been sealed yet, so the failure paths can seal exactly once
-        episode_sealed = False
         if begin_episode(episode_recorder, options, start_s=initial.simulator_received_monotonic_s):
             episode_start_s = float(initial.simulator_received_monotonic_s)
+        episode_last_receipt = float(initial.simulator_received_monotonic_s)
         task_scene = runtime.task_scene_port(
             node,
             "mujoco",
@@ -598,6 +601,14 @@ def run_dynamic_execute(
             if result.failure is not None and result.failure.code:
                 primary_failure = result.failure.code
     finally:
+        # A failed run must leave an episode too: sealing only on success would make every failure invisible in the
+        # evidence, which is the opposite of what this task is for. The verdict stays the run's own - `primary_failure`
+        # is None when nothing failed. The end is the last receipt on the observer's clock, so the window is comparable
+        # with its start; `episode_sealed` keeps a run that already succeeded from being sealed twice, which would
+        # rewrite a document the verifier may already have read.
+        if episode_start_s is not None and not episode_sealed:
+            end_episode(episode_recorder, end_s=episode_last_receipt, start_s=episode_start_s,
+                        outcome={"status": "FAILED", "reason": primary_failure or "none", "task8_success": False})
         cleanup_token = (
             profiler.start_span("runtime.cleanup")
             if profiler is not None
