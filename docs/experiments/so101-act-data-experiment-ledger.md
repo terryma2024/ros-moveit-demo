@@ -44948,3 +44948,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   with the plan's negatives.
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written. HEAD e58a82f91; goal active.
+
+
+## CP-2384 — The runtime loader's controls are in the test file now, twenty-one green
+
+- `test_act_endpoint_pose_acceptance.py` gained the runtime cases CP-2383 recorded as an honest gap: one positive
+  asserting the installed section 5.1 values load exactly, and seven negatives (an extra section, a missing key, a
+  boolean, a float `disk_free_min_bytes`, a negative age, a wrong kind, an infinite age) each refused by name.
+  **21 passed** with `--junitxml` in a fresh scratch, rc=0.
+- So the module's controls now cover both documents it owns: the five-threshold policy (verbatim case, axis
+  boundary, yaw insensitivity, XY/Z separation, four bad poses, five bad policies) and the development runtime.
+- E1's remaining plan items are unchanged: the policy and runtime roles in both real input registries; the
+  `user_empirical_default` approval with a real immutable effective-config artifact (base runtime/collection bytes
+  and hashes, the override source, every effective value, the episode identity); `prepare --runtime-policy`; the
+  freezer's keyword-only `runtime_policy`; `--mode`/`--endpoint-policy` preserving old-call behaviour; and
+  `test_act_first_episode_inputs.py` with the prepare/preflight positives and the safety negatives.
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written. HEAD 84e089e92; goal active.
