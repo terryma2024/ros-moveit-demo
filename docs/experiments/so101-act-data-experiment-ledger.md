@@ -45039,3 +45039,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   checkpoint; E1's data, loaders, calculator and twenty-one controls landed; F5's step two one traceback away;
   F11's derivation one clean edit away; F13's scene item behind K2.
 - HEAD 42a9b06de; goal active.
+
+
+## CP-2389 — Correction: K1's missing half is the rewrite of the existing control, not new negatives
+
+- Reading the plan's K1 item again against what I landed at CP-2369: it asks to MODIFY
+  `test_a_formal_audit_may_not_seal_without_source_coverage` so that it creates head/wrist acquisitions and a
+  complete legal audit through the real writer API, derives the window from that data, proves the positive seal and
+  the independent readback, and only then constructs the coverage negative by removing a single required
+  reference/event/physics record **with the camera window still consistent** - plus a separate window-mismatch
+  negative.
+- What I landed instead: two NEW negatives built on `_self_consistent_formal` (a legal camera window with the
+  physics history emptied, and a schedule naming an unacquired instant). They prove the attribution, and they are
+  worth keeping, but they do **not** rewrite the existing control, which still seals `_window()` with no
+  acquisitions at all - the shape CP-2332 recorded and the reason F11's derivation still cannot land: with the
+  derivation in force, that control's window cannot satisfy the camera endpoint comparison, so it reports a window
+  error where it means to report coverage.
+- So K1's remaining half is that rewrite, and it is also the exact prerequisite for F11: a camera-consistent audit
+  whose window is derived from its own acquisitions, with the coverage negative reached by removing one record.
+  CP-2376's derived window (schedule at the run's instants, `collection_*` containing the run, endpoints equal to the
+  physics extremes) is the construction both need.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F11's derivation
+  still open and now correctly attributed to this rewrite; F5's step two one traceback away; E1's data, loaders,
+  calculator and controls landed with the CLI the next transcription. HEAD 633033c29; goal active.
