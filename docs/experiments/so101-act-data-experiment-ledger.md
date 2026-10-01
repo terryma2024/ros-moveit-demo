@@ -42138,3 +42138,29 @@ phase 6/7/8 未跑、无 bundle/manifest、**无 `--resume` 路径**。
 
 **Task 13 内部进度**：§0 + phase **1/2/3/4/5/6/8** 就位（累计新用例 **180**）；**phase 7**（时序与停车参数）与
 **`coarse_step_rad` 的 val sweep/lock 证据**仍缺——`run` 仍会在 phase 6 之后/之内如实失败。
+
+## HS-296 — phase 7（时序与停车参数）完成：40 个新用例 RED→GREEN，节点级零差异
+
+**提交** `a1b9ea22b`（两个新文件，+1578；普通 `git commit`，钩子 rc=0；树干净）：
+
+| 参数 | 公式（实现） | 拒绝 |
+| --- | --- | --- |
+| `max_age_s` | nearest-rank p99.9(端到端帧龄) + 10 ms；**上限 1.5 个帧周期** | 超上限 → `CAL_FRESHNESS_EXCEEDED`（明确"改流水线，不提阈值"） |
+| `max_skew_s` | p99.9(image/CameraInfo/joint-TF 偏斜) + 时钟分辨率；**上限半个帧周期** | 超上限 → `CAL_SKEW_EXCEEDED`（**拒绝而非钳制**，等于上限允许） |
+| `submit_lead_s` | min(首个目标 sim 时间 − 提交快照 sim 时间) + MuJoCo 时间步 | 非仿真时基/未被覆盖 → `CAL_SUBMIT_LEAD_UNVERIFIED` |
+| `stop_velocity_rad_s` | p99.9(静止反馈速度) + 量化分辨率/周期 + 控制器停止容差 | 设计无上限 |
+| `stop_latency_s` | p99.9(stop/revoke → **第三个连续合格反馈**) + 一个反馈周期 | **任何单个样本超限即 `CAL_STOP_LATENCY_EXCEEDED`**（"从不因慢样本提高阈值"） |
+
+另把 **`frame_contract_10_hz`** 记入 `also_recorded`（上面每个以帧周期表达的上限都依赖它）。
+
+**验证链**：RED（collection error，rc=1，且**边界正确**：只缺新模块，phase-8/run 的 import 已解析）→ GREEN **40 passed, rc=0**
+（提交后 `hs296-postcommit`：40 + 回归 **248 passed, rc=0**；首次 GREEN 失败全在**夹具**自身——非十六进制摘要、双重包装记录、一个浮点刀口——只改夹具，未削弱断言）
+→ 回归 **208 passed, rc=0** → 全套件 **175 failed / 5816 passed / 152 skipped / 86 errors**，与基线**节点级 `diff` 为空（261 相同）、+40 正好新增、0 新增失败**；本轮**未出现**那个既有 flake。
+
+**它声明的主要推断（待评审）**：① p99.9 用 nearest-rank `ceil(0.999n)` 顺序统计量、不插值（n≤1000 时**就是最大值**，故"单样本超限"用例用 1000 个样本构造）；
+② 五个原始记录形状沿用既有 Task-8 measurement contract v2；③ **只接受 10 Hz** 帧契约，其它声明速率报普通 `ValueError`（因为放宽速率只会放宽上限）；
+④ 上限一律"拒绝而非钳制"；⑤ `submit_lead_s` 的覆盖方向取 `lead ≤ 计算值`（`lead ≥ 值` 在 min+时间步的构造下不可满足），未覆盖复用 `CAL_SUBMIT_LEAD_UNVERIFIED`；
+⑥ 时基必须是 `time_base=="simulation"` 且带 `*_sim_s` 戳；⑦ 停止速度取三项之**和**作为保守包络（设计未给公式形状）；⑧ 空/畸形测量报普通 `ValueError`（沿用 phase 6 惯例）。
+
+**Task 13 内部进度**：§0 + phase **1/2/3/4/5/6/7/8 的模块均已存在**（累计新用例 **220**）。**下一块**是把 phase 6/7/8 接进
+`head_search_calibration_run.py` 的编排，并让"`coarse_step_rad` 未计算"这一已知缺口**以 `CAL_BUNDLE_INCOMPLETE` 如实暴露**。
