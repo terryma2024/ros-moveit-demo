@@ -41684,3 +41684,24 @@ best-epochs60.pt = ef833f9c990292f5…  ✓ 与旧版 C 权重一致
 operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**搬进仓库内的正式入口**，因为设计禁止临时脚本产出最终参数）。
 
 **当前选型（用户裁决）**：C2a 为最终模型，两域同用，工作点 0.25/0.5；权重与数据已在 HF 更新并校验（HS-276/277）。
+
+## HS-279 — 实现计划被复审 **REJECT**（五条 findings），不据此动代码
+
+复审：tmux `codex-review28`，GPT-6.1-Sol high，2026-10-01 13:31，用时 2m29s。判决与全文存
+`$HEAD_EVIDENCE/reviews/task13-runtime-plan/verdict.md`（另存原始面板捕获）。**判决：REJECT**，五条：
+
+1. **phase 2 必须生成 coarse-step 候选**（不只是枚举），且**最终选择需要获选模型的 val sweep/lock 证据**；
+2. 运行时**缺失** `CalibrationMeasurementAdmission` / `CalibrationSearchBinding`、一次 generation 与一次 resource binding、**独立的 sweep receipts**、
+   以及 **recorder refusal**；
+3. **phase 5 引用了 phase 8 才产生的 bundle digest**（顺序倒置）；bundle 生成还**把后续审批混在一起**；各 phase 的必需产物、runtime identity、
+   受控依赖与**生效值检查（effective-value checks）**不完整；
+4. 测试缺：calibration 与 held-out 的**隔离**、测量公式、时序上下界、**fail-fast 顺序**、**失败运行的不可变性（failed-run immutability）**、
+   以及**安装产物级的端到端执行**；
+5. 验收缺：Task 13 **Step 4 的晋级提交**与**两个 source gate**；Step 5 需要显式的 **commit-stamped 全新构建、prefix/artifact 检查、ledger 与 Task 14 交接**。
+
+**处置：不写实现代码。** 计划需按上述五条重写后再送审——这是本任务一贯的"先评审后动手"。
+我在写这份计划时已接近上下文上限，因此它偏薄（尤其第 2、3、4 条的运行时契约与 phase 产物），复审指出的正是这些地方；
+**重写必须在新的上下文里做，不能带着当前余量草率成文**——那只会得到第二次 REJECT。
+
+**教训**：我上一轮把"送审"当作流程合规动作完成了，却低估了设计 §8 对运行时契约（admission、binding、receipts、refusal）的要求；
+计划里"reuses"一列写得像清单，实际掩盖了这些契约的存在。
