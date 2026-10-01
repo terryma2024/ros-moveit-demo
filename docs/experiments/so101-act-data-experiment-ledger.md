@@ -48173,3 +48173,28 @@ So the approved route's work is durable up to the host boundary CP-2543 recorded
 and verified, and the broker's remaining obstacle is a perception dependency the amendment excludes. With no answer yet
 to the three options, the next work is K2's protocol table rewrite, which CP-2536's review made concrete and which is
 entirely within this host's reach.
+
+
+## CP-2545 — K2 revision 2: the chain stated as a causal protocol
+
+With no answer yet to the three options CP-2543 raised, work moved to K2, whose review made the next step concrete. The
+first and largest of its four findings was that a containment rule is wrong for a chain that advances, so revision 2 -
+written to `reviews/k2-protocol-table-v2.md` under the plan root - states the chain as five boundaries with **descent**
+relations instead of containment:
+
+**S** source capture (the plugin's own stamp and step) -> **G** geometry derivation (which keeps its source rather than
+discarding it, the reviewer's specific complaint about `pick_place_scene_geometry()`) -> **A** apply (with an event
+identity) -> **Q** query (with a request identity and invocation bounds) -> **R** receipt (monotonic, naming the query
+it answers).
+
+The faithfulness question therefore becomes "does every record the window claims exist, and do their parents join",
+which is about identities rather than clock arithmetic. Clock mapping is confined to the interval `/clock` actually
+published for, with its uncertainty carried and **unknown** reported where no mapping exists - never manufactured
+equality, never a receipt-time clock read, never `scene_revision` as a sequence.
+
+It also freezes the schema requirements (nested keys, separate sequence namespaces, journal references checked rather
+than copied, geometry retained, new event kinds entering the closed schema) and lists the files that must move
+together, including the reviewer's factual correction: the verifier is **`verify_audit_manifest()`**.
+
+Next: run this revision past the same checkpoint before any implementation, since the review's remaining three findings
+are about exactly this document.
