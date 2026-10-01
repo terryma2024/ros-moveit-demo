@@ -48304,3 +48304,18 @@ the fix is procedural rather than forensic: next time, run the fixture and read 
 with the file unchanged between the run and the reading. That is CP-2504's lesson applied to its own evidence.
 
 The re-review is still running (`tail -1` empty).
+
+
+## CP-2552 — Same-run evidence: the acquisitions are there, the call site is mine, and bind_row still refuses
+
+This round's traceback came from the same run that produced it, which is what CP-2551 prescribed, and it says: `KEYS
+['s/1/head/1', 's/1/head/10'] 20` - all twenty acquisitions are in `writer._acquisitions`, keyed by acquisition id - the
+call site is `test_act_episode_audit.py:1441`, which is this fixture's `writer.bind_row(...)` line, and the source
+snippet around the raise is `bind_row`'s record construction plus `_closed(record, _ROW_FIELDS, "AUDIT_ROW_INVALID")`.
+
+So the refusal is real, in `bind_row`, on a call whose four validators accept its arguments as printed, with the
+acquisition keys present. What has not yet been printed **inside one run** is the record's actual key set beside
+`_ROW_FIELDS` - the one comparison that would settle whether the record built here differs from the five keys CP-2503
+read. That is the next measurement, and it is a two-line addition to the same fixture.
+
+The re-review is still running (`tail -1` empty).
