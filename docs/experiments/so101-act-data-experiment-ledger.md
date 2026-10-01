@@ -46220,3 +46220,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the coordinator commit follow in order.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 04fbd501f; goal active.
+
+
+## CP-2448 — The approved headless ACT stack is up, started once, with its evidence recorded
+
+- The launch plan was written to the LIVE_ROOT and then executed once, after a reconnaissance that confirmed no
+  `ros2 launch`, `move_group`, `mujoco_ros2_control` or `gz sim` process was already running. What is up now is the
+  approved stack: `ros2 node list` shows `/controller_manager`, `/move_group`, `/move_group/moveit`,
+  `/move_group_private_*`, `/moveit_*`, `/moveit_simple_controller_manager`, `/robot_state_publisher` and
+  `/so101_base_to_camera_link`. The argv, session id, evidence root, scene path, stop instructions and the
+  pre-check's result are all in `launch-plan.md`, with `launch.log` and `launch.pid` beside it.
+- Three measured lessons from getting there, each worth keeping: `ros2 launch`'s arguments use the `:=` form, so the
+  first attempt died with "malformed launch argument"; and the **same shadowing CP-2402 recorded for python applies to
+  `ros2 launch`** - with the main worktree's install sourced, the package resolved to
+  `/home/matianyi/Projects/ros-moveit-demo/install/...` and the launch file was "not found in the share directory",
+  so the correct environment for this task is ROS plus **this worktree's** overlay only, which then resolves the share
+  to `<worktree>/install/so101_demo_py/share/so101_demo_py` and finds the launch file.
+- `controller_manager` was still logging "Waiting for data on 'robot_description' topic" when the sample was taken,
+  which is the normal startup transient rather than a fault; the next check is that it clears and the controllers
+  become active before any episode is driven.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 77f1e1acc; goal active.
