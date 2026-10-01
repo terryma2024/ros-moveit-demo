@@ -515,6 +515,8 @@ def run_dynamic_execute(
         # episode started at. Opening the episode before that validation would mean creating one for a reset that is
         # about to be rejected - an abandoned episode root, and a seal over a run that never began (CP-2862).
         episode_start_s = None
+        # whether this episode has been sealed yet, so the failure paths can seal exactly once
+        episode_sealed = False
         if begin_episode(episode_recorder, options, start_s=initial.simulator_received_monotonic_s):
             episode_start_s = float(initial.simulator_received_monotonic_s)
         task_scene = runtime.task_scene_port(
@@ -683,4 +685,5 @@ def run_dynamic_execute(
                              "reason": (result.failure.code if getattr(result, "failure", None) is not None
                                         and getattr(result.failure, "code", None) else "none"),
                              "task8_success": result.status.value == "DONE"})
+        episode_sealed = True
     return 0
