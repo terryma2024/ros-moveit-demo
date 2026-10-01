@@ -50849,3 +50849,27 @@ next job is to separate those caused by this stretch's changes from those that p
 
 Two lessons, both mine, both recorded: a summary must be read **after** the summary, and "no FAILED lines yet" is not
 "no failures".
+
+
+## CP-2677 — The first failure, read: a committed test expects an attribute the committed class lacks
+
+Serially, in 0.79 s:
+
+```
+E   AttributeError: type object 'PickPlaceSearchBoundary' has no attribute '_gate_facts'
+1 failed
+```
+
+So the first of the 61 is not a parallel-fixture interaction and not something my changes could have caused: a test asks
+`PickPlaceSearchBoundary` for `_gate_facts` and the class does not define it. And `git status --porcelain` on both the
+test file and `pick_place_search_port.py` is **empty** - they are committed and clean - so this is a **pre-existing
+failing state in the repository's own committed tests**, not the user's uncommitted work and not mine.
+
+One caveat, recorded so it is not over-read: `_gate_facts` appears **once** in `test_act_task8_motion_phases.py` while 61
+tests fail, so this explanation covers one of them; the other sixty have to be read the same way, one error at a time,
+before any statement about the family as a whole is honest.
+
+What the round establishes is narrower and solid: the 61 are **real** (they reproduce serially), they are **not mine**
+(the file and its subject are clean, and this stretch never touched `pick_place_search_port.py`), and the right next
+instrument is the same one that settled it here - read the actual error of one test at a time rather than reasoning from
+the family's name.
