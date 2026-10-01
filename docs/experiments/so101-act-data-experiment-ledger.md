@@ -47131,3 +47131,12 @@ marker left in `episode_audit.py`, the four suites green together (audit, first-
 artifacts), and the one approved headless ACT stack still running with `joint_state_broadcaster` active. The user's
 decision on the container-free broker path (CP-2481/2482) and on where to run K2's Codex checkpoint (CP-2487) are
 still open; nothing else is.
+
+
+### One line for the next context, so it does not repeat a failed exact string
+
+The two-clause probe was attempted and **aborted on a failed assertion before touching the file** (the schedule rule's
+source text is not `acquired.setdefault(row["camera"], set()).add(row["stamp_s"])` at the indentation I guessed), so
+the tree is untouched and the audit suite ran uninstrumented at 74 passed. The next context should read that rule's
+exact text with one grep before patching it - the same lesson as CP-2490's and CP-2484's, applied to a probe rather
+than to production code: read the line, then patch the line.
