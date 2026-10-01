@@ -49389,3 +49389,30 @@ applies, which means the new kinds need no new append path - only the schema ent
 
 That keeps K2's implementation to the shape it has had all along: additions to closed sets, each one measured before it
 is written.
+
+
+## CP-2611 — What K2's third piece actually needs, measured
+
+`_payload_typed(payload)` classifies every payload value by **key membership**:
+
+```python
+        if key in _EVENT_FLAGS:      type(value) is bool
+        elif key in _EVENT_COUNTS:   type(value) is int and value >= 0
+        elif key == "physics_step":  int >= 0
+        elif key == "release_epoch": int >= 0
+        elif key in _EVENT_STRINGS:  isinstance(value, str) and value
+        else: return False           # an unclassified key is refused
+```
+
+So the audit has **three** value categories - boolean flags, non-negative integers, non-empty strings - and anything
+else is refused. That is enough for every existing kind and **not** enough for K2's three, because the passed table
+gives them floats (`applied_at_s`, `query_at_s`, `received_at_s`, `uncertainty_s`) and a string that may be **null**
+(`clock_source`, which is null exactly when a publication did not cover the record).
+
+So K2's third piece is three additions in one file, not one: the three kinds in `_EVENT_PAYLOADS` with their key sets, a
+new float category (with whatever nullability the table's rule requires), and the classification of each new key. The
+existing kinds and their categories stay exactly as they are, and the `else: return False` rule keeps its guarantee -
+nothing enters a payload unclassified.
+
+This is the same shape as the other two pieces: a measured addition to a closed set, where the measurement is what keeps
+the edit to one pass instead of two.
