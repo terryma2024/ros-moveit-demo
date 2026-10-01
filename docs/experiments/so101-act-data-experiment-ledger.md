@@ -51220,3 +51220,24 @@ stays visible in the episode's seal; what changes is that it no longer decides.
 
 One thing still to read before writing: the failing status's exact name in `AttemptStatus`/`ValidationStatus`, so the
 downgrade uses the vocabulary the coordinator already understands rather than a string I invent.
+
+
+## CP-2691 — Correction 3's second half has an existing fixture to extend
+
+The search for a place to prove the downgrade end-to-end finds one already built:
+
+- **`test_act_result_commit.py:46`, `:61`, `:76`** construct **`ActCollectionResultVerifier({"w00": worker_root})`** - the
+  `act/result_store` class the coordinator's special path checks for (CP-2652), with a real worker root and a sealed
+  result;
+- `test_act_parallel_collection.py:124` constructs the **other** same-named class, the adapter one, which is not the
+  class under test here;
+- and the artifacts suite mentions `endpoint` zero times, so nothing there exercises this path yet.
+
+So the second half of correction 3 is an extension of an existing fixture rather than a new harness: give those tests'
+verifier the `endpoint_inputs` it now accepts, seal an episode whose endpoints do **not** match the frozen targets, and
+assert that the status it returns is `FAILED` even though the episode claims `PASSED`. That is the coordinator-level
+property in miniature - the same field, the same class, the same persistence path - and it is a dozen lines where a full
+coordinator drive would be many.
+
+The two enums recorded alongside it: `AttemptStatus{PASSED, FAILED, INVALID, INDETERMINATE}` and
+`ValidationStatus{VALIDATION_PASSED, VALIDATION_FAILED, VALIDATION_INVALID}`.
