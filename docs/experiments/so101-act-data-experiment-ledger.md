@@ -50482,3 +50482,29 @@ and the fix is mine to make.
 
 Nothing is hidden by this: the ledger records that my gate was too narrow (CP-2659), that my prediction was wrong
 (CP-2660), and that the next action is the baseline that decides between the two explanations.
+
+
+## CP-2661 — The 129 failures are environmental: the asset resolves to the main worktree's install
+
+One failing test, read in full, answers the question the last two rounds posed:
+
+```
+src/so101_demo_py/test/test_act_task8_readback.py:31: in loaded_model
+    return mujoco.MjModel.from_xml_path(str(path))
+E   ValueError: ParseXML: Error opening file
+    '/home/matianyi/Projects/ros-moveit-demo/install/so101_demo_py/share/so101_demo_py/assets/mujoco/act/scene...'
+```
+
+The path is the **main worktree's** `install/`, not this one's, and its share directory does not carry the act assets -
+so the test never reaches an assertion, and the 129 "failures" are the same environment shape this stretch has met
+before: an overlay that resolves package data to a different worktree's install tree.
+
+So neither my code nor the user's tests are implicated: `test_act_task8_readback.py` and its siblings fail because
+`ament_index` hands them a scene path that does not exist in the tree it points at. The honest fix for a full-sweep gate
+is to source **this** worktree's install last (or point the suites at the source assets), exactly as the earlier
+`colcon build` and launch work needed - and the narrower nine-suite gate was green because those suites resolve what
+they need by relative path rather than through `ament_index`.
+
+That also means CP-2659's reading of the numbers stands as a fact - 129 failed, 5925 passed - while its implication
+("some of them are in code I changed") is **falsified**: the two names that looked most like mine are the asset
+resolution failing before any assertion about them could run.
