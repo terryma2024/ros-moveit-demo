@@ -46098,3 +46098,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   their isolated-copy negatives.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 5110c4392;
   goal active.
+
+
+## CP-2442 — The input chain is green end to end with the corrected resource route
+
+- After the rebuild, all three of the plan's first E3 commands pass against the real worktree, into the plan root
+  `experiments/nonhead-first-episode-closure.hK7mQ2pL`: `inspect` rc=0, `prepare --mode
+  preselected_target_diagnostic --endpoint-policy <installed> --runtime-policy <installed>` rc=0, and `preflight`
+  rc=0 reporting the diagnostic mode, twelve roles and - for the first time from the design's own document -
+  `runtime_policy.hard_stops = {rtf_min: 0.9, disk_free_min_bytes: 53687091200}`.
+- That closes the loop CP-2411 opened: the two stops the design authorized are explicit in
+  `config/act/endpoint_pose_development_runtime_v1.yaml`, are read there by the resource route, and are bound into the
+  frozen manifest and its `inputs_sha256` - while the batch runtime config whose contract is a closed dataclass keeps
+  its original bytes and digest.
+- So the input half of the milestone is finished, measured, and now internally consistent: candidates discover with
+  zero blockers, the freeze records every role with its own provenance plus the amendment's three bindings, and the
+  reader accepts exactly that document while still refusing unknown fields.
+- What is left is the execution half: wire the run's fourth piece (the episode runner and the approved MuJoCo stack it
+  needs), execute one FULL_RESTART episode, then the fresh-process `qc`, `verify-commit` and `check-export` with their
+  isolated-copy negatives.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 1603978f7;
+  goal active.
