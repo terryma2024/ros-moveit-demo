@@ -49108,3 +49108,18 @@ The next work on K2 is its implementation, which the first review specified as a
 `pick_place_scene.py`, `ports/planning_scene.py`, `task_scene.py`, `pick_place_search_segment.py`,
 `pick_place_search_port.py`, `pick_place_runner.py`, `episode_audit.py`, `recorder.py` and `result_store.py`, with
 their tests. That is F13's fourth item.
+
+
+## CP-2597 — K2's checkpoint is formally complete: PASS with its marker
+
+The log closes at 366 lines with **`EXIT=0`** as its final line and `PASS` at 362 and 365 - the same shape the seven
+FAILs had, so the completion marker rule (CP-2546) is satisfied and the verdict is final rather than in progress. K2's
+protocol table is passed after eight revisions.
+
+The checkpoint's requirements are therefore met on this axis, which per the repository's rule for `dst` execution means
+the work it gated may now proceed: K2's implementation, in the files the first review listed as needing to move
+together. That is the next piece of work and it is F13's fourth item; E2's remaining wiring is the other open piece,
+and both are within this host's reach.
+
+Nothing else changed this round: the tree still holds only the user's thirty-five entries, E2's six tests remain green
+under the width gate at 242 passed, and the one decision outstanding is still the user's broker choice (CP-2543).
