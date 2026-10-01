@@ -51771,3 +51771,24 @@ stands between this test and its assertion, and that is a single grep away.
 
 The test is reverted and the worktree is clean at 35 entries. This is the fifth shape this one correction has had to
 read - and, unlike the first four, this one is a one-line detail rather than a contract.
+
+
+## CP-2716 — The last unknown, found: rows reach the recorder on drain, which my tests never called
+
+```
+                self.recorder.append(row["observation"], entry["positions"], audit)      # 450
+                # the row leaves pending work only once the recorder accepted it, so a refusal ...
+```
+
+So the capture hands rows to the recorder from its **drain** path, and `drain()` (`:179`) is what moves pending rows
+across. My sealing test fed three frames through `frames_at` and went straight to `finish` - and `finish` does call
+`self._service()` (its own code, read at CP-2671), but the observation is that the recorder saw too few rows for its grid
+and refused with `EPISODE_TIME_GAP`.
+
+That makes the fix one line: call `capture.drain()` (or the equivalent) after feeding and before finishing, so the rows
+actually reach the recorder. Everything else in both tests has been exercised - the seal succeeded in the first test
+(CP-2714), which proves the drain path does deliver rows in that shape.
+
+Worth noting the contrast with the previous four unknowns in these two tests: those were contracts (roots, scope types,
+byte-equality, prescribed field sets) and this one is a call the test forgot to make. The distinction is why the remedy is
+a line rather than another round of reading.
