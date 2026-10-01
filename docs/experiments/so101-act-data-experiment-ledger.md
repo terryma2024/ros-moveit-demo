@@ -50936,3 +50936,35 @@ construction, not inferred from my code. Two options, and both are legitimate:
 
 What is not legitimate is choosing whichever makes the suite green, which is why the next read is the test's body around
 its composition call rather than another attempt at the fix.
+
+
+## CP-2680 — The test's own builder settles it: its "external broker" is a docker container
+
+The judgement CP-2679 asked for is settled by the test's construction, not by my convenience:
+
+```python
+    composition = ProductionBatchComposition(
+        spec,
+        resource_probe=Probe(),
+        claim_root=scratch / "external-broker-claims",
+        supervisor=supervisor,
+        broker_command_builder=lambda owner: (
+            "docker",
+            "run",
+            ...
+```
+
+So the "one external broker" this test prepares and supervises is **a docker container**. Its intent is therefore the
+first reading: **an external broker that is a container still receives the container-shaped spec**, and
+`config_path == "/runtime/runtime-config.yaml"` is exactly right for it. My CP-2541 substitution leaked too far - it
+switched every custom builder to the host path, when the container path is correct whenever the broker actually runs in
+a container.
+
+The corrected rule is therefore about the **command**, not about whether a builder exists: the spec names
+`/runtime/runtime-config.yaml` when the builder's command is a container runtime (`docker`, `podman`), and the host copy
+only when it is a host command - which is precisely the container-free route's case, and only that case.
+
+Two further facts from this round: the serial gate shows the same `F` marks as the parallel one (its log prints
+`.....F..................F..` at the time of writing), confirming CP-2677 that the failures are not parallel-specific;
+and the failing test's docker command is itself evidence that the container route is a live, exercised path in this
+repository - worth remembering when the user decides the broker question.
