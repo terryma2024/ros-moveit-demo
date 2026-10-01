@@ -48567,3 +48567,18 @@ Reading E2's section whole gives what guessing could not:
 So E2's first concrete artefact is `endpoint_records_from_audit` in `episode_qc.py`, with the RED test that a
 fresh-process QC accepts a legal-endpoint, quality-absent chain - and the review of K2 revision 3 is still running
 (`tail -1` empty).
+
+
+## CP-2566 — E2's shared QC module does not exist yet, so its first artefact is a new file
+
+The plan lists E2 as *modifying* `act/episode_qc.py`, but that file is not in the tree and no shared QC module is
+anywhere under `src/` - the only match for QC-shaped names is `act/collection.py`. So the plan's verb is aspirational:
+E2 **creates** `act/episode_qc.py`, and its first artefact is the interface the plan names,
+`endpoint_records_from_audit(audit: dict, inputs: dict) -> dict`, living there so that the fresh-process QC and the
+Coordinator's verifier can share one implementation rather than each recomputing the endpoint records its own way.
+
+That also explains why E2's RED test is stated as a chain rather than a unit: the thing being built is the shared
+recomputation path - `producer -> Writer -> seal -> fresh-process QC` - whose first requirement is that a legal-endpoint,
+quality-absent episode is **not** refused by conditions that were written when the quality fields were expected.
+
+The review of K2 revision 3 is still running (`tail -1` empty).
