@@ -186,3 +186,31 @@ def test_the_assembly_seam_builds_a_capture_from_the_parts_a_run_holds(tmp_path)
     assert isinstance(capture, ContinuousEpisodeCapture)
     # the recorder owns the directory and creates it, which is why the audit writer has to accept an existing root
     assert episode_root.is_dir()
+
+
+def test_the_real_synchronizer_satisfies_the_sampler_contract_the_capture_calls():
+    """K1's forward half, as far as a headless host allows.
+
+    The capture calls `sampler.sample_with_audit(session_id, attempt_id, at_s)` and expects an `(observation,
+    source_audit)` pair; `RgbObservationSynchronizer` is the production object that provides it. Reading its `sample`
+    rather than guessing (three guesses cost three rounds at CP-2824) gives its requirements exactly: `causal_sample`
+    runs over **every** stream buffer, so all four must hold a stamp within `max_age_s` of the instant, their stamps
+    must agree within `max_skew_s`, and `neck` and `arm` are read by name - `neck` for the yaw the state appends.
+    """
+    import numpy as np
+
+    from so101_demo.act.synchronizer import RgbObservationSynchronizer
+
+    synchronizer = RgbObservationSynchronizer(max_age_s=0.1, max_skew_s=0.1)
+    synchronizer.reset("session-1")
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    receipt = synchronizer.monotonic()          # the same clock the sampling compares against (CP-2823)
+    for camera in ("head", "wrist"):
+        synchronizer.push(camera, "session-1", 1.0, frame, received_monotonic_s=receipt)
+    synchronizer.push("arm", "session-1", 1.0, [0.0] * 6, received_monotonic_s=receipt)
+    synchronizer.push("neck", "session-1", 1.0, 0.0, received_monotonic_s=receipt)
+
+    observation, source_audit = synchronizer.sample_with_audit("session-1", "attempt-1", 1.0)
+    assert observation["sim_time_s"] == 1.0
+    # what the capture records about a sample's provenance comes from this pair, so the key it reads has to be here
+    assert "source_stamps" in source_audit and set(source_audit["source_stamps"]) == {"head", "wrist", "arm", "neck"}
