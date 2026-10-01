@@ -483,7 +483,9 @@ class _OneFieldFlipped(FakePort):
     # the release group's evidence does not come from _evidence: the runner takes it from these builders, so the
     # override is applied wherever the runner will read it rather than only where the hold group is built
     def set_down(self, request):
-        return self._apply("FINAL_CHECK", super().set_down(request))
+        # the third gate, keyed to itself: it carries its own code (SET_DOWN_EVIDENCE_INVALID) and eleven boolean
+        # predicates, and nothing about a phase's flip should reach it (CP-2813)
+        return self._apply("SET_DOWN", super().set_down(request))
 
     def release_preflight(self, request):
         # its own key: the preflight and the release phase are two gates with two codes, so a flip meant for one must
@@ -557,7 +559,24 @@ def test_the_release_phase_refuses_each_predicate(phase, flip):
     with pytest.raises(PickPlaceError, match="RELEASE_NOT_CONFIRMED"):
         PickPlaceRunner(port).run(request())
 
-# FINAL_CHECK is deliberately not in the test above: its four flips failed there, and the reason is that it is not
-# guarded by the release conjunction at all - the run reads it through set_down, whose own checks raise
-# FINAL_PLACEMENT_INVALID (pick_place_runner.py:232). So the release half has not two gates but three, and this one
-# needs its own negatives with its own code rather than being folded in with the phase's.
+@pytest.mark.parametrize("key", [
+    "cup_supported", "bilateral_contact", "controller_stopped", "controller_reference_ok",
+    "joint_feedback_ok", "planning_attached", "contact_ok", "mujoco_ok", "planning_scene_ok",
+    "head_rgb_ok", "wrist_rgb_ok",
+])
+def test_set_down_refuses_each_predicate(key):
+    """The third gate of the release half: eleven predicates, one code, each refusing alone (CP-2813).
+
+    Its own key, so a flip here cannot leak into the release preflight or the release phase - the two gates that run
+    before it must both pass for the run to reach this one at all.
+    """
+    port = _OneFieldFlipped("SET_DOWN", **{key: False})
+    with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
+        PickPlaceRunner(port).run(request())
+
+
+def test_set_down_requires_the_cup_to_be_held():
+    """The same gate's non-boolean predicate: the cup must still be held when the run sets it down."""
+    port = _OneFieldFlipped("SET_DOWN", holding_state="EMPTY")
+    with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
+        PickPlaceRunner(port).run(request())
