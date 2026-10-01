@@ -50784,3 +50784,30 @@ only their poses, which ties this correction to K2's task-level sequence in a wa
 This is the third time in E2 that the answer was already written in the design and I built something else: the pose key,
 the report shape, and the "no quality precondition" reading. The pattern is mine, and the remedy is the one this ledger
 keeps prescribing: read the prescription before writing the artefact.
+
+
+## CP-2674 — The so101-dev skill is loaded, and its gate contract changes how this work must be verified
+
+The repository rule requires the `so101-dev` skill before task actions on any SO-101 development, and it is now loaded.
+Three of its requirements bear directly on this stretch:
+
+**1. The full-module gate.** Every module's complete ordinary pytest scope must run under `pytest-xdist` with
+`min(8, logical CPU)` workers, recording the CPU count, the worker count, the actual scope, the exit code, a JUnit
+report and the skip count. Targeted or serial runs are for localisation only and **do not count as a pass**. My "nine
+suites, 264 passed" gate therefore does not satisfy this, and neither does the directory sweep in CP-2664 - that one had
+the right scope and the right recipe but was not recorded with its worker count, JUnit and skips. The next full gate does
+all four, on `src/so101_demo_py/test/` only (never `benchmark_test/`).
+
+**2. The shell.** AGENTS.md states the workspace's default interactive shell is `zsh` and forbids assigning to its
+read-only parameters such as `status`. That is exactly the fact CP-2662/2663 measured from the other side - the setup
+scripts are zsh-only, and sourcing them from bash silently half-works - so this stretch's 129-failure detour is now
+confirmed by the repository's own rules rather than only by experiment.
+
+**3. The per-round report.** Each round's report has a required shape: symptom boundary, current judgement
+(`OBSERVED`/`INFERRED`/`HYPOTHESIS`), the single variable changed, the modification, automated verification, runtime
+verification, visual verification, and the next minimal hypothesis. Visual verification may be N/A with a reason only
+for purely headless or Web-backend changes - which this work is, since nothing here drives a GUI.
+
+Also restated by the skill and already honoured: one registered evidence root
+(`/data/work/so101-evidence/act-data/20260924-fbc25063-resume/`), a long-task ledger in the worktree (this file), no
+second stack, and no deletion of evidence without authorisation.
