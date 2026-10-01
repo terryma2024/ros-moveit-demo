@@ -41705,3 +41705,30 @@ operating point 的正式联合搜索（把本 campaign 的临时脚本逻辑**�
 
 **教训**：我上一轮把"送审"当作流程合规动作完成了，却低估了设计 §8 对运行时契约（admission、binding、receipts、refusal）的要求；
 计划里"reuses"一列写得像清单，实际掩盖了这些契约的存在。
+
+## HS-280 — 重写依据：设计 §8.2 里我漏掉的那段运行时契约（逐条对上五条 finding）
+
+原文（`design.md` §8.2，phase 列表之后那段，逐字引用）：
+
+> 首次校准不能调用要求既有 `TASK8_READY/QUALIFIED` 的生产 Head Search 入口，否则会形成先有资格才能校准的死锁。
+> `run` 与首次 `qualify` 必须复用现有 `CalibrationMeasurementAdmission` 与 `CalibrationSearchBinding`：
+> 只允许 `role=calibration` 的单次 measurement flight，**release 和 recorder 永远拒绝**；
+> 所有 neck target 绑定**同一 generation、measurement plan、safe interval 和独立 sweep-check receipt**。
+> **资源只在 CLI 入口绑定一次**，内部阶段不得重绑。
+> 当前正向累计 `2*pi` 的生产 controller **不满足本文轨迹契约**，必须在 **RED/GREEN** 中改成前述有界停点序列后才能用于正式资格验证。
+
+**复审五条 finding ↔ 契约条款对应（重写时逐条落实）**：
+
+| finding | 对应契约/设计 |
+| --- | --- |
+| 1 phase 2 要生成 coarse-step 候选；最终选择需获选模型的 val sweep/lock 证据 | §7.1 `coarse_step_rad`（有界双向扫描覆盖 `required_search_domain_rad`）+ §7.2 "获选感知参数原样纳入并验证" |
+| 2 缺 Admission/Binding、一次 generation 与一次 resource binding、独立 sweep receipts、recorder refusal | 上面整段（release 与 recorder 永远拒绝；资源只在 CLI 入口绑定一次） |
+| 3 phase 5 引用 phase 8 才有的 bundle digest；bundle 生成混入审批；缺 phase 产物/runtime identity/受控依赖/生效值检查 | §8.3 输出清单 + §7.1 "每项参数必须记录…SHA256…production owner、启动 readback" |
+| 4 测试缺隔离/公式/上下界/fail-fast/failed-run immutability/安装级端到端 | §7.1 各项失败条件 + §8.2 "结果只能是 SUCCEEDED 或 FAILED…失败时记录首次失败阶段…已经生成的证据" |
+| 5 验收缺 Step 4 晋级提交与两个 source gate；Step 5 需 commit-stamped 构建、prefix/artifact 检查、ledger、Task 14 交接 | 计划 Task 13 Step 4/5 原文 |
+
+**另外两条必须在重写时写进计划的既有约束**：
+- 生产 controller 的**正向累计 `2*pi` 轨迹不合格**，必须先按 RED/GREEN 改成有界停点序列——这是一项**先于** phase 6/7 的代码改动，且属"改现有实现"而非新写；
+- `run` 的 phase 序列是**固定八段**（§8.2 已列），没有 `--resume`，`run-status.json` 仅供审计。
+
+**下一步**：按上表重写 `docs/superpowers/plans/2026-10-01-so101-head-search-calibration-runtime-plan.md`，再送同一会话复审；**通过前不写实现代码**。
