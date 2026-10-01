@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import evaluate_endpoint_pose
+from so101_demo.act.episode_audit import verify_audit_manifest
 
 PHYSICS_STREAM = "physics.jsonl"
 REFERENCE_STREAM = "references.jsonl"
@@ -99,3 +100,29 @@ def endpoint_records_from_audit(audit, inputs) -> dict:
     return {"status": verdict["status"], "errors": dict(verdict["errors"]), "passed": dict(verdict["passed"]),
             "endpoint_passed": all(verdict["passed"].values()),
             "initial_pose": poses[0], "final_pose": poses[-1], "source": "verified-raw-audit"}
+
+
+def endpoint_qc_document(episode_root, inputs, *, manifest_name: str = "audit-manifest.json") -> dict:
+    """The independent endpoint verdict for a sealed episode, as a document.
+
+    A fresh process is pointed at the sealed episode's root; this reads the manifest through the repository's own
+    verifier - which re-reads every stream and recomputes the digests - and then recomputes the endpoint records from
+    what it re-read. The verdict it returns is therefore evidence plus calculation, and it is deliberately **beside**
+    the seal's own ``qc_passed`` claim rather than replacing it, so that "a legal seal" and "the endpoints were judged
+    by a fresh process" stay distinguishable (the design's three states).
+    """
+
+    root = Path(episode_root)
+    manifest_path = root / manifest_name
+    manifest = verify_audit_manifest(manifest_path)
+    verdict = endpoint_records_from_audit({"manifest": manifest, "root": manifest_path.parent}, inputs)
+    return {"kind": "ACT_ENDPOINT_QC", "schema_version": 1,
+            "episode_root": str(root), "episode_manifest_sha256": _manifest_digest(manifest_path),
+            "claim": {"status": manifest.get("status"), "qc_passed": manifest.get("qc_passed")},
+            "endpoint": verdict}
+
+
+def _manifest_digest(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
