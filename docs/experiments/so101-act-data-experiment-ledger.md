@@ -46485,3 +46485,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   than derived.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 949b09780; goal active.
+
+
+## CP-2461 — Three named failures in a row, and the trusted target is a seven-value pose
+
+- Driving the fourth piece produced a sequence of named refusals, each one layer deeper and each one fixed or
+  understood rather than worked around:
+  1. the run's own guard refused a pre-created root (`already exists; a run is a new evidence root`) - correct
+     behaviour, I had made the directory myself;
+  2. `parallel_batch.artifacts.ArtifactError: WRONG_RUN_MODE` - because I passed the **collection mode**
+     (`preselected_target_diagnostic`) where a `RunMode` enum belongs; the adapter now receives `RunMode.EXECUTE`,
+     with the collection mode staying recorded in the run's log and in the frozen manifest;
+  3. `ArtifactError: TRUSTED_FINAL_TARGET_REQUIRED` - and reading `artifacts.py:697` shows why: the value's last four
+     components are validated as a **quaternion** (sum of squares against 1.0 to 1e-6), so
+     `expected_final_cup_pose_world` is a **seven-value pose** (xyz + xyzw) while my `--final-cup-pose` takes three.
+- So the CLI's flag has to carry seven finite numbers with a unit-norm quaternion, validated the same way the
+  endpoint policy validates poses - and it stays an explicit, fail-closed input rather than a default, because the
+  target is the scenario's frozen quantity and inventing one would make every later PASS meaningless.
+- Honest state of the tree: the `run` subcommand's fourth-piece work (points document, frozen provenance copy, the
+  `RunMode` fix, both written under the run's own root) is **uncommitted** and currently stops at the third refusal;
+  `run.log` has not been written yet because the refusal happens before it. The next pass fixes the flag's arity,
+  re-runs, and commits once it reaches a full run or a clearly named next layer.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 5c8e002d2; goal active.
