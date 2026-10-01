@@ -52945,3 +52945,33 @@ test's success says the episode itself is sound.
 State: correction 2's end-to-end proof passes (CP-2761), correction 3's test is one store-level check away, and the
 uncommitted work holds two genuine production fixes (acquisitions appended from the frames; row bindings produced where
 rows are recorded) plus the chain test and its adapter.
+
+
+## CP-2764 — The store re-runs verify_episode_seal, and that is where the binding is checked again
+
+```python
+        if _safe(episode_seal_path) != self.episode_root / "seal.json":
+            raise ValueError("EPISODE_LOCATION_MISMATCH")
+        try:
+            episode = verify_episode_seal(episode_seal_path)
+            if episode["attempt_id"] != self.lease.attempt_id:
+                raise ValueError("LEASE_IDENTITY_MISMATCH")
+            ...
+        except (OSError, ValueError, TypeError) as error:
+            raise ResultInfraError("RESULT_EPISODE_INVALID") from error
+```
+
+So the store does not trust the recorder's word: it calls **the same `verify_episode_seal`** the recorder's `finish` uses,
+and wraps whatever it raises as `RESULT_EPISODE_INVALID`. `EPISODE_SEAL_AUDIT_INCOMPLETE` is one of the codes that
+function raises (`recorder.py:412`, the same "both or neither" rule CP-2666 read at `:247`), so the episode the second test
+produced is, as far as that verification is concerned, missing half of its audit binding - even though the first test
+successfully read the **manifest file** and judged it.
+
+That difference is the clue worth keeping: the first test locates the audit by the path the helper returns
+(`<audit-root>/audit/audit-manifest.json`) rather than through the episode's seal, so it never asked whether the **seal**
+carries the binding. The second test does, and the answer is that it does not - which means the capture's `finish` did not
+pass both `audit_manifest` and `scope` after all, despite holding them.
+
+The next read is the body around `recorder.py:412` in `verify_episode_seal`, and then the capture's own `finish` block to
+see which of the two it actually supplied. One of them is a small gap, and it is the last thing between correction 3's test
+and its assertion.
