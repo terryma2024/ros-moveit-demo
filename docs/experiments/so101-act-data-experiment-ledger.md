@@ -52305,3 +52305,27 @@ when it decides to sample and which instant it stamps the sample with.
 
 Everything else holds: the scope checks pass, the audit is balanced, the identity matches, and the only thing between
 these two tests and E2's corrections 2 and 3 is the cadence of one loop.
+
+
+## CP-2737 — The grid pointer, and the gate that mints a row
+
+```python
+            self._next_grid_s = at_s + self.dt_s                          # 377
+    def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
+        ...
+            observation, source_audit = self.sampler.sample_with_audit(
+                self._session_id, self._attempt_id, at_s)                  # 391
+```
+
+So the capture walks an explicit grid: each minted row advances `_next_grid_s` by `dt_s`, and `_mint` takes **both**
+cameras' acquisitions for that instant, checks their skew, guards them, and only then samples. Three grid instants should
+therefore produce three rows - and the probe measured one, so the gate that decides *when* to mint is where the answer
+lives: the caller that compares the frames it has against `_next_grid_s` and mints only when the instant's pair is
+complete.
+
+That is the last unread piece of this loop, and it is the one that turns "three frames" into "one row": most likely the
+capture mints only the current grid instant per service pass, and my probe's frames at 1.0, 1.1 and 1.2 arrive in one
+burst, so the first service pass mints 1.0 and the rest are treated as future frames until their own instants are
+serviced - which they would be, if the drain were given a chance between them, and my loop does drain between them.
+
+So the read is the minting caller, and with it the reason one row came out of three.
