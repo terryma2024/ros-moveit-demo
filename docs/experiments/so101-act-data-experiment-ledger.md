@@ -47415,3 +47415,18 @@ then `bind_row`, then `writer._window_matches_rows(window)` with the CP-2495 win
 
 That test replaces the runner-backed fixture with roughly fifteen lines and needs no port, no runner and no 10 Hz
 minting loop beyond a handful of `minter.mint` calls - and it is the shortest remaining path to naming F5's refuser.
+
+
+### CP-2504 — The traceback names my own append_source line, and the module frame is the pypath copy
+
+Printed the failing run's frames: the test frame is `test_act_episode_audit.py:1435` - my own `append_source("physics", ...)`
+line - and the module frame is under
+`.../nonhead-first-episode-plan.hKhvkON3/pypath/so101_demo/...`, the plan root's overlay copy. So `"physics"` was refused
+by the `SOURCE_KINDS` check even though the worktree's `episode_audit.py` line 48 lists
+`("events", "references", "physics")`. The obvious reading, and the one CP-2439 taught by measuring rather than
+reasoning, is that the overlay copy is **stale**: CP-2439's `diff -q` proving it identical was taken long before this
+stretch's many commits to that module, and a stale copy would explain a check that no longer matches the source.
+
+The diff between the two copies is printed beside this entry, and the test was withdrawn (tree back to the user's 35
+entries, audit suite 74 passed). If the copies differ, refreshing the overlay is a one-command fix that unblocks the
+fifteen-line direct test; if they are identical, the refusal must be read from the module's own line numbers instead.
