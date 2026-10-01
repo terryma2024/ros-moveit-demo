@@ -47711,3 +47711,16 @@ the next layer - which is how the five previous layers of this integration were 
 
 Also fixed this round: the scene path now comes from the frozen set unconditionally, because the `run` subcommand has
 no `--scene` flag and referencing one would have raised an AttributeError before reaching the guard.
+
+
+### CP-2521 — StartGuardPolicy's fields, and the platform note that matters
+
+`StartGuardPolicy` lives at `parallel_batch/start_guard.py:99` with a docstring that fixes the design's 2 s deadline as
+a maximum no configuration may enlarge, and explains that `mps_minimum_headroom_bytes` belongs to the approved
+Darwin/MPS profiles only: "It stays `None` for every other platform, so ... a Linux document cannot silently acquire
+one." So on ai-station that field is None and the approved values from the dispatch's list are the whole story.
+
+Its field list and constructors are printed beside this entry, which makes the next round a transcription: build the
+policy from `timeout_s=2.0`, `cpu_busy_warn_fraction=0.90`, `ram_minimum_bytes=1073741824`,
+`ram_minimum_fraction=0.05`, `gpu_minimum_bytes=1073741824` (with the MPS headroom left None), pass it as
+`start_guard=...` where the spec is built, re-run, and let the composition name the next layer.
