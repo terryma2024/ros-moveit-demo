@@ -53103,3 +53103,36 @@ directory.
 That is the shape of the remaining work on this chain, and it is now a question about ownership rather than about values.
 The two tests are as close as they have been: correction 2 passes end to end, and correction 3 needs this directory
 question settled - which, being a convention the live path must also obey, is work E3 needs done anyway.
+
+
+## CP-2770 — The conflict is real: one directory is claimed by three components with three different rules
+
+Separating the roots again makes `EPISODE_LOCATION_MISMATCH` return, and the reason is structural rather than
+arrangeable:
+
+- **the store** requires the seal at `<workspace>/working/episode/seal.json` - it owns that path and refuses any other;
+- **the recorder** writes its seal at *its own* root (`self.root / "seal.json"`), so its root must be exactly the store's
+  episode root;
+- **the audit writer** must root at that same directory for the manifest to sit where the verifier's convention looks
+  (`<episode_root>/audit-manifest.json`) - and it refuses a root that already exists, while the recorder refuses the same;
+- and the recorder reads `audit_manifest.parent / "episode.json"`, which ties the writer's root to the recorder's root
+  just as tightly.
+
+Moving the seal afterwards is not a way out, because a seal's own record hashes name the episode's files by path and
+content, so relocating it invalidates what it asserts.
+
+So the three rules are mutually unsatisfiable as written, and the resolution is a design decision rather than an
+arrangement:
+
+- **the store's `episode_root`** could be created by whichever component legitimately owns it, rather than being a fixed
+  path the store names without creating (it names, and the recorder creates - which works only if the writer is not also
+  pointed there);
+- **or the audit writer** could accept an existing root, which is what a component that owns a directory *inside* an
+  episode would naturally do;
+- **or the verifier's convention** could name the audit one level differently, matching where a writer rooted beside a
+  recorder actually puts it.
+
+Which of the three is right is a question about ownership of the episode directory, and it is exactly the question E3's
+live path will have to answer too - with the difference that in the live path there is also a worker and a coordinator
+above these three. That is the next thing to settle, and it is worth settling deliberately rather than by whichever
+arrangement happens to make one test pass.
