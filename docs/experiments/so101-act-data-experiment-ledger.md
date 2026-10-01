@@ -48110,3 +48110,20 @@ deployment's runtime document, which the specification already carries as `confi
 Worth recording how far the chain has come: the composition builds, the drive runs, the supervisor starts the broker,
 the broker parses its arguments, the transport builds with a real deployment identity and real digests, and the
 remaining objection is a single path inside a document the composition writes.
+
+
+## CP-2542 — The config path cleared, and the hash mismatch is my own pairing
+
+Fixing the broker spec's `config_path` to name the host copy (guarded by `_uses_production_broker_container`, so the
+container route is untouched) cleared `CONFIG_READ_FAILED`. The next refusal is
+`IpcError: BROKER_MODEL_HASH_MISMATCH` - which is the transport **checking** the declared digests against the files
+they name, and catching my inconsistency: I declared the runtime document's digest under `yolo_weights_sha256` while
+`yolo_weights` pointed at a different file (the runtime config copy). A digest that does not describe the file beside
+it is exactly what that check exists to catch, so the check is right and the pairing is mine to fix.
+
+Two facts from the frozen manifest shape the fix. `runtime_policy` carries a `sha256` but **no `path`** - it is a
+policy document digested elsewhere, not a file this run can point at - whereas `scene_model` carries both
+`path: scene_model/scene.xml` and `sha256: 4db48e35...`, which is a pairing a reader can recompute directly. So the
+honest repair is to point the checked names at files that exist and whose digests are the ones declared: the scene
+model for one, and for the other a real file whose digest the run can state - with `digest_meaning` already in the
+provenance saying exactly what each names, so nothing is implied that the run does not claim.
