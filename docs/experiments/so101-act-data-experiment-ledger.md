@@ -43639,3 +43639,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - short schedule through.
 - F1 and F14 closed; F3 closed by this stretch; F11 one of three; F5's regression fixed with its two halves open;
 - F12/F13 narrowed; HEAD 00b9e511a; goal paused.
+
+## CP-2315 - F11's derivation is right; its fixture's actual physics times must be read first
+
+- Changing the endpoint relation from enclosure to equality-within-tolerance (the verdict's "derive, do not
+- enclose") turned five tests red, including the by-construction-valid one, so the derivation is right and the
+- fixture is what disagrees with it. Adjusting the window's physics_end_s from 1.2 to 1.1 did not clear it either,
+- so the mismatch is not where the verdict's prose suggests or not only there.
+- The next step is the probe that has settled every one of these: print, for the self-consistent formal fixture,
+- the window's first_command_s and physics_end_s beside min() and max() of the physics rows' sim_time_s - one run,
+- then align whichever of the two is wrong. Guessing between them costs rounds.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- F1 and F14 closed; F3 closed; F11 one of three with this item staged; F5's regression fixed; F12/F13 narrowed;
+- HEAD 38858d125; goal paused.
