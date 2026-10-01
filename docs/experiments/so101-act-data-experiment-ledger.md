@@ -45424,3 +45424,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's provenance
   collision resolved with both kinds accepted (CP-2406), its CLI verified, and `inspect` reporting exactly these four
   roles as blockers. HEAD 245d0b09f; goal active.
+
+
+## CP-2408 — The candidate mechanism, fully read: an evidence-root JSON the ledger names
+
+- `inspect_inputs` line 959: `referenced = _ledger_referenced_json(Path(ledger), evidence_root)`. And
+  `_ledger_referenced_json` (line 561) does exactly what its docstring says - it scans the LEDGER TEXT for tokens
+  ending in `.json`, resolves each against the registered evidence root (or keeps an absolute reference), keeps only
+  those whose canonical path is inside the root and is a file, and returns them sorted and deduplicated. So a candidate
+  for the three empirical roles must be: a **`.json` document**, **under the registered evidence root**, and **named in
+  the ledger**.
+- That is precisely the artifact the design describes for this amendment ("the effective artifact also stores the base
+  runtime/collection bytes and hashes, the user override source, every effective value and the episode identity"), and
+  it explains why the two YAML files landed in the source tree cannot serve as candidates by themselves: they are
+  `.yaml` and outside the root, so the discovery never sees them.
+- So step 4 becomes: write the effective-configuration artifact as JSON under the evidence root - with the authorized
+  values, `kind` one of the amendment's two, `approval: user_empirical_default`, the base runtime/collection bytes and
+  hashes, and the override source - **name its absolute path in this ledger**, and extend
+  `_inspect_calibration_role` to accept a document that declares one of those two kinds (stamping it
+  `user_empirical_default`) beside the historical `checks`-bearing reports (which keep `nonhead_calibration`). The
+  filename must contain `calibration`, `report` or `policy`, since that token check gates the scan.
+- With those three pieces the flow runs end to end: `inspect` reports no blockers, `prepare` freezes the set, and E3's
+  command sequence has its first two steps. F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's
+  scene item awaiting K2. HEAD 7e71c7bf9; goal active.
