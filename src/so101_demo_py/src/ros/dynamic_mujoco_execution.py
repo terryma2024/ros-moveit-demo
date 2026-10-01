@@ -399,8 +399,14 @@ class RosDynamicMujocoExecution:
         # insisting on.
         if self.episode_recorder is not None:
             from ..act.episode_assembly import physical_audit_from_execution
+            # the epoch is not defaulted: a row placed in the wrong reset epoch is as misleading as an invented one, so
+            # an absent epoch stops the recording here and names what is missing (the form the default took for one
+            # round, replaced as promised)
+            _reset_epoch = getattr(self._targets, "reset_epoch", None)
+            if _reset_epoch is None:
+                raise RuntimeError("EPISODE_RESET_EPOCH_MISSING: the resolved targets do not state the reset epoch")
             self.episode_recorder.set_physical_audit(physical_audit_from_execution(
-                phase=state.value, reset_epoch=getattr(self._targets, "reset_epoch", None) or 1,
+                phase=state.value, reset_epoch=int(_reset_epoch),
                 release_epoch=int(details.get("release_epoch", 1)),
                 release_event=bool(details.get("release_event", False)),
                 release_time_s=float(details.get("release_time_s", 0.0)),
