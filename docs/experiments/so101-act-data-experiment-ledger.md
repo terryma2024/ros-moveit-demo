@@ -47090,3 +47090,25 @@ marker (CP-2480) and the deployment verifier states what it does and does not cl
   entry), the fixture was withdrawn so the tree stays green, and the audit suite is back to 74 passed.
 - F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; E1's input side green end to end;
   the execution side waits on the container-free broker decision. HEAD 8a4e5d6ec; goal active.
+
+
+## CP-2491 — Two candidate clauses named, both printable in one probe
+
+- Read the predicate's clause list with its own comments and found the two rules that decide this fixture and that no
+  probe has yet printed:
+  1. `if not row_times or abs(window["label_cutoff_s"] - max(row_times)) > _TOLERANCE_S: return False` - "the cutoff
+     is the last labelled observation, not a number chosen to fit". The seal passes `self._row_times`, which is the
+     **bound rows** (appended once per `bind_row`, CP-2372), so this compares the window's `label_cutoff_s` against
+     the bound rows' maximum, not against the physics history's.
+  2. The per-stream schedule rule, whose comment reads "for that stream, not only its endpoints, so a shortened or
+     padded schedule cannot describe coverage it lacks": it accumulates `acquired[camera].add(row["stamp_s"])` from
+     the acquisitions and compares each stream's claimed instants against what was actually acquired.
+- The fixture sets `label_cutoff_s = 1.0` with one bound row at 1.0, and mints acquisitions at exactly the instants
+  the schedule names, so on my reading both pass - which only means my reading is again incomplete, exactly as it was
+  for the coverage predicate (CP-2352..2361) until a probe printed the terms verbatim. The next probe therefore prints
+  these two clauses' own values on this fixture: `row_times`, `max(row_times)`, `label_cutoff_s`, and the per-camera
+  acquired sets beside the schedule.
+- Housekeeping unchanged: the module is restored, the fixture withdrawn, the tree clean beyond the user's 35 entries
+  and the audit suite at 74 passed.
+- F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; the execution side waits on the
+  container-free broker decision. HEAD e207437c4; goal active.
