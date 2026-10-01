@@ -48469,3 +48469,21 @@ The honest summary of the long chase: the fixture was wrong in one respect (a mi
 `bind_row` requires at `round(sim_time_s + _GRID_S, 6)`), and the window was wrong in another (the full form asserts
 observations this fixture never made), and both were found by reading verbatim logs and the suite's own passing tests
 rather than by reasoning about source text - the same lesson this stretch recorded five times.
+
+
+## CP-2561 — K2 revision 3 begins with the ordering mechanism
+
+The review's first correction was that parents prove referential integrity, not causal ordering, so revision 3 opens by
+requiring **two** things on every record rather than one: a **monotonic sequence in a single namespace** assigned at the
+boundary (not one counter per boundary, which would make cross-boundary comparison meaningless), and a
+**happens-before assertion carried as data** - each record names its parent *and* asserts `sequence(parent) <
+sequence(self)`, with a record whose parent has a later sequence refused so a forged descent cannot be ordered after its
+own parent by relabelling.
+
+Together they give the protocol the property revision 2 lacked: any two records can be ordered from the records alone,
+without trusting a clock, a wall time, or the order in which files happened to be written. Clocks are then left with
+their real job - relating the chain to the simulation - which is correction 2's subject and is already read from the
+source (`publish_clock()` published per physics step, with the CPU/sim synchronisation pair in `physics_loop()`,
+CP-2558).
+
+Written to `reviews/k2-protocol-table-v3.md`, to be extended with the clock section and the defined schema.
