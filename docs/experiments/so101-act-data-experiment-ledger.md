@@ -47627,3 +47627,23 @@ being true.
 The one thing still to confirm is that those post-steps are guarded by that flag rather than run unconditionally; the
 grep for their call sites is printed beside this entry. If they are guarded, the container-free route needs nothing
 more than the builder; if one is not, it is the single place the approved work has to touch.
+
+
+## CP-2516 — Every container post-step is guarded, so the approved route needs only the builder
+
+The last check comes back clean. `_uses_production_broker_container` guards the container paths at 3185 and, decisive
+for the post-steps, at 3286-3287 where `_harden_broker_container_id()` is called. So with a
+`broker_command_builder` supplied, the composition never runs a docker inspect, never hardens a cidfile and never reads
+`container.cid`; the broker is built by the caller's command and started by `self.supervisor.start("broker", command)`
+exactly like any other process.
+
+That closes the design of the work the user approved: the container-free route is
+
+    ProductionBatchComposition(spec, broker_command_builder=lambda composition:
+        [<the broker's own entry point>, <arguments built from evidence_root, runtime_ipc_root,
+         broker_input_root and the uid>])
+
+with the three image gates belonging to the default branch that is not taken, and no change to the broker, the
+scheduler or the recorder. The only thing left to read is the broker's own plain-process entry point in
+`so101_demo.cli.parallel_perception_broker` - the grep for it is printed beside this entry - after which the `run`
+subcommand can supply the builder and the composition can be driven for a real episode.
