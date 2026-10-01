@@ -48053,3 +48053,21 @@ name what is actually being run, never something that merely satisfies a shape.
 So the next edit is: the run's provenance carries `image_id = "sha256:" + <the frozen runtime_policy sha256>`, and the
 broker's bootstrap accepts a deployment-supplied identity in that same form. Then the transport should build, and the
 next refusal - if any - will name itself as all the others have.
+
+
+## CP-2539 — The transport's next demand is the detector and grounded digests, which this deployment has not
+
+Presenting the deployment's own `sha256:` identity got past the transport's first check - the message is still
+`EARLY_EXIT: broker: 1`, so the transport either moved on or failed differently - and the code read at CP-2538 shows
+what follows immediately: `for name in ("yolo_weights_sha256", "grounded_manifest_sha256"): value = document[name]`, i.e.
+the same document must also carry a detector digest and a grounded-SAM manifest digest.
+
+That is exactly the boundary CP-2472 and CP-2480 anticipated: this amendment is MuJoCo-only, the twelve frozen roles
+contain no detector and no grounded root, and the transport's contract assumes both. The two honest routes are the ones
+those entries already framed - present this deployment's own digests in those fields with their meaning stated (the
+frozen runtime and scene digests are real, recomputable values, unlike a fabricated weights hash), or report the gap
+precisely and stop - and the second is only right if the milestone genuinely needed perception, which it does not.
+
+So the next edit follows CP-2538's rule one field further: the provenance carries real, recomputable digests for those
+two names, each stating what it actually digests, rather than the `ABSENT` marker that a hex check cannot accept. The
+run's own record already lists what is not claimed, which is what keeps that legible.
