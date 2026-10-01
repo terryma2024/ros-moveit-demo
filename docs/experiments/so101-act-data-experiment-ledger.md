@@ -51935,3 +51935,25 @@ physical half must sum to exactly the recorder's set.
 Test reverted, worktree clean at 35 entries. This is the eighth fact this one correction has surfaced, and it is the one
 that explains why the correction-2 test passed with a FAILED outcome: with a five-key physical half and no references, no
 row was ever written at all, so no audit ever had to satisfy the recorder's schema.
+
+
+## CP-2723 — The extra key: the harness's sampler emits one the recorder does not admit
+
+```python
+        return observation, {"source_stamps": stamps, "source_received_wall_s": dict(stamps)}
+```
+
+The sampler mints its `source_audit` with **two** keys, and the recorder's closed set contains only `source_stamps` -
+`source_received_wall_s` is not among the sixteen. So the union the capture builds always carries one key the recorder
+refuses, and `EPISODE_AUDIT_SCHEMA` is that refusal. My earlier swap to the recorder suite's sixteen-key `audit()` could
+not have helped: the surplus key arrives from the sampler, not from the physical half.
+
+Which places this harness precisely: it was written to drive `FakeRecorder`, which validates nothing, and it therefore
+never had to satisfy the real recorder's schema. Driving the real recorder needs a sampler whose `source_audit` is
+exactly `{"source_stamps"}`, and a physical half that supplies the remaining admitted keys (the identifiers, the epochs,
+`phase`, and `session_id`/`attempt_id`/`reset_epoch` where the recorder expects them) - minus the three the capture
+overwrites itself (`reference_time_s`, `reference_source`, `reference_positions`).
+
+That is the ninth fact this correction has surfaced, and it is the one that reframes the work: the test does not need a
+new fixture so much as a **recorder-compatible** one, because the existing harness's freedom to be loose is exactly what
+`FakeRecorder` allowed and the real recorder does not.
