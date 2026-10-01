@@ -55098,3 +55098,21 @@ contract rather than two designs that happen to meet.
 
 Recorded in the handover with the table, so whoever extracts has both the inputs' requirements and the output's in one
 document, and can see that the repository already decided this split once.
+
+
+## CP-2849 — The handover now names which sampler the live path takes
+
+Two classes ended up in `episode_assembly.py` doing almost the same thing, and the difference is exactly who feeds the
+synchronizer - so the handover now states the choice rather than leaving it to be inferred from a docstring:
+
+| class | who feeds | for |
+| --- | --- | --- |
+| **`LiveSampler`** | the run (`RosObservationAdapter`) | **the live path** |
+| `ProductionProducer` | itself, from recorded stamps, with synthesised frames | the harness |
+
+with the concrete line the wiring needs - `assemble_episode_capture(sampler=LiveSampler(sources.rgb), ...)` - and the
+reason the two are not interchangeable (a live synchronizer fed synthetic frames would fail the capture's pixel check
+sooner or later).
+
+That is the last decision the handover had left implicit. Everything else it already carried: what to hand over, what the
+wiring must respect, the extraction's inputs and the physical audit's thirteen keys, and the acceptance script.
