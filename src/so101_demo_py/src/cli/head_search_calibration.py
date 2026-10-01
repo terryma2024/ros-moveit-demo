@@ -1,11 +1,13 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
-already exists, so there is no way to resume or continue a stage. `measure-coarse-step` is the one
-measurement flight the run cannot take itself - the run declares documents, it does not render - so it is
-its own installed entry, validated here and measured by `so101_demo.act.head_search_coarse_step_measurement`.
+already exists, so there is no way to resume or continue a stage. `measure-coarse-step` and
+`measure-mujoco` are the measurement flights the run cannot take itself - the run declares documents, it
+does not render or read a sealed model - so they are their own installed entries, validated here and
+produced by `so101_demo.act.head_search_coarse_step_measurement` and
+`so101_demo.act.head_search_mujoco_measurements`.
 """
 
 from __future__ import annotations
@@ -129,6 +131,19 @@ MEASUREMENT_REQUIRED_FLAGS = (
     ("output_dir", "--output-dir"),
 )
 
+#: the `measure-mujoco` entry: the sealed scene, at least one sealed document that pins its bytes, and
+#: the brand-new directory the document owns. `--mujoco-readback` is optional: it loads the scene in
+#: MuJoCo and records `model.opt.timestep` next to the declaration
+MUJOCO_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("output_dir", "--output-dir"),
+)
+MUJOCO_IDENTITY_FLAGS = (
+    ("geometry_seal", "--geometry-seal"),
+    ("dataset_manifest", "--dataset-manifest"),
+    ("geometry_contract", "--geometry-contract"),
+)
+
 
 def _measurement_parser() -> argparse.ArgumentParser:
     """The `measure-coarse-step` entry: it declares inputs and calls one library function.
@@ -218,6 +233,93 @@ def _measure_coarse_step(arguments: list[str]) -> int:
         f"COARSE_STEP_MEASURED {receipt['chosen_coarse_step_rad']} "
         f"scenes={receipt['scene_count']} candidates={receipt['candidate_count']} "
         f"passes={receipt['passes']} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _mujoco_parser() -> argparse.ArgumentParser:
+    """The `measure-mujoco` entry: it declares the sealed scene and calls one library function.
+
+    The document phase 7 declares under `--mujoco-measurements` carries one number, the sealed MuJoCo
+    model's simulation timestep, which is a declaration of the sealed scene rather than a measurement
+    flight. Nothing is computed here beyond parsing and validating what the caller declared.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-mujoco",
+        description=(
+            "Read the sealed MuJoCo scene's simulation timestep once, into a brand-new output directory, "
+            "and write the document the run declares under --mujoco-measurements"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the runtime steps")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--dataset-manifest", type=Path, help="the sealed head dataset manifest")
+    parser.add_argument("--geometry-contract", type=Path, help="the sealed geometry contract")
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the document owns")
+    parser.add_argument(
+        "--mujoco-readback",
+        action="store_true",
+        help="load the scene in MuJoCo and record model.opt.timestep next to the declaration",
+    )
+    return parser
+
+
+def _measure_mujoco(arguments: list[str]) -> int:
+    """Validate the declared scene and its sealed identities, then hand the flight to the library."""
+
+    parsed = _mujoco_parser().parse_args(arguments)
+    missing = [flag for name, flag in MUJOCO_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if not missing and all(getattr(parsed, name) is None for name, _flag in MUJOCO_IDENTITY_FLAGS):
+        missing = [flag for _name, flag in MUJOCO_IDENTITY_FLAGS]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    declared = MUJOCO_REQUIRED_FLAGS + MUJOCO_IDENTITY_FLAGS
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in declared
+        if name != "output_dir" and getattr(parsed, name) is not None
+        and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_mujoco_measurements import write_mujoco_measurements
+
+    try:
+        result = write_mujoco_measurements(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            dataset_manifest_path=parsed.dataset_manifest,
+            geometry_contract_path=parsed.geometry_contract,
+            output_dir=parsed.output_dir,
+            mujoco_readback=parsed.mujoco_readback,
+            command=_command_line(arguments, subcommand="measure-mujoco"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"MUJOCO_TIMESTEP_PRODUCED {receipt['simulation_timestep_s']} "
+        f"scene={receipt['scene_path']} readback={receipt['mujoco_readback']} "
+        f"output_dir={parsed.output_dir}"
     )
     return 0
 
@@ -547,6 +649,9 @@ def main(argv: list[str] | None = None) -> int:
     # the one measurement the run cannot take itself is its own installed entry, never a script
     if arguments[:1] == ["measure-coarse-step"]:
         return _measure_coarse_step(arguments[1:])
+    # the sealed scene's own declaration is the other document the run declares but does not read itself
+    if arguments[:1] == ["measure-mujoco"]:
+        return _measure_mujoco(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":

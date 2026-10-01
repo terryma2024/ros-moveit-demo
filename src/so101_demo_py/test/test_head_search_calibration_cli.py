@@ -763,3 +763,100 @@ def test_measure_coarse_step_parses_and_hands_the_flight_to_the_library(tmp_path
         "ros2 run so101_demo_py so101_head_search_calibration measure-coarse-step"
     )
     assert "COARSE_STEP_MEASURED 0.6560533740603397" in capsys.readouterr().out
+
+
+# --------------------------------------------------------------------------------------------------
+# the sealed scene's simulation timestep: the installed entry that produces the phase-7 document
+# --------------------------------------------------------------------------------------------------
+
+
+def _mujoco_inputs(tmp_path: Path) -> dict:
+    """A tiny sealed scene and the geometry seal that pins it: the CLI's own end-to-end fixtures."""
+
+    import hashlib
+
+    scene = tmp_path / "head_search_scene.xml"
+    scene.write_text(
+        '<mujoco model="fixture">\n  <option timestep="0.002" gravity="0 0 -9.81"/>\n</mujoco>\n',
+        encoding="utf-8",
+    )
+    seal = tmp_path / "head-camera-geometry.json"
+    seal.write_text(
+        json.dumps({"source_digests": {"scene_sha256": hashlib.sha256(scene.read_bytes()).hexdigest()}}),
+        encoding="utf-8",
+    )
+    return {"scene": scene, "seal": seal}
+
+
+def test_measure_mujoco_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
+    assert main(["measure-mujoco"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "measurement").exists()
+
+
+def test_measure_mujoco_refuses_a_missing_input_and_an_existing_output(tmp_path: Path, capsys) -> None:
+    inputs = _mujoco_inputs(tmp_path)
+    arguments = [
+        "measure-mujoco",
+        "--scene",
+        str(inputs["scene"]),
+        "--geometry-seal",
+        str(inputs["seal"]),
+        "--output-dir",
+        str(tmp_path / "measurement"),
+    ]
+    assert main([arguments[0], "--scene", str(tmp_path / "absent.xml"), *arguments[3:]]) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    (tmp_path / "measurement").mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_mujoco_refuses_a_scene_nothing_seals(tmp_path: Path, capsys) -> None:
+    inputs = _mujoco_inputs(tmp_path)
+
+    assert (
+        main(
+            [
+                "measure-mujoco",
+                "--scene",
+                str(inputs["scene"]),
+                "--output-dir",
+                str(tmp_path / "measurement"),
+            ]
+        )
+        == 2
+    )
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+    assert not (tmp_path / "measurement").exists()
+
+
+def test_measure_mujoco_produces_the_document_the_run_declares(tmp_path: Path, capsys) -> None:
+    inputs = _mujoco_inputs(tmp_path)
+    output = tmp_path / "measurement"
+
+    assert (
+        main(
+            [
+                "measure-mujoco",
+                "--scene",
+                str(inputs["scene"]),
+                "--geometry-seal",
+                str(inputs["seal"]),
+                "--output-dir",
+                str(output),
+            ]
+        )
+        == 0
+    )
+
+    printed = capsys.readouterr().out
+    assert "MUJOCO_TIMESTEP_PRODUCED 0.002" in printed
+    document = json.loads((output / "mujoco-measurements.json").read_text(encoding="utf-8"))
+    assert document["simulation_timestep_s"] == pytest.approx(0.002)
+    assert document["path"] == str(output / "mujoco-measurements.json")
+    assert document["mujoco_readback"] is False
+    receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
+    assert receipt["measurement_sha256"] == document["sha256"]
+    assert receipt["runtime_identity"]["motion_commanded"] is False
