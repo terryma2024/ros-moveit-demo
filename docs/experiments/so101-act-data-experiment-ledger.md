@@ -46640,3 +46640,19 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   one-point catalogue, the seven-value target, and the composition instantiated with a one-worker specification.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 54da125dd; goal active.
+
+
+## CP-2469 — The last unknown: BatchKindV2.FIRST_PASS
+
+- `BatchKindV2` (contracts.py:833) has exactly three members - `FIRST_PASS`, `FULL_RESTART_RETRY`,
+  `ADAPTIVE_POOL` - so a fresh, full, non-adaptive run is `FIRST_PASS`. (The plan's `FULL_RESTART` wording names the
+  **lifecycle** of the stack this task started once, which is separate from the batch kind.)
+- With that, the fourth piece is fully specified and becomes a transcription:
+  `BatchRequestV2(batch_id=<minted>, run_mode=RunMode.EXECUTE, selected_point_ids=(point.id,), worker_count=1,
+  evidence_root=<new LIVE_ROOT>, batch_kind=BatchKindV2.FIRST_PASS)` - handed to the composition together with the
+  frozen runtime config (already parsed), the frozen provenance inputs, the one-point catalogue and the seven-value
+  target the sealed-result adapter validates.
+- Everything else the run needs is already in the working tree: the guard-checked CLI surface, the points document,
+  the frozen provenance copy, the `RunMode.EXECUTE` fix and the seven-value pose validation.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD a4eaf42ad; goal active.
