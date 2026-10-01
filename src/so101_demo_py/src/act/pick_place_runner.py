@@ -208,8 +208,11 @@ class PickPlaceRunner:
             raise PickPlaceError("PHASE_EVIDENCE_INVALID")
         if evidence["manual_intervention"] is not False or evidence["moveit_recovery"] is not False:
             raise PickPlaceError("HUMAN_OR_RECOVERY_INTERVENTION")
-        if any(evidence[key] is not True for key in self._EVIDENCE_GATES):
-            raise PickPlaceError("PHASE_EVIDENCE_INVALID")
+        failing = [key for key in self._EVIDENCE_GATES if evidence[key] is not True]
+        if failing:
+            # named, because a gate that is not True says which one it was - the same reason every other refusal in
+            # this task names what it wants rather than reporting a category
+            raise PickPlaceError(f"PHASE_EVIDENCE_INVALID: gates not established: {failing}")
         if evidence["holding_state"] not in ("EMPTY", "HOLDING"):
             raise PickPlaceError("HOLDING_UNKNOWN")
         if phase == "CLOSE" and evidence["bilateral_contact"] is not True:
