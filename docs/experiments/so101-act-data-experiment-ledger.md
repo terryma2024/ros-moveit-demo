@@ -46261,3 +46261,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   second stack is started.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD 30e7e06ef; goal active.
+
+
+## CP-2450 — A tooling slip: my own pkill matched my own shell
+
+- Stopping the half-up stack, the recorded pid was killed first, and then `pkill -f
+  "so101_mujoco_act_execution_stack"` was run - which matched **the shell running that very command**, because the
+  pattern appears in its own command line. The command was terminated by SIGTERM before the relaunch, so this round
+  produced no new stack state, and the actual state has to be re-checked rather than assumed.
+- The safe pattern, for the record: kill by the **pid** the launch recorded, and if a pattern is needed at all, filter
+  the current shell out (`pgrep -f pattern | grep -v $$`) instead of letting `pkill` consider its own caller. This is
+  the same class of mistake as CP-2429's stray parenthesis - a small mechanical slip caught immediately - and it is
+  recorded rather than smoothed over.
+- What is known about the stack right now: the recorded pid was killed, so at most remnants of its children may
+  survive; the relaunch with the corrected order (ROS, then the main worktree's install, then this worktree's overlay)
+  has **not** happened yet. The next round re-checks with `pgrep`/`ros2 node list` and starts it cleanly if needed.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD c4d45ec9d; goal active.
