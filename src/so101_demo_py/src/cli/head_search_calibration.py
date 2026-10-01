@@ -17,6 +17,13 @@ here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `measure-operating-point` are phase 3's two inputs: the first writes the rule record before any
 measurement can exist, the second measures the frames that rule consumes and has the installed phase 3
 select every candidate's point (`so101_demo.act.head_search_operating_point_measurement`).
+`measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
+flat measurement plan the installed controller is constructed with, the six-field
+`CalibrationMeasurementAdmission` for `role=calibration`, and the receipt that records every refusal the
+runtime contract fixes - and `measure-bundle-inputs` produces the declared geometry and perception
+parameter blocks with the live effective-value readback
+(`so101_demo.act.head_search_calibration_admission_document`,
+`so101_demo.act.head_search_calibration_bundle_inputs`).
 """
 
 from __future__ import annotations
@@ -205,6 +212,55 @@ TIMING_REQUIRED_FLAGS = (
     ("output_dir", "--output-dir"),
 )
 TIMING_OPTIONAL_FILE_FLAGS = (("weights", "--weights"),)
+
+#: the `measure-admission` entry: the six sealed inputs the run itself declares, the brand-new run root
+#: whose name is the generation, and the brand-new directory the plan, the admission and the receipt own.
+#: `--seal` is optional, exactly as it is for `run`: the seal is either declared or computed here
+ADMISSION_REQUIRED_FLAGS = (
+    ("dataset", "--dataset"),
+    ("candidate", "--candidate"),
+    ("geometry_seal", "--geometry-seal"),
+    ("episode_partitions", "--episode-partitions"),
+    ("production_config", "--production-config"),
+    ("camera_config", "--camera-config"),
+    ("run_root", "--run-root"),
+    ("output_dir", "--output-dir"),
+)
+#: the required flags that name a file that must already exist; the run root and the output directory
+#: must not exist, which is what makes the generation new and the documents unwritten
+ADMISSION_REQUIRED_FILE_FLAGS = (
+    "dataset",
+    "candidate",
+    "geometry_seal",
+    "episode_partitions",
+    "production_config",
+    "camera_config",
+)
+ADMISSION_OPTIONAL_FILE_FLAGS = (("seal", "--seal"),)
+
+#: the `measure-bundle-inputs` entry: the sealed geometry the two geometry values come from, the
+#: production configuration the values and the controller's motion tolerances are read from, the phase-3
+#: selection document, the frozen candidate document, the selected model's weights and the brand-new
+#: directory the declared document and its receipt own. `--operating-point-measurements` is optional: it
+#: is the frame-level measurement the selection was made on, cited as input evidence when it is declared
+BUNDLE_INPUTS_REQUIRED_FLAGS = (
+    ("geometry_seal", "--geometry-seal"),
+    ("production_config", "--production-config"),
+    ("operating_point", "--operating-point"),
+    ("frozen_candidate", "--frozen-candidate"),
+    ("weights", "--weights"),
+    ("output_dir", "--output-dir"),
+)
+BUNDLE_INPUTS_REQUIRED_FILE_FLAGS = (
+    "geometry_seal",
+    "production_config",
+    "operating_point",
+    "frozen_candidate",
+    "weights",
+)
+BUNDLE_INPUTS_OPTIONAL_FILE_FLAGS = (
+    ("operating_point_measurements", "--operating-point-measurements"),
+)
 
 
 #: the `measure-deadband-candidates` entry: the sealed scene the lock trials step the neck in, the sealed
@@ -1668,6 +1724,219 @@ def _measure_operating_point(arguments: list[str]) -> int:
     return 0
 
 
+def _admission_document_parser() -> argparse.ArgumentParser:
+    """The `measure-admission` entry: the six sealed inputs, the new run root and the output directory.
+
+    Nothing is decided here: the six sealed inputs are digested by the same helper the run uses, the
+    generation is the brand-new run root's name, and the plan, the admission and the receipt are one
+    library call. The entry refuses a missing or absent input before the library runs, and the library
+    refuses an existing run root or output directory, a document that cannot yield a plan, and a plan the
+    installed controller will not accept.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-admission",
+        description=(
+            "Produce the run's --admission: the flat measurement plan the installed controller is "
+            "constructed with, the six-field CalibrationMeasurementAdmission for role=calibration, and "
+            "the receipt that records the refusals and the single resource binding"
+        ),
+    )
+    parser.add_argument("--dataset", type=Path, help="dataset manifest (sealed input)")
+    parser.add_argument("--candidate", type=Path, help="model manifest (sealed input)")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--episode-partitions", type=Path, help="scenario partitions (sealed input)")
+    parser.add_argument("--production-config", type=Path, help="the sealed production configuration")
+    parser.add_argument("--camera-config", type=Path, help="the production camera configuration")
+    parser.add_argument("--seal", type=Path, help="declared digests of the six sealed inputs")
+    parser.add_argument(
+        "--run-root", type=Path, help="the brand-new run root the run will claim; it must not exist"
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, help="the brand-new directory the plan, admission and receipt own"
+    )
+    parser.add_argument("--operation", default="neck_target", help="the admitted operation")
+    parser.add_argument("--cpu-cores", type=int, default=os.cpu_count() or 1)
+    parser.add_argument("--gpu-device", default="0")
+    parser.add_argument(
+        "--search-start-rad",
+        type=float,
+        default=0.0,
+        help="the neck angle the bounded plan starts from; it must lie in the sealed interval",
+    )
+    return parser
+
+
+def _measure_admission(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the admission document to the library module."""
+
+    parsed = _admission_document_parser().parse_args(arguments)
+    missing = [flag for name, flag in ADMISSION_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name in ADMISSION_REQUIRED_FILE_FLAGS
+        if not Path(getattr(parsed, name)).is_file()
+    ] + [
+        str(getattr(parsed, name))
+        for name, _flag in ADMISSION_OPTIONAL_FILE_FLAGS
+        if getattr(parsed, name) is not None and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_admission_document import (
+        record_admission_document,
+    )
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+
+    try:
+        result = record_admission_document(
+            sealed_inputs=_sealed_inputs(parsed),
+            run_root=parsed.run_root,
+            output_dir=parsed.output_dir,
+            operation=parsed.operation,
+            cpu_cores=parsed.cpu_cores,
+            gpu_device=_gpu_device(parsed.gpu_device),
+            search_start_rad=parsed.search_start_rad,
+            command=_command_line(arguments, subcommand="measure-admission"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    admission = result["admission"]
+    print(
+        f"ADMISSION_RECORDED generation={admission['generation']} "
+        f"plan_sha256={admission['measurement_plan_sha256']} "
+        f"safe_interval_rad={admission['safe_interval_rad']} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _bundle_inputs_parser() -> argparse.ArgumentParser:
+    """The `measure-bundle-inputs` entry: the declared documents, the device and the output directory.
+
+    Nothing is computed and nothing is constructed here: the entry validates the declared inputs and hands
+    them to `so101_demo.act.head_search_calibration_bundle_inputs`, which constructs the installed
+    controller and the production detector with the recorded values and records what it observes. The
+    output directory must be brand new, exactly as every other runner's is.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-bundle-inputs",
+        description=(
+            "Produce the run's --bundle-inputs: the geometry and perception evidence blocks, each with the "
+            "evidence phase 8 requires and the startup readback observed on the production components"
+        ),
+    )
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--production-config", type=Path, help="the sealed production search configuration"
+    )
+    parser.add_argument(
+        "--operating-point", type=Path, help="the installed phase 3's selection document"
+    )
+    parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument(
+        "--operating-point-measurements",
+        type=Path,
+        help="the phase-3 frame measurements the selection was made on, cited as input evidence",
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, help="the brand-new directory the document and receipt own"
+    )
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--readback-identity",
+        default=None,
+        help="the identity the readback's controller is constructed under",
+    )
+    parser.add_argument(
+        "--web-bundle-root",
+        type=Path,
+        help="the installed teleop web bundle whose digest the runtime identity records",
+    )
+    return parser
+
+
+def _measure_bundle_inputs(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the declaration to the library module."""
+
+    parsed = _bundle_inputs_parser().parse_args(arguments)
+    missing = [flag for name, flag in BUNDLE_INPUTS_REQUIRED_FLAGS if getattr(parsed, name) is None]
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a measurement declares {' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name in BUNDLE_INPUTS_REQUIRED_FILE_FLAGS
+        if not Path(getattr(parsed, name)).is_file()
+    ] + [
+        str(getattr(parsed, name))
+        for name, _flag in BUNDLE_INPUTS_OPTIONAL_FILE_FLAGS
+        if getattr(parsed, name) is not None and not Path(getattr(parsed, name)).is_file()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.output_dir.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.output_dir} exists; a measurement is "
+            f"never resumed, continued or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from so101_demo.act.head_search_calibration_bundle_inputs import (
+        DECLARED_PARAMETERS,
+        record_bundle_inputs,
+    )
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+
+    request = {
+        "geometry_seal": parsed.geometry_seal,
+        "production_config": parsed.production_config,
+        "operating_point": parsed.operating_point,
+        "frozen_candidate": parsed.frozen_candidate,
+        "weights": parsed.weights,
+        "output_dir": parsed.output_dir,
+        "operating_point_measurements": parsed.operating_point_measurements,
+        "device": parsed.device,
+        "web_bundle_root": parsed.web_bundle_root,
+        "command": _command_line(arguments, subcommand="measure-bundle-inputs"),
+    }
+    if parsed.readback_identity is not None:
+        request["readback_identity"] = parsed.readback_identity
+    try:
+        result = record_bundle_inputs(**request)
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    unverified = sorted(result["receipt"]["unverified"])
+    print(
+        f"BUNDLE_INPUTS_RECORDED parameters={len(DECLARED_PARAMETERS)} "
+        f"unverified={','.join(unverified) if unverified else 'none'} "
+        f"detector_device={parsed.device} output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
 def _has_file(value) -> bool:
     """Every declared file must exist: a repeated flag declares one file per candidate."""
 
@@ -2315,6 +2584,14 @@ def main(argv: list[str] | None = None) -> int:
         return _measure_selection_rule(arguments[1:])
     if arguments[:1] == ["measure-operating-point"]:
         return _measure_operating_point(arguments[1:])
+    # the run's admission is its own declared input: the plan, the six-field admission and the receipt
+    # that records the refusals are produced here, from the same six sealed inputs the run declares
+    if arguments[:1] == ["measure-admission"]:
+        return _measure_admission(arguments[1:])
+    # the run's declared parameter evidence is its other declared input: the six blocks with the live
+    # effective-value readback are produced here
+    if arguments[:1] == ["measure-bundle-inputs"]:
+        return _measure_bundle_inputs(arguments[1:])
     parsed = qualification_parser().parse_args(arguments)
     run_root = Path(parsed.run_root)
     if parsed.command == "verify-promoted-config":
