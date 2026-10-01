@@ -53763,3 +53763,32 @@ same verification), with the endpoint inputs and the per-episode audit pair.
 
 That is a production change with a clear shape, and it is the same family as everything the chain just closed - a component
 written to a contract, and a caller that never supplied what it needs.
+
+
+## CP-2796 — Correction 4 stated exactly: the coordinator imports the verifying class and the composition builds a different one
+
+```python
+class SealedResultAdapter:
+    def __init__(self, worker_roots, run_mode, *, expected_final_cup_pose_world=None):
+        ...
+        if run_mode is RunMode.EXECUTE:
+            if not isinstance(expected_final_cup_pose_world, (tuple, list)) ...
+```
+
+So the production adapter already carries the endpoint **target** - and it is constructed with it at
+`mujoco_parallel_batch.py:2737`. What it does not do is perform the endpoint **judgement**: that is
+`ActCollectionResultVerifier`'s job, and the coordinator's own code proves the intent:
+
+```python
+        from so101_demo.act.result_store import ActCollectionResultVerifier     # coordinator.py:777
+        ...
+        if (isinstance(self.result_port, ActCollectionResultVerifier) ...)      # :790
+```
+
+The coordinator **imports the ACT verifier precisely to detect it** and take its verifying path - and the production
+composition builds `SealedResultAdapter` instead, so that path never fires in production. Which is correction 4 in one
+sentence: the class the consumer checks for is never the class the producer constructs.
+
+Both take `worker_roots` first, so the substitution is small; the ACT verifier additionally takes `endpoint_inputs`,
+`audit_manifest` and `scope`, and the composition has the first of those available from the spec
+(`expected_final_cup_pose_world`) while the audit pair is per-episode. That is the wiring to complete.
