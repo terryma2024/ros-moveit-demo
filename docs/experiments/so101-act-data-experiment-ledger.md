@@ -48011,3 +48011,26 @@ verification. New event kinds must enter the closed event schema - and the exist
 So K2's checkpoint is complete and it did **not** pass the table as written: it named what is missing, why the fence
 route needs a documented causal protocol rather than a containment rule, and the exact set of files that must move
 together. That is the input K2's implementation was waiting for, and it goes into the ledger as such.
+
+
+## CP-2537 — The broker's container coupling is four points, all in one module
+
+Reading the parser construction gives the line to change and, beside it, the rest of the coupling:
+
+```python
+        else:
+            parser.add_argument(flag, required=True, choices=[frozen[index + 1]])
+            index += 2
+```
+
+That single-element `choices` is what refused this run's host paths. But the same function then reads
+`/opt/parallel-provenance.json`, verifies `/opt/so101_demo_py` against it with `verify_source(...)`, and requires
+`os.environ['PARALLEL_IMAGE_ID']` to match `sha256:[0-9a-f]{64}` before it will build the runtime - three more container
+assumptions (`--device` is the one flag already handled as a closed set of devices, with a comment noting it used to be
+dropped and silently forced CUDA).
+
+So the approved container-free route's scope is now exact and bounded: the location flags stop being singletons, and
+the provenance bootstrap stops assuming the image's `/opt` layout and image-id environment - all four points in
+`cli/parallel_perception_broker.py`, with the substantive checks (detector model id and weights digest, runtime pin
+versions, source provenance verification itself) kept. That is a slightly bigger edit than "one parser change" and it is
+still one module, which is what makes it a piece of work rather than a redesign.
