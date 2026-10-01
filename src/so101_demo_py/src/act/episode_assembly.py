@@ -21,7 +21,8 @@ from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
            "ProductionProducer", "assemble_episode_capture", "episode_audit_pair",
-           "physical_audit_from_captured", "readback_from_frozen"]
+           "physical_audit_from_captured", "physical_audit_from_observation",
+           "readback_from_frozen"]
 
 
 def assemble_episode_capture(
@@ -428,3 +429,39 @@ def readback_from_frozen(*, scene_model, world, scene, contacts, rgb, broker, fr
         cup_orientation_tolerance=float(policy.get("cup_orientation_tolerance", 0.0)),
         **kwargs)
     return readback
+
+
+def physical_audit_from_observation(observation, *, release_epoch: int, release_event: bool, release_time_s: float,
+                                    phase: str, contacts, physical_stamps: dict, reference: dict,
+                                    controller_state: dict) -> dict:
+    """Compose one row's physical audit from the scene observation and the run's own facts.
+
+    `CupSceneObservation` is the boundary that already exists in the episode's own process (CP-2861): it carries the
+    simulator's pose beside MoveIt's, which is exactly the pair the physical-outcome rule wants kept independent - the
+    simulator is the fact about where the cup is, the Planning Scene is the collision-planning shadow - plus the
+    attachment, the reset epoch and whether the physics is paused. So four of the thirteen names come straight from it,
+    and the rest from what the same process already holds: the joint reader, the cup-pose sample, and the phase
+    sequence.
+
+    Deliberately separate from `physical_audit_from_captured`, which was written for a readback on the parent side of
+    the process boundary; that one is kept because it is tested and may serve another path, but this is the one the
+    episode's own process should use.
+    """
+    epoch = getattr(observation, "reset_epoch", None)
+    if epoch is None:
+        raise ValueError("OBSERVATION_EPOCH_MISSING")
+    return {
+        "reset_epoch": int(epoch), "release_epoch": int(release_epoch),
+        "release_event": bool(release_event), "release_time_s": float(release_time_s),
+        "physical_stamps": dict(physical_stamps), "phase": str(phase),
+        "reference_time_s": float(reference["time_s"]), "reference_source": str(reference["source"]),
+        "reference_positions": reference["positions"],
+        "mujoco_truth": {"pose_world": observation.simulator_pose_world,
+                         "received_monotonic_s": float(observation.simulator_received_monotonic_s),
+                         "simulation_session_id": observation.simulation_session_id},
+        "contacts": contacts,
+        "planning_scene": {"pose_world": observation.moveit_pose_world,
+                           "received_monotonic_s": float(observation.moveit_received_monotonic_s),
+                           "attached": bool(observation.moveit_attached), "paused": observation.paused},
+        "controller_state": dict(controller_state),
+    }

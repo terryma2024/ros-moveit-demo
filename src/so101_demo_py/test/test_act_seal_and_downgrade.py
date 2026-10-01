@@ -19,7 +19,8 @@ from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_assembly import (EpisodeSink, LiveSampler, PhysicalAuditAdapter,
                                               PointEpisode, ProductionProducer,
                                               assemble_episode_capture, episode_audit_pair,
-                                              physical_audit_from_captured, readback_from_frozen)
+                                              physical_audit_from_captured, physical_audit_from_observation,
+                                              readback_from_frozen)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -553,3 +554,32 @@ def test_the_readback_refuses_a_frozen_set_that_does_not_state_its_expectations(
         with pytest.raises(ValueError, match=f"READBACK_EXPECTATION_MISSING: {re.escape(path)}"):
             readback_from_frozen(scene_model="/nonexistent/scene.xml", world=None, scene=None, contacts=None,
                                  rgb=None, broker=None, frozen=broken)
+
+
+def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
+    """The boundary that already exists in the episode's own process (CP-2861)."""
+    from so101_demo.ports.cup_scene_observation import CupSceneObservation
+    from so101_demo.ports.evidence import PoseEvidence
+
+    def _obs(received_a=12.5, received_b=12.6, attached=True, epoch=2):
+        return CupSceneObservation(
+            simulator_pose_world=PoseEvidence((0.02, -0.28, 0.165), (0.0, 0.0, 0.0, 1.0)),
+            simulator_received_monotonic_s=received_a,
+            moveit_pose_world=PoseEvidence((0.02, -0.28, 0.165), (0.0, 0.0, 0.0, 1.0)),
+            moveit_received_monotonic_s=received_b, moveit_attached=attached,
+            simulation_session_id="session-1", reset_epoch=epoch, paused=False)
+    audit = physical_audit_from_observation(
+        _obs(), release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
+        contacts={"held": True}, physical_stamps={"head": 12.4},
+        reference={"time_s": 12.4, "source": "mujoco", "positions": [0.0, 0.0, 0.0]},
+        controller_state={"active": True})
+    assert set(audit) == set(PhysicalAuditAdapter.KEYS)
+    # the simulator side and the MoveIt side remain separate facts, which is the reason the type carries both
+    assert audit["mujoco_truth"]["received_monotonic_s"] == 12.5
+    assert audit["planning_scene"]["received_monotonic_s"] == 12.6
+    assert audit["planning_scene"]["attached"] is True and audit["reset_epoch"] == 2
+    with pytest.raises(ValueError, match="OBSERVATION_EPOCH_MISSING"):
+        physical_audit_from_observation(
+            _obs(epoch=None), release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
+            contacts={}, physical_stamps={},
+            reference={"time_s": 1.0, "source": "mujoco", "positions": [0.0]}, controller_state={})
