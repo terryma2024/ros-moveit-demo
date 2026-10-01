@@ -54990,3 +54990,23 @@ and exactly the piece the physical side owns.
 
 Which leaves the division clean and confirmed by the code rather than by inference: the coordinator extracts those values
 from the capture path, and I supply the seam and the two wrappers that let the extraction be handed over and verified.
+
+
+## CP-2842 — The extraction note, and the conflict it exposes between two mappings
+
+The handover now carries the eleven values `live_evidence_sample` needs and where each comes from, because the repository's
+own docstring is right that extraction - not object-passing - is the remaining work.
+
+Writing it out exposed a conflict that neither half can settle alone. `ProductionProducer` narrows the synchronizer's
+audit to `source_stamps`, for a good reason: the recorder's channel is closed at sixteen keys and refuses
+`source_received_wall_s` as `EPISODE_AUDIT_SCHEMA` (CP-2832's family, seen from the source side). But
+`live_evidence_sample` **requires** that second mapping as `source_received_monotonic_s`.
+
+So the two mappings have to travel by different paths:
+
+* the **row's audit** keeps only `source_stamps` - what an episode row records;
+* the **extraction** reads the receipt mapping from the synchronizer directly.
+
+That split is my side's, and it is the same seam as the recorder's `_RECORDER_LOCAL_KEYS` one more time - evidence that a
+closed channel plus a wider producer will keep meeting at exactly this boundary. Recording it in the handover means the
+coordinator does not have to discover it while wiring.
