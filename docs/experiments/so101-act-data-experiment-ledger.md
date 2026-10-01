@@ -53005,3 +53005,27 @@ The fix is on the store's side: `seal` must resolve the manifest and the scope t
 knows: the worker workspace, the frozen inputs, or a convention about where a v2 episode's audit lives.
 
 That is the last read before the fix, and it closes both correction 2's literal text and correction 3's test at once.
+
+
+## CP-2766 — Where the store could resolve the pair, and the smallest honest fix
+
+The store knows exactly these locations: its `workspace`, the `working` directory it creates inside it, and
+`episode_root = working / "episode"`. It knows the lease, the expected session and reset epoch, and a clock. It does
+**not** know where a v2 episode's raw audit or its scope document live - and the seal itself carries only their digests
+(`audit_manifest_sha256`, `scope_sha256`), not their paths.
+
+So the reviewer's wording - "**resolve** and supply" - is the design question, and there are two honest answers:
+
+- **a convention**: the audit lives at a fixed place relative to the episode (for instance `<episode_root>/audit/…` or
+  beside it), in which case the store resolves it and verifies the digest against the seal's own `audit_manifest_sha256`
+  before passing it on - which is exactly the kind of check this codebase writes everywhere else;
+- **an explicit supply**: the store takes the pair (or a small resolver) as a constructor argument, and whoever builds an
+  episode - the worker path - passes what it holds.
+
+The second is more in keeping with everything else this stretch has read: the recorder refuses to guess whether both
+artifacts were meant (`EPISODE_SEAL_AUDIT_INCOMPLETE`), `verify_episode_seal` refuses to look for them, and the
+container-free route refused to invent a broker command. Each of those decided that a caller must state what it means
+rather than have a component infer it. A convention would be the first place in this chain where the opposite is done.
+
+Either way the change is small and localised to `ActCollectionResultStore`: take the pair (or resolve it), pass it to
+`verify_episode_seal`, and let the seal's own digests be the check that what was supplied is what was meant.
