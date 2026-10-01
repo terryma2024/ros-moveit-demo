@@ -54838,3 +54838,30 @@ rounds when done the other way.
 
 With `finish` proven, the next step is one line further: extend the same probe through `store.seal(...)` and read where it
 raises, which is now the only unknown left in E3's software loop.
+
+
+## CP-2836 — The QC PASS direction needs real physics rows, which is a property of the real run
+
+Writing the other direction - an episode whose targets match the pose it ends at should be a PASS - fails immediately and
+instructively:
+
+```
+E   TypeError: 'NoneType' object is not iterable
+```
+
+because `endpoint_records_from_audit` returns `final_pose = None` for this episode: the shared endpoint rule cannot
+reconstruct a pose from the rows the test's episode carries. So the episode the chain test seals - real recorder, real
+audit writer, real production producer - still has no physics rows the QC can read a cup pose from.
+
+Which is not a defect in any of those classes but a statement about what the test can and cannot prove. The QC's endpoint
+rule reads poses from the run's physics rows (`cup_position_world_m` plus `cup_orientation_world_xyzw`, the pair the audit
+admits); with `ProductionProducer` supplying frames and a resting arm/neck state, nothing in this episode writes those
+rows. They come from a real MuJoCo run's summary stream.
+
+So the objective's "独立 QC PASS" is not reachable by aligning targets in this harness: it needs an episode whose physics
+rows carry the cup's pose, which is precisely what the real run E3 asks for provides. That merges the last two items -
+the physical-side handover and the real MuJoCo run - into one requirement, and it means the software side is as far as it
+can go without it: every other link (lossless recording, independent judgement, downgrade, coordinator commit) is proven,
+and this one awaits the episode only a live run produces.
+
+The test is reverted so the tree stays green (`8 passed`), and nothing of mine is uncommitted.
