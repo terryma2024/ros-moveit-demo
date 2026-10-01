@@ -46920,3 +46920,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   catalogue whose `task_start` matches the endpoint rule, and the environment with RobotSystem activated.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 87b9359a2;
   goal active.
+
+
+## CP-2483 — The environment is still healthy, and the one decision still stands
+
+- Health check after roughly thirty rounds of uptime: the launch process `3111252` is alive, `ros2 node list` reports
+  twenty-three nodes, `ros2 control list_controllers` answers with `joint_state_broadcaster ... active`, and the last
+  log line is the benign `tf2_buffer: Detected jump back in time` warning that a simulated clock produces. So the one
+  approved stack this task started remains usable for the pending live run, and nothing needs restarting.
+- The decision reported at CP-2481/2482 still stands and is the only thing between this session and a real episode:
+  the default production composition's broker is a perception container (`perception.sock`, `container.cid`), the only
+  way past it is `DRY_RUN`, which produces no episode, and this amendment excludes implementing containers while the
+  design forbids a second, simplified scheduler or broker. Either a container-free broker path is approved as its own
+  piece of work, or the live run waits for it.
+- Everything else is ready and committed: zero-blocker frozen inputs, the endpoint policy and its twenty-one controls,
+  the CLI with its guards and V2 request, the deployment provenance verifier, the pinned catalogue whose `task_start`
+  matches the endpoint rule, and this environment.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 32015f152;
+  goal active.
