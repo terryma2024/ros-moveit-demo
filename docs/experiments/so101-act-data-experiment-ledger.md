@@ -47953,3 +47953,23 @@ CP-2406: extend the closed set deliberately, with the reason recorded, rather th
 
 Everything else in the chain is proven: the composition builds, the drive runs, the supervisor starts the command, and
 the broker's only objection is these literals.
+
+
+## CP-2535 — The broker's every location is a singleton, and the substantive values are separable
+
+The full usage line shows the shape: `--endpoint {/runtime/perception.sock}`, `--input-root {/inputs}`,
+`--ready-receipt {/runtime/ready.json}`, `--runtime-spec {/runtime/broker-spec.json}`,
+`--yolo-weights {/models/yolo/best.pt}`, `--yolo-weights-sha256 {f281d252...0781}`,
+`--yolo-model-id {plastic-cup-yolo11n-seg-v1}`, and more of the same. So the broker does not merely prefer the container
+layout - it accepts nothing else, each flag being a one-element choice set.
+
+That is the approved work's exact scope, and it separates cleanly into two kinds of value. The **locations** -
+endpoint, input root, ready receipt, spec path, weights path - exist only to name where things are, and a host run needs
+them to name this deployment's paths, all of which the composition already holds. The **substance** - the detector's
+model id `plastic-cup-yolo11n-seg-v1` and its weights digest `f281d252...0781` - is what the frozen-argument comment is
+really protecting: those must stay exactly as they are, because they are what stops a run silently using different
+weights than the ones admitted.
+
+So the change is: let the parser accept this run's locations while keeping the substantive literals closed. One small
+edit in the broker's argument construction, one rebuild, and the supervisor should see a broker that comes up instead
+of exiting 2.
