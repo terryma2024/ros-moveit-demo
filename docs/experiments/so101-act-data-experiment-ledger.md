@@ -46546,3 +46546,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   pose, and now the request type), and the tree's uncommitted work stops precisely here.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 1f2f8ef50; goal active.
+
+
+## CP-2464 — The consumer is a campaign CLI, and its construction is the recipe
+
+- The readers of `selected_point_ids` are the campaign CLIs: `macos_service_campaign.py:315` puts it into a document
+  as `list(arguments.point_id)`, and `macos_w2_campaign.py:758` builds a request with
+  `selected_point_ids=tuple(arguments.point_id)`, listing it among a document's keys at 1124. So the object the
+  coordinator expects on this path is the **adaptive/campaign-shaped request**, and the campaign module already shows
+  how one is constructed from a set of point ids - which is exactly the shape this task has: one point, one id.
+- The next read is that construction site in full (its other fields, and how the point ids relate to the catalogue the
+  request carries), after which the fourth piece's request becomes a transcription of a call this repository already
+  makes. Everything else it needs is already in place: the frozen config and provenance, the one-point catalogue, the
+  seven-value target, `RunMode.EXECUTE`, the journal, the sealed-result adapter and the coordinator.
+- Recorded for continuity: the tree's fourth-piece work is uncommitted and stops at this refusal; four layers of it
+  are already cleared (the guard, the run mode, the trusted pose, the frozen artefacts), and each was cleared by
+  reading the contract the refusal named rather than by adapting the consumer.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD f91714507; goal active.
