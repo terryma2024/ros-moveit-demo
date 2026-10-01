@@ -52744,3 +52744,18 @@ makes a one-line search.
 
 Nothing else about the chain has changed: the production acquisition fix, the five alignments and the adapter are all in
 place, the values the binding needs are known, and the seal is one lookup away from agreeing with them.
+
+
+## CP-2756 — The binding is accepted, and the seal counts rows against bindings
+
+With the sequence looked up by instant, `AUDIT_BINDING_REFERENCE_INVALID` is gone and the seal now says
+**`EPISODE_SEAL_ROWS_MISMATCH`** - the check CP-2727 read from the other side: every recorded row must be bound to the
+acquisitions it consumed, at the same instant.
+
+The numbers line up with the two earlier measurements: `_service_pending` wrote **two** rows (CP-2752's `drained=1`
+twice), and the tail handed the callback **one** (CP-2753's single `BIND` line). So the tail's row set is smaller than the
+recorder's, and that is the whole of this refusal - a row was recorded that no binding names.
+
+The next read is `_tail_paths` itself: what it iterates, and at what point in `finish` it runs relative to the rows that
+`finish`'s own `_service()` releases. Everything else in the chain is now aligned: scope, identity, grid, acquisitions,
+bindings and their reference keys all pass, and the only remaining difference is how many rows each side counted.
