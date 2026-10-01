@@ -45083,3 +45083,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F11's derivation
   waiting on this rewrite; F5's step two one traceback away; E1's data, loaders, calculator and controls landed with
   the CLI as the next transcription. HEAD 26c857f3a; goal active.
+
+
+## CP-2391 — F11's derivation: the control is camera-consistent after all, and one borrowed value is left
+
+- Correction to CP-2389/CP-2390: `test_a_formal_audit_may_not_seal_without_source_coverage`'s `complete` sub-case
+  **already mints head/wrist acquisitions** through `AcquisitionMinter` (the loop at 879-884, with a comment saying
+  the window must hold the acquisitions its schedule declares), so it is camera-consistent and its `empty`/`partial`
+  sub-cases never reach the window comparison because coverage refuses first. The rewrite the plan asks for is
+  therefore largely already in place, and my new pair of negatives at CP-2369 add the attribution it wanted.
+- With F11's derivation applied, exactly one test refuses: that control, with `AUDIT_WINDOW_INVALID`. The value at
+  fault is the one the control still **borrows** from the shared `_window()` helper - its `physics_end_s` is 1.2
+  while that sub-case's physics rows all sit at 1.1, which the derived comparison reads as a 0.1 offset against a
+  0.1 tolerance and (at the boundary) a mismatch. The fix is the plan's own instruction applied to that sub-case:
+  derive its window from its own rows rather than borrowing the shared literal, exactly as CP-2345 did for the other
+  two fixtures.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains. F11's derivation is one small
+  fixture edit away, not a blocked item.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F5's step two one
+  traceback away; E1's data, loaders, calculator and controls landed with the CLI as the next transcription.
+  HEAD ee7002add; goal active.
