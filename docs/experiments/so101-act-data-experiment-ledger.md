@@ -45977,3 +45977,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   together with this change and the `run` re-attempted.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 9114cfaee;
   goal active.
+
+
+## CP-2435 — Zero blockers again, with the stops in the document the design names
+
+- Landed CP-2434's patch: `resource_policy_identity(runtime_bytes, collection_bytes, *, development_runtime=None)`
+  falls back to that document's `hard_stops` only when the batch runtime does not carry them, and
+  `_inspect_resource_thresholds` names `src/so101_demo_py/config/act/endpoint_pose_development_runtime_v1.yaml`.
+  Because the fallback happens after the runtime bytes are hashed, `runtime_config_sha256` still describes the batch
+  file exactly as before - which is the reason the merge could not be done by synthesising a document.
+- Measured after the rebuild: `inspect` rc=0, **zero blockers**, `resource_thresholds` READY. The input half is
+  therefore READY again, and this time the two stops live in the document section 5.1 declares rather than in a file
+  whose contract refuses them.
+- The same commit carries the `run` subcommand's three composition calls, which rebuild cleanly: the journal, the
+  sealed-result adapter built with the frozen target, and the coordinator over the frozen runtime document parsed by
+  `load_runtime_config_any_schema`. Running it now reaches the fourth piece and refuses by name - the episode runner
+  needs the approved MuJoCo stack, which this CLI deliberately does not start on its own.
+- Next: re-freeze (`prepare`) so the frozen set carries the corrected resource route, then decide the fourth piece's
+  wiring, which is where the approved stack comes in.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 9986e44bc;
+  goal active.
