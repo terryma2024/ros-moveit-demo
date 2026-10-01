@@ -46712,3 +46712,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   that verifier establishes, in the same spirit as the frozen-artefact rule.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD facd061b8; goal active.
+
+
+## CP-2473 — The deployment-verifier seam is designed, so route one is the honest one
+
+- Read the seam: `prepare_batch(argv=None, *, provenance_verifier=verify_provenance, start_guard=None)` (1136) calls
+  `provenance = provenance_verifier(inputs)` (1314) - so the verifier **returns the provenance document**, it is not
+  merely a pass/fail gate - stores it on the spec (1421, field declared at 197), the composition hands it on
+  (`spec.provenance_verifier`, 2779), and `run_cli(..., provenance_verifier=verify_provenance,
+  composition_factory=ProductionBatchComposition)` (4240-4244) threads whatever the caller supplies.
+- So a deployment is expected to supply its own verifier, and this task's deployment is MuJoCo-only: route one of
+  CP-2472. The obligation that comes with it is the one this ledger keeps: the run's own record must state **what that
+  verifier establishes** - for this deployment, that the frozen inputs are the ones being executed (the manifest and
+  the byte-identical scene), and that no detector weights, grounded-SAM root or broker image is claimed, because none
+  participates.
+- The alternative - reporting the gap and stopping - remains available and would be the right answer if the milestone
+  genuinely needed perception or a container. It does not: the amendment is MuJoCo-only, and the plan's "default
+  production factory" wording is satisfied by the default composition factory plus a deployment-appropriate verifier.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 677458b5b; goal active.
