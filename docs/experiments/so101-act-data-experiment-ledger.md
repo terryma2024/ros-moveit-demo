@@ -44864,3 +44864,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2's protocol table written); F11's derivation open
   with the window contract read; F5's step two one traceback from its fix; E1's data artifacts landed; HEAD
   1aa4847cb; goal active.
+
+
+## CP-2380 — E1's policy loader landed, and its controls must move into the plan's test file
+
+- `src/so101_demo_py/src/act/endpoint_pose_acceptance.py` (commit 4fad2e599) owns the closed policy document:
+  `POLICY_KIND`/`POLICY_SCHEMA_VERSION`/`RULE_VERSION`/`POLICY_FIELDS`, the five `THRESHOLD_UNITS` in the design's
+  order, and `load_endpoint_policy(path)` which parses only that closed document, coerces each threshold to a finite
+  positive float, refuses radians above pi, and raises `ENDPOINT_POLICY_INVALID` by name for booleans, NaN,
+  infinities, unknown fields, unknown kind and unknown versions.
+- Verified this round by loading the installed policy (the five authorized values come back as floats) and by four
+  negatives - wrong kind, schema_version 2, an extra threshold key and a boolean threshold - each refused by name.
+- Honest gap: that verification ran as a one-liner, while the plan requires `test/test_act_endpoint_pose_acceptance.py`
+  with the verbatim RED case and `--junitxml` under a fresh scratch. The controls therefore still have to be moved
+  into that file, together with the boundary cases the plan lists (equal and just-over threshold, XYZ against XY,
+  yaw insensitivity, toppled, q/-q, bad norm, NaN/Inf/bool, missing field, unknown version), and the calculator
+  `evaluate_endpoint_pose` itself still has to be written.
+- E1's remaining plan items are unchanged from CP-2379: the calculator, the policy role in both real input
+  registries, `load_development_runtime` with the `user_empirical_default` approval and a real effective-config
+  artifact, `prepare --runtime-policy`, the freezer's keyword-only `runtime_policy`, `--mode`/`--endpoint-policy`,
+  and the input/CLI suite with its negatives.
+- F5's step two remains one traceback from its fix (CP-2377); F11's derivation and F13's scene item remain open;
+  K2's protocol table is written (CP-2375). HEAD 28ed2ce2e; goal active.
