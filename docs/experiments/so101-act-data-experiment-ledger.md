@@ -45143,3 +45143,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1, F14, F3, F12 and F11 are closed; F5's step two is one traceback away; F13's scene item awaits K2's
   implementation after its protocol table; E1's data, loaders, calculator and controls are landed with the CLI as the
   next transcription. HEAD b288d055b; goal active.
+
+
+## CP-2394 — Tree state stated exactly, and no uncommitted work of mine
+
+- `git status --short` reports 37 entries: 24 modified and 13 untracked. Every modified path is the user's
+  pre-existing work - 16 of them under `so101_demo_py` (`act/contracts.py`, `act/pick_place_validation_campaign.py`,
+  `adapters/act/broker_execution.py`, `pick_place_reset.py`, `pick_place_search_binding.py`, `pick_place_sources.py`
+  and their tests), the rest under `so101_mujoco_support` and `so101_teleop` - none of which this stretch touched.
+- Checked explicitly for leftovers of mine across the files this stretch edited (the endpoint-pose module and
+  config, the audit writer, its test): **0 matches**, i.e. my work is entirely in the commits
+  (`3601546d4`, `418170f8c`, `4fad2e599`, `747cd93d5`, `00a160175`, `ebc4023f9`, `60330a75b` and the ledger entries).
+- The honest note: the count is 37 today against the 35 recorded at earlier checkpoints, which is a count over all
+  paths rather than the `src/`-only figure used before, and the extra entries are untracked files outside my edits.
+  Nothing of mine is uncommitted, and no probe or withdrawn fixture remains.
+- F1, F14, F3, F12, F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
+  E1's data, loaders, calculator and controls landed with the CLI as the next transcription. HEAD 19aafc2ce;
+  goal active.
