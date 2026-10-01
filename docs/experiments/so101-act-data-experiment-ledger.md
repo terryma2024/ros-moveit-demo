@@ -52280,3 +52280,28 @@ corrections 2 and 3 end to end.
 The uncommitted edits in `test_act_seal_and_downgrade.py` are the three alignments above, each applied with an assertion
 after it (CP-2733's lesson), and they are kept rather than reverted because every one of them moved the failure strictly
 forward.
+
+
+## CP-2736 — Measured: three frames and three references produce exactly one row
+
+```
+row times: [1.0]
+gaps    : []
+```
+
+So the capture writes a single row from the whole sequence, and that is the `EPISODE_TIME_GAP` at the seal: a one-point
+grid cannot satisfy `require_grid`, which wants the recorded times to step by `dt_s` from each other.
+
+The mechanism is visible in the two facts already read: a row is created per sampler call and carries
+`target_s = at_s + dt_s` (CP-2725), and it is written only when a reference for that `target_s` is ready (CP-2721). So
+the sequence 1.0/1.1/1.2 with references at 1.1/1.2/1.3 should release three rows - unless the later frames never produce
+rows at all, which is what one row means. The sampler's rule is the likeliest reason: `sample_with_audit` takes the
+**newest causal stamp** per camera, so a frame fed before the previous row has been serviced can collapse into the same
+instant rather than advancing it.
+
+What that implies for the test is a flow question rather than a value question: the frames, the reference and the drain
+have to interleave so that each instant produces exactly one row, and the next read is `_service`'s sampling condition -
+when it decides to sample and which instant it stamps the sample with.
+
+Everything else holds: the scope checks pass, the audit is balanced, the identity matches, and the only thing between
+these two tests and E2's corrections 2 and 3 is the cadence of one loop.
