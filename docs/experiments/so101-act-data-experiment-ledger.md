@@ -48941,3 +48941,23 @@ The verdict (2442 lines, real `EXIT=0`, tokens 56,524): **FAIL**, four correctio
 So revision 7's brief is exact and small, and the pattern across revisions 5, 6 and now 7 is consistent: my *new*
 sections are right and my *old* ones are left behind, which is precisely what a reviewer reading the whole artefact
 catches and a writer patching in place does not.
+
+
+## CP-2588 — Revision 7 answers all four, in the old sections this time
+
+Every correction was applied where the document was already wrong rather than in a new section:
+
+1. section 3's declaration now says the five K2 kinds carry **`record_schema_version: 1`** in a namespace of their own
+   and that the manifest keeps `schema_version: 2` untouched, and **all five rows** use the new field name - the stale
+   `` `schema_version = 2` `` count in the rows is now zero;
+2. **G gained a declared `sim_time_s` (float or null)**, so the clock table no longer omits an instant for one kind, and
+   **`R.received_at_s` is declared nullable**, matching the document's own "instant iff `clock_source` non-null" rule;
+3. the event envelope is corrected to what the repository writes -
+   `{sequence, kind, identity, sim_time_s, monotonic_ns, payload}` - with the invented envelope `schema_version` removed,
+   and the version table's envelope row now reads "*(no version field)*";
+4. the manifest is a **six-row table** with types (`kind`, `schema_version`, `scope_sha256`, `identity`, `window`,
+   `files`), so it gets the same treatment as the five record kinds.
+
+Sent for review (`reviews/k2-protocol-recheck7.log`). The recurring lesson across revisions 5, 6 and 7 is now explicit in
+the document's own shape: new sections get written correctly and old ones get left behind, so the fix is to patch the
+artefact the reader implements and then re-read the whole document for what the patch made stale.
