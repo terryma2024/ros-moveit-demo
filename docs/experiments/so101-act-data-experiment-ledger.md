@@ -52068,3 +52068,29 @@ them, so that the information is not lost, only moved off the channel whose sche
 
 That is the reviewer's correction 3 unblocked and correction 4's neighbourhood: the live path connects components that
 were each written to a contract, and the contracts meet at exactly this kind of seam.
+
+
+## CP-2728 — The two ids belong to the audit's row-bindings records, so the capture's update is redundant and wrong
+
+Where the identifiers actually live:
+
+```python
+_ROW_FIELDS = frozenset({"row_index", "sim_time_s", "head_acquisition_id",
+                         "wrist_acquisition_id", "reference_sequence"})          # episode_audit.py:51-52
+                  "head_acquisition_id": head_id, "wrist_acquisition_id": wrist...   # episode_audit.py:791
+```
+
+So `head_acquisition_id` and `wrist_acquisition_id` are fields of the audit's **row-bindings** records - a stream the
+audit writer writes itself, with the ids passed to it - while the recorder's per-row `audit` dictionary is a different,
+closed sixteen-key channel. The capture puts them in the wrong one.
+
+That makes the fix unambiguous and small: drop the `audit.update({...})` at `continuous_capture.py:412-413` from the
+dictionary handed to the recorder, and make sure the ids travel where they belong - to the audit writer's row-binding
+path, which already names them. The information is not lost, only moved off the channel whose schema is closed.
+
+And it completes the diagnosis of the integration defect: the capture was written against the audit writer's vocabulary,
+the recorder against its own closed set, and nothing had ever driven the two together - which is precisely the gap E2's
+corrections are about and E3 has to close.
+
+The tests in `test_act_seal_and_downgrade.py` are `xfail(strict=True)`, so when this is fixed they will report XPASS as a
+failure until they are unmarked - which is the intended signal, not an accident.
