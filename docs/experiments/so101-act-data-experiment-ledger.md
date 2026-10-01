@@ -42350,3 +42350,95 @@ sealed identity，否则拒发文档；④ `simulation_timestep_s` 的启动 rea
 sim-time 提交、静止反馈、stop/revoke 延迟、以及反馈量化/停车容差/帧契约这三项受控声明）。证据：
 `scratch/hs299/`（RED/GREEN/回归/全套件日志、运行器、shim）、`head-toolchain-20261001T082411Z`、
 `head-mujoco-measurements-20261001T082455Z`，均为**删除候选，未删除**。
+
+## HS-300 — `search_timing` 与 `frame_age_measurements` 两项测量文档有源：真实 bounded-sweep 时序测量（6 个稳定停点、p99 settle 0.346 s、p99 frame 6.03 ms）
+
+**提交** `335cb67d3`（4 文件，+2520/−6；普通 `git commit`，钩子 rc=0）+ `0385a5f77`（1 文件，+12/−9，真实运行后
+对"实时因子必然小于 1"这一**被实测推翻**的推断的诚实更正）。`git status --porcelain` 为空（`scratch/` 由
+`/data/work/ws_moveit/.git/info/exclude` 本地排除，证据文件仍在盘上、未被跟踪、未删除）。
+
+**清点项 #1/#2 的缺口闭合**：HS-299 清点中 `search_timing`（phase 6）与 `frame_age_measurements`（phase 7）
+的"缺 capability"已由本轮生产者填上；其余 12 项仍无源、仍未伪造。
+
+**新增库模块** `src/so101_demo_py/src/act/head_search_timing_measurement.py`（决策层零 MuJoCo/零检测器/零 CUDA：
+
+| 层 | API | 作用 |
+| --- | --- | --- |
+| 计划 | `controller_config(...)` / `planned_stops(config)` | 用 sealed geometry + production search config 构造**生产** `HeadSearchController`，直接取其 `plan.targets_rad`；FOV/lock 区间两文档不一致即 `CAL_TIMING_EVIDENCE_CONTRADICTORY` |
+| 周期 | `read_control_period(...)` | 从 sealed `ros2_controllers.yaml` 的 `controller_manager.ros__parameters.update_rate=500` 声明 0.002 s；必须整除 sealed timestep 否则拒绝 |
+| 停车规则 | `SettleTracker` | **声明式**：`|qvel| <= settle_velocity_rad_s` 连续 `settle_consecutive_steps=5` 个控制步 **且** 同一时刻 `|qpos-target| <= goal_tolerance_rad`；先静止后启动不算 settle（速度判据必须与容差判据同时成立） |
+| 时基 | `verify_simulation_time_base(...)` | 精确证明：每个停点 `settle_s == steps * simulation_timestep_s`、`sim_end-sim_start == settle_s`、每帧 sim 戳单调且 decision≥received；否则 `CAL_TIMING_TIME_BASE_UNVERIFIED` |
+| 判定 | `classify_stop(...)` | 到位但从未稳定 → `CAL_TIMING_STOP_UNSETTLED`；根本没到位 → `CAL_TIMING_SWEEP_UNSETTLED` |
+| 文档 | `build_search_timing` / `build_frame_age_measurements` / `frame_contract_document` | 产出 `search-timing.json`（phase 6 读 `p99_settle_s`/`p99_frame_s`/`control_period_s` + `path`+自摘要）、`frame-age-measurements.json`（phase 7 读 `samples[].received_monotonic_s`/`decision_monotonic_s` + 被 `path`+sha256 引用的帧契约）、`frame-contract.json` |
+| 执行 | `MujocoNeckSweepRunner`（唯一重层，函数内 import）/ `runtime_identity` | 按 sealed 周期步进 sealed 场景，用 `neck_yaw_joint` position 执行器下发每个停点；每 0.1 s **仿真时间**产出一帧（渲染 head_camera + sealed 检测器 `predict`），逐帧记录 sim 戳与 monotonic 墙钟戳 |
+| 生产 | `write_head_search_timing_measurement(...)` | 先校验再运行：scene 摘要必须被 seal 的 `source_digests.scene_sha256` 钉住、控制周期必须整步、权重摘要必须等于 production config 的 `weight_sha256`、声明 cuda 而无 CUDA 即 `CAL_TIMING_DEVICE_UNAVAILABLE`（**allow_cpu_fallback=false**）；目录已存在即 `FileExistsError` |
+
+拒绝码（6 个，`REFUSAL_CODES` 有测试钉住）：`CAL_TIMING_EVIDENCE_MISSING` / `_CONTRADICTORY` /
+`CAL_TIMING_SWEEP_UNSETTLED` / `CAL_TIMING_STOP_UNSETTLED` / `CAL_TIMING_TIME_BASE_UNVERIFIED` /
+`CAL_TIMING_DEVICE_UNAVAILABLE`。
+
+**CLI（薄解析/校验）**：安装入口新增子命令 `measure-search-timing`（`--scene/--geometry-seal/
+--production-search-config/--controller-config/--output-dir` 必填，`--weights` 可选，`--anchor` 可重复、
+`--device`、`--max-settle-s`、`--settle-consecutive-steps`）；缺输入/文件不存在/输出目录已存在 →
+`HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE` rc=2，库拒绝原样打印 rc=2，成功打印
+`SEARCH_TIMING_MEASURED p99_settle_s=… p99_frame_s=… stops=… frames=…`。
+
+**一次真实运行（安装程序，rc=0，wall 3 s / 程序内 2.32 s）**：
+
+```
+T=$EV/head-toolchain-20261001T083846Z            # 由 0385a5f77 构建，build rc=0，安装模块 sha256 与源一致 8c780c9d…
+ros2 run so101_demo_py so101_head_search_calibration measure-search-timing \
+  --scene $T/.../assets/mujoco/act/head_search_scene.xml --geometry-seal $EV/head-camera-probe11-…/head-camera-geometry.json \
+  --production-search-config $T/.../config/mujoco/act/head_search_v2.json --controller-config $T/.../config/mujoco/ros2_controllers.yaml \
+  --weights $EV/models/huggingface/so101-yolo11n-seg-plastic-cup/b55430fb…/best.pt --device cuda \
+  --output-dir $EV/head-yolo-models-20260930T120608Z/sweep-timing-20261001T083953Z
+rc=0  SEARCH_TIMING_MEASURED p99_settle_s=0.346 p99_frame_s=0.0060269 stops=6 frames=25 anchors=default,forward,left
+```
+
+- **逐停点 settle（仿真时间）**：default/forward/left 三 anchor × 2 个 plan 停点 = 6 个稳定停点，全部
+  `settled && reached`；0.122 / 0.346、0.252 / 0.344、0.252 / 0.344 s（p99 = 0.346 s，最近秩、6 样本即最大）；
+  另有 3 个 `anchor_positioning` 停点（0.266/0.310/0.310 s）**记录但不计入** p99（`settle_s.plan_stops_only=true`）。
+- **逐帧**：25 帧（10 Hz 仿真时间，2.546 s 扫描），age = decision−received 墙钟 3.45–4.72 ms（p99.9 = 4.721 ms），
+  frame time = decision−frame（含渲染）4.00–6.03 ms（p99 = `p99_frame_s` = 6.027 ms）；`sim_age_s` 全为 0
+  （渲染/推理期间仿真暂停，文档以 `transport_measured: false`、`simulation_paused_while_perceiving: true` 与实测
+  `real_time_factor=1.66` 明示）；首帧 CUDA 预热 1.18 s 被**显式记录**在 `warmup` 而不混入分布（预热先做一次渲染+推理）。
+- **消费验证（安装版，`consumption-check.log`）**：phase 6 `compute_search_timeout_s` 接受 → `search_timeout_s=0.70605`
+  （按 `path`+sha256 引用本文档与 seal）；phase 7 `compute_max_age_s` 接受 → `max_age_s=0.014581`，1.5 帧周期上限
+  0.15 s，余量 0.13542。**运行前后 `ps` 与 `nvidia-smi --query-compute-apps` 均为空**，无残留进程/无 CUDA 占用。
+
+**验证链**：
+
+| 步骤 | 结果 |
+| --- | --- |
+| RED（新测试文件，模块缺失） | **rc=2, 1 collection error**（只缺新模块，边界正确） |
+| RED（CLI，无新子命令） | **3 failed / 22 deselected, rc=1**（`invalid choice: 'measure-search-timing'`） |
+| GREEN（新文件 + CLI） | **29 passed** 与 **25 passed**，rc=0；`ruff check` 干净 |
+| 回归（15 文件 = HS-288..299 各 phase + 新模块 + CLI + calibration，基线调用式） | **385 passed / 0 failed / 0 error / 0 skipped, rc=0**（4 s） |
+| 全套件基线**复现**（按 HS-299 的 `pytest-xdist8-hs299.sCuIOsHB/{pythonpath.txt,tempfile-proof.log}` 逐字重建调用式，父提交 `d05a3d230`） | **tests 6316 / 175 failed / 86 errors / 152 skipped, rc=1**，与 `hs299.nodes.txt` **逐字节相同（diff 0 行）** |
+| 全套件（同一调用式，8 workers，HEAD `0385a5f77`） | **tests 6348 / 175 failed / 86 errors / 152 skipped, rc=1**；**passed +32 = 新增 29 + CLI 3**；与基线节点集 **diff 0 行**；失败集中 **0 个 head_search 节点** |
+
+**它声明的主要推断（待评审）**：① 帧年龄用**单调墙钟**（生产 `HeadSearchController` 的新鲜度门限比较
+`now - received_wall_s`），同一批样本的仿真戳一并记录以证明扫描自身的时基；`p99_frame_s` 取
+`decision-frame`（含渲染）而非仅推理；② 无检测器时**不写** frame-age/frame-contract 两份产物、`p99_frame_s=null`，
+phase 6 会如实以 `CAL_TIMEOUT_UNBOUNDED` 拒绝该文档；③ 首帧预热（渲染+推理各一次）单列于 `warmup`，
+不进入分布；④ `frame-contract.json` 是**额外**产物：phase 7 按 `path`+sha256 引用帧契约，10 Hz 契约本身是设计
+固定的声明（`measured_here: false`，启动 readback 仍归 run）；⑤ 扫描遍历 seal 声明的**全部** anchor
+（default/forward/left，共 6 个 plan 停点），生产搜索只走其中一个 anchor；⑥ 检测器取 production config
+`weight_sha256` 钉住的权重（`f281d252…`，即配置自己声明的模型），不是 HS-298 选中的 C2a；⑦ `control_period_s`
+是 `ros2_controllers.yaml` 的**声明**（500 Hz），并要求整除 sealed timestep；⑧ 锚点定位停点（仿真从 qpos=0 起，
+anchor 可能不在该角度）记录但不计入 `stable_stop_count`/percentile；⑨ 未接 ROS 图像话题，故
+`transport_measured: false`——running-topic freshness/skew 仍是另一项能力；⑩ `scratch/` 加入共享
+`.git/info/exclude` 以使 `git status --porcelain` 干净（仅本地忽略，未改仓库跟踪内容）。
+
+**本轮证据与生命周期**：保留 `head-toolchain-20261001T083649Z`（被 `0385a5f77` 取代）、
+`head-toolchain-20261001T083846Z`（最终）、`sweep-timing-20261001T083759Z`（被取代，未删）、
+`sweep-timing-20261001T083953Z`（最终）、`$EV/scratch/pytest-xdist8-{parent-rebuilt.ad456708,
+hs300-final.6d73f10e,hs300-regression.23a8baf4}`（三次基线调用式门禁）、
+`$EV/scratch/head-test-20261001T084136Z-86bc8550`（**无效调用式**，6100 收集，仅作探索留证）、
+`…T084503Z-6a4d43b1`、`…T084731Z-08e12989`（工具链式调用，作为对照留证）、工作树
+`scratch/hs300/`（RED/GREEN/回归日志、`pyshim`、runner、preflight）。以上**均为删除候选，未删除**。
+
+**其余 12 项测量文档仍无生产者**（`camera_measurements`、`deadband_candidates`、`workspace_projection`、
+`fine_correction_episodes`、`skew_measurements`、`frame_contract`(独立声明)、`controller_submissions`、
+`stationary_measurements`、`feedback_measurements`、`controller_stop_config`、`stop_proofs`，
+以及 phase 3 的 operating point 帧）。
