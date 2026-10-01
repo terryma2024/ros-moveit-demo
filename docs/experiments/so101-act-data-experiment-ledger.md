@@ -44622,3 +44622,22 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (K2 is its route now); F11's divergence fixed with its
   alignment landed and its derivation waiting on K1's rewrites; F5's regression fixed with step one landed and step
   two's seal-side blockers fixed; HEAD a8e81b065; goal active.
+
+
+## CP-2368 — F5's step two cleared the coverage gate: the refusal is now the window
+
+- The runner-backed fixture, re-added after the three seal-side fixes (CP-2362 the writer's own tie, CP-2363 the
+  initial epoch's source, CP-2365 the identity's two shapes), changed its refusal from
+  `AUDIT_FORMAL_COVERAGE_INCOMPLETE` to **`AUDIT_WINDOW_INVALID`**. That is the decisive gain: the coverage gate now
+  passes on a real runner's stream, which is exactly what F5's second item asked for, and the remaining refusal is
+  the window's own consistency with the audit the run produced.
+- Two fixture attempts at that window did not clear it (acquisitions moved to the shared schedule's 1.0/1.1/1.2 and
+  the cutoff set to the last labelled row). The window rules worth checking next are the ones the readback applies
+  in order: the schedule's per-stream instants against the acquisitions actually held, the endpoints against the
+  physics history, the outcome/cutoff relation, and the camera endpoints against the observed extremes - with the
+  plan's K1 instruction in mind that coverage is checked BEFORE the window, so the attribution this stretch measured
+  (coverage first, then window) is the expected order and not a regression.
+- Withdrawn; green (audit plus the artifact suite) and the tree back to its 35-entry baseline.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's divergence fixed with its
+  alignment landed and its derivation waiting on K1's rewrite; F5's regression fixed, step one landed, step two past
+  the coverage gate; HEAD 63fd6817d; goal active.
