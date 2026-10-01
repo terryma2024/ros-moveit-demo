@@ -44089,3 +44089,23 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
 - derivation behind CP-2332; F5's regression fixed with step one landed, step two measured feasible here; HEAD
 - 16dcc0bd7; goal paused.
+
+## CP-2342 - F5's hybrid: three attempts, three named errors, and the fixture handed off
+
+- The write was exactly the transcription CP-2338/CP-2341 specified: _formal_writer, minted acquisitions at
+- 0.1/0.5/1.0, one accepted reference at 1.1 with the legacy raw group, PickPlaceRunner(AlignedPort(), audit=writer)
+- with the attempt-aligned request, bind_row, a window derived from the run's own physics times, seal and verify.
+- Three attempts, each refused by name and each informative:
+-   1. AUDIT_FORMAL_COVERAGE_INCOMPLETE - coverage wanted more than the run supplies;
+-   2. AUDIT_BINDING_REFERENCE_INVALID - after adding the binding, which proves the binding's own rule is what
+-      checks the pair (the reference's time must be the bound row's instant plus one grid step, exactly as
+-      _self_consistent_formal pairs 1.0 with 1.1);
+-   3. AUDIT_FORMAL_COVERAGE_INCOMPLETE again, with the binding mirroring the preset fixture's row and instant.
+- So the fixture is close but not exact, and the remaining gap is one of the coverage requirements whose identity
+- the last refusal did not name. The next worker's cheapest step is the probe: print which coverage clause is
+- unsatisfied at seal (the acquisitions' schedule, the reference group, the observed row or the completions) rather
+- than reading four rules and guessing between them - the technique that resolved every similar wall in this ledger.
+- Withdrawn; green (audit plus the artifact suite) and nothing half-applied.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285 pending); F11's divergence fixed with its
+- derivation behind CP-2332; F5's regression fixed, step one landed (CP-2339), step two attempted here and handed
+- off with its three refusals; HEAD 35d6d38ee; goal paused.
