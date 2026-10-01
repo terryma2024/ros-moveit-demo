@@ -454,3 +454,54 @@ class AlignedPort(FakePort):
 
     def set_down(self, request):
         return self._aligned(super().set_down(request))
+
+
+class _OneFieldFlipped(FakePort):
+    """A port whose evidence for one phase has exactly one field flipped (CP-2806's checklist).
+
+    The predicates live in the evidence document, so a per-predicate negative is a single override applied where the
+    runner will read it - every other field stays exactly as the passing fixture builds it.
+    """
+
+    def __init__(self, phase, **flip):
+        super().__init__()
+        self._flipped = (phase, flip)
+
+    def _evidence(self, phase, epoch, **overrides):
+        document = super()._evidence(phase, epoch, **overrides)
+        if phase == self._flipped[0]:
+            document = {**document, **self._flipped[1]}
+        return document
+
+
+def test_close_requires_bilateral_contact():
+    """CLOSE, predicate 1 of 10: without bilateral contact the phase refuses and nothing opens."""
+    port = _OneFieldFlipped("CLOSE", bilateral_contact=False)
+    with pytest.raises(PickPlaceError, match="BILATERAL_CONTACT_MISSING"):
+        PickPlaceRunner(port).run(request())
+    assert port.opened == []
+    assert port.stops == ["TASK8_ABORT"]
+
+
+@pytest.mark.parametrize("phase", ["MICRO_LIFT", "TRANSPORT", "ALIGN"])
+@pytest.mark.parametrize("flip", [
+    {"holding_state": "EMPTY"},
+    {"bilateral_contact": False},
+    {"micro_lift_confirmed": False},
+    {"cup_off_table": False},
+    {"cup_supported": True},
+])
+def test_hold_requires_every_predicate(phase, flip):
+    """MICRO_LIFT / TRANSPORT / ALIGN, predicates 2-6 of 10: each one alone refuses the phase."""
+    port = _OneFieldFlipped(phase, **flip)
+    with pytest.raises(PickPlaceError, match="HOLD_NOT_CONFIRMED"):
+        PickPlaceRunner(port).run(request())
+    assert port.opened == []
+    assert port.stops == ["TASK8_ABORT"]
+
+
+# The RELEASE / RADIAL_RETREAT / FINAL_CHECK group (predicates 7-10, code RELEASE_NOT_CONFIRMED) is not asserted
+# here yet: that group's evidence does not come from `_evidence` - the runner takes it from the port's `set_down` and
+# `release_preflight` (pick_place_runner.py:238), so its negatives need the override applied to those builders
+# instead. Recorded rather than guessed at, because a negative whose flip never reaches the runner passes for the
+# wrong reason and fails for the right one, which is what all twelve cases did here.
