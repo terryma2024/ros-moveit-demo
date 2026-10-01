@@ -53738,3 +53738,28 @@ gaps the chain just closed, one level up in the production path.
 The read that makes it concrete is the construction site (the `SealedResultAdapter`/verifier instantiation in
 `mujoco_parallel_batch.py`) and what the frozen spec carries that could supply those values - the expected final cup pose is
 already in the spec (`spec.expected_final_cup_pose_world`, seen in an earlier read), and the audit pair is per-episode.
+
+
+## CP-2795 — The production construction site, and the two classes it could use
+
+```python
+        self.result_verifier = SealedResultAdapter(            # mujoco_parallel_batch.py:2737
+            worker_roots,
+            spec.request.run_mode,
+            expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
+        )
+```
+
+So the production path builds its result port from `worker_roots`, the run mode and the **expected final cup pose** the
+spec already carries - and it builds `SealedResultAdapter`, the parallel-batch class, while the reviewer's correction 4
+names `result_store.py:308`, which is `ActCollectionResultVerifier`, the ACT class the chain tests use and which now carries
+`endpoint_inputs` and the v2 audit pair.
+
+That is the wiring question in one line: the production path has the endpoint target already (`expected_final_cup_pose_world`)
+but hands it to a class that does not perform the endpoint QC, while the class that does perform it - and that the
+coordinator's verifying path checks for by `isinstance` - is constructed nowhere in the production composition. So
+correction 4 is to connect those: the composition should build the ACT verifier (or make the adapter it builds carry the
+same verification), with the endpoint inputs and the per-episode audit pair.
+
+That is a production change with a clear shape, and it is the same family as everything the chain just closed - a component
+written to a contract, and a caller that never supplied what it needs.
