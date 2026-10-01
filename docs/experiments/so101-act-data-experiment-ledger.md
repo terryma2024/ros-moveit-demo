@@ -45692,3 +45692,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   something untrue.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished (inspect, prepare, preflight rc=0). HEAD 7273e38d4; goal active.
+
+
+## CP-2421 — No broker-image identity exists, so the single-episode run composes the pieces directly
+
+- Measured: `broker_image`/`--broker-image` appears nowhere in `src/so101_demo_py/config/` and nowhere in the ACT
+  adapters or the parallel-batch package - the only place it exists is the batch parser's required-argument list. So
+  the flag belongs to the container/parallel workflow, which this amendment explicitly excludes ("do not implement
+  containers"), and there is no approved image identity to pass honestly.
+- Therefore CP-2420's second option is the correct one and needs no owner decision: the single-episode `run` does
+  **not** route through the batch parser's container-shaped surface. It composes the same production pieces the
+  composition uses - the sealed-result adapter, the coordinator journal, the coordinator and the one-worker resource
+  allocation - from the frozen inputs directly, with a one-worker specification whose roots come from the new
+  LIVE_ROOT. Inventing an image id would put an untrue claim in a log, and passing a placeholder would make the
+  provenance check meaningless.
+- The mapping this leaves to implement is exactly the one CP-2420 listed, minus the container fields:
+  `--config`/`--points` from `runtime_config`/`collection_config`, the grounded root and its manifest hash from
+  `scene_model`/`anchor_scene`, the detector weights and their hash from the sources role, the evidence root from the
+  new LIVE_ROOT, the run mode from `--mode`, and a freshly minted batch id per run.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD d00c857e0; goal active.
