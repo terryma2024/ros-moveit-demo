@@ -46016,3 +46016,28 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   next single edit.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD aaa7ec258;
   goal active.
+
+
+## CP-2438 — The eight failures are mine, from CP-2415/CP-2416, and the guard was not the cause
+
+- Named, they are freeze/manifest tests: `test_freeze_copies_one_verified_candidate_per_role`,
+  `test_inputs_manifest_is_closed_and_read_back_strictly`, `test_freeze_accepts_the_production_input_formats` and five
+  siblings. So neither the missing development runtime (CP-2437's diagnosis) nor the guard was the cause: these tests
+  encode the manifest's **previous** closed contract, and my own earlier commits changed that contract - CP-2415 widened
+  `_MANIFEST_FIELDS` with `mode`, `endpoint_policy` and `runtime_policy`, and CP-2416 made the reader hash those
+  bindings as the writer does.
+- The regression was missed because of the order I worked in: after those commits I ran the endpoint-pose, artifact,
+  audit and release-boundary suites, but the scope suite - the one that owns the manifest contract - was last run at
+  CP-2397, **before** the change. That is the exact failure mode the repository's rule about running every suite of
+  every touched file exists to prevent.
+- The fix is to move those tests with the contract, with the amendment's reason stated: the freezer binds the
+  collection mode, the endpoint policy and the development runtime into the manifest because the design requires the
+  policy to be part of the inputs hash chain, and the reader must hash what the writer wrote. A closed-field test then
+  asserts the **new** closed set - and, importantly, still rejects an unknown field, so the contract stays closed
+  rather than merely wider.
+- Both guards from this round are kept: with them `prepare` and `preflight` are rc=0 again against the real worktree,
+  and an old registry whose root lacks the document behaves exactly as it did before.
+- The tree currently carries the guarded resource route uncommitted and still fails the scope suite by design of the
+  old assertions; the next pass updates those assertions, runs all four suites, and commits the two together.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 565c5c114;
+  goal active.
