@@ -49371,3 +49371,21 @@ trusting a clock, a stamp, or the order files happened to be written.
 So K2's implementation now has two of its three pieces in: the geometry provenance (67e12c918) and the ordering
 sequence (c1a08882d). The third - the new record kinds, which the passed table defines key by key - is the only
 genuinely new document left, and `verify_audit_manifest` is where its validation belongs.
+
+
+## CP-2610 — Where K2's three record kinds enter the audit
+
+`_EVENT_PAYLOADS` maps each event kind to a **frozen key set**: `phase_start`, `phase_complete`, `run_complete`,
+`run_aborted`, `run_incomplete_evidence`, `dispatch`, `accept`, `revoke`, `stop`, `contact`, `release`,
+`final_check`, and more. Its own comment states the rule the schema enforces: "each value is typed below so a boolean
+can never stand in for a physical fact and an unknown key cannot be smuggled into a known kind".
+
+So K2's third piece lands exactly there: three new kinds - `k2_apply`, `k2_query`, `k2_receipt` - each with a payload key
+set equal to that record's keys as the **passed table** defines them (A: `apply_event_id`, `applied_at_s`, `accepted`;
+Q: `query_id`, `query_at_s`, `request_bytes`, `response_bytes`; R: `receipt_id`, `received_at_s`, `clock_source`,
+`uncertainty_s`), plus their entries in the typing map so the boolean-can't-stand-in-for-a-fact rule holds for them too.
+The writer's `append_source` then validates them through the same `_EVENT_PAYLOADS[kind]` equality check it already
+applies, which means the new kinds need no new append path - only the schema entries.
+
+That keeps K2's implementation to the shape it has had all along: additions to closed sets, each one measured before it
+is written.
