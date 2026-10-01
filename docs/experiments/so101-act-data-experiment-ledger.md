@@ -49233,3 +49233,22 @@ is what the optional-default design was for. Two edits, both minimal:
 So the provenance the first review found discarded on return now travels with the geometry it describes, and nothing is
 re-read or re-derived to get it. That is K2's geometry item done; the remaining items are the single-namespace ordering
 sequence and the new record kinds, which are additions to the audit rather than repairs to what is there.
+
+
+## CP-2603 — The audit's sequence landscape, and why K2 adds one task-level counter
+
+Reading every `sequence` in `episode_audit.py` gives the picture the passed protocol was written against:
+
+- `_ACQUISITION_FIELDS` carries `sequence` (49) - per camera, per acquisition;
+- `_REFERENCE_FIELDS` (53), `_EVENT_FIELDS` (75) and `_PHYSICS_FIELDS` (99) each carry their own;
+- and alongside them `observer_sequence` (71), `publisher_sequence` (111) and `status_sequence` (124).
+
+So the audit has several sequence namespaces and **every one of them is per-stream** - which is exactly the shape
+section 1 of the passed protocol calls insufficient: "not one counter per boundary ... it makes cross-boundary
+comparison meaningless". The existing counters order records **within** a stream correctly and say nothing about
+whether an event came before a physics row.
+
+K2's addition is therefore a single **task-level sequence** carried on every record beside the existing per-stream
+ones, which stay as they are because other consumers order within streams and tests assert them. That is an addition
+rather than a rework: one new field, assigned by the writer, validated by the reader, and used by the ordering and
+descent checks the protocol specifies.
