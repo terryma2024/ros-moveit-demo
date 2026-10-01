@@ -55051,3 +55051,32 @@ What it cannot do is the point of writing it down. Two things need a live run an
 Both are named in the script's own output, so whoever runs it reads what remains at the same moment they read the result,
 and neither is silently implied by a green run. That is the honest shape of an acceptance for a task whose last step is
 somebody else's: it verifies everything verifiable and states the rest in words.
+
+
+## CP-2845 — The last implicit interface, named: thirteen keys from the physical audit
+
+```python
+continuous_capture.py:416    physical = self.physical_audit(at_s)
+:419                         audit = dict(physical)
+:420                         audit.update(source_audit)
+:421                         audit.update({"head_acquisition_id": head.acquisition_id,
+:422                                       "wrist_acquisition_id": wrist.acquisition_id})
+```
+
+So a row's audit is three pieces: what `physical_audit(at_s)` returns, the sampler's `source_audit` (now `source_stamps`
+alone), and the two acquisition ids the capture adds. The recorder then requires exactly its closed sixteen - which means
+**`physical_audit` must supply thirteen**:
+
+```
+reset_epoch  release_epoch  release_event  release_time_s  physical_stamps  phase
+reference_time_s  reference_source  reference_positions
+mujoco_truth  contacts  planning_scene  controller_state
+```
+
+and failing to surfaces as `CAPTURE_PHYSICAL_AUDIT_INVALID` at the sample rather than at the seal, because the capture
+validates before it queues.
+
+That is the last interface in the handover that was implicit, and it is now written there with the count and the names.
+It also closes the loop on the extraction: `live_evidence_sample(...)` and `capture_evidence_fields(...)` are where those
+thirteen values come from, and the split recorded at CP-2842 is what keeps their receipt mapping from having to go through
+the row.
