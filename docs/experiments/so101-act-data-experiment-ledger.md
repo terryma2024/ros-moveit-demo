@@ -54635,3 +54635,48 @@ Which makes the next test concrete rather than exploratory: seal an ACT episode 
 producer, commit it through a real `BatchCoordinator` with the ACT port, and assert the commit and the readback - plus the
 isolated negative (an episode the endpoint rule rejects must not be committed as a success). Every object that test needs
 is already proven by one of these two files.
+
+
+## CP-2828 — E3's closed-loop test, fully specified by the file that already does most of it
+
+`test_act_result_commit.py` already walks the whole coordinator leg, and reading it end to end gives E3's test as a
+difference rather than a design:
+
+```python
+    journal = CoordinatorJournal.create(tmp_path / "journal", "batch-a")
+    verifier = ActCollectionResultVerifier({"w00": root})
+    coordinator = BatchCoordinator(journal, request, config=config, clock=lambda: 0., result_port=verifier)
+    coordinator.register_worker("w00", generation=1)
+    current = coordinator.grant_lease("w00", generation=1)
+    coordinator.ack_lease(current, request_key="ack-1")
+    coordinator.ack_attempt_started(current, request_key="start-1", gate_summary=gate)
+    workspace = coordinator.snapshot().workers["w00"].workspace
+    store = ActCollectionResultStore(workspace, current, clock=lambda: 1.)
+    with pytest.raises(ValueError, match="RESULT_MISSING"):
+        coordinator.commit_result(current, str(workspace / "sealed"), request_key="result-1")
+    sealed = store.seal(failed_episode(store))
+    result = coordinator.commit_result(current, str(sealed), request_key="result-1")
+    assert result["status"] == "FAILED"
+    assert coordinator.snapshot().points["scene-1"].terminal is True
+```
+
+and the episode it commits is built directly by the recorder:
+
+```python
+def failed_episode(store):
+    recorder = EpisodeRecorder(store.episode_root, session_id="session-1",
+                               attempt_id=store.lease.attempt_id, reset_epoch=2, provenance=PROVENANCE)
+    return recorder.finish({"status": "FAILED", ...})
+```
+
+Note what that episode has and lacks: it roots at `store.episode_root` - **the same arrangement the seam uses** - and it
+writes **no audit**, so the store needs no v2 pair to verify it. E3's episode is the one this stretch built: sealed
+through `assemble_episode_capture` with `ProductionProducer` as its sampler, which *does* create an audit writer, so the
+store must be handed the pair (correction 4's work), and whose endpoint verdict must decide the terminal status rather
+than the episode's own claim (correction 3's work).
+
+So E3's test is: the coordinator leg above, with its `failed_episode(store)` replaced by an episode sealed through the
+seam and the production producer, the store given the published audit pair, and two assertions - a commit whose endpoint
+verdict is not PASS must not be committed as a success, and an episode the endpoint rule accepts must commit with a
+terminal point. Every object it needs is already proven by `test_act_result_commit.py` or by the six tests in
+`test_act_seal_and_downgrade.py`, so the next round writes it rather than exploring.
