@@ -52807,3 +52807,33 @@ What is now in place, uncommitted and each verified as far as it goes: the acqui
 binding produced at record time, the recorder's closed channel respected, and the chain test's five alignments with its
 adapter - which, between them, closed `EPISODE_SCOPE_INVALID`, `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH`, `EPISODE_TIME_GAP`,
 `EPISODE_AUDIT_SCHEMA`, `AUDIT_BINDING_UNKNOWN` and `AUDIT_BINDING_REFERENCE_INVALID` in turn. One comparison remains.
+
+
+## CP-2759 — The check verbatim: exact equality of counts, and the reference must carry the row's action
+
+```python
+            else:
+                # every recorded row must be bound to the acquisitions it consumed, at the same instant
+                # and to the reference its action actually claims
+                if len(bindings) != document["record_count"]:
+                    raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                for row, binding in zip(recorded, bindings, strict=True):
+                    if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+                    named = references.get(binding["reference_sequence"])
+                    if named is None or list(row["action"]) != list(named["positions"]):
+                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+```
+
+Two requirements, both now derived rather than guessed:
+
+1. **the binding count must equal the recorded row count exactly** - so the tail's call, which binds the row that stayed
+   pending, must not reach the same `row-bindings` stream. That is the fix the mismatch is asking for, and it also says
+   something about the tail: it was written to hand off evidence that never became a row, and handing it to the *binding*
+   callback is what puts the counts out of step.
+2. **each binding must name the reference whose `positions` equal the row's own `action`** - so the adapter cannot pick a
+   reference by time alone; it must pick the one the row's action claims, which is exactly what the capture already put
+   in `row["reference"]` and what the row audit carries as `reference_positions`.
+
+Both are small, and both are readable from the check itself rather than from another probe. The chain has now closed
+seven distinct refusals in order; these are the eighth and the shape of the ninth.
