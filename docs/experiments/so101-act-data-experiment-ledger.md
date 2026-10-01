@@ -48335,3 +48335,34 @@ That means the earlier readings and this run are not describing the same failure
 greps of logs rather than their verbatim endings. The remedy is the same one this stretch keeps arriving at: read the
 tail of the log whole. Whatever the current run actually raises is in its last few lines, and this round printed them
 rather than a pattern's matches.
+
+
+## CP-2555 — The root cause, read verbatim from the failing line
+
+The log's tail, printed whole for the first time, names the frame exactly:
+`.../pypath/so101_demo/act/episode_audit.py:813: ValueError`. Line 813 is **inside `bind_row`** (which starts at 762),
+and the lines above it say what it demands:
+
+```python
+        entry = self._references.get(record["reference_sequence"])
+        target = round(record["sim_time_s"] + _GRID_S, 6)
+        if (entry is None or entry["reference_time_s"] != target
+                or entry["accepted"] is not True
+                or entry["reference_time_s"] in self._revoked_targets):
+            # the binding must name a reference this episode accepted for exactly that instant and
+            # whose acceptance still stands
+            raise ValueError("AUDIT_BINDING_REFERENCE_INVALID")
+```
+
+So binding a row requires a **reference row** at that `reference_sequence`, with
+`reference_time_s == round(sim_time_s + _GRID_S, 6)`, `accepted: True`, and not revoked. The fixture minted twenty
+acquisitions, a physics row and a window, and never appended that reference - which is why every attempt stopped at
+this line, and why the ledger's earliest guess ("append a reference before binding", CP-2508's note) was right while all
+the later reasoning about `AUDIT_ROW_INVALID` chased a frame that was never the raiser. The lesson is the one this
+stretch has now recorded five times, most recently as CP-2554: **read the log's ending whole**, because a filtered grep
+of a traceback names whatever line happens to contain the words being searched for.
+
+F5's remaining work is therefore exact: mint the accepted reference at the grid instant the binding expects, then the
+seal and the readback can be attempted against the same window.
+
+The re-review is still running (`tail -1` empty).
