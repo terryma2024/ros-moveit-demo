@@ -45589,3 +45589,25 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   the amendment's rule applies: a new field is a versioned change with its consumers moved together.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 730b21252;
   goal active.
+
+
+## CP-2416 — The plan's first three E3 commands pass: inspect, prepare, preflight
+
+- The last refusal was a digest mismatch of the amendment's own making: `freeze_inputs` folds `mode`,
+  `endpoint_policy` and `runtime_policy` into `inputs_sha256` - which is exactly what the design asks, since the
+  policy must be part of the inputs hash chain - while `read_inputs_manifest` recomputed the digest over `roles`
+  alone. The reader now hashes the same document the writer wrote.
+- Measured on the installed CLI in the fresh plan root `experiments/nonhead-first-episode-closure.hK7mQ2pL`, with the
+  installed policy (digest identical to source) and the installed runtime:
+  `inspect` rc=0 with twelve roles and zero blockers;
+  `prepare --mode preselected_target_diagnostic --endpoint-policy <installed> --runtime-policy <installed>` rc=0,
+  writing the twelve role directories and `inputs-manifest.json`;
+  `preflight --mode preselected_target_diagnostic` rc=0, reporting `prepared_mode`, twelve roles and
+  `rule_version endpoint_pose_v1`.
+- What that means for the objective: the frozen input set the milestone needs now exists as an artifact, produced by
+  the installed entry point rather than by a test fixture, and every role carries its own provenance - the four the
+  user authorized through the empirical artifact and the resource route, and the eight others from the controlled
+  sources. The remaining E3 steps are the live run itself (`run --inputs --root --mode --lifecycle FULL_RESTART`),
+  the fresh-process `qc`, `verify-commit` and `check-export`, plus their isolated-copy negatives.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 0a0ebc98d;
+  goal active.
