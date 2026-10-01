@@ -53951,3 +53951,26 @@ a spec whose frozen inputs carry a policy constructs the ACT port, and one built
 
 Correction 4's plans 1, 2 and 3 are committed (`62dc47267`, `063fb350f`), with `discover` added to the ACT verifier and the
 port chosen by contract; only plan 4 and its test remain.
+
+
+## CP-2803 — Where the two-way test goes, and the pattern it follows
+
+The existing parallel-batch CLI tests already build a real composition and assert on its port:
+
+```python
+test_parallel_batch_cli.py:942    assert composition.results is not composition.result_verifier
+```
+
+so the two-way test for correction 4 belongs in that same file, beside the construction pattern it already uses, and it
+asserts the choice the new code makes:
+
+- a composition built with `endpoint_inputs` present has a `result_verifier` that is an `ActCollectionResultVerifier` -
+  the class the coordinator's ACT gate selects by contract - so a real ACT episode takes the verifying path;
+- a composition built without them keeps `SealedResultAdapter`, so the generic parallel-batch path is untouched, which is
+  what the coordinator's own comment requires.
+
+Both directions matter and neither is asserted today: the suites are green at 262 with the port choice in place, but
+nothing states it, and a contract that is only implied is the kind this chain has spent a stretch finding.
+
+That is the last piece of correction 4. After it: correction 5, K1's forward half, and E3 - which the coordinator's
+decision has unblocked by approving reuse of the existing broker image.
