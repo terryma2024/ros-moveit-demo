@@ -44915,3 +44915,50 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 **提交**：仅本条目（docs）。**未改**任何配置、测量文档或源码，故不跑 RED→GREEN 与阶段/全量门禁（本轮无源码改动）。
 
 **证据（全部保留，未删除）**：新增 `$EV/reviews/reservation-and-joint-rate-diagnosis.md`（本轮唯一持久产物）与 `$EV/head-qualification-hs327-ownership-20261001T184450Z/exclusive-ownership.json`；工作树 `scratch/hs327/`（`env.sh`、`stamp.txt`、`make-frame.py`、`build-probe.sh`、`live-probe.py`/`live-probe2.py`/`live-probe3.py`/`live-probe4.py`、`rate-probe.py`、`qos-probe.py`、`pyshim/`、`probe/{reservation_probe.cpp,serialize_determinism.cpp,admit_mismatch.cpp}` 及三个编译产物、`out/{manifest.json,goal-neck.cdr,frame-*.bin,frame-*.json,*.reserialized.cdr,rate-*.json,qos-*.json,live-probe*.json}`、`logs/{probe-offline*.txt,probe-aliasing.txt,serialize-determinism.txt,probe-admit-mismatch.txt,live-probe*-*.txt}`、`live-work{2,3,4}/`、`live-work/`、`tmp/`）。以上**均为删除候选，未删除**；HS-300..326 的产物只读引用，未改动。工作树 `git status --porcelain`：`?? broker-27c83b/`、`?? broker-997d39/`、`?? ipc/`、`?? runs/`（HS-325/326 既有未跟踪，未动）。收工时 `ps` 无任何 mujoco/ros2_control_node/spawner/探针残留、`nvidia-smi --query-compute-apps` 为空、`ros2 node list --no-daemon` 为空。
+
+## HS-328 — Task 14 `approved_values_readback` 有了**资格期间的**生产者：一条真实起栈把 17 个值逐项从消费它的生产组件读出、4 个相机测量从运行中的栈现场观测，聚合 `missing` 从 1 降到 **0**（该门由 MISSING 变 **HOLDS**），其余 5 门仍 VIOLATED；bundle 字节未变
+
+**目标与边界**：只补最后一道 MISSING 门的生产者。开工前 `ps`/`nvidia-smi --query-compute-apps`/`ros2 node list --no-daemon` 全空、tmux 只有本 agent 会话（不匹配 owner 模式）；用 HS-315 的 ownership gate 领 gate root（`$EV/head-qualification-readback-ownership-20261001T191628Z/exclusive-ownership.json`，rc=0）。运行面 = `$T = $EV/head-toolchain-20261001T170212Z`（commit `d8d1b5f8b`）、python 源码经 `scratch/hs328/pyshim` 指向本 worktree（与 HS-326/327 同一 shim 装置）、`MUJOCO_GL=egl`；**全程 MuJoCo、每次只有一个 CUDA 检测器**、跑完 `ps`/GPU/`ros2 node list` 全空。**未重跑** anchor restarts、production smoke、Teleop acceptance（只读引用其既有 root），**未改**任何配置/测量文档，**未晋级**、**未重产** bundle。
+
+### (a) 模块与入口
+
+| 项 | 值 |
+| --- | --- |
+| 模块 | `src/so101_demo_py/src/act/head_search_qualification_readback.py` = `so101_demo.act.head_search_qualification_readback`，sha256 `b9be374064a8df116171d91f82fe490369c25ebc6fef17115475899b83530749`；`KIND` 与聚合的 `READBACK_KIND` 逐字相同 |
+| API | `write_head_search_qualification_readback(...)`（生产者：先接收据/运行时/批准值/run root 校验，再 `observe`，再出文档）；`run_readback_observation(...)`（活体一半：**一套** `RestartStack` + `_await_graph` + 相机/TF 探测 + CUDA 检测器 + 观测 + 拆除证明）；`observe_qualification_values(...)`（17 值）；`_controller_observations`/`_detector_observations`（组件与来源命名沿用 pending bundle 自己的 `production_owner`/`startup_readback` 词表）；`camera_measurement_records(...)`；`readback_document(...)`（门的形状，运行时先自检）；`approved_values(...)`（晋级值 vs 获批 bundle 逐值） |
+| 安装版入口 | `so101_head_search_calibration measure-qualification-readback --run-root --evidence-root --ownership-receipt --final-run --production-config --approved-bundle --geometry-seal --scene --urdf --plugin-config --controller-config --weights --reservation-root --workdir [--anchor --device --camera-reference --expected-*]`；别名 `readback` / `qualification-readback` |
+| 拒绝码 | `READBACK_INPUTS_INCOMPLETE`/`_RUN_ROOT_EXISTS`/`_OWNERSHIP_REFUSED`/`_OWNERSHIP_MISMATCH`/`_RUNTIME_UNVERIFIED`/`_VALUES_INCOMPLETE`/`_BUNDLE_MISMATCH`/`_VALUE_MISMATCH`/`_CAMERA_NOT_OBSERVED`/`_PROBE_FAILED`/`_FOREIGN_OWNER_ACTIVE`/`_STACK_START_FAILED`/`_COMPONENT_UNBUILDABLE`/`_DETECTOR_FAILED`/`_TEARDOWN_UNPROVEN`/`_GPU_NOT_RELEASED`（restart 模块自己的 `RESTART_*` 码原样保留在 detail 里） |
+
+**run root 的语义（本轮最大的设计判断）**：门的 `document["run_root"]` 必须与聚合自己的 run root **逐字符相等**，而聚合的 `_require_new_root` 又拒绝任何已存在的 root。因此**读回声明它为之而取的资格 run root**（= Step 1 receipt 的 `planned_run_root`，= 聚合随后领的那个 root），自身证据写在 `--evidence-root`（campaign 的 `qualification-readback-<UTC>/`）。读回**从不创建**那个 root：run of record 的 provenance 记 `qualification_run_root_exists=no`。**一份** ownership receipt 同时服务读回与聚合的 `exclusive_ownership` 门 —— 这正是"资格期间"而不是两次无关运行的地方。
+
+### (b) 真实运行与观测结果
+
+`$CAMPAIGN/qualification-readback-20261001T191628Z/`（rc=**0**，墙钟 **33 s**，读回本体 31.8 s，文档 sha256 `1a35b075a39f738e4ef63e7c40b428b1f076214385bb0ca7ee4c19dd1debb184`；`teardown-proof.json` + `stdout.log`/`stderr.log`）。栈稳状态 8/8 声明节点、0 foreign（约 8 s）。
+
+| 组 | 观测 | 来源 |
+| --- | --- | --- |
+| 控制器 10 键 | 全部等于获批值 | `HeadSearchController(...).config[...]` |
+| fov / 颈部安全区间 | `1.3121067481206794` / `[-6.283175307179587, 6.283175307179587]` | `...plan.horizontal_fov_rad` / `...plan.safe_interval_rad`（控制器自己建的有界停止计划） |
+| 11 项 measured | 全部等于获批值；`max_age_s` 三个消费方（controller / `neck_port.max_age` / `stop_criterion.max_age`）一致；三个行为探针（deadline / freshness / skew）在精确浮点边界重测通过 | HS-312 的 `observe_measured_readbacks`（颈端口 `lead`/`stop_timeout`、停止判据 `stop_velocity`） |
+| `tracking_iou` / `min_bbox_aspect` | `0.5` / `0.5` | 现场加载的**唯一** CUDA `HeadRgbDetector`（权重 `2afd5506…`、`runtime_device="cuda"`、`allow_cpu_fallback=false`） |
+
+17/17 `matches_approved=true`，读回值 canonical digest = `3c787fd7ec402355d8a6e363a6bcbf814273ce30d98d47a3af2bc4400f568df2`（与冻结晋级配置**逐字相同**）。
+
+**4 个相机测量 = 现场观测（本轮 campaign 里没有获批参考文档）**，故 `matches_approved: null` 并写明原因，**不把没观测到的数字写成观测结果**：`head_intrinsics_px=[415.69219381653056, 415.69219381653056, 320.0, 240.0]`（`/head_camera/camera_info` 的 K，逐分量中位数，与 Task 8 合同 `fx=fy=(H/2)/tan(fovy/2)`、`cx=W/2`、`cy=H/2` 一致）；`head_translation_m=[-0.06, 0.06, 0.24]`、`head_rpy_rad=[-2.2142974355881804, 4.31e-32, 3.141592653589793]`、`yaw_zero_bearing_rad=-1.5707963267948968`（`base -> head_camera_frame` TF，ZYX 分解 / `wrap_pi(atan2(a_y,a_x))`）。`--camera-reference` 已就位：下一轮给出获批四值即可享受与 17 值同样的精确比对。
+
+**拆除证明**：四项事实全 true + `gpu_released=true`，0 进程 / 0 节点 / 0 GPU compute app；本阶段自己的 rclpy 节点与 pid **按名排除**并保留原始行。
+
+**真实运行找出的唯一缺陷（单元测试看不见，失败留在盘上）**：runner 节点建为 `Node("/head_search_qualification_readback")`，而 rclpy **拒绝含 `/` 的节点名**（`InvalidNodeNameException`）—— 图名与运行时名不是同一个字符串。被取代的尝试 `$CAMPAIGN/qualification-readback-20261001T191447Z`（rc=1、9 s，栈已正常起来且被正确拆掉）即该证据；修法 = 拆成 `RUNNER_NODE`（运行时名）与 `RUNNER_GRAPH_NODE`（探测排除用的图名），并把 rclpy context 在节点创建**之前**登记以便任何路径都能 shutdown；回归测试 `test_the_runner_node_name_is_one_rclpy_accepts`（RED 1 failed → GREEN 19 passed）。
+
+### (c) 门禁与聚合裁决
+
+- 新文件 RED→GREEN：RED#1 收集错误（缺模块）→ RED#2 **4 failed / 14 passed**（缺 CLI 入口 + 两处契约断言，`invalid choice: 'measure-qualification-readback'`）→ GREEN **19 passed**；`ruff check` 干净（新文件 + 改动的 CLI），`ruff format` 只作用于两个新文件（CLI 在 HEAD 本就不是 format-clean，未动其既有格式）。
+- 阶段回归（HS-288..328 共 42 个文件，`-n 8`，**提交后**复核）= **4 failed / 1169 passed**，4 个失败与 HS-326 控制运行**逐节点相同**（`test_act_task8_search_port.py` 既有 4 条，diff 0 行），passed +19 = 本轮新增测试文件。
+- 全量 `src/so101_demo_py/test`（8 workers，baseline run-dir 布局，`$EV/scratch/pytest-xdist8-hs328-demo-suite.4BsJ0ys7`，source_commit `7aa643af3` + 三个新/改文件的 sha256 记在 `label.txt`）= **175 failed / 6595 passed / 152 skipped / 86 errors**，rc=1，64.7 s；对最新基线 `pytest-xdist8-hs326-demo-suite.DyTKU26R`（175/6576/152/86）**逐节点 diff 两个方向都是 0 行**（各 261 个节点），passed +19 正好是新增测试文件。
+- 聚合复跑（`$EV/head-qualification-readback-agg-20261001T191628Z`，最新 root `…T170212Z`，其余声明与 HS-326 最新 root 那次**完全相同**，什么都没重跑）：**`missing` = 0**（原 1，唯一缺项就是 `runtime_readback`），`approved_values_readback` 由 **MISSING → HOLDS**（裁决文档 `citations.runtime_readback` 引用该文档与其 sha256 `1a35b075…`）。其余门：`exclusive_ownership`/`runtime_identity`/`frame_cadence`/`stop_proofs` HOLDS；`scenario_journal` VIOLATED(2，40 场景跑的是 commit `956b5b74b`/配置 `dfa0af9b…`)；`scenario_terminals` VIOLATED(2，场景 900002/900013)；`anchor_restarts` VIOLATED(18，HS-318 三份 receipt 的 frame 身份 + runtime of record)；`production_smoke` VIOLATED(3，`RESTART_SEARCH_TICK_FAILED`、无干净 lock、`frames_short`)；`teleop_acceptance` VIOLATED(**3**，比 HS-326 最新 root 那次多 1 条)：多出的那条**只是同一份 receipt 被读得更多** —— values 门成立后 `_gate_teleop` 走过了早退分支，于是也报出"安装版验收没有通过的 e2e 证据（`case=None status=None pairs=0 screenshots=0`）"，非新缺陷。总 violations 27 → 28。
+
+**受保护产物**：pending bundle `$CAMPAIGN/head-search-calibration-20261001T160314Z/head-search-calibration-bundle.json` **开工与收工均 `0563bada4fa6c8017ccc3b91118069412508269261338411f736c1bce5d04c01`**（真实运行 provenance 文件里逐次记录 before/after）；已批准 bundle `e21899c22cb15774bfe06e9f995c85fc20797a61bda08560c6f48044a8767974` 未变；`head_search_v2.json` `3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9` 前后相同；未写任何 approval 字段、未晋级、未重产 bundle、未改配置或测量文档、未跑 `verify-promoted-config`。
+
+**提交**：`feat: during-qualification approved-values readback (RED->GREEN)`（新模块 + CLI 入口 + 新测试文件 + 本条目 + 审计 §12）。
+
+**证据（全部保留，未删除）**：`$CAMPAIGN/qualification-readback-20261001T191628Z/`（run of record）与 `$CAMPAIGN/qualification-readback-20261001T191447Z/`（被取代、rclpy 节点名缺陷证据）；`$EV/head-qualification-readback-ownership-20261001T191628Z/exclusive-ownership.json`；`$EV/head-qualification-readback-agg-20261001T191628Z/{qualification-verdict.json,calibration-state.json}`；`$EV/reviews/task14-gap-audit.md` §12；工作树 `scratch/hs328/`（`env.sh`、`run-tests.sh`、`run-fullsuite.sh`、`real-run.sh`、`aggregate.sh`、`regression-files.txt`、`logs/`、`pyshim/`、`readback-work-*`、`tmp*`）。以上**均为删除候选，未删除**；HS-300..327 的产物只读引用，未改动。工作树 `git status --porcelain`：`?? broker-27c83b/`、`?? broker-997d39/`、`?? ipc/`、`?? runs/`（HS-325/326 既有未跟踪，未动）+ 本轮起栈留下的 `?? broker-7f5e1c/`、`?? broker-fb2ecf/`（各 2 个 broker-runtime/stop JSON）与 `?? scratch/`（git 已排除）；以上均未删除。收工时 `ps` 无任何 mujoco/ros2_control_node/spawner/检测器残留、`nvidia-smi --query-compute-apps` 为空、`ros2 node list --no-daemon` 为空。

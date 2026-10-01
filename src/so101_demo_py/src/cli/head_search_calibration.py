@@ -3349,6 +3349,244 @@ def _measure_production_smoke(arguments: list[str], *, entry: str = PRODUCTION_S
         f"rate_hz={document['frame_cadence']['achieved_rate_hz']}"
     )
     return 0 if document["status"] == "PASS" else 2
+
+
+#: the two spellings of the during-qualification readback entry: the `measure-` name the other phase
+#: entries use, and the bare name the aggregate's own gate vocabulary uses for the artefact
+QUALIFICATION_READBACK_ENTRY = "so101_head_search_calibration measure-qualification-readback"
+QUALIFICATION_READBACK_ALIASES = ("readback", "qualification-readback")
+
+#: every declared input of the readback, and the flag it is declared under. The run root is the
+#: qualification run root the readback is taken FOR - the aggregate claims it afterwards - so it must not
+#: exist yet, exactly like the ownership receipt's own `planned_run_root`
+QUALIFICATION_READBACK_REQUIRED_FLAGS = (
+    ("ownership_receipt", "--ownership-receipt"),
+    ("final_run", "--final-run"),
+    ("production_config", "--production-config"),
+    ("approved_bundle", "--approved-bundle"),
+    ("geometry_seal", "--geometry-seal"),
+    ("scene", "--scene"),
+    ("urdf", "--urdf"),
+    ("plugin_config", "--plugin-config"),
+    ("controller_config", "--controller-config"),
+    ("weights", "--weights"),
+    ("reservation_root", "--reservation-root"),
+)
+
+
+def _qualification_readback_parser() -> argparse.ArgumentParser:
+    """The `measure-qualification-readback` entry: one owned stack, seventeen values, four measurements."""
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-qualification-readback",
+        description=(
+            "Run Task 14's during-qualification approved-values readback: take the Step 1 ownership "
+            "receipt that guards the qualification run root, start the one production composition, read "
+            "each of the seventeen approved values off the production component that consumes it while "
+            "the stack runs, read the four camera measurements off the running camera and TF, load the "
+            "one CUDA detector from the frozen weights, then stop the stack and prove it is gone. The "
+            "document the aggregate's `approved_values_readback` gate consumes is written under the "
+            "evidence root, and the qualification run root it declares stays unclaimed for the aggregator"
+        ),
+    )
+    parser.add_argument(
+        "--run-root",
+        type=Path,
+        help="the qualification run root this readback is taken for; it must not exist yet",
+    )
+    parser.add_argument(
+        "--evidence-root",
+        type=Path,
+        help="the readback's own evidence root (the campaign's qualification-readback-<UTC>)",
+    )
+    parser.add_argument(
+        "--ownership-receipt",
+        type=Path,
+        help="Step 1's exclusive-ownership receipt, whose planned root is the run root above",
+    )
+    parser.add_argument("--final-run", type=Path, help="the frozen runtime of record")
+    parser.add_argument(
+        "--production-config", type=Path, help="the promoted production search config whose values are read"
+    )
+    parser.add_argument("--approved-bundle", type=Path, help="the approved calibration bundle")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the stack steps")
+    parser.add_argument("--urdf", type=Path, help="the ACT URDF the stack's robot description is built from")
+    parser.add_argument("--plugin-config", type=Path, help="the production MuJoCo plugin configuration")
+    parser.add_argument("--controller-config", type=Path, help="the sealed controller configuration")
+    parser.add_argument("--weights", type=Path, help="the selected model's weights file")
+    parser.add_argument(
+        "--reservation-root",
+        type=Path,
+        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
+    )
+    parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
+    parser.add_argument(
+        "--anchor",
+        default="default",
+        help="the seal anchor whose controller configuration the running controller is built with",
+    )
+    parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
+    parser.add_argument(
+        "--camera-reference",
+        type=Path,
+        help="an optional document carrying approved values for the four camera measurements",
+    )
+    parser.add_argument(
+        "--expected-source-commit", help="the frozen runtime's source commit the identity must match"
+    )
+    parser.add_argument(
+        "--expected-production-config-sha256",
+        help="the promoted config digest the identity must match",
+    )
+    parser.add_argument(
+        "--expected-values-sha256", help="the 17 values' digest the identity must match"
+    )
+    parser.add_argument(
+        "--expected-weights-sha256", help="the detector weights digest the identity must match"
+    )
+    return parser
+
+
+def _measure_qualification_readback(
+    arguments: list[str], *, entry: str = QUALIFICATION_READBACK_ENTRY
+) -> int:
+    """Validate the declared inputs, then hand the one readback to the library.
+
+    The CLI is thin on purpose: the library owns the order (recorded values against the approval, the
+    receipt, the run root, one stack, the observations, the teardown proof) and this entry owns the flag
+    surface and the exit code.
+    """
+
+    parsed = _qualification_readback_parser().parse_args(arguments)
+    missing = [
+        flag for name, flag in QUALIFICATION_READBACK_REQUIRED_FLAGS if getattr(parsed, name) is None
+    ]
+    if parsed.run_root is None:
+        missing.insert(0, "--run-root")
+    if parsed.evidence_root is None:
+        missing.insert(0, "--evidence-root")
+    if missing:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: a qualification readback declares "
+            f"{' '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 2
+    absent = [
+        str(getattr(parsed, name))
+        for name, _flag in QUALIFICATION_READBACK_REQUIRED_FLAGS
+        if not Path(getattr(parsed, name)).exists()
+    ]
+    if absent:
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: no such input {', '.join(sorted(absent))}",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.run_root.exists():
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.run_root} exists; the readback is "
+            f"taken for a qualification run root the aggregate has not claimed yet, and no qualification "
+            f"phase is ever resumed",
+            file=sys.stderr,
+        )
+        return 2
+    if parsed.evidence_root.exists() and any(parsed.evidence_root.iterdir()):
+        print(
+            f"{HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE}: {parsed.evidence_root} exists and is not "
+            f"empty; a readback is never resumed or overwritten",
+            file=sys.stderr,
+        )
+        return 2
+
+    from functools import partial
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_qualification_readback import (
+        run_readback_observation,
+        write_head_search_qualification_readback,
+    )
+
+    production = json.loads(parsed.production_config.read_text(encoding="utf-8"))
+    seal = json.loads(parsed.geometry_seal.read_text(encoding="utf-8"))
+    approved_bundle = json.loads(parsed.approved_bundle.read_text(encoding="utf-8"))
+    camera_reference = (
+        json.loads(parsed.camera_reference.read_text(encoding="utf-8"))
+        if parsed.camera_reference is not None
+        else None
+    )
+    command = _command_line(arguments, subcommand="measure-qualification-readback")
+    try:
+        runtime = ownership.read_runtime_identity(parsed.final_run, production_config=parsed.production_config)
+        expected: dict = {}
+        for key, attribute in (
+            ("source_commit", "expected_source_commit"),
+            ("production_config_sha256", "expected_production_config_sha256"),
+            ("values_sha256", "expected_values_sha256"),
+            ("weight_sha256_declared", "expected_weights_sha256"),
+        ):
+            value = getattr(parsed, attribute)
+            if value:
+                expected[key] = value
+        for key, wanted in sorted(expected.items()):
+            if runtime.get(key) != wanted:
+                raise CalibrationInputsRefused(
+                    "READBACK_RUNTIME_UNVERIFIED",
+                    f"{key}: the run declares {wanted!r} and the frozen runtime reads "
+                    f"{runtime.get(key)!r}",
+                )
+        result = write_head_search_qualification_readback(
+            run_root=parsed.run_root,
+            evidence_root=parsed.evidence_root,
+            ownership_receipt=parsed.ownership_receipt,
+            runtime=runtime,
+            approved_bundle=approved_bundle,
+            production_config=production,
+            observe=partial(
+                run_readback_observation,
+                reservation_root=parsed.reservation_root,
+                workdir=parsed.workdir,
+                production=production,
+                seal=seal,
+                anchor=parsed.anchor,
+                production_config_path=parsed.production_config,
+                urdf_path=parsed.urdf,
+                scene_path=parsed.scene,
+                plugin_config_path=parsed.plugin_config,
+                controller_config_path=parsed.controller_config,
+                weights_path=parsed.weights,
+                device=parsed.device,
+                excluded_pids=process_ancestry(),
+            ),
+            approved_bundle_path=parsed.approved_bundle,
+            production_config_path=parsed.production_config,
+            camera_reference=camera_reference,
+            command=f"{entry} {command}",
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    document = result["document"]
+    observed = [
+        f"{name}={row.get('observed_value')}"
+        for name, row in sorted(document["values"].items())
+    ]
+    for row in observed:
+        print(f"observed {row}")
+    print(
+        f"camera_measurements="
+        f"{json.dumps({name: row.get('observed_value') for name, row in document['camera_measurements'].items()}, sort_keys=True)}"
+    )
+    print(
+        f"READBACK_MEASURED status={document['status']} run_root={result['run_root']} "
+        f"evidence_root={result['evidence_root']} values={document['values_count']} "
+        f"values_sha256={document['values_sha256']} elapsed_s={result['elapsed_s']:.1f} "
+        f"document={result['document_path']} teardown={result['teardown_proof']}"
+    )
+    return 0 if document["status"] == "PASS" else 2
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     # Step 1's gate is stack-free and runs before any run root is claimed: it must not be routed through
@@ -3386,6 +3624,14 @@ def main(argv: list[str] | None = None) -> int:
     # closed loop, the sealed journal and the aggregator the qualification gate consumes
     if arguments[:1] == ["measure-production-smoke"]:
         return _measure_production_smoke(arguments[1:])
+    # the during-qualification readback: the same entry under the aggregate's own vocabulary for it
+    if arguments[:1] == ["measure-qualification-readback"]:
+        return _measure_qualification_readback(arguments[1:])
+    for alias in QUALIFICATION_READBACK_ALIASES:
+        if arguments[:1] == [alias]:
+            return _measure_qualification_readback(
+                arguments[1:], entry=f"so101_head_search_calibration {alias}"
+            )
     # Task 14 Step 4's three restarts are their own installed flight: one owned stack per anchor, the
     # production admission for every neck goal, and a teardown the phase proves before the next anchor
     if arguments[:1] == ["measure-restarts"]:
