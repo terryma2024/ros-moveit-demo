@@ -48800,3 +48800,23 @@ it was reading.
 So the revision-4 corrections are corroborated, and revision 5 already answers this one (the ordering assertion is now
 conditional on a non-null parent, with the source record's `parent: null` called out explicitly). The main review of
 revision 5 (`k2-review-c`) continues, and both verdicts will be read as they land, strictest governing.
+
+
+## CP-2580 — The two independent reviews agree, and one correction is wider than revision 5 assumed
+
+`4b`'s verdict (947 lines, ending in a real `EXIT=0`, tokens 28,092) is **FAIL** with exactly the corrections the main
+review gave for revision 4:
+
+1. "Reconcile §2's `clock_source: "none"` and absent instant with §3: only R permits `clock_source`, while S/A/Q and
+   event envelopes require timesta..." - correction 1, verbatim in substance;
+2. "Complete the schema with exact **manifest and event-envelope** keys and types, including G/A/Q/R `sequence` and R
+   `received_at_s`" - correction 3, **wider** than the main review's wording: it also demands the **manifest's** and the
+   **event envelope's** keys and types;
+3. "Exempt S (`parent: null`) from `sequence(parent) < sequence(self)`" - correction 2.
+
+So the duplicate run did what it was for: two independent readings, the same three findings, which means the review is
+reproducible rather than idiosyncratic - and the union is what revision 6 must satisfy. Revision 5 already answers 1 and
+3 and declares `sequence` for all five records plus `R.received_at_s`; what it does **not** yet define is the **manifest's
+keys and types** and the **event envelope's**, which is the genuinely new demand in `4b`'s second correction.
+
+The main review of revision 5 is still running (344 lines), so revision 6 waits for it and then answers the union.
