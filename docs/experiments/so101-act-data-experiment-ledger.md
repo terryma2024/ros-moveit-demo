@@ -43523,3 +43523,26 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - a trend they do not carry.
 - F14, F3 and F1 closed; F11 three cuts with two negatives handed off; F13 three of four blocked on CP-2285; F12
 - three of four plus its carrier cut; F5 first half complete; eighth review running and active; goal paused.
+
+## CP-2307 - The eighth verdict: F1 and F14 closed, five residuals narrowed
+
+- Verdict copied to reviews/task3-rereview7-verdict.md (21409 bytes, sha256 96e8c8ea024ed92a...), reviewed
+- checkpoint 875360b31. Headline: FAIL - 0 Critical / 5 Important / 0 Minor; Task 3 is not a completed dependency
+- for independent QC.
+- Closed: T3-F1 (the real port normalises all five tuple-valued frame fields and admission/readback enforce the
+- registered names and order) and T3-F14 (the gate is isinstance-based and EXECUTE-only, after the
+- acknowledged-request branch, so the generic sealed adapter keeps its paths). These are the two findings the
+- stretch worked most thoroughly, and both are now accepted rather than partially credited.
+- Open as narrower residuals: T3-F3 (the real-runner control admits appends but cannot seal its release history,
+- and the claimed formal positive exercises neither sealing nor readback); T3-F5 (coverage still accepts a preset
+- summary while the new epoch rule rejects normal histories - the epoch relation this ledger added at CP-2292);
+- T3-F11 (short schedules and invented endpoints still pass, and seal and readback differ); T3-F12 (feedback is
+- cached beside the immutable observation and still does not reach a valid SEARCH audit row); T3-F13 (reset
+- invalidation does not fence delayed callbacks, measured stamps remain unchecked, and scene production remains
+- absent).
+- Owner matters the verdict explicitly leaves alone: it does not reinstate a frozen window policy, it accepts the
+- episode-parameter decision and the eight-key feedback contract, and it does not decide the scene-clock contract
+- recorded in CP-2285.
+- Next: read the five residual bodies in full, then repair in dependency order, with F5's epoch regression first
+- because this ledger introduced it; F1 and F14 stay untouched.
+- HEAD 27817b926; goal paused.
