@@ -51405,3 +51405,20 @@ Two things follow for the next rounds. First, an end-to-end test of the sealing 
 episode read by the endpoint QC - is the honest way to prove correction 2 rather than asserting that the code path
 exists. Second, that test needs the capture's collaborators and its `start`/`append` API read first, since its
 constructor signature is known (CP-2671) but its driving sequence is not.
+
+
+## CP-2698 — The capture is driven in a test already, so the end-to-end sealing test is an extension
+
+The search that mattered was the wrong width the first time: CP-2670 looked for users of `ContinuousEpisodeCapture`
+under `src/` and found none, and concluded the capture was undriven. Searching the tests as well gives the answer:
+
+- **`test/test_act_continuous_capture.py:64` constructs a `ContinuousEpisodeCapture`** - with its sampler, its physical
+  audit and its guard - so the driving sequence and the fakes for its collaborators already exist;
+- and its collaborators' interfaces are visible in the capture itself: **`self.sampler.sample_with_audit(...)` returning
+  `(observation, source_audit)`** (381), and **`self.guard.accept(head)` / `self.guard.accept(wrist)`** (373-374).
+
+So the end-to-end test that proves correction 2 - a capture driven to a seal whose audit the endpoint QC can then read -
+is an extension of an existing file rather than a new harness, and it can reuse that file's sampler and physical-audit
+fakes. This is the second time in this stretch that a "nothing uses this" conclusion was really "nothing under the
+directory I searched uses this" (the earlier one being the overlay-versus-source confusion), and the remedy is the same
+in both cases: name the scope when making the claim.
