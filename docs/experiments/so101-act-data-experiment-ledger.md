@@ -44374,3 +44374,23 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two one verbatim print from
 - diagnosis; HEAD 35d94b2bc; goal active.
+
+## CP-2356 - The coverage predicate's six terms, verbatim - the enumeration I kept missing
+
+- Read from episode_audit.py:1156-1165, the final expression has exactly SIX terms, and the earlier guards are the
+- three named returns (file reads, completions, per-kind history) plus the epoch clause at 1148-1151:
+-   1. physics and events and references (all three non-empty);
+-   2. any reference with accepted is True AND (_REFERENCE_RAW_FIELDS <= set(row) OR _REFERENCE_FRAME_FIELDS <=
+-      set(row));
+-   3. any(row["kind"] == "release" for row in events) - a release EVENT must exist, which none of my earlier
+-      summaries named;
+-   4. all(phase in phases for phase in FORMAL_PHASES);
+-   5. all(kind in kinds for kind in _PHYSICS_KINDS);
+-   6. observed - at least one physics row carrying both nested records.
+- With the probe's counts (physics 10, events 11, references 1, all nine phases, all four kinds) and _physics's
+- shallow copy proving term 6, every one of the six APPEARS to hold while the seal still refuses - so one of those
+- appearances is wrong, and the probe that prints exactly these six booleans ends it. The enumeration is now
+- verbatim rather than mine, which is the piece that was missing from CP-2352 through CP-2355.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation behind CP-2332; F5's regression fixed with step one landed and step two six booleans from
+- diagnosis; HEAD f005688bd; goal active.
