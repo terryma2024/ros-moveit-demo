@@ -48427,3 +48427,26 @@ So the honest description for revision 3 is not "the published `/clock` mapping"
 whose relation to the consumer's clock is maintained by the simulator's own CPU/sim synchronisation**, and any protocol
 must name which of those two it relies on and what uncertainty it carries. That is the same class of correction the
 reviewer made about `verify_audit_manifest()`: a fact I asserted about this repository, which the source settles.
+
+
+## CP-2559 — F5's answer was in the suite all along: complete_audit() and a three-key window
+
+The sealing tests share a helper, `complete_audit(tmp_path)`, and it is exactly the fixture F5 kept failing to build:
+acquisitions for both cameras at **1.0, 1.1 and 1.2**; **one accepted reference** at `reference_time_s: 1.1`; an
+**events** row `{kind: phase_complete, payload: {phase: SEARCH, physics_step: 1}}`; **two physics rows**, a `support` at
+1.1 and a `retract` at 1.2, both with the full observation block; `bind_row(0, 1.0, head@1.0, wrist@1.0, 1)`; and then
+
+```python
+    window = {"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.0}
+```
+
+- **three keys**, and `writer.seal(window)` **succeeds** with them. That is the missing piece of the whole F5 puzzle:
+the seal's window checks are conditional on the key set (the line read at CP-2501 is
+`if (... or set(window) == _WINDOW_FIELDS) and not _window_ok(...)`), so the **minimal** window skips `_window_ok` and
+`_window_matches_rows` entirely, while my hybrid's ten-field `_window()` triggered them and was refused by a predicate
+whose clauses were then chased for ten rounds.
+
+So F5's step two is not "satisfy the predicate"; it is "either use the minimal window that the suite's own sealable
+fixture uses, or supply the real observations the ten-field form asserts and let the predicate judge them". Both are
+legitimate, and the first is what the suite does deliberately: the minimal form is the one that makes no claims the
+audit cannot support.
