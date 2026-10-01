@@ -908,9 +908,15 @@ class EpisodeAuditWriter:
             # F5: one shared predicate governs both sides - the writer's coverage is the same requirement the
             # readback re-checks (which also names the accepted reference an inline check used to miss) - and
             # the F3 tie stays beside it
+            # T3-F3 (eighth verdict): the episode's declared initial epoch is not a transition, so the writer's own
+            # tie exempts it exactly as the readback's does (CP-2311) - the two must agree, or a stream the readback
+            # accepts cannot be sealed at all
+            _initial = self.identity.get("release_epoch")
+            if type(_initial) is not int:
+                _initial = 0
             if (not _formal_coverage_ok(self.root / "audit")
                     # F3: every release step the stream takes must be named by a release event, not just one
-                    or any(epoch > 0 and not named for epoch, named in self._release_named.items())):
+                    or any(epoch > _initial and not named for epoch, named in self._release_named.items())):
                 raise ValueError("AUDIT_FORMAL_COVERAGE_INCOMPLETE")
         for sequence in sorted(self._bound_references):
             entry = self._references.get(sequence)
