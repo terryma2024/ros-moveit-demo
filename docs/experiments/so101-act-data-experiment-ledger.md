@@ -45103,3 +45103,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2's protocol table written; F5's step two one
   traceback away; E1's data, loaders, calculator and controls landed with the CLI as the next transcription.
   HEAD ee7002add; goal active.
+
+
+## CP-2392 — F11's derivation landed: the endpoints are derived, not merely enclosed
+
+- `_window_matches_observed` now requires `abs(first_command_s - min(physics_times)) <= tolerance` and
+  `abs(physics_end_s - max(physics_times)) <= tolerance` instead of the enclosing inequalities, so a window that
+  claims 1.2 while every row ends at 1.1 is refused - the eighth verdict's F11 residual. Both the seal and the
+  readback use this predicate, so the two cannot disagree.
+- The single fixture that still borrowed the shared `_window()` literal - the coverage control's `complete`
+  sub-case, whose rows all sit at 1.1 and which already mints the acquisitions its schedule declares (so it was
+  camera-consistent after all, correcting CP-2389/CP-2390) - now states `physics_end_s=1.1` as its own value.
+- GREEN 206 passed on the four suites, 244 on the wider gate, with JUnit and the real rc under
+  `logs/task3-f11-derivation.run` in the plan root.
+- Remaining open items unchanged in kind: F5's step two (one traceback), F13's scene item (K2's implementation
+  after its protocol table), and E1/E2/E3 (the CLI transcription first). F1, F14, F3, F12 closed; F11 closed by
+  this entry.
+- HEAD 21faf0ce3; goal active.
