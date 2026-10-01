@@ -46080,3 +46080,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   theorising about which copy is loaded.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 21b32246c;
   goal active.
+
+
+## CP-2441 — Regression cleared: the manifest is required-plus-optional, and the guards stay
+
+- `_MANIFEST_REQUIRED` (the eight base fields) plus `_MANIFEST_OPTIONAL` (the amendment's `mode`, `endpoint_policy`,
+  `runtime_policy`) replace the single widened set, and `read_inputs_manifest` accepts any document between the two
+  while still refusing an unknown field. That is the plan's rule made structural: a call predating the amendment keeps
+  its contract, a new call records the bindings, and the contract stays closed.
+- Measured: the scope, endpoint-pose, artifact and audit suites pass together - **236 passed**, rc=0 - where the same
+  four reported 8 failures before this change.
+- The same commit keeps this round's existence guards: `_inspect_resource_thresholds` and `_verify_roles` pass the
+  development runtime only when the registry's own root carries it, so the two resource stops come from the design's
+  section 5.1 document on a real run and an older fixture behaves exactly as it always did.
+- What remains on the main line is unchanged: re-freeze with the corrected route, wire the run's fourth piece (the
+  episode runner and the approved MuJoCo stack), then the fresh-process `qc`, `verify-commit` and `check-export` with
+  their isolated-copy negatives.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 5110c4392;
+  goal active.
