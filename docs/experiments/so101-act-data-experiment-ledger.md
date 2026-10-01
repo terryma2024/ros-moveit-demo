@@ -44206,3 +44206,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
 - its derivation behind CP-2332; F5's regression fixed with step one landed and step two handed off; HEAD
 - aa0c0c9f5; goal paused.
+
+## CP-2348 - Item 5 surveyed read-only: one composition site, and no installed CLI yet
+
+- The default production composition is src/cli/mujoco_parallel_batch.py, which builds SealedResultAdapter at
+- line 2731 and BatchCoordinator at 2742 - a single composition site, and the same adapter whose paths F14's fix
+- preserved. The cli/ directory holds the act_* tooling this stretch has been writing against (capture,
+- calibration collection, the Task 6/8 report builders), and there is no installed console entry for an ACT
+- collection run yet.
+- So item 5 is what the plan says it is: a composition that injects the ACT verifier (owner decision 3a, scoped by
+- F14) and the ACT store/Recorder beside the existing coordinator wiring, plus the installed CLI - bounded work at
+- one known site rather than a repair anywhere. It follows the owner's nine input values and nothing else.
+- This closes the read-only survey planned in CP-2347: the objective's remaining path is (a) two contract rulings
+- for F11/F13/F5, (b) the nine values and one selection, then freeze_inputs once, (c) items 5-8, (d) a ninth review
+- after F5 and F11 close.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed with step one landed and step two handed off;
+- HEAD b363ba92b; goal paused.
