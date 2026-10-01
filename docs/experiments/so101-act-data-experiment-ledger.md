@@ -50258,3 +50258,26 @@ That is the second of the five consumers read, and the second whose wiring turns
 wording suggested. The remaining three - the real Worker, the container shard protocol and the qualification call sites
 - are where any genuinely new connection would have to live, and the shard protocol is explicitly *not* to be
 implemented (containers are out of scope for this amendment).
+
+
+## CP-2651 — The wiring point is the coordinator's verifying result port
+
+Reading how the batch side consumes results gives the connection E2's wiring needs, and it is a named class rather than
+a diffuse call site:
+
+- **`SealedResultAdapter`** at `artifacts.py:657` - the result port this milestone instantiates in its own `run`;
+- **`coordinator.py:129`** stores `result_port`, and **`:248` / `:366`** call
+  **`self.result_port.discover(lease, Path(workspace))`** - the port is asked to find a worker's sealed result;
+- **`:384-394`** write `aggregate_results.json` atomically (`mkstemp` + `os.replace`);
+- and **`:790`** branches on **`isinstance(self.result_port, ActCollectionResultVerifier)`** - so the coordinator has a
+  **special path for a port that verifies**, which is the independent-verification side of the design's chain.
+
+That branch is where E2's endpoint verdict belongs: `ActCollectionResultVerifier` is the component that checks a sealed
+result independently, `endpoint_qc_document` is the endpoint-side computation of the same kind, and the coordinator
+already knows how to take the verifying path when its port offers one. So the connection is "the verifier consults the
+endpoint QC for the episode it is verifying", not a new mechanism and not a new port.
+
+Three of the plan's five consumers are now read - the qualification contract (validity-only, category reserved), the
+route-comparison report (a summary, additive at most) and the real Worker (a verifying result port) - and the remaining
+two are the container shard protocol, which is explicitly out of scope, and the qualification call sites already
+surveyed.
