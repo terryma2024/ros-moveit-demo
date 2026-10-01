@@ -342,6 +342,9 @@ def run_dynamic_execute(
     # that never reach the reset - the same trap as primary_failure, checked this time before the tests found it
     episode_start_s = None
     episode_last_receipt = None
+    # the observations the wrapped observer saw, newest last: the row's own facts live beside them in
+    # RosDynamicMujocoExecution.perform, which composes the audit
+    episode_observations: list = []
     episode_sealed = False
 
     def emit_failure(candidate: object) -> None:
@@ -367,7 +370,7 @@ def run_dynamic_execute(
         )
         return 1
 
-    from ..act.episode_assembly import begin_episode, end_episode
+    from ..act.episode_assembly import RecordingWorldObserver, begin_episode, end_episode
     from ..application.cup_pose_preflight import (
         validate_cup_scene,
         validate_mujoco_scene_identity,
@@ -574,7 +577,11 @@ def run_dynamic_execute(
             actions,
             session_id=options.session_id,
             policy_bundle_sha256=loaded.sha256,
-            world_observer=execution.observer,
+            # the observer is wrapped so that every instant the state machine acts on is seen (CP-2862 step 2),
+            # and what it keeps is the latest observation - the phase and the rest of the row come from
+            # RosDynamicMujocoExecution.perform, which is the only place that knows which state is running
+            world_observer=RecordingWorldObserver(execution.observer,
+                                                 record=lambda observation: episode_observations.append(observation)),
         )
         finish_setup("accepted")
         result = runner.run(RunRequest(mode=RunMode.EXECUTE))
