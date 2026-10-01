@@ -46139,3 +46139,26 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   expectations - after which the spawn is a transcription with a real rc to report.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end (inspect, prepare, preflight rc=0; four suites 236 passed). HEAD 92339922d; goal active.
+
+
+## CP-2444 — The worker spec's fifteen fields, and the plumbing the spawn really needs
+
+- `_build_worker_from_spec` requires exactly these keys: `schema_version`, `batch_id`, `run_mode`, `config_path`,
+  `socket_path`, `token_path`, `coordinator_epoch`, `resources`, `broker_socket_path`, `broker_generation`,
+  `catalog`, `control_token_path`, `control_socket_path`, `shutdown_deadline_s`, `max_frame_bytes` - with
+  `start_paused`, `worker_start_timeout_s` and `adaptive_workers` optional and the schema version pinned to 1. And
+  `ResourceAllocator.allocate(worker_count=None)` admits "exactly the requested count; never downgrade it", so one
+  episode is `allocate(1)`.
+- Most of those fields are not free inputs: the socket and token paths, the coordinator epoch and the broker's socket
+  and generation are produced by the coordinator's own startup sequence - the same sequence
+  `ProductionBatchComposition` performs before it spawns anything. So the fourth piece is not "write a JSON and fork":
+  it is to drive that composition with a **one-worker** specification, which is where the sweep-only fields would
+  otherwise have to be invented - and the honest reading is that a composition built for one episode should need none
+  of them beyond what its own objects require.
+- That is the next decision, and it is a design question rather than a missing fact: either the composition is
+  instantiated with a one-worker specification (accepting that several sweep fields are carried but unused), or the
+  run builds the coordinator/journal/adapter itself and consults the composition only for the worker spawn. Both are
+  honest; the first reuses more production code, the second states more precisely what a single episode needs, and the
+  choice should follow whichever keeps the live evidence closest to the production path the plan names.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 24e000117; goal active.
