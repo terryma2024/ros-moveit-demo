@@ -54963,3 +54963,30 @@ to the seam.
 
 Recorded in the handover note as well, so the person doing the wiring reads it there rather than discovering it in a
 traceback.
+
+
+## CP-2841 — The repository's own docstring names the same remaining step
+
+```python
+    def live_evidence_sample(self, *, identity, phase, physics_step, sim_time_s,
+                             source_stamps_s, source_received_monotonic_s, raw_records,
+                             holding_state, frame, contact, measurements):
+        """Emit one canonical live-evidence sample for the frozen 10 Hz grid.
+        The readback owns the values; the canonical shape lives in one place so this adapter and
+        the search port cannot drift apart. Extracting the values directly from the capture path
+        for CLOSE..FINAL_CHECK is the remaining wiring step.
+        """
+```
+
+**"Extracting the values directly from the capture path for CLOSE..FINAL_CHECK is the remaining wiring step."** -
+written in the repository, before this stretch began, and it is the same conclusion CP-2838 reached from the other end:
+the run writes the physics evidence and the capture path is where it has to be extracted from.
+
+It also shapes the adapter precisely, and shows it is not a thin wrapper: `live_evidence_sample` takes eleven keyword
+values (identity, phase, physics step and time, both source-stamp mappings, raw records, holding state, frame, contact,
+measurements), while the capture's `physical_audit` contract is a callable of `at_s` alone. So the adapter has to *hold*
+what the run supplies and hand it over per instant - which is exactly the piece of wiring the docstring calls remaining,
+and exactly the piece the physical side owns.
+
+Which leaves the division clean and confirmed by the code rather than by inference: the coordinator extracts those values
+from the capture path, and I supply the seam and the two wrappers that let the extraction be handed over and verified.
