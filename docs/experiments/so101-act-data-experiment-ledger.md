@@ -53822,3 +53822,28 @@ document, which `first_episode_inputs.py` would show.
 
 I am recording it rather than choosing silently, because the choice is visible in the frozen-inputs contract and therefore
 in what E3 will replay.
+
+
+## CP-2798 — The repository already froze the endpoint policy into the inputs, so correction 4's choice is made
+
+```python
+_MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy"})            # :57
+    extra = {key: document[key] for key in ("mode", "endpoint_policy", "runtime_policy") if key in document}   # :245
+                  endpoint_policy: Path | None = None, runtime_policy: Path | None = None) -> Path:           # :400
+    if endpoint_policy is not None:
+        document = load_endpoint_policy(Path(endpoint_policy))
+        extra["endpoint_policy"] = {"rule_version": document["rule_version"], ...}       # :427
+```
+
+So the first-episode path **already freezes the endpoint policy into the inputs manifest**, beside `mode` and the runtime
+policy - which answers CP-2797's question: the repository chose the second option, "the policy becomes part of the frozen
+spec", and it did so before this correction was written. That leaves exactly one input the composition cannot know at
+construction time: the **initial** target, which is a property of the episode.
+
+So correction 4 is now fully specified and small: a port that performs the endpoint judgement can be constructed from the
+frozen inputs (the policy, and the final target from the spec), with the initial target resolved per episode - either by
+reading it from the episode's own first endpoint row, or by handing the verifier a resolver rather than a value.
+
+That is the last thing standing between correction 4 and an implementation, and it is a parameter's shape rather than a
+design question. Worth noting for the record how it was settled: by reading whether the identity already travels, which is
+the same question the runtime policy answered with `runtime_policy_sha256`.
