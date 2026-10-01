@@ -49166,3 +49166,34 @@ The honest next step is therefore a **comparison rather than a rewrite**: for ea
 read what is already there against what the passed protocol now demands - `source` propagation exists, geometry is the
 question, ordering and the K2 record kinds are new - and implement the difference. That keeps the change as small as
 the tree allows instead of rebuilding what the amendment already landed.
+
+
+## CP-2600 — The reviewer's geometry complaint, located precisely
+
+`adapters/act/pick_place_scene.py:15`:
+
+```python
+def pick_place_scene_geometry(base: TaskGeometry, readback: dict, *,
+                              session_id: str, reset_epoch: int) -> TaskGeometry:
+    """Preserve fixed task geometry and move only the cup to its physical pose."""
+    ...
+    world, scene, contact = (readback[name] for name in ("world", "scene", "contact"))
+    scope = (session_id, reset_epoch)
+    if ((world.simulation_session_id, world.reset_epoch) != scope
+            or (scene["simulation_session_id"], scene["reset_epoch"]) != scope
+            or (contact[...]) != scope
+            or type(world.simulation_step) is not int or world.simulation_step < 1
+```
+
+Two things follow, and they are good news for the size of the change. First, the function **already reads the
+source-side facts** - it checks the session/epoch scope on all three records and requires a positive
+`simulation_step` - so the information K2 needs is present at the point where geometry is derived. Second, its **return
+type is `TaskGeometry`**, described as "preserve fixed task geometry and move only the cup to its physical pose", which
+has no place to carry that provenance; that is exactly the reviewer's complaint ("discards their provenance when
+returning geometry") and it is structural rather than a missing read.
+
+So K2's change on this file is bounded and nameable: **give the provenance somewhere to travel** - either a field on
+the geometry type or a companion return - while the verification that already happens stays as it is. Together with
+CP-2599's finding that the scene observation already carries `source`, this puts the K2 implementation on a
+comparison footing: two of the review's items are already partly satisfied, and the rest are additions rather than
+repairs.
