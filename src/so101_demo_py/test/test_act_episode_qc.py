@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import verify_audit_manifest
-from so101_demo.act.episode_qc import endpoint_records_from_audit
+from so101_demo.act.episode_qc import endpoint_qc_document, endpoint_records_from_audit
 from test_act_episode_audit import complete_audit
 
 POLICY = Path(__file__).resolve().parents[1] / "config" / "act" / "endpoint_pose_acceptance_v1.yaml"
@@ -42,8 +42,8 @@ def test_a_sealed_episode_with_full_poses_yields_a_real_endpoint_verdict(tmp_pat
     rows = physics.read_text().splitlines()
     pose = [-0.07, -0.23, 0.165, 0.0, 0.0, 0.0, 1.0]
     appended = [__import__("json").dumps(
-        {"kind": "support", "sim_time_s": 1.0, "release_epoch": 1,
-         "observation": {"simulation_time_s": 1.0, "simulation_step": 10, "cup_pose_world": pose}}),
+        {"kind": "support", "sim_time_s": 1.3, "release_epoch": 1,
+         "observation": {"simulation_time_s": 1.3, "simulation_step": 13, "cup_pose_world": pose}}),
         __import__("json").dumps(
         {"kind": "retract", "sim_time_s": 1.3, "release_epoch": 1,
          "observation": {"simulation_time_s": 1.3, "simulation_step": 13, "cup_pose_world": pose}})]
@@ -96,8 +96,8 @@ def test_the_verdict_follows_the_frozen_targets_not_the_rows(tmp_path):
         {"kind": "support", "sim_time_s": 1.0, "release_epoch": 1,
          "observation": {"simulation_time_s": 1.0, "simulation_step": 10, "cup_pose_world": pose}}),
         __import__("json").dumps(
-        {"kind": "retract", "sim_time_s": 1.3, "release_epoch": 1,
-         "observation": {"simulation_time_s": 1.3, "simulation_step": 13, "cup_pose_world": pose}})]) + "\n")
+        {"kind": "retract", "sim_time_s": 1.4, "release_epoch": 1,
+         "observation": {"simulation_time_s": 1.4, "simulation_step": 14, "cup_pose_world": pose}})]) + "\n")
     policy = load_endpoint_policy(POLICY)
     far = [9.0, 9.0, 9.0, 0.0, 0.0, 0.0, 1.0]
     accepted = endpoint_records_from_audit(audit, {"initial_target": pose, "final_target": pose,
@@ -108,3 +108,32 @@ def test_the_verdict_follows_the_frozen_targets_not_the_rows(tmp_path):
     assert accepted["status"] == "PASS" and accepted["endpoint_passed"] is True
     assert refused["status"] == "FAIL" and refused["endpoint_passed"] is False
     assert accepted["initial_pose"] == refused["initial_pose"] == pose
+
+
+def test_the_independent_document_keeps_the_claim_and_the_verdict_apart(tmp_path):
+    """The seal's own qc_passed is a claim; the fresh-process endpoint verdict sits beside it, not instead of it."""
+
+    writer, window = complete_audit(tmp_path)
+    position = [0.0, 0.0, 0.0]
+    orientation = [0.0, 0.0, 0.0, 1.0]
+    pose = position + orientation
+    # the rows go in through the writer, in the shape the audit's own schema admits: the MuJoCo summary fields,
+    # of which cup_position_world_m and cup_orientation_world_xyzw together are a pose (CP-2635)
+    # `pose` and `retract` are the two kinds whose required summary fields are exactly the ones a pose needs:
+    # simulation_time_s, simulation_step and cup_position_world_m (CP-2638)
+    for step, (kind, stamp) in enumerate((("pose", 1.3), ("retract", 1.4)), start=13):
+        writer.append_source("physics", {
+            "kind": kind, "sim_time_s": stamp, "release_epoch": 1,
+            "observation": {"simulation_time_s": stamp, "simulation_step": step,
+                            "cup_position_world_m": position, "cup_orientation_world_xyzw": orientation}})
+    # and only then the seal, because a sealed manifest is verified by recomputation
+    path = writer.seal(window)
+    document = endpoint_qc_document(path.parent, {"initial_target": pose, "final_target": pose,
+                                                 "endpoint_policy": load_endpoint_policy(POLICY)})
+    print("QCDOC", {k: v for k, v in document.items() if k != "endpoint"})
+    assert document["kind"] == "ACT_ENDPOINT_QC" and document["schema_version"] == 1
+    assert set(document) >= {"claim", "endpoint", "episode_manifest_sha256"}
+    assert "qc_passed" in document["claim"]                 # the seal's claim, carried as a claim
+    assert document["endpoint"]["source"] == "verified-raw-audit"   # and the independent verdict, identifiable
+    assert document["endpoint"]["status"] == "PASS"
+    assert len(document["episode_manifest_sha256"]) == 64

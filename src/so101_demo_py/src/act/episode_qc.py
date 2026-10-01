@@ -48,6 +48,14 @@ def endpoint_poses(physics_rows) -> list[list[float]]:
     poses = []
     for row in physics_rows:
         observation = observation_of(row)
+        # the MuJoCo summary rows carry a pose as a position and an orientation in the xyzw order the policy wants,
+        # so the pair is read first - it is the shape the audit actually admits (CP-2635)
+        position = observation.get("cup_position_world_m")
+        orientation = observation.get("cup_orientation_world_xyzw")
+        if (isinstance(position, (list, tuple)) and len(position) == 3
+                and isinstance(orientation, (list, tuple)) and len(orientation) == 4):
+            poses.append([float(value) for value in position] + [float(value) for value in orientation])
+            continue
         for key in POSE_KEYS:
             pose = observation.get(key)
             if isinstance(pose, (list, tuple)) and len(pose) == 7:
@@ -85,7 +93,15 @@ def endpoint_records_from_audit(audit, inputs) -> dict:
     if PHYSICS_STREAM not in listed:
         return {"status": "INCOMPLETE", "errors": ["ENDPOINT_PHYSICS_STREAM_ABSENT"], "passed": False}
     rows = read_verified_rows(root, PHYSICS_STREAM)
-    poses = endpoint_poses(rows)
+    # a pose can come from a recorded configuration when the frozen inputs name the scene and the body, which is how
+    # a real episode carries it; otherwise the rows' own pose keys are used, so both sources stay honest (CP-2632)
+    scene_path, body_name = inputs.get("scene_path"), inputs.get("endpoint_body")
+    if scene_path and body_name:
+        poses = [pose_from_configuration(scene_path, row["observation"]["model_qpos"], body_name)
+                 for row in rows
+                 if isinstance(row.get("observation"), dict) and row["observation"].get("model_qpos")]
+    else:
+        poses = endpoint_poses(rows)
     if len(poses) < 2:
         # a source that publishes only the cup's position cannot answer an orientation question, so the absence is
         # named for what it is instead of a point being passed off as a pose (CP-2590/2591)
