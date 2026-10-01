@@ -52224,3 +52224,34 @@ only a summary line rather than asserting each replacement.
 So the next attempt writes the file with explicit assertions after every replacement - which is what this ledger's own
 `python3 - <<PY` patches have always done for the ones that mattered - and then reads the four clauses against the actual
 values rather than reasoning about them.
+
+
+## CP-2734 — Measured: the audit's own coordinates, and the one I had wrong
+
+The probe drives the capture with a stub recorder and prints the four clause values from the audit it produced:
+
+```
+session_id: 'session-1'
+attempt_id: 'attempt-1'
+reset_epoch: 2 | type is int: True
+release_epoch: 0
+keys: 16
+```
+
+Three things follow, and the first is the refusal:
+
+- **`session_id` is `'session-1'`, not `'s'`**. The recorder suite's `audit()` helper hardcodes `session-1`, while its
+  separate `identity()` helper uses `"s"` - and I had been reading the two as one. My chain test builds its recorder with
+  `session_id="s"`, so clause 1 of `EPISODE_SCOPE_INVALID` was true the whole time, whatever I did to the epochs.
+- **`reset_epoch` is 2**, so the physical half's default is what reaches the recorder; my attempt to override it did not
+  take effect, consistent with the silent-replace suspicion of CP-2733.
+- **`keys: 16`** - the audit is exactly the recorder's closed set, so the harness (`RecorderSampler` plus
+  `recorder_physical_audit`) is balanced and correct. That part of the work is done.
+
+So the chain test needs three values aligned rather than one: the recorder's `session_id="session-1"`, `reset_epoch=2`,
+and frames whose own reset epoch is 2 as well - the last because `feed()` defaults to 1 and the earlier
+`ACQUISITION_RESET_MISMATCH` was the frames objecting to exactly that.
+
+The lesson is the same one this stretch keeps re-learning in new clothes: two helpers in one file that look like the same
+fact (`identity()`'s `"s"` and `audit()`'s `session-1`) are two facts, and reading one does not authorise assuming the
+other.
