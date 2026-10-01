@@ -45856,3 +45856,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   turns this subcommand into the live run the milestone needs.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare, preflight and now run's own contract verified. HEAD ec79e3453; goal active.
+
+
+## CP-2429 — The composition increment needs the runtime-config loader first
+
+- Wrote the three composition calls into `_run` - `CoordinatorJournal.create(root / "coordinator", batch_id)`, a
+  worker root, `SealedResultAdapter({"worker-0": worker_root}, mode, expected_final_cup_pose_world=target)` and
+  `BatchCoordinator(journal, request, config=..., result_port=...)` - then noticed the fourth argument needs a
+  `ParallelRuntimeConfig` parsed from the frozen runtime document, and I had written a placeholder helper
+  (`_runtime_config`) that does not exist. Committing that would have left the CLI importing nothing and failing for
+  the wrong reason, so the file was reverted to the committed v1 rather than committed broken.
+- The loader is one read away: `ParallelRuntimeConfig` and whatever parses it live in the parallel-batch package (the
+  batch path builds its `config` through `prepare_batch`). The next pass reads that, defines the helper against the
+  real API, wires the three calls, and runs the subcommand again - expecting either the composed objects in `run.log`
+  or a named refusal for the fourth piece, which needs the approved MuJoCo stack that this CLI must not start on its
+  own.
+- Kept honest on purpose: the version currently committed composes nothing and says so; the version that composes
+  three pieces is one short increment away and will be measured the same way.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished, and run's own contract, guards and identity are verified. HEAD b309019cd; goal active.
