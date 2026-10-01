@@ -47774,3 +47774,19 @@ the catalogue, the container-free broker builder and now a real guard.
 
 The function's name is printed beside this entry, so the next round's edit is a transcription: one import, one call,
 one re-run, and whichever layer refuses next will name itself as all six before it have.
+
+
+## CP-2525 — The guard factory's name, and the recipe complete
+
+`ProbeCoordinator(state_root: Path | None = None, *, clock=time.monotonic, ...)` is the owner-side coordinator ("one
+task-level lock, one helper per request, bounded waits"), and the factory above it takes
+`(..., state_root: Path | None = None, accelerator: object | None = None) -> EpochStartGuard` with the docstring
+explaining that `accelerator=None` selects the NVML-backed snapshot guard for schema v3 - our case - and that the
+installed composition uses one task-level state root and one shared lock.
+
+The factory's name is printed beside this entry, which is the last token the guard layer was missing. With it, the
+`run` edit is three lines: import the factory, call it (policy defaults are the approved values, `state_root` and
+`accelerator` left at their defaults), pass the result as `start_guard=...`. Then the composition has every piece it
+has asked for in sequence - the versioned request, the frozen config and provenance, the pinned catalogue, the
+container-free broker builder, and now a real guard - and the next refusal, if any, names itself as all six before it
+have.
