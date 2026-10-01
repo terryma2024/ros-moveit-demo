@@ -374,11 +374,18 @@ def _verify_roles(registry: dict) -> dict:
     return payloads
 
 
-def freeze_inputs(candidates_path: Path, output: Path) -> Path:
+def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = None,
+                  endpoint_policy: Path | None = None, runtime_policy: Path | None = None) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
     a previous one.
+
+    The three keyword-only arguments are the amendment's additions and are optional, so every call that predates
+    them keeps its exact behaviour and no caller silently acquires the new policy. When given, the endpoint policy
+    and the development runtime are parsed through their own closed loaders and their content enters the inputs hash
+    chain - the design requires the policy, the two target poses and the recipe/transform hashes to be bound here,
+    because every later gate reads the frozen document rather than the live file.
     """
 
     registry = read_candidate_registry(candidates_path)
@@ -387,6 +394,27 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
         raise ValueError("INPUT_OUTPUT_EXISTS")
     payloads = _verify_roles(registry)
     roles = {}
+    extra = {}
+    if mode is not None:
+        if mode not in ("formal", "preselected_target_diagnostic"):
+            raise ValueError("INPUT_MODE_INVALID")
+        extra["mode"] = mode
+    if endpoint_policy is not None:
+        from .endpoint_pose_acceptance import load_endpoint_policy
+        document = load_endpoint_policy(Path(endpoint_policy))
+        extra["endpoint_policy"] = {
+            "rule_version": document["rule_version"],
+            "thresholds": document["thresholds"],
+            "sha256": hashlib.sha256(_canonical(document)).hexdigest(),
+        }
+    if runtime_policy is not None:
+        from .endpoint_pose_acceptance import load_development_runtime
+        document = load_development_runtime(Path(runtime_policy))
+        extra["runtime_policy"] = {
+            "sha256": hashlib.sha256(_canonical(document)).hexdigest(),
+            "path_policy": document["path_policy"], "rgb_sync": document["rgb_sync"],
+            "safety_release": document["safety_release"], "hard_stops": document["hard_stops"],
+        }
     try:
         target.mkdir(parents=True)
         for role in INPUT_ROLES:
@@ -408,8 +436,8 @@ def freeze_inputs(candidates_path: Path, output: Path) -> Path:
                     "source_root": registry["source_root"],
                     "source_commit": registry["source_commit"],
                     "config_sha256": registry["config_sha256"],
-                    "evidence_root": registry["evidence_root"], "roles": roles,
-                    "inputs_sha256": hashlib.sha256(_canonical(roles)).hexdigest()}
+                    "evidence_root": registry["evidence_root"], "roles": roles, **extra,
+                    "inputs_sha256": hashlib.sha256(_canonical({**roles, **extra})).hexdigest()}
         manifest_path = target / "inputs-manifest.json"
         with open(manifest_path, "wb") as stream:
             stream.write(_canonical(manifest))
