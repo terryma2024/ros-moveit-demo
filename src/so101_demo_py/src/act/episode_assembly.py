@@ -19,7 +19,7 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["assemble_episode_capture"]
+__all__ = ["ProductionProducer", "assemble_episode_capture"]
 
 
 def assemble_episode_capture(
@@ -68,3 +68,61 @@ def assemble_episode_capture(
         # duplicated here, so a caller that needs them is not forced to assemble the recorder and writer by hand
         **capture_options,
     )
+
+
+class ProductionProducer:
+    """The production producer behind the sampler interface the capture calls.
+
+    It owns a real `RgbObservationSynchronizer` - the class the live path uses to pair camera streams with simulation
+    time - and presents it to `ContinuousEpisodeCapture` as its `sampler`. The capture calls
+    `sample_with_audit(session_id, attempt_id, at_s)` and expects an `(observation, source_audit)` pair; this class
+    supplies the frames that instant needs and narrows the audit to what an episode row records.
+
+    Three properties are worth knowing, each learned by driving the real synchronizer rather than by reading it:
+
+    * every stream it buffers must hold a stamp within `max_age_s` of the instant and their stamps must agree within
+      `max_skew_s`, because `causal_sample` runs over all of them and refuses with `INPUT_STALE` otherwise - so a stream
+      with nothing recorded for that instant carries the instant itself;
+    * the receipt time must come from the synchronizer's own clock, which is what its sampling compares against, or the
+      frame is stale the instant it is pushed;
+    * and its audit carries `source_received_wall_s` and `neck_yaw_rad` beyond the closed sixteen keys the recorder
+      accepts, so what the capture is handed is narrowed to `source_stamps` - the same seam as `_RECORDER_LOCAL_KEYS`,
+      seen from the source side.
+    """
+
+    STREAMS = ("head", "wrist", "arm", "neck")
+
+    def __init__(self, *, max_age_s: float = 0.1, max_skew_s: float = 0.1) -> None:
+        from .synchronizer import RgbObservationSynchronizer
+
+        self.synchronizer = RgbObservationSynchronizer(max_age_s=max_age_s, max_skew_s=max_skew_s)
+        #: where a frame-feeding loop records the instants it has supplied, one list per stream
+        self.stamps = {stream: [] for stream in self.STREAMS}
+        self._pushed = 0
+        self._latest = None
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        """Return the observation for `at_s` and the source audit an episode row records."""
+        import numpy as np
+
+        if self._pushed == 0:
+            self.synchronizer.reset(session_id)
+        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        while self._pushed < max(len(self.stamps[stream]) for stream in self.STREAMS):
+            for stream in self.STREAMS:
+                recorded = self.stamps[stream]
+                stamp = float(recorded[self._pushed]) if self._pushed < len(recorded) else self._latest
+                if stamp is None:
+                    continue
+                if stream in ("head", "wrist"):
+                    value = frame
+                elif stream == "arm":
+                    value = [0.0] * 6
+                else:
+                    value = 0.0
+                self.synchronizer.push(stream, session_id, stamp, value,
+                                       received_monotonic_s=self.synchronizer.monotonic())
+                self._latest = stamp
+            self._pushed += 1
+        observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
