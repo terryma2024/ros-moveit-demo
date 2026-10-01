@@ -47898,3 +47898,18 @@ itself writes (`composition.broker_spec_path`, prepared by `_prepare_broker_gene
 roots - as the composition's own `broker_input_root` and the ipc root suggest - then the host command is the frozen
 flags with the container paths replaced by the composition's host paths, and the ready receipt written where the
 supervisor expects it. That is the last thing to read before the builder is corrected, and then the episode can run.
+
+
+## CP-2532 — runtime_ipc_root is None at build time, so the attributes have to be read rather than assumed
+
+The corrected builder never ran: substituting the host paths raised
+`TypeError: unsupported operand type(s) for /: 'NoneType' and 'str'` on
+`composition.runtime_ipc_root / "perception.sock"`. So that attribute is None when the builder is called - which is
+consistent with the composition setting the runtime roots only inside the branches that actually start a broker or a
+worker, while the container-free path reaches the builder earlier, or with the attribute being populated only when the
+production container route is taken.
+
+Either way the fix is the same kind as every layer before it: read where the composition assigns `runtime_ipc_root`,
+`broker_runtime_root`, `broker_input_root` and `broker_spec_path` - the grep is printed beside this entry - and build
+the substitutions only from the ones that are already set at that point, falling back to the run's own root for the
+rest. The frozen flags themselves are right; only their location values need to come from what exists.
