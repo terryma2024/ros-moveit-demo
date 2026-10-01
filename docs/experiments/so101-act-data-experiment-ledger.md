@@ -54499,3 +54499,30 @@ What that means for the objective is worth stating plainly. **K1's forward half 
 wire is being built by the coordinator** - so the honest move is to keep my side ready and let theirs land, or to ask which
 side builds it, rather than to start a competing version. Everything else this stretch found is committed and green; this is
 a coordination question, not a technical one.
+
+
+## CP-2823 — Driving the real producer headlessly needs its clock, which is a precondition for K1 and E3
+
+Trying to make K1's forward half real in the test suite - replace the fixture sampler with the production
+`RgbObservationSynchronizer`, push frames through its own `push`, and take a sample the way the capture does - reaches a
+refusal instead of a result:
+
+```
+    raise ValueError("INPUT_STALE")
+```
+
+`push(stream, session_id, sim_time_s, value, *, received_monotonic_s=None)` records a **receipt time** and the sampler
+then judges staleness against `max_age_s`. In the suite the two clocks disagree by construction: the simulated time is
+1.0 while the real monotonic clock is whatever the machine's uptime is, so a frame is stale the instant it is pushed.
+Supplying `received_monotonic_s=100.0` by hand does not help, because the sample compares that receipt against the real
+clock too - the two ends have to agree, and the synchronizer does not take a clock of its own.
+
+So this is a real precondition rather than a test problem: **anything that drives the production synchronizer off the live
+robot must supply a coherent monotonic source at both ends**, and a headless harness that wants to exercise it has to do
+the same - either by pushing with a receipt time read from the same clock the sampling uses, or by giving the synchronizer
+an injectable clock, which it does not currently offer. For E3 this is naturally satisfied (the run has a real clock and
+real receipts); for a test it has to be arranged deliberately.
+
+Recorded rather than worked around: the test I wrote is reverted so the tree stays green, and what it found is worth more
+than the test would have been - the producer's contract includes a clock agreement that nothing in the chain tests had to
+satisfy until now, because their sampler was a fixture.
