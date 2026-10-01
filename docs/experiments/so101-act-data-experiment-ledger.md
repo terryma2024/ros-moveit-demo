@@ -43602,3 +43602,14 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F3's second half remains, as the verdict words it: the release emission runs before _verify_phase() and coerces
 - and defaults its flags, so it must move after verification and stop inventing a missing no_fingertip_contact.
 - F1 and F14 closed; F5's regression fixed; F3 half closed; F11/F12/F13 narrowed; HEAD 73415aee1; goal paused.
+
+## CP-2312 - F3's release flags are stated now, not coerced or defaulted
+
+- The emission payload now reads evidence.get("cup_supported") is True and the same for no_fingertip_contact,
+- with a comment saying why: an absent measurement may not become a True claim, and `is True` can only refuse a
+- gate rather than falsely satisfy one. GREEN 204 passed, wider gate recorded with the commit.
+- What remains of F3's second half: the emission still runs before that phase's _verify_phase call, which the
+- verdict names as an integrity problem. Moving it after requires the else-branch's text below line 352, one read
+- away, and the event's identity then carries the epoch _verify_phase accepted rather than the epoch assumed.
+- F1 and F14 closed; F5's regression fixed; F3 first half closed and second half half done; F11/F12/F13 narrowed;
+- HEAD 7f39490d1; goal paused.
