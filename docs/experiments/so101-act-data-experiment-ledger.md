@@ -44984,3 +44984,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   their behaviour and no silent application of the new policy.
 - F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
   table is written; E1's data, loaders and calculator are landed. HEAD fdd20055d; goal active.
+
+
+## CP-2386 — The conventions the new first-episode CLI must follow
+
+- Read the existing CLI's shape so the new module matches it rather than inventing a second style:
+  `cli/mujoco_parallel_batch.py` imports `argparse`, defines a `_Parser(argparse.ArgumentParser)` subclass (line 171)
+  and a `build_parser()` (line 231), and exposes `main(argv=None) -> int` (line 4292) which returns the process exit
+  code - so subcommands and rc handling have a house style to copy. `setup.py` declares `entry_points` with a
+  `console_scripts` list (lines 92-93), which is where `act_first_episode` must be registered for the installed
+  `ACT_FIRST_EPISODE` the plan's E3 sequence tests for.
+- The new module's surface, from the plan: `inspect --source-root --ledger --output`,
+  `prepare --candidates --mode --endpoint-policy --runtime-policy --output`, `preflight --inputs --mode --output`,
+  and later `run --inputs --root --mode --lifecycle`, `qc`, `verify-commit`, `check-export` - with unknown flags,
+  missing files and invalid modes refused as rc2 and old call shapes keeping their behaviour rather than silently
+  adopting the new policy.
+- With this recorded, the write itself is a transcription: parser, subcommands over the landed loaders and the
+  existing `freeze_inputs`, a `main` returning the code, and the `console_scripts` entry.
+- F5's step two remains one traceback from its fix; F11's derivation and F13's scene item remain open; K2's protocol
+  table is written. HEAD 4e08ac437; goal active.
