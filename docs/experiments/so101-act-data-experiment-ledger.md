@@ -50410,3 +50410,21 @@ than from the repository, which is the same error in miniature as inventing a po
 precisely because every honest change in this stretch was committed before the next experiment began.
 
 E2's checkpoint continues in `dst:e2-checkpoint`; its verdict is read when the marker lands.
+
+
+## CP-2658 — The full-directory sweep, and a prediction worth testing
+
+Two attempts, and the first one's failure was environmental rather than real: a bare
+`pytest src/so101_demo_py/test -q` gives **eight collection errors** of
+`ament_index_python.packages.PackageNotFoundError`, which is the overlay not being sourced - the same shape
+recorded earlier in this work, where running files by path works and running the directory does not unless the ROS and
+overlay setups are sourced first. With them sourced the sweep runs, and at the moment of writing it is at **99%** with
+**three failures** (`FF` and a later `F`) and five pytest processes still going, so the failure names will appear when it
+prints its summary.
+
+A prediction to test when it does: the three failures are most likely **the user's own untracked test files** - the
+thirteen recorded at CP-2394 - rather than mine, because every file this stretch added or changed is covered by the nine
+suites that are green at 264 passed. If they are the user's, the sweep's three failures are pre-existing conditions of
+the working tree and not regressions, and the honest report says so with the file names as evidence rather than a claim.
+
+E2's checkpoint continues in `dst:e2-checkpoint`; its marker is read when it lands, not before.
