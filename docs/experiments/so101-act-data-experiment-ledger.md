@@ -50707,3 +50707,30 @@ And it means E2's remainder and E3 are the same work: E3 is "the frozen default 
 which is exactly the path that would drive a capture and a recorder to a seal. The dispatch's own staging put them in
 that order for this reason - E2 builds the pieces, E3 runs them - and the checkpoint has now shown that the pieces were
 built **around** a path that was never connected.
+
+
+## CP-2671 — The capture already holds the recorder and the audit, and hands off its tail
+
+The constructor of `ContinuousEpisodeCapture` takes - beyond the grid and clock parameters it validates strictly -
+**`recorder`**, **`sampler`**, **`physical_audit`**, **`guard`**, **`audit_writer`** and **`audit`**, and its own comment
+about the last says: "**the raw controller reference history goes to the episode audit when one is wired**". So the
+capture is already the component that holds the episode's audit writer *and* the recorder.
+
+And `finish(physical_end_s) -> CaptureSummary` is explicit about its last act:
+
+```python
+        # the tail is handed off before finalization is declared, so a refusing writer leaves the
+        # capture retryable and reported with its own reason instead of finished
+        paths = tuple(self._tail_paths())
+        self._finished = True
+        return CaptureSummary(sample_count=self._written, label_cutoff_s=self.label_cutoff_s,
+                              audit_files=paths)
+```
+
+So the v2 sealing call belongs exactly here - after the tail has been handed off and before the summary is declared -
+and the two things it needs to pass are both in reach: the writer's sealed `audit-manifest.json` (the capture holds the
+audit) and the scope document (the capture knows the session and epoch it ran under). The only additional input is the
+outcome the recorder's `finish` expects, which the layer above supplies.
+
+That makes the first of the reviewer's corrections a small, localised change with a named place: one call in
+`finish`, carrying the manifest and the scope, proven by a test that seals a v2 episode and verifies it.
