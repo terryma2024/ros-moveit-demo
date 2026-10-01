@@ -47595,3 +47595,16 @@ What the function's executable should be is the last open question: the broker's
 `so101_demo.cli.parallel_perception_broker`, which the default branch imports for `container_run_argv` and which must
 therefore also expose a plain-process entry - one grep of that module answers it, and then the `run` subcommand can be
 finished.
+
+
+## CP-2514 — 3789 is a docker helper, so the broker's real spawn is just below the command
+
+Correction to CP-2513: the `run(command)` at 3786 is a **local helper** that calls `self._container_runner(command,
+check=False, capture_output=True, text=True, timeout=5.0)` - a docker invocation for this module's own purposes, not
+the broker's launch. The broker's spawn is immediately after the command is built, and the lines just below
+`container_run_argv(...)` are printed alongside this entry: they show what the launcher is handed and therefore the
+exact shape a container-free builder's argv must take (and whether anything beyond the argv - an environment, a
+working directory - is attached beside it).
+
+So the contract is one read from complete, and the difference between "one grep" and "printed beside the entry" is the
+lesson this stretch keeps re-learning: read the lines, not the neighbourhood.
