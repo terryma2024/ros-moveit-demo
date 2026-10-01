@@ -903,7 +903,16 @@ def _feedback_as_lists(record):
                 max_source_wait_s=self.max_source_wait_s,
                 poll_interval_s=self.poll_interval_s,
             )
-            return segment.run(request, reset_epoch=self.reset.receipt.new_epoch)
+            observed = segment.run(request, reset_epoch=self.reset.receipt.new_epoch)
+            # T3-F12 (eighth verdict): the records the verifier chain cached belong ON the observation the port
+            # builds its document from, not beside it - so the replacement travels from here, while the chain's
+            # own `or` contract, the port's signature and every other consumer stay exactly as they were
+            import dataclasses
+
+            records = getattr(self, "_controller_feedback", None)
+            if records and dataclasses.is_dataclass(observed):
+                return dataclasses.replace(observed, controller_feedback=tuple(records))
+            return observed
         except BaseException as error:
             try:
                 if self.safe_stop("TASK8_SEARCH_ABORT", request) is not True:
