@@ -54002,3 +54002,31 @@ location yields a verified seal, and any other workspace yields `None`. That is 
 when it drives either port through the same call, and it is the only method of the new port that has no test at all.
 
 Both are small, both are additive, and between them correction 4 is closed with its contract stated rather than implied.
+
+
+## CP-2805 — The two patterns the positive half needs, both already in that file
+
+```
+test_parallel_batch_cli.py:120    def argv(root: Path, **changes):        # ... "evidence_root": str(root)
+test_parallel_batch_cli.py:384    spec = replace(spec, request=replace(spec.request, evidence_root=root))
+```
+
+So the positive half - a composition built with endpoint inputs constructs `ActCollectionResultVerifier` - has two
+established ways to get a spec whose evidence root does not collide with the one the existing test already claimed:
+
+- **build its own** with `argv(<fresh root>, ...)`, which sets `evidence_root` from the root it is given, plus whatever
+  provenance helper that file uses (`verified(_spec)` at `:172`); or
+- **rebind an existing spec's root** with the `dataclasses.replace` pattern already used at `:384`, which is one line and
+  says exactly what it changes.
+
+The second is smaller and is the file's own idiom for the same problem, so the next round uses it: take the spec the test
+already builds, rebind `request.evidence_root` to a fresh subtree, construct a composition with `endpoint_inputs`, and
+assert `isinstance(composition.result_verifier, ActCollectionResultVerifier)`.
+
+That closes correction 4 - both directions stated, with the negative half already committed (`b37c15ff8`) and the reason
+the positive half is not simply added to that test written at the assertion site.
+
+Also worth recording: the blocker this round found is a property of the composition rather than of the test - a
+composition derives its evidence root from its spec, and a second composition from the same spec collides
+(`ResourceAllocationError: DIRECTORY_CONFLICT`). That is a real fact about the production class, and it is why the two
+directions of this contract need two specs rather than one.
