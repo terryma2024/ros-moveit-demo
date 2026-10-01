@@ -43963,3 +43963,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
 - choice; F5's regression fixed with two items behind the same surgery; F12 two of three with this transcription
 - ready; HEAD d8ce0baad; goal paused.
+
+## CP-2336 - F12's replace: search()'s return lies past line 900, one read away
+
+- The grep for a return between 837 and 900 found none, so search() delegates or returns further down; the widened
+- grep printed alongside this entry names the line. That is the last unknown for F12's third item: the edit is one
+- dataclasses.replace on that return, wrapping the observation the boundary's own verifier chain has already
+- annotated with the feedback records in self._controller_feedback.
+- Recording it here rather than editing at the end of this context: the change flows through the whole SEARCH path,
+- so it wants one read, one replace and one six-suite run rather than a tail-end guess.
+- F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
+- choice; F5's regression fixed with two items behind the same surgery; F12 two of three with its edit localized;
+- HEAD 1bdc8a0f7; goal paused.
