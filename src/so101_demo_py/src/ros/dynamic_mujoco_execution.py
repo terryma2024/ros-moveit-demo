@@ -397,7 +397,9 @@ class RosDynamicMujocoExecution:
         # pose. A layer with no camera stamps says so by passing an empty map rather than inventing times - the
         # distinction between "this layer has no such fact" and "I assume it is this value" is the one this task keeps
         # insisting on.
-        if self.episode_recorder is not None:
+        # getattr rather than the attribute: some construction paths skip __init__, and a recorder that is absent
+        # because of how the object was built is the same as one that was never set
+        if getattr(self, "episode_recorder", None) is not None:
             from ..act.episode_assembly import physical_audit_from_execution
             # the epoch is not defaulted: a row placed in the wrong reset epoch is as misleading as an invented one, so
             # an absent epoch stops the recording here and names what is missing (the form the default took for one
