@@ -46804,3 +46804,20 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   from this worktree) is the next read, and it decides CP-2475's option one against option two.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD eeb97f01c; goal active.
+
+
+## CP-2477 — Option one is real: the pinned catalogue is in this worktree
+
+- Searched by the digest the code pins: `c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5` matches
+  exactly one file, `src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml`. So the "approved
+  twenty-point catalogue" `_catalog` demands is present, source-controlled, and is the file the CLI hashes - which
+  means the composition's catalogue check can be **satisfied honestly** rather than worked around, and CP-2475's
+  option one is the live route: supply the real catalogue and a deployment-appropriate provenance verifier.
+- The twenty points are also how a single episode rides this vehicle: the composition iterates
+  `spec.request.selected_point_ids`, so a request naming exactly one of those ids runs exactly one episode through the
+  real Coordinator, Worker and Recorder - which is the design's §4 requirement, not a simplification of it.
+- What remains before the drive: the deployment-appropriate provenance verifier (route one of CP-2472/2473, stating in
+  the run's record what it establishes), the full twenty-two-field `PreparedBatch`, and the runner that drives the
+  connected components to completion - after which §6's three states are what get judged.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD 0b9e61f94; goal active.
