@@ -44515,3 +44515,19 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
 - landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's seal-side blockers
 - both fixed (CP-2362, CP-2363); HEAD 7fc5f9e18; goal active.
+
+## CP-2364 - F5's step two handed off: the next probe must evaluate the predicate from INSIDE it
+
+- Two seal-side blockers were found and fixed this stretch (CP-2362 the writers own tie, CP-2363 the initial epoch
+- read from a file that does not exist at seal time), and the hybrid STILL refuses AUDIT_FORMAL_COVERAGE_INCOMPLETE.
+- Meanwhile an instrumented probe that re-implements the predicate's six terms and four guards against the same
+- files reads all ten true. Both facts cannot hold, and the place they can differ is the probe itself: it recomputes
+- the terms from the files while the predicate computes them from its own rows() reads and its own variables.
+- So the one thing not yet tried is the obvious one: print each term AS THE PREDICATE COMPUTES IT - assign the six
+- terms and the four guards to locals inside _formal_coverage_ok and print those locals - rather than re-deriving
+- them in the test. That removes the last place a discrepancy can hide, and it is ~15 lines in one function.
+- The fixture itself is written out in CP-2342/CP-2364 and needs only to be pasted back for that run as well.
+- Withdrawn; green (audit plus the artifact suite) and the tree back to its 35-entry baseline.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four (CP-2285); F11's divergence fixed with its alignment
+- landed and its derivation behind CP-2332; F5's regression fixed, step one landed, step two's two seal-side
+- blockers fixed and its diagnosis narrowed to the predicate's own locals; HEAD a66e6edac; goal active.
