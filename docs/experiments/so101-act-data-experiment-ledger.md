@@ -42286,3 +42286,67 @@ COARSE_STEP_MEASURED 0.6560533740603397 scenes=200 candidates=6 passes=2
 它还需要另外 14 个测量文档（phase 3 的 operating point 帧、phase 6 的 4 个、phase 7 的 9 个）与六个 sealed 输入，这些**目前没有生产者**；
 所以下一步仍是"为其余测量文档建生产者"，之后才是 17 值审批暂停点。
 证据：`scratch/hs298/`（含 RED/GREEN/回归/全套件日志、工具链 root 记录、测量 runner）与三个工具链 root、三个测量 run dir，**均列为删除候选，未删除**。
+
+## HS-299 — phase 6/7 测量输入可用性清点：**14 项中只有 1 项**（`mujoco_measurements`）有现存证据，为它建了生产者并真实运行
+
+**提交** `bdc9393ce`（4 文件，+1025/−4；普通 `git commit`，钩子 rc=0）。
+
+**清点结果**（文档：`/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/reviews/phase6-7-measurement-inventory.md`，
+含 17671 个候选文件的逐键 grep 结果、排除 pytest scratch/`ipc`/`diagnostics`/`broker-*`
+（全部是 `test-kernel` 夹具）与 `*/install/**` 配置树）：
+
+| 文档 | 结论 |
+| --- | --- |
+| `mujoco_measurements` | **有源**：sealed scene `<option timestep="0.002">`，sha256 `aea2df3b…` = geometry seal `source_digests.scene_sha256` = head dataset manifest `mjcf_sha256` = geometry contract `accepted_scene_sha256` |
+| `search_timing` | 缺 capability：bounded-sweep execution with settle timing（`p99_settle_s` 全库 0 命中；`control_period_s` 可从 `ros2_controllers.yaml` 的 `update_rate: 500` 声明；`p99_frame_s` 只有离线 `latency_ms` 的部分来源） |
+| `camera_measurements` | 部分：seal 有 `horizontal_fov_rad`/`image_width`/`image_height`；`centre_jitter_rad` 与 `safety_margin_px` 无任何来源 |
+| `deadband_candidates` | 缺 capability：闭环 deadband trial（`longest_locked_run_frames`/`direction_reversals` 0 命中） |
+| `workspace_projection` | 缺证据：seal 只留 `workspace_matrix.key_samples`（2 个 `required_domain_endpoint` 带 u/v = 320 / 263.30、265.82，都是"相机对准该点"的投影，构不成工作区 v 带；120 个样本的投影未留） |
+| `fine_correction_episodes` | 缺 capability：held-out 精调 episode（`episodes8` 是开环 3 个固定角，无 `fine_corrections`） |
+| `frame_age_measurements` / `skew_measurements` | 缺 capability：running-topic freshness/skew（`received_monotonic_s`/`decision_monotonic_s`/`clock_resolution_s` 全库 0 命中；episode 的 `latency_ms` 只是 `predict()` 的墙钟） |
+| `frame_contract` | 缺声明：无任何受控产物声明 head-search 帧率（calibration contract 的 `hard_bounds` 0.15/0.05 与 0.1 s 自洽但未声明） |
+| `controller_submissions` / `stationary_measurements` / `stop_proofs` | 缺 capability：sim-time 提交、静止反馈采样、stop/revoke 延迟（对应键全库 0 命中） |
+| `feedback_measurements` | 部分：`period_s` 可从 `update_rate: 100` 声明；`quantisation_rad` 无任何来源 |
+| `controller_stop_config` | 缺 capability：`stopped_tolerance_rad_s` 只出现在测试夹具里 |
+
+**实现的生产者（唯一有源项）**：`src/so101_demo_py/src/act/head_search_mujoco_measurements.py`
+（决策层只读 sealed scene 的 `<option timestep>`，跟随 `<include>`，跨文件两个不同声明即
+`CAL_MUJOCO_EVIDENCE_CONTRADICTORY`；至少一个 sealed identity 必须与场景字节相符，否则
+`CAL_MUJOCO_EVIDENCE_MISSING`；文档带 `path` + 自摘要 `canonical_sha256(body 去掉 sha256)`、
+`measured_here: false`、`declared_by`，可选 `--mujoco-readback` 记录 `model.opt.timestep`），
+CLI 新增安装入口 `measure-mujoco`（缺输入/文件不存在/输出目录已存在 → `HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE` rc=2）。
+其余 13 项**未实现、未伪造**。
+
+**真实运行（安装程序，一次成功）**：`head-toolchain-20261001T082411Z`（由 `bdc9393ce` 构建，build rc=0，
+`prefix_demo` 与安装产物均含新代码）→
+
+```
+ros2 run so101_demo_py so101_head_search_calibration measure-mujoco \
+  --scene …/assets/mujoco/act/head_search_scene.xml --geometry-seal …/head-camera-geometry.json \
+  --dataset-manifest …/head-dataset/dataset-manifest.json --geometry-contract …/head-camera-geometry-contract-v1.json \
+  --output-dir …/head-mujoco-measurements-20261001T082455Z --mujoco-readback
+rc=0  wall 1 s（程序内 0.20 s）  MUJOCO_TIMESTEP_PRODUCED 0.002 readback=True
+```
+三方 identity 一致于 `aea2df3b…`；MuJoCo 3.12.0 读回 `model.opt.timestep=0.002`；自摘要
+`20b5494668f0a49b…` 由**安装模块**复算一致；**安装版** phase 7 `compute_submit_lead_s` 接受该文档并按
+`path`+`sha256` 引用；运行后 `ps` 与 `nvidia-smi` 均无残留进程、无 CUDA 使用。
+
+**验证链**：RED **rc=1, 1 collection error**（只缺新模块，边界正确）→ 新测试文件 GREEN **17 passed, rc=0**
+（首个 GREEN 的 1 个失败在**夹具**自身：`<option>` 插在 include 之前，生产者的 include 冲突检查只在顶层无声明时下钻——改成"始终收集顶层与 include 的声明，出现不同值即拒绝"后 GREEN）→ CLI RED
+**4 failed / 18 passed, rc=1**（`invalid choice: 'measure-mujoco'`）→ GREEN **22 passed, rc=0** →
+回归（13 文件：HS-288..298 各 phase + 新模块 + CLI + calibration）**341 passed, rc=0** →
+全套件（8 workers，基线 run-dir 布局）**175 failed / 5903 passed / 152 skipped / 86 errors, rc=1**，
+与 HS-298 基线（175/5881/152/86）对照 **+22 passed 正好是新增（18+4）**，261 个 FAILED/ERROR 节点
+**逐字节相同（diff 0 行）**。`ruff check` 干净。
+
+**它声明的主要推断（待评审）**：① `<option timestep>` 是"sealed model 的声明"而非实测分布，文档以
+`measured_here: false` 明示；② 顶层与 include 出现不同声明时**拒绝**而不复刻 MuJoCo 的后者覆盖规则
+（对真实 `head_search_scene.xml`/`so101.xml` 无影响：include 里没有 option）；③ 必须声明至少一个
+sealed identity，否则拒发文档；④ `simulation_timestep_s` 的启动 readback 仍归 run（phase 8），生产者不伪造；
+⑤ 其余 13 项按"无源即不实现"处理，`workspace_projection` 尤其**不用** seal 里那两个"对准即居中"的端点凑数。
+
+**Task 13 现在的状态**：真实端到端 `run` 仍不可执行——14 个 phase 6/7 测量文档中已有 1 个有安装程序生产者，
+其余 13 个需要真实运行时能力（bounded-sweep settle 时序、闭环 deadband、精调 episode、running-topic freshness/skew、
+sim-time 提交、静止反馈、stop/revoke 延迟、以及反馈量化/停车容差/帧契约这三项受控声明）。证据：
+`scratch/hs299/`（RED/GREEN/回归/全套件日志、运行器、shim）、`head-toolchain-20261001T082411Z`、
+`head-mujoco-measurements-20261001T082455Z`，均为**删除候选，未删除**。
