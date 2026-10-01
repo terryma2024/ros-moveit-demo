@@ -47140,3 +47140,34 @@ source text is not `acquired.setdefault(row["camera"], set()).add(row["stamp_s"]
 the tree is untouched and the audit suite ran uninstrumented at 74 passed. The next context should read that rule's
 exact text with one grep before patching it - the same lesson as CP-2490's and CP-2484's, applied to a probe rather
 than to production code: read the line, then patch the line.
+
+
+### The schedule rule's exact text, and a clause I had not counted
+
+Read verbatim from `_window_matches_observed` (offsets within the function):
+
+```
+ 9:            return False
+12:        return False
+20:            return False
+21:    schedule = window["source_schedule"]
+22:    if set(window["streams_required"]) - set(schedule):
+23:        return False
+24:    # T3-F11: the reverse relation — every instant a stream claims must be an instant the episode actually acquired
+25:    # for that stream, not only its endpoints, so a shortened or padded schedule cannot describe coverage it lacks
+26:    acquired: dict = {}
+28:        acquired.setdefault(row["camera"], set()).add(row["stamp_s"])
+29:    for name, instants in schedule.items():
+30:        stamps = acquired.get(name)
+33:            return False
+37:        return entry.get("camera"), entry.get("stamp_s")
+38:        return getattr(entry, "camera", None), getattr(entry, "stamp_s", None)
+```
+
+Two facts for the next probe. First, the reason last round's patch aborted: the line exists verbatim but at **eight**
+spaces of indentation inside a different loop head, while I asserted it at twelve - a one-character-class mistake that
+the assert caught before any write, which is exactly what the assert was for. Second, line 21-23 is a clause I had not
+counted at all: `set(window["streams_required"]) - set(schedule)` must be empty, so every required stream has to appear
+in the schedule. On this fixture both that clause and the reverse relation (each claimed instant acquired for that
+stream) read as satisfied, so the failing clause is one of the three `return False`s above them - offsets 9, 12 and 20 -
+which the next probe prints in one pass, since they are the only ones left unnamed.
