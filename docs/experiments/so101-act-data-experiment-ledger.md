@@ -50508,3 +50508,24 @@ they need by relative path rather than through `ament_index`.
 That also means CP-2659's reading of the numbers stands as a fact - 129 failed, 5925 passed - while its implication
 ("some of them are in code I changed") is **falsified**: the two names that looked most like mine are the asset
 resolution failing before any assertion about them could run.
+
+
+## CP-2662 — Two environment facts that explain a whole family of puzzles
+
+First: **`install/COLCON_IGNORE` exists inside this worktree's install tree**, so colcon and the setup scripts treat it as
+absent. That is why `AMENT_PREFIX_PATH` contains the **main** worktree's install six times over and never this one's -
+and why sourcing this worktree's `setup.zsh` cannot make `get_package_share_directory("so101_demo_py")` resolve here,
+however the source order is arranged. The asset path the Task-8 suites receive is therefore the main worktree's, whose
+share directory has no act assets, which is the 129 failures of CP-2661.
+
+Second, and larger: **the setup scripts are zsh-only**, and running them under bash fails loudly but harmlessly -
+`/opt/ros/jazzy/local_setup.zsh: line 6: ${(%):-%N}: bad substitution`. So every `source …setup.zsh` in a bash command
+has been only partially effective, and the environment recipes in this stretch's reports are weaker than they read.
+The `colcon build` invocations were unaffected because those were run through `zsh -c '...'` - which is exactly why they
+worked while the pytest invocations' sourcing did not.
+
+So the reliable recipe is `zsh -c 'source ...; ...'` for anything that depends on ament, and the honest note for the
+record is that several earlier "environment-shaped" observations in this work may have been this fact in disguise. The
+next round re-runs the failing Task-8 suite under `zsh -c` with the underlays sourced and this worktree's install
+sourced last - and if the COLCON_IGNORE still governs, the test that follows is whether the main worktree's share dir
+gains the asset (by installing there) or whether these suites are simply not runnable from this worktree.
