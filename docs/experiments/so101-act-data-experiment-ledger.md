@@ -43667,3 +43667,15 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
 - F1 and F14 closed; F3 closed; F11's divergence fixed (CP-2314) with this item handed off; F5's regression fixed;
 - F12/F13 narrowed; HEAD 0a1a6a4db; goal paused.
+
+## CP-2317 - F12's records are normalised at the boundary that reads them
+
+- A module helper converts every tuple-valued field of the driver's ratified record to a list, and
+- _remember_controller_feedback applies it to both kinds before caching, so the gates and the SEARCH document see
+- the same list-typed records the audit admits. This is the same carrier-boundary pattern F1's fix used for frames,
+- applied where the feedback records enter the search boundary. GREEN 238 passed.
+- What F12 still owes, from the verdict: carry a replacement immutable observation through every
+- segment/verifier/port return rather than caching beside it, and give the SEARCH pose carrier its
+- cup_position_world_m and registered cup/model measurements, which pose admission requires.
+- F1 and F14 closed; F3 closed; F11's divergence fixed with its derivation handed off; F5's regression fixed;
+- F12 one of three; F13 narrowed; HEAD d5df29703; goal paused.
