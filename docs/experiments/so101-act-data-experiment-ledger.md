@@ -43946,3 +43946,20 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
 - choice; F5's regression fixed with two items behind the same surgery; F12 two of three with the insertion point
 - localized to one read; HEAD 413428b10; goal paused.
+
+## CP-2335 - F12's third item is a transcription now: boundary.search returns the observation the port reads
+
+- The read that was missing: the port's SEARCH path does `observed = copy.deepcopy(self.boundary.search(request))`
+- and immediately `evidence = self._search_evidence(observed, request)`, so the object the document is built from is
+- exactly what the boundary's search() returns - and the boundary's verifier chain, which caches the feedback in
+- self._controller_feedback, runs inside that call before it returns.
+- So the verdict's replacement is one site: return dataclasses.replace(observed, controller_feedback=
+- tuple(self._controller_feedback)) from the boundary's search() when records were cached, leaving the chain's `or`
+- contract, the port's signature and every other consumer untouched. The port then reads the records off the
+- observation, which is what its own code already expects.
+- Recording it rather than writing it at the very end of this context, because the edit touches a return value the
+- whole SEARCH path flows through and deserves a run of its own: one read of search()'s return, one replace, one
+- suite run (search port, segment, boundary, audit, task8, generic artifacts).
+- F1 and F14 closed; F3 closed; F13 three of four (CP-2285 pending); F11's derivation behind CP-2332's contract
+- choice; F5's regression fixed with two items behind the same surgery; F12 two of three with this transcription
+- ready; HEAD d8ce0baad; goal paused.
