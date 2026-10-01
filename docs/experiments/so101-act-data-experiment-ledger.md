@@ -45483,3 +45483,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   That is the next piece, and it is also what produces the effective-config hash the amendment requires.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD c592d569a;
   goal active.
+
+
+## CP-2411 — The last blocker cleared, and the identity signal it surfaced
+
+- `src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml` gains an explicit `hard_stops:` block
+  (`rtf_min: 0.90`, `disk_free_min_bytes: 53687091200`) beside its existing `start_guard` and `execution` sections,
+  which is what the design asks for instead of picking between the two historical candidates. The file's top-level
+  keys before the edit were `execution`, `schema_version`, `start_guard`, and `resource_policy_identity` reads
+  `runtime["start_guard"]`, `runtime["hard_stops"]` and `collection["recorder"]`.
+- Measured on the installed CLI: `resource_thresholds` is now **READY with one source-controlled candidate**, so the
+  four empirical blockers that stood for many rounds are gone. The same run surfaced a new and expected signal -
+  `collection_config` and `runtime_config` report `INPUT_IDENTITY_MISMATCH` - because editing the runtime
+  configuration changed its bytes while some recorded identity still names the old hash. That judgement is raised from
+  `first_episode_inputs.py` around lines 279/282/290, and reading that comparison is the next pass's first step: the
+  recorded identity has to move with the file, which is the same rule that makes a freeze a new immutable input set.
+- Undone from the earlier plan for this file: the design also mentions keeping the existing start guard, the Recorder
+  watermarks, 10 Hz, `lossless=true` and CUDA/no-CPU-fallback - all of which are untouched by this addition and still
+  to be confirmed by the identity comparison rather than assumed.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; E1's artifact,
+  discovery and resource route all landed. HEAD 7fd43bf96; goal active.
