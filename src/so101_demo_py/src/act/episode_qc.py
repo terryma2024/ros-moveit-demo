@@ -126,3 +126,32 @@ def _manifest_digest(path: Path) -> str:
     import hashlib
 
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def pose_from_configuration(scene_path, model_qpos, body_name) -> list[float]:
+    """The `xyz_xyzw` pose of `body_name` at a recorded configuration, computed in this process.
+
+    This is the geometry half of `adapters/act/held_cup_state.py`'s `_body_transform`, and deliberately not its public
+    ``prove``: that one is a **live** proof whose freshness arguments include the wall clock at the moment of the call
+    (`scene_received_monotonic_s`, `now_monotonic_s`), which a process reading a finished episode cannot supply
+    honestly (CP-2632). Forward kinematics needs no live input at all, so a sealed audit can be judged from it.
+
+    It performs no IO beyond loading the scene's model, touches no live port, and invents nothing: an unusable
+    configuration or an unknown body is refused rather than defaulted.
+    """
+
+    import mujoco
+
+    model = mujoco.MjModel.from_xml_path(str(scene_path))
+    data = mujoco.MjData(model)
+    body = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, str(body_name))
+    if body < 0:
+        raise ValueError("ENDPOINT_QC_BODY_UNKNOWN: " + str(body_name))
+    qpos = [float(value) for value in model_qpos]
+    if len(qpos) != model.nq:
+        raise ValueError("ENDPOINT_QC_QPOS_INVALID: expected %d, got %d" % (model.nq, len(qpos)))
+    data.qpos[:] = qpos
+    mujoco.mj_forward(model, data)
+    position = [float(value) for value in data.xpos[body]]
+    quaternion = [float(value) for value in data.xquat[body]]          # mujoco's xquat is (w, x, y, z)
+    return position + [quaternion[1], quaternion[2], quaternion[3], quaternion[0]]
