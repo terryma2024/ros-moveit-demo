@@ -320,6 +320,11 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
+def _clock_now() -> float:
+    import time
+    return time.monotonic()
+
+
 def run_dynamic_execute(
     options,
     *,
@@ -362,7 +367,7 @@ def run_dynamic_execute(
         )
         return 1
 
-    from ..act.episode_assembly import begin_episode
+    from ..act.episode_assembly import begin_episode, end_episode
     from ..application.cup_pose_preflight import (
         validate_cup_scene,
         validate_mujoco_scene_identity,
@@ -669,4 +674,14 @@ def run_dynamic_execute(
         ),
         file=status_stream,
     )
+    # The episode is sealed here, with the verdict the run itself computed rather than one composed for the occasion:
+    # `result.status` is the run's own outcome and `result.failure.code` its own reason. Only fields that are actually
+    # derived are filled - a field the run never stated is left out, so the recorder's own check refuses the document
+    # instead of receiving a plausible invention, which is the failure mode this whole task exists to prevent.
+    if episode_start_s is not None:
+        end_episode(episode_recorder, end_s=float(_clock_now()), start_s=episode_start_s,
+                    outcome={"status": "PASSED" if result.status.value == "DONE" else "FAILED",
+                             "reason": (result.failure.code if getattr(result, "failure", None) is not None
+                                        and getattr(result.failure, "code", None) else "none"),
+                             "task8_success": result.status.value == "DONE"})
     return 0
