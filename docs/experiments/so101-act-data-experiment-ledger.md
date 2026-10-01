@@ -43559,3 +43559,19 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - timestamps, and the retained positive artifact is still the preset FORMAL_PHASES summary, so the runner-backed
 - fixture (CP-2293's hybrid) remains the fix for coverage and for the summary artifact alike.
 - F1 and F14 closed by the eighth verdict; F3/F5/F11/F12/F13 narrowed; HEAD 959f2989f; goal paused.
+
+## CP-2309 - F3's tie exemption is right, and its negative control must move to a later epoch
+
+- The eighth verdict's F3 residual asks the seal and readback to distinguish the declared initial epoch from an
+- actual release transition, and the formal tie is where it bites: it requires a release event for every positive
+- epoch in the events stream, including the episode's declared initial one.
+- Applying the same exemption CP-2308 used for the physics epochs (read the declared initial epoch from the
+- manifest's identity, exempt it, fence every later epoch) turned exactly one test red:
+- test_readback_refuses_a_formal_stream_that_steps_without_a_release. That control's unnamed step IS the declared
+- initial epoch, so the exemption legitimately admits it - which means the control has to be re-based on an epoch
+- later than the declared initial one before the exemption can land. That is the next edit: one read of the
+- control, one change to the epoch it steps to, then the exemption.
+- Reverted; the audit suite is green (72 passed) and nothing half-applied remains.
+- F3's other half from the verdict, still to do: the release emission runs before _verify_phase() and coerces and
+- defaults its flags, so it must move after verification and stop inventing a missing no_fingertip_contact.
+- F1 and F14 closed; F3/F5/F11/F12/F13 narrowed; F5's regression fixed at CP-2308; HEAD 34e8c5c8a; goal paused.
