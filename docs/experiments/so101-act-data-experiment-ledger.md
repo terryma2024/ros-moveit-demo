@@ -54913,3 +54913,28 @@ sentence from the coordinator.
 
 Recorded so the next rounds spend themselves on the objective rather than on harness approximations of evidence that the
 QC is designed to distrust.
+
+
+## CP-2839 — Decision taken: the coordinator wires the physical side, and the goal stays active
+
+The coordinator answered both open questions:
+
+* **CP-2822**: the middle option - **the coordinator wires the physical side, I take the assembly and the verification.**
+  Which is what the last several rounds were preparing for: `assemble_episode_capture`, `ProductionProducer` and
+  `episode_audit_pair` are committed and green, and the chain now runs through them rather than through hand-assembly, so
+  handing over the three parts is the whole of the remaining wiring.
+* **the goal stays active** rather than being marked blocked, so the small-step work continues.
+
+The handover note is written at
+`experiments/nonhead-first-episode-plan.hKhvkON3/handover/20261002-physical-side-handover.md`, and it says three things:
+
+1. **what to hand over** - `sampler`, `physical_audit` and `guard`, all three already constructed inside
+   `PickPlaceRosEvidence` (`self.rgb`, `self.readback`, `self.physics_fence`), so passing them on is the whole job;
+2. **what the wiring must respect** - the producer's clock agreement (CP-2823), all four streams (CP-2824), and the two
+   phase-dependent audit pairs a store and a verifier each need (CP-2777);
+3. **what I will verify** - K1's forward half, E3's single production episode with its independent QC and real
+   coordinator commit, and the negatives in isolation.
+
+It also records what is already proven, so that the wiring is visibly the only thing left: six end-to-end tests on
+production classes, and one thing no test can manufacture - the physics stream that only a live run writes
+(CP-2837/CP-2838).
