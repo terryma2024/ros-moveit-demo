@@ -464,6 +464,27 @@ def test_the_three_frame_lock_rule_is_observed_behaviourally(tmp_path: Path) -> 
     assert readback["locked_with_one_frame_outside_the_deadband"] is False
 
 
+def test_the_three_frame_lock_rule_is_observed_under_the_calibrated_timeout(tmp_path: Path) -> None:
+    """The probe ticks at the declared frame cadence, so a calibrated budget is still observable.
+
+    The promoted bundle's `search_timeout_s` is 0.7089213519976479 s. A probe that advances the wall
+    clock by a whole second per tick times the constructed controller out on the second tick and can
+    never observe the three-frame lock, which would make the behavioural record refuse.
+    """
+
+    declared = _declared(
+        tmp_path, production=_production_config(search_timeout_s=0.7089213519976479)
+    )
+    document = _read(_record(tmp_path, declared=declared)["document_path"])
+    readback = document["also_recorded"]["three_consecutive_frame_lock_rule"]["startup_readback"]
+    assert readback["verified"] is True
+    assert readback["observation"] == "behavioural"
+    assert readback["status_after_three_ticks"] == "TARGET_LOCKED"
+    assert readback["ticks_to_lock"] == 3
+    assert readback["locked_after_two_ticks"] is False
+    assert readback["locked_with_one_frame_outside_the_deadband"] is False
+
+
 def test_the_tracker_algorithm_is_the_one_the_running_detector_uses(tmp_path: Path) -> None:
     document = _read(_record(tmp_path)["document_path"])
     record = document["also_recorded"]["tracker_algorithm"]

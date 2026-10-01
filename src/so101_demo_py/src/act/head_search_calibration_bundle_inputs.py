@@ -86,6 +86,11 @@ CAL_BUNDLE_INPUTS_INCOMPLETE = "CAL_BUNDLE_INPUTS_INCOMPLETE"
 DEFAULT_DEVICE = "cuda"
 #: the production detector's input size, exactly as the closed-loop flights construct it
 DETECTOR_IMAGE_SIZE_PX = 640
+#: the declared frame contract is 10 Hz (phase 7 measures it), so the behavioural lock probe ticks its
+#: frames at that cadence. Stepping the wall clock by a whole second per tick times the constructed
+#: controller out on its own `search_timeout_s` for any calibrated budget below two seconds, and the
+#: probe reports SEARCH_TIMEOUT instead of observing the rule it exists to observe.
+LOCK_RULE_FRAME_PERIOD_S = 0.1
 #: the detector's model label when the production configuration declares no `runtime_id`
 DETECTOR_MODEL_ID = "head-search-bundle-inputs-readback"
 #: the installed detector adapter the running search composes
@@ -484,8 +489,8 @@ def _ticks(configuration, *, offsets_px, controller_factory=None) -> list:
     controller = controller_factory(dict(configuration))
     results = []
     for index, offset in enumerate(offsets_px):
-        stamp = 1.0 + 0.1 * index
-        now_wall_s = 100.0 + index
+        stamp = 1.0 + LOCK_RULE_FRAME_PERIOD_S * index
+        now_wall_s = 100.0 + LOCK_RULE_FRAME_PERIOD_S * index
         results.append(
             controller.tick(
                 _frame(
