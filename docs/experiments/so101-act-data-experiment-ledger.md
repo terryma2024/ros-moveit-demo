@@ -47370,3 +47370,21 @@ performs around this call.
 
 The fixture is withdrawn (tree back to the user's 35 entries, audit suite 74 passed) and the recording above carries
 the physics times verbatim, so the next round starts from a measurement rather than a guess.
+
+
+### CP-2501 — The seal has three window refusals, and the probe already proved which one fires
+
+Read the seal's window checks with their line numbers: 930 raises after a field-set/schema test, 934 raises after
+`... and not _window_ok(window, mode=...)` (931), and 937 raises after
+`if self.scope.get("mode") == "formal" and not self._window_matches_rows(window):` (935). So there are **three**
+distinct refusals carrying the same code, and CP-2490's probe settled which: it instrumented
+`_window_matches_rows` - the third check - and printed `WIN-CALLSITE seal False`, meaning that call returned False and
+the seal then raised at 937. The first two checks cannot be the refuser: the fixture's window is built from the shared
+`_window()` helper so its key set matches `_WINDOW_FIELDS`, and `_window_ok` was ruled out at CP-2373/2491.
+
+That places the refuser squarely inside `_window_matches_observed`, whose clauses have now all been read at least once
+and each of the last two named ones (the cadence gap, the observed camera extremes) was falsified by running rather
+than by reading. What remains is the instrument built for exactly this: CP-2497's read-style probe, proven inert and
+complete, prints every input the predicate sees on one line. Pairing it with the fixture answers the question in a
+single run, and the fixture is now better understood than ever - its physics history is 0.1 through 1.2 with a gap at
+0.6 -> 0.9, and the acquisitions are a clean 10 Hz grid from 0.1 to 1.0 (CP-2500).
