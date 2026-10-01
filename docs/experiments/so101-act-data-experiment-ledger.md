@@ -51750,3 +51750,24 @@ That makes the live path's shape precise and small:
 My 0ca35cc93 wiring held one value and passed it to both, which is exactly the defect the end-to-end test found and
 named. With this read, the fix is a line in the capture (hold the scope's path for the recorder, the document for the
 writer) plus the producer that writes that file - and the test is then the mechanical thing it was always meant to be.
+
+
+## CP-2715 — The downgrade test's last unknown: which time the capture gives the recorder
+
+The test reached the recorder and was refused by its own grid rule:
+
+```
+E   ValueError: EPISODE_TIME_GAP
+```
+
+because I pinned the capture's clock to `lambda: 0.0`. A `PASSED` outcome requires `require_grid(self._times, self.dt_s)`
+(CP-2693), so whatever time the capture hands the recorder must advance on its `dt_s` cadence - and which time that is,
+I have not read. The three candidate sources are the frame stamps the test feeds (1.0, 1.1, 1.2, already a 0.1 grid), the
+capture's monotonic clock, or the physical end time; only one of them is what the recorder is given.
+
+Everything else in the test is now exercised: the episode is built by a real capture with a real recorder and a real
+audit writer, the audit is sealed and bound, and the verifier is constructed with `endpoint_inputs`. Only the time base
+stands between this test and its assertion, and that is a single grep away.
+
+The test is reverted and the worktree is clean at 35 entries. This is the fifth shape this one correction has had to
+read - and, unlike the first four, this one is a one-line detail rather than a contract.
