@@ -1,17 +1,19 @@
-"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, verify-promoted-config, qualify.
+"""The formal head search calibration CLI: run, measure-coarse-step, measure-mujoco, measure-search-timing, measure-deadband-candidates, measure-camera, measure-workspace-projection, verify-promoted-config, qualify.
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
 trajectory precondition and the run status live (plan rule 4). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
-`measure-mujoco`, `measure-search-timing`, `measure-deadband-candidates` and `measure-camera` are the
-measurement flights the run cannot take itself - the run declares documents, it does not render, read a
-sealed model, step a simulator or close a control loop - so they are their own installed entries, validated
+`measure-mujoco`, `measure-search-timing`, `measure-deadband-candidates`, `measure-camera` and
+`measure-workspace-projection` are the measurement flights the run cannot take itself - the run declares
+documents, it does not render, read a sealed model, step a simulator, project a workspace or close a
+control loop - so they are their own installed entries, validated
 here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `so101_demo.act.head_search_mujoco_measurements`,
 `so101_demo.act.head_search_timing_measurement`,
-`so101_demo.act.head_search_deadband_measurement` and
-`so101_demo.act.head_search_camera_measurement`.
+`so101_demo.act.head_search_deadband_measurement`,
+`so101_demo.act.head_search_camera_measurement` and
+`so101_demo.act.head_search_workspace_projection`.
 """
 
 from __future__ import annotations
@@ -146,6 +148,18 @@ MUJOCO_IDENTITY_FLAGS = (
     ("geometry_seal", "--geometry-seal"),
     ("dataset_manifest", "--dataset-manifest"),
     ("geometry_contract", "--geometry-contract"),
+)
+
+#: the `measure-workspace-projection` entry: the sealed scene whose camera pose every projected pose is
+#: read from, the sealed geometry whose workspace matrix, required domain and mount model the projection
+#: is checked against, the geometry contract that declares the workspace box, and the brand-new directory
+#: the document owns. No detector, no weights, no controller and no renderer take part: the legal pick
+#: workspace is geometry, and the projection is arithmetic over it
+WORKSPACE_PROJECTION_REQUIRED_FLAGS = (
+    ("scene", "--scene"),
+    ("geometry_seal", "--geometry-seal"),
+    ("geometry_contract", "--geometry-contract"),
+    ("output_dir", "--output-dir"),
 )
 
 #: the `measure-search-timing` entry: the sealed scene the sweep steps the neck in, the sealed geometry
@@ -405,6 +419,67 @@ def _measure_mujoco(arguments: list[str]) -> int:
         f"MUJOCO_TIMESTEP_PRODUCED {receipt['simulation_timestep_s']} "
         f"scene={receipt['scene_path']} readback={receipt['mujoco_readback']} "
         f"output_dir={parsed.output_dir}"
+    )
+    return 0
+
+
+def _workspace_projection_parser() -> argparse.ArgumentParser:
+    """The `measure-workspace-projection` entry: the sealed scene, the seal and the contract.
+
+    This flight is the one phase 6's `vertical_bounds_px` was missing: the legal pick workspace the
+    geometry contract declares, projected into the sealed head camera at the neck poses the bounded search
+    actually holds, with the image-space extent per pose and over the pose set. It loads the scene for the
+    camera pose alone - no detector, no renderer, no GPU and no controller take part.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog="so101_head_search_calibration measure-workspace-projection",
+        description=(
+            "Project the geometry contract's declared legal pick workspace into the sealed head camera at "
+            "the bounded plan's in-domain neck poses, into a brand-new output directory, and write the "
+            "document the run declares under --workspace-projection"
+        ),
+    )
+    parser.add_argument("--scene", type=Path, help="the sealed MuJoCo scene the camera pose is read from")
+    parser.add_argument("--geometry-seal", type=Path, help="the sealed head camera geometry")
+    parser.add_argument(
+        "--geometry-contract", type=Path, help="the contract that declares the legal pick workspace box"
+    )
+    parser.add_argument("--output-dir", type=Path, help="the brand-new directory the document owns")
+    return parser
+
+
+def _measure_workspace_projection(arguments: list[str]) -> int:
+    """Validate the declared inputs, then hand the projection to the library."""
+
+    parsed = _workspace_projection_parser().parse_args(arguments)
+    refused = _refuse_measurement_inputs(parsed, WORKSPACE_PROJECTION_REQUIRED_FLAGS)
+    if refused is not None:
+        print(refused, file=sys.stderr)
+        return 2
+
+    from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+    from so101_demo.act.head_search_workspace_projection import (
+        write_head_search_workspace_projection,
+    )
+
+    try:
+        result = write_head_search_workspace_projection(
+            scene_path=parsed.scene,
+            geometry_seal_path=parsed.geometry_seal,
+            geometry_contract_path=parsed.geometry_contract,
+            output_dir=parsed.output_dir,
+            command=_command_line(arguments, subcommand="measure-workspace-projection"),
+        )
+    except CalibrationInputsRefused as error:
+        print(str(error), file=sys.stderr)
+        return 2
+    receipt = result["receipt"]
+    print(
+        f"WORKSPACE_PROJECTION_PRODUCED top_px={receipt['top_px']!r} "
+        f"bottom_px={receipt['bottom_px']!r} poses={receipt['pose_count']} "
+        f"points={receipt['point_count']} union={receipt['union_px']} "
+        f"intersection={receipt['intersection_px']} output_dir={parsed.output_dir}"
     )
     return 0
 
@@ -1465,6 +1540,10 @@ def main(argv: list[str] | None = None) -> int:
     # declaration this entry reads or refuses, never a number it makes up
     if arguments[:1] == ["measure-camera"]:
         return _measure_camera(arguments[1:])
+    # the legal pick workspace's projection is the sixth: it reads the scene's camera pose and projects,
+    # loading no detector, no renderer and no GPU
+    if arguments[:1] == ["measure-workspace-projection"]:
+        return _measure_workspace_projection(arguments[1:])
     # the controller's stopped tolerance is a declaration of the running controller: this entry cites it
     if arguments[:1] == ["measure-controller-stop-config"]:
         return _measure_controller_stop_config(arguments[1:])

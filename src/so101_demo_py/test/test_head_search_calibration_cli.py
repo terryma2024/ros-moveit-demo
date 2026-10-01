@@ -1970,3 +1970,122 @@ def test_the_stop_flight_entries_need_a_scene_and_a_seal(tmp_path: Path, capsys)
         arguments[2] = str(tmp_path / "absent.xml")
         assert main(arguments) == 2
         assert "no such input" in capsys.readouterr().err
+
+
+# --- measure-workspace-projection ------------------------------------------------------------------
+
+
+def test_measure_workspace_projection_needs_its_declared_inputs(capsys) -> None:
+    assert main(["measure-workspace-projection"]) == 2
+    assert HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE in capsys.readouterr().err
+
+
+def test_measure_workspace_projection_refuses_a_missing_input_and_an_existing_output(
+    tmp_path: Path, capsys
+) -> None:
+    declared = {
+        "--scene": tmp_path / "head_search_scene.xml",
+        "--geometry-seal": tmp_path / "head-camera-geometry.json",
+        "--geometry-contract": tmp_path / "head-camera-geometry-contract-v1.json",
+        "--output-dir": tmp_path / "measurement",
+    }
+    arguments = ["measure-workspace-projection"]
+    for flag, path in declared.items():
+        arguments += [flag, str(path)]
+    assert main(arguments) == 2
+    assert "no such input" in capsys.readouterr().err
+
+    for flag, path in declared.items():
+        if flag != "--output-dir":
+            path.write_text("{}", encoding="utf-8")
+    declared["--output-dir"].mkdir()
+    assert main(arguments) == 2
+    assert "never resumed" in capsys.readouterr().err
+
+
+def test_measure_workspace_projection_hands_the_flight_to_the_library(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """The CLI is a parser and a validator: the projection itself is the library module's."""
+
+    from so101_demo.act import head_search_workspace_projection
+
+    inputs = {}
+    for flag, name in (
+        ("--scene", "head_search_scene.xml"),
+        ("--geometry-seal", "head-camera-geometry.json"),
+        ("--geometry-contract", "head-camera-geometry-contract-v1.json"),
+    ):
+        path = tmp_path / name
+        path.write_text("{}", encoding="utf-8")
+        inputs[flag] = path
+    output = tmp_path / "measurement"
+    seen = {}
+
+    def fake_write(**arguments):
+        seen.update(arguments)
+        return {
+            "receipt": {
+                "top_px": 191.699852915671,
+                "bottom_px": 272.6768492617673,
+                "pose_count": 3,
+                "point_count": 120,
+                "union_px": [191.699852915671, 272.6768492617673],
+                "intersection_px": [192.79306238636892, 266.49194356287984],
+            }
+        }
+
+    monkeypatch.setattr(
+        head_search_workspace_projection, "write_head_search_workspace_projection", fake_write
+    )
+    arguments = ["measure-workspace-projection"]
+    for flag, path in inputs.items():
+        arguments += [flag, str(path)]
+    arguments += ["--output-dir", str(output)]
+
+    assert main(arguments) == 0
+
+    printed = capsys.readouterr().out
+    assert "WORKSPACE_PROJECTION_PRODUCED top_px=191.699852915671" in printed
+    assert "poses=3" in printed and "points=120" in printed
+    assert seen["scene_path"] == inputs["--scene"]
+    assert seen["geometry_seal_path"] == inputs["--geometry-seal"]
+    assert seen["geometry_contract_path"] == inputs["--geometry-contract"]
+    assert seen["output_dir"] == output
+    assert "measure-workspace-projection" in seen["command"]
+
+
+def test_measure_workspace_projection_reports_the_library_refusal(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from so101_demo.act import head_search_workspace_projection
+    from so101_demo.act.head_search_workspace_projection import (
+        CAL_PROJECTION_POSE_SET_AMBIGUOUS,
+        CalibrationWorkspaceProjectionRefused,
+    )
+
+    inputs = {}
+    for flag, name in (
+        ("--scene", "head_search_scene.xml"),
+        ("--geometry-seal", "head-camera-geometry.json"),
+        ("--geometry-contract", "head-camera-geometry-contract-v1.json"),
+    ):
+        path = tmp_path / name
+        path.write_text("{}", encoding="utf-8")
+        inputs[flag] = path
+
+    def fake_write(**_arguments):
+        raise CalibrationWorkspaceProjectionRefused(
+            CAL_PROJECTION_POSE_SET_AMBIGUOUS, "the in-domain stop set depends on the coarse step"
+        )
+
+    monkeypatch.setattr(
+        head_search_workspace_projection, "write_head_search_workspace_projection", fake_write
+    )
+    arguments = ["measure-workspace-projection"]
+    for flag, path in inputs.items():
+        arguments += [flag, str(path)]
+    arguments += ["--output-dir", str(tmp_path / "measurement")]
+
+    assert main(arguments) == 2
+    assert CAL_PROJECTION_POSE_SET_AMBIGUOUS in capsys.readouterr().err

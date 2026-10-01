@@ -1324,6 +1324,19 @@ def _camera_mount_model(
     )
 
 
+def workspace_matrix_points(
+    contract: HeadCameraGeometryContract,
+) -> tuple[tuple[float, float, float], ...]:
+    """Every declared workspace sample at every declared height, not just its mid plane.
+
+    This is the public name of the rule the seal's own `workspace_matrix` counts (`samples`), so a
+    document that has to project the very workspace the seal was built from can call it instead of
+    re-implementing the sampling and hoping the two agree.
+    """
+
+    return _workspace_matrix_points(contract)
+
+
 def _workspace_matrix_points(
     contract: HeadCameraGeometryContract,
 ) -> tuple[tuple[float, float, float], ...]:
