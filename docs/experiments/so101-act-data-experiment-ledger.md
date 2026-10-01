@@ -46402,3 +46402,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   explicit, and cheap to re-check on every run.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 69fae20bd;
   goal active.
+
+
+## CP-2457 — The approved stack is fully up: RobotSystem configured and activated
+
+- Restarted with the include-carrying scene: `XML Error` and `Failed to load the model` appear **zero** times, and the
+  log shows `Successful 'configure' of hardware 'RobotSystem'`, `'activate' hardware 'RobotSystem'`,
+  `Successful 'activate' of hardware 'RobotSystem'` and `Registering statistics for : RobotSystem`, with `move_group`
+  reporting a successful pipeline start. The environment the plan's live run needs - MoveIt, ros2_control and the
+  MuJoCo hardware interface - is therefore up for the first time in this session, started once by this task and
+  recorded in `launch5.log`, `launch.pid` and `launch-plan.md`.
+- What made the difference, in order: the fork workspace's install provides the hardware plugin the main worktree
+  never built (CP-2454), and the scene path must be one whose directory carries the include (CP-2455/2456) - the
+  frozen witness and the source file being byte-identical makes that honest rather than a workaround.
+- The next step is the run's fourth piece: allocate one worker, write the spec the coordinator expects, spawn the
+  existing worker entry with it, and record that spawn's argv, stdout, stderr and real rc under the LIVE_ROOT - after
+  which the episode itself, the Recorder evidence, the fresh-process QC and the coordinator commit follow in order.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD c589ea206; goal active.
