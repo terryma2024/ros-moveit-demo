@@ -47515,3 +47515,29 @@ launch, the liveness probe and all three gates rather than only the launcher.
 Next: read `_start_broker` in full, then design the smallest change that lets the same broker run as a plain process
 while keeping every real check (the three image gates become a deployment-appropriate identity rather than a docker
 image tag), per the design's section 4 requirement to use the real components in a one-worker configuration.
+
+
+## CP-2510 — The container-free route is a designed extension point, not a modification
+
+Read `_start_broker` in full and found the answer to the user's approval: it begins
+
+```python
+if self._broker_command_builder is not None:
+    command = self._broker_command_builder(self)
+else:
+    from so101_demo.cli.parallel_perception_broker import container_run_argv, gpu_groups, image_record
+    image_id = self.spec.provenance.get("image_id")
+    ...
+    current_image = image_record(self.spec.broker_image)
+```
+
+So the docker/container path is the **default** branch, and a caller may supply a `broker_command_builder` that returns
+its own command instead - the composition takes it through the `**kwargs` of its constructor, exactly as CP-2471
+showed. That makes the container-free broker route a **supported configuration** rather than a fork or a second
+implementation: the same broker process, started by a command this deployment provides, with the three image gates
+belonging to the default branch that is simply not taken.
+
+What the next read must establish is the builder's contract - how it is passed in, what it receives, and what shape of
+command (argv list, environment, working directory) it must return - after which the single-episode run can supply it
+and the approved route is complete. This also satisfies the design's section 4 wording precisely: the real Coordinator,
+Worker and result interfaces, one worker, and a broker started without a container.
