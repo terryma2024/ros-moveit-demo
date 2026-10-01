@@ -54706,3 +54706,30 @@ thing to read - `start`'s four arguments and where the row's `session_id`/`attem
 
 The test is reverted again so the tree stays green (`7 passed`), and the shape of the remaining work is now one print away
 rather than one design away.
+
+
+## CP-2830 — start's semantics are what the test assumed, so the mismatching dict is assembled elsewhere
+
+```python
+    def start(self, session_id, attempt_id, reset_epoch, start_s) -> None:
+        ...
+        self._session_id = session_id
+        self._attempt_id = attempt_id
+        self._reset_epoch = reset_epoch
+        self._next_grid_s = float(start_s)
+```
+
+So the call in E3's test - `capture.start(IDENTITY["session_id"], current.attempt_id, IDENTITY["reset_epoch"], 1.0)` -
+stores exactly the coordinates the recorder holds, which the print already confirmed agree
+(`session-1 scene-1-lease-1 2` on both sides). And `ProductionProducer` narrows the synchronizer's own audit to
+`source_stamps` alone, so it cannot be overriding `session_id` or `attempt_id` either - although the synchronizer's audit
+does carry both, which is worth remembering as the one place such an override could come from if that narrowing were ever
+loosened.
+
+Which leaves the dictionary the recorder is actually checking as the only unknown, and it is not reachable by printing the
+writer's identity or the lease: it is assembled per row. The instrument is therefore a print **inside** the recorder's
+check - the three values it compares, from the dict it was handed - and that is one temporary edit to production code,
+reverted with the test.
+
+Recorded rather than guessed, because the last three rounds each advanced by one refusal and this one is the first that
+cannot be advanced by aligning a caller: the callers already agree.
