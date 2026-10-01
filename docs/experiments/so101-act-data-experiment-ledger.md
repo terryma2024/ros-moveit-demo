@@ -45780,3 +45780,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   paths and the grounded root/hash that the composition records for provenance.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   finished with inspect, prepare and preflight all rc=0. HEAD 089d8b781; goal active.
+
+
+## CP-2425 — The single-episode composition is four calls
+
+- Read the coordinator's shape: `BatchCoordinator.__init__(self, journal, request, *, config,
+  clock=time.monotonic, result_port, ...)` - it needs a journal, a request, a config and a result port, and its own
+  docstring says it does not run processes, so it is a bookkeeping object over durable grants and terminal point
+  accounting. `SealedResultAdapter` is constructed, per line 2731, as
+  `SealedResultAdapter(worker_roots, run_mode, expected_final_cup_pose_world=...)` with `worker_roots` a mapping.
+- So a single-episode composition is four calls, every piece of which this task has already seen working in the batch
+  path: `journal = CoordinatorJournal.create(evidence_root / "coordinator", batch_id)`;
+  `result_port = SealedResultAdapter({worker_id: worker_root}, run_mode,
+  expected_final_cup_pose_world=frozen_target)`; `coordinator = BatchCoordinator(journal, request, config=config,
+  result_port=result_port)`; and the episode runner that produces the stream the adapter then verifies. With one
+  worker and one episode, the sweep-specific fields (`points`, catalog, fallback counts, detector, broker image) have
+  no role to play, which is exactly what CP-2423/CP-2424 established.
+- What the request still needs from the frozen set, and all of it exists: the mode, `FULL_RESTART`, the scenario's
+  frozen target pose, the three bindings, the config paths and the grounded root and hash, and an `evidence_root`
+  under a new LIVE_ROOT.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  finished with inspect, prepare and preflight all rc=0. HEAD 32646bd99; goal active.
