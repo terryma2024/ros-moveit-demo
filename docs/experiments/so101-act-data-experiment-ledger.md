@@ -49675,3 +49675,21 @@ phase or a guard inside it returned first. That is the next read, and it is a si
 The honest note for the record: five rounds of red have been my construction, and the failures have nevertheless
 narrowed the question each time - from "the audit refuses my identity" to "the run writes no physics rows", which is a
 question about the runner rather than about the test.
+
+
+## CP-2625 — The terminal wiring exists and consumes the episode seal's own qc verdict
+
+`result_store.py` (365 lines) holds `ActCollectionResultStore` (79) whose `seal(episode_seal_path)` (100) builds a
+result from the episode seal and carries **`episode["qc_passed"]`** into it (124), with `_RESULT_FIELDS` (32) naming the
+result document's keys - `kind`, `schema_version`, `lease_identity`, `status`, `qc_passed` and more. There are also
+`seal_attempt(lease, decision)` (143) and `write_recovery_receipt(...)` (160).
+
+So the chain the plan describes - "the QC uses frozen targets/policy and the sealed raw records; the Coordinator
+commit's verifier and aggregator use the same result and version" - has its terminal link already in place: the result
+store takes the **episode seal's** verdict rather than recomputing one, which is exactly the "one result, one version"
+property the plan asks for.
+
+That leaves E2 one question on this axis, and it is a read rather than a design: whether the **episode seal's**
+`qc_passed` is derived from the endpoint QC - `endpoint_records_from_audit` plus E1's calculator - or from the older
+quality conditions the amendment removes. If the former, the wiring is complete and E2's terminal item is a test; if the
+latter, the seal is where the endpoint verdict has to arrive.
