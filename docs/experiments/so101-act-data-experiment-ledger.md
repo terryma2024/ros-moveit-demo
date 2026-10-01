@@ -41228,3 +41228,35 @@ scenario->truth 计数：two_cups=2（24 帧）、no_cup=0（24 帧）、其余 
 检出：A 115/116、B 120/120、C 165/162（与修复前相同，说明只改了记录形状）
 检出键：['conf','x','y']
 ```
+
+## HS-261 — 第三个 recorder 缺陷：truth 只有一张分割图，task 域被拿去与 head 视角的真值比对
+
+**症状**：truth 修好后，episode 指标首次非零，但两个 domain 形状极不合理（`OBSERVED`）：
+
+```
+episode head: A recall 0.9167 f1 0.9483 p95 3.44px | B/C recall 1.0 f1 1.0 p95 3.99/3.77px
+episode task: A/B recall 0.0167 f1 0.0167         | C 0.0123/0.0167      ← 三者几乎全灭
+```
+
+**定位（两步互证）**：
+
+1. **两个 domain 的 truth 像素统计完全相同**（n=60、median 8475、min 5820、max 11524 一模一样）——不可能是巧合；
+2. 相机探针证明两相机确实看到不同画面：`head_camera id=2 pos=[0,0,0] img_sha=7dbaf657… mean=38.31`，
+   `task_camera id=0 pos=[0.65,-0.65,0.55] img_sha=fbf3e4b9… mean=17.05`（`OBSERVED`，rc=0）。
+
+根因在源码：`_segmentation()` 把相机写死为配置相机 ——
+`renderer.update_scene(self._data, camera=self._config.camera_name)`（`mujoco_dataset.py:1863`），
+而 `_config.camera_name == "head_camera"`。我的录制器**每个角度只调一次** `_segmentation()` 并把同一张图用于两个 domain，
+于是 task 域的 recall 是拿 **task 相机的检出** 去比 **head 相机的真值** —— 1.7% 是记录口径错误的产物，不是模型能力。
+
+**修复**：在相机循环内各自渲染分割图（`enable_segmentation_rendering()` → `update_scene(camera=cid)` →
+`_geom_ids(...)` → `disable_segmentation_rendering()`），truth 随该相机的视角计算。
+
+**修复后核验**（`episodes6` 重录，两 split 各 20 文件、`rec6 rc=0`）：
+
+```
+head 域 truth: n=120  median=8624px  min=5820  max=11524
+task 域 truth: n=120  median=4502px  min=2607  max=5322      ← 两域已不同
+```
+
+至此 recorder 的四个缺陷全部修掉：① 不写 truth；② truth 按 geom 而非按 body；③ truth 跨相机复用；④ 检出键 `cx/cy` 而非 `x/y`。
