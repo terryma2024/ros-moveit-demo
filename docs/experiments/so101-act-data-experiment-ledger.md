@@ -46278,3 +46278,7 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   has **not** happened yet. The next round re-checks with `pgrep`/`ros2 node list` and starts it cleanly if needed.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD c4d45ec9d; goal active.
+
+- Measured remnant state after the slip: the recorded launch pid `3107569` is gone, while `pgrep -c -f
+  ros2_control_node` reports **2** surviving children. So the stack is genuinely half-shut, and the next round kills
+  those two by pid (never by a pattern that could match its own shell) before relaunching with the corrected order.
