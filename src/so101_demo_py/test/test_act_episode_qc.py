@@ -53,3 +53,30 @@ def test_a_sealed_episode_with_full_poses_yields_a_real_endpoint_verdict(tmp_pat
     # E1's `passed` is a per-threshold map; the single boolean this module adds is `endpoint_passed`
     assert verdict["status"] == "PASS" and verdict["endpoint_passed"] is True, verdict
     assert set(verdict["passed"]) == set(verdict["errors"])
+
+
+def test_a_sealed_audit_without_the_physics_stream_is_a_named_absence(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    manifest = verify_audit_manifest(path)
+    manifest["files"] = {name: entry for name, entry in manifest["files"].items() if name != "physics.jsonl"}
+    verdict = endpoint_records_from_audit({"manifest": manifest, "root": path.parent},
+                                          {"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
+                                           "endpoint_policy": load_endpoint_policy(POLICY)})
+    print("QC3", verdict)
+    assert verdict["errors"] == ["ENDPOINT_PHYSICS_STREAM_ABSENT"] and verdict["passed"] is False
+
+
+def test_a_single_pose_is_not_enough_for_two_endpoints(tmp_path):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    audit = {"manifest": verify_audit_manifest(path), "root": path.parent}
+    physics = audit["root"] / "physics.jsonl"
+    pose = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    physics.write_text(physics.read_text() + __import__("json").dumps(
+        {"kind": "retract", "sim_time_s": 1.4, "release_epoch": 1,
+         "observation": {"simulation_time_s": 1.4, "simulation_step": 14, "cup_pose_world": pose}}) + "\n")
+    verdict = endpoint_records_from_audit(audit, {"initial_target": pose, "final_target": pose,
+                                                  "endpoint_policy": load_endpoint_policy(POLICY)})
+    print("QC4", verdict)
+    assert verdict["errors"] == ["ENDPOINT_POSE_NOT_DERIVABLE"] and verdict["poses"] == 1
