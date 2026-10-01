@@ -41627,3 +41627,25 @@ train-c2 rc=2
   工作点 **0.25（两域同点）**、基模 `f281d252…`。
 - 指标（`evaluation-c2a/`）：静态 head 0.7409 / task **0.9699**（与最好者差 0.0038，retention 门通过）；
   episode head r 0.9833 / f1 0.9833、task r 1.0000 / f1 1.0000；`no_cup_false = 0`。
+
+## HS-277 — HF 已按裁决更新：C 仓库以 C2a 为 `best.pt`，旧版保留为 `best-epochs60.pt`，数据集补 C2a 与契约副本
+
+| 仓库 | 变更 | 提交 |
+| --- | --- | --- |
+| `zjumty/so101-yolo11n-seg-plastic-cup-head-task-mixed` | `best.pt` ← **C2a**（epochs 120）；新增 `best-epochs60.pt` 保留旧版；README 重写 | `2738cd55…`、`2e869339…`、`17bdba6c…` |
+| `zjumty/so101-head-search-bc-training-data` | 新增 `candidate-c2a/`（manifest、plan、run-manifest、config、split 列表，`*.pt` 已排除）与 `contracts/head_search_yolo_training-epochs120.yaml` | `eab5ff24…`、`d9ea86fa…` |
+
+**回下载校验（不采信"✓ Uploaded"）**：
+
+```
+best.pt         = 2afd550694abfbe6…  ✓ 与 C2a 权重一致
+best-epochs60.pt = ef833f9c990292f5…  ✓ 与旧版 C 权重一致
+```
+
+**为什么用"新增 + 覆盖"而不是只覆盖**：`best.pt` 按裁决换成 C2a，但**旧版 C 的权重保留在同一仓库的另一文件名下**，
+因为两版各有已发表的指标（C 的 static task 0.9631 与 retention 缺口 0.0105、C2a 的 0.9699 与 head F1 0.9833），
+删掉任何一版都会让已记录的对比失去可复现对象。
+
+**模型卡如实写明"由项目所有者选定、非 gate 晋升"**：它同时列出两个 revision 的 sha256/plan、两版指标对照、
+参考候选（A、B）的数值、以及那句 `EVALUATION_F1_MARGIN` 拒绝原文，并声明**该豁免只针对 F1-margin 这一条**，
+`TASK_RETENTION_MARGIN = 0.01`、no-cup 假检门等**全部未动**，机器裁决仍记 `selection: null / promoted: false`。
