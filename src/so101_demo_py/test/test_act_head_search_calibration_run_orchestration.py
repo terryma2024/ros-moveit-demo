@@ -661,6 +661,7 @@ def _inputs(
     search_timing=SEARCH_TIMING,
     coarse_step_observations=COARSE_STEP_OBSERVATIONS,
     frame_age_measurements=FRAME_AGE_MEASUREMENTS,
+    readback_observer=None,
 ) -> CalibrationPhaseInputs:
     if coarse_step_observations is COARSE_STEP_OBSERVATIONS:
         coarse_step_observations = _coarse_step_observations()
@@ -696,6 +697,7 @@ def _inputs(
         feedback_measurements=FEEDBACK_MEASUREMENTS,
         controller_stop_config=CONTROLLER_STOP_CONFIG,
         stop_proofs=STOP_PROOFS,
+        readback_observer=readback_observer,
         bundle_inputs=(
             _bundle_inputs(HIGH_POINT if values is None else values)
             if bundle_inputs is None
@@ -1336,3 +1338,51 @@ def test_the_phase_four_runner_refuses_an_unparsable_gate_failure(tmp_path):
         )
 
     assert refused.value.code == "CAL_CANDIDATE_EVALUATION_FAILED"
+
+
+def test_the_run_records_the_measured_values_observed_off_the_running_components(tmp_path):
+    """With a readback observer the run proves the eleven measured values instead of restating them."""
+
+    from so101_demo.act.head_search_measured_readback import (
+        CONSTRUCTED_OBSERVATION,
+        MEASURED_PARAMETERS,
+        observe_measured_readbacks,
+    )
+
+    result = _run(tmp_path, readback_observer=observe_measured_readbacks)
+
+    assert result.status == "SUCCEEDED"
+    bundle = _read(tmp_path / "run-01", BUNDLE_NAME)
+    assert set(bundle["parameters"]) == set(BUNDLE_PARAMETERS)
+    for name in MEASURED_PARAMETERS:
+        readback = bundle["parameters"][name]["startup_readback"]
+        assert readback["observation"] == CONSTRUCTED_OBSERVATION, name
+        assert readback["verified"] is True, name
+    # the six declared values keep the readbacks their own producers recorded, so no value loses its owner
+    for name in ("horizontal_fov_rad", "lock_valid_neck_rad"):
+        assert bundle["parameters"][name]["startup_readback"]["observed_value"] == (
+            bundle["parameters"][name]["value"]
+        )
+
+
+def test_an_observer_that_observes_another_value_fails_the_phase_it_owns(tmp_path):
+    """The observation is checked against the computed value: a mismatch fails the run, never warns."""
+
+    from so101_demo.act.search import HeadSearchController
+
+    def observer_using_another_timeout(*, values, configuration, **kwargs):
+        observed = HeadSearchController({**dict(configuration), **dict(values), "search_timeout_s": 99.0})
+        return {
+            "search_timeout_s": {
+                "observed_value": observed.config["search_timeout_s"],
+                "observation": "constructed_production_component",
+                "verified": False,
+                "source": "HeadSearchController(...).config['search_timeout_s']",
+            }
+        }
+
+    result = _run(tmp_path, readback_observer=observer_using_another_timeout)
+
+    assert result.status == "FAILED"
+    assert result.first_failing_phase == "search_parameters"
+    assert result.failure_code == "CAL_EFFECTIVE_VALUE_MISMATCH"

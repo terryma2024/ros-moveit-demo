@@ -61,6 +61,7 @@ from so101_demo.act.head_search_calibration_geometry import (
     generate_coarse_step_candidates,
 )
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search_measured_readback import OBSERVED_OBSERVATIONS
 from so101_demo.act.head_search_domain import (
     HeadSearchDomainError,
     bounded_search_stops,
@@ -857,7 +858,12 @@ def choose_coarse_step_rad(*, geometry, observations, selected_weights_sha256=No
 
 
 def _readback(name: str, value, startup_readback):
-    """The startup readback of the value: a reported one is checked, an absent one stays unverified."""
+    """The startup readback of the value: a reported one is checked, an absent one stays unverified.
+
+    A readback taken off the running controller keeps its own observation and verdict, exactly as phase
+    6 does for the five values it computes itself; a readback the caller merely reports is checked here
+    and marked as reported.
+    """
 
     if startup_readback is None:
         return {
@@ -879,8 +885,10 @@ def _readback(name: str, value, startup_readback):
             f"running system has to use the chosen value",
         )
     readback = dict(startup_readback)
-    readback["observation"] = "reported_by_caller"
-    readback["verified"] = True
+    if readback.get("observation") not in OBSERVED_OBSERVATIONS:
+        # the caller reported the value rather than observing the controller that uses it
+        readback["observation"] = "reported_by_caller"
+        readback["verified"] = True
     return readback
 
 

@@ -55,6 +55,7 @@ from so101_demo.act.head_search_calibration_bundle import (
     PARAMETER_EVIDENCE_KEYS,
 )
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
+from so101_demo.act.head_search_measured_readback import OBSERVED_OBSERVATIONS
 
 SCHEMA_VERSION = 1
 KIND = "head_search_calibration_timing_parameters"
@@ -279,7 +280,13 @@ def _frame_period(frame_contract) -> tuple[float, float]:
 
 
 def _readback(name: str, value, startup_readback):
-    """The startup readback of one value: a reported one is checked, an absent one stays unverified."""
+    """The startup readback of one value: a reported one is checked, an absent one stays unverified.
+
+    A readback taken off the running component keeps its own observation and verdict: the caller that
+    observed the component already decided whether the observation proves the value, and relabelling it a
+    caller's report would hide the difference between proof and restatement. A readback the caller merely
+    reports is checked here and marked as reported.
+    """
 
     if startup_readback is None:
         return {
@@ -301,8 +308,10 @@ def _readback(name: str, value, startup_readback):
             f"running system has to use the computed value",
         )
     readback = dict(startup_readback)
-    readback["observation"] = "reported_by_caller"
-    readback["verified"] = True
+    if readback.get("observation") not in OBSERVED_OBSERVATIONS:
+        # the caller reported the value rather than observing the component that uses it
+        readback["observation"] = "reported_by_caller"
+        readback["verified"] = True
     return readback
 
 

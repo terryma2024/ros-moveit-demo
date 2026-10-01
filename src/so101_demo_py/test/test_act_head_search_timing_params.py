@@ -920,3 +920,49 @@ def test_the_five_blocks_and_the_frame_contract_survive_phase_8_assembly_verbati
         assembly["bundle"]["also_recorded"][FRAME_CONTRACT_ITEM]
         == document["also_recorded"][FRAME_CONTRACT_ITEM]
     )
+
+
+def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
+    """A readback taken off the running component is not relabelled as a caller's report."""
+
+    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION
+
+    computed = build()["parameters"]["max_age_s"]["value"]
+    document = build(
+        startup_readbacks={
+            "max_age_s": {
+                "observed_value": computed,
+                "observation": CONSTRUCTED_OBSERVATION,
+                "verified": True,
+                "source": "HeadSearchController(...).config['max_age_s']",
+            }
+        }
+    )
+
+    readback = document["parameters"]["max_age_s"]["startup_readback"]
+    assert readback["observation"] == CONSTRUCTED_OBSERVATION
+    assert readback["verified"] is True
+    assert readback["source"] == "HeadSearchController(...).config['max_age_s']"
+
+
+def test_a_constructed_readback_of_an_unobservable_value_stays_unverified():
+    """A value the component could not be queried for is recorded unverified, never as an observation."""
+
+    from so101_demo.act.head_search_measured_readback import NOT_OBSERVABLE
+
+    computed = build()["parameters"]["max_age_s"]["value"]
+    document = build(
+        startup_readbacks={
+            "max_age_s": {
+                "observed_value": computed,
+                "observation": NOT_OBSERVABLE,
+                "verified": False,
+                "reason": "the installed neck search port refused the recorded values",
+            }
+        }
+    )
+
+    readback = document["parameters"]["max_age_s"]["startup_readback"]
+    assert readback["verified"] is False
+    assert readback["observation"] == NOT_OBSERVABLE
+    assert "refused the recorded values" in readback["reason"]

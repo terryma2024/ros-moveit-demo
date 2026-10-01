@@ -2846,3 +2846,16 @@ def test_measure_operating_point_prints_the_librarys_selection(
     assert seen["task_selection_rule_path"] == inputs["--task-selection-rule"]
     assert seen["output_dir"] == inputs["--output-dir"]
     assert "OPERATING_POINTS_MEASURED" in capsys.readouterr().out
+
+
+def test_the_run_entry_observes_the_measured_values_off_the_running_components(tmp_path: Path) -> None:
+    """The run's phase inputs carry the observer, so phases 6 and 7 record proof rather than a restatement."""
+
+    from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
+    from so101_demo.cli.head_search_calibration import _phase_inputs, _run_parser
+
+    parsed = _run_parser().parse_args(_run_arguments(tmp_path)[1:])
+    phase_inputs = _phase_inputs(parsed)
+
+    assert phase_inputs.readback_observer is observe_measured_readbacks
+    assert phase_inputs.startup_readbacks is None

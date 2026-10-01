@@ -1106,3 +1106,48 @@ def test_the_coarse_step_is_not_computed_from_a_declared_number():
         "head-camera-geometry.json",
         COARSE_STEP_OBSERVATIONS_PATH,
     ]
+
+
+def test_a_constructed_readback_keeps_its_own_observation_and_verdict():
+    """A readback taken off the running component is not relabelled as a caller's report."""
+
+    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION
+
+    document = build(
+        startup_readbacks={
+            "search_timeout_s": {
+                "observed_value": EXPECTED_TIMEOUT_S,
+                "observation": CONSTRUCTED_OBSERVATION,
+                "verified": True,
+                "source": "HeadSearchController(...).config['search_timeout_s']",
+            }
+        }
+    )
+
+    readback = document["parameters"]["search_timeout_s"]["startup_readback"]
+    assert readback["observation"] == CONSTRUCTED_OBSERVATION
+    assert readback["verified"] is True
+    assert readback["source"] == "HeadSearchController(...).config['search_timeout_s']"
+
+
+def test_a_constructed_readback_of_an_unobservable_value_stays_unverified():
+    """A value the component could not be queried for is recorded unverified, never as an observation."""
+
+    from so101_demo.act.head_search_measured_readback import CONSTRUCTED_OBSERVATION, NOT_OBSERVABLE
+
+    document = build(
+        startup_readbacks={
+            "search_timeout_s": {
+                "observed_value": EXPECTED_TIMEOUT_S,
+                "observation": NOT_OBSERVABLE,
+                "verified": False,
+                "reason": "the installed controller refused the recorded values",
+            }
+        }
+    )
+
+    readback = document["parameters"]["search_timeout_s"]["startup_readback"]
+    assert readback["verified"] is False
+    assert readback["observation"] == NOT_OBSERVABLE
+    assert "refused the recorded values" in readback["reason"]
+    assert CONSTRUCTED_OBSERVATION != NOT_OBSERVABLE

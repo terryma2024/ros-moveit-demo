@@ -234,6 +234,13 @@ class CalibrationPhaseInputs:
     #: computed value refuses that phase with `CAL_EFFECTIVE_VALUE_MISMATCH`, and an absent one is
     #: recorded as unverified rather than invented
     startup_readbacks: Mapping | None = None
+    #: the observer that takes those readbacks off the running components: given the values a phase
+    #: computed and the flat configuration the controller is constructed with, it returns one readback
+    #: per value (`head_search_measured_readback.observe_measured_readbacks`). With it, the eleven
+    #: measured values are proven at startup instead of restated; without it the phases keep recording
+    #: them as unverified, which is what a caller that wants only the computation gets. A declared
+    #: readback in `startup_readbacks` always wins: an explicit declaration is never overridden
+    readback_observer: Callable[..., Mapping] | None = None
 
 
 @dataclass(frozen=True)
@@ -559,36 +566,48 @@ def _phase_runners(
         )
 
     def search_parameters(context: CalibrationPhaseContext) -> Mapping:
-        return validate_head_search_calibration_search_parameters(
-            # the coverage proof is phase 2's own document: the run never declares what it just measured
-            bounded_sweep=context.document("geometry_coverage"),
-            timing=phase_inputs.search_timing,
-            camera=phase_inputs.camera_measurements,
-            deadband_candidates=phase_inputs.deadband_candidates,
-            workspace_projection=phase_inputs.workspace_projection,
-            fine_correction_episodes=phase_inputs.fine_correction_episodes,
-            held_out_splits=_held_out_splits(phase_inputs.selection_rule),
-            # the coarse step is chosen from the val sweep of the model phase 4 selected, and only that
-            # model's weights may have produced the sweep the value is read out of
-            coarse_step_observations=phase_inputs.coarse_step_observations,
-            selected_weights_sha256=_selected_frozen_candidate(context).get("weight_sha256"),
-            startup_readbacks=phase_inputs.startup_readbacks,
-            output_path=context.run_root / SEARCH_NAME,
+        def measured(startup_readbacks, output_path):
+            return validate_head_search_calibration_search_parameters(
+                # the coverage proof is phase 2's own document: the run never declares what it measured
+                bounded_sweep=context.document("geometry_coverage"),
+                timing=phase_inputs.search_timing,
+                camera=phase_inputs.camera_measurements,
+                deadband_candidates=phase_inputs.deadband_candidates,
+                workspace_projection=phase_inputs.workspace_projection,
+                fine_correction_episodes=phase_inputs.fine_correction_episodes,
+                held_out_splits=_held_out_splits(phase_inputs.selection_rule),
+                # the coarse step is chosen from the val sweep of the model phase 4 selected, and only
+                # that model's weights may have produced the sweep the value is read out of
+                coarse_step_observations=phase_inputs.coarse_step_observations,
+                selected_weights_sha256=_selected_frozen_candidate(context).get("weight_sha256"),
+                startup_readbacks=startup_readbacks,
+                output_path=output_path,
+            )
+
+        return measured(
+            _observed_readbacks(phase_inputs=phase_inputs, compute=lambda: measured(None, None)),
+            context.run_root / SEARCH_NAME,
         )
 
     def timing_stop_parameters(context: CalibrationPhaseContext) -> Mapping:
-        return validate_head_search_calibration_timing_params(
-            frame_age=phase_inputs.frame_age_measurements,
-            skew=phase_inputs.skew_measurements,
-            frame_contract=phase_inputs.frame_contract,
-            submissions=phase_inputs.controller_submissions,
-            mujoco=phase_inputs.mujoco_measurements,
-            stationary=phase_inputs.stationary_measurements,
-            feedback=phase_inputs.feedback_measurements,
-            controller=phase_inputs.controller_stop_config,
-            stop_proofs=phase_inputs.stop_proofs,
-            startup_readbacks=phase_inputs.startup_readbacks,
-            output_path=context.run_root / TIMING_NAME,
+        def measured(startup_readbacks, output_path):
+            return validate_head_search_calibration_timing_params(
+                frame_age=phase_inputs.frame_age_measurements,
+                skew=phase_inputs.skew_measurements,
+                frame_contract=phase_inputs.frame_contract,
+                submissions=phase_inputs.controller_submissions,
+                mujoco=phase_inputs.mujoco_measurements,
+                stationary=phase_inputs.stationary_measurements,
+                feedback=phase_inputs.feedback_measurements,
+                controller=phase_inputs.controller_stop_config,
+                stop_proofs=phase_inputs.stop_proofs,
+                startup_readbacks=startup_readbacks,
+                output_path=output_path,
+            )
+
+        return measured(
+            _observed_readbacks(phase_inputs=phase_inputs, compute=lambda: measured(None, None)),
+            context.run_root / TIMING_NAME,
         )
 
     def selected_perception_readback(context: CalibrationPhaseContext) -> Mapping:
@@ -624,6 +643,32 @@ def _phase_runners(
         "timing_stop_parameters": timing_stop_parameters,
         "bundle_generation": bundle_generation,
     }
+
+
+def _observed_readbacks(*, phase_inputs: CalibrationPhaseInputs, compute) -> Mapping | None:
+    """The declared startup readbacks plus the ones observed off the running components.
+
+    Plan section 2b wants every one of the seventeen values proven by a startup readback, and the eleven
+    phases 6 and 7 compute are proven by constructing the production component each of them configures.
+    The values are computed first - without a readback, and without writing - because the component can
+    only be asked about a value that exists; the observer then returns one readback per value, and the
+    phase is run a second time with them, so the mismatch check stays the phase's own
+    (`CAL_EFFECTIVE_VALUE_MISMATCH`) rather than being duplicated here. A declared readback wins over an
+    observed one for the same parameter: an explicit declaration is never silently overridden.
+    """
+
+    declared = dict(phase_inputs.startup_readbacks or {})
+    if phase_inputs.readback_observer is None:
+        return declared or None
+    measured = compute()
+    values = {
+        name: block["value"] for name, block in measured["parameters"].items()
+    }
+    observed = phase_inputs.readback_observer(
+        values=values, configuration=phase_inputs.production_search_config
+    )
+    combined = {**dict(observed), **declared}
+    return combined or None
 
 
 def _held_out_splits(selection_rule) -> tuple[str, ...]:

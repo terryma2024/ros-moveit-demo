@@ -2146,6 +2146,7 @@ def _phase_inputs(parsed) -> CalibrationPhaseInputs:
     """Build the phase inputs from the declared documents; nothing is computed here."""
 
     from so101_demo.act.head_search_calibration_run import CalibrationPhaseInputs
+    from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
     from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
 
     admission_document = _json_document(parsed.admission)
@@ -2188,6 +2189,10 @@ def _phase_inputs(parsed) -> CalibrationPhaseInputs:
         held_out_measurements=held_out,
         evaluation_arguments=_evaluation_arguments(parsed),
         bundle_inputs=_json_document(parsed.bundle_inputs),
+        # phases 6 and 7 prove the eleven values they measure by constructing the production component
+        # that consumes each one (plan section 2b): the run observes them at startup rather than
+        # restating the number it just computed
+        readback_observer=observe_measured_readbacks,
         **measurements,
     )
 
