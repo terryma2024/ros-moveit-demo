@@ -48750,3 +48750,20 @@ outstanding, reporting the protocol as answered-but-unreviewed; (b) terminate th
 request, on the chance that the wait is incidental; or (c) have the coordinator look at the `dst:k2-review` window
 directly, since it is the one place the pending question would be visible. I am reporting the state rather than
 guessing, and the next round will re-check before choosing.
+
+
+## CP-2577 — The original review was not stuck, and a duplicate is now running
+
+Re-checking before acting paid off: `reviews/k2-protocol-recheck4.log` has moved from 502 to **515 lines** and its last
+line is now a correction in progress - "**Complete the field types: declare `seq...`**" - so the session was working all
+along and CP-2576's "appears to wait on a collaboration event" was premature. The lesson is the one this stretch keeps
+meeting: a slow log is not a stopped log, and one round of no growth is not evidence of a stall.
+
+Because I had already committed to option (b) in the same round, a **duplicate review is now running** in a new window
+(`dst:k2-review-b`, log `reviews/k2-protocol-recheck4b.log`). That is harmless - two independent readings of the same
+document - and the working rule is to take whichever finishes with a real `EXIT=` marker at the end of its file, noting
+which one it came from. If both answer, the stricter of the two governs, since a FAIL costs one more revision while a
+missed defect costs the milestone.
+
+The revision-4 verdict, when it lands, will therefore be read from `k2-protocol-recheck4.log` first (it is further
+along), with `...4b.log` as the independent second opinion.
