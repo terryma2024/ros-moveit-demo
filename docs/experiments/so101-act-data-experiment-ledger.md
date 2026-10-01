@@ -51699,3 +51699,25 @@ each creates its own with `exist_ok=False`. The test's shape is therefore:
 
 Four attempts, and the answer was one directory apart from where I was looking. Recorded because the next attempt is now
 mechanical: two distinct roots, nothing shared.
+
+
+## CP-2711 — The frames name my wiring bug: the recorder wants the scope's path, the writer wants its document
+
+```
+>       self.recorder.finish(outcome, audit_manifest=audit_manifest, scope=self.scope)   # my 0ca35cc93 wiring
+>           audit_manifest, scope = Path(audit_manifest), Path(scope)                    # recorder.py
+>                   raise TypeError(... not 'dict')
+```
+
+So `Recorder.finish(scope=...)` wants a **path** - it converts both arguments with `Path(...)` - while
+`EpisodeAuditWriter(root, scope, ...)` wants the **document**. My capture stored one thing and handed it to both, and
+the test caught it the moment a real scope document reached the recorder.
+
+That is a real defect in the code I committed, found by exactly the kind of test it needed: the sealing path was
+"wired" in a way that only worked as long as nothing exercised it. The fix is small and now unambiguous - the capture
+holds the scope's **path** for the recorder, and the writer keeps the document - but it needs one read first: what the
+recorder does with that path (it appears to hash or copy it), so that the capture passes a path the recorder can actually
+use.
+
+My test is reverted and the worktree is clean at 35 entries. The valuable outcome of this round is the frame list above,
+which converts a vague "the sealing path is unwired" into a specific type error in a specific line of my own commit.
