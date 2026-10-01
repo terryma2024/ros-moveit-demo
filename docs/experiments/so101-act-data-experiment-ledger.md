@@ -44631,3 +44631,63 @@ HS-322 自己的 A/B 产物（`scratch/hs320/probe-maxage/deadband-candidates.js
 **本轮推断（待评审）**：① 那 ~30 ms 一次性代价被定位到"进程内第一个真的出框/出掩码的 predict"（零图 predict 无框无掩码、首真帧 34.2 ms、次真帧 4.2–5.4 ms 为证），但**未**定位到具体 kernel；② "生产检测器同样缺这一步预热"由代码读得（同一 `YoloSegDetector`、同一 `imgsz=640`、同一全零 `_predict`），本轮**未**在生产栈上跑出那张帧；③ 生产 40 样本的取样面窄（单一 anchor、静态无检测、40 帧里 19 个不同 sim 戳），故 (c) 的答案是"证据范围内没有违反 + 指明唯一未测的违反点"，不是"已证明永不违反"。
 
 **证据与生命周期**：新增 `$EV/reviews/max-age-harness-diagnosis.md`（本轮唯一持久产物）；工作树 `scratch/hs323/`（`env.sh`、`age_probe.py`、A/B 控制件 `ab-maxage-0.05.production-search-config.json`（`865f1b6c…`）、`logs/{deadband-sealed,deadband-ab,deadband-ab-c3,fine-sealed,fine-ab,warmup-probe}.log`、`logs/deadband-sealed.provenance.txt`、`tmp/`）为诊断产物，**均为删除候选，未删除**；HS-300..322 的产物只读引用，未改动（`scratch/hs320/probe-maxage/deadband-candidates.json` 只做只读复算）。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ 本条目所在的账本提交。
+
+## HS-324 — 修复 HS-323 诊断的两个 harness 预热缺口：声明并排除一帧"真的出框"的 warm-up（配置/阈值/测量文档一字未改）
+
+**目标与边界**：HS-323 把两个飞行器无法在晋级后的 `max_age_s = 0.014736005008453503` 下重产的原因定位为**它们各自的第一帧没有预热**（进程内第一个真的出框/出掩码的 `predict` 多付 ~31–37 ms，落在被测量的第 0 帧里，控制器如实回 `INPUT_STALE`）。本轮只改两个 harness 模块与它们的测试；**不改配置键、不改阈值、不重产任何测量文档、不重新生成 bundle、不晋级**。待用户第二次精确批准的 bundle（文件 `0563bada…`、规范 `1b92c8e6…`）在本轮前后逐字节相同。
+
+### (a) 改动：按兄弟生产者（timing）已验证的先例声明并排除一帧 warm-up
+
+**提交** `d8d1b5f8be37678f5bdbdaa92c322b4548f25504`（4 文件，+567/−11；普通 `git commit`）。
+
+- `src/so101_demo_py/src/act/head_search_deadband_measurement.py`：新增 `WARMUP_POLICY`（与 timing 模块同一套措辞/理由）、`declared_warmup(*, performed, detections, wall_s)`（**恰好** timing 用的四个键：`performed`/`detections`/`wall_s`/`declared_because`）、`perform_warmup_frame(*, plant, detector, clock)`（渲染一帧 → 用该飞行器自己的 detector 走同一条 `_detections` 路径 → 返回声明块）。`run_lock_trial` 在第一次 `command(target)` 之后、被测量循环之前执行该帧（**与被测量第 0 帧同一 plant 状态**），随后再 `reset()` 一次 detector（`HeadRgbDetector.reset` 只清 attempt 的 track/stamp，不会让已热的模型变冷），并把块作为 `result["warmup"]` 返回。`build_deadband_candidates` 写 `warmup`（取第一个 trial 的块——即付一次性代价的那一帧）与 `warmup_samples_excluded: true`；receipt 写同一 `warmup` 键。
+- `src/so101_demo_py/src/act/head_search_fine_correction_episodes.py`：同一对 helper（从 deadband 模块导入，`WARMUP_POLICY` 以 `_DEADBAND_WARMUP_POLICY` 别名导入后重新导出为本模块常量，保证三生产者同一措辞），`run_fine_correction_episode` 在 `command(target, kind="plan")` 之后执行同一帧并同样 `reset()`；warm-up 上的 detector 异常映射为本模块自己的 `CAL_FINE_EPISODE_DETECTOR_FAILED`。文档加 `warmup` + `warmup_samples_excluded: true`，receipt 加同一个 `warmup` 键（与 timing 模块的 receipt 一致，不带 `warmup_samples_excluded`），每个 episode 各自带自己的块。
+- **年龄计算一字未改**：`decision_monotonic_s − received_monotonic_s` 仍原样交给 `HeadSearchController.tick`，`max_age_s` 未动；变的只是**被测量帧集合**——warm-up 帧不在任何 `frames`、`lock_run`、`detection_frames` 或分布里。
+
+### (b) 门禁（TDD，先 RED 后 GREEN；phase 回归；8 worker 全量）
+
+| 步骤 | 命令（`scratch/hs324/run-tests.sh <tmpdir-label> …`，`TMPDIR` = 工作树 `scratch/hs324/tmp-<label>`） | 结果 |
+| --- | --- | --- |
+| RED（只回退两个模块源码，保留新测试：`git stash push -- <2 模块>`） | deadband / fine 两个测试文件 | **5 failed / 35 passed, rc=1** 与 **5 failed / 46 passed, rc=1**（`scratch/hs324/logs/red-{deadband,fine}-full.log`） |
+| RED 缺陷钉（关键一条） | `-k excluded_from_the_measured_ages` | `CAL_TIMING_SWEEP_UNSETTLED: … status 'INPUT_STALE'`（deadband）/ `CAL_FINE_EPISODE_NO_VERDICT: … 'INPUT_STALE'`（fine），即**与 HS-323 真实飞行器完全相同的拒绝码**（`logs/red-pin-{deadband,fine}.log`） |
+| GREEN | 同两个文件 | **40 passed, rc=0** / **51 passed, rc=0**（`logs/green-*-full.log`） |
+
+夹具做法：合成的 `OneOffDetectionCostDetector` 只让**第一个真的出框的调用**多花 35 ms（HS-323 §2.2 实测 34.2 ms），`max_age_s` 用晋级值；另一条测试把同一 35 ms 挪到**被测量帧**上，断言两个 harness **仍然拒绝** `INPUT_STALE` —— 证明修的是"声明并排除预热"，不是"放宽门限"。新增测试另外断言：warm-up 块四键齐全且 `detections == 1`（不是构造函数那张全零图）、`detector.detection_calls == len(frames) + 1`、`frames` 的 `frame_index` 连续、`detection_frames == len(frames)`、`plant.frames_rendered == len(frames) + 1`、每个被测量帧年龄 ≤ `max_age_s`，以及**文档键集合 = 该生产者改动前的全部键 + `{warmup, warmup_samples_excluded}`**（键表逐字抄自改动前实产文档，见 `scratch/hs324/doc-keys.out`）。`ruff check`（仓库 `src/so101_demo_py/ruff.toml`，E4/E7/E9/F/I）四个改动文件全通过。
+
+| 门禁 | 命令 | 结果 |
+| --- | --- | --- |
+| phase 回归（HS-288..319 的 39 文件清单 `scratch/hs324/regression-files.txt`，含 `test_head_search_calibration_cli.py`、`test_act_head_search_calibration.py`、`test_act_head_search_qualification.py`；`-n 8`） | `bash scratch/hs324/run-tests.sh regression -q -n 8 $(cat …)` | 新树 **4 failed / 1075 passed, rc=1**；改动前同清单控制运行（`git stash` 四文件）**4 failed / 1065 passed, rc=1**。节点级 diff（`$EV/scratch/pytest-xdist8-hs324-regression.xupZDtR9/node-delta-vs-prechange-control.txt`）：`only_in_new` = **恰为本轮 10 条新测试且全 pass**，`only_in_baseline` = **0**；4 个失败两侧逐节点相同，全是与 frame/预热无关的既有失败（`test_act_task8_search_port.py` 的四个节点，HS-321 已记录） |
+| 全量 `src/so101_demo_py/test`（8 workers，baseline run-dir 布局 `$EV/scratch/pytest-xdist8-hs324-demo-suite.XXXXXXXX`）运行 A：`TMPDIR` 按本轮任务书放在工作树 `scratch/hs324` | `bash scratch/hs324/run-fullsuite.sh` | **175 failed / 6501 passed / 152 skipped / 86 errors, rc=1**（118 s，`…demo-suite.SMv42KWz`，失败节点 261）。对最新基线 `pytest-xdist8-hs322-demo-suite.413bca28`（175/6491/152/86）节点 diff 为 **+1/−1 两个节点互换**：`only_in_new` = `test_debug_only_provenance.py::test_debug_manifest_records_unknown_commit_without_git`，`only_in_baseline` = `test_controller_reservation_client.py::test_client_rejects_symlinked_ancestor_before_connecting` |
+| 全量运行 B：唯一变量 = `TMPDIR` 移到仓库之外（`HS324_TMP_ROOT=$EV/scratch`），其余配方不变 | `HS324_TMP_ROOT=$EV/scratch bash scratch/hs324/run-fullsuite.sh` | **174 failed / 6502 passed / 152 skipped / 86 errors, rc=1**（81 s，`…demo-suite.bkpJVfwb`，失败节点 260）。节点 diff：**`only_in_new` = 0**；`only_in_baseline` = 1，即基线那条 `test_client_rejects_symlinked_ancestor_before_connecting`（本轮两次全量都 pass，单独重跑 3/3 pass ⇒ 基线侧的一次失败不可复现、与本次改动无关） |
+
+**两个被移动节点的机制（OBSERVED，不是猜测）**：`test_debug_manifest_records_unknown_commit_without_git` 让 git 在一个临时目录里回答 `rev-parse`；运行 A 的 `TMPDIR` 位于 git worktree 之内，git 向上走到本 worktree 而返回 HEAD（该测试期望 `None`）——把 `TMPDIR` 移到 `$EV/scratch` 后同一次单测 **pass**；`git stash` 掉本轮四个文件后（`TMPDIR` 仍在 worktree 内）同一条测试 **同样 fail**，证明它与本轮改动无关，只是 `TMPDIR` 位置效应。所以 B 是本轮与基线可比的那一次（0 个新增失败节点），A 如实保留为"任务书 TMPDIR 位置"的记录。
+
+### (c) 真实飞行器（throwaway：产物只写 `scratch/hs324/runs/`，$CAMPAIGN 与任何记录 run dir 零写入）
+
+环境：新 commit-stamped root `$EV/head-toolchain-20261001T170212Z`（`source-commit.txt` = `d8d1b5f8b`，`build_rc=0`、real **86.39 s**、`status=DONE`、`assertions_rc=0`；断言含"install 树里两个模块都带 warm-up 声明"与"install 的 sealed 配置仍是 `3fb9f276…`/`max_age_s=0.014736005008453503`"）；sealed 生产配置 = 安装树 `config/mujoco/act/head_search_v2.json`（**未做任何派生/改写**）；`MUJOCO_GL=egl`、`ROS_DOMAIN_ID=0`、`TMPDIR=scratch/hs324/tmp-runs`；每次运行前后 `require_cuda_idle`（进程表 + `nvidia-smi --query-compute-apps`）通过，全程一个 CUDA 检测器。
+
+| 飞行（`scratch/hs324/run-real-flight.sh <flight>`） | rc | 终端状态（console 末行） | 记录的 warm-up 行（首个飞行） | 预热后年龄范围（`decision − received`，全部被测量帧） |
+| --- | --- | --- | --- | --- |
+| `deadband-20261001T170344Z` | **0**（5 s） | `DEADBAND_CANDIDATES_MEASURED candidates=10 anchors=left trials=10 locking=7`；**10/10 trial `TARGET_LOCKED`** | `{performed: true, detections: 1, wall_s: 0.285060619993601}`（其后 9 个 trial 0.094–0.098 s） | n=45：**min 5.156 ms / max 6.434 ms**（首帧最大 6.434 ms），余量 8.302 ms |
+| `fine-20261001T170357Z` | **0**（12 s） | `FINE_CORRECTION_EPISODES_MEASURED episodes=20 succeeded=14 refused=6 split=held_out_evaluation anchor=left max_fine_corrections_observed=2 max_cumulative_fine_correction_rad=0.3480593742527027`；判据分布 14 `TARGET_LOCKED` / 3 `TARGET_AMBIGUOUS` / 3 `TARGET_NOT_FOUND`，**无 `INPUT_STALE`** | `{performed: true, detections: 1, wall_s: 0.12725471804151312}`（其后 0.093–0.096 s） | n=88：**min 3.932 ms / max 6.834 ms**（首帧最大 6.834 ms），余量 7.902 ms |
+
+两者都落在 HS-323 §1 预测的"运行中流水线"位置（A/B 稳态 5.38–6.68 ms），deadband 文档的 45 个被测量帧与 HS-322 A/B 文档的帧数一致；文档 `sha256`：`e8c0dab4c6399b57ed5e8225efe678d4f3644d629af4664d75a06e2ac8f487e5`（deadband）、`6525c94a39df2fbfd1aa44e83817dc64af780adce3e5c73ee62d429500a0cd05`（fine）。
+
+### (d) 受保护产物复核（开工前先取哈希清单，收工后逐一比对）
+
+- `$CAMPAIGN` 下全部 **4869 个 `*.json`**（含两份待重产的测量文档与全部历史测量层）：**逐文件 sha256 相同**。
+- 待批准 bundle `$CAMPAIGN/head-search-calibration-20261001T160314Z/head-search-calibration-bundle.json`：**`0563bada4fa6c8017ccc3b91118069412508269261338411f736c1bce5d04c01`（前后相同）**；未重新生成、未晋级。
+- sealed 配置：源码 `src/so101_demo_py/config/mujoco/act/head_search_v2.json` 与 install 树均为 `3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9`（**未改**），`values.max_age_s` 仍是晋级值。
+- `$EV/reviews` 下除本轮按任务要求追写的 `max-age-harness-diagnosis.md`（新增 §7，前六节逐字未动）外，其余 121 个文件哈希相同。
+
+### (e) 本轮推断（待评审，逐条照录）
+
+① "warm-up 帧付掉那笔一次性代价"由"`detector.detection_calls == len(frames) + 1` 且 `wall_s ≥ 35 ms` 而全部被测量帧 ≤ `max_age_s`"证明（合成夹具）与真实运行的 `warmup.detections=1` + 首帧 6.4/6.2 ms 支持，但**未**隔离到具体 kernel（沿用 HS-323 的 OBSERVED 边界）；② warm-up 只在其自身帧**真的出框**时才付掉这笔代价：fine 生产者里 `no_cup` 场景的 warm-up 块如实记 `detections: 0`（本轮 800010/11/13），这在第一个飞行器已经把进程热起来之后无害，且声明的顺序把 nominal 种子放在最前（`condition_classes[0] = "nominal"`，seed 800000 记 `detections: 1`）；但若**首个**声明种子是 `no_cup` 场景，一次性代价仍会落在第一张被测量帧里——本轮**没有**加"反复预热直到出框"的规则，只让这种情况在文档里可见；③ 全量运行 A 的那一个新增失败节点是 `TMPDIR` 位于 git worktree 内的位置效应（已用"改 `TMPDIR` 即 pass + 回退本轮改动仍 fail"两次 A/B 区分），不是源码回归；④ 运行 A/B 的 `passed` 增量 = +10（运行 A）/ +11（运行 B），前者恰为本轮 10 条新测试，后者再多 1 条是基线侧那条不可复现的 flaky 节点。
+
+### (f) 证据与生命周期
+
+- 代码/测试：提交 `d8d1b5f8b`（4 文件）。诊断报告：`$EV/reviews/max-age-harness-diagnosis.md` §7（本轮唯一改动的 review 文件）。
+- 工具链：`$EV/head-toolchain-20261001T170212Z/`（`source-commit.txt`、`build.sh` 不在其中，配方见工作树脚本；含 `build.{rc,console.log,provenance.txt}`、`assertions.{txt,rc}`、`status`、`build/`、`install/`、`build-log/`）。
+- 测试运行：`$EV/scratch/pytest-xdist8-hs324-{regression.xupZDtR9,regression-control,demo-suite.SMv42KWz,demo-suite.bkpJVfwb}`、`$EV/scratch/pytest-xdist8-hs324-demo-suite.{06UCJklK,h5UQCZmA}`（**空目录**：一次 CWD/相对路径用错的启动尝试与其 mktemp 目录，无内容）、`$EV/scratch/{hs324-tmp-probe,tmp-fullsuite-pytest-xdist8-hs324-demo-suite.bkpJVfwb}`。
+- 工作树 `scratch/hs324/`：`env.sh`、`env-runs.sh`、`run-tests.sh`、`run-fullsuite.sh`、`build-toolchain.sh`、`run-real-flight.sh`、`report-flight.py`、`doc-keys.py`/`doc-keys.out`、`regression-files.txt`、`regression-rundir.txt`、`toolchain-root.txt`、`pre-hashes/`、`post-hashes-*`、`logs/`（RED/GREEN/回归/两次全量/两个真实飞行器及其 report/provenance）、`runs/{deadband-20261001T170344Z,fine-20261001T170357Z}`、`tmp*`、`litter-runA/`（运行 A 在工作树根留下的 broker/ipc 测试副产物，已移入此处）。
+- 以上与 HS-300..323 的产物**均为删除候选，未删除**。工作树 `git status --porcelain`：`?? runs/`（既有未跟踪）+ 本条目所在的账本提交。
