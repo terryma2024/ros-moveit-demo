@@ -51851,3 +51851,29 @@ contracts read correctly, is the sort of detail that has been the whole difficul
 Worth stating plainly for the record: this single test has now taken twelve rounds, and every one of them has been a
 real fact rather than a repetition. The test is the end-to-end proof of correction 3, and its cost is the reason the
 ledger has been recording each fact as it was found.
+
+
+## CP-2720 — The grid rule, verbatim: exact dt_s steps from the observation's sim_time_s
+
+```python
+    def append(self, observation: dict, action: tuple, audit: dict) -> None:
+        ...
+        checked = validate_observation(observation)
+        ...
+        t = checked["sim_time_s"]
+        if self._times and not math.isclose(t - self._times[-1], self.dt_s,
+                                            rel_tol=0, abs_tol=1e-6):
+            raise ValueError("EPISODE_TIME_GAP")
+```
+
+So the recorder's grid is the sequence of `observation["sim_time_s"]` values, and consecutive ones must differ by
+**exactly** `dt_s` (to 1e-6). And `FakeSampler.sample_with_audit` builds those from the newest causal frame stamp per
+camera - `round(max(causal), 6)` - which for stamps 1.0, 1.1, 1.2 gives 1.0, 1.1, 1.2 at successive instants. On that
+reading the grid passes.
+
+Since it does not, the capture must be calling `append` at instants other than those three - either at its own cadence,
+or twice per instant (which would make consecutive times equal and the gap 0 rather than 0.1). The read that settles it
+is the capture's drain/service loop: where it decides that a pending row is ready and what instant it stamps it with.
+
+This is the sixth fact in this one test, and like the others it is a real contract rather than a repetition: the grid is
+exact, the time is the observation's own, and the sampler's stamps do not reach the recorder unmediated.
