@@ -49553,3 +49553,27 @@ instant was not observable from a publication" instead of inventing one.
 
 Next round writes the three calls on that basis: `k2_apply` after the `detach_moveit` interaction, `k2_query` around
 `planning_attached`, and `k2_receipt` from the returned evidence - each with the payload keys the schema now admits.
+
+
+## CP-2618 — K2's implementation is complete: schema and carriage
+
+Committed as **1fd35bdbe**, width gate green at **257 passed** (the 242 of the four suites plus the release-boundary
+suite's 15). The runner now emits the three records the passed protocol defines, on the boundaries that already existed
+in its flow:
+
+- **`k2_apply`** after `detach_moveit` - the planning-scene interaction that changes what MoveIt holds;
+- **`k2_query`** around `planning_attached` - the question put to the consumer;
+- **`k2_receipt`** from the release-preflight evidence - its answer;
+
+each with exactly the payload keys the schema admits, and with the instants and `clock_source` left **null**, because the
+runner's monotonic clock is neither the published step time nor the synchronisation pair. That is the protocol's own
+rule for a record no publication covered, applied one level down from the envelope's existing `sim_time_s` treatment -
+and the audit's float category now accepts null for the same reason.
+
+The release-boundary test that pins the run's event sequence was updated **deliberately** rather than to make it pass:
+the three records precede the release event because that is where the boundary they describe falls, and the diff said so
+explicitly ("At index 6 diff: ('k2_apply', None) != ('release', None)").
+
+So K2 stands complete as measured: the protocol table passed its checkpoint after eight revisions, and its
+implementation landed as three schema additions (geometry provenance, task-level sequence, the three record kinds) plus
+the carriage that emits them. That is F13's fourth item.
