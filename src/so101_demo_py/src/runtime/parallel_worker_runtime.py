@@ -830,6 +830,10 @@ class ParallelWorkerRuntime:
             tuple[object, ...], InferenceSnapshotReceipt
         ] = {}
         self._accepted_poses: dict[tuple[object, ...], Any] = {}
+        # the episode being recorded for a point: the synchronizer the captures are pushed into, the capture built
+        # around it, and the coordinates the row audit and the seal need. Kept per lease key like the receipts above,
+        # so a point's episode state is created when it starts and cleared when it ends.
+        self._episode_state: dict[tuple[object, ...], dict[str, Any]] = {}
         self._published_pose_keys: set[tuple[object, ...]] = set()
         self._execute_consumers: dict[tuple[object, ...], Any] = {}
         self._paused_for_inference: set[tuple[object, ...]] = set()
