@@ -305,9 +305,12 @@ class ActCollectionResults:
 class ActCollectionResultVerifier:
     """Coordinator port: verify only its registered Worker and exact lease path."""
 
-    def __init__(self, worker_roots: Mapping[str, Path]) -> None:
+    def __init__(self, worker_roots: Mapping[str, Path], *, endpoint_inputs: dict | None = None) -> None:
         self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
         self.run_mode = RunMode.EXECUTE
+        #: the frozen inputs the independent endpoint QC needs (the two targets and the policy). Absent means the
+        #: verdict is simply not carried, so every existing construction keeps working (CP-2654).
+        self.endpoint_inputs = endpoint_inputs
 
     def _expected(self, lease: LeaseIdentity) -> Path:
         _identity(lease)
@@ -351,7 +354,14 @@ class ActCollectionResultVerifier:
                 or document["qc_passed"] is not episode["qc_passed"]):
             raise ValueError("RESULT_EPISODE_MISMATCH")
         _fsync_dir(workspace)
-        return {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest()}
+        verdict = {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest()}
+        if self.endpoint_inputs is not None:
+            # the episode has just been verified, so this is the place to recompute its endpoints in this process:
+            # the seal's status stays the run's claim, and the endpoint verdict sits beside it (CP-2653/2654)
+            from so101_demo.act.episode_qc import endpoint_qc_document
+
+            verdict["endpoint"] = endpoint_qc_document(episode_path.parent, self.endpoint_inputs)
+        return verdict
 
     def discover(self, lease: LeaseIdentity, workspace: Path) -> str | None:
         try:
