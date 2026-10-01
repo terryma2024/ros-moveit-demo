@@ -52552,3 +52552,24 @@ from a place the current wiring does not reach, exactly as the recorder's v2 sea
 This is the fifth integration seam this stretch has found between components that were each written to a contract:
 the audit writer's acquisition stream, like the row-bindings and the v2 seal before it, is a step that no layer currently
 performs on the live path - and each one was invisible until something drove the components together.
+
+
+## CP-2746 — The acquisition fix works, and the binding's reference is the next check
+
+Appending the acquisitions from the frames - in `_mint`, the one layer that holds them - clears
+`AUDIT_BINDING_UNKNOWN`, and the seal moves to **`AUDIT_BINDING_REFERENCE_INVALID`**: the binding now names real
+acquisitions, and the thing it still names wrongly is its **reference**.
+
+`bind_row`'s fifth argument is `reference_sequence`, which must point at a record in the audit's `references.jsonl` -
+the stream the capture writes through `self.audit.append_source("references", ...)` when a controller reference arrives.
+My adapter passes a constant `1`, which is a real sequence only if the reference's own time and the row's instant line up
+as the check expects; the check itself is the next read.
+
+Progress, in order: `EPISODE_SCOPE_INVALID` -> `EPISODE_SEAL_AUDIT_EPISODE_MISMATCH` -> `EPISODE_TIME_GAP` ->
+`EPISODE_SEAL_ROWS_MISMATCH` -> `EPISODE_AUDIT_SCHEMA` (resolved by the recorder's closed channel) ->
+`AUDIT_BINDING_UNKNOWN` -> now this. Each was a distinct contract, and the two most recent were both **production gaps**
+rather than test mistakes: the recorder's channel boundary (fixed in b47532954) and the audit's acquisition stream (fixed
+this round, uncommitted).
+
+The production fix in this round is worth keeping regardless of how the test ends: an audit writer given to the capture is
+now fed the acquisitions it must contain, which is a step no layer performed before.
