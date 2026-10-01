@@ -51603,3 +51603,25 @@ is exactly where my **first** attempt looked for it, before I "corrected" myself
 
 Three attempts, and the shape that was right at the first try is the one the evidence now supports: the two "fixes" I
 applied were both corrections to things that were not broken.
+
+
+## CP-2707 — The recorder does not care about the root; my probe's provenance was the wrong shape
+
+Extending the probe to the recorder answers the remaining question and raises a smaller one:
+
+```
+after writer: root exists: True
+recorder RAISED ValueError -> EPISODE_PROVENANCE_INVALID
+recorder-first RAISED ValueError -> EPISODE_PROVENANCE_INVALID
+```
+
+So the recorder **does not object to an existing root in either order** - it got past the directory question entirely and
+refused on the provenance document instead, which my probe wrote from memory as
+`{source_sha256, scene_sha256, git_commit, dirty}`. The real shape is in `test_act_recorder.py`'s `PROVENANCE` constant,
+and reading it is the next step.
+
+That leaves the original `FileExistsError` unexplained by either class's root behaviour: the writer accepts a fresh root
+(CP-2706), the recorder ignores an existing one (here), and yet the test saw one. The honest position is to say so and to
+rewrite the test with a correct provenance - at which point the error either appears with a full path (which will be
+printed, not truncated) or does not appear at all. What is now closed is the pair of guesses that consumed two rounds:
+neither class refuses a shared root, and the manifest's location is `<root>/audit/audit-manifest.json`.
