@@ -44271,3 +44271,20 @@ The ledger records every attempt, including these: `episode_audit.py:1235` then 
 the copied sequence), the four fences of the formal writer (CP-2258), the appended row's sequence (CP-2248), the
 inverted endpoint directions (CP-2267), the shared `_window()` literal (CP-2327/2329), and the four attempts the
 both-kinds rule took (CP-2321/2324). Each names the run that settled it.
+
+## CP-2350 - The goal is active again (revision 8), and what that changes
+
+- get_goal reports phase active, activation armed, revision 8, roundsStarted 408 - so the session is expected to
+- continue the objective rather than hold in maintenance, and the note I recorded about staying in maintenance
+- applies only while the goal is paused.
+- What that means for the next rounds, given that F11, F13's scene item and F5's step two all wait on the owner:
+- the work that does NOT wait is Task A's probe (CP-2342's recipe: instrument _formal_coverage_ok to print each
+- clause, re-add the fixture, let one run name the unsatisfied clause), F5's per-kind history rule (CP-2330's
+- analysis, which shares that fixture surgery), and items 5-8's first step at the known composition site
+- (CP-2348). Each is a bounded pass; none needs a ruling.
+- Also checked this round: the approved plan document itself is not in the plan root (only environment.md), so its
+- item text is available only through the verdict's quotations and this ledger's summaries (CP-2293, CP-2344,
+- CP-2348) - worth knowing before anyone plans to re-read it there.
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four; F11's divergence fixed with its alignment landed and
+- its derivation one clean edit behind CP-2332; F5's regression fixed with step one landed and step two handed off;
+- HEAD b3245063c; goal active.
