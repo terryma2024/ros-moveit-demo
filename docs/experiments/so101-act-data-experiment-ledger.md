@@ -48787,3 +48787,16 @@ Each is small, each is mine, and together they say the same thing the previous r
 document has to be **one internally consistent schema**, and my prose has been outrunning my tables. The convergence
 continues (4 findings, then 3, then 2, then 3 - the third round's drop was partly luck as the schema section was newly
 written), and the duplicate review `4b` is still running as an independent second opinion.
+
+
+## CP-2579 — The second opinion independently found the same correction
+
+`reviews/k2-protocol-recheck4b.log` has moved to 939 lines and its last line is a correction in progress: "Exempt S
+(`parent: null`) from `sequence(parent) < se...`" - i.e. the **same** finding the main review of revision 4 returned as
+correction 2. Two independent readings of the same document agreeing on the same defect is the corroboration the
+duplicate run was for, and it also settles CP-2576/2577's question in the other direction: `4b` was not stalled either,
+it was reading.
+
+So the revision-4 corrections are corroborated, and revision 5 already answers this one (the ordering assertion is now
+conditional on a non-null parent, with the source record's `parent: null` called out explicitly). The main review of
+revision 5 (`k2-review-c`) continues, and both verdicts will be read as they land, strictest governing.
