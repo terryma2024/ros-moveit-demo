@@ -43613,3 +43613,16 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - away, and the event's identity then carries the epoch _verify_phase accepted rather than the epoch assumed.
 - F1 and F14 closed; F5's regression fixed; F3 first half closed and second half half done; F11/F12/F13 narrowed;
 - HEAD 7f39490d1; goal paused.
+
+## CP-2313 - F3 closed on both halves: the release event records what was verified
+
+- The event now follows the else-branch's _verify_phase call, while the epoch advance stays before it because that
+- verification must judge post-release evidence. So the event names the epoch the verification accepted and states
+- the flags it read, instead of the epoch and flags the runner assumed before verifying.
+- GREEN 204 passed, wider gate recorded with the commit. With CP-2311 (the declared initial epoch exempt from the
+- transition tie) and CP-2312 (flags stated rather than coerced or defaulted) this addresses both halves of the
+- eighth verdict's F3 residual.
+- Next by the verdict's own emphasis: F11's seal-versus-readback divergence, then F12's SEARCH audit row, then
+- F13's delayed-callback fencing - the scene-production item still awaits the owner's CP-2285 ruling.
+- F1 and F14 closed; F5's regression fixed and its two other halves open; F3 closed by this stretch's work;
+- F11/F12/F13 narrowed; HEAD dc5fe5fab; goal paused.
