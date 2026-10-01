@@ -54325,3 +54325,29 @@ The checkpoint's three line numbers turned out to point at one thing that was al
 reason worth knowing, and one that was right for a reason the checkpoint itself had written down. Checking each against the
 rule rather than correcting all three is what found that out - the same discipline as the twelve release cases that
 disagreed with each other until the third gate explained why.
+
+
+## CP-2817 — K1's forward half, characterised: the fixtures left are the producer, not the chain
+
+Searching the test tree for the fake components gives exactly two files, and they are not the same kind of fake:
+
+```
+test_act_continuous_capture.py    FakeSampler, FakeRecorder, AcquisitionMinter        # the unit-level harness
+test_act_seal_and_downgrade.py    (my chain tests, which use the real classes)
+```
+
+So the chain this stretch closed - `ContinuousEpisodeCapture`, `EpisodeRecorder`, `EpisodeAuditWriter`,
+`verify_audit_manifest`, the endpoint QC, `ActCollectionResultStore` and `ActCollectionResultVerifier` - is already
+driven with **real** components end to end. What remains simulated is the thing upstream of all of them: the sampler that
+produces frames and observations, which in `test_act_continuous_capture.py` is `FakeSampler` handing over synthetic
+`source_audit` payloads and zero-pixel frames.
+
+That makes K1's forward half precise rather than vague: **give the capture a real producer** - frames and physics
+observations from an actual MuJoCo scene, the way the live path gets them - and let the same chain run from there. The
+value is the same as everything else this stretch: the seams between components only appear when real ones are driven
+together, and the producer is the last component still standing outside.
+
+Two things to establish first: which class the live path uses as its producer (the sampler interface the capture expects),
+and whether a real MuJoCo render is required or whether the physics-summary half alone can be produced for the purpose -
+the endpoint QC reads poses from physics rows, so a producer of those may be enough to make the forward half real without
+a renderer.
