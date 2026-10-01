@@ -878,12 +878,19 @@ class MujocoClosedLoopPlant:
                 f"the sealed scene {scene} has no {self._joint_name} actuator, so no target can be "
                 f"commanded",
             )
+        self._cup_body = mujoco.mj_name2id(
+            self._model, mujoco.mjtObj.mjOBJ_BODY, request.get("cup_body", "plastic_cup")
+        )
+        if self._cup_body < 0:
+            raise _refuse(
+                CAL_TIMING_EVIDENCE_CONTRADICTORY,
+                f"the sealed scene {scene} has no {request.get('cup_body', 'plastic_cup')} body, so where "
+                f"the anchor's cup sits cannot be read back",
+            )
         self._place_cup(request["cup_joint"], request["cup_start_m"])
         self._data.qpos[self._qpos_address] = float(request["start_rad"])
         mujoco.mj_forward(self._model, self._data)
-        self._renderer = mujoco.Renderer(
-            self._model, height=int(request["image_height"]), width=int(request["image_width"])
-        )
+        self._renderer = None
         self._steps_per_control = max(1, int(round(self.control_period_s / self.simulation_timestep_s)))
         self._max_steps = int(math.ceil(self.max_settle_s / self.simulation_timestep_s))
         self._next_frame_s = float(self._data.time)
@@ -897,7 +904,7 @@ class MujocoClosedLoopPlant:
         )
 
     def _place_cup(self, joint_name: str, position) -> None:
-        joint = self._mujoco.mj_name2id(self._model, self.mujoco.mjtObj.mjOBJ_JOINT, joint_name)
+        joint = self._mujoco.mj_name2id(self._model, self._mujoco.mjtObj.mjOBJ_JOINT, joint_name)
         if joint < 0:
             raise _refuse(
                 CAL_TIMING_EVIDENCE_CONTRADICTORY,
@@ -973,6 +980,12 @@ class MujocoClosedLoopPlant:
         }
 
     def render_frame(self):
+        """One frame of the head camera, opening the GL context on the first frame that needs one."""
+
+        if self._renderer is None:
+            self._renderer = self._mujoco.Renderer(
+                self._model, height=self._image_height, width=self._image_width
+            )
         self._renderer.update_scene(self._data, camera=self._camera)
         return self._renderer.render()
 
@@ -998,8 +1011,16 @@ class MujocoClosedLoopPlant:
             ),
         }
 
+    @property
+    def cup_position_m(self) -> list[float]:
+        """Where the anchor's cup really is, read back out of the stepped model rather than assumed."""
+
+        return [float(value) for value in self._data.xpos[self._cup_body]]
+
     def close(self) -> None:
-        self._renderer.close()
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
 
 
 class ProductionHeadDetector:
@@ -1117,6 +1138,7 @@ def _plant_request(*, request, scene, seal, camera, control_period_s, max_settle
         "start_rad": config["search_start_rad"],
         "cup_start_m": request["cup_start_m"],
         "cup_joint": "cup_free_joint",
+        "cup_body": "plastic_cup",
     }
 
 

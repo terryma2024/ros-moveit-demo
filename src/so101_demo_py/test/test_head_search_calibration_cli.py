@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -872,7 +873,7 @@ TIMING_SCENE = """<mujoco model="timing-fixture">
     <body name="head_mount">
       <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" damping="0.05" armature="0.001"/>
       <geom name="head_geom" type="box" size="0.05 0.05 0.05"/>
-      <camera name="head_camera" pos="0 0 0.05" xyaxes="1 0 0 0 1 0"/>
+      <camera name="head_camera" pos="0 0 0.05" fovy="60" xyaxes="1 0 0 0 1 0"/>
     </body>
   </worldbody>
   <actuator>
@@ -1030,7 +1031,7 @@ DEADBAND_SCENE = """<mujoco model="deadband-fixture">
     <body name="head_mount">
       <joint name="neck_yaw_joint" type="hinge" axis="0 0 1" damping="0.05" armature="0.001"/>
       <geom name="head_geom" type="box" size="0.05 0.05 0.05"/>
-      <camera name="head_camera" pos="0 0 0.05" xyaxes="1 0 0 0 1 0"/>
+      <camera name="head_camera" pos="0 0 0.05" fovy="60" xyaxes="1 0 0 0 1 0"/>
     </body>
   </worldbody>
   <actuator>
@@ -1163,6 +1164,54 @@ def _deadband_arguments(inputs: dict, output: Path) -> list:
         "--candidate",
         "2",
     ]
+
+
+def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path) -> None:
+    """The entry's own plant is built for real here, so a typo in its MuJoCo calls cannot hide.
+
+    Only the plant is exercised - the renderer is not opened and no detector is loaded - but this is the
+    code path the installed entry really runs, and it constructs the model, places the anchor's cup,
+    commands the neck actuator, applies the declared settle rule and reads the camera's own geometry.
+    """
+
+    from so101_demo.act import head_search_deadband_measurement as measurement
+
+    inputs = _deadband_inputs(tmp_path)
+    plant = measurement.MujocoClosedLoopPlant(
+        {
+            "scene_path": str(inputs["scene"]),
+            "camera_name": "head_camera",
+            "image_width": 640,
+            "image_height": 48,
+            "fovy_rad": 1.0471975511965976,
+            "control_period_s": 0.002,
+            "frame_period_s": 0.1,
+            "max_settle_s": 5.0,
+            "settle_consecutive_steps": 5,
+            "settle_velocity_rad_s": 0.05,
+            "goal_tolerance_rad": 0.05,
+            "start_rad": 0.0,
+            "cup_start_m": [-0.08, -0.28, 0.165],
+            "cup_joint": "cup_free_joint",
+            "cup_body": "cup",
+        }
+    )
+    assert plant.simulation_timestep_s == 0.002
+    assert plant.yaw_rad == 0.0
+    assert plant.cup_position_m == [-0.08, -0.28, 0.165]
+
+    stop = plant.settle_to(0.0)
+    assert stop["settled"] is True and stop["reached"] is True
+    assert math.isclose(stop["settle_s"], stop["steps"] * 0.002, rel_tol=0.0, abs_tol=1e-12)
+    assert plant.time_s > 0.0
+    assert plant.frame_stamp_ns == int(round(plant.time_s * 1e9))
+
+    geometry = plant.optical_geometry()
+    assert geometry["k"][2] == 320.0 and geometry["k"][5] == 24.0
+    assert geometry["k"][0] > 0.0
+    rotation = geometry["rotation_optical_to_base"]
+    assert len(rotation) == 3 and all(len(row) == 3 for row in rotation)
+    plant.close()
 
 
 def test_measure_deadband_candidates_needs_its_declared_inputs(tmp_path: Path, capsys) -> None:
