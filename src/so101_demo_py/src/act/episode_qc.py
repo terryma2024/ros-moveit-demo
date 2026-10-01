@@ -115,7 +115,12 @@ def endpoint_records_from_audit(audit, inputs) -> dict:
     # maps, not a list and not a single boolean - so they are passed through unchanged (CP-2593)
     return {"status": verdict["status"], "errors": dict(verdict["errors"]), "passed": dict(verdict["passed"]),
             "endpoint_passed": all(verdict["passed"].values()),
-            "initial_pose": poses[0], "final_pose": poses[-1], "source": "verified-raw-audit"}
+            "initial_pose": poses[0], "final_pose": poses[-1], "source": "verified-raw-audit",
+            # the design's prescribed entry names which records were judged and against which frozen policy, so the
+            # two endpoint rows' task-level sequences and the policy's own digest travel with the poses (CP-2673)
+            "initial_sequence": rows[0].get("task_sequence"), "final_sequence": rows[-1].get("task_sequence"),
+            "initial_target": list(inputs["initial_target"]), "final_target": list(inputs["final_target"]),
+            "policy_sha256": _document_digest(inputs["endpoint_policy"])}
 
 
 def endpoint_qc_document(episode_root, inputs, *, manifest_name: str = "audit-manifest.json") -> dict:
@@ -136,6 +141,15 @@ def endpoint_qc_document(episode_root, inputs, *, manifest_name: str = "audit-ma
             "episode_root": str(root), "episode_manifest_sha256": _manifest_digest(manifest_path),
             "claim": {"status": manifest.get("status"), "qc_passed": manifest.get("qc_passed")},
             "endpoint": verdict}
+
+
+def _document_digest(document) -> str:
+    """The digest of a document as canonical JSON, so the same frozen policy always yields the same value."""
+
+    import hashlib
+    import json
+
+    return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def _manifest_digest(path: Path) -> str:
