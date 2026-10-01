@@ -46675,3 +46675,21 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   this session, so that step is a transcription with a real rc to report.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
   up with RobotSystem activated. HEAD 3c24f6f92; goal active.
+
+
+## CP-2471 — The composition takes the specification and wires everything on construction
+
+- `ProductionBatchComposition.__init__(self, spec: PreparedBatch, **kwargs)` is the entry, and the code read at
+  2700-2836 - the allocator, the journal, the coordinator, the broker spec and the per-worker token issuance, sockets,
+  servers and spec documents - lives inside its initialisation, so constructing it performs the whole wiring, worker
+  spawn included (through `self._worker_launcher`). Its docstring is explicit that it "connect[s] reviewed batch
+  components; no result is synthesized by this layer".
+- So this round's next increment is: build the full `PreparedBatch` (all twenty-two fields, each now traced to a
+  frozen source or to a value this session established), hand it to `ProductionBatchComposition`, and record what the
+  construction did - after which the remaining question is which runner drives the connected components to
+  completion, which is the caller `run_cli` already uses for the sweep path.
+- Everything needed is in hand: the V2 request, the frozen config and provenance, the one-point catalogue, the
+  seven-value target, `RunMode.EXECUTE`, `FIRST_PASS`, and the parity between CP-2459's field list and CP-2460's
+  config-derived values.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the environment is
+  up with RobotSystem activated. HEAD b479b4907; goal active.
