@@ -17,6 +17,17 @@ from .pick_place_search_reference import verify_search_stationary_references
 from .pick_place_search_segment import PickPlaceSearchSegment
 
 
+def _feedback_as_lists(record):
+    """T3-F12: the driver's ratified record carries tuples for its names and vectors; the audit types lists.
+
+    `list(record)` alone would only change the outer container, so each named field is converted here, at the one
+    boundary both the boundary's gates and the SEARCH document read.
+    """
+
+    if not isinstance(record, dict):
+        return record
+    return {key: (list(value) if isinstance(value, tuple) else value) for key, value in record.items()}
+
 class PickPlaceSearchBoundaryError(RuntimeError):
     """The child cannot prove a scoped SEARCH or physical stop."""
 
@@ -283,16 +294,6 @@ class PickPlaceSearchBoundary:
             self._controller_reference = physical_proof
         return None
 
-def _feedback_as_lists(record):
-    """T3-F12: the driver's ratified record carries tuples for its names and vectors; the audit types lists.
-
-    `list(record)` alone would only change the outer container, so each named field is converted here, at the one
-    boundary both the boundary's gates and the SEARCH document read.
-    """
-
-    if not isinstance(record, dict):
-        return record
-    return {key: (list(value) if isinstance(value, tuple) else value) for key, value in record.items()}
 
 
     def _remember_controller_feedback(self, observed):
