@@ -45160,3 +45160,24 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
 - F1, F14, F3, F12, F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
   E1's data, loaders, calculator and controls landed with the CLI as the next transcription. HEAD 19aafc2ce;
   goal active.
+
+
+## CP-2395 — The freezer binds the policy and runtime into the inputs hash chain
+
+- `freeze_inputs` (commit b9536eebe) now takes three keyword-only arguments: `mode`, `endpoint_policy` and
+  `runtime_policy`. All three default to None, so every pre-existing call keeps its exact behaviour - the plan's
+  requirement that no caller silently acquires the new policy - and the signature is
+  `(candidates_path, output, *, mode=None, endpoint_policy=None, runtime_policy=None)`.
+- When given, `mode` must be one of the two collection modes (`INPUT_MODE_INVALID` otherwise), and the policy and
+  runtime are parsed through the landed closed loaders. Their canonical content - the policy's rule version and five
+  thresholds with a sha256, the runtime's four sections with a sha256 - is recorded in the inputs manifest and folded
+  into `inputs_sha256`, which is what the design asks for: the frozen document, not the live file, is what every
+  later gate reads.
+- The input, endpoint-pose, artifact and audit suites were run under the ordinary xdist shape to confirm no
+  regression from the signature change; the result and its scratch pointer are in this round's test log.
+- Still owed for E1: the CLI (`cli/act_first_episode.py` and its console_scripts line) so the freezer has a
+  production caller at all; the `user_empirical_default` approval with an immutable effective-config artifact; the
+  policy role in both real input registries; and `test_act_first_episode_inputs.py` with the plan's positives and
+  safety negatives.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
+  HEAD ed358f3b5; goal active.
