@@ -51087,3 +51087,27 @@ Two things to carry forward: the failure's real error is `BROKER_CONTAINER_ID_MI
 that `--tb=line` showed (the line form named the last frame, the short form named the cause); and the next attempt
 starts by locating **this** test's own `ProductionBatchComposition(` call rather than by matching a line that merely
 looked like it.
+
+
+## CP-2686 — The A/B closes: the failures reproduce serially, so they are not parallel-specific
+
+The serial full gate finished:
+
+```
+62 failed, 6002 passed, 163 skipped, 12 deselected, 4 warnings in 415.18s (0:06:55)
+```
+
+against the parallel gate's `61 failed, 6003 passed, 163 skipped`. The two are essentially the same set - a difference of
+one, consistent with the twelve deselected in the serial run - so the failures are **not** a parallel-fixture
+interaction. They reproduce serially, exactly as CP-2677 found for the first of them by running it alone in 0.79 s, and
+the A/B that the skill requires is now closed with a real answer rather than an assumption.
+
+What the pair of runs also establishes, and it is worth stating because it corrects two earlier readings of mine: the
+package's ordinary test scope has **61-62 failures**, not zero. CP-2664's "zero failures at 99%" was read before the
+summary existed, and the honest figure is the one printed here. Of those, one was mine (the `config_path` regression,
+now fixed and verified) and the rest are the pre-existing committed-tests-versus-committed-source mismatch that CP-2677
+and CP-2678 characterised: the `test_act_task8_*` family calling `search`, `planning_attached` and `_gate_facts` on a
+`PickPlaceSearchBoundary` that no longer carries them.
+
+So the gate is red for reasons that pre-date this stretch, with one exception that this stretch caused and has now
+repaired. Reporting it that way - with the numbers, the split, and my own share named - is the point.
