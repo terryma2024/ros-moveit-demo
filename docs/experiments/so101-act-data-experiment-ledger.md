@@ -49804,3 +49804,24 @@ the pose is an `xyz_xyzw`, the transform's translation and quaternion rotation a
 That is the next edit: `endpoint_records_from_audit` reads `model_qpos` from the physics rows and derives the pose
 through the existing helper, which also removes the invented `cup_pose_world` key from my module - a key the audit's
 schema rightly refuses, as this round's test established.
+
+
+## CP-2631 — The public API, and why the QC's inputs are already in the audit
+
+`held_cup_state.py` (159 lines) exposes exactly what a pose derivation needs:
+
+- **`held_cup_attachment(...)`** at 120 and its private core at 37;
+- **`class HeldCupAttachmentModel`** at 137 with `__init__(self, scene_path, expected_model_sha256)` - it loads the
+  model from the scene and pins its digest - and **`prove(self, scene: dict, physics_step: dict, *, ...)`** at 149;
+- `_body_transform(data, body)` at 16, which is where `data.xpos[body]` becomes the transform;
+- and the module's own docstring: "**Prove a held cup from one lossless physics step and the same scene state.**"
+
+So the QC's pose comes from `prove(scene, physics_step)`, and both arguments are things the sealed audit already holds:
+the **scene** is the `planning_scene_observation` row's payload - which is why its closed key set carries `source`,
+`sim_time_s`, `scene_revision`, `attached_objects` and `world_object_ids` (CP-2599) - and the **physics step** is the
+physics row itself, with its `model_qpos`.
+
+That closes E2's gap without inventing anything: read the scene row and the physics row from the sealed audit, ask this
+component to prove the held cup, and take the translation plus quaternion as the `xyz_xyzw` pose E1's calculator wants.
+It also removes `cup_pose_world` from my module - a key I had invented before checking, which the schema rightly refused
+(CP-2627), and whose absence is now explained rather than merely observed.
