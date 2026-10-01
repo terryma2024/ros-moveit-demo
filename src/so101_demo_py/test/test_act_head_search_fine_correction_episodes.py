@@ -944,3 +944,29 @@ def test_a_lock_that_needed_no_correction_is_refused_rather_than_written_as_a_ze
 
     assert refused.value.code == CAL_FINE_EPISODE_NO_CORRECTION_NEEDED
     assert CAL_FINE_EPISODE_NO_CORRECTION_NEEDED in REFUSAL_CODES
+
+
+def test_the_scene_preparer_signature_accepts_every_key_the_producer_passes():
+    """The real run found this boundary: the producer passed `scenario`, the preparer did not declare it.
+
+    The request is built by one named function and the preparer's own signature is the contract, so a key
+    added on one side without the other fails here instead of after a MuJoCo scene has been loaded.
+    """
+
+    import inspect
+
+    request = module.scene_preparation_request(
+        dataset_config_path="profile.yaml",
+        generator_commit="0" * 40,
+        seed=800000,
+        cup_count=1,
+        scenario="nominal",
+        scene_path="scene.xml",
+        split=HELD_OUT_SPLIT,
+    )
+
+    parameters = inspect.signature(module.prepare_episode_scene).parameters
+    assert set(request) <= set(parameters), sorted(set(request) - set(parameters))
+    assert parameters["seed"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert request["cup_count"] == 1
+    assert request["split"] == HELD_OUT_SPLIT

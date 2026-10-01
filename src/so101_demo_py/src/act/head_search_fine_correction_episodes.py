@@ -1125,7 +1125,38 @@ def _resolve_config_scene(dataset_config_path) -> Path:
     return declared if declared.is_absolute() else (path.parent / declared).resolve()
 
 
-def prepare_episode_scene(*, dataset_config_path, generator_commit, seed, cup_count, scene_path) -> dict:
+def scene_preparation_request(
+    *, dataset_config_path, generator_commit, seed, cup_count, scenario, scene_path, split
+) -> dict:
+    """The one request :func:`prepare_episode_scene` is called with, built in one place.
+
+    The producer and the preparer have to agree on this mapping exactly - the preparer's signature is the
+    contract - so it is built here rather than inline, and both are checked against each other by the
+    tests. `scenario` and `split` are carried for the record: the scene a seed prepares depends on its cup
+    count and its seed, and the condition class is the recorder's own name for that count.
+    """
+
+    return {
+        "dataset_config_path": dataset_config_path,
+        "generator_commit": generator_commit,
+        "seed": int(seed),
+        "cup_count": int(cup_count),
+        "scenario": scenario,
+        "scene_path": scene_path,
+        "split": split,
+    }
+
+
+def prepare_episode_scene(
+    *,
+    dataset_config_path,
+    generator_commit,
+    seed,
+    cup_count,
+    scenario=None,
+    scene_path=None,
+    split=None,
+) -> dict:
     """Prepare one held-out seed's scene exactly as the recorder prepared it, and snapshot it.
 
     The recorder (`record_episodes7.py`) built a `MuJoCoDatasetRenderer` from the head dataset profile and
@@ -1133,6 +1164,10 @@ def prepare_episode_scene(*, dataset_config_path, generator_commit, seed, cup_co
     rendered a frame. This does the same and returns the state that preparation produced - the free joints,
     the camera position and the materials - so the plant can be put into that very scene rather than into
     a scene of its own.
+
+    Every keyword :func:`scene_preparation_request` builds is accepted here, including the ones the scene
+    does not depend on (`scenario`, `split`): the call has to be one call with one mapping, and a
+    signature that silently dropped a key would prepare a scene nobody asked for.
     """
 
     import numpy as np
@@ -1426,15 +1461,15 @@ def write_head_search_fine_correction_episodes(
     for seed, scenario in zip(declared_seeds, scenarios):
         cup_count = cup_count_for_condition_class(scenario)
         state = prepare(
-            **{
-                "dataset_config_path": dataset_path,
-                "generator_commit": generator_commit,
-                "seed": int(seed),
-                "cup_count": int(cup_count),
-                "scenario": scenario,
-                "scene_path": scene,
-                "split": split,
-            }
+            **scene_preparation_request(
+                dataset_config_path=dataset_path,
+                generator_commit=generator_commit,
+                seed=seed,
+                cup_count=cup_count,
+                scenario=scenario,
+                scene_path=scene,
+                split=split,
+            )
         )
         episode_request = dict(request)
         episode_request["controller_config"] = controller
