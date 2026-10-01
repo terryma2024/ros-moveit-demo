@@ -51017,3 +51017,29 @@ And a check I ran because the traceback pointed there: the plan root's `pypath` 
 `mujoco_parallel_batch.py` is **in sync** - same size (179120), same mtime, and it already contains `container_brokers`
 three times - so these two failures are being measured against my current code, not a stale copy. The next read is line
 3171 and the condition it asserts.
+
+
+## CP-2683 — The two remaining failures want the opposite of the one I fixed, from the same kind of builder
+
+The assertion at `test_parallel_batch_cli.py:3171` is `assert composition._recover_broker(old_process, 17) is True`, and
+it returns False. Following it into the source shows why the flag I changed is load-bearing in more than one place:
+
+```python
+    def _retire_broker_container(self, *, runtime_root=None, generation=None):
+        """Stop only the exact Docker container created for this Broker generation."""
+        if not self._uses_production_broker_container or self.broker_spec_path is None:
+            return True                                              # 3192: a no-op off the container route
+```
+
+and `_recover_broker` (3355) marks health, requires a recovery deadline, and builds a replacement - a path that, on the
+container route, goes through the container identity files that a fake `docker` builder never creates.
+
+So the situation is a genuine tension, and it is worth stating plainly: **the `config_path` test supplies a docker
+builder and expects the container-shaped spec, while these two recovery tests supply the same kind of builder and expect
+the non-container behaviour.** One boolean cannot follow from both, which is precisely why the inference
+(`broker_command_builder is None`) was wrong and why declaring the fact is right. What remains is a judgement rather than
+a patch: either these two tests predate the container route and should declare `container_brokers=False` for the
+non-container behaviour they exercise, or their expectation is the contract and my default of True is wrong for them.
+
+That judgement is the next round's work, and it needs the two tests' own bodies read the same way the `config_path`
+test's was - so that the choice comes from their intent rather than from whichever value turns them green.
