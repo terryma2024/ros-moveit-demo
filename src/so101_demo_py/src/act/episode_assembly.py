@@ -19,8 +19,8 @@ from .continuous_capture import ContinuousEpisodeCapture
 from .episode_audit import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
-__all__ = ["PhysicalAuditAdapter", "ProductionProducer", "assemble_episode_capture",
-           "episode_audit_pair"]
+__all__ = ["LiveSampler", "PhysicalAuditAdapter", "ProductionProducer",
+           "assemble_episode_capture", "episode_audit_pair"]
 
 
 def assemble_episode_capture(
@@ -197,3 +197,31 @@ class PhysicalAuditAdapter:
         if missing:
             raise ValueError(f"PHYSICAL_AUDIT_INCOMPLETE: {sorted(missing)}")
         return {key: values[key] for key in self.KEYS}
+
+
+class LiveSampler:
+    """Present an already-fed `RgbObservationSynchronizer` to the capture as its `sampler`.
+
+    The difference from `ProductionProducer` is who feeds the synchronizer. A live run does that itself - the ROS
+    observation adapter pushes each camera frame as it arrives - so nothing here should invent or replay anything: this
+    class only delegates `sample_with_audit` and keeps the synchronizer's own audit available to the extraction, exactly
+    as `ProductionProducer` does (`last_source_audit`, `source_received_monotonic_s()`), while leaving the recorded row's
+    audit narrowed to `source_stamps`.
+
+    `ProductionProducer` remains the harness's feeder: it pushes what a test has recorded, because a test has no camera.
+    Using it against a live synchronizer would push synthetic frames alongside the real ones and, sooner or later, the
+    capture's pixel check (`ACQUISITION_PIXEL_MISMATCH`) would say so.
+    """
+
+    def __init__(self, synchronizer) -> None:
+        self.synchronizer = synchronizer
+        self.last_source_audit: dict = {}
+
+    def sample_with_audit(self, session_id, attempt_id, at_s):
+        observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
+        self.last_source_audit = dict(audit)
+        return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
+
+    def source_received_monotonic_s(self) -> dict:
+        """The receipt times of the last sample, by stream - for the extraction, not for a row (CP-2842)."""
+        return dict(self.last_source_audit.get("source_received_wall_s") or {})

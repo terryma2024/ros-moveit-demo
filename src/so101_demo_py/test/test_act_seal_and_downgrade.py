@@ -15,8 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import (PhysicalAuditAdapter, ProductionProducer,
-                                              assemble_episode_capture, episode_audit_pair)
+from so101_demo.act.episode_assembly import (LiveSampler, PhysicalAuditAdapter,
+                                              ProductionProducer, assemble_episode_capture,
+                                              episode_audit_pair)
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -386,3 +387,25 @@ def test_the_producer_pushes_the_runs_own_frames_when_it_has_them():
     observation, _ = producer.sample_with_audit("session-1", "attempt-1", 1.0)
     assert seen == [("head", 0), ("wrist", 0)]
     assert int(observation["head"][0, 0, 0]) == 7
+
+
+def test_the_live_sampler_only_delegates_and_leaves_feeding_to_the_run():
+    """A live run feeds the synchronizer itself, so the live sampler must not push anything (CP-2848)."""
+    import numpy as np
+
+    from so101_demo.act.synchronizer import RgbObservationSynchronizer
+
+    synchronizer = RgbObservationSynchronizer(max_age_s=0.1, max_skew_s=0.1)
+    synchronizer.reset("session-1")
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    receipt = synchronizer.monotonic()
+    for camera in ("head", "wrist"):
+        synchronizer.push(camera, "session-1", 1.0, frame, received_monotonic_s=receipt)
+    synchronizer.push("arm", "session-1", 1.0, [0.0] * 6, received_monotonic_s=receipt)
+    synchronizer.push("neck", "session-1", 1.0, 0.0, received_monotonic_s=receipt)
+
+    sampler = LiveSampler(synchronizer)
+    observation, row_audit = sampler.sample_with_audit("session-1", "attempt-1", 1.0)
+    assert observation["sim_time_s"] == 1.0
+    assert set(row_audit) == {"source_stamps"}
+    assert set(sampler.source_received_monotonic_s()) == {"head", "wrist", "arm", "neck"}
