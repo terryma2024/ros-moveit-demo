@@ -137,3 +137,24 @@ def test_the_independent_document_keeps_the_claim_and_the_verdict_apart(tmp_path
     assert document["endpoint"]["source"] == "verified-raw-audit"   # and the independent verdict, identifiable
     assert document["endpoint"]["status"] == "PASS"
     assert len(document["episode_manifest_sha256"]) == 64
+
+
+def test_the_final_endpoint_is_the_last_pose_not_the_best_one(tmp_path):
+    """E2's negative list: "best frame before termination" cannot displace where the episode actually ended."""
+
+    writer, window = complete_audit(tmp_path)
+    target = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+    # a row that would look perfect, early, and a later row that is where the run actually finished
+    rows = ((("pose", 1.3), target), (("retract", 1.4), [0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]))
+    for step, ((kind, stamp), pose) in enumerate(rows, start=13):
+        writer.append_source("physics", {
+            "kind": kind, "sim_time_s": stamp, "release_epoch": 1,
+            "observation": {"simulation_time_s": stamp, "simulation_step": step,
+                            "cup_position_world_m": pose[:3], "cup_orientation_world_xyzw": pose[3:]}})
+    path = writer.seal(window)
+    verdict = endpoint_records_from_audit(
+        {"manifest": verify_audit_manifest(path), "root": path.parent},
+        {"initial_target": target, "final_target": target, "endpoint_policy": load_endpoint_policy(POLICY)})
+    print("BESTFRAME final_pose:", verdict.get("final_pose"), "| status:", verdict.get("status"))
+    assert verdict["final_pose"] == rows[-1][1]          # the last pose, not the matching earlier one
+    assert verdict["status"] == "FAIL"                   # and the verdict says so rather than flattering the run
