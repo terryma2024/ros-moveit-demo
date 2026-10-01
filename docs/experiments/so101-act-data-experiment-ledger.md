@@ -46321,3 +46321,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   stack this task starts.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
   green end to end. HEAD ebab3f0f8; goal active.
+
+
+## CP-2453 — The log names it: the hardware plugin for 'RobotSystem' cannot initialize
+
+- `launch3.log` (265 lines, nine node prefixes: `static_transform_publisher-1/2`, `robot_state_publisher-3`,
+  `ros2_control_node-4`, `spawner-5..8`, `graceful_shutdown_move_group-9`) carries the decisive line three times:
+  `[ros2_control_node-4] [ERROR] [controller_manager]: Failed to initialize hardware 'RobotSystem'`, preceded by a
+  benign `Could not enable FIFO RT scheduling policy` warning and followed by a `graceful_shutdown_move_group`
+  complaint about no 3D sensor plugin.
+- So the stack does not fail for a missing topic publisher: the **MuJoCo hardware interface plugin** cannot
+  initialize, which is exactly what a missing `mujoco_ros2_control_plugins` (one of the five packages CP-2401 left
+  to the main worktree, and which the fork workspace `ws_mujoco_ros2_control_fork` also ships) would cause. CP-2451's
+  hypothesis is therefore the right one, and CP-2452's reframing is now answered: the description is rendered and
+  injected, but the node that should consume it dies first.
+- The fix is environmental and small: source ROS, then an install that carries that plugin - the main worktree's or
+  the fork workspace's - then **this worktree's** overlay last so its `so101_demo_py` and launch file still win; then
+  restart my one stack and re-check that `RobotSystem` initializes and `controller_manager` stops waiting. Nothing is
+  rebuilt and no second stack is started; the fork workspace's own running processes remain untouched.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2; the input half is
+  green end to end. HEAD 744d60dd5; goal active.
