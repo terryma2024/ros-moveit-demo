@@ -48127,3 +48127,33 @@ policy document digested elsewhere, not a file this run can point at - whereas `
 honest repair is to point the checked names at files that exist and whose digests are the ones declared: the scene
 model for one, and for the other a real file whose digest the run can state - with `digest_meaning` already in the
 provenance saying exactly what each names, so nothing is implied that the run does not claim.
+
+
+## CP-2543 — All the transport's checks pass, and the broker stops at torch, which this host does not have
+
+Declaring the digests the frozen runtime configuration itself carries - which is what the transport actually compares,
+`document["yolo_weights_sha256"] != config.yolo_weights_sha256 or document["grounded_manifest_sha256"] !=
+config.grounded_sam_manifest_sha256` - cleared `BROKER_MODEL_HASH_MISMATCH`. With that, **every check the broker and its
+transport perform on this run passes**: the arguments parse, the identity is present, the digests agree with the frozen
+configuration, the spec's config path resolves and loads, and the host paths are accepted. The run has therefore driven
+the approved container-free route as far as it can go, and the broker's next and only remaining obstacle is its own
+first import:
+
+```
+importlib.metadata.PackageNotFoundError: No package metadata was found for torch
+```
+
+**torch is not installed on this host** - neither in the test environment (`ModuleNotFoundError: No module named
+'torch'`) nor in the worktree's install tree (zero matching distributions). The broker is a perception process: torch,
+YOLO and grounded-SAM are what it exists to serve, and the amendment this milestone runs under is MuJoCo-only and
+excludes both containers and perception substitutes (CP-2472, CP-2480, CP-2535's "keep the substance"). A stub broker
+would be exactly the invented evidence this task forbids, so the honest options are:
+
+1. **the episode's chain does not need a perception broker at all** - in which case the composition's requirement for
+   one has to be met by the deployment telling it so, and that is a design question rather than a patch;
+2. **install torch and the pinned perception stack on this host** - heavy, and it would have to match the frozen
+   `PINS` versions exactly;
+3. **run the broker the way it was designed to run, in its image** - i.e. not the container-free route at all.
+
+Everything else on the route is done and green: the composition builds, the drive runs, the supervisor starts a
+process, the broker accepts its arguments, and every transport check passes against the frozen inputs.
