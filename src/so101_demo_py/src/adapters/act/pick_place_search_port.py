@@ -466,6 +466,10 @@ class PickPlaceSearchPhasePort:
                 # T3-F12: the comment above always claimed the records travel in this carrier, but only the
                 # scene record was ever put here; the feedback the gates already read travels with them now
                 **({"controller_feedback": list(feedback)} if feedback else {}),
+                # T3-F12 (eighth verdict): pose admission requires the registered cup measurement, and the world
+                # readback this document already validates carries it - stated exactly as the other qualified
+                # phases state it (micro_lift.py:67), so the carrier is admissible as a pose observation
+                "cup_position_world_m": list(world.object_state.position_world),
             },
             "planning_scene_ok": planning_scene_ok,
             "head_rgb_ok": True, "wrist_rgb_ok": True, "manual_intervention": False,
