@@ -319,6 +319,10 @@ class EpisodeSink:
 
     def __init__(self) -> None:
         self.current = None
+        #: the outcome the episode will be sealed with, set by whoever knows it - the run's own decision. It is not
+        #: derived here: an episode's status is a fact about the run, and inventing one is exactly what this task
+        #: forbids (a fabricated PASS makes every later PASS meaningless).
+        self.outcome: dict | None = None
 
     def record(self, camera: str, *, stamp_s: float, pixels, received_monotonic_s: float | None = None) -> bool:
         """Offer one captured frame to the current episode; returns whether anything took it.
@@ -331,3 +335,16 @@ class EpisodeSink:
             return False
         episode.push(camera, stamp_s=stamp_s, pixels=pixels, received_monotonic_s=received_monotonic_s)
         return True
+
+    def finish(self, end_s: float):
+        """Seal the current episode at the run's own end boundary; no episode means nothing to seal.
+
+        The outcome has to have been set first - `Recorder.finish` refuses a document whose status and reason do not
+        agree with themselves, and this class has no business guessing either.
+        """
+        episode = self.current
+        if episode is None:
+            return None
+        if self.outcome is None:
+            raise ValueError("EPISODE_OUTCOME_MISSING")
+        return episode.finish(end_s, outcome=dict(self.outcome))

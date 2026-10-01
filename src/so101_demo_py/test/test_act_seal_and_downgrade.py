@@ -497,5 +497,15 @@ def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
     episode.start(1.0)
     sink.current = episode
     assert sink.record("head", stamp_s=1.0, pixels=frame) is True
+    # sealing without an outcome is refused rather than guessed
+    with pytest.raises(ValueError, match="EPISODE_OUTCOME_MISSING"):
+        sink.finish(1.4)
+    sink.outcome = {"status": "FAILED", "reason": "search_failed",
+                    "task8_success": False, "stopped_confirmed": True}
+    for camera in ("wrist",):
+        sink.record(camera, stamp_s=1.0, pixels=frame)
+    episode.push_numeric(stamp_s=1.0, arm=[0.0] * 6, neck=0.0)
+    sink.finish(1.4)
+    assert (episode_root / "seal.json").is_file()
     sink.current = None
     assert sink.record("head", stamp_s=1.1, pixels=frame) is False
