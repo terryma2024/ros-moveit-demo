@@ -135,3 +135,32 @@ def test_a_run_claiming_success_cannot_survive_a_failing_endpoint_verdict(tmp_pa
     print("DOWNGRADE status:", result["status"], "| endpoint:", result["endpoint"]["status"])
     assert result["endpoint"]["status"] != "PASS"
     assert result["status"] == "FAILED"
+
+
+def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path):
+    """The ACT port's discover, which the composition drives exactly as it drives the generic adapter (CP-2801).
+
+    Two directions, because both matter: the reserved location yields a verified seal, and anything else yields None
+    rather than a scan of the filesystem.
+    """
+    store = store_for(tmp_path)
+    manifest_path, episode_seal = sealed_episode(
+        tmp_path, episode_root=store.episode_root,
+        outcome={"status": "FAILED", "reason": "search_failed",
+                 "task8_success": False, "stopped_confirmed": True})
+    # the store verifies before it publishes, so it is handed the pre-publish pair; the verifier the published one
+    store.audit_manifest = manifest_path
+    store.scope = manifest_path.parent / "source.json"
+    sealed = store.seal(episode_seal)
+
+    verifier = ActCollectionResultVerifier(
+        {"w00": tmp_path / "w00"},
+        audit_manifest=sealed / "episode" / "audit" / "audit-manifest.json",
+        scope=sealed / "episode" / "audit" / "source.json",
+        endpoint_inputs={"initial_target": [0.0] * 7,
+                         "endpoint_policy": {"rule_version": "endpoint_pose_v1", "thresholds": {}},
+                         "final_target": [0.0] * 7})
+
+    reserved = tmp_path / "w00" / "attempts" / "point-1" / "attempt-1"
+    assert verifier.discover(lease(), reserved) == str(reserved / "sealed")
+    assert verifier.discover(lease(), tmp_path / "elsewhere") is None

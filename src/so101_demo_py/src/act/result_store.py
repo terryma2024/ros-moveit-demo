@@ -340,15 +340,19 @@ class ActCollectionResultVerifier:
         the same call: a deterministic lookup under the trusted worker root, restricted to the execution parent the
         journal reserved, and None for anything else (CP-2801).
         """
+        root = self.worker_roots.get(lease.worker_id)
+        if root is None:
+            # an unknown worker is "not here", but a missing endpoint input is a misconfiguration and must not be
+            # mistaken for one - only the lookup above is allowed to say None (CP-2805)
+            return None
         try:
-            parent = (Path(self.worker_roots[lease.worker_id]) / "attempts"
-                      / lease.point_id / lease.attempt_id)
+            parent = Path(root) / "attempts" / lease.point_id / lease.attempt_id
             if _safe(Path(workspace)) != parent:
                 return None
             location = str(parent / "sealed")
             self.verify(lease, location, RunMode.EXECUTE)
             return location
-        except (KeyError, OSError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError):
             return None
 
     def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict:
