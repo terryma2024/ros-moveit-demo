@@ -56,7 +56,8 @@ def build_parser() -> argparse.ArgumentParser:
                      choices=("FULL_RESTART", "REUSE_STACK", "RESET_WORLD"))
     # the final cup target the endpoint rule compares against: it is the scenario's frozen quantity, and this CLI
     # refuses rather than inventing one, because an invented target would make every later PASS meaningless
-    run.add_argument("--final-cup-pose")
+    run.add_argument("--final-cup-pose",
+                     help="seven numbers: the frozen final cup pose as xyz plus an xyzw quaternion")
 
     preflight = subparsers.add_parser("preflight", help="re-read a frozen input set")
     preflight.add_argument("--inputs", required=True)
@@ -115,12 +116,20 @@ def _run(arguments) -> int:
     except ValueError:
         print("act_first_episode: --final-cup-pose must be three comma-separated numbers", file=sys.stderr)
         return 2
-    if len(target) != 3 or any(not math.isfinite(value) for value in target):
-        print("act_first_episode: --final-cup-pose must be three finite numbers", file=sys.stderr)
+    # the adapter validates the last four components as a quaternion, so the target is a full pose; the same
+    # norm tolerance the endpoint policy uses applies here, and the quaternion is normalised before use
+    if len(target) != 7 or any(not math.isfinite(value) for value in target):
+        print("act_first_episode: --final-cup-pose must be seven finite numbers (xyz and an xyzw quaternion)",
+              file=sys.stderr)
         return 2
+    norm = math.sqrt(sum(value * value for value in target[3:]))
+    if norm == 0 or abs(norm - 1.0) > 1e-3:
+        print(f"act_first_episode: --final-cup-pose quaternion norm is {norm}", file=sys.stderr)
+        return 2
+    target = (*target[:3], *(value / norm for value in target[3:]))
 
-    from so101_demo.application.task_batch import BatchRequest
     from so101_demo.core.task_points import TaskPoint
+    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode
     from so101_demo.cli.mujoco_parallel_batch import SealedResultAdapter
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -132,8 +141,11 @@ def _run(arguments) -> int:
     root.mkdir(parents=True, mode=0o700)
     batch_id = f"nonhead-{arguments.mode}-{int(time.time())}"
     point = TaskPoint(id=batch_id, label=arguments.mode, cup_position_world_m=tuple(target))
-    request = BatchRequest(batch_id=batch_id, simulation_session_id=batch_id, points=(point,),
-                           evidence_root=root.resolve())
+    # the composition reads selected_point_ids off this request, so it is the versioned contract rather than the
+    # application-layer one: one point, one worker, an execute run and a fresh first pass
+    request = BatchRequestV2(batch_id=batch_id, run_mode=RunMode.EXECUTE, selected_point_ids=(point.id,),
+                             worker_count=1, evidence_root=root.resolve(),
+                             batch_kind=BatchKindV2.FIRST_PASS)
     # the production composition's first three pieces, the same objects the batch path builds around one point:
     # the journal, the sealed-result adapter and the coordinator. The config is the frozen runtime document, parsed
     # by the same loader the batch path uses, so nothing here re-reads a live file.
@@ -143,15 +155,36 @@ def _run(arguments) -> int:
     journal = CoordinatorJournal.create(root / "coordinator", batch_id)
     worker_root = root / "worker-0"
     worker_root.mkdir(parents=True, mode=0o700)
-    result_port = SealedResultAdapter({"worker-0": worker_root}, arguments.mode,
+    # the collection mode (diagnostic or formal) is not the run mode: driving the approved stack is an execute run,
+    # and the mode stays recorded in the run's own log and in the frozen manifest
+
+    result_port = SealedResultAdapter({"worker-0": worker_root}, RunMode.EXECUTE,
                                       expected_final_cup_pose_world=tuple(target))
     coordinator = BatchCoordinator(journal, request, config=config, result_port=result_port)
+    # the two artefacts the specification needs, both written under this run's own root: a one-point TaskPointList
+    # (the sweep catalogue reduced to this episode) and a copy of the frozen provenance inputs, so the composition
+    # verifies what was frozen rather than what is on disk now
+    points_document = {"schema_version": 1,
+                       "points": [{"id": point.id, "label": point.label,
+                                   "cup_position_world_m": list(point.cup_position_world_m)}]}
+    points_path = root / "points.json"
+    points_path.write_text(json.dumps(points_document, indent=2, sort_keys=True) + "\n")
+    provenance_paths = {}
+    for name in ("inputs-manifest.json",):
+        source = inputs / name
+        if source.is_file():
+            payload = source.read_bytes()
+            destination = root / name
+            destination.write_bytes(payload)
+            provenance_paths[name] = str(destination)
     log = root / "run.log"
     with log.open("w") as stream:
         stream.write(f"batch_id={batch_id}\nmode={arguments.mode}\nlifecycle={arguments.lifecycle}\n"
                      f"final_cup_pose={target}\ninputs={inputs.resolve()}\n"
                      f"config={type(config).__name__}\njournal={type(journal).__name__}\n"
-                     f"result_port={type(result_port).__name__}\ncoordinator={type(coordinator).__name__}\n")
+                     f"result_port={type(result_port).__name__}\ncoordinator={type(coordinator).__name__}\n"
+                     f"points={points_path}\nprovenance={sorted(provenance_paths)}\n"
+                     f"broker_image=ABSENT (headless MuJoCo-only stack; no broker container exists to name)\n")
         stream.flush()
         os.fsync(stream.fileno())
     print(f"act_first_episode: composed {type(journal).__name__}, {type(result_port).__name__} and "
