@@ -50428,3 +50428,23 @@ suites that are green at 264 passed. If they are the user's, the sweep's three f
 the working tree and not regressions, and the honest report says so with the file names as evidence rather than a claim.
 
 E2's checkpoint continues in `dst:e2-checkpoint`; its marker is read when it lands, not before.
+
+
+## CP-2659 — The full sweep corrects my gate: 129 failed, and some of them are in code I changed
+
+The full-directory run finished: **129 failed, 5925 passed, 163 skipped, 10 errors in 76.88s**. The first names are the
+important ones, because they are in the areas this stretch touched:
+
+- **`test_parallel_batch_cli.py::test_physical_composition_prepares_and_supervises_one_external_broker`** - the test for
+  the composition this work modified for the container-free route;
+- **five failures in `test_act_task8_readback.py`** - a readback suite, which is exactly the area where the audit's
+  schema changed (the task-level sequence and the three K2 record kinds).
+
+So my "nine suites, 264 passed" gate was **too narrow**: it covered the files I was actively editing and missed
+neighbouring suites that exercise the same components. That is a real correction to several of this stretch's reports,
+and it is the kind this ledger exists to make rather than to hide.
+
+What happens next is a separation, not a guess: list all 129 failures by file, split the ones inside this stretch's
+changed surface (the audit, the result store, the runner, the composition, the CLI) from the ones that belong to the
+user's own untracked tests, and fix only mine. The prediction recorded in CP-2658 - that the failures would be the
+user's files - is **falsified** by these names, which is worth saying plainly.
