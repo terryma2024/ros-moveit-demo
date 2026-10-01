@@ -47289,3 +47289,24 @@ merely failing to parse; the guard that saved it was running the suite before tr
 order this ledger keeps prescribing. For the next attempt: instrument by **reading** each clause's inputs into a
 single dictionary at the end of the predicate (or print at the top with the clause names written out by hand), rather
 than by rewriting returns mechanically.
+
+
+### CP-2497 — The read-style probe is the right instrument: inert and complete
+
+Built the probe the way CP-2496 recommended - **read**, never rewrite: at the top of `_window_matches_observed`, a
+small block recomputes the window's own fields, the schedule, the held stamps per camera, the derived gaps, the
+`row_times` and the physics history, and prints them on one line, wrapped in `try/except` so it can never change
+control flow. Ran the audit suite with it: **74 passed**, rc=0, one probe line per formal seal. So this instrument is
+both inert and complete, which the mechanical rewrite of CP-2496 was not.
+
+Its first line already shows the shape the next context will diff: for the `no_label` fixture the window carries
+`cadence_s 0.1`, `permitted_gaps_s []`, `collection_start_s 1.0`, `collection_end_s 1.2`,
+`first_command_s 1.1`, `physics_end_s 1.1`, `label_cutoff_s None`, `streams_required ['head','wrist']`, with the
+schedule at 1.0/1.1/1.2 and the held stamps matching it.
+
+The next round: re-apply this probe verbatim (it is inert) plus the 10 Hz fixture from CP-2495, run that single test,
+and diff its printed line against the passing fixtures' lines - the clause inputs that differ are the refuser's
+neighbourhood, and the clause that consumes them names itself.
+
+The module has been restored again (marker count zero, tree at the user's 35 entries) and the audit suite is green at
+74 passed.
