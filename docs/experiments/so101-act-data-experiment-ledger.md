@@ -51171,3 +51171,23 @@ verdict becomes the report's own `status` plus its `checks.endpoint_pose` entry.
 `endpoint_records_from_audit` already computes plus the frozen policy the inputs name.
 
 The next round writes it against the existing tests, which will need their assertions moved to the new shape.
+
+
+## CP-2689 — The reshape is feasible, and both missing fields have a source
+
+`endpoint_records_from_audit(audit, inputs)` returns a verdict carrying `status`, `errors`, `passed` and the poses it
+derived - and **not** the two things the prescribed entry needs beyond them: `policy_sha256` and the endpoint records'
+sequences. Both have a source, which is what makes the reshape a bounded change rather than a redesign:
+
+- **the sequences**: the physics rows carry **`task_sequence`** - the task-level ordering this stretch added for K2 - so
+  the QC can name *which* records it judged (the first and last endpoint rows) instead of only their poses, which is
+  exactly what `initial_sequence` and `final_sequence` ask for;
+- **the policy digest**: `inputs` names the endpoint policy the run froze, so `policy_sha256` is that file's digest, and
+  the same digest the manifest's own identity already carries can be checked against it.
+
+So the edit is: extend the verdict with the two endpoint sequences and the policy digest, keep the poses and targets it
+already derives, and return the prescribed shape - `rule_version`, `status`, `checked_monotonic_s`, `cleanup_state`, and
+`checks.endpoint_pose` with the design's closed keys. The existing tests then move to that shape in the same edit, since
+the surface they assert on is the one being changed (the lesson this stretch has now learned three times).
+
+Recorded so the next round writes it in one pass, with both sources named rather than assumed.
