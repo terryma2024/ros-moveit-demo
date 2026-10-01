@@ -43458,3 +43458,86 @@ HS-288..307 各 phase/CLI/calibration + 新模块测试）**697 passed, rc=0**�
 （追加 HS-308 状态节）、工作树 `scratch/hs308/`（env/build-toolchain/rebuild-python/run-tests/baseline-invocation/
 consumption-check 脚本、pyshim、RED/GREEN/回归/全量日志、tmp*）。以上**均为删除候选，未删除**；HS-288..307 的产物
 只读引用。
+
+## HS-309 — 第一次真实端到端 `run`：派生 C2a 校准输入按评审答复 (a) 就位（两个配置摘要 + 权重摘要 + key-level diff 留证），但 run 在**入口**如实拒绝——四个 phase 输入在安装程序里**没有生产者**，bundle 未产出
+
+**代码提交**：无（本轮**未改任何代码**；`git status --porcelain` 只有本账本条目，`scratch/` 本地排除）。父提交 `1ddcdf596`，
+工具链 `$EV/head-toolchain-20261001T114500Z`（source commit `a9c0a0b58`），安装树与本 worktree 源码 `diff -rq` **无差异**。
+
+**(a) 派生 C2a 校准输入（评审答复 option (a) 的落地）**
+
+| 项 | 值 |
+| --- | --- |
+| sealed 原件（安装件 `share/so101_demo_py/config/mujoco/act/head_search_v2.json`） | sha256 `d3c4ef9b57cc258ff975d96a29a8426adfdc562bbfbda2029e578542846b1c57`，**未修改**（与 worktree 源文件逐字节相同） |
+| 派生件 `$CAMPAIGN/head-search-calibration-20261001T112548Z.production-search-config-c2a.json` | sha256 `dfe7165656f2d9a1e19f50fb41f41f6dcf7197c3b4830410127697022af5fa2a`——与 HS-301/302/303/307 的派生件**逐字节相同**（交叉核对通过） |
+| 只差的两个 key | `weight_path`：`models/head-search/yolo11n-seg-best.pt` → C2a 权重绝对路径；`weight_sha256`：`f281d252…` → `2afd550694abfbe6…`；其余 key 逐字复制，写法沿用原件 canonical 形式（sort_keys/indent=2/尾换行） |
+| 派生 provenance | `$CAMPAIGN/head-search-calibration-20261001T112548Z.derived-input-provenance.json`，sha256 `bd56af1948dec1ad44a9c9001ee9209720b75956323fd1e2181a85bddb5d7f1f`，kind `head_search_derived_calibration_input`（两个摘要 + 权重摘要 + `differing_keys` + changed lines + 权重一致性守卫未变 + sealed 未修改） |
+
+**一处必须报备的缺口（未擅自改代码）**：安装版 phase 8 的 bundle **没有承载派生输入的字段**——`head_search_calibration_bundle._check_dependencies`
+要求每个受控依赖**恰好** `{path, sha256}`，`assemble_calibration_bundle` 只有五个内容段（`parameter_names`、`parameters`、
+`also_recorded`、`runtime_identity`、`controlled_dependencies`）。所以"两个配置摘要 + 权重摘要 + key-level diff 进入 bundle provenance"
+这一条今天**只能落在运行级 provenance 文件**里；让它真正进入 bundle 需要一次 schema 增补（会改变审批摘要所绑定的对象），本轮未做。
+
+**(b) 运行（安装程序，一次，未重试）**
+
+```
+ros2 run so101_demo_py so101_head_search_calibration run \
+  --run-root $CAMPAIGN/head-search-calibration-20261001T112548Z \
+  --dataset …/head-dataset/dataset-manifest.json（66dc46d3…）\
+  --candidate …/candidate-c2a/candidate-manifest.json（579c5df0…）\
+  --geometry-seal …/head-camera-probe11-20260930T101722Z/head-camera-geometry.json（0db2eb4c…）\
+  --episode-partitions …/config/act/head-search-scenario-partitions-v1.json（7973f61a…）\
+  --production-config <派生件 dfe71656…> --production-search-config <同一派生件> \
+  --camera-config …/config/perception/head_camera_yolo_seg.yaml（9ad9b934…）--candidate-id C \
+  --frozen-candidate …/reselected-c2a/frozen-c.json（f50b8d92…）\
+  --task-dataset …/deps/so101-task-dataset/dataset/dataset-manifest.json（694e5fa5…）--device cuda \
+  + 15 个 measurement flag（HS-300..308 的真文档，各 file sha256 已录进 provenance）
+rc=2   elapsed 0 s
+stderr: HEAD_SEARCH_RUN_INPUTS_INCOMPLETE: a run declares --admission --selection-rule --operating-point-measurements --bundle-inputs
+```
+
+* **证据**：console `…20261001T112548Z.console.log`；provenance `…20261001T112548Z.provenance.txt`（sha256 `3023bfb9…`，含
+  prefix/console script/commit/installed==source/六依赖与全部声明输入的 sha256/15 份测量文档 sha256/前后进程与 GPU/flag 覆盖核对）；
+  staged 六依赖 `…20261001T112548Z.sealed-inputs.json`（`edd7d8f1…`，六者 path+sha256，`production_config` 记派生件并附 sealed 原件摘要与 diff）。
+  **run root 从未被创建**（`test ! -e` 通过）——入口拒绝发生在认领 root 之前，故 `run-status.json` 亦不存在。
+* **覆盖核对（读安装模块 `RUN_REQUIRED_FLAGS`）**：30 个必填 flag 中声明 26 个，未声明的**恰好**是上面四个；15/15 measurement flag、
+  6/6 sealed input 全部声明。**未提供 `--seal`**（seal 由 run 自己按声明路径计算，故派生件以**自身摘要**进入 manifest，符合"派生输入按自身摘要记录"）。
+* **测量层只读复核**（安装模块的 canonical 自摘要，15/15）：`MEASUREMENT_CONSUMPTION documents=15 mismatches=0`（kind 与自摘要全对）。
+
+**(c) 判定：未达 `SUCCEEDED`，`head-search-calibration-bundle.json` / `manifest.json` / `run-status.json` 全部未产出；首个失败边界 = CLI 入口，码 `HEAD_SEARCH_RUN_INPUTS_INCOMPLETE`，rc=2。**
+四个输入在安装程序里确实没有生产者，逐条（均为本轮实测/代码核对，非推测）：
+
+| 输入 | 为什么今天无法诚实产出 |
+| --- | --- |
+| `--admission` | 需要 Task-8 生产组合（`CalibrationMeasurementContext`）给出的 generation / `controller_generation` / `broker_generation`；`$EV` 全境（除 install/test）无 `broker_generation` 键；本任务不允许起超出 run 所需的 ROS 栈 |
+| `--selection-rule` | `record_selection_rule` **无任何调用者、无 CLI 入口**；规则必须先于测量存在（`CAL_RULE_AFTER_MEASUREMENT`），事后补记即失真 |
+| `--operating-point-measurements` | phase 3 的帧测量没有安装入口；campaign 的 `episodes8` 是 `record_episodes7.py`（campaign 脚本，设计禁止其产出最终参数）的开环录制 |
+| `--bundle-inputs` | phase 2/3 的文档**不含** `parameters`（`grep -c '"parameters"'`：geometry 0、operating_point 0；search/timing 各 1），6 个参数块只能由声明提供；块内 `startup_readback.observed_value` 必须是"运行中的系统确实用了该值"的读数，今天没有这样的运行，手写即伪造 |
+
+**未跳过、未放宽任何检查，未手改任何文档，未伪造任何输入，未以"占位文档"骗过入口校验。**
+
+**(d) 未晋级**：未写 `head_search_v2.json`、未运行 `verify-promoted-config`，sealed 配置字节未变（`d3c4ef9b…` 复核）。
+
+**门禁**：回归（HS-288..308 的 25 个 phase/CLI/calibration 文件，`-n 8`）**697 passed, rc=0**（与 HS-308 相同）；
+全量 `src/so101_demo_py/test`（8 workers，基线 run-dir 布局 `$EV/scratch/pytest-xdist8-hs309-final.08a6a164`）
+**tests 6596 / 175 failed / 6183 passed / 152 skipped / 86 errors, rc=1, 86 s**，与基线 `pytest-xdist8-hs308-final.46ebd316`
+**节点级 diff 0 行（261 节点相同）、0 新增失败**，失败集中 **0 个** head_search/calibration 节点；24 逻辑 CPU / 8 workers，
+`tempfile.gettempdir()` 落在 run dir 的 `tmp`（tempfile-proof 已存）。运行与测试后 `ps` 无 ros2/MuJoCo/pytest 残留，
+`nvidia-smi --query-compute-apps` 为空，`ros2 daemon` 未运行。
+
+**它声明的推断（待评审，逐条照录）**：① "把六依赖 stage 在 fresh run root"落地为 `…sealed-inputs.json`（run 被拒时 root 不存在，
+故不能写进 root 内）；② `--candidate` 取 `candidate-c2a/candidate-manifest.json`（campaign 的模型清单；run 只对它取摘要，其内容不参与任何计算）；
+③ `--camera-config` 取生产 head 相机 profile `head_camera_yolo_seg.yaml`（HS-305 的认定：`camera_views.yaml` 是 viewer 预设）；
+④ 派生输入的两个摘要/权重摘要/key-level diff 记在运行级 provenance 而非 bundle（见 (a) 缺口）；
+⑤ 为不伪造，四个无生产者的输入**不声明**，run 因此停在入口而非某个 phase；⑥ 运行目录名用 UTC `20261001T112548Z`，
+派生件与 provenance 沿用 HS-30x 的"运行目录同名兄弟文件"约定。
+
+**17 值 bundle 状态**：**未产出**。测量层本身**齐备且自洽**（15/15 文档 kind 与自摘要复核通过），C2a 派生输入与 frozen 身份一致，
+sealed 六依赖互洽；**唯一缺口是四个 phase 输入的生产者**——`selection-rule` 与 `operating-point-measurements` 需要 phase-3 的正式安装入口
+（含一次 CUDA 检测飞行与 no-cup 守卫），`admission` 需要 Task-8 生产组合的一次真实 generation，`bundle-inputs` 需要一次生效值 readback；
+另外 (a) 还欠一次 bundle schema 决策（是否新增派生输入段）。
+
+**本轮证据与生命周期**：`$CAMPAIGN/head-search-calibration-20261001T112548Z.{console.log,provenance.txt,sealed-inputs.json,production-search-config-c2a.json,derived-input-provenance.json}`
+（run root 本身不存在）、`$EV/scratch/pytest-xdist8-hs309-final.08a6a164`、`$EV/reviews/phase6-7-measurement-inventory.md`（追加 HS-309 节）、
+工作树 `scratch/hs309/`（env.sh、make-c2a-config.py、run-calibration.sh、measurement-consumption-check.py、run-tests.sh、baseline-invocation.sh、
+regression-files.txt、logs/、pyshim、tmp*）。以上**均为删除候选，未删除**；HS-300..308 的产物只读引用，未改动。
