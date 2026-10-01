@@ -47724,3 +47724,18 @@ Its field list and constructors are printed beside this entry, which makes the n
 policy from `timeout_s=2.0`, `cpu_busy_warn_fraction=0.90`, `ram_minimum_bytes=1073741824`,
 `ram_minimum_fraction=0.05`, `gpu_minimum_bytes=1073741824` (with the MPS headroom left None), pass it as
 `start_guard=...` where the spec is built, re-run, and let the composition name the next layer.
+
+
+## CP-2522 — The guard is EpochStartGuard, and the batch CLI shows how it is built
+
+The `AttributeError` named the missing method, and one grep named its class:
+`EpochStartGuard.require_before_spawn` lives at `parallel_batch/start_guard_probe.py:844`, and the class is declared at
+799 with `__init__(self, coordinator: ProbeCoordinator, policy: StartGuardPolicy, *, ...)`. So the composition does not
+want the policy - it wants a **guard**, built from a `ProbeCoordinator` plus the policy, with the probe coordinator
+declared at 181 in the same module. That is one layer more than I assumed, and exactly the kind of thing this stretch
+keeps finding by running rather than by reading.
+
+The next read is the construction site: how `prepare_batch` or the composition builds an `EpochStartGuard` in the
+production path (the grep is printed beside this entry), which gives the exact arguments to reproduce in `run`. With
+that, the guard joins the catalogue, the start-guard policy and the container-free broker as a piece whose shape is
+known rather than guessed.
