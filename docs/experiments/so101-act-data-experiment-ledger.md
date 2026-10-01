@@ -52196,3 +52196,31 @@ So the two facts this round adds are: the refusal is about the audit's agreement
 `ACQUISITION_RESET_MISMATCH` is what the frames say when an episode's epoch moves. The chain-test file is back at its
 committed state with its two `xfail(strict)` marks, the capture fix from `b47532954` is untouched, and the next read is
 `recorder.py:145-155` - the condition itself - rather than another attempt at the value it tests.
+
+
+## CP-2733 — The scope condition verbatim: four clauses, one of them a type check
+
+```python
+    def _audit(self, observation: dict, action: tuple, audit: dict) -> None:
+        if not isinstance(audit, dict) or set(audit) != _AUDIT_KEYS:
+            raise ValueError("EPISODE_AUDIT_SCHEMA")
+        if (audit["session_id"] != self.session_id
+                or audit["attempt_id"] != self.attempt_id
+                or type(audit["reset_epoch"]) is not int
+                or audit["reset_epoch"] != self.reset_epoch):
+            raise ValueError("EPISODE_SCOPE_INVALID")
+```
+
+Four clauses, and the third is the interesting one: **`type(...) is not int`** - an exact type, not an isinstance - so a
+value that happens to equal the recorder's epoch but is not a plain `int` (a `bool`, a numpy integer, a string) trips the
+refusal just as a wrong number does. The other three are the ones I had been varying.
+
+Which also means my last attempt should have satisfied all four: the recorder suite's `audit()` hardcodes
+`"session_id": "s"` and `"attempt_id": "attempt-1"`, and passing `reset_epoch=1` makes the fourth clause agree with a
+recorder built with `reset_epoch=1`. Since it still refused, the likeliest explanation is that **my edit did not apply**:
+the round's patch used `str.replace` with a long exact string, those fail silently when they do not match, and I printed
+only a summary line rather than asserting each replacement.
+
+So the next attempt writes the file with explicit assertions after every replacement - which is what this ledger's own
+`python3 - <<PY` patches have always done for the ones that mattered - and then reads the four clauses against the actual
+values rather than reasoning about them.
