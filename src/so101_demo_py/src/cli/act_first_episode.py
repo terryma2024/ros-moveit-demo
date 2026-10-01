@@ -10,6 +10,7 @@ than inventing a registry.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -92,6 +93,36 @@ def _preflight(arguments) -> int:
     Path(arguments.output).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(arguments.output)
     return 0
+
+
+def _nonhead_provenance(inputs: dict) -> dict:
+    """The deployment's provenance verifier: what this MuJoCo-only episode can actually establish.
+
+    The default verifier in the batch CLI demands detector weights, a grounded-SAM root and a specific broker image -
+    none of which participates here - so this deployment states what it does establish instead of passing something
+    invented: the frozen input manifest and the scene it names, at the bytes the freeze recorded.
+    """
+
+    manifest_path = Path(inputs["inputs_manifest"])
+    document = json.loads(manifest_path.read_bytes())
+    scene = Path(inputs["scene_model"])
+    recorded = document["roles"]["scene_model"]
+    actual = hashlib.sha256(scene.read_bytes()).hexdigest()
+    if actual != recorded["sha256"]:
+        raise ValueError("NONHEAD_PROVENANCE_SCENE_MISMATCH")
+    if hashlib.sha256(manifest_path.read_bytes()).hexdigest() != inputs["inputs_manifest_sha256"]:
+        raise ValueError("NONHEAD_PROVENANCE_MANIFEST_MISMATCH")
+    return {
+        "kind": "ACT_NONHEAD_DEPLOYMENT_PROVENANCE",
+        "schema_version": 1,
+        "inputs_manifest": str(manifest_path),
+        "inputs_manifest_sha256": inputs["inputs_manifest_sha256"],
+        "scene_model": str(scene),
+        "scene_model_sha256": actual,
+        "establishes": "the frozen input manifest and the scene it names, at the frozen bytes",
+        "does_not_claim": ["detector weights", "grounded-SAM root", "broker image"],
+        "reason": "this deployment is MuJoCo-only; no perception and no container participates",
+    }
 
 
 def _run(arguments) -> int:
