@@ -49087,3 +49087,24 @@ E2 now has five tests - the legal-endpoint, quality-absent positive; the full-po
 measured against sealed audits rather than hand-built dictionaries.
 
 The review of K2 revision 8 (a one-word change) continues; its verdict is read when the marker lands.
+
+
+## CP-2596 — K2's protocol table passes
+
+Revision 8's log ends with the line **`PASS`** (365 lines, actively written, the `EXIT=` marker still to land). That is
+the checkpoint's verdict on the protocol table: after eight revisions and seven FAILs - four findings, then three,
+two, three, four, one, and finally one word - the document is judged sound. Every correction along the way was
+narrower than the last, and the last was a field name (`bytes` for what the repository calls `size`).
+
+What the table now says, in outline: a **causal chain** of five record types S/G/A/Q/R whose ordering comes from a
+single-namespace sequence plus a conditional happens-before assertion (not from parents alone, and not from stamps);
+**clocks named as the repository actually has them** (`publish_clock()` publishing per successful step, simulation time
+only, with a skipped publication carried as a nullable instant rather than invented); a **defined schema** - version
+fields, exact keys and types for all five kinds, the six manifest keys as a table, and the event envelope as
+`{sequence, kind, identity, sim_time_s, monotonic_ns, payload}` with no envelope version; and verification added to
+**`verify_audit_manifest()`**.
+
+The next work on K2 is its implementation, which the first review specified as a set of files that must move together:
+`pick_place_scene.py`, `ports/planning_scene.py`, `task_scene.py`, `pick_place_search_segment.py`,
+`pick_place_search_port.py`, `pick_place_runner.py`, `episode_audit.py`, `recorder.py` and `result_store.py`, with
+their tests. That is F13's fourth item.
