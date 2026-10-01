@@ -201,13 +201,21 @@ def _sealed(body: dict) -> dict:
     return {**sealed, "seal_sha256": canonical_sha256(sealed)}
 
 
-def _run_arguments(tmp_path: Path, *, bounded: bool = True, seal: str | None = None) -> list[str]:
+def _run_arguments(
+    tmp_path: Path,
+    *,
+    bounded: bool = True,
+    seal: str | None = None,
+    omit: tuple[str, ...] = (),
+) -> list[str]:
     """A complete synthetic argument set for `run`, with every declared input written under tmp_path.
 
     The sealed documents, the search configuration the entry preconditions read, the admission, the
-    phase-3 rule and measurements, the frozen candidate and the bundle inputs are all real files
-    produced by the repository's own writers; no detector, GPU or simulator is involved, because what
-    this exercises is the CLI's parsing, validation and orchestration.
+    phase-3 rule and measurements, the frozen candidate, the bundle inputs and the phase-6/phase-7
+    measurement documents are all real files produced by the repository's own writers or declared as
+    plainly as the phases read them; no detector, GPU or simulator is involved, because what this
+    exercises is the CLI's parsing, validation and orchestration. `omit` drops a flag and its value, so
+    a test can show what a run that fails to declare one of its inputs does.
     """
 
     from so101_demo.act.head_search_candidate_freeze import freeze_candidate
@@ -334,12 +342,121 @@ def _run_arguments(tmp_path: Path, *, bounded: bool = True, seal: str | None = N
         "--bundle-inputs",
         str(bundle_inputs),
     ]
+    # the phase-6 and phase-7 measurement documents this run declares. The synthetic candidate set
+    # makes the frozen-candidate gate refuse before either phase reads its measurements, so what these
+    # files have to be here is what the CLI validates: a declared input that exists. The phases that
+    # consume them are covered, with their own measurement documents, by their own tests.
+    measurements = {
+        "--search-timing": (
+            "search-timing.json",
+            {"p99_settle_s": 0.5, "p99_frame_s": 0.1, "control_period_s": 0.05},
+        ),
+        "--camera-measurements": (
+            "camera-measurements.json",
+            {
+                "horizontal_fov_rad": 0.4,
+                "image_width_px": 640,
+                "image_height_px": 480,
+                "safety_margin_px": 10.0,
+                "centre_jitter_rad": 0.002,
+            },
+        ),
+        "--deadband-candidates": (
+            "deadband-candidates.json",
+            [
+                {
+                    "center_deadband_px": 18.0,
+                    "longest_locked_run_frames": 3,
+                    "direction_reversals": 0,
+                }
+            ],
+        ),
+        "--workspace-projection": (
+            "workspace-projection.json",
+            {"top_px": 110.0, "bottom_px": 370.0},
+        ),
+        "--fine-correction-episodes": (
+            "fine-correction-episodes.json",
+            [
+                {
+                    "split": "held_out_evaluation",
+                    "episode_id": "episode-1",
+                    "succeeded": True,
+                    "fine_corrections": 1,
+                    "fine_corrections_rad": [0.01],
+                }
+            ],
+        ),
+        "--frame-age-measurements": (
+            "frame-age.json",
+            {"samples": [{"received_monotonic_s": 0.0, "decision_monotonic_s": 0.02}]},
+        ),
+        "--skew-measurements": (
+            "skew.json",
+            {"clock_resolution_s": 0.001, "samples": [{"stamps": [0.0, 0.005, 0.008]}]},
+        ),
+        "--frame-contract": ("frame-contract.json", {"frame_rate_hz": 10.0}),
+        "--controller-submissions": (
+            "controller-submissions.json",
+            {
+                "samples": [
+                    {
+                        "time_base": "simulation",
+                        "submit_snapshot_sim_s": 1.0,
+                        "first_target_sim_s": 1.02,
+                    }
+                ]
+            },
+        ),
+        "--mujoco-measurements": ("mujoco.json", {"simulation_timestep_s": 0.002}),
+        "--stationary-measurements": (
+            "stationary.json",
+            {"samples": [{"velocity_rad_s": [0.0, 0.001]}]},
+        ),
+        "--feedback-measurements": (
+            "feedback.json",
+            {"quantisation_rad": 0.0001, "period_s": 0.01},
+        ),
+        "--controller-stop-config": (
+            "controller-stop-config.json",
+            {"stopped_tolerance_rad_s": 0.01},
+        ),
+        "--stop-proofs": (
+            "stop-proofs.json",
+            {
+                "samples": [
+                    {
+                        "stop_request_monotonic_s": 0.0,
+                        "third_confirming_receive_monotonic_s": 0.02,
+                    }
+                ]
+            },
+        ),
+    }
+    for flag, (name, document) in measurements.items():
+        arguments.append(flag)
+        arguments.append(str(_write_json(tmp_path / name, document)))
+
     if seal is not None:
         sealed = {name: dict(record) for name, record in declared.items()}
         if seal == "broken":
             sealed["camera_config"]["sha256"] = "0" * 64
         arguments += ["--seal", str(_write_json(tmp_path / "seal.json", sealed))]
-    return arguments
+    return _without(arguments, omit)
+
+
+def _without(arguments: list[str], flags: tuple[str, ...]) -> list[str]:
+    """The same argument list without the named flags and their single values."""
+
+    remaining: list[str] = []
+    index = 0
+    while index < len(arguments):
+        if arguments[index] in flags:
+            index += 2
+            continue
+        remaining.append(arguments[index])
+        index += 1
+    return remaining
 
 
 def test_run_needs_its_declared_inputs_and_claims_no_root(tmp_path: Path, capsys) -> None:

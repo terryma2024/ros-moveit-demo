@@ -30,6 +30,30 @@ if TYPE_CHECKING:  # pragma: no cover - the run module is imported where it is u
 #: a run whose declared inputs are missing or unreadable is refused before any phase, by name
 HEAD_SEARCH_RUN_INPUTS_INCOMPLETE = "HEAD_SEARCH_RUN_INPUTS_INCOMPLETE"
 
+#: the measurement documents phases 6 and 7 consume (plan section 2 rows 6 and 7), each with the flag it
+#: is declared under and its shape: `document` is one JSON object the phase cites by path and sha256,
+#: `records` is the JSON list of measured records the phase itself builds its evidence from. The run
+#: reads these files and never invents a measurement; a run that omits one is refused at this entry.
+RUN_PHASE_SIX_MEASUREMENTS = (
+    ("search_timing", "--search-timing", "document"),
+    ("camera_measurements", "--camera-measurements", "document"),
+    ("deadband_candidates", "--deadband-candidates", "records"),
+    ("workspace_projection", "--workspace-projection", "document"),
+    ("fine_correction_episodes", "--fine-correction-episodes", "records"),
+)
+RUN_PHASE_SEVEN_MEASUREMENTS = (
+    ("frame_age_measurements", "--frame-age-measurements", "document"),
+    ("skew_measurements", "--skew-measurements", "document"),
+    ("frame_contract", "--frame-contract", "document"),
+    ("controller_submissions", "--controller-submissions", "document"),
+    ("mujoco_measurements", "--mujoco-measurements", "document"),
+    ("stationary_measurements", "--stationary-measurements", "document"),
+    ("feedback_measurements", "--feedback-measurements", "document"),
+    ("controller_stop_config", "--controller-stop-config", "document"),
+    ("stop_proofs", "--stop-proofs", "document"),
+)
+RUN_PHASE_MEASUREMENTS = RUN_PHASE_SIX_MEASUREMENTS + RUN_PHASE_SEVEN_MEASUREMENTS
+
 #: the six sealed controlled dependencies of plan section 2b, and the flag each is declared with
 RUN_SEALED_INPUT_FLAGS = (
     ("dataset_manifest", "dataset", "--dataset"),
@@ -57,7 +81,7 @@ RUN_REQUIRED_FLAGS = (
     ("frozen_candidate", "--frozen-candidate"),
     ("task_dataset", "--task-dataset"),
     ("bundle_inputs", "--bundle-inputs"),
-)
+) + tuple((name, flag) for name, flag, _shape in RUN_PHASE_MEASUREMENTS)
 
 #: the required flags that name a file that must already exist; `--run-root` must not, and a candidate
 #: id is a name rather than a path
@@ -75,7 +99,7 @@ RUN_REQUIRED_FILE_FLAGS = (
     "frozen_candidate",
     "task_dataset",
     "bundle_inputs",
-)
+) + tuple(name for name, _flag, _shape in RUN_PHASE_MEASUREMENTS)
 
 #: the optional flags that name a file, and the ones that name an existing directory
 RUN_OPTIONAL_FILE_FLAGS = ("seal", "held_out_measurements", "episode_records")
@@ -125,6 +149,8 @@ def _run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--head-dataset-root", type=Path)
     parser.add_argument("--task-dataset-root", type=Path)
     parser.add_argument("--bundle-inputs", type=Path)
+    for name, flag, _shape in RUN_PHASE_MEASUREMENTS:
+        parser.add_argument(flag, dest=name, type=Path, help=f"phase measurement: {name}")
     parser.add_argument("--operation", default="neck_target")
     parser.add_argument("--cpu-cores", type=int, default=os.cpu_count() or 1)
     parser.add_argument("--gpu-device", default="0")
@@ -212,6 +238,14 @@ def _phase_inputs(parsed) -> CalibrationPhaseInputs:
     held_out = (
         _frames(parsed.held_out_measurements) if parsed.held_out_measurements is not None else ()
     )
+    measurements = {
+        name: (
+            _records(getattr(parsed, name))
+            if shape == "records"
+            else _json_document(getattr(parsed, name))
+        )
+        for name, _flag, shape in RUN_PHASE_MEASUREMENTS
+    }
     return CalibrationPhaseInputs(
         production_search_config=_json_document(parsed.production_search_config),
         sealed_inputs=_sealed_inputs(parsed),
@@ -226,6 +260,7 @@ def _phase_inputs(parsed) -> CalibrationPhaseInputs:
         held_out_measurements=held_out,
         evaluation_arguments=_evaluation_arguments(parsed),
         bundle_inputs=_json_document(parsed.bundle_inputs),
+        **measurements,
     )
 
 
@@ -304,6 +339,17 @@ def _json_document(path) -> Mapping:
     if not isinstance(document, Mapping):
         raise ValueError(f"{path} is not a JSON object")
     return document
+
+
+def _records(path) -> list:
+    """A phase's declared list of measured records, or a document that carries them under `records`."""
+
+    document = json.loads(Path(path).read_text(encoding="utf-8"))
+    if isinstance(document, Mapping):
+        document = document.get("records")
+    if isinstance(document, (str, bytes)) or not isinstance(document, Sequence):
+        raise ValueError(f"{path} declares no list of measured records")
+    return list(document)
 
 
 def _frames(path) -> list:

@@ -8,11 +8,14 @@ contract (one binding at the entry, one `role=calibration` flight, no release an
 run status as `SUCCEEDED` or `FAILED` with the first failing phase, and no `--resume` anywhere.
 
 Everything here is synthetic: the sealed inputs are ordinary files under `tmp_path`, the geometry is a
-seal this file builds, the admission is the repository's own `CalibrationMeasurementAdmission`, and the
-one phase that needs a detector - the frozen-candidate evaluation - is injected as a runner, because the
-orchestration is what is under test and never the measurement. Phases 6 and 7 do not exist yet, so a
-run that gets past phase 5 always stops at `search_parameters` with `CAL_PHASE_UNIMPLEMENTED`, and every
-test of a later phase asserts exactly that.
+seal this file builds, the admission is the repository's own `CalibrationMeasurementAdmission`, the
+phase-6 and phase-7 measurements are documents this file declares, and the one phase that needs a
+detector - the frozen-candidate evaluation - is injected as a runner, because the orchestration is what
+is under test and never the measurement. All eight phases are wired now, and a run that gets past
+phase 5 walks 6 and 7 and then stops at `bundle_generation` with `CAL_BUNDLE_INCOMPLETE`: phase 6
+records `coarse_step_rad` as deliberately uncomputed until the selected model's val sweep and lock
+evidence exists, so the bundle of the seventeen cannot be complete and no bundle is written. Every test
+of the run's end therefore asserts exactly that failure - never a success and never a written bundle.
 """
 
 from __future__ import annotations
@@ -24,9 +27,11 @@ from pathlib import Path
 import pytest
 from so101_demo.act.head_search_calibration_bundle import (
     BUNDLE_NAME,
+    CAL_BUNDLE_INCOMPLETE,
     MANIFEST_NAME,
     RUN_STATUS_NAME,
 )
+from so101_demo.act.head_search_calibration_bundle import PARAMETERS as BUNDLE_PARAMETERS
 from so101_demo.act.head_search_calibration_inputs import (
     CAL_ADMISSION_REFUSED,
     CAL_BINDING_REBOUND,
@@ -34,12 +39,10 @@ from so101_demo.act.head_search_calibration_inputs import (
 )
 from so101_demo.act.head_search_calibration_readback import READBACK_NAME
 from so101_demo.act.head_search_calibration_run import (
-    CAL_PHASE_UNIMPLEMENTED,
     CAL_SAFE_INTERVAL_MISMATCH,
     CAL_TRAJECTORY_CONTRACT_UNSATISFIED,
     PHASES,
     RUN_ROOT_ALREADY_EXISTS,
-    UNIMPLEMENTED_PHASES,
     CalibrationPhaseInputs,
     CalibrationRunRefused,
     check_trajectory_contract,
@@ -48,6 +51,8 @@ from so101_demo.act.head_search_calibration_run import (
 )
 from so101_demo.act.head_search_candidate_freeze import freeze_candidate
 from so101_demo.act.head_search_operating_point import record_selection_rule
+from so101_demo.act.head_search_search_params import CAL_TIMEOUT_UNBOUNDED
+from so101_demo.act.head_search_timing_params import CAL_FRESHNESS_EXCEEDED
 from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
@@ -131,6 +136,123 @@ PERCEPTION_UNITS = {
     "tracking_iou": "1",
     "min_bbox_aspect": "1",
     "min_area_px2": "px^2",
+}
+#: the two geometry values phases 2 and 3 hand the bundle through the run's declared bundle inputs
+DECLARED_UNITS = {**PERCEPTION_UNITS, "horizontal_fov_rad": "rad", "lock_valid_neck_rad": "rad"}
+#: the six parameters the declared bundle inputs own; the other eleven belong to phases 6 and 7
+DECLARED_PARAMETERS = {
+    "horizontal_fov_rad",
+    "lock_valid_neck_rad",
+    *PERCEPTION_PARAMETERS,
+}
+
+#: the phase-6 measurements this file declares (plan section 2 row 6). The coverage proof phase 6
+#: consumes is deliberately not here: it is the document phase 2 produces in the run itself.
+SEARCH_TIMING = {
+    "path": "/evidence/search-timing.json",
+    "sha256": canonical_sha256({"n": "search-timing"}),
+    "p99_settle_s": 0.5,
+    "p99_frame_s": 0.1,
+    "control_period_s": 0.05,
+}
+#: the same document without the settle percentile: no timeout can be bounded from it
+UNBOUNDED_TIMING = {key: value for key, value in SEARCH_TIMING.items() if key != "p99_settle_s"}
+CAMERA_MEASUREMENTS = {
+    "path": "/evidence/camera-measurements.json",
+    "sha256": canonical_sha256({"n": "camera-measurements"}),
+    "horizontal_fov_rad": GEOMETRY_BODY["horizontal_fov_rad"],
+    "image_width_px": 640,
+    "image_height_px": 480,
+    "safety_margin_px": 10.0,
+    "centre_jitter_rad": 0.002,
+}
+#: one candidate at or above the computed jitter start that locks for three frames without reversing
+DEADBAND_CANDIDATES = (
+    {"center_deadband_px": 18.0, "longest_locked_run_frames": 3, "direction_reversals": 0},
+)
+WORKSPACE_PROJECTION = {
+    "path": "/evidence/workspace-projection.json",
+    "sha256": canonical_sha256({"n": "workspace-projection"}),
+    "top_px": 110.0,
+    "bottom_px": 370.0,
+}
+#: one successful held-out validation episode: the only split phase 6 may bound its numbers with
+FINE_CORRECTION_EPISODES = (
+    {
+        "split": HELD_OUT_SPLITS[0],
+        "episode_id": "episode-1",
+        "succeeded": True,
+        "fine_corrections": 1,
+        "fine_corrections_rad": [0.01],
+    },
+)
+
+#: the phase-7 measurements this file declares (plan section 2 row 7)
+FRAME_CONTRACT = {
+    "path": "/evidence/frame-contract.json",
+    "sha256": canonical_sha256({"n": "frame-contract"}),
+    "frame_rate_hz": 10.0,
+}
+FRAME_AGE_MEASUREMENTS = {
+    "path": "/evidence/frame-age.json",
+    "sha256": canonical_sha256({"n": "frame-age"}),
+    "samples": (
+        {"received_monotonic_s": 0.0, "decision_monotonic_s": 0.02},
+        {"received_monotonic_s": 0.1, "decision_monotonic_s": 0.12},
+    ),
+}
+#: a frame age beyond 1.5 frame periods of the declared contract: refused, never clamped
+FRESHNESS_BREACH = {
+    **FRAME_AGE_MEASUREMENTS,
+    "samples": ({"received_monotonic_s": 0.0, "decision_monotonic_s": 0.3},),
+}
+SKEW_MEASUREMENTS = {
+    "path": "/evidence/skew.json",
+    "sha256": canonical_sha256({"n": "skew"}),
+    "clock_resolution_s": 0.001,
+    "samples": ({"stamps": [0.0, 0.005, 0.008]},),
+}
+CONTROLLER_SUBMISSIONS = {
+    "path": "/evidence/controller-submissions.json",
+    "sha256": canonical_sha256({"n": "controller-submissions"}),
+    "samples": (
+        {"time_base": "simulation", "submit_snapshot_sim_s": 1.0, "first_target_sim_s": 1.02},
+    ),
+}
+MUJOCO_MEASUREMENTS = {
+    "path": "/evidence/mujoco.json",
+    "sha256": canonical_sha256({"n": "mujoco"}),
+    "simulation_timestep_s": 0.002,
+}
+STATIONARY_MEASUREMENTS = {
+    "path": "/evidence/stationary.json",
+    "sha256": canonical_sha256({"n": "stationary"}),
+    "samples": ({"velocity_rad_s": [0.0, 0.001]},),
+}
+FEEDBACK_MEASUREMENTS = {
+    "path": "/evidence/feedback.json",
+    "sha256": canonical_sha256({"n": "feedback"}),
+    "quantisation_rad": 0.0001,
+    "period_s": 0.01,
+}
+CONTROLLER_STOP_CONFIG = {
+    "path": "/evidence/controller-stop-config.json",
+    "sha256": canonical_sha256({"n": "controller-stop-config"}),
+    "stopped_tolerance_rad_s": 0.01,
+}
+STOP_PROOFS = {
+    "path": "/evidence/stop-proofs.json",
+    "sha256": canonical_sha256({"n": "stop-proofs"}),
+    "samples": ({"stop_request_monotonic_s": 0.0, "third_confirming_receive_monotonic_s": 0.02},),
+}
+
+#: the four also-recorded items of the five that phase 8 takes from the run's declared inputs; the
+#: fifth, `frame_contract_10_hz`, is phase 7's own (it is the contract every cap is expressed in)
+ALSO_RECORDED = {
+    "settle_velocity_rad_s": ("0.05 rad/s", "settle-velocity"),
+    "goal_tolerance_rad": ("0.05 rad", "goal-tolerance"),
+    "three_consecutive_frame_lock_rule": ("three consecutive frames lock", "lock-rule"),
+    "tracker_algorithm": ("iou-tracker-v1", "tracker"),
 }
 
 
@@ -254,16 +376,20 @@ def _rule() -> dict:
 
 
 def _evidence(name, value):
+    owner = {
+        "horizontal_fov_rad": "head_search_calibration_geometry.py",
+        "lock_valid_neck_rad": "head_search_calibration_geometry.py",
+    }.get(name, "head_search_operating_point.py")
     return {
         "value": value,
-        "unit": PERCEPTION_UNITS[name],
+        "unit": DECLARED_UNITS[name],
         "selection_formula": f"the {name} rule of design 7.1",
         "input_evidence": [
             {"path": f"/evidence/{name}-campaign.json", "sha256": canonical_sha256({"n": name})}
         ],
         "observed_distribution": {"p50": 1.0, "p99": 2.0, "samples": 120},
         "safety_margin": {"bound": 1.5, "observed": 1.0},
-        "production_owner": "src/so101_demo_py/src/act/head_search_operating_point.py",
+        "production_owner": f"src/so101_demo_py/src/act/{owner}",
         "startup_readback": {"source": "ros2 param get", "observed_value": value},
     }
 
@@ -285,16 +411,51 @@ def _runtime_identity():
     }
 
 
-def _bundle_inputs(values) -> dict:
-    """The per-parameter evidence blocks, the runtime identity and the five also-recorded items."""
+def _recorded_item(value: str, evidence: str) -> dict:
+    """One of the four also-recorded items the run declares: a value, its evidence and its readback."""
 
-    parameters = {
-        name: _evidence(name, values[name]) for name in PERCEPTION_PARAMETERS if name in values
+    return {
+        "value_or_definition": value,
+        "input_evidence": [
+            {"path": f"/evidence/{evidence}.json", "sha256": canonical_sha256({"n": evidence})}
+        ],
+        "startup_readback": {"source": "ros2 param get", "observed_value": value},
     }
+
+
+def _declared_parameter_evidence(values) -> dict:
+    """The parameter evidence the two earlier owners hand over: geometry (phase 2) and perception (3).
+
+    Phases 6 and 7 produce their own evidence blocks in this run, so they are deliberately absent here:
+    a declared block for either of them would be a second owner of a measured value.
+    """
+
+    return {
+        "geometry_coverage": {
+            "parameters": {
+                "horizontal_fov_rad": _evidence(
+                    "horizontal_fov_rad", GEOMETRY_BODY["horizontal_fov_rad"]
+                ),
+                "lock_valid_neck_rad": _evidence(
+                    "lock_valid_neck_rad", list(GEOMETRY_BODY["lock_valid_neck_rad"])
+                ),
+            }
+        },
+        "perception_operating_point": {
+            "parameters": {name: _evidence(name, values[name]) for name in PERCEPTION_PARAMETERS}
+        },
+    }
+
+
+def _bundle_inputs(values) -> dict:
+    """The declared bundle inputs: the two earlier owners' blocks, the identity and four extra items."""
+
     return {
         "runtime_identity": _runtime_identity(),
-        "also_recorded": {},
-        "parameter_evidence": {"perception_operating_point": {"parameters": parameters}},
+        "also_recorded": {
+            name: _recorded_item(*declaration) for name, declaration in ALSO_RECORDED.items()
+        },
+        "parameter_evidence": _declared_parameter_evidence(values),
     }
 
 
@@ -366,6 +527,9 @@ def _inputs(
     values=None,
     required=(-0.35, 0.35),
     safe=(-2.0, 2.0),
+    bundle_inputs=None,
+    search_timing=SEARCH_TIMING,
+    frame_age_measurements=FRAME_AGE_MEASUREMENTS,
 ) -> CalibrationPhaseInputs:
     geometry = _seal(GEOMETRY_BODY if geometry_body is None else geometry_body)
     return CalibrationPhaseInputs(
@@ -382,7 +546,27 @@ def _inputs(
         candidate_id=CANDIDATE_ID,
         held_out_measurements=(),
         evaluation_arguments=["compare"],
-        bundle_inputs=_bundle_inputs(HIGH_POINT if values is None else values),
+        # phase 6's measurements: the coverage proof it consumes is phase 2's own document
+        search_timing=search_timing,
+        camera_measurements=CAMERA_MEASUREMENTS,
+        deadband_candidates=DEADBAND_CANDIDATES,
+        workspace_projection=WORKSPACE_PROJECTION,
+        fine_correction_episodes=FINE_CORRECTION_EPISODES,
+        # phase 7's measurements
+        frame_age_measurements=frame_age_measurements,
+        skew_measurements=SKEW_MEASUREMENTS,
+        frame_contract=FRAME_CONTRACT,
+        controller_submissions=CONTROLLER_SUBMISSIONS,
+        mujoco_measurements=MUJOCO_MEASUREMENTS,
+        stationary_measurements=STATIONARY_MEASUREMENTS,
+        feedback_measurements=FEEDBACK_MEASUREMENTS,
+        controller_stop_config=CONTROLLER_STOP_CONFIG,
+        stop_proofs=STOP_PROOFS,
+        bundle_inputs=(
+            _bundle_inputs(HIGH_POINT if values is None else values)
+            if bundle_inputs is None
+            else bundle_inputs
+        ),
     )
 
 
@@ -409,35 +593,37 @@ def _read(root: Path, name: str) -> dict:
     return json.loads((root / name).read_text(encoding="utf-8"))
 
 
-def test_the_eight_phases_are_the_designs_and_only_six_and_seven_are_unimplemented():
+def test_the_eight_phases_are_the_designs_and_no_phase_is_left_unimplemented():
+    module = _module()
+
     assert PHASES == DESIGN_PHASES
-    assert UNIMPLEMENTED_PHASES == {
-        "search_parameters": CAL_PHASE_UNIMPLEMENTED,
-        "timing_stop_parameters": CAL_PHASE_UNIMPLEMENTED,
-    }
+    # the seam that used to refuse phases 6 and 7 is gone, not merely empty: every phase the run walks
+    # has a runner of its own
+    assert not hasattr(module, "UNIMPLEMENTED_PHASES")
+    assert not hasattr(module, "CAL_PHASE_UNIMPLEMENTED")
     assert CAL_SAFE_INTERVAL_MISMATCH == "CAL_SAFE_INTERVAL_MISMATCH"
 
 
-def test_the_run_walks_the_first_five_phases_and_stops_at_search_parameters(tmp_path):
+def test_the_run_walks_the_phases_in_order_and_stops_at_bundle_generation(tmp_path):
     result = _run(tmp_path)
 
     root = tmp_path / "run-01"
     assert result.status == "FAILED"
     assert result.run_root == root
-    assert result.phases_run == DESIGN_PHASES[:5]
-    assert result.first_failing_phase == "search_parameters"
-    assert result.failure_code == CAL_PHASE_UNIMPLEMENTED
+    # six and seven completed, in the fixed order, and eight is the phase that refused
+    assert result.phases_run == DESIGN_PHASES[:7]
+    assert result.first_failing_phase == "bundle_generation"
+    assert result.failure_code == CAL_BUNDLE_INCOMPLETE
 
     status = _status(root)
     assert status["status"] == "FAILED"
-    assert status["first_failing_phase"] == "search_parameters"
-    assert status["failure_code"] == CAL_PHASE_UNIMPLEMENTED
+    assert status["first_failing_phase"] == "bundle_generation"
+    assert status["failure_code"] == CAL_BUNDLE_INCOMPLETE
     assert status["audit_only"] is True
     assert status["checkpoint"] is False
     assert status["resume_supported"] is False
     assert status["failure_command"] == COMMAND
-    # the evidence already produced: the artefacts of the phases that ran, and nothing the phases that
-    # did not run would own
+    # the evidence the seven phases produced, and nothing the refusing phase would have written
     assert status["evidence_produced"] == [
         "calibration-inputs.json",
         "geometry-measurements.json",
@@ -445,21 +631,122 @@ def test_the_run_walks_the_first_five_phases_and_stops_at_search_parameters(tmp_
         "model-comparison.json",
         "model-selection-verdict.json",
         READBACK_NAME,
+        "search-calibration.json",
+        "timing-calibration.json",
     ]
     assert {path.name for path in root.iterdir()} == set(status["evidence_produced"]) | {
         RUN_STATUS_NAME
     }
-    # phases 6, 7 and 8 never ran, so their artefacts must not exist and no bundle may be claimed
-    for absent in (
-        "search-calibration.json",
-        "timing-calibration.json",
-        BUNDLE_NAME,
-        MANIFEST_NAME,
-    ):
+    # phase 8 refused before writing: no bundle and no manifest may exist for a failed run
+    for absent in (BUNDLE_NAME, MANIFEST_NAME):
         assert not (root / absent).exists(), absent
 
 
-def test_the_five_phases_are_the_library_modules_and_not_each_others_copies(tmp_path):
+def test_the_bundle_refuses_because_phase_six_leaves_coarse_step_rad_uncomputed(tmp_path):
+    """The honest failure: the only parameter no owner has measured keeps the bundle incomplete."""
+
+    result = _run(tmp_path)
+    root = tmp_path / "run-01"
+
+    search = _read(root, "search-calibration.json")
+    assert search["uncomputed_parameter"]["name"] == "coarse_step_rad"
+    assert search["uncomputed_parameter"]["computed_here"] is False
+    assert "coarse_step_rad" not in search["parameters"]
+    timing = _read(root, "timing-calibration.json")
+    # each measured phase wrote every value it declares, and the one it does not declare is the gap
+    measured = set(search["parameters"]) | set(timing["parameters"])
+    assert measured == set(search["parameter_names"]) | set(timing["parameter_names"])
+    assert set(BUNDLE_PARAMETERS) - measured == DECLARED_PARAMETERS | {"coarse_step_rad"}, (
+        "sixteen of the seventeen have an owner's value in this run; coarse_step_rad has none"
+    )
+    assert result.first_failing_phase == "bundle_generation"
+    assert result.failure_code == CAL_BUNDLE_INCOMPLETE
+    assert not (root / BUNDLE_NAME).exists()
+    assert not (root / MANIFEST_NAME).exists()
+    assert _status(root)["evidence_produced"][-2:] == [
+        "search-calibration.json",
+        "timing-calibration.json",
+    ]
+
+
+def test_a_failing_phase_six_leaves_seven_and_eight_unrun(tmp_path):
+    """Six before seven before eight: a six that refuses stops the run before seven measures."""
+
+    result = _run(tmp_path, search_timing=UNBOUNDED_TIMING)
+    root = tmp_path / "run-01"
+
+    assert result.phases_run == DESIGN_PHASES[:5]
+    assert result.first_failing_phase == "search_parameters"
+    assert result.failure_code == CAL_TIMEOUT_UNBOUNDED
+    assert not (root / "search-calibration.json").exists()
+    assert not (root / "timing-calibration.json").exists()
+    assert not (root / BUNDLE_NAME).exists()
+    assert _status(root)["evidence_produced"] == [
+        "calibration-inputs.json",
+        "geometry-measurements.json",
+        "perception-calibration.json",
+        "model-comparison.json",
+        "model-selection-verdict.json",
+        READBACK_NAME,
+    ]
+
+
+def test_a_failing_phase_seven_keeps_phase_sixes_evidence_and_writes_no_bundle(tmp_path):
+    """A seven that refuses stops the run before eight assembles anything, keeping six's document."""
+
+    result = _run(tmp_path, frame_age_measurements=FRESHNESS_BREACH)
+    root = tmp_path / "run-01"
+
+    assert result.phases_run == DESIGN_PHASES[:6]
+    assert result.first_failing_phase == "timing_stop_parameters"
+    assert result.failure_code == CAL_FRESHNESS_EXCEEDED
+    assert (root / "search-calibration.json").is_file()
+    assert not (root / "timing-calibration.json").exists()
+    assert not (root / BUNDLE_NAME).exists()
+    assert not (root / MANIFEST_NAME).exists()
+    status = _status(root)
+    assert status["failure_code"] == CAL_FRESHNESS_EXCEEDED
+    assert status["evidence_produced"][-1] == "search-calibration.json"
+
+
+def test_a_declared_parameter_block_for_a_measured_phase_is_refused_as_a_second_owner(tmp_path):
+    """Phases 6 and 7 measured their values here: a declared copy would be a second owner of them."""
+
+    declared = _bundle_inputs(HIGH_POINT)
+    declared["parameter_evidence"]["search_parameters"] = {"parameters": {}}
+
+    with pytest.raises(ValueError, match="one owner"):
+        _run(tmp_path, bundle_inputs=declared)
+
+    root = tmp_path / "run-01"
+    assert (root / "search-calibration.json").is_file(), "the run refused at phase 8, not earlier"
+    assert not (root / RUN_STATUS_NAME).exists(), "a caller bug is not a design outcome"
+
+
+def test_a_run_missing_a_phase_six_or_seven_measurement_is_refused_at_the_cli(tmp_path, capsys):
+    """The run declares the measurements it consumes; without one the CLI runs no phase at all."""
+
+    # the CLI's own end-to-end fixture builds a complete, real argument set; reusing it keeps this test
+    # from drifting away from the flags the installed entry actually accepts
+    from so101_demo.cli.head_search_calibration import HEAD_SEARCH_RUN_INPUTS_INCOMPLETE, main
+    from test_head_search_calibration_cli import _run_arguments
+
+    for flag in ("--search-timing", "--frame-contract"):
+        # a case of its own per flag: the CLI fixture writes exclusively, exactly as the run does
+        case = tmp_path / flag.strip("-")
+        case.mkdir()
+        root = case / "run"
+
+        assert main(_run_arguments(case, omit=(flag,))) == 2
+
+        captured = capsys.readouterr()
+        assert HEAD_SEARCH_RUN_INPUTS_INCOMPLETE in captured.err
+        assert flag in captured.err, "the refusal names the measurement the run did not declare"
+        assert not root.exists(), "a run refused at the CLI claims no root and runs no phase"
+        assert not (root / RUN_STATUS_NAME).exists()
+
+
+def test_the_seven_phases_are_the_library_modules_and_not_each_others_copies(tmp_path):
     _run(tmp_path)
     root = tmp_path / "run-01"
 
@@ -468,6 +755,8 @@ def test_the_five_phases_are_the_library_modules_and_not_each_others_copies(tmp_
     assert _read(root, "geometry-measurements.json")["phase"] == "geometry_coverage"
     assert _read(root, "perception-calibration.json")["phase"] == "perception_operating_point"
     assert _read(root, READBACK_NAME)["phase"] == "selected_perception_readback"
+    assert _read(root, "search-calibration.json")["phase"] == "search_parameters"
+    assert _read(root, "timing-calibration.json")["phase"] == "timing_stop_parameters"
 
     chosen = _read(root, "perception-calibration.json")["chosen_point"]
     assert chosen == HIGH_POINT, "the phase-3 fixture must choose the high point"
@@ -477,6 +766,22 @@ def test_the_five_phases_are_the_library_modules_and_not_each_others_copies(tmp_
     assert {
         name: readback["parameters"][name]["bundle_value"] for name in PERCEPTION_PARAMETERS
     } == {name: chosen[name] for name in PERCEPTION_PARAMETERS}
+
+    # phase 6 consumed this run's own coverage proof, not a declared copy of it
+    geometry = _read(root, "geometry-measurements.json")
+    stops = max(len(anchor["targets_rad"]) for anchor in geometry["coverage_proof"]["anchors"])
+    search = _read(root, "search-calibration.json")
+    assert (
+        search["parameters"]["search_timeout_s"]["observed_distribution"]["max_stable_stop_points"]
+        == stops
+    )
+    assert set(search["parameters"]) == set(search["parameter_names"]) - {"coarse_step_rad"}
+    assert search["motion_commanded"] is False
+    # phase 7 produced the five values and its own frame-contract item, and commanded no motion
+    timing = _read(root, "timing-calibration.json")
+    assert set(timing["parameters"]) == set(timing["parameter_names"])
+    assert "frame_contract_10_hz" in timing["also_recorded"]
+    assert timing["motion_commanded"] is False
 
 
 def test_every_neck_target_binds_one_generation_one_plan_and_one_safe_interval(tmp_path):
@@ -502,7 +807,7 @@ def test_every_neck_target_binds_one_generation_one_plan_and_one_safe_interval(t
         assert receipt["measurement_plan_sha256"] == PLAN_SHA
         assert receipt["safe_interval_rad"] == list(SAFE_INTERVAL)
         assert receipt["motion_commanded"] is False
-    assert result.status == "FAILED", "phases 6 and 7 do not exist yet"
+    assert result.status == "FAILED", "the bundle refuses while coarse_step_rad is uncomputed"
 
 
 def test_the_run_takes_exactly_one_role_calibration_measurement_flight(tmp_path):
@@ -541,7 +846,7 @@ def test_a_second_resource_binding_is_refused(tmp_path):
     second = _run(tmp_path, binder=binder, run_root=tmp_path / "run-02")
 
     assert binder.binding["bound_at_entry"] is True
-    assert first.first_failing_phase == "search_parameters"
+    assert first.first_failing_phase == "bundle_generation"
     assert second.phases_run == ()
     assert second.first_failing_phase == "input_validation"
     assert second.failure_code == CAL_BINDING_REBOUND
@@ -703,7 +1008,7 @@ def test_the_orchestration_offers_no_resume_or_continuation_entry(tmp_path):
     status = _status(tmp_path / "run-01")
     assert status["resume_supported"] is False
     assert status["checkpoint"] is False
-    assert result.status == "FAILED", "no run may claim success while phases 6 and 7 are missing"
+    assert result.status == "FAILED", "the run still fails honestly, now at the bundle"
 
 
 def test_an_uncoded_phase_error_is_not_dressed_up_as_a_design_refusal(tmp_path):

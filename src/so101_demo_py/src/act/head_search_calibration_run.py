@@ -23,10 +23,12 @@ What the entry owns, and why (plan sections 0, 1 and 2b):
 * a phase that refuses **stops the run immediately**. The first failing phase, its code, the command, the
   exit code and the evidence already produced are written to `run-status.json` as `FAILED`, and no later
   phase runs;
-* phases 6 and 7 do not exist yet. The run therefore never reports success: it stops at
-  `search_parameters` with `CAL_PHASE_UNIMPLEMENTED` and records that refusal, instead of pretending the
-  work happened. An override for an unimplemented phase is refused too, so the seam that injects a
-  measurement phase can never be used to fake one that is missing.
+* the run **never reports success while a value has no owner**. Phase 6 measures five of its six
+  parameters and records `coarse_step_rad` as deliberately uncomputed until the selected model's val
+  sweep and lock evidence exists (plan section 2 row 6, ledger HS-295). Phase 8 therefore refuses the
+  bundle with `CAL_BUNDLE_INCOMPLETE` before it writes anything, and the run ends `FAILED` at
+  `bundle_generation` rather than producing a bundle that pretends to be complete. The refusal is the
+  design's own gap made visible, not a stub: every other phase has its module and its evidence.
 
 An uncoded exception from a phase is not a design outcome: it propagates (with the earlier evidence left
 on disk for forensics) rather than being dressed up as a `FAILED` run with an invented code.
@@ -65,6 +67,13 @@ from so101_demo.act.head_search_calibration_readback import (
 from so101_demo.act.head_search_operating_point import (
     validate_head_search_calibration_operating_point,
 )
+from so101_demo.act.head_search_search_params import (
+    validate_head_search_calibration_search_parameters,
+)
+from so101_demo.act.head_search_timing_params import (
+    FRAME_CONTRACT_ITEM,
+    validate_head_search_calibration_timing_params,
+)
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
@@ -84,7 +93,6 @@ PHASES = (
 
 #: the refusal the entry-triggered precondition raises, and the ones the run adds around the contract
 CAL_TRAJECTORY_CONTRACT_UNSATISFIED = "CAL_TRAJECTORY_CONTRACT_UNSATISFIED"
-CAL_PHASE_UNIMPLEMENTED = "CAL_PHASE_UNIMPLEMENTED"
 CAL_SAFE_INTERVAL_MISMATCH = "CAL_SAFE_INTERVAL_MISMATCH"
 #: a gate that fails without printing one of its own codes still fails the phase by name
 CAL_CANDIDATE_EVALUATION_FAILED = "CAL_CANDIDATE_EVALUATION_FAILED"
@@ -92,17 +100,20 @@ CAL_CANDIDATE_EVALUATION_FAILED = "CAL_CANDIDATE_EVALUATION_FAILED"
 RUN_ROOT_ALREADY_EXISTS = "RUN_ROOT_ALREADY_EXISTS"
 REFUSAL_CODES = (
     CAL_TRAJECTORY_CONTRACT_UNSATISFIED,
-    CAL_PHASE_UNIMPLEMENTED,
     CAL_SAFE_INTERVAL_MISMATCH,
     CAL_CANDIDATE_EVALUATION_FAILED,
     RUN_ROOT_ALREADY_EXISTS,
 )
 
-#: the phases whose library modules do not exist yet, with the refusal that names them
-UNIMPLEMENTED_PHASES = {
-    "search_parameters": CAL_PHASE_UNIMPLEMENTED,
-    "timing_stop_parameters": CAL_PHASE_UNIMPLEMENTED,
-}
+#: the four phases plan section 3 makes the owners of the seventeen parameters. Phases 2 and 3 carry
+#: their values - and their evidence blocks - in the run's declared bundle inputs; phases 6 and 7
+#: measure theirs in this run, so a declared block for either would be a second owner of a measured value
+PARAMETER_PHASES = (
+    "geometry_coverage",
+    "perception_operating_point",
+    "search_parameters",
+    "timing_stop_parameters",
+)
 
 #: the artefact each phase owns, in the run root, exactly as design section 8.3 names it. The evidence
 #: already produced is the subset of these that exists when the run stops, so a phase that wrote part of
@@ -172,6 +183,11 @@ class CalibrationPhaseInputs:
     interval. ``bundle_inputs`` carries the per-parameter evidence blocks, the runtime identity and the
     five also-recorded items (plan section 2b); the readback of phase 5 reads the bundle the phases have
     assembled so far from the same document phase 8 assembles the final one from.
+
+    The measurement documents of phases 6 and 7 are declared here and never invented: a run without one
+    of them is refused at the CLI (plan section 2 rows 6 and 7). Phase 6's coverage proof is deliberately
+    absent - it is the document phase 2 produces in this run - and so are detection extremes, which phase
+    6 refuses rather than back-filling the vertical bounds from them.
     """
 
     production_search_config: Mapping
@@ -189,6 +205,32 @@ class CalibrationPhaseInputs:
     held_out_measurements: Sequence[Mapping] = ()
     evaluation_arguments: Sequence[str] = ()
     bundle_inputs: Mapping | None = None
+    #: phase 6's measurements: the p99 settle/frame times and the control period it bounds the timeout
+    #: with, the camera whose angular resolution turns the centre jitter into pixels, the searched
+    #: deadband candidates, the projected legal pick workspace and the held-out validation episodes the
+    #: fine-correction budgets are measured on
+    search_timing: Mapping | None = None
+    camera_measurements: Mapping | None = None
+    deadband_candidates: Sequence[Mapping] = ()
+    workspace_projection: Mapping | None = None
+    fine_correction_episodes: Sequence[Mapping] = ()
+    #: phase 7's measurements: the frame age and skew distributions, the 10 Hz frame contract, the
+    #: controller submissions, the MuJoCo timestep, the stationary velocities, the feedback quantisation
+    #: and period, the controller's stopped tolerance and the stop/revoke proofs
+    frame_age_measurements: Mapping | None = None
+    skew_measurements: Mapping | None = None
+    frame_contract: Mapping | None = None
+    controller_submissions: Mapping | None = None
+    mujoco_measurements: Mapping | None = None
+    stationary_measurements: Mapping | None = None
+    feedback_measurements: Mapping | None = None
+    controller_stop_config: Mapping | None = None
+    stop_proofs: Mapping | None = None
+    #: the startup readbacks that prove the running system uses a computed value (plan section 2b). Each
+    #: phase looks up its own parameter names in this one mapping; a readback that disagrees with the
+    #: computed value refuses that phase with `CAL_EFFECTIVE_VALUE_MISMATCH`, and an absent one is
+    #: recorded as unverified rather than invented
+    startup_readbacks: Mapping | None = None
 
 
 @dataclass(frozen=True)
@@ -412,7 +454,8 @@ def execute_calibration_run(
     that would sweep past its safe interval never sees a neck target), then the exclusive claim on the
     run root, then the single resource binding, and only then the phases. `phase_runners` replaces the
     runner of an implemented phase - the measurement phases need a detector, so the orchestration is
-    tested with a synthetic one - and is refused for a phase that does not exist yet.
+    tested with a synthetic one - and a name no phase owns is refused, because a run never pretends a
+    phase it does not have.
     """
 
     if not isinstance(phase_inputs, CalibrationPhaseInputs):
@@ -434,15 +477,6 @@ def execute_calibration_run(
     documents: dict[str, Mapping] = {}
     produced: list[str] = []
     for phase in PHASES:
-        if phase in UNIMPLEMENTED_PHASES:
-            return _failed(
-                root=root,
-                phase=phase,
-                code=UNIMPLEMENTED_PHASES[phase],
-                command=run_command,
-                produced=produced,
-                documents=documents,
-            )
         context = CalibrationPhaseContext(run_root=root, documents=dict(documents))
         try:
             document = runners[phase](context)
@@ -521,6 +555,35 @@ def _phase_runners(
             output_dir=context.run_root,
         )
 
+    def search_parameters(context: CalibrationPhaseContext) -> Mapping:
+        return validate_head_search_calibration_search_parameters(
+            # the coverage proof is phase 2's own document: the run never declares what it just measured
+            bounded_sweep=context.document("geometry_coverage"),
+            timing=phase_inputs.search_timing,
+            camera=phase_inputs.camera_measurements,
+            deadband_candidates=phase_inputs.deadband_candidates,
+            workspace_projection=phase_inputs.workspace_projection,
+            fine_correction_episodes=phase_inputs.fine_correction_episodes,
+            held_out_splits=_held_out_splits(phase_inputs.selection_rule),
+            startup_readbacks=phase_inputs.startup_readbacks,
+            output_path=context.run_root / SEARCH_NAME,
+        )
+
+    def timing_stop_parameters(context: CalibrationPhaseContext) -> Mapping:
+        return validate_head_search_calibration_timing_params(
+            frame_age=phase_inputs.frame_age_measurements,
+            skew=phase_inputs.skew_measurements,
+            frame_contract=phase_inputs.frame_contract,
+            submissions=phase_inputs.controller_submissions,
+            mujoco=phase_inputs.mujoco_measurements,
+            stationary=phase_inputs.stationary_measurements,
+            feedback=phase_inputs.feedback_measurements,
+            controller=phase_inputs.controller_stop_config,
+            stop_proofs=phase_inputs.stop_proofs,
+            startup_readbacks=phase_inputs.startup_readbacks,
+            output_path=context.run_root / TIMING_NAME,
+        )
+
     def selected_perception_readback(context: CalibrationPhaseContext) -> Mapping:
         return readback_selected_perception_values(
             bundle=bundle_under_assembly(bundle_inputs=phase_inputs.bundle_inputs),
@@ -537,10 +600,10 @@ def _phase_runners(
             status="SUCCEEDED",
             command=command,
             exit_code=0,
-            phase_inputs=bundle_inputs.get("parameter_evidence"),
+            phase_inputs=_parameter_evidence(context=context, bundle_inputs=bundle_inputs),
             controlled_dependencies=_controlled_dependencies(context),
             runtime_identity=bundle_inputs.get("runtime_identity"),
-            also_recorded=bundle_inputs.get("also_recorded"),
+            also_recorded=_also_recorded(context=context, bundle_inputs=bundle_inputs),
             output_dir=context.run_root,
         )
 
@@ -550,8 +613,85 @@ def _phase_runners(
         "perception_operating_point": perception_operating_point,
         "frozen_candidate_evaluation": frozen_candidate_evaluation,
         "selected_perception_readback": selected_perception_readback,
+        "search_parameters": search_parameters,
+        "timing_stop_parameters": timing_stop_parameters,
         "bundle_generation": bundle_generation,
     }
+
+
+def _held_out_splits(selection_rule) -> tuple[str, ...]:
+    """The splits phase 3 declared held-out; phase 6 may bound its fine corrections with them alone.
+
+    The rule record is the phase-3 declaration the run already passed to that phase, so its held-out
+    splits are the ones this run measured against. Phase 6 checks every episode against them again and
+    refuses an episode of any other split with `CAL_SPLIT_LEAK`; this reads the declaration, it does not
+    re-decide it.
+    """
+
+    splits = selection_rule.get("held_out_splits") if isinstance(selection_rule, Mapping) else None
+    if isinstance(splits, (str, bytes)) or not isinstance(splits, Sequence) or not splits:
+        raise ValueError(
+            "the selection rule declares no held-out splits, so no fine-correction episode could be "
+            "shown to belong to one"
+        )
+    return tuple(splits)
+
+
+def _parameter_evidence(*, context: CalibrationPhaseContext, bundle_inputs) -> dict:
+    """The four owning phases' evidence blocks, in the shape phase 8 collects them by phase.
+
+    Design section 7.1 gives the seventeen parameters to four phases. Phases 2 and 3 carry their values
+    and their evidence blocks in the run's declared bundle inputs, because their own documents record the
+    measurement rather than the bundle block. Phases 6 and 7 produced theirs in this run, so their live
+    documents are the evidence; a declared block for either of them would be a second owner of a value
+    this run measured, and is refused rather than silently preferred.
+    """
+
+    declared = bundle_inputs.get("parameter_evidence")
+    if not isinstance(declared, Mapping):
+        raise ValueError("the bundle inputs declare no parameter evidence")
+    evidence: dict[str, Mapping] = {}
+    for phase in PARAMETER_PHASES:
+        document = context.documents.get(phase)
+        measured = document.get("parameters") if isinstance(document, Mapping) else None
+        if isinstance(measured, Mapping):
+            if phase in declared:
+                raise ValueError(
+                    f"the bundle inputs declare {phase} parameter evidence as well, but that phase "
+                    "produced its values in this run: a measured value has one owner"
+                )
+            evidence[phase] = {"parameters": dict(measured)}
+            continue
+        declared_phase = declared.get(phase)
+        if not isinstance(declared_phase, Mapping):
+            raise ValueError(f"the bundle inputs declare no {phase} parameter evidence")
+        evidence[phase] = declared_phase
+    return evidence
+
+
+def _also_recorded(*, context: CalibrationPhaseContext, bundle_inputs) -> dict:
+    """The five also-recorded items: the four declared owners and the frame contract phase 7 measured.
+
+    Phase 7 records the 10 Hz contract every one of its caps is expressed in, and says the other four
+    items come from their own owners and are merged by the run (design section 7.1, final paragraph).
+    A declared copy of the frame contract would be a second owner of the contract, so it is refused.
+    """
+
+    declared = bundle_inputs.get("also_recorded")
+    if not isinstance(declared, Mapping):
+        raise ValueError("the bundle inputs record no also-recorded items")
+    recorded = dict(declared)
+    if FRAME_CONTRACT_ITEM in recorded:
+        raise ValueError(
+            f"the bundle inputs record {FRAME_CONTRACT_ITEM} as well, but phase 7 records the frame "
+            "contract it measured: the item has one owner"
+        )
+    document = context.documents.get("timing_stop_parameters")
+    items = document.get("also_recorded") if isinstance(document, Mapping) else None
+    if not isinstance(items, Mapping) or FRAME_CONTRACT_ITEM not in items:
+        raise ValueError("the timing phase recorded no frame contract for the bundle to carry")
+    recorded[FRAME_CONTRACT_ITEM] = items[FRAME_CONTRACT_ITEM]
+    return recorded
 
 
 def _failed(
