@@ -719,7 +719,7 @@ def test_readback_requires_exact_types_and_correlated_clocks(tmp_path):
 def _window(**overrides):
     window = {"source_schedule": {"head": [1.0, 1.1, 1.2], "wrist": [1.0, 1.1, 1.2]},
               "streams_required": ["head", "wrist"], "cadence_s": 0.1, "permitted_gaps_s": [],
-              "collection_start_s": 1.0, "collection_end_s": 1.2, "first_command_s": 1.0,
+              "collection_start_s": 1.0, "collection_end_s": 1.2, "first_command_s": 1.1,
               "physics_end_s": 1.2, "label_cutoff_s": 1.0, "outcome": "complete"}
     window.update(overrides)
     return window
@@ -818,7 +818,7 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
 
     empty = _formal_writer(tmp_path / "empty")
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
-        empty.seal(_window())
+        empty.seal({**_window(), "first_command_s": 1.1, "physics_end_s": 1.1})
 
     partial = _formal_writer(tmp_path / "partial")
     partial.append_source("physics", {"kind": "pose", "sim_time_s": 1.1, "release_epoch": 1,
@@ -826,7 +826,7 @@ def test_a_formal_audit_may_not_seal_without_source_coverage(tmp_path):
                                                       "simulation_step": 1,
                                                       "cup_position_world_m": [0.0, 0.0, 0.0]}})
     with pytest.raises(ValueError, match="AUDIT_FORMAL_COVERAGE_INCOMPLETE"):
-        partial.seal(_window())
+        partial.seal({**_window(), "first_command_s": 1.1, "physics_end_s": 1.1})
 
     complete = _formal_writer(tmp_path / "complete")
     complete.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
@@ -1181,7 +1181,9 @@ def _self_consistent_formal(tmp_path):
                                         "monotonic_ns": 1, "payload": payload})
     writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id,
                     frames[("wrist", 1.0)].acquisition_id, 1)
-    return writer, _window()
+    # T3-F11: this fixture's five physics rows all sit at 1.1, so its window states those endpoints rather than
+    # borrowing the shared helper's, which describes the relabelled-coverage fixture's rows (1.1 to 1.2)
+    return writer, {**_window(), "first_command_s": 1.1, "physics_end_s": 1.1}
 
 
 def test_a_self_consistent_formal_window_seals(tmp_path):
