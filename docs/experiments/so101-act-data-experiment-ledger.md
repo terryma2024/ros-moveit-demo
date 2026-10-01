@@ -52675,3 +52675,25 @@ adapter ran at a point this probe never reached (it never called `finish`).
 So the last measurement is the one the chain test itself can print: the rows the tail hands to the callback, with their
 `sim_time_s`. That is where the 0.1 offset in the binding check either lines up or does not, and it is a single print
 inside the adapter that already exists.
+
+
+## CP-2753 — The binding's values line up exactly, and the failure is after it
+
+```
+BIND row sim_time_s: 1.2 reference_time_s: 1.3 -> target: 1.3 seq: 1
+F
+```
+
+So the tail hands the callback **one** row, its `sim_time_s` is 1.2, the reference the binding names is for 1.3, and
+`sim_time_s + 0.1` is exactly 1.3 - which means **the reference clause of `AUDIT_BINDING_REFERENCE_INVALID` is satisfied
+by construction**, and the sequence `1` is the key of exactly that reference (`{1: 1.1, 2: 1.2, 3: 1.3, 4: 1.4}`... hmm,
+the map measured earlier was built from a run that fed four instants; here the tail row's reference is at 1.3 and it bound
+without complaint).
+
+And the failure comes **after** that binding, not from it. So the seal refuses for something else now - a later check in
+`finish`, or the second test's own path - and the message I have not yet read is the thing to read next rather than another
+value to guess.
+
+What this round establishes is narrow and worth keeping: the adapter is right, the reference key is right, the values the
+binding needs are right, and the row count the tail sees (one) is a fact about how many rows were released before
+`finish` rather than a mistake in the adapter. The next read is the failure's own text.
