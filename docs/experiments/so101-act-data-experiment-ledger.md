@@ -53925,3 +53925,29 @@ because then one port implements the ACT contract and the gate fires on it. The 
 to see an `ActCollectionResultVerifier`, which a delegation wrapper is not.
 
 That is the decision the next round makes, and it is now a one-method question rather than an interface tangle.
+
+
+## CP-2802 — Plan 4's edit point, and the module already promises the value
+
+```python
+    composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command,
+                                             container_brokers=False)          # act_first_episode.py:304
+```
+
+That is the one line plan 4 changes: it gains `endpoint_inputs=...`. And the module's own docstring says the value is
+already there to be read:
+
+> "the endpoint policy and the development runtime are bound into the inputs hash chain there; `preflight` re-reads a
+> frozen set and refuses when its own manifest, its policy or its runtime cannot be accounted for"
+
+with the freezing done at `:74-75` (`freeze_inputs(..., endpoint_policy=Path(arguments.endpoint_policy), ...)`) and the
+frozen set re-read at `:82` (`inputs = Path(arguments.inputs)`). So the policy is in the manifest this path already
+validates, and the composition merely has not been told.
+
+The only thing the next round needs that is not yet read is the name of the reader that pulls the policy block back out of
+the manifest - `first_episode_inputs` exposes `inspect_inputs` beside `freeze_inputs`, and the preflight path uses one of
+them to do exactly this accounting. With that, plan 4 is a two-line change plus the two-way test: a composition built from
+a spec whose frozen inputs carry a policy constructs the ACT port, and one built without constructs the generic adapter.
+
+Correction 4's plans 1, 2 and 3 are committed (`62dc47267`, `063fb350f`), with `discover` added to the ACT verifier and the
+port chosen by contract; only plan 4 and its test remain.
