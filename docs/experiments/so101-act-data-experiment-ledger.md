@@ -47005,3 +47005,55 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   of two rules that could otherwise collide - and the review is not something to skip.
 - F1, F14, F3, F12 and F11 closed; F5's step two one instrumented run away; E1's input side green end to end; the
   environment is up and healthy. HEAD 0bcf4f666; goal active.
+
+
+## CP-2488 — Hand-off index for the next worker (supersedes CP-2349's)
+
+**Where things stand at HEAD `ab326df08`.** The eighth verdict's items: F1, F14, F3, F12 and F11 are **closed** (F11 by
+`60330a75b` plus its fixture alignment). F5's step two and F13's scene item are the only two still open, and neither is
+blocked by a missing fact.
+
+**F5 step two, one run from done.** Coverage already passes on the runner-backed fixture (CP-2368, which cleared the
+coverage gate and left `AUDIT_WINDOW_INVALID`). Three seal-side blockers and the identity's shape were fixed on the way
+(CP-2362/2363/2365), and the window's own rules are fully read (CP-2373). The next action, verbatim: re-apply the
+wrapper probe from CP-2485 (take `verdict = _window_matches_observed(...)`, print `WIN-CALLSITE seal <verdict>`, return
+it - **never** a comment inside an argument list, CP-2484), add the fixture whose window CP-2376 derives (schedule at
+the acquired instants 0.1/0.5/1.0, `collection_*` containing the run, `first_command_s`/`physics_end_s` equal to the
+physics extremes, `label_cutoff_s` the bound row's instant), run that single test, read which call site refuses,
+restore the module from the backup, then make the one fix it names.
+
+**F13's scene item, K2's route.** The protocol table is written (CP-2375) and awaits the execution-host Codex
+checkpoint the plan requires before the schema, writer, serializer and every consumer change together. `codex` is
+installed at `/home/matianyi/.local/bin/codex` and tmux session `dst` is up (CP-2487); the user's answer on where to
+run that review is pending.
+
+**The input half is finished and measured.** `inspect` rc=0 with zero blockers, `prepare` rc=0, `preflight` rc=0, and
+236 tests green across the audit, first-episode-scope, endpoint-pose and artifact suites. The pieces: the endpoint
+policy and development runtime YAMLs, both closed loaders, the pure calculator with twenty-one controls, the CLI's
+`inspect`/`prepare`/`preflight`/`run` with its guards and its V2 request, the deployment provenance verifier
+(`87b9359a2`), and the frozen set under `experiments/nonhead-first-episode-closure.hK7mQ2pL`.
+
+**The execution half waits on one decision.** The default production composition's broker is a perception container -
+`perception.sock`, a `container.cid` check, `image_record(spec.broker_image)`, and `yolo_weights`/`grounded_root`
+handed to the worker - and the only switch that avoids it is `RunMode.DRY_RUN`, which produces no episode. The
+amendment excludes implementing containers and the design forbids a second, simplified scheduler or broker, so the
+options are an approved container-free broker path (the design's section 4 chain, real components, one worker) or
+waiting. Report and await the user's call; do not improvise around it.
+
+**Environment.** One approved headless ACT stack is running, started once by this task: 23 nodes with
+`/move_group`, `/controller_setup`-grade material and an **active** `joint_state_broadcaster`, `RobotSystem`
+configured and activated. Its recipe: source ROS, then `/home/matianyi/Projects/ws_mujoco_ros2_control_fork/install`
+(the only install carrying the hardware plugin), then this worktree's overlay last; launch
+`so101_mujoco_act_execution_stack.launch.py` with `:=` arguments and `mujoco_scene` pointing at the source scene
+(byte-identical to the frozen witness, CP-2456). Evidence under
+`experiments/nonhead-first-episode-live.k3Tq8wRs`: `launch-plan.md`, `launch.log`, `launch5.log`, `launch.pid`,
+`run.log`.
+
+**Discipline that paid off, and the slips.** Every breakthrough this stretch came from making a run name its own
+refusal (the coverage gate, the three seal-side blockers, the identity's shape, the window's ordering rule, the
+hardware plugin, the model's include, the request type). Every slip - a stray parenthesis (CP-2429), a `pkill`
+matching its own shell (CP-2450), a comment inside an argument list (CP-2484) - was reverted and recorded in the same
+round, and none reached a commit. Never satisfy a check with something invented: the absent fields carry an explicit
+marker (CP-2480) and the deployment verifier states what it does and does not claim (CP-2479).
+
+**Goal**: `active`, `armed`, revision 10, round 533/1000. The objective is **not** achieved; do not claim it is.
