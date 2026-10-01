@@ -43361,3 +43361,100 @@ seal 生产配置自己的（**注意**：phase 6 算出的 `center_deadband_px`
 run-tests/build-toolchain/run-fine-correction-episodes/consumption-check 脚本、preflight 复现探针、
 800013 杯位诊断、make-c2a-config、RED/GREEN/回归/全量日志、pyshim、tmp*）。以上**均为删除候选，未删除**；
 HS-288..306 的产物只读引用。
+
+## HS-308 — 清点项 #7 `skew_measurements` 与 #8 `frame_contract` 有源：ROS head-camera 图像传输路径确实存在且可在单栈规则下运行，实测 p99.9 skew 8 ms、时钟分辨率 2 ms，安装版 phase 7 算出 `max_skew_s=0.010000000000001563`
+
+**提交** `fdecc66a6`（4 文件，+1847；普通 `git commit`，钩子 rc=0）→ `e4716ae84`（1 文件，真实运行 RED：capture 节点
+`Parameter("use_sim_time", True)` 抛 `TypeError`）→ `a9c0a0b58`（1 文件，真实运行 RED：捕获边界把最后一帧配到上一帧的
+CameraInfo，探针实测 0.1 s 假偏斜）。`git status --porcelain` 为空（`scratch/` 本地排除，证据仍在盘上、未删除）。
+
+**(a) 先做范围判定：路径存在，且就是生产路径。** 证据（文件/行）：
+
+| 环节 | 文件 | 声明/行为 |
+| --- | --- | --- |
+| 相机发布 | `third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp`（`render_and_publish_camera`） | 离屏渲染 MJCF 相机，按 `camera_publish_rate` 发布 `Image`+`CameraInfo`，**两者用同一个** `rclcpp::Time(Duration::from_seconds(mjData.time))` 时间戳（MuJoCo 仿真钟） |
+| 生产声明 | `src/so101_demo_py/config/mujoco/act/mujoco_plugins.yaml`（安装件 sha256 `6a030c48…`） | `camera_publish_rate: 10.0`；`head_camera`：`streaming`/`head_camera_frame`/`/head_camera/color`/`/head_camera/camera_info` |
+| 相机模型 | `assets/mujoco/act/so101.xml:158`（被 sealed `head_search_scene.xml` include） | `<camera name="head_camera" resolution="640 480" fovy="60" …/>` |
+| 生产消费者 | `src/adapters/act/ros_search.py:61-63` | `RosSearchAdapter` 订阅这三个话题，要求 `stamp(info)==image stamp`（否则 `INPUT_CAMERA_INFO_INVALID`），反馈走 `causal_sample`，并做 `base→head_camera_frame` 的 TF 查询 |
+| TF / joint | `assets/mujoco/act/so101.urdf:645-649`、`config/mujoco/act/ros2_controllers.yaml` | `head_camera_frame` 是 `head_mount` 的 fixed 子链接（`robot_state_publisher` 从 `/joint_states` 发布）；`joint_state_broadcaster.update_rate: 100` |
+| 起动方式 | `src/runtime/launch_composition.py:799-878` | `ros2_control_node` + `robot_state_publisher` + spawner |
+
+**可运行，且按单栈规则运行**：测量只起三个进程（MuJoCo+相机插件+joint_state_broadcaster、robot_state_publisher、
+spawner），**无检测器、无权重、无 CUDA、无 MoveIt、无 broker、无遥操作**；日志实测 `Attempting EGL for headless
+rendering` → `publishing at 10.000000 Hz`。**三个时间戳同钟可得**：插件、`/joint_states`、TF 全部是仿真器自己
+`/clock`（`mjData.time`）驱动的 `RCL_ROS_TIME`，因此时钟分辨率可实测而非假定。两个结构性事实记录在文档里：
+① 图像与 CameraInfo 的时间戳**由构造相同**（插件赋同一个 `stamp`），故可观测偏斜是"图像/CameraInfo 对"与因果配对的
+joint state 之差，TF 结果并列记录而**不作为第四个时间戳**（TF 由同一 joint state 派生）；② 工具链的 C++ 仿真链接
+`/opt/ros/jazzy/opt/mujoco_vendor/lib/libmujoco.so.3.4.0`（MuJoCo **3.4.0**），而 HS-298..307 的 Python 生产者用
+MuJoCo **3.12.0** —— 场景与 URDF 字节相同，但这是记录在案的环境差异。
+
+**生产者**：`so101_demo.act.head_search_transport_measurement`（库模块）+ 两个安装入口
+`measure-frame-contract`（读生产插件配置，非生产 head 流/非 10 Hz 即 `CAL_FRAME_CONTRACT_CONTRADICTORY`；文档
+`measured_here:false`、`value_source:"declaration"`、`declared_by`=路径+sha256+JSON pointer；有实测速率时并列记录、
+不替换声明值）与 `measure-skew`（起上述三节点栈，按"每帧配自己的 CameraInfo 时间戳"这一生产规则 + 因果 joint 配对，
+逐样本记录三时间戳/接收时刻/TF 查询/时钟读数，`clock_resolution_s` 取捕获期间同钟不同读数的最小正步长；空捕获、丢源、
+时钟未走动分别以 `CAL_SKEW_NO_SAMPLES`/`CAL_SKEW_SOURCE_MISSING`/`CAL_SKEW_EVIDENCE_CONTRADICTORY`/
+`CAL_SKEW_CLOCK_UNMEASURED` 拒绝）。
+
+**两次真实运行**（安装程序，工具链 `$EV/head-toolchain-20261001T114500Z`，由 `fdecc66a6` 构建、6 包（含
+`mujoco_ros2_control`/`_msgs`/`_plugins`）build rc=0，后按 `a9c0a0b58` 增量重装；`$CAMPAIGN` 同前）：
+
+| 运行 | rc | 结果 |
+| --- | --- | --- |
+| `measure-frame-contract --plugin-config …/mujoco_plugins.yaml --skew-measurements …` → `$CAMPAIGN/frame-contract-20261001T111254Z` | 0（0.3 s） | 声明 **10.0 Hz**（`frame_period_s` 0.1，`measured_here:false`，citing `6a030c48…`），并列记录实测 **9.982638889222176 Hz**；文件 sha256 `4a8d3f3a…`，自摘要 `9d9cb2a6…`，receipt `f09a4a75…`（`DECLARED`） |
+| `measure-skew --scene … --geometry-seal … --plugin-config … --controller-config … --urdf … --frame-contract … --frames 300` → `$CAMPAIGN/skew-measurements-20261001T111219Z` | 0（32 s，仿真窗 29.952 s） | **300 样本**：图像= CameraInfo 时间戳完全相同，joint 落后 **0/2/4/6/8 ms（107/44/71/57/21 个）** → p99.9（nearest-rank，n=300 即最大值）**0.008 s**；`clock_resolution_s` **0.0019999999999988916**（实测：仿真钟只按 sealed timestep 前进）；接收 301 帧、配对 300、因窗口内无 joint 丢弃 1、因无 CameraInfo 丢弃 0；文件 sha256 `9ef5c928…`，自摘要 `0b3acc75…`，receipt `39c25dd5…`（`MEASURED`） |
+
+**安装版 phase 7 消费**（`consumption-check.log` 在运行目录内，两个模块都按路径断言来自安装树）：
+`compute_max_skew_s(skew=<本文件>, frame_contract=<声明>)` = **`max_skew_s = 0.010000000000001563 s`**
+（p99.9 0.008000000000002672 + 时钟分辨率 0.0019999999999988916），余量 0.03999999999999844 s（上限 0.05 s =
+半个 frame period），按 path+sha256 引用两份文档；`frame_contract_item` 记 "10.0 Hz … frame_period_s = 0.1"。
+四条对照如实拒绝：去掉 `clock_resolution_s` → `ValueError`；样本只剩一个时间戳 → `ValueError`；0.06 s 偏斜 →
+`CAL_SKEW_EXCEEDED`（拒绝而非钳制）；30 Hz 契约 → `ValueError`。两份文档自摘要由安装模块复算一致。
+
+**真实运行才暴露的两个缺陷**（各自独立提交）：① 首个探针 `skew-probe-20261001T111100Z` rc=1：
+`Parameter("use_sim_time", True)` 在该 rclpy 版本里把 `True` 当成参数类型（`TypeError`），capture 立即退出并
+SIGINT 掉尚在初始化的栈（栈日志因此留下 `failed to initialize rcl node` 的 apport 回溯）；② 第二个探针
+`skew-probe2-20261001T111600Z` rc=0 但 17 个样本里有 1 个恰好 0.1 s —— 捕获在收到第 N 帧图像时立刻停止，而该帧的
+CameraInfo（紧随其后发布）尚未被 executor 处理，于是被配到上一帧。修正是"每帧必须配自己的 CameraInfo 时间戳"
+（这正是生产 `INPUT_CAMERA_INFO_INVALID` 规则）；该探针其余 16 个样本已经是结构性的 8 ms，说明缺陷是捕获边界
+假象而非流水线属性。
+
+**另外两项如实记录**：③ **TF 查询在 300 帧中只有 39 帧成功**（其余样本记录查询错误）。它不进入 `max_skew_s`
+（三个时间戳是 image/CameraInfo/joint），但这是本测量**比生产消费更宽**的地方：`RosSearchAdapter` 在 TF 查询失败时
+`continue` 跳过该帧并回退到更旧的帧，而本捕获仍记录该帧——需要"只看生产会消费的帧"的评审应按 `sources.tf.resolved`
+逐样本筛选，而不是假定 300 帧都可用。④ sealed head-search 场景**没有 keyframe**，故 URDF 的 `initial_keyframe`
+token 渲染为空串（仿真器拒绝模型中不存在的 keyframe），这是生产者唯一没有调用
+`launch_composition._render_mujoco_robot_description` 的原因。
+
+**它声明的推断（待评审，逐条照录）**：① skew 的 `stamps` 取三个**带时间戳的**来源（图像、其 CameraInfo、因果配对的
+joint state），TF 并列记录而不计为第四个戳（图像与 CameraInfo 由构造同戳，TF 由同一 joint state 派生）；②
+`clock_resolution_s` 由捕获自身读数实测（同钟不同值的最小正步长），时钟未走动即拒绝，**不按标称速率声明**；③ 帧只与
+"自己的 CameraInfo 戳 + 窗口内的 joint"配对，丢弃计数写进文档而不隐藏；④ skew 文档以 path/sha256/rate 记录它所对齐的
+frame contract；⑤ 飞行只起上述三个生产节点，别的什么都不起。
+
+**门禁**：`ruff check` 干净（两个新文件另过 `ruff format`）；新模块 RED（1 collection error，只缺新模块）→ GREEN
+**17 passed**，rc=0；CLI 入口 RED（`invalid choice: 'measure-skew'`，8 failed）→ GREEN **9 passed**；回归（25 文件 =
+HS-288..307 各 phase/CLI/calibration + 新模块测试）**697 passed, rc=0**；全量 `src/so101_demo_py/test`（8 workers，
+基线 run-dir 布局）**175 failed / 6183 passed / 152 skipped / 86 errors, rc=1, 86 s**
+（`$EV/scratch/pytest-xdist8-hs308-final.46ebd316`），与基线 `pytest-xdist8-hs307-final3.bfe79607`
+（175/6157/152/86）**节点级 diff 0 行（261 节点相同）、0 个新增失败**，`passed +26` 正好是新增（17+9）；失败集中
+**0 个 head_search 节点**。运行后 `ps` 无任何 ros2/MuJoCo/spawner 残留，`nvidia-smi --query-compute-apps` 为空，
+`ros2 daemon` 未运行（无需 stop）。
+
+**17 值 bundle 状态**：本清点 14 项 + 第 15 项 `coarse_step_observations` **现在全部有安装生产者**（本轮闭合 #7/#8）。
+但这不等于 bundle 端到端可完成：HS-301 起所有测量飞行都用**派生**的 C2a 生产配置（`09fe03f7…` = sealed 配置仅替换
+`weight_path`/`weight_sha256`），因为安装版权重守卫要求权重摘要等于声明配置封印的 `weight_sha256`；sealed 生产配置
+仍钉 candidate A（`f281d252…`）而获选模型是 C2a（`2afd550694abfbe6…`）。真实 `run` 同时声明 sealed
+`--production-config` 与 C2a 文档会撞上这个受控依赖不一致——这不是测量文档能解决的，需要决定"把生产配置提升为 C2a"
+还是"让 sealed 依赖准入接受派生配置"，本轮**未做该决定**。此外 run 根还需六个 sealed 受控依赖齐备且互洽，本轮未产出
+或改动它们。
+
+**本轮证据与生命周期**：工具链 `$EV/head-toolchain-20261001T114500Z`（含 C++ 仿真/插件/msgs），两次失败探针
+`$CAMPAIGN/skew-probe-20261001T111100Z`（rc=1 留证：console+transport 栈日志）与 `skew-probe2-20261001T111600Z`
+（rc=0 但含配对缺陷，被取代）、一次纯声明 `$CAMPAIGN/frame-contract-20261001T111026Z`、
+**记录用** `$CAMPAIGN/frame-contract-20261001T111254Z` 与 `$CAMPAIGN/skew-measurements-20261001T111219Z`
+（各含文档、receipt、console、provenance、transport 栈日志与 params 文件、skew 目录内 `consumption-check.log`）、
+`$EV/scratch/pytest-xdist8-hs308-{regression.580bb04b,final.46ebd316}`、`$EV/reviews/phase6-7-measurement-inventory.md`
+（追加 HS-308 状态节）、工作树 `scratch/hs308/`（env/build-toolchain/rebuild-python/run-tests/baseline-invocation/
+consumption-check 脚本、pyshim、RED/GREEN/回归/全量日志、tmp*）。以上**均为删除候选，未删除**；HS-288..307 的产物
+只读引用。
