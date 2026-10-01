@@ -50906,3 +50906,33 @@ The line asserts `broker_spec["config_path"] == "/runtime/runtime-config.yaml"` 
 `_broker_command` work substituted **host** paths for the container-free route. So the substitution leaked into the
 **spec** where the container path is expected. That is a real bug of mine, in the route whose disposition the user has
 not yet decided (decision 1), and it is recorded as mine rather than folded into the family's pre-existing count.
+
+
+## CP-2679 — My regression located to the line, and the judgement it needs
+
+```python
+        self._uses_production_broker_container = broker_command_builder is None          # 2682
+...
+            # the container route mounts runtime_root at /runtime; a host run names the copy itself, which sits
+            # beside the spec (CP-2541)
+            "config_path": ("/runtime/runtime-config.yaml" if self._uses_production_broker_container
+                            else str(config_copy)),                                      # 3002
+```
+
+So the spec's `config_path` is the container-style `/runtime/runtime-config.yaml` only when no custom broker command
+builder was supplied, and the host copy's own path otherwise - the change CP-2541 made for the container-free route.
+
+The failing test is `test_physical_composition_prepares_and_supervises_one_external_broker`, i.e. it **supplies** a
+builder ("one external broker") and still asserts the container path. So it encodes the **pre-CP-2541** contract: it was
+written when a custom builder did not change how the spec names its config.
+
+That makes this a judgement rather than a patch, and the judgement has to come from the test's own intent - read at its
+construction, not inferred from my code. Two options, and both are legitimate:
+
+- the test's intent is "an external broker still receives the container-shaped spec", in which case **my substitution
+  leaked too far** and the fix is mine;
+- the test's intent is "the composition prepares and supervises an external broker", in which case it predates the
+  host-path contract and **updating it is the honest change**, with the reason stated in the commit.
+
+What is not legitimate is choosing whichever makes the suite green, which is why the next read is the test's body around
+its composition call rather than another attempt at the fix.
