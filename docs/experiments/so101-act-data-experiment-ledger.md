@@ -54270,3 +54270,29 @@ So the checkpoint's three line numbers point at three different things, and the 
 three but to check each against the rule: `:16` needs nothing, `:142` needs nothing, and `:50` needs the question answered
 of whether `cup_pose_world` is read as a convenience or whether the fixture is feeding the runner a key the writer would
 reject.
+
+
+## CP-2815 — `cup_pose_world` is a real key one layer up, and absent where the QC reads
+
+Searching the whole package for the key the `:50` fixture writes:
+
+```
+src/application/e2e_acceptance.py:371        pose = _pose(mujoco.get("cup_pose_world"))
+src/application/task_reachability.py:79      cup_pose_world: PoseEvidence,
+src/adapters/act/candidate_reachability.py:89 cup_pose_world: object,
+```
+
+So the name is **real** - it is how the application and adapter layers carry cup pose evidence, as a `PoseEvidence` - and
+it does **not** appear in the ACT episode modules at all: neither `act/episode_qc.py` nor `act/episode_audit.py` mentions
+it, and the physics rows the audit checks are keyed by `cup_position_world_m` and `cup_orientation_world_xyzw` (CP-2635).
+
+Which makes `:50` a genuine question rather than a copy-paste slip: the fixture appends `support` and `retract` rows whose
+observation carries `cup_pose_world`, the QC's own reader does not read that name, and the test nonetheless asserts
+`status == PASS`. Three readings survive - the rows are tolerated because the QC takes its endpoints from other rows, the
+reader has a fallback that reconstructs the pair from any pose-shaped value, or the assertion passes for a reason unrelated
+to those two appended rows. Distinguishing them needs the QC's own physics-reading path, which is the next read, and the
+answer decides whether the fixture is feeding the runner a key it ignores (harmless but misleading) or one it depends on
+(load-bearing, and then the schema check should say so).
+
+Both outcomes are worth writing down: this is the third time in this stretch that one name has meant two things across
+layers, and the first time the two meanings sit on either side of a schema boundary.
