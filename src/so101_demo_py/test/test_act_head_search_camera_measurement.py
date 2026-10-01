@@ -22,6 +22,8 @@ from so101_demo.act import head_search_camera_measurement as module
 from so101_demo.act.head_search_camera_measurement import (
     CAL_CAMERA_CUP_LOST,
     CAL_CAMERA_POSE_OUT_OF_CORRIDOR,
+    CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
+    CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE,
     CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
     DEFAULT_FRAMES_PER_POSE,
     KIND,
@@ -38,6 +40,8 @@ from so101_demo.act.head_search_camera_measurement import (
     write_head_search_camera_measurement,
 )
 from so101_demo.act.head_search_search_params import (
+    CAL_VERTICAL_BOUNDS_UNPROJECTED,
+    CalibrationSearchParamsRefused,
     compute_center_deadband_px,
     compute_vertical_bounds_px,
 )
@@ -407,6 +411,219 @@ def test_an_undeclared_safety_margin_is_recorded_as_null_never_defaulted():
 def test_a_missing_declaration_file_is_a_caller_error(tmp_path):
     with pytest.raises(FileNotFoundError):
         read_declared_safety_margin(tmp_path / "absent.json")
+
+
+# --- HS-305: the declared image safety margin fraction (approved Proposal A) -----------------------
+
+
+def _image_geometry() -> dict:
+    """The sealed camera geometry phase 6 derives the shorter edge from: 640 x 480."""
+
+    return declared_camera_geometry(
+        geometry_seal={
+            "horizontal_fov_rad": HORIZONTAL_FOV_RAD,
+            "image_width": WIDTH_PX,
+            "image_height": HEIGHT_PX,
+        },
+        seal_path=None,
+        seal_sha256="a" * 64,
+    )
+
+
+def _margin_profile(tmp_path, body: str):
+    artefact = tmp_path / "head_camera_yolo_seg.yaml"
+    artefact.write_text(body, encoding="utf-8")
+    return artefact
+
+
+def test_a_declared_fraction_is_derived_into_pixels_with_ceil_and_cited(tmp_path):
+    """Proposal A: the production camera declaration states a fraction; the producer applies ceil."""
+
+    artefact = _margin_profile(
+        tmp_path,
+        "camera_name: head_camera\n"
+        "image_width: 640\n"
+        "image_height: 480\n"
+        "image_safety_margin_fraction: 0.25\n",
+    )
+
+    declaration = read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+    assert declaration["value"] == 120.0  # ceil(0.25 * min(640, 480))
+    assert declaration["unit"] == "px"
+    assert declaration["field"] == "safety_margin_px"
+    assert declaration["declared"] is True
+    assert declaration["measured_here"] is False
+    assert declaration["refusal"] is None
+    assert declaration["fraction"] == 0.25
+    assert declaration["image_width_px"] == WIDTH_PX
+    assert declaration["image_height_px"] == HEIGHT_PX
+    assert declaration["shorter_edge_px"] == HEIGHT_PX
+    declared_by = declaration["declared_by"]
+    assert declared_by["path"] == str(artefact)
+    assert declared_by["sha256"] == hashlib.sha256(artefact.read_bytes()).hexdigest()
+    assert declared_by["key"] == "image_safety_margin_fraction"
+    assert declared_by["fraction"] == 0.25
+    assert declared_by["derivation"] == "ceil(0.25 * min(640.0, 480.0)) = 120 px"
+
+
+def test_a_fraction_without_declared_dimensions_is_bound_to_the_sealed_geometry(tmp_path):
+    artefact = _margin_profile(tmp_path, "image_safety_margin_fraction: 0.125\n")
+
+    declaration = read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+    assert declaration["value"] == 60.0  # ceil(0.125 * 480)
+    assert declaration["image_width_px"] == WIDTH_PX
+    assert declaration["image_height_px"] == HEIGHT_PX
+    assert declaration["declared_by"]["bound_to"] == "the sealed head camera geometry"
+
+
+def test_a_fraction_whose_declared_dimensions_contradict_the_sealed_geometry_is_refused(tmp_path):
+    artefact = _margin_profile(
+        tmp_path,
+        "image_width: 640\nimage_height: 481\nimage_safety_margin_fraction: 0.25\n",
+    )
+
+    with pytest.raises(CalibrationCameraMeasurementRefused) as refused:
+        read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+    assert refused.value.code == CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY
+    assert "481" in refused.value.detail
+
+
+def test_a_fraction_outside_the_open_zero_to_a_half_range_is_refused(tmp_path):
+    for bad in (0.0, -0.25, 0.5000001, 1.0, 12.0):
+        artefact = tmp_path / f"out-of-range-{bad}.json"
+        artefact.write_text(json.dumps({"image_safety_margin_fraction": bad}), encoding="utf-8")
+
+        with pytest.raises(CalibrationCameraMeasurementRefused) as refused:
+            read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+        assert refused.value.code == CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE
+
+    # the upper bound itself is inside the closed end: half the shorter edge, one edge's worth
+    half = tmp_path / "exactly-half.json"
+    half.write_text(json.dumps({"image_safety_margin_fraction": 0.5}), encoding="utf-8")
+    assert read_declared_safety_margin(half, image_geometry=_image_geometry())["value"] == 240.0
+
+
+def test_a_fraction_that_is_not_a_finite_number_is_undeclared(tmp_path):
+    for bad in ("a quarter", None, float("inf")):
+        artefact = tmp_path / "not-a-fraction.json"
+        artefact.write_text(json.dumps({"image_safety_margin_fraction": bad}), encoding="utf-8")
+
+        with pytest.raises(CalibrationCameraMeasurementRefused) as refused:
+            read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+        assert refused.value.code == CAL_CAMERA_SAFETY_MARGIN_UNDECLARED
+
+
+def test_an_artefact_declaring_both_margin_forms_is_refused(tmp_path):
+    artefact = tmp_path / "both-forms.json"
+    artefact.write_text(
+        json.dumps({"image_safety_margin_fraction": 0.25, "safety_margin_px": 110.0}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(CalibrationCameraMeasurementRefused) as refused:
+        read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+    assert refused.value.code == CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY
+
+
+def test_a_fraction_declaration_without_the_sealed_geometry_is_a_caller_error(tmp_path):
+    artefact = _margin_profile(tmp_path, "image_safety_margin_fraction: 0.25\n")
+
+    with pytest.raises(ValueError, match="image geometry"):
+        read_declared_safety_margin(artefact)
+
+
+def test_the_pixel_form_is_still_read_when_the_geometry_is_not_offered(tmp_path):
+    """The pre-existing pixel declaration keeps working, and its cited block keeps its exact shape."""
+
+    artefact = tmp_path / "camera-safety.json"
+    artefact.write_text(json.dumps({"safety_margin_px": 12.5}), encoding="utf-8")
+
+    declaration = read_declared_safety_margin(artefact)
+
+    assert declaration["value"] == 12.5
+    assert declaration["declared_by"] == {
+        "path": str(artefact),
+        "sha256": hashlib.sha256(artefact.read_bytes()).hexdigest(),
+        "key": "safety_margin_px",
+    }
+
+
+def test_the_two_fraction_refusals_are_registered_and_the_old_one_survives():
+    assert CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE in REFUSAL_CODES
+    assert CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY in REFUSAL_CODES
+    assert CAL_CAMERA_SAFETY_MARGIN_UNDECLARED in REFUSAL_CODES
+
+
+# --- HS-305: what phase 6 does with the derived margin ---------------------------------------------
+
+
+def test_the_document_carries_the_derived_margin_and_no_refusal(tmp_path):
+    artefact = _margin_profile(
+        tmp_path,
+        "image_width: 640\nimage_height: 480\nimage_safety_margin_fraction: 0.25\n",
+    )
+    margin = read_declared_safety_margin(artefact, image_geometry=_image_geometry())
+
+    document = _document(tmp_path, safety_margin=margin)
+
+    assert document["safety_margin_px"] == 120.0
+    assert document["refusals"] == []
+    assert document["safety_margin"]["declared_by"]["key"] == "image_safety_margin_fraction"
+    assert (
+        document["safety_margin"]["declared_by"]["sha256"]
+        == hashlib.sha256(artefact.read_bytes()).hexdigest()
+    )
+
+
+def test_phase_six_intersects_the_projection_with_the_derived_margin(tmp_path):
+    artefact = _margin_profile(
+        tmp_path,
+        "image_width: 640\nimage_height: 480\nimage_safety_margin_fraction: 0.25\n",
+    )
+    document = _document(
+        tmp_path,
+        safety_margin=read_declared_safety_margin(artefact, image_geometry=_image_geometry()),
+    )
+    projection = {
+        "path": str(tmp_path / "workspace-projection.json"),
+        "sha256": "c" * 64,
+        "top_px": 96.0,
+        "bottom_px": 470.0,
+    }
+
+    block = compute_vertical_bounds_px(camera=document, workspace_projection=projection)
+
+    assert block["value"] == [120.0, 360.0]
+    assert block["observed_distribution"]["image_safety_margin_px"] == 120.0
+
+
+def test_phase_six_refuses_an_empty_intersection_under_the_derived_margin(tmp_path):
+    artefact = _margin_profile(
+        tmp_path,
+        "image_width: 640\nimage_height: 480\nimage_safety_margin_fraction: 0.25\n",
+    )
+    document = _document(
+        tmp_path,
+        safety_margin=read_declared_safety_margin(artefact, image_geometry=_image_geometry()),
+    )
+    projection = {
+        "path": str(tmp_path / "workspace-projection.json"),
+        "sha256": "c" * 64,
+        "top_px": 0.0,
+        "bottom_px": 100.0,
+    }
+
+    with pytest.raises(CalibrationSearchParamsRefused) as refused:
+        compute_vertical_bounds_px(camera=document, workspace_projection=projection)
+
+    assert refused.value.code == CAL_VERTICAL_BOUNDS_UNPROJECTED
+    assert "image safety" in refused.value.detail
 
 
 # --- the declared geometry ------------------------------------------------------------------------
@@ -1059,6 +1276,8 @@ def test_the_producer_declares_the_refusal_vocabulary_it_can_raise():
         CAL_CAMERA_CUP_LOST,
         CAL_CAMERA_POSE_OUT_OF_CORRIDOR,
         CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
+        CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE,
+        CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
         CAL_TIMING_EVIDENCE_MISSING,
         CAL_TIMING_EVIDENCE_CONTRADICTORY,
         CAL_TIMING_STOP_UNSETTLED,

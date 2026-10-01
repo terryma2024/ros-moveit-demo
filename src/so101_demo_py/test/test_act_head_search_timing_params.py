@@ -697,6 +697,58 @@ def test_stop_velocity_requires_a_positive_feedback_period():
     )
 
 
+def test_stop_velocity_accepts_an_explicitly_zero_quantisation():
+    """HS-305 Proposal B: the zero resolution is a declaration, and the envelope keeps its three terms."""
+
+    block = compute_stop_velocity_rad_s(
+        stationary=stationary_document(),
+        feedback=feedback_document(quantisation_rad=0.0),
+        controller=controller_document(),
+    )
+
+    assert block["observed_distribution"]["quantisation_rad"] == 0.0
+    assert block["safety_margin"]["quantisation_velocity_rad_s"] == 0.0
+    assert block["safety_margin"]["envelope_terms"] == 3
+    assert block["value"] == pytest.approx(
+        EXPECTED_P99_9_STATIONARY_RAD_S + 0.0 + STOPPED_TOLERANCE_RAD_S
+    )
+    assert block["value"] < EXPECTED_STOP_VELOCITY_RAD_S
+
+
+def test_stop_velocity_still_refuses_a_missing_or_non_finite_quantisation():
+    """The zero is accepted only where it was declared: absent, null and non-finite stay refusals."""
+
+    for bad in (None, float("nan"), float("inf")):
+        assert caller_error_of(
+            lambda bad=bad: compute_stop_velocity_rad_s(
+                stationary=stationary_document(),
+                feedback=feedback_document(quantisation_rad=bad),
+                controller=controller_document(),
+            )
+        )
+    assert caller_error_of(
+        lambda: compute_stop_velocity_rad_s(
+            stationary=stationary_document(),
+            feedback={
+                key: value
+                for key, value in feedback_document().items()
+                if key != "quantisation_rad"
+            },
+            controller=controller_document(),
+        )
+    )
+
+
+def test_stop_velocity_still_refuses_a_negative_quantisation():
+    assert caller_error_of(
+        lambda: compute_stop_velocity_rad_s(
+            stationary=stationary_document(),
+            feedback=feedback_document(quantisation_rad=-1e-6),
+            controller=controller_document(),
+        )
+    )
+
+
 # --------------------------------------------------------------------------------------------------
 # stop_latency_s
 # --------------------------------------------------------------------------------------------------

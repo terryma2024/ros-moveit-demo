@@ -183,8 +183,9 @@ DEADBAND_CANDIDATE_FLAG = ("candidate", "--candidate")
 #: field of view and image size are the declared camera, the production search configuration, the sealed
 #: controller period, the selected candidate's frozen document, the selected model's weights and the
 #: brand-new directory the documents own. `--safety-margin-declaration` is optional: it names the artefact
-#: that declares `safety_margin_px`, and without it that field is written as null and refused rather than
-#: defaulted
+#: that declares `image_safety_margin_fraction` (the approved production form, the fraction of the shorter
+#: production image edge this producer derives into pixels with `ceil`) or `safety_margin_px` directly, and
+#: without it that field is written as null and refused rather than defaulted
 CAMERA_REQUIRED_FLAGS = (
     ("scene", "--scene"),
     ("geometry_seal", "--geometry-seal"),
@@ -208,7 +209,9 @@ STOP_CONFIG_REQUIRED_FLAGS = (
 
 #: the `measure-feedback` entry: the sealed controller configuration that declares both rates, and the
 #: optional artefact that declares the quantisation resolution. Without that artefact the resolution is
-#: written as null and refused, exactly like the camera measurement's undeclared safety margin
+#: written as null and refused, exactly like the camera measurement's undeclared safety margin; the
+#: retained declaration `config/act/feedback-quantisation-declaration-v1.json` states this platform's
+#: explicit zero with its basis (HS-305)
 FEEDBACK_REQUIRED_FLAGS = (
     ("controller_config", "--controller-config"),
     ("output_dir", "--output-dir"),
@@ -558,7 +561,10 @@ def _camera_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--safety-margin-declaration",
         type=Path,
-        help="the artefact that declares safety_margin_px; without one the field is refused, not defaulted",
+        help=(
+            "the artefact that declares image_safety_margin_fraction (derived with ceil against the sealed "
+            "image dimensions) or safety_margin_px directly; without one the field is refused, not defaulted"
+        ),
     )
     parser.add_argument("--anchor", action="append", help="measure only these sealed anchors")
     parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
@@ -744,7 +750,8 @@ def _feedback_parser() -> argparse.ArgumentParser:
         prog="so101_head_search_calibration measure-feedback",
         description=(
             "Read the declared feedback period the stop path consumes and the declared feedback quantisation "
-            "resolution; without a declaration of the resolution the field is refused, never defaulted"
+            "resolution; without a declaration of the resolution the field is refused, never defaulted, and "
+            "an explicitly zero resolution has to state its basis"
         ),
     )
     parser.add_argument("--controller-config", type=Path, help="the sealed controller configuration")
@@ -753,8 +760,8 @@ def _feedback_parser() -> argparse.ArgumentParser:
         "--quantisation-declaration",
         type=Path,
         help=(
-            "the artefact that declares quantisation_rad, or counts_per_revolution with joint_travel_rad; "
-            "without one the field is written as null and refused"
+            "the artefact that declares quantisation_rad (explicitly zero needs the basis of the zero), or "
+            "counts_per_revolution with joint_travel_rad; without one the field is written as null and refused"
         ),
     )
     return parser

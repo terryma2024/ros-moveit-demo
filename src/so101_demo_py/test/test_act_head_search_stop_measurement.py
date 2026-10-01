@@ -233,6 +233,114 @@ def test_the_feedback_document_derives_a_declared_quantisation(tmp_path: Path) -
     assert document["refusals"] == []
 
 
+# --- HS-305: the explicitly zero resolution of this platform (approved Proposal B) --------------------
+
+
+def _zero_declaration(tmp_path: Path, **document) -> Path:
+    """The declaration this platform records: an explicit zero resolution with the statement behind it."""
+
+    body = {
+        "schema_version": 1,
+        "kind": "head_search_feedback_quantisation_declaration",
+        "platform": "mujoco",
+        "quantisation_rad": 0.0,
+        "basis": (
+            "the MuJoCo closed loop feeds the stop window MuJoCo's own joint velocities (mjData.qvel); "
+            "there is no encoder and no count quantisation in that path"
+        ),
+    }
+    body.update(document)
+    path = tmp_path / "feedback-quantisation-declaration.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
+
+
+def test_an_explicitly_zero_declared_quantisation_is_read_with_its_basis(tmp_path: Path) -> None:
+    """Proposal B: the zero is a declaration the platform records, never a default for a missing value."""
+
+    declaration = stop.declared_quantisation(_zero_declaration(tmp_path))
+
+    assert declaration["declared"] is True
+    assert declaration["measured_here"] is False
+    assert declaration["quantisation_rad"] == 0.0
+    assert declaration["declared_by"]["keys"] == {"quantisation_rad": "quantisation_rad"}
+    assert declaration["declared_by"]["derivation"] == (
+        "declared directly as an explicit zero, with its basis"
+    )
+    assert declaration["declared_by"]["basis"].startswith("the MuJoCo closed loop")
+    assert declaration["basis"].startswith("the MuJoCo closed loop")
+
+
+def test_a_zero_without_its_basis_is_a_caller_error(tmp_path: Path) -> None:
+    """A bare zero would be the invented resolution this amendment refuses; the basis is mandatory."""
+
+    bare = tmp_path / "bare-zero.json"
+    bare.write_text(json.dumps({"quantisation_rad": 0.0, "platform": "mujoco"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="basis"):
+        stop.declared_quantisation(bare)
+
+    for body in ({"basis": ""}, {"basis": None}, {"basis": ["qvel"]}):
+        with pytest.raises(ValueError, match="basis"):
+            stop.declared_quantisation(_zero_declaration(tmp_path, **body))
+
+
+def test_the_zero_declaration_survives_the_producer_and_leaves_no_refusal(tmp_path: Path) -> None:
+    """The produced document carries `quantisation_rad: 0.0` and no refusal, so phase 7 accepts it."""
+
+    controllers = _controllers(tmp_path)
+    written = stop.write_feedback_measurements(
+        controller_config_path=controllers,
+        output_dir=tmp_path / "feedback-zero",
+        quantisation_declaration_path=_zero_declaration(tmp_path),
+    )
+
+    document = written["document"]
+    assert document["quantisation_rad"] == 0.0
+    assert document["period_s"] == 0.01
+    assert document["refusals"] == []
+    assert document["quantisation"]["declared"] is True
+    assert document["quantisation"]["declared_by"]["basis"]
+    assert written["receipt"]["status"] == "DECLARED"
+    assert written["receipt"]["quantisation_rad"] == 0.0
+    assert written["refusals"] == []
+
+
+def test_an_absent_resolution_is_still_refused_and_never_zero(tmp_path: Path) -> None:
+    """A missing resolution alone does not justify zero: `None` and the refusal survive untouched."""
+
+    absent = stop.declared_quantisation(tmp_path / "absent.json")
+
+    assert absent["declared"] is False
+    assert absent["quantisation_rad"] is None
+    assert absent["path"] is None
+
+    controllers = _controllers(tmp_path)
+    written = stop.write_feedback_measurements(
+        controller_config_path=controllers, output_dir=tmp_path / "feedback-absent"
+    )
+    assert written["document"]["quantisation_rad"] is None
+    assert [record["code"] for record in written["refusals"]] == [
+        stop.CAL_FEEDBACK_QUANTISATION_UNDECLARED
+    ]
+
+
+def test_a_negative_declared_quantisation_is_still_a_caller_error(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="quantisation_rad"):
+        stop.declared_quantisation(_zero_declaration(tmp_path, quantisation_rad=-1e-6))
+
+
+def test_the_platform_declaration_in_the_config_tree_states_the_zero_and_its_basis() -> None:
+    """The retained declaration the run passes to `measure-feedback` exists and declares the zero."""
+
+    path = Path(__file__).parents[1] / "config/act/feedback-quantisation-declaration-v1.json"
+    declaration = stop.declared_quantisation(path)
+
+    assert declaration["quantisation_rad"] == 0.0
+    assert declaration["declared"] is True
+    assert "qvel" in declaration["basis"]
+    assert declaration["detail"]
+
+
 def test_the_feedback_document_refuses_a_configuration_without_a_feedback_rate(tmp_path: Path) -> None:
     """Without a declared broadcaster rate there is no period the stop path's feedback arrives at."""
 

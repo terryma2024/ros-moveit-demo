@@ -19,16 +19,22 @@ Phase 6 reads five keys off this document
   ``rad_per_px`` phase 6 divides by, so ``ceil(centre_jitter_rad / rad_per_px)`` is the pixel spread that
   was measured. The document headlines the **worst case over poses** and keeps every pose's own
   distribution, its frames and its stamps beside it; the row-axis spread is recorded too, for review.
-* ``safety_margin_px`` is a **declaration that no retained artefact carries**. The sealed geometry does not
-  declare it, the calibration contract's seventeen parameters do not include it, and the production search
-  configuration declares its vertical bounds but no margin; the seal's ``min_anchored_visible_pixels`` and
-  the geometry contract's ``visible_pixel_minimum`` are counts of visible object pixels, not an inset from
-  the image border, so they are not the same quantity and are not substituted. With no declaring artefact
-  this document writes ``safety_margin_px: null`` and records the refusal
-  :data:`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED` beside it; it never defaults a number phase 6 would
-  intersect the projected workspace with. When the caller passes an artefact that does declare the key
-  (``--safety-margin-declaration``), the value is read from it and recorded with ``measured_here: false``
-  and the declaring path, sha256 and key.
+* ``safety_margin_px`` is a **declaration**, and since HS-305 it is declared as a **fraction of the shorter
+  production image edge** in the production head-camera declaration
+  ``config/perception/head_camera_yolo_seg.yaml``: this producer derives
+  ``safety_margin_px = ceil(image_safety_margin_fraction * min(image_width_px, image_height_px))`` from
+  that declaration and records the declaring path, its sha256 and the arithmetic, because a fraction
+  survives a resolution change and the ceiling keeps the bound conservative. Nothing is inferred from the
+  workspace projection the margin constrains (that would be circular) and no pixel-count field such as the
+  geometry contract's ``visible_pixel_minimum`` is substituted (a different quantity with a different unit).
+  When no artefact declares either form the document writes ``safety_margin_px: null`` and records the
+  refusal :data:`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED` beside it; it never defaults a number phase 6 would
+  intersect the projected workspace with. A declared fraction outside ``(0, 0.5]`` is
+  :data:`CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE`, a declaration whose own image dimensions disagree with the
+  sealed geometry - or that declares both forms at once - is
+  :data:`CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY`, and the pre-existing direct pixel declaration
+  (``safety_margin_px``) is still read and cited unchanged. Whichever form is declared, the value is read
+  from an artefact and recorded with ``measured_here: false`` and the declaring path, sha256 and key.
 
 What is measured, and what is refused instead of fabricated:
 
@@ -110,10 +116,14 @@ RECEIPT_ARTIFACT = "measurement-receipt.json"
 CAL_CAMERA_CUP_LOST = "CAL_CAMERA_CUP_LOST"
 CAL_CAMERA_POSE_OUT_OF_CORRIDOR = "CAL_CAMERA_POSE_OUT_OF_CORRIDOR"
 CAL_CAMERA_SAFETY_MARGIN_UNDECLARED = "CAL_CAMERA_SAFETY_MARGIN_UNDECLARED"
+CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE = "CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE"
+CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY = "CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY"
 REFUSAL_CODES = (
     CAL_CAMERA_CUP_LOST,
     CAL_CAMERA_POSE_OUT_OF_CORRIDOR,
     CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
+    CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE,
+    CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_STOP_UNSETTLED,
@@ -121,6 +131,21 @@ REFUSAL_CODES = (
     CAL_TIMING_TIME_BASE_UNVERIFIED,
     CAL_TIMING_DEVICE_UNAVAILABLE,
 )
+
+#: the two declarations the image safety margin is read from: the approved fraction of the shorter
+#: production image edge (`image_safety_margin_fraction`), and the direct pixel count the field was
+#: declared with before. The fraction is the production form; the pixel form stays readable, and an
+#: artefact that declares both is refused rather than resolved by precedence
+IMAGE_SAFETY_MARGIN_FRACTION_KEY = "image_safety_margin_fraction"
+SAFETY_MARGIN_PX_KEY = "safety_margin_px"
+
+#: the declared fraction's closed upper bound: half the shorter edge, i.e. one whole edge's worth
+MAX_IMAGE_SAFETY_MARGIN_FRACTION = 0.5
+
+#: the keys a declaration may carry its own production image dimensions under, so the fraction can be
+#: checked against the sealed geometry rather than trusted
+DECLARED_IMAGE_WIDTH_KEYS = ("image_width_px", "image_width")
+DECLARED_IMAGE_HEIGHT_KEYS = ("image_height_px", "image_height")
 
 #: how many frames one fixed pose is observed for. A spread needs samples; three is the floor the loop
 #: accepts, twelve (1.2 s of simulation time at the declared frame period) is the default
@@ -160,14 +185,23 @@ FRAME_CADENCE = (
     "between frames, so the pose does not change and every frame is a repeated observation of it"
 )
 UNDECLARED_SAFETY_MARGIN_DETAIL = (
-    "no retained artefact declares safety_margin_px: the sealed head camera geometry measures the field of "
-    "view and the image size only, the head-search calibration contract's seventeen parameters do not "
-    "include an image margin, and the production search configuration declares values.vertical_bounds_px "
+    "no retained artefact declares the image safety margin: the sealed head camera geometry measures the "
+    "field of view and the image size only, the head-search calibration contract's seventeen parameters do "
+    "not include an image margin, and the production search configuration declares values.vertical_bounds_px "
     "but no margin. The seal's minimum visible-pixel counts and the geometry contract's "
     "visible_pixel_minimum are counts of visible object pixels, not an inset from the image border, so they "
     "are not substituted. This measurement records the field as null and refuses it rather than defaulting "
     "a number phase 6 would intersect the projected workspace with; pass --safety-margin-declaration with "
-    "an artefact that really declares the key once one exists"
+    "the production head-camera declaration, which states the fraction, or with an artefact that declares "
+    "the pixel count directly"
+)
+
+IMAGE_SAFETY_MARGIN_RULE = (
+    "safety_margin_px = ceil(image_safety_margin_fraction * min(image_width_px, image_height_px)): the "
+    "declared fraction of the shorter production image edge, rounded up so the reserved edge can only grow. "
+    "The fraction is a policy value of the production camera declaration, it survives a resolution change, "
+    "and it is bound to the sealed geometry's own image dimensions - a declaration whose dimensions "
+    "disagree with the seal's is refused rather than believed"
 )
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -304,30 +338,21 @@ def undeclared_safety_margin(detail: str | None = None) -> dict:
     }
 
 
-def _declared_key(document: Mapping) -> tuple[str, object] | None:
-    """Where the document declares `safety_margin_px`: at its top level, or one block down."""
+def _declared_key(document: Mapping, key: str) -> tuple[str, object] | None:
+    """Where the document declares `key`: at its top level, or one block down."""
 
-    if "safety_margin_px" in document:
-        return "safety_margin_px", document["safety_margin_px"]
+    if key in document:
+        return key, document[key]
     for name in sorted(document):
         block = document[name]
-        if isinstance(block, Mapping) and "safety_margin_px" in block:
-            return f"{name}.safety_margin_px", block["safety_margin_px"]
+        if isinstance(block, Mapping) and key in block:
+            return f"{name}.{key}", block[key]
     return None
 
 
-def read_declared_safety_margin(path) -> dict:
-    """The image safety margin an artefact declares, with the path and digest that declare it.
+def _declaration_document(artefact: Path) -> Mapping:
+    """One declaration artefact, read as JSON first and YAML second, or a caller error."""
 
-    The declaration has to exist and has to be a non-negative finite pixel number: an artefact that
-    declares no such key, or declares something that is not a margin, refuses with
-    :data:`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED` rather than being read as a default. JSON is tried first
-    and YAML second, so one artefact format is not privileged over the other.
-    """
-
-    artefact = Path(path)
-    if not artefact.is_file():
-        raise FileNotFoundError(f"the safety margin declaration {artefact} does not exist")
     raw = artefact.read_text(encoding="utf-8")
     try:
         document = json.loads(raw)
@@ -346,13 +371,140 @@ def read_declared_safety_margin(path) -> dict:
         raise ValueError(
             f"the safety margin declaration {artefact} must be a mapping of keys to values"
         )
-    found = _declared_key(document)
-    if found is None:
+    return document
+
+
+def _declared_dimension(document: Mapping, keys) -> tuple[str, float] | None:
+    """The image dimension a declaration states for itself, if it states one."""
+
+    for key in keys:
+        found = _declared_key(document, key)
+        if found is not None and _finite(found[1]):
+            return found[0], float(found[1])
+    return None
+
+
+def _derived_safety_margin(
+    *, artefact: Path, document: Mapping, fraction_key: str, fraction, image_geometry
+) -> dict:
+    """Turn a declared fraction into the integer pixel margin, bound to the sealed image dimensions.
+
+    The fraction has to be a finite number inside ``(0, 0.5]``; a declaration that states its own image
+    dimensions has to agree with the sealed geometry, because a fraction of a different image is a different
+    margin; and the derivation is recorded key by key so a reviewer can recompute
+    ``ceil(fraction * min(width, height))`` from the document alone.
+    """
+
+    if not _finite(fraction):
         raise _refuse(
             CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
-            f"the artefact {artefact} declares no safety_margin_px, so it declares no image safety margin",
+            f"the artefact {artefact} declares {fraction_key} = {fraction!r}; an image safety margin "
+            f"fraction is a finite number of the shorter image edge",
         )
-    key, value = found
+    if not isinstance(image_geometry, Mapping):
+        raise ValueError(
+            f"a declared {IMAGE_SAFETY_MARGIN_FRACTION_KEY} needs the image geometry it is a fraction "
+            f"of, so the sealed camera geometry has to be offered"
+        )
+    width = _number(image_geometry, "the sealed camera geometry", "image_width_px", positive=True)
+    height = _number(
+        image_geometry, "the sealed camera geometry", "image_height_px", positive=True
+    )
+    declared_width = _declared_dimension(document, DECLARED_IMAGE_WIDTH_KEYS)
+    declared_height = _declared_dimension(document, DECLARED_IMAGE_HEIGHT_KEYS)
+    for name, declared, sealed in (
+        ("width", declared_width, width),
+        ("height", declared_height, height),
+    ):
+        if declared is not None and declared[1] != sealed:
+            raise _refuse(
+                CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
+                f"the artefact {artefact} declares {declared[0]} = {declared[1]!r}, but the sealed head "
+                f"camera geometry's image {name} is {sealed!r}: a fraction of a different image is not "
+                f"this camera's safety margin",
+            )
+    value = float(fraction)
+    if not 0.0 < value <= MAX_IMAGE_SAFETY_MARGIN_FRACTION:
+        raise _refuse(
+            CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE,
+            f"the artefact {artefact} declares {fraction_key} = {value!r}; the fraction of the shorter "
+            f"image edge has to lie inside (0, {MAX_IMAGE_SAFETY_MARGIN_FRACTION}], because a margin of "
+            f"zero reserves no edge and a margin of more than half the shorter edge leaves no image",
+        )
+    shorter_edge = min(width, height)
+    margin_px = int(math.ceil(value * shorter_edge))
+    derivation = f"ceil({value!r} * min({width!r}, {height!r})) = {margin_px} px"
+    return {
+        "field": "safety_margin_px",
+        "value": float(margin_px),
+        "unit": "px",
+        "measured_here": False,
+        "declared": True,
+        "declared_by": {
+            "path": str(artefact),
+            "sha256": _digest(artefact),
+            "key": fraction_key,
+            "fraction": value,
+            "shorter_edge_px": shorter_edge,
+            "bound_to": "the sealed head camera geometry",
+            "rule": IMAGE_SAFETY_MARGIN_RULE,
+            "derivation": derivation,
+        },
+        "refusal": None,
+        "detail": (
+            f"{fraction_key} is declared by {artefact} and derived here into a pixel margin; the fraction "
+            f"itself is not measured by this flight"
+        ),
+        "fraction": value,
+        "image_width_px": width,
+        "image_height_px": height,
+        "shorter_edge_px": shorter_edge,
+        "derivation": derivation,
+    }
+
+
+def read_declared_safety_margin(path, *, image_geometry=None) -> dict:
+    """The image safety margin an artefact declares, with the path and digest that declare it.
+
+    Two declarations are read. The production form is ``image_safety_margin_fraction``: a policy fraction of
+    the **shorter production image edge**, which this function derives into pixels with ``ceil`` and binds to
+    the sealed image dimensions (`image_geometry`); a fraction outside ``(0, 0.5]`` is
+    :data:`CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE` and a declaration whose own dimensions disagree with the
+    seal is :data:`CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY`. The other form is a direct non-negative finite
+    ``safety_margin_px`` count, read and cited exactly as before. An artefact that declares neither refuses
+    with :data:`CAL_CAMERA_SAFETY_MARGIN_UNDECLARED` rather than being read as a default, and one that
+    declares both is :data:`CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY` instead of resolved by precedence. JSON
+    is tried first and YAML second, so one artefact format is not privileged over the other.
+    """
+
+    artefact = Path(path)
+    if not artefact.is_file():
+        raise FileNotFoundError(f"the safety margin declaration {artefact} does not exist")
+    document = _declaration_document(artefact)
+    fraction = _declared_key(document, IMAGE_SAFETY_MARGIN_FRACTION_KEY)
+    pixels = _declared_key(document, SAFETY_MARGIN_PX_KEY)
+    if fraction is not None and pixels is not None:
+        raise _refuse(
+            CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
+            f"the artefact {artefact} declares both {fraction[0]} = {fraction[1]!r} and "
+            f"{pixels[0]} = {pixels[1]!r}; the image safety margin is declared one way, and this "
+            f"measurement refuses to choose between two declarations",
+        )
+    if fraction is not None:
+        return _derived_safety_margin(
+            artefact=artefact,
+            document=document,
+            fraction_key=fraction[0],
+            fraction=fraction[1],
+            image_geometry=image_geometry,
+        )
+    if pixels is None:
+        raise _refuse(
+            CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
+            f"the artefact {artefact} declares neither {IMAGE_SAFETY_MARGIN_FRACTION_KEY} nor "
+            f"{SAFETY_MARGIN_PX_KEY}, so it declares no image safety margin",
+        )
+    key, value = pixels
     if not _finite(value) or float(value) < 0.0:
         raise _refuse(
             CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
@@ -1048,7 +1200,9 @@ def write_head_search_camera_measurement(
     margin = (
         undeclared_safety_margin()
         if safety_margin_declaration_path is None
-        else read_declared_safety_margin(safety_margin_declaration_path)
+        else read_declared_safety_margin(
+            safety_margin_declaration_path, image_geometry=geometry
+        )
     )
     camera = seal.get("camera") if isinstance(seal.get("camera"), Mapping) else {}
     detector = (

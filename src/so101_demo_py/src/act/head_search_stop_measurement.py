@@ -174,8 +174,20 @@ QUANTISATION_RULE = (
     "the feedback path's position resolution in radians, expressed as a velocity over one feedback period. It "
     "is a declaration of the plant or the encoder, never a measurement of the simulation: from a declared "
     "`counts_per_revolution` and `joint_travel_rad` it is `joint_travel_rad / counts_per_revolution`, and a "
-    "declaration may carry `quantisation_rad` directly. No artefact in this repository declares either, so "
-    "without an explicit declaration the field is `null` with its refusal and phase 7 refuses the document"
+    "declaration may carry `quantisation_rad` directly. On this platform the MuJoCo feedback path exposes "
+    "joint velocities with no encoder quantisation, so the retained declaration "
+    "`config/act/feedback-quantisation-declaration-v1.json` states an explicit zero together with its basis; "
+    "a declaration that states no resolution at all still leaves the field `null` with its refusal, because a "
+    "missing resolution alone never justifies a zero"
+)
+
+#: the statement an explicitly zero resolution has to carry: a bare zero would be the invented value the
+#: amendment refuses, so this platform records the zero as a declaration together with its basis
+QUANTISATION_BASIS_KEY = "basis"
+ZERO_BASIS_REQUIRED = (
+    "an explicitly zero quantisation_rad is a declaration, not a default: the document has to state the "
+    "basis of the zero - the feedback path that exposes velocities without quantisation - because a missing "
+    "resolution alone never justifies one"
 )
 QUANTISATION_SEARCH = {
     "searched": [
@@ -187,7 +199,9 @@ QUANTISATION_SEARCH = {
     "result": (
         "no retained artefact declares a joint or encoder resolution; the geometry and calibration contracts "
         "declare pixel counts and angles, the URDF and MJCF declare joint limits, and the controller's "
-        "declaration is a velocity tolerance. The resolution is therefore refused, not derived"
+        "declaration is a velocity tolerance. This platform's MuJoCo feedback exposes joint velocities, so "
+        "the resolution is declared as an explicit zero by "
+        "`config/act/feedback-quantisation-declaration-v1.json` and never derived from a count"
     ),
 }
 
@@ -272,6 +286,12 @@ def _positive_number(name: str, value, *, allow_zero: bool = False) -> float:
     if number < 0.0 or (number == 0.0 and not allow_zero):
         raise ValueError(f"{name} is not positive")
     return number
+
+
+def _nonnegative_number(name: str, value) -> float:
+    """A declared number that may be an explicit zero, but never negative or non-finite."""
+
+    return _positive_number(name, value, allow_zero=True)
 
 
 def _positive_int(name: str, value, *, minimum: int = 1) -> int:
@@ -466,7 +486,7 @@ def undeclared_quantisation(detail: str | None = None) -> dict:
         or (
             "no retained artefact declares a joint or encoder resolution: the field is written `null` with "
             "the refusal CAL_FEEDBACK_QUANTISATION_UNDECLARED instead of being defaulted, and phase 7 refuses "
-            "any document whose quantisation_rad is not a finite positive number"
+            "any document whose quantisation_rad is missing or not a finite non-negative number"
         ),
     }
 
@@ -477,6 +497,12 @@ def declared_quantisation(path) -> dict:
     A declaration carries either `quantisation_rad` itself, or the two declarations the resolution is derived
     from: `counts_per_revolution` and `joint_travel_rad`. Anything else is a caller error (a plain
     `ValueError`), because a document that names neither is not a declaration of a resolution.
+
+    An explicitly **zero** `quantisation_rad` is a valid declaration on this platform - the MuJoCo feedback
+    path exposes joint velocities with no encoder quantisation, so the second term of the stop envelope is
+    identically zero - but only when the document also states the basis of the zero. A bare zero, and a
+    document that declares no resolution at all, are refused: the zero is declared here, never defaulted for
+    a missing value.
     """
 
     if path is None:
@@ -491,10 +517,20 @@ def declared_quantisation(path) -> dict:
     if not isinstance(document, Mapping):
         raise ValueError(f"the quantisation declaration {declaration_path} is not a document")
     digest = _digest(declaration_path)
+    basis = None
     if "quantisation_rad" in document:
-        value = _positive_number("the declared quantisation_rad", document["quantisation_rad"])
+        value = _nonnegative_number("the declared quantisation_rad", document["quantisation_rad"])
         keys = {"quantisation_rad": "quantisation_rad"}
         derivation = "declared directly"
+        if value == 0.0:
+            basis = document.get(QUANTISATION_BASIS_KEY)
+            if type(basis) is not str or not basis.strip():
+                raise ValueError(
+                    f"the quantisation declaration {declaration_path} declares quantisation_rad = 0.0 "
+                    f"without a {QUANTISATION_BASIS_KEY}: {ZERO_BASIS_REQUIRED}"
+                )
+            basis = basis.strip()
+            derivation = "declared directly as an explicit zero, with its basis"
     elif "counts_per_revolution" in document and "joint_travel_rad" in document:
         counts = _positive_number(
             "the declared counts_per_revolution", document["counts_per_revolution"]
@@ -511,19 +547,20 @@ def declared_quantisation(path) -> dict:
             f"the quantisation declaration {declaration_path} declares neither quantisation_rad nor the "
             f"counts_per_revolution and joint_travel_rad pair the resolution is derived from"
         )
-    return {
+    declared_by = {
+        "path": str(declaration_path),
+        "sha256": digest,
+        "keys": keys,
+        "rule": QUANTISATION_RULE,
+        "derivation": derivation,
+    }
+    block = {
         "declared": True,
         "measured_here": False,
         "quantisation_rad": value,
         "path": str(declaration_path),
         "sha256": digest,
-        "declared_by": {
-            "path": str(declaration_path),
-            "sha256": digest,
-            "keys": keys,
-            "rule": QUANTISATION_RULE,
-            "derivation": derivation,
-        },
+        "declared_by": declared_by,
         "rule": QUANTISATION_RULE,
         "declaration_search": dict(QUANTISATION_SEARCH),
         "detail": (
@@ -531,6 +568,14 @@ def declared_quantisation(path) -> dict:
             "and not measured by this producer"
         ),
     }
+    if basis is not None:
+        declared_by[QUANTISATION_BASIS_KEY] = basis
+        block[QUANTISATION_BASIS_KEY] = basis
+        block["detail"] = (
+            "the resolution is declared as an explicit zero, with the basis of the zero recorded here: the "
+            "feedback path of this platform exposes velocities without an encoder quantisation"
+        )
+    return block
 
 
 # --- the documents ------------------------------------------------------------------------------------

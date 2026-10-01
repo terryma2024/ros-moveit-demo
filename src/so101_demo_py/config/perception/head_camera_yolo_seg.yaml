@@ -8,6 +8,18 @@ mjcf_path: ../../assets/mujoco/act/head_search_scene.xml
 camera_name: head_camera
 image_width: 640
 image_height: 480
+# The image safety edge phase 6 of the formal calibration intersects the projected legal pick workspace
+# with (design section 7.1, `vertical_bounds_px`), declared as a FRACTION of the shorter production image
+# edge rather than as a pixel count so it survives a resolution change:
+#   safety_margin_px = ceil(image_safety_margin_fraction * min(image_width, image_height))
+#                 = ceil(0.25 * min(640, 480)) = ceil(120.0) = 120 px
+# 0.25 is a policy value: one quarter of the shorter edge is reserved at the top and at the bottom, which
+# leaves half the 480 px image height for the projection to land in. It is deliberately NOT derived from
+# the promoted `values.vertical_bounds_px` of `head_search_v2.json` - a margin defined by the bounds it
+# constrains would be circular - and 0.25 is exactly representable in binary, so the ceiling is not
+# perturbed by floating-point rounding. The calibration records this path, its sha256 and the derived
+# integer, and refuses a fraction outside (0, 0.5] or one whose dimensions contradict the sealed camera.
+image_safety_margin_fraction: 0.25
 dataset_contract: so101-head-search-yolo-seg-v1
 split_counts:
   train: 800

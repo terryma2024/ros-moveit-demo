@@ -517,8 +517,12 @@ def compute_stop_velocity_rad_s(*, stationary, feedback, controller, startup_rea
             raise ValueError("every stationary sample records the finite velocity of each joint")
         maxima.append(max(abs(float(velocity)) for velocity in velocities))
     noise = p99_9(maxima)
+    # the second term is the declared feedback resolution over one feedback period. On this platform the
+    # resolution is declared as an explicit zero (the MuJoCo feedback exposes joint velocities, with no
+    # encoder quantisation), so the term may be zero - but a missing or null resolution is still refused,
+    # because a defaulted zero would be the invented value design section 7.1 forbids (HS-305)
     quantisation_rad = _number(
-        feedback, "the controller feedback", "quantisation_rad", positive=True
+        feedback, "the controller feedback", "quantisation_rad", nonnegative=True
     )
     feedback_period_s = _number(feedback, "the controller feedback", "period_s", positive=True)
     tolerance = _number(
