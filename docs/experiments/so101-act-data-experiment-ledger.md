@@ -44677,3 +44677,23 @@ both-kinds rule took (CP-2321/2324). Each names the run that settled it.
 - F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
   K1's legal-window construction now available to it; F5's regression fixed, step one landed, step two past the
   coverage gate with its window one instrumented run away; HEAD dd0558a1b; goal active.
+
+
+## CP-2371 — The hybrid's four window values are consistent by construction, so the probe moves one level up
+
+- Applied CP-2370's rehearsal format to the runner-backed fixture arithmetically, with the values CP-2368 and the
+  fixture's own construction fix:
+  schedule `head/wrist [1.0, 1.1, 1.2]` against acquisitions minted at `1.0/1.1/1.2` - consistent;
+  labelled `[1.0]` (the single bound row) against cutoff `max(physics times) = 1.0` - consistent;
+  physics `0.1 ... 1.0` against `first_command_s = min = 0.1` and `physics_end_s = max = 1.0` - consistent;
+  window edges `collection_start_s 1.0` / `collection_end_s 1.2` against the camera extremes `1.0/1.2` - consistent.
+- So the refusal is not in any of the four comparisons that print names, and the probe has to move ONE LEVEL UP:
+  `_window_ok` (the closed-schema and schedule rules: strict increase per stream, `streams_required` equal to the
+  schedule's streams, cadence/gap fields, the outcome/cutoff pair) and the writer's own `_window_matches_rows` call
+  site. Printing `_window_ok`'s verdict beside the window predicate's verdict is the one-line upgrade that separates
+  "the window is malformed" from "the window does not match what the audit holds".
+- The two failure codes are already distinct in the audit (`AUDIT_WINDOW_INVALID` comes from both, which is why the
+  print, not the code, is what distinguishes them here).
+- F1 and F14 closed; F3 closed; F12 closed; F13 three of four with K2 as its route; F11's derivation still open with
+  K1's legal-window construction available; F5's regression fixed, step one landed, step two past the coverage gate
+  with its window one level-up probe away; HEAD dbc29d567; goal active.
