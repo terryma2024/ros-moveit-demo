@@ -52724,3 +52724,23 @@ looking up what the audit actually keys by.
 
 The uncommitted work now contains a genuine production fix (the acquisitions appended from the frames), the adapters and
 alignments, and this correction - and the chain is one lookup away from proving E2's corrections 2 and 3 end to end.
+
+
+## CP-2755 — The lookup edit did not apply, and my own assertion is what caught it
+
+```
+AssertionError: adapter body
+```
+
+The `str.replace` I wrote from memory did not match the file - the same class of failure as CP-2733's silent replace -
+except that this time the patch asserted its anchor first, so it failed loudly and wrote nothing, and the test's result
+is unchanged rather than misleading. That is the discipline working as intended: CP-2733's lesson was "assert after every
+replacement", and it has now prevented a repeat of the very error it was written about.
+
+So the next attempt reads the adapter's current text and edits from what is there rather than from what I remember
+writing. The value to install is already derived: resolve the sequence by looking up the reference whose
+`reference_time_s` equals `round(sim_time_s + 0.1, 6)`, which CP-2751's measured map `{1: 1.1, 2: 1.2, 3: 1.3, 4: 1.4}`
+makes a one-line search.
+
+Nothing else about the chain has changed: the production acquisition fix, the five alignments and the adapter are all in
+place, the values the binding needs are known, and the seal is one lookup away from agreeing with them.
