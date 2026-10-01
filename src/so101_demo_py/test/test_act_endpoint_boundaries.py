@@ -2,6 +2,8 @@
 
 import json
 import sys
+
+import pytest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -48,3 +50,13 @@ def test_the_first_cup_pose_precedes_the_gripper_dispatch(tmp_path):
     # the design's initial sample means "after the reset and before the arm-gripper dispatch", which holds exactly
     # when the first pose row precedes the CLOSE phase in the single task-level order
     assert pose_rows[0]["task_sequence"] < close_event[0]["task_sequence"]
+
+
+def test_an_expired_deadline_is_refused_before_any_phase(tmp_path):
+    """E2's negative list: an expired attempt is refused, and the refusal is the deadline's own name."""
+
+    from so101_demo.act.pick_place_runner import PickPlaceError
+
+    runner = PickPlaceRunner(FakePort(), audit=None)
+    with pytest.raises(PickPlaceError, match="TASK8_DEADLINE_EXPIRED"):
+        runner.run({**boundary_request(), "deadline_ns": 0})
