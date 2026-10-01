@@ -50355,3 +50355,22 @@ optional `source` field.
 
 That makes the change: one optional constructor argument, one attribute, three lines in `verify`, and no change to any
 existing branch - after which E2's wiring on the Worker consumer is done and its checkpoint has a real diff to review.
+
+
+## CP-2655 — E2's checkpoint is running
+
+The plan gives E2 its own checkpoint - "review the exact diff, the E1/E2 tests and the real producer/default-factory
+wiring evidence" - and all three now exist, so the check was launched the way the repository's rules require: a Codex
+session in a tmux window on this machine (`dst:e2-checkpoint`), `gpt-6.1-sol` at reasoning effort `high`, output to
+`reviews/e2-checkpoint.log` with an `EXIT=` marker appended when it finishes.
+
+The prompt names the commit range to review (3a0577c8e back through 0b996b36d plus the ledger entries that document the
+reasoning) and asks it to judge five things against the plan's own text rather than against my summary: whether the
+boundary sampling is genuinely the design's two boundaries; whether the shared QC is honestly independent and keeps the
+seal's claim apart from the fresh process's verdict; whether the terminal wiring is real and its optional argument
+leaves existing behaviour unchanged; whether the plan's eight negatives are actually covered rather than nominally; and
+whether anything in the diff is an invented value or a relaxed check the plan forbids.
+
+Per the review-period discipline this is not polled: the log's `EXIT=` marker on the last line is what will be read, and
+the verdict collected then. Meanwhile the E2 item stays in progress in the visible task list, because the checkpoint is
+part of what E2 requires.
