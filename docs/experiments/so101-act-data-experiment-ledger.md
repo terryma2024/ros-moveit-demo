@@ -50830,3 +50830,22 @@ The honest position until the names are read is that this may well be a regressi
 way rather than excused. What matters is that the gate which satisfies the repository's contract is the one that found
 it: the narrower nine-suite gate was green, and CP-2664's sweep was green, and only the fully shaped gate shows the
 three. That is the argument for running it in this shape from now on, made by the gate itself.
+
+
+## CP-2676 — The gate's real numbers, and the correction of my own "green" claim
+
+The compliant parallel gate finished: **61 failed, 6003 passed, 163 skipped, 4 warnings in 83.32s**. And that number
+corrects an earlier entry of mine: CP-2664 read the same kind of sweep at **99%** and concluded "zero failures" - but at
+99% pytest has not yet printed its summary, so `FAILED` lines were zero **because the failures had not been listed
+yet**, not because there were none. My "the whole package is green" claim was a measurement taken too early, and the
+truth is 61 failures.
+
+The failures are concentrated where the checkpoints pointed: the `test_act_task8_*` family (motion phases, search
+boundary, case documents, planning scene port, nine phase case, sealed artifact, close execution, live epoch and edges,
+sealed raw sources, full case joined chain, bottom io geometry) plus `test_parallel_batch_cli.py`'s external-broker test
+and three `test_act_pick_place_search_*` tests. The serial A/B run is still going, and it is now the run that matters:
+if those 61 are a parallel-fixture interaction they will vanish serially, and if they do not, they are real and the
+next job is to separate those caused by this stretch's changes from those that pre-date it.
+
+Two lessons, both mine, both recorded: a summary must be read **after** the summary, and "no FAILED lines yet" is not
+"no failures".
