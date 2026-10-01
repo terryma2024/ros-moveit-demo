@@ -45997,3 +45997,22 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   wiring, which is where the approved stack comes in.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD 9986e44bc;
   goal active.
+
+
+## CP-2437 — The gate caught it: eight fixtures have no development runtime at their recorded root
+
+- Committed nothing: with the `_verify_roles` change in place, the scope and endpoint suites report **8 failed, 51
+  passed**, and the change was reverted on the spot, so the tree is back at the committed state. That is the gate
+  doing its job rather than a setback.
+- The failures are the expected shape: those fixtures build a candidate registry whose `source_root` is a temporary
+  tree that has no `config/act/endpoint_pose_development_runtime_v1.yaml`, so the fallback finds no stops and the
+  identity refuses - exactly the behaviour a historical fixture should keep.
+- So the fix is an existence guard, not a wider change: the verify path passes the development runtime **only when the
+  document exists** under the registry's recorded root, and otherwise leaves the call exactly as it was. That keeps
+  old records reading as they did (the same rule CP-2406 applied to approvals) while a real run's registry - whose
+  source root is the worktree that does carry the document - gets the two stops from the design's own file.
+- The honest state of the tree right now: `inspect` works with the corrected route (CP-2435, committed), the verify
+  path is unpatched, and `prepare` therefore still refuses with `NONHEAD_INPUT_BINDING_REQUIRED`. The guard is the
+  next single edit.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2. HEAD aaa7ec258;
+  goal active.
