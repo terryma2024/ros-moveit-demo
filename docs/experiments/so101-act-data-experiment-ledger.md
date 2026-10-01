@@ -55488,3 +55488,65 @@ time, each with its own failing test first:
 **State at this checkpoint**: the launch is still up (3h32m) and no new run has been started, so the endpoint is still
 gated on the coordinator's two actions rather than on this side's code. The two scripts that will read the episode
 (`handover/verify-e3.sh`, and the frozen-input `run`) are unchanged and were last green at CP-2850.
+
+
+## CP-2863 — The recording is wired end to end on this side; one run remains
+
+Checkpoint at the point where the code stops being the blocker. The recording now exists in the process the episode
+actually runs in, not in the process that spawns it (CP-2861):
+
+| what | where | why there |
+|---|---|---|
+| the episode begins | `ros/dynamic_runtime.py:518` | after `validate_mujoco_scene_identity` accepts the reset, which is the first moment a start instant is a fact rather than an expectation |
+| every instant | `ros/dynamic_mujoco_execution.py:_record` (390) | the one place that knows which state is running, so the phase is an argument rather than an inference |
+| the row | `act/episode_assembly.physical_audit_from_execution` | its inputs are the facts that object already holds - per-state evidence, the joint-state receipt trio, the planning-scene readback, the input pose |
+| every instant is seen | `RecordingWorldObserver` at `dynamic_runtime.py:583` | the runner asks its observer in two places today; wrapping covers both, now and after the next refactor |
+| the episode ends | success path `:682`, failure path in `finally` | a failed run must leave evidence too, both ends on the observer's clock |
+
+**Four defaults were removed, each the same species**: a hardcoded scope seed that happened to match the frozen one, two
+synchronizer tolerances taken from constructor defaults that happened to match `runtime_policy.rgb_sync`, a scope built
+from a digest of zeros, and `reset_epoch` falling back to 1. None was wrong in value; all were wrong in authorship - a
+value that looks right makes every later verdict about the episode meaningless, which is what the invented `final_cup_pose`
+and the fabricated QC verdict would have done at the start of this work.
+
+**Verification as of this checkpoint**: `handover/verify-e3.sh` rc=0 with tempdir inside the scratch root and `chain rc=0`;
+the chain file at 24 tests; the four suites around the touched files at 97. Disclosures made and then closed rather than
+left standing: the parent-side seam was removed when the process boundary was understood, the window's two clocks were
+unified, the failure paths gained a seal, and the reset epoch became a refusal.
+
+**What remains is not code on this side**: `kill 3111252` (which takes the runaway `graceful_shutdown_move_group` with it),
+then re-run. The `use_sim_time` fix and the broker-image fix are already in the install tree that run loads. With an
+episode produced, `verify-e3.sh` and the K1/E3 acceptance finally have something real to read - and until one exists, no
+claim about the objective's endpoint is warranted.
+
+Recent commits, for the record:
+9bdd40602 fix(ros): the reset epoch is required, not defaulted to one
+8c9bc293d feat(ros): every state the episode passes through is offered to the episode recorder
+99a28d53c feat(act): physical_audit_from_execution, the composer for the process the episode runs in
+bbf7532ca feat(ros): the execution can be told where to record, without being told twice
+044a2ddea feat(ros): the state machine sees every instant through the recording observer
+88b7e1014 feat(act): RecordingWorldObserver records every instant by construction, not by enumeration
+836ea98c3 feat(ros): a failed run leaves an episode too, sealed on the observer's own clock
+c52168ece feat(ros): the episode knows whether it has been sealed, so the failure paths can seal exactly once
+6d9de1295 fix(ros): both ends of the episode window come from the same observer
+c186bfc7c feat(ros): the episode is sealed with the verdict the run computed, on the success path
+94264ce28 feat(ros): the episode begins in its own process, after the reset it belongs to is validated
+7855051f8 refactor(cli): recording leaves the parent, where it could only see the wrong side
+8116079d1 feat(act): end_episode seals with the window, RED first
+0c00188b2 feat(act): record_instant turns one observation into one row's audit, RED first
+7fbcd3c81 feat(act): begin_episode, RED first, so the start step is testable without the state machine
+2d3c28e1b docs(ledger): the remaining implementation as steps that each start with a failing test
+75f1e351e feat(ros): run_dynamic_execute accepts the recorder the episode records through
+7cd9fdeb2 feat(act): the audit composer for the episode's own process, from CupSceneObservation
+9fd211f28 docs(ledger): where a production episode actually runs, and where the recording goes
+b806b93fe docs(ledger): the seam closed on this side, one attribute and two actions remain
+58ba117bc feat(cli): the extraction consumes the run's physical sources, and names what it lacks
+df3557f59 feat(act): readback_from_frozen, which builds the readback the audit draws on
+f53aa9096 docs(ledger): the last block specified to the line
+a66b31ef4 fix(cli): the synchronizer's knobs are the frozen rgb_sync policy, not defaults that happen to match
+8f71ced68 fix(cli): the episode scope is read from the frozen set, not assumed
+baf7650ca feat(act): where the audit's thirteen names come from, as a pure function
+4435e7b6d docs(ledger): the full package gate and why its 79 failures are not from this work
+a156a66d9 feat(cli): the composition gives the runtime its episode seam, extraction still pending
+5a7095096 feat(runtime): the episode is sealed at the terminal capture, completing the runtime side
+3ef81cdc4 feat(act): the sink carries the episode's outcome, and refuses to seal without one
