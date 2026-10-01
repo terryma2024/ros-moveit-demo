@@ -49619,3 +49619,22 @@ So E2's sampling wiring is not a new mechanism: the two boundaries are the first
 and the QC reads them there. The caveat worth recording honestly is the one the mapping exposes: if a run wrote no pose
 before CLOSE, `poses[0]` would be post-dispatch and the initial sample would not mean what the design says. That is a
 property to assert rather than to assume - and it is a test I can write against the fake port.
+
+
+## CP-2621 — E2's boundary test is RED, and the reason is the audit's identity check doing its job
+
+The test refuses at `episode_audit.py:859`, the events append, with an `AUDIT_` schema error. The cause is a mismatch I
+introduced by borrowing the audit suite's writer: `_formal_writer` builds an identity of
+`{"session_id": "s", "attempt_id": "attempt-1", "reset_epoch": 1, "release_epoch": 1, "scene_id": "default", "seed": 0,
+"mode": "preselected_target_diagnostic"}`, while the release-boundary suite's `request()` names
+`attempt_id: "a"`. Aligning the attempt id alone was not enough, because the event identity check compares more than
+that field.
+
+The right fix is the one the repository's own design implies: build the writer's identity **from the request** the run
+will be given, so the audit and the run agree by construction, rather than relaxing a check that is doing exactly what
+it exists for. The alternative - using the release-boundary suite's `RecordingAudit`, which accepts anything - would
+make the test measure nothing, since the whole point is that a real audit receives rows whose order can be asserted.
+
+So the next edit is small and honest: construct the audit for this test with an identity derived from its request (the
+suite's `scope()` plus an identity built from the request's own fields), then assert the ordering the design's sampling
+wording requires.
