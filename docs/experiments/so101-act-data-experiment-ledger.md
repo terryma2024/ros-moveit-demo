@@ -49693,3 +49693,26 @@ That leaves E2 one question on this axis, and it is a read rather than a design:
 `qc_passed` is derived from the endpoint QC - `endpoint_records_from_audit` plus E1's calculator - or from the older
 quality conditions the amendment removes. If the former, the wiring is complete and E2's terminal item is a test; if the
 latter, the seal is where the endpoint verdict has to arrive.
+
+
+## CP-2626 — `qc_passed` is the run's own claim, which is exactly why the independent QC exists
+
+The whole chain, in five lines:
+
+- `recorder.py:324` - `"qc_passed": outcome["status"] == "PASSED"` - the episode seal derives it from **the run's own
+  outcome**;
+- `recorder.py:385` - `document["qc_passed"] is not (document["status"] == "PASSED")` - a consistency check inside the
+  seal;
+- `result_store.py:124` - `"qc_passed": episode["qc_passed"]` - carried into the result document;
+- `result_store.py:351` - `document["qc_passed"] is not episode["qc_passed"]` - a consistency check across the two.
+
+So `qc_passed` is a **claim**, and the design says as much in its own words: the seal's `status`/`qc_passed` is only a
+claim, which is why the fresh-process readback and the shared QC exist at all. The plan's E2 line states the same thing
+operationally - "QC uses the frozen targets/policy and the sealed raw records to recompute; the Coordinator commit's
+verifier and aggregator use the same result and version" - and `endpoint_records_from_audit` plus E1's calculator are
+precisely that recomputation, now committed and tested.
+
+So E2's terminal wiring is: the independent endpoint verdict must be **computed in the fresh process** from the sealed
+records and placed where the Coordinator's verification can see it - beside the seal's claim rather than replacing it,
+so that "a legal seal/QC" and "committed" remain distinguishable, as the design's three states require. That is the next
+edit, and it is on the QC/result side rather than in the runner.
