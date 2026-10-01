@@ -131,12 +131,21 @@ def test_the_independent_document_keeps_the_claim_and_the_verdict_apart(tmp_path
     document = endpoint_qc_document(path.parent, {"initial_target": pose, "final_target": pose,
                                                  "endpoint_policy": load_endpoint_policy(POLICY)})
     print("QCDOC", {k: v for k, v in document.items() if k != "endpoint"})
-    assert document["kind"] == "ACT_ENDPOINT_QC" and document["schema_version"] == 1
-    assert set(document) >= {"claim", "endpoint", "episode_manifest_sha256"}
-    assert "qc_passed" in document["claim"]                 # the seal's claim, carried as a claim
-    assert document["endpoint"]["source"] == "verified-raw-audit"   # and the independent verdict, identifiable
-    assert document["endpoint"]["status"] == "PASS"
-    assert len(document["episode_manifest_sha256"]) == 64
+    # the design's prescribed shape (CP-2673/2687): the top-level common schema, the versioned rule, and the
+    # endpoint answer as one named check whose keys are the ones the design lists
+    assert document["rule_version"] == "endpoint_pose_v1"
+    assert set(document) >= {"rule_version", "status", "checked_monotonic_s", "cleanup_state", "checks"}
+    assert document["status"] == "PASS"
+    check = document["checks"]["endpoint_pose"]
+    assert set(check) == {"status", "policy_sha256", "initial_sequence", "final_sequence",
+                          "initial_pose", "final_pose", "initial_target", "final_target"}
+    assert check["status"] == "PASS"
+    assert check["initial_sequence"] is not None and check["final_sequence"] is not None
+    assert check["initial_pose"] == pose and check["final_pose"] == pose
+    assert len(check["policy_sha256"]) == 64
+    assert check["initial_target"] == pose and check["final_target"] == pose
+    # and the seal's own claim stays where it belongs: in the episode this report names, not in the report (CP-2645)
+    assert "qc_passed" not in document and "claim" not in document
 
 
 def test_the_final_endpoint_is_the_last_pose_not_the_best_one(tmp_path):

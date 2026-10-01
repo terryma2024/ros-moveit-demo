@@ -12,9 +12,10 @@ the arm-gripper dispatch, and the final record is the pose evidence after normal
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
-from so101_demo.act.endpoint_pose_acceptance import evaluate_endpoint_pose
+from so101_demo.act.endpoint_pose_acceptance import RULE_VERSION, evaluate_endpoint_pose
 from so101_demo.act.episode_audit import verify_audit_manifest
 
 PHYSICS_STREAM = "physics.jsonl"
@@ -137,10 +138,20 @@ def endpoint_qc_document(episode_root, inputs, *, manifest_name: str = "audit-ma
     manifest_path = root / manifest_name
     manifest = verify_audit_manifest(manifest_path)
     verdict = endpoint_records_from_audit({"manifest": manifest, "root": manifest_path.parent}, inputs)
-    return {"kind": "ACT_ENDPOINT_QC", "schema_version": 1,
-            "episode_root": str(root), "episode_manifest_sha256": _manifest_digest(manifest_path),
-            "claim": {"status": manifest.get("status"), "qc_passed": manifest.get("qc_passed")},
-            "endpoint": verdict}
+    # the design prescribes the report's shape: the top-level common schema (status, when it was checked, the
+    # cleanup state, a map of named checks) with the endpoint answer as one entry under its own rule version
+    # (CP-2673/2687). The seal's own status and qc_passed stay in the episode this report names, so "a legal seal"
+    # and "the endpoints were judged by a fresh process" remain distinguishable.
+    return {"rule_version": RULE_VERSION,
+            "status": verdict["status"],
+            "checked_monotonic_s": time.monotonic(),
+            "cleanup_state": manifest.get("cleanup_state"),
+            "checks": {"endpoint_pose": {
+                "status": verdict["status"],
+                "policy_sha256": verdict["policy_sha256"],
+                "initial_sequence": verdict["initial_sequence"], "final_sequence": verdict["final_sequence"],
+                "initial_pose": verdict["initial_pose"], "final_pose": verdict["final_pose"],
+                "initial_target": verdict["initial_target"], "final_target": verdict["final_target"]}}}
 
 
 def _document_digest(document) -> str:
