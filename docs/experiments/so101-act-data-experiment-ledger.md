@@ -51469,3 +51469,30 @@ helpers (used by its own fixtures), so the test can build them the same way rath
 seals and verifies by recomputation.
 
 With those three pieces named, the sealing test has no unread inputs left.
+
+
+## CP-2701 — The writer's four documents, and therefore no unread inputs left
+
+```python
+def identity():
+    return {"session_id": "s", "attempt_id": "attempt-1", "reset_epoch": 1, "release_epoch": 1,
+            "scene_id": "default", "seed": 0, "mode": "preselected_target_diagnostic"}
+
+def scope():
+    return {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
+            "mode": "preselected_target_diagnostic", "scene_id": "default", "seed": 0,
+            "inputs_sha256": "a" * 64}
+
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(), {"inputs_sha256": "a" * 64})
+```
+
+So the four documents the sealing test must supply are exactly these, and the only real work left is making three things
+agree: the audit writer's `scope()`/`identity()`, the recorder's own `session_id`/`attempt_id`/`reset_epoch`, and the
+capture's construction. They agree trivially if the test derives all of them from one dictionary - which is how the
+fixture should be written, since a mismatch between them is precisely the failure mode the reviewer's correction 2 is
+about.
+
+That closes the reading phase for this test: outcome schema (CP-2693), passing-episode recipe (CP-2694), harness
+inventory (CP-2699), writer signature (CP-2700), and now the document shapes. The next round writes the test rather
+than reading another shape - and if it fails, it will fail on something the test can be told about, not on a guess about
+a signature.
