@@ -55141,3 +55141,20 @@ things only a live run can prove.
 
 So the acceptance is now a check rather than a claim - and the honest summary of this stretch's last several rounds is
 that the verifying half is finished and exercised, and what remains is one wiring step and one live run.
+
+
+## CP-2851 — The acceptance's command line, and the two things that cost attempts
+
+The handover now carries the verbatim command that ran the acceptance, with the two facts that each cost an attempt here:
+
+* **`env.zsh` must be sourced inside the same `zsh -c`** as the script - it sets `TEST_PYTHON` and `TASK_ROOT`, and
+  sourcing it outside while using the variables inside leaves them unset (this round's first failure);
+* **the setup scripts are zsh-only** - sourcing them from bash half-works, with package share resolution silently pointing
+  at another worktree's install, which is the 129-false-failures trap from early in this task.
+
+with the scratch-root rule the script itself enforces (fresh directory under the durable evidence root, `TMPDIR` checked
+before anything runs).
+
+That closes the "how do I run the acceptance" question the same way the rest of this handover closes its questions: written
+where whoever picks it up will read it, rather than rediscovered. With it, the verifying half of this task is complete,
+exercised, and documented - and what remains is one wiring step and one live run.
