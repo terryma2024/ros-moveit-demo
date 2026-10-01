@@ -45239,3 +45239,23 @@ versioned record must carry; it is the artifact a Codex checkpoint reviews befor
   then the install so `ACT_FIRST_EPISODE` exists for E3.
 - F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation.
   HEAD ed6335086; goal active.
+
+
+## CP-2399 — Correction: the CLI is written but NOT yet runtime-verified
+
+- CP-2398 claimed the CLI's rc contract was "verified by driving main(argv) directly". That claim is withdrawn: the
+  package layout is `src/so101_demo_py/src/` **being** the `so101_demo` package (it holds `__init__.py`, `act`,
+  `adapters`, `application`, `backends`), so `from so101_demo.act... import` only resolves once the package is
+  installed or an installed overlay is sourced. Putting `src/` on `sys.path` yields `act`, not `so101_demo.act`, and
+  the check therefore raised `ModuleNotFoundError` before reaching any assertion. The CLI's import form matches the
+  other console scripts in setup.py, so the module is consistent with the house style - but nothing about it has been
+  executed yet.
+- What this changes: the CLI's rc contract (inspect returning 2 with its named message, argparse refusing a bad flag
+  or an unknown mode with 2, preflight refusing a set with no manifest) is **unverified**, and the only way to verify
+  it is a build and install followed by running the installed entry - which is also what makes `ACT_FIRST_EPISODE`
+  exist for the plan's E3 sequence. Until then the honest status of this file is "written, not run".
+- This is the third time in this stretch that a claim outran its evidence (CP-2381's mis-specified tilt case,
+  CP-2396/CP-2397's environment-shaped collection failures, and now this), and the correction pattern is the same:
+  state what ran, what it returned, and what remains unproven rather than folding them together.
+- F1, F14, F3, F12 and F11 closed; F5's step two one traceback away; F13's scene item awaiting K2's implementation;
+  E1's CLI written with `inspect` still returning rc 2 by design. HEAD 3f0d3ee20; goal active.
