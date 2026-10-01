@@ -47112,3 +47112,22 @@ marker (CP-2480) and the deployment verifier states what it does and does not cl
   and the audit suite at 74 passed.
 - F1, F14, F3, F12 and F11 closed; F13's scene item awaiting its Codex checkpoint; the execution side waits on the
   container-free broker decision. HEAD e207437c4; goal active.
+
+
+### Addendum to CP-2488, written at the hand-off (user chose "continue in a fresh context")
+
+Three entries since the index above, and they are the ones the next context should read first:
+
+- **CP-2490 answers the open question**: with CP-2485's wrapper probe live, the runner-backed fixture printed
+  `WIN-CALLSITE seal False` and `PROBE seal refused: AUDIT_WINDOW_INVALID` - so the refuser is
+  `_window_matches_observed` **as called by the seal**, not the readback's own check.
+- **CP-2491 names the two clauses that remain**: the `label_cutoff_s == max(row_times)` rule (whose `row_times` are
+  the **bound** rows, not the physics history) and the per-stream schedule rule ("a shortened or padded schedule
+  cannot describe coverage it lacks"). The next probe prints those two clauses' own values on the same fixture.
+- **CP-2489 holds the fixture verbatim**, one paste away, and CP-2485 holds the three-line probe recipe.
+
+Verified at hand-off: HEAD `3de483187`, the working tree clean beyond the user's 35 pre-existing entries, no probe
+marker left in `episode_audit.py`, the four suites green together (audit, first-episode-scope, endpoint-pose,
+artifacts), and the one approved headless ACT stack still running with `joint_state_broadcaster` active. The user's
+decision on the container-free broker path (CP-2481/2482) and on where to run K2's Codex checkpoint (CP-2487) are
+still open; nothing else is.
