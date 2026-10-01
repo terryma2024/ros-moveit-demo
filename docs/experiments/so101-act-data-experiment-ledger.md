@@ -41887,3 +41887,42 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 TMPDIR=…/scratch/hs286 PYTHONPATH=…/scratch
 
 **下一步**：按上述两条改 `search.py` 至 GREEN，跑本测试、`test_act_head_search_domain.py`，再跑两个完整套件
 `head_test -n 8 src/so101_demo_py/test -q` 与 `head_test -n 8 src/so101_teleop/test -q`。
+
+## HS-288 — GREEN 达成（RED→GREEN，含 A/B 对照）：有界扫描已按 seal 拼写生效
+
+**提交** `14a45745f`：`src/so101_demo_py/src/act/search.py`（+30/−7）与 `src/so101_demo_py/test/test_act_head_search_bounded_sweep.py`
+（250 行，sha256 `8937ff51…`，**未削弱任何断言**）；`git status --porcelain` 为空。
+
+**改动要点**：同时接受 seal 的 `required_search_domain_rad` 与既有 `required_domain_rad`（seal 优先）；
+**只要声明了任一拼写的域就构建有界计划**（原来是"必须两个 legacy 键同时存在"才走有界路径）；
+`safe_interval_rad` = 有 `lock_valid_neck_rad` 就用它，否则**退回 required 域本身**；完全没声明域的配置仍走累计分支（254-258 未动）。
+
+**验证（逐条，含退出码）**：
+
+| 步骤 | 命令要点 | 结果 |
+| --- | --- | --- |
+| RED 复核（改前） | 同 RED 命令 | **4 failed / 2 passed, rc=1** ✓ 与 HS-287 一致 |
+| ① 目标测试 | 同命令 | **6 passed, rc=0** ✓ |
+| ② 既有域测试 | `test_act_head_search_domain.py` | **12 passed, rc=0** ✓ |
+| ③ 完整套件 | 见下 | **两套都 rc=1（未全绿）**，但经 A/B 对照确认**与本次改动无关** |
+
+**③ 的实情（必须如实记录，不能写成"全绿"）**：
+- 计划 Step 4 写的 `head_test -n 8 …` 在本环境**不是可执行命令**：`command -v head_test` → rc=1，它只是
+  `/tmp/so101-debug-head-search-antzb-LuFlHq6a/head-test-shell.sh` 里的 shell 函数，而其 `/usr/bin/python3` 的 pytest 7.4.4 **没有 xdist**，`-n 8` 无从谈起；
+- 代之以 perception venv（pytest 9.1.1 + xdist 3.8.0、24 CPU → **8 workers**）、每个套件独立 NVMe scratch 并验证 `TMPDIR`/worker 数、
+  禁用 ROS 插件（pytest 9 与 `launch_testing` pluggy 不兼容）：demo **175 failed / 5592 passed / 152 skipped / 86 errors, rc=1**；
+  teleop **37 failed / 1241 passed / 43 skipped, rc=1**；
+- **A/B 对照**（同一命令、HEAD 版本 `search.py`）：demo 179 failed / 5588 passed、teleop 37 failed / 1241 passed →
+  **节点级差异恰为"修好的 4 个 RED 测试"，两个套件 0 个新增破坏**。故其余失败**全部是既有问题**。
+
+**既有阻塞（非本次引入，也不在本次两文件提交范围内）**：9 个测试文件 import 从未提交的 helper
+`test_act_pick_place_approach_path_screen`（以及缺失的 adapter → 66 个 setup error）；`/data/work/ws_moveit/install` 里的陈旧 share（19 个
+`ParseXML`/`BOTTOM_IO_SCENE_MISSING`）；源码/测试 API 漂移（`PickPlaceRunner._verify_phase` 参数个数、`retire_failed_start`、`UnboundLocalError`）；
+teleop 的 AF_UNIX 路径长度拒绝（`child_runtime.py` 拒绝 >103 字节，而规定的证据根下 scratch 路径 141 字节）。
+
+**一处必须公开的判断（非 seal 明文）**：在"只有 required 域、无安全区间"的回退分支里，把区间放宽了 **1e-12**。
+原因是 `bounded_search_stops` 把端点命令为 `current + direction*travel`，落点比下界低 **1 ulp**（实测 `-0.2914567944778671` vs
+`-0.29145679447786704`），使"已覆盖"被判成"撞边界"；**声明的安全区间从不放宽**，停点仍在域内（相对测试 1e-9 容差只差 1 ulp），
+真正未覆盖的计划仍返回撞边界。这是我关于规划器舍入的推断，**不是 seal 的明文规定**，评审可推翻。
+
+**下一轮**：`search.py` 已 GREEN；接着按计划推进 phase 1/2（输入验证、几何与覆盖证明）的库模块，并把上面 1e-12 回退留待评审。
