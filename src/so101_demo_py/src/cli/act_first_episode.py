@@ -188,11 +188,13 @@ def _run(arguments) -> int:
         return 2
     root.mkdir(parents=True, mode=0o700)
     batch_id = f"nonhead-{arguments.mode}-{int(time.time())}"
-    point = TaskPoint(id=batch_id, label=arguments.mode, cup_position_world_m=tuple(target))
+    # the point must be one the approved catalogue actually names: task_start is the episode's start, and the
+    # request selects exactly that one id, so the sweep vehicle runs a single episode (CP-2519)
+    point = TaskPoint(id="task_start", label=arguments.mode, cup_position_world_m=tuple(target[:3]))
     # the composition reads selected_point_ids off this request, so it is the versioned contract rather than the
     # application-layer one: one point, one worker, an execute run and a fresh first pass
     request = BatchRequestV2(batch_id=batch_id, run_mode=RunMode.EXECUTE, selected_point_ids=(point.id,),
-                             worker_count=1, evidence_root=root.resolve(),
+                             worker_count=1, evidence_root=(root / "run").resolve(),
                              batch_kind=BatchKindV2.FIRST_PASS)
     # the production composition's first three pieces, the same objects the batch path builds around one point:
     # the journal, the sealed-result adapter and the coordinator. The config is the frozen runtime document, parsed
@@ -235,6 +237,34 @@ def _run(arguments) -> int:
                      f"broker_image=ABSENT (headless MuJoCo-only stack; no broker container exists to name)\n")
         stream.flush()
         os.fsync(stream.fileno())
+    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, _catalog, PreparedBatch
+    from so101_demo.parallel_batch.start_guard import StartGuardPolicy
+    from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard
+
+    points_path = Path("src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml").resolve()
+    catalog, catalog_sha = _catalog(points_path)
+    selection_sha = hashlib.sha256(json.dumps([point.id], separators=(",", ":")).encode()).hexdigest()
+    manifest_path = root / "inputs-manifest.json"
+    scene_path = Path(str(inputs / "scene_model" / "scene.xml"))
+    provenance_inputs = {"inputs_manifest": str(manifest_path),
+                         "inputs_manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                         "scene_model": str(scene_path)}
+    provenance = _nonhead_provenance(provenance_inputs)
+    manifest = json.loads(manifest_path.read_bytes())
+    spec = PreparedBatch(
+        start_guard=compose_default_start_guard(StartGuardPolicy(),
+                                               state_root=root / "start-guard"),
+        request=request, adaptive_request=None, config=config,
+        config_path=inputs / "runtime_config" / "parallel_batch_v3.yaml", adaptive_config_path=None,
+        points_path=points_path, catalog=catalog, expected_final_cup_pose_world=tuple(target),
+        catalog_sha256=catalog_sha, selection_sha256=selection_sha, broker_image="ABSENT",
+        yolo_weights=Path("ABSENT"), yolo_weights_sha256="ABSENT", grounded_root=Path("ABSENT"),
+        grounded_manifest_sha256="ABSENT", provenance=provenance, manifest=manifest,
+        provenance_inputs=provenance_inputs, provenance_verifier=_nonhead_provenance,
+        start_guard_evidence=None, resume=False)
+    composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command)
+    print(f"act_first_episode: composition built ({type(composition).__name__}) for {batch_id}",
+          file=sys.stderr)
     print(f"act_first_episode: composed {type(journal).__name__}, {type(result_port).__name__} and "
           f"{type(coordinator).__name__} for {batch_id}; the episode runner needs the approved MuJoCo stack and is "
           f"not wired yet", file=sys.stderr)
