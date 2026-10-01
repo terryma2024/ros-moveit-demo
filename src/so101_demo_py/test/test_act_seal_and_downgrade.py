@@ -15,6 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
+from so101_demo.act.episode_assembly import assemble_episode_capture
 from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
 from so101_demo.act.episode_qc import endpoint_qc_document
@@ -164,3 +165,25 @@ def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path)
     reserved = tmp_path / "w00" / "attempts" / "point-1" / "attempt-1"
     assert verifier.discover(lease(), reserved) == str(reserved / "sealed")
     assert verifier.discover(lease(), tmp_path / "elsewhere") is None
+
+
+def test_the_assembly_seam_builds_a_capture_from_the_parts_a_run_holds(tmp_path):
+    """The seam K1's forward half and E3 both need (CP-2822): given a producer's parts and the episode's identity, the
+    recorder and audit writer are built and wired, and neither side has to know the other's internals.
+
+    `scope` is the document, not a path - the writer takes the document and `Recorder.finish` takes the file the writer
+    puts it in - which is the distinction this seam's own first test found (422e93c03).
+    """
+    episode_root = tmp_path / "episode"
+    capture = assemble_episode_capture(
+        sampler=RecorderSampler(),
+        physical_audit=recorder_physical_audit,
+        identity=IDENTITY,
+        provenance=PROVENANCE,
+        inputs={"inputs_sha256": "a" * 64},
+        episode_root=episode_root,
+        scope=SCOPE,
+    )
+    assert isinstance(capture, ContinuousEpisodeCapture)
+    # the recorder owns the directory and creates it, which is why the audit writer has to accept an existing root
+    assert episode_root.is_dir()
