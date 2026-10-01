@@ -52603,3 +52603,24 @@ up by construction; only my constant was wrong.
 
 Also noted from the same check's neighbourhood: rows must form a **contiguous 10 Hz schedule**
 (`AUDIT_ROW_SCHEDULE_INVALID` otherwise), which the 1.0/1.1/1.2 rows satisfy by construction.
+
+
+## CP-2750 — The ordinal is the right kind, and one of the check's other clauses is what fails
+
+```
+    self._references[item["sequence"]] = item            episode_audit.py:913
+```
+
+So the audit keys its references by the record's own `sequence`, and `bind_row`'s fifth argument is an ordinal - my
+original `1` was right in kind, and my "rounded instant" reading was wrong (it came from the capture's *own* dictionary,
+keyed by `round(float(at_s), 6)` at `continuous_capture.py:312`; two dictionaries, one name). Passing `index + 1` now is
+therefore the correct kind of value.
+
+And the check still refuses, so one of its other clauses is false: the named reference must have
+`reference_time_s == round(record["sim_time_s"] + 0.1, 6)` and `accepted is True`. My references are accepted by
+construction (`reference(at_s)` defaults `accepted=True`) and are fed at `stamp + 0.1`, and the rows' `sim_time_s` should
+be the grid instants 1.0/1.1/1.2 - so by my reading they line up, which means one of those two times is not what I think.
+
+The instrument that settles it in one run is a probe printing both sides: the audit's `_references` mapping (sequence ->
+`reference_time_s`) and each row's `sim_time_s` as the binding sees it. That is two lines of print, and it removes the
+last guess from this chain.
