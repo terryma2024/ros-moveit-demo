@@ -47224,3 +47224,25 @@ That leaves the block built around the local `parts()` helper, which I have neve
 predicate that can still return False for this window - the same place the earlier probes never reached because they
 printed the structures rather than the verdicts of the clauses after this point. The next read is therefore that
 block in full (from `def parts(entry):` to the function's final `return`), one grep away, before any probe is written.
+
+
+### CP-2494 — The refuser is the cadence-gap rule, and the implementation is right
+
+Read the last unread block. After building `held` from `acquisitions.values()` via the local `parts()` helper, it
+enforces two rules per stream: every scheduled instant must match an observed stamp within tolerance ("a scheduled
+instant no camera published is an invented schedule entry"), and **every consecutive pair of scheduled instants** must
+either be no wider than `window["cadence_s"] * 1.5 + _TOLERANCE_S` or fall inside one of `window["permitted_gaps_s"]`
+("a gap beyond the cadence must be one the frozen inputs permit").
+
+Against the runner-backed fixture: `cadence_s` is 0.1 from the shared window, so the permitted gap is 0.25, while my
+schedule names 0.1, 0.5 and 1.0 - gaps of 0.4 and 0.5, both wider - and `permitted_gaps_s` is empty, so the `any(...)`
+is False and the clause returns False. **That is the refusal**, and the implementation is right to make it: a window
+whose schedule skips 0.4 s of a 10 Hz stream is exactly the "shortened or padded schedule" the comments describe.
+
+The fix belongs to the fixture, not the code: mint the acquisitions and the schedule on the 10 Hz grid the design's
+section 6.2 requires (instants 0.1 apart, e.g. 0.1 through 1.0), so the window describes a stream that really is
+continuous. That also honours the design's own words - "a complete 10 Hz grid" is one of the things the fresh-process
+readback checks.
+
+So F5's step two is now a fixture edit, and the earlier probes were not wasted: they excluded every other clause in the
+predicate one by one, which is what made this one visible.
