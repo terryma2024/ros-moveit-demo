@@ -51444,3 +51444,28 @@ real `EpisodeAuditWriter` as `audit`, and a `scope`, the capture's `finish(windo
 binds both into the episode (0ca35cc93) - and then the endpoint QC can read that episode through
 `verify_audit_manifest`, which is the proof correction 2 needs. `build()` has no `audit=`/`scope=` parameters yet, so
 the new test constructs its capture directly or extends the helper.
+
+
+## CP-2700 — The audit writer's signature confirms the wiring, and names the test's remaining inputs
+
+Two signatures, read:
+
+```python
+class EpisodeAuditWriter:                                                    # 719
+    def __init__(self, root: Path, scope: dict, identity: dict, inputs: dict) -> None:
+
+    def seal(self, window: dict) -> Path:                                     # 935
+```
+
+So the writer takes the **scope** and `seal` returns a **Path** - the manifest - which is exactly what
+`Recorder.finish(audit_manifest=..., scope=...)` wants. That confirms the wiring committed as 0ca35cc93 from the other
+side: the capture's `audit.seal(window)` produces the manifest, and the scope the capture holds is the same document the
+writer was given, so both halves of the v2 binding come from one source.
+
+For the end-to-end test, what remains is assembling the writer's four arguments: a root, a `scope` document, an
+`identity` document and an `inputs` document. The suite that owns the audit already has `scope()` and `identity()`
+helpers (used by its own fixtures), so the test can build them the same way rather than inventing shapes - and the
+`window` can be the minimal three-key form this ledger established earlier (`start_s`, `end_s`, `label_cutoff_s`), which
+seals and verifies by recomputation.
+
+With those three pieces named, the sealing test has no unread inputs left.
