@@ -50646,3 +50646,23 @@ frozen scope - must finish the recorder with both, and the two things it needs a
 This also explains why the QC-side work looked complete while E2 still failed: everything I built reads a sealed
 episode, and the sealing side of the v2 contract was never connected. The next rounds take the reviewer's five
 corrections in order with this diagnosis as the first.
+
+
+## CP-2668 — The v2 finish belongs in continuous_capture, where the recorder and the writer meet
+
+The search for the live path that owns both things lands on one module:
+
+- **`act/continuous_capture.py:45`** - its constructor takes `*, recorder, sampler, physical_audit, guard=None,
+  audit_writer=None`;
+- **`:67`** stores `self.audit_writer`;
+- **`:463`** guards it (`if self.audit_writer is None: ...`) and **`:466`** calls it per row -
+  `paths.append(self.audit_writer(row["observation"], row["audit"]))`.
+
+So `continuous_capture` is where the episode recorder and the audit writer are brought together: it drives the loop, it
+hands each row to the audit, and it is therefore the component that has both the sealed `audit-manifest.json` and the
+scope document in hand when the episode ends. The v2 call - `recorder.finish(outcome, audit_manifest=..., scope=...)` -
+belongs in its completion path, and that is a single named location rather than a search.
+
+With CP-2667 (no caller) and this (the place the caller belongs), the first of the reviewer's five corrections has a
+concrete plan: read `continuous_capture`'s completion path, pass the pair through, and prove it with a test that seals a
+v2 episode and verifies it - the very thing that currently fails with `EPISODE_SEAL_AUDIT_INCOMPLETE`.
