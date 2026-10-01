@@ -138,6 +138,12 @@ def _nonhead_provenance(inputs: dict) -> dict:
     }
 
 
+#: the broker image the coordinator approved for this milestone (CP-2760): the perception stack and torch
+#: live inside it, which is what the host lacks - and reusing it is the decision that supersedes the
+#: container-free route this path was written under (CP-2854)
+BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
+
+
 def _broker_command(composition):
     """The deployment's container-free broker command.
 
@@ -261,7 +267,7 @@ def _run(arguments) -> int:
                      f"config={type(config).__name__}\njournal={type(journal).__name__}\n"
                      f"result_port={type(result_port).__name__}\ncoordinator={type(coordinator).__name__}\n"
                      f"points={points_path}\nprovenance={sorted(provenance_paths)}\n"
-                     f"broker_image=ABSENT (headless MuJoCo-only stack; no broker container exists to name)\n")
+                     f"broker_image={BROKER_IMAGE} (reused, per the coordinator's decision CP-2760)\n")
         stream.flush()
         os.fsync(stream.fileno())
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, _catalog, PreparedBatch
@@ -284,7 +290,7 @@ def _run(arguments) -> int:
         request=request, adaptive_request=None, config=config,
         config_path=inputs / "runtime_config" / "parallel_batch_v3.yaml", adaptive_config_path=None,
         points_path=points_path, catalog=catalog, expected_final_cup_pose_world=tuple(target),
-        catalog_sha256=catalog_sha, selection_sha256=selection_sha, broker_image="ABSENT",
+        catalog_sha256=catalog_sha, selection_sha256=selection_sha, broker_image=BROKER_IMAGE,
         # the broker spec takes these four from the specification itself, so they name the frozen documents that
         # really participate here - the development runtime and the scene model - with the same digests the
         # provenance states (CP-2540)
@@ -309,9 +315,9 @@ def _run(arguments) -> int:
     if "endpoint_policy" in _frozen:
         _endpoint_inputs = {"endpoint_policy": _frozen["endpoint_policy"],
                             "final_target": list(spec.expected_final_cup_pose_world)}
-    composition = ProductionBatchComposition(spec, broker_command_builder=_broker_command,
-                                             container_brokers=False,
-                                             endpoint_inputs=_endpoint_inputs)
+    # the broker runs in its image, which is the route the coordinator approved (CP-2760): the composition's
+    # own default builds that command from the spec, so the container-free builder is not passed here
+    composition = ProductionBatchComposition(spec, endpoint_inputs=_endpoint_inputs)
     # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
     # document, and the document is written as the aggregate beside the run's own evidence
     from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document
