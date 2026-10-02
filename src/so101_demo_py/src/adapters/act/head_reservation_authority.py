@@ -3,14 +3,113 @@
 Main normal closure is distinct from the primary and CPU fault channels, whose
 NativeRevocationClient keeps its separate hard 2 ms connection bound.
 """
+import os
+from pathlib import Path
 import re
+import socket
+import stat
+import struct
+import time
 
 from so101_demo.act.head_search_restarts import ReservationAuthority
-from .head_revocation import NativeRevocationClient
+from .controller_reservation_provision import _private_parent, _process_start_ticks
 
 
-class _MainChannel(NativeRevocationClient):
+class _MainChannel:
     _connection_bound_s=.05
+
+    def __init__(self, path, *, capability, native_owner, generation,
+                 timeout_s, monotonic=time.monotonic):
+        self.path=Path(path)
+        self.capability=capability
+        self.native_owner=dict(native_owner)
+        self.generation=generation
+        self.timeout=timeout_s
+        self.monotonic=monotonic
+        self._last_exchange=None
+        if (type(generation) is not int or not 0<generation<2**64
+                or type(timeout_s) not in (int,float) or timeout_s!=self._connection_bound_s
+                or not callable(monotonic)
+                or not isinstance(capability,bytes) or len(capability)!=32 or not any(capability)
+                or set(self.native_owner)!= {'uid','pid','start_ticks'}
+                or any(type(value) is not int for value in self.native_owner.values())
+                or not 0<=self.native_owner['uid']<2**32
+                or not 0<self.native_owner['pid']<2**31
+                or not 0<self.native_owner['start_ticks']<2**64
+                or len(os.fsencode(self.path))>107):
+            raise ValueError('HEAD_MAIN_CONFIG_INVALID')
+        self._scope=(self.capability,self.generation,dict(self.native_owner),self.path,self.timeout)
+
+    def _verify_peer(self,connection):
+        pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+        if (uid!=self.native_owner['uid'] or pid!=self.native_owner['pid']
+                or _process_start_ticks(pid)!=self.native_owner['start_ticks']):
+            raise PermissionError('HEAD_MAIN_NATIVE_PEER_INVALID')
+
+    def _remaining(self, deadline):
+        remaining=deadline-self.monotonic()
+        if remaining<=0:raise TimeoutError('HEAD_MAIN_TIMEOUT')
+        return remaining
+
+    @property
+    def exchange_trace(self):
+        trace=self._last_exchange
+        return None if trace is None else dict(trace,native_owner=dict(trace['native_owner']),phases=dict(trace['phases']))
+
+    def _exchange(self, body, *, identity=False):
+        if (self.capability,self.generation,self.native_owner,self.path,self.timeout)!=self._scope:
+            raise PermissionError('HEAD_MAIN_SCOPE_CHANGED')
+        started=self.monotonic();deadline=started+self.timeout
+        trace=dict(request_wall_s=started,deadline_wall_s=deadline,
+            native_owner=dict(self.native_owner),generation=self.generation,phase='path',phases={},error_type=None)
+        self._last_exchange=trace
+        try:
+            result=self._exchange_bound(body,identity=identity,started=started,deadline=deadline,trace=trace)
+            trace['phase']='complete'
+            return result
+        except BaseException as error:
+            trace['error_type']=type(error).__name__
+            raise
+        finally:trace['ended_wall_s']=self.monotonic()
+
+    def _exchange_bound(self, body, *, identity, started, deadline, trace):
+        _private_parent(self.path)
+        endpoint=self.path.lstat()
+        if (not stat.S_ISSOCK(endpoint.st_mode) or endpoint.st_uid!=os.geteuid()
+                or stat.S_IMODE(endpoint.st_mode)!=0o600):
+            raise PermissionError('HEAD_MAIN_PATH_INVALID')
+        trace['phases']['path_verified']=self.monotonic();trace['phase']='connect'
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
+            connection.settimeout(self._remaining(deadline))
+            connection.connect(str(self.path))
+            trace['phases']['connected']=self.monotonic();trace['phase']='request_peer'
+            # Authenticate the connected endpoint before writing capability
+            # bytes. A correct-looking reply from another process has no value.
+            self._verify_peer(connection)
+            trace['phases']['request_peer_verified']=self.monotonic();trace['phase']='send'
+            connection.settimeout(self._remaining(deadline))
+            connection.sendall(len(body).to_bytes(4,'big')+body)
+            trace['phases']['sent']=self.monotonic();trace['phase']='receive'
+            def read(size):
+                result=bytearray()
+                while len(result)<size:
+                    connection.settimeout(self._remaining(deadline))
+                    value=connection.recv(size-len(result))
+                    if not value:raise RuntimeError('HEAD_MAIN_REPLY_INCOMPLETE')
+                    result.extend(value)
+                return bytes(result)
+            if identity:
+                size=int.from_bytes(read(4),'big')
+                if not 17<=size<=145:raise RuntimeError('HEAD_MAIN_IDENTITY_INVALID')
+                reply=read(size)
+            else:reply=read(16)
+            trace['phases']['reply_received']=self.monotonic();trace['phase']='reply_peer'
+            self._verify_peer(connection)
+            trace['phases']['reply_peer_verified']=self.monotonic();trace['phase']='final_deadline'
+            self._remaining(deadline)
+        return reply,dict(request_wall_s=started,ack_wall_s=self.monotonic(),
+                          native_owner=dict(self.native_owner),generation=self.generation)
+
 
 
 class HeadReservationAuthority(ReservationAuthority):
