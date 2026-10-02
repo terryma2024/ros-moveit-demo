@@ -286,14 +286,20 @@ class HeadROSMonitor:
         The independent CPU monitor continues to use its own ROS subscribers.
         """
         if not self._external_inputs:raise PermissionError('HEAD_MONITOR_EXTERNAL_INPUT_FORBIDDEN')
-        if (kind not in ('CLOCK','IMAGE','INFO') or type(record) is not dict
+        if (kind not in ('CLOCK','IMAGE','INFO','JOINT') or type(record) is not dict
                 or type(record.get('source_ns')) is not int or record['source_ns']<=0
                 or type(record.get('wall_s')) not in (int,float)
                 or not math.isfinite(record['wall_s']) or record['wall_s']<0
                 or record.get('valid') is not True
-                or (kind!='CLOCK' and record.get('frame_id')!=self.camera_frame)):
+                or (kind in ('IMAGE','INFO') and record.get('frame_id')!=self.camera_frame)):
             self.fault('HEAD_PRIMARY_ORIGINAL_INVALID');raise ValueError('HEAD_PRIMARY_ORIGINAL_INVALID')
         original=dict(record)
+        if kind=='JOINT':
+            # The shared port already owns this original. Never replace its
+            # cache or receipt clock; this path adds immediate invalidity
+            # closure and evidence outside that port's short cache lock.
+            self._event('JOINT_ORIGINAL',sample=original)
+            return
         if kind=='CLOCK':
             with self._lock:
                 previous=self._clock
