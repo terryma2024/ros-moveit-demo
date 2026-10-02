@@ -25,6 +25,7 @@ class NativeRevocationClient:
         self.generation=generation
         self.timeout=timeout_s
         self.monotonic=monotonic
+        self._last_exchange=None
         if (type(generation) is not int or not 0<generation<2**64
                 or type(timeout_s) not in (int,float) or not 0<timeout_s<=self._connection_bound_s
                 or not callable(monotonic)
@@ -48,21 +49,43 @@ class NativeRevocationClient:
         if remaining<=0:raise TimeoutError('HEAD_REVOKER_TIMEOUT')
         return remaining
 
+    @property
+    def exchange_trace(self):
+        trace=self._last_exchange
+        return None if trace is None else dict(trace,native_owner=dict(trace['native_owner']),phases=dict(trace['phases']))
+
     def _exchange(self, body, *, identity=False):
         started=self.monotonic();deadline=started+self.timeout
+        trace=dict(request_wall_s=started,deadline_wall_s=deadline,
+            native_owner=dict(self.native_owner),generation=self.generation,phase='path',phases={},error_type=None)
+        self._last_exchange=trace
+        try:
+            result=self._exchange_bound(body,identity=identity,started=started,deadline=deadline,trace=trace)
+            trace['phase']='complete'
+            return result
+        except BaseException as error:
+            trace['error_type']=type(error).__name__
+            raise
+        finally:trace['ended_wall_s']=self.monotonic()
+
+    def _exchange_bound(self, body, *, identity, started, deadline, trace):
         _private_parent(self.path)
         endpoint=self.path.lstat()
         if (not stat.S_ISSOCK(endpoint.st_mode) or endpoint.st_uid!=os.geteuid()
                 or stat.S_IMODE(endpoint.st_mode)!=0o600):
             raise PermissionError('HEAD_REVOKER_PATH_INVALID')
+        trace['phases']['path_verified']=self.monotonic();trace['phase']='connect'
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
             connection.settimeout(self._remaining(deadline))
             connection.connect(str(self.path))
+            trace['phases']['connected']=self.monotonic();trace['phase']='request_peer'
             # Authenticate the connected endpoint before writing capability
             # bytes. A correct-looking reply from another process has no value.
             self._verify_peer(connection)
+            trace['phases']['request_peer_verified']=self.monotonic();trace['phase']='send'
             connection.settimeout(self._remaining(deadline))
             connection.sendall(len(body).to_bytes(4,'big')+body)
+            trace['phases']['sent']=self.monotonic();trace['phase']='receive'
             def read(size):
                 result=bytearray()
                 while len(result)<size:
@@ -76,7 +99,9 @@ class NativeRevocationClient:
                 if not 17<=size<=145:raise RuntimeError('HEAD_REVOKER_IDENTITY_INVALID')
                 reply=read(size)
             else:reply=read(16)
+            trace['phases']['reply_received']=self.monotonic();trace['phase']='reply_peer'
             self._verify_peer(connection)
+            trace['phases']['reply_peer_verified']=self.monotonic();trace['phase']='final_deadline'
             self._remaining(deadline)
         return reply,dict(request_wall_s=started,ack_wall_s=self.monotonic(),
                           native_owner=dict(self.native_owner),generation=self.generation)

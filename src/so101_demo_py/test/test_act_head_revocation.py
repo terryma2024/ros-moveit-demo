@@ -6,6 +6,7 @@ import secrets
 import select
 import subprocess
 import sys
+import time
 import uuid
 
 import pytest
@@ -19,6 +20,7 @@ pytestmark=pytest.mark.skipif(sys.platform!='linux',reason='native revoker requi
 
 SERVER="""
 import os,socket,sys
+import time
 with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
     listener.bind(sys.argv[1]);os.chmod(sys.argv[1],0o600);listener.listen(1)
     print('READY',flush=True)
@@ -27,7 +29,9 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
         connection.settimeout(2)
         data=connection.recv(4096)
         print('RECEIVED' if data else 'EMPTY',flush=True)
-        if data: connection.sendall(bytes.fromhex(sys.argv[2]))
+        if data:
+            time.sleep(float(sys.argv[3]))
+            connection.sendall(bytes.fromhex(sys.argv[2]))
         sys.stdin.readline()
 """
 
@@ -35,11 +39,11 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
 @pytest.fixture
 def native_server(tmp_path):
     processes=[]
-    def start(reply):
+    def start(reply,delay=0.):
         base=Path(os.environ['SO101_IPC_SOCKET_BASE'])
         directory=base/('hr-'+uuid.uuid4().hex[:8]);directory.mkdir(mode=0o700)
         path=directory/'r.sock'
-        process=subprocess.Popen([sys.executable,'-c',SERVER,str(path),reply.hex()],
+        process=subprocess.Popen([sys.executable,'-c',SERVER,str(path),reply.hex(),str(delay)],
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
         processes.append(process)
         poll=select.poll();poll.register(process.stdout,select.POLLIN|select.POLLHUP)
@@ -70,6 +74,37 @@ def test_actual_close_ack_from_exact_owned_process(native_server):
     assert receipt['ack_validated'] is True and receipt['native_owner']==owner
     assert receipt['ack_wall_s']>=receipt['request_wall_s']
     assert process.stdout.readline()=='RECEIVED\n'
+
+
+@pytest.mark.parametrize('failure',[None,'receive','post_reply_peer'])
+def test_original_native_transport_trace_distinguishes_timeout_boundary(native_server,failure):
+    path,owner,_=native_server(ack(),delay=.010 if failure=='receive' else 0.)
+    revoker=client(path,owner)
+    if failure=='post_reply_peer':
+        original=revoker._verify_peer;checks=[]
+        def verify(connection):
+            original(connection);checks.append(True)
+            if len(checks)==2:time.sleep(.003)
+        revoker._verify_peer=verify
+    if failure is None:assert revoker.close_strict()['ack_validated'] is True
+    else:
+        with pytest.raises(TimeoutError):revoker.close_strict()
+    trace=revoker.exchange_trace
+    assert trace['native_owner']==owner and trace['generation']==5
+    assert trace['deadline_wall_s']==trace['request_wall_s']+.002
+    assert trace['ended_wall_s']>=trace['request_wall_s']
+    assert all(trace['request_wall_s']<=value<=trace['ended_wall_s'] for value in trace['phases'].values())
+    assert trace['phases']['sent']<=trace['ended_wall_s']
+    if failure is None:
+        assert trace['phase']=='complete' and trace['error_type'] is None
+        assert trace['phases']['reply_received']<=trace['phases']['reply_peer_verified']
+    elif failure=='receive':
+        assert trace['phase']=='receive' and trace['error_type']=='TimeoutError'
+        assert 'reply_received' not in trace['phases']
+    else:
+        assert trace['phase']=='final_deadline' and trace['error_type']=='TimeoutError'
+        assert trace['phases']['reply_received']<trace['phases']['reply_peer_verified']
+    assert 'capability' not in repr(trace) and 'body' not in trace
 
 
 @pytest.mark.parametrize('damage',['magic','version','reserved6','reserved7','generation','status'])

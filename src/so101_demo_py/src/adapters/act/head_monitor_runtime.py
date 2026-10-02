@@ -458,10 +458,12 @@ class HeadMonitorRuntime:
         if self._shutdown.is_set():return
         try:
             self._native_close=self._revoker.close_strict()
-            self._emit('NATIVE_FAULT_CLOSE_ACK',fault=self._fault,receipt=self._native_close)
+            self._emit('NATIVE_FAULT_CLOSE_ACK',fault=self._fault,receipt=self._native_close,
+                transport_trace=getattr(self._revoker,'exchange_trace',None))
         except BaseException as error:
             self._native_close_error=type(error).__name__
-            try:self._emit('NATIVE_FAULT_CLOSE_UNCONFIRMED',fault=self._fault,error=self._native_close_error)
+            try:self._emit('NATIVE_FAULT_CLOSE_UNCONFIRMED',fault=self._fault,error=self._native_close_error,
+                transport_trace=getattr(self._revoker,'exchange_trace',None))
             except Exception:pass
         finally:self._close_done.set()
 
