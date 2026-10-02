@@ -1,7 +1,8 @@
-"""Installed CUDA bootstrap and optional native binding, with SDK send disabled."""
+"""Installed CUDA bootstrap with explicit calibration-only native/SDK diagnostics."""
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -34,6 +35,112 @@ def _bind_native_diagnostic(primary,authority,result):
     finally:
         result['main_exchange_receipts']=list(authority.exchange_receipts)
         if 'neck' in authority._armed:result['native_arm_count']=1
+
+
+def _record_refusal(result,error):
+    result['status']='REFUSED'
+    result['error']=dict(type=type(error).__name__,message=str(error))
+
+
+def _bound_goal_settlement(samples,state,*,target_rad,position_tolerance_rad,
+        velocity_tolerance_rad_s,source_floor_ns,dispatch_wall_s,terminal_wall_s):
+    """Terminal success plus three advancing, original post-terminal samples."""
+    response=state.get('result')
+    if (state.get('accepted') is not True or getattr(response,'status',None)!=4
+            or getattr(getattr(response,'result',None),'error_code',None)!=0):return None
+    quiet=[];previous=None
+    for original in samples:
+        row=dict(original)
+        if (any(type(row[key]) is not int or row[key]<=0 for key in ('sequence','source_ns'))
+                or any(type(value) not in (int,float) or not math.isfinite(value)
+                    for value in (row['wall_s'],row['positions'][0],row['velocities'][0]))):return None
+        if (row.get('valid') is not True or row['source_ns']<=source_floor_ns
+                or row['wall_s']<=max(dispatch_wall_s,terminal_wall_s)):
+            quiet=[];previous=None;continue
+        if previous is not None and any(row[key]<=previous[key]
+                for key in ('sequence','source_ns','wall_s')):return None
+        previous=row
+        if (abs(row['positions'][0]-target_rad)>position_tolerance_rad
+                or abs(row['velocities'][0])>velocity_tolerance_rad_s):
+            quiet=[];continue
+        quiet.append(row)
+        if len(quiet)==3:return quiet
+    return None
+
+
+def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit):
+    """One real sealed-domain endpoint goal, through the existing bound SDK."""
+    from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
+    from so101_demo.act.head_search_calibration_run import check_trajectory_contract
+    from so101_demo.act.head_search_restarts import _neck_goal_duration
+    from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
+    from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
+    # All actual resources and the measured policy already exist before this
+    # precondition; the formal entry must eventually share this composition.
+    initial=port.feedback_snapshot()
+    config=derive_measurement_plan(production_config=production,geometry_document=geometry,
+        generation=result['epoch'],search_start_rad=initial['positions'][0])
+    trajectory=check_trajectory_contract(production_search_config=config)
+    low,high=trajectory['safe_interval_rad'];domain=trajectory['required_search_domain_rad']
+    target=max(domain,key=lambda value:abs(value-initial['positions'][0]))
+    if abs(target-initial['positions'][0])<=production['motion']['goal_tolerance_rad']:
+        raise PermissionError('HEAD_DIAGNOSTIC_NONMOVING_ENDPOINT')
+    dispatcher=HeadInventoryDispatcher(port,authority,monitor,epoch=result['epoch'],
+        generation=result['generation'],session_id=result['session_id'],
+        controller_identity=result['native_identity'],guard=primary.dispatch_guard,
+        own_inventory=primary.own_inventory,fault_callback=primary.fault,emit=emit)
+    values=production['values']
+    neck=RosNeckSearchPort(node,session_id=result['session_id'],attempt_id=result['epoch'],
+        goal_duration_s=_neck_goal_duration(values),submit_lead_s=values['submit_lead_s'],
+        stop_timeout_s=values['stop_latency_s'],stop_velocity_rad_s=values['stop_velocity_rad_s'],
+        max_age_s=values['max_age_s'],command_guard=lambda current,end:low<=current<=high and low<=end<=high,
+        controller_port=dispatcher,feedback_policy=port.feedback_policy)
+    evidence=dict(diagnostic_only=True,trajectory_contract=trajectory,initial=initial,target_rad=target,
+        target_rule='farthest endpoint of the sealed required search domain; diagnostic motion, not a search terminal',
+        duration_s=neck.duration,position_tolerance_rad=production['motion']['goal_tolerance_rad'],
+        velocity_tolerance_rad_s=min(production['motion']['settle_velocity_rad_s'],values['stop_velocity_rad_s']),
+        dispatch_wall_s=time.monotonic(),settled=False)
+    result['bound_goal_diagnostic']=evidence
+    emit('BOUND_GOAL_DECLARATION',**evidence)
+    try:
+        gid=neck.command_neck(target,session_id=result['session_id'],attempt_id=result['epoch'],
+            observation_time_s=initial['source_ns']*1e-9)
+        evidence['goal_uuid']=gid;evidence['inventory']=dispatcher.inventory
+        evidence['main_exchange_receipts']=list(authority.exchange_receipts)
+        deadline=evidence['dispatch_wall_s']+values['search_timeout_s']
+        terminal_wall=None;floor=None
+        while True:
+            primary.dispatch_guard();current=port.feedback_snapshot()
+            with port._lock:
+                state=dict(port._goals[gid])
+                samples=tuple(dict(row) for row in port._head_samples
+                    if terminal_wall is not None and row['wall_s']>terminal_wall)
+            response=state.get('result')
+            evidence['accepted']=state['accepted'];evidence['terminal_status']=getattr(response,'status',None)
+            evidence['result_error_code']=getattr(getattr(response,'result',None),'error_code',None)
+            if state['accepted'] is False:raise PermissionError('HEAD_DIAGNOSTIC_GOAL_REJECTED')
+            if response is not None:
+                if response.status!=4 or response.result.error_code!=0:
+                    raise PermissionError('HEAD_DIAGNOSTIC_GOAL_RESULT_FAILED')
+                if terminal_wall is None:
+                    terminal_wall=time.monotonic();floor=current['decision']['sim_ns']
+                    evidence['terminal_observed_wall_s']=terminal_wall;evidence['terminal_source_floor_ns']=floor
+                proof=_bound_goal_settlement(samples,state,target_rad=target,
+                    position_tolerance_rad=evidence['position_tolerance_rad'],
+                    velocity_tolerance_rad_s=evidence['velocity_tolerance_rad_s'],source_floor_ns=floor,
+                    dispatch_wall_s=evidence['dispatch_wall_s'],terminal_wall_s=terminal_wall)
+                if proof is not None:
+                    evidence['confirming_samples']=proof;evidence['settled_source_floor_ns']=proof[-1]['source_ns']
+                    evidence['settled']=True;evidence['settled_wall_s']=time.monotonic()
+                    emit('BOUND_GOAL_SETTLED',**evidence);return evidence
+            if time.monotonic()>=deadline:raise TimeoutError('HEAD_DIAGNOSTIC_GOAL_SETTLEMENT_TIMEOUT')
+            time.sleep(.001)
+    except Exception:
+        primary.fault('HEAD_BOUND_GOAL_DIAGNOSTIC_FAILED')
+        raise
+    finally:
+        evidence['inventory']=dispatcher.inventory
+        evidence['main_exchange_receipts']=list(authority.exchange_receipts)
 
 
 class _ImageWriter:
@@ -78,6 +185,8 @@ def main(argv=None):
     parser.add_argument('--device',choices=['cuda'],default='cuda')
     parser.add_argument('--native-binding-diagnostic',action='store_true',
         help='after the full stopped measurement, bind all three native identities and prove owned fault stop; SDK sends remain forbidden')
+    parser.add_argument('--bound-goal-diagnostic',action='store_true',
+        help='after stopped measurement and three-party native binding, dispatch one sealed-domain endpoint goal; diagnostic only')
     args=parser.parse_args(argv)
     # Import CPU resources first. No torch/model import precedes monitor exec.
     from so101_demo.act.head_search_restarts import (
@@ -117,7 +226,7 @@ def main(argv=None):
     _require_empty(before,anchor='stopped_bootstrap',stage='pre-start')
     root.mkdir();session='hs_boot_'+uuid.uuid4().hex[:16];epoch=uuid.uuid4().hex
     generation=int.from_bytes(secrets.token_bytes(7),'big') or 1
-    result=dict(purpose='calibration',motion_authority=False,qualification=False,
+    result=dict(purpose='calibration',motion_authority=False,qualification=False,diagnostic_only=True,
         status='REFUSED',epoch=epoch,generation=generation,session_id=session,dependencies=dependencies,
         before=before,seed_config=_reference(args.production_config),entry=_reference(__file__),
         python=sys.executable,started_wall_s=time.monotonic(),native_arm_count=0,goal_send_count=0)
@@ -158,8 +267,9 @@ def main(argv=None):
         def forbid_send(*positional,**named):
             result['goal_send_count']+=1
             raise PermissionError('HEAD_BOOTSTRAP_MOTION_FORBIDDEN')
-        # Even binding a provisional policy cannot turn this diagnostic into a
-        # dispatcher. The actual SDK client remains permanently send-disabled.
+        # The default/native-only diagnostic never sends. Only the explicit
+        # bound-goal branch below temporarily adopts this same SDK after ARM.
+        sdk_send=client.send_goal_async
         client.send_goal_async=forbid_send
         port=RosControllerPort(node,client,('neck_yaw_joint',),stop_velocity_rad_s=values['stop_velocity_rad_s'],
                                max_age_s=values['max_age_s'],head_bootstrap=True)
@@ -231,7 +341,7 @@ def main(argv=None):
         capture.check()
         port.bind_head_policy(measured['values'])
         result['status']='STOPPED_BOOTSTRAP_MEASURED'
-        if args.native_binding_diagnostic:
+        if args.native_binding_diagnostic or args.bound_goal_diagnostic:
             primary_writer=HeadOriginalJournal(root/'primary-events.jsonl',fault_callback=original_failure)
             own=_peer(os.getpid())
             provision,fault_cap=_provision(directory/'neck-primary-revoke.provision',authority='primary',
@@ -245,7 +355,7 @@ def main(argv=None):
                 policy_ack=result['policy_ack'],configuration_ack=result['monitor_configured'],
                 stop_latency_s=values['stop_latency_s'],camera_max_age_s=measured['camera_seed_values']['max_age_s'],
                 camera_frame_id=production['camera']['frame_id'],
-                emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
             primary.start()
             # Before the first activation, wait only for newly received matching
             # originals. No cached bootstrap sample is seeded into the primary.
@@ -267,16 +377,29 @@ def main(argv=None):
                 arm_guard=primary.prearm_guard,fault_callback=primary.fault)
             result['native_identity']=_bind_native_diagnostic(primary,authority,result)
             result['primary_ready']=primary.ready
+            if args.bound_goal_diagnostic:
+                def counted_send(*positional,**named):
+                    primary.dispatch_guard()
+                    result['goal_send_count']+=1
+                    return sdk_send(*positional,**named)
+                client.send_goal_async=counted_send
+                try:
+                    _run_bound_goal_diagnostic(node=node,port=port,primary=primary,authority=authority,
+                        monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
+                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                finally:client.send_goal_async=forbid_send
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()
             receipt=result['primary_teardown']
             if (receipt['native_close'] is None or receipt['native_close'].get('ack_validated') is not True
                     or not any(row['stopped'] for row in receipt['stop_observations'])
-                    or result['native_arm_count']!=1 or result['goal_send_count']!=0):
+                    or result['native_arm_count']!=1 or result['goal_send_count']!=(1 if args.bound_goal_diagnostic else 0)):
                 raise PermissionError('HEAD_BOOTSTRAP_NATIVE_BOUNDARY_UNPROVEN')
-            result['status']='NATIVE_BINDING_STOPPED_DIAGNOSTIC'
+            result['status']='BOUND_GOAL_STOPPED_DIAGNOSTIC' if args.bound_goal_diagnostic else 'NATIVE_BINDING_STOPPED_DIAGNOSTIC'
     except Exception as error:
-        result['error']=dict(type=type(error).__name__,message=str(error))
+        result['status']='REFUSED'
+        if primary is not None:primary.fault('HEAD_BOOTSTRAP_ATTEMPT_FAILED')
+        _record_refusal(result,error)
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
         if primary is not None:
@@ -346,4 +469,4 @@ def main(argv=None):
             result['raw_observations']=_write(root/'raw-observations.json',result.pop('raw_observations_pending'))
         result['ended_wall_s']=time.monotonic();_write(root/'result.json',result)
     print(result['status']+' run_root='+str(root),flush=True)
-    return 0 if result['status'] in ('STOPPED_BOOTSTRAP_MEASURED','NATIVE_BINDING_STOPPED_DIAGNOSTIC') else 2
+    return 0 if result['status'] in ('STOPPED_BOOTSTRAP_MEASURED','NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC') else 2
