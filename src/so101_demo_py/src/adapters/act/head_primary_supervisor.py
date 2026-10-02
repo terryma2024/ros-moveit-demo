@@ -139,6 +139,7 @@ class HeadPrimarySupervisor:
                     self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010); return
                 self._shutdown.wait(.002); continue
             record = dict(wall_s=now, executor_wall_s=executor, inference_deadline_wall_s=deadline)
+            reply = None; error_type = None; rpc_started = time.monotonic()
             try:
                 self.observer.heartbeat(record)
                 stage = self.epoch.stage; arming = self._arming
@@ -147,8 +148,17 @@ class HeadPrimarySupervisor:
                 if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
                 if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
                 self._ack(reply, 'HEARTBEAT', reply['stage'])
-            except BaseException:
+            except BaseException as error:
+                error_type = type(error).__name__
                 self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED', now); return
+            finally:
+                rpc_ended = time.monotonic()
+                try:
+                    self._emit('HEARTBEAT_ROUND_TRIP', request=record, reply=reply,
+                        rpc_started_wall_s=rpc_started, rpc_ended_wall_s=rpc_ended,
+                        error_type=error_type)
+                except BaseException:
+                    self.fault('HEAD_PRIMARY_HEARTBEAT_JOURNAL_FAILED', rpc_ended)
             self._shutdown.wait(.002)
 
     def _watchdog(self):

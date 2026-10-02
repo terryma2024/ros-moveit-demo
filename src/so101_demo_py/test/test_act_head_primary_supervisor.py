@@ -319,3 +319,29 @@ def test_passive_wait_bound_includes_exchange_that_returns_fresh_but_too_late(tm
         with pytest.raises(TimeoutError):sup.wait_cpu_inputs(timeout_s=.004)
         assert sup.failed and not sup.ready
     finally:sup.close();port.close_head_io(timeout_s=1.)
+
+@pytest.mark.parametrize('refused',[False,True])
+def test_original_heartbeat_round_trip_is_retained_on_ack_and_transport_failure(tmp_path,refused):
+    _,port,sup,_,events,_=setup(tmp_path)
+    try:
+        sup._started_wall=time.monotonic();sup.observer.executor_progress()
+        def exchange(request):
+            sup._shutdown.set()
+            if refused:raise TimeoutError('controlled original transport deadline')
+            return dict(request='HEARTBEAT',stage='POLICY_READY',epoch='attempt',generation=5,
+                session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+                motion_authority=False,ack_wall_s=time.monotonic())
+        sup.monitor.request_runtime=exchange
+        sup._heartbeat()
+        record=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
+        assert record['request']['executor_wall_s']==sup.observer._executor_wall
+        assert record['request']['executor_wall_s']<=record['request']['wall_s']
+        assert record['request']['wall_s']<=record['rpc_started_wall_s']<=record['rpc_ended_wall_s']
+        if refused:
+            assert record['reply'] is None and record['error_type']=='TimeoutError'
+            assert sup.failed and not sup.ready and port._head_policy_binding_failed
+        else:
+            assert record['reply']['ack_wall_s']<=record['rpc_ended_wall_s']
+            assert record['error_type'] is None and not sup.failed and not sup.ready
+        assert sup.epoch.stage==('REVOKED' if refused else 'POLICY_READY')
+    finally:sup.close();port.close_head_io(timeout_s=1.)
