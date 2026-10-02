@@ -380,6 +380,12 @@ class HeadMonitorRuntime:
     def close(self):
         """Owned CPU teardown and sealed raw stream, never a robot stop claim."""
         if self._finished:return dict(stage='RETIRED',motion_authority=False)
+        if self._configure_thread is not None and self._configure_thread.is_alive():
+            # Setup can still assign owned ROS resources. Stop and join it
+            # before retiring those resources or publishing a receipt.
+            self._shutdown.set();self._configure_thread.join(.2)
+            if self._configure_thread.is_alive():
+                raise PermissionError('HEAD_MONITOR_CONFIGURE_RETIRE_UNCONFIRMED')
         if self._configured and self.epoch.stage=='ARMED_READY' and not self.revoked:
             self.fault('HEAD_MONITOR_OWNED_SHUTDOWN',time.monotonic())
         if self.revoked and self._observer is not None:
@@ -387,9 +393,18 @@ class HeadMonitorRuntime:
             self._close_done.wait(.010)
         self._shutdown.set();self._fault_event.set()
         for thread in self._threads:thread.join(.2)
-        if self._observer is not None:self._observer.close(timeout_s=.010)
-        if self._executor is not None:self._executor.shutdown(timeout_sec=.2)
-        if self._spinner is not None:self._spinner.join(.2)
+        if any(thread.is_alive() for thread in self._threads):
+            raise PermissionError('HEAD_MONITOR_WORKER_RETIRE_UNCONFIRMED')
+        if self._observer is not None:
+            retired=self._observer.close(timeout_s=.010)
+            if (type(retired) is not dict or set(retired)!={'result','cancel'}
+                    or any(value.get('retired') is not True for value in retired.values())):
+                raise PermissionError('HEAD_MONITOR_ACTION_IO_RETIRE_UNCONFIRMED')
+        if self._executor is not None and self._executor.shutdown(timeout_sec=.2) is not True:
+            raise PermissionError('HEAD_MONITOR_EXECUTOR_RETIRE_UNCONFIRMED')
+        if self._spinner is not None:
+            self._spinner.join(.2)
+            if self._spinner.is_alive():raise PermissionError('HEAD_MONITOR_SPINNER_RETIRE_UNCONFIRMED')
         if self._node is not None:self._node.destroy_node()
         if self._context is not None and self._context.ok():self._context.shutdown()
         if self._journal_handle is not None:
