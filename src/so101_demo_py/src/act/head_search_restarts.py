@@ -1693,7 +1693,7 @@ class RestartStack(MujocoRosTransport):
         for controller in CONTROLLERS:
             if controller == "joint_state_broadcaster":
                 continue
-            self._spawn(
+            self.processes.append(self._spawn(
                 [
                     _package_executable("controller_manager", "spawner"),
                     controller,
@@ -1703,7 +1703,7 @@ class RestartStack(MujocoRosTransport):
                     str(self.controller_config_path),
                 ],
                 f"spawner {controller}",
-            )
+            ))
 
 
 # --- one anchor's real flight -------------------------------------------------------------------------

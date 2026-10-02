@@ -87,6 +87,32 @@ def _within(values, bound):
         raise ValueError('HEAD_WINDOW_OBSERVATION_EXCEEDS_BOUND')
 
 
+def _carry_in(window, series, start):
+    """Bind the last original before the window without counting it as delivery.
+
+    The whole boundary gap is retained in the matching-clock population. No
+    clipping, manufactured sample or receipt refresh fills the first decision.
+    """
+    carry=window.get('carry_in')
+    if carry is None:return dict(joint=0,camera=0,info=0,clock=0)
+    if type(carry) is not dict or set(carry)!={'joint','camera','info','clock'}:
+        raise ValueError('HEAD_WINDOW_CARRY_IN_FIELDS_INVALID')
+    for name,(identities,source_gaps,receipt_gaps,period) in series.items():
+        original=carry[name]
+        if type(original) is not dict or original.get('valid') is not True:
+            raise ValueError('HEAD_WINDOW_CARRY_IN_INVALID')
+        source=_stamp(original['source_ns']);receipt=nanoseconds(_number(original['wall_s']))
+        first=next(iter(identities.values()))
+        source_gap=(first['source_ns']-source)*1e-9
+        receipt_gap=(nanoseconds(first['wall_s'])-receipt)*1e-9
+        if (receipt>=start or source in identities or source_gap<=0 or receipt_gap<=0
+                or (period is not None and abs(source_gap-period)>1e-6)):
+            raise ValueError('HEAD_WINDOW_CARRY_IN_NOT_CONTIGUOUS')
+        identities[source]=original
+        source_gaps.insert(0,source_gap);receipt_gaps.insert(0,receipt_gap)
+    return dict(joint=1,camera=1,info=1,clock=1)
+
+
 def evaluate_feedback_window(window, *, stop_latency_s):
     """Refuse the entire window on a bad observation; never filter or clamp.
 
@@ -113,10 +139,15 @@ def _evaluate(window, stop_latency_s):
         start=start, end=end, minimum=1900, source_period=.01)
     cameras, camera_source, camera_wall = _messages(window['camera_messages'],
         start=start, end=end, minimum=190, source_period=.1)
-    infos, _, _ = _messages(window['info_messages'],
+    infos, info_source, info_wall = _messages(window['info_messages'],
         start=start, end=end, minimum=190, source_period=.1)
-    _, clock_source, clock_wall = _messages(window['clock_messages'],
+    clocks_by_source, clock_source, clock_wall = _messages(window['clock_messages'],
         start=start, end=end, minimum=2)
+    camera_cohort,info_cohort=set(cameras),set(infos)
+    joint_count,camera_count,info_count=len(joints),len(cameras),len(infos)
+    carry_counts=_carry_in(window,dict(joint=(joints,joint_source,joint_wall,.01),
+        camera=(cameras,camera_source,camera_wall,.1),info=(infos,info_source,info_wall,.1),
+        clock=(clocks_by_source,clock_source,clock_wall,None)),start)
     decisions = _series(window['decisions'])
     if len(decisions) < 3900:
         raise ValueError('HEAD_WINDOW_DECISION_COUNT')
@@ -159,7 +190,7 @@ def _evaluate(window, stop_latency_s):
     for inference in _series(window['inferences']):
         source = _stamp(inference['source_ns'])
         frame = cameras.get(source)
-        if frame is None or source in seen or source <= previous_image_source:
+        if frame is None or source not in camera_cohort or source in seen or source <= previous_image_source:
             raise ValueError('HEAD_WINDOW_INFERENCE_LINKAGE')
         seen.add(source)
         previous_image_source = source
@@ -189,7 +220,7 @@ def _evaluate(window, stop_latency_s):
         frame_ages.extend([(admission-image)*1e-9, (completion-image)*1e-9,
                            (admission-info)*1e-9, (completion-info)*1e-9])
         skews.append(spread)
-    if seen != set(cameras) or seen != set(infos):
+    if seen != camera_cohort or seen != info_cohort:
         raise ValueError('HEAD_WINDOW_INFERENCE_MISSING')
 
     raw_series = dict(joint_receipt_age_s=joint_receipt_ages,
@@ -237,9 +268,10 @@ def _evaluate(window, stop_latency_s):
         camera_seed_values=camera_values, distributions=distributions,
         periods=dict(joint_source_p50_s=js, joint_receipt_p50_s=jm,
                      camera_source_p50_s=cs, camera_receipt_p50_s=cm),
-        counts=dict(decisions=len(decisions), joint_messages=len(joints),
-                    camera_messages=len(cameras), clock_messages=len(window['clock_messages']),
-                    info_messages=len(infos),
+        carry_in_counts=carry_counts,
+        counts=dict(decisions=len(decisions), joint_messages=joint_count,
+                    camera_messages=camera_count, clock_messages=len(window['clock_messages']),
+                    info_messages=info_count,
                     inferences=len(seen), watchdog_polls=len(polls)),
         real_time_factor=(decisions[-1]['clocks']['sim_ns']-decisions[0]['clocks']['sim_ns'])/
             (nanoseconds(decisions[-1]['clocks']['wall_after_s'])-

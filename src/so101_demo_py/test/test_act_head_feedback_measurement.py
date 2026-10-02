@@ -135,3 +135,37 @@ def test_later_completion_does_not_make_a_backward_frame_admissible():
     older['admission_wall_s']=raw['inferences'][100]['completion_wall_s']+.001
     older['completion_wall_s']=older['admission_wall_s']+.001
     with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)
+
+
+def with_carry_in():
+    raw=window()
+    carry={}
+    for name,field,period in (('joint','joint_messages',.01),('camera','camera_messages',.1),
+                             ('info','info_messages',.1),('clock','clock_messages',.002)):
+        first=raw[field][0]
+        carry[name]=dict(first,source_ns=first['source_ns']-round(period*1e9),wall_s=first['wall_s']-period)
+    raw['carry_in']=carry
+    raw['decisions'].insert(0,dict(joint=dict(carry['joint']),camera=dict(carry['camera']),
+        clocks=dict(wall_before_s=100.0005,wall_after_s=100.0005,sim_ns=10_000_000_000)))
+    return raw
+
+
+def test_pre_window_originals_bind_first_decision_without_inflating_window_counts():
+    measured=evaluate_feedback_window(with_carry_in(),stop_latency_s=.07)
+    assert measured['counts']['joint_messages']==2000
+    assert measured['counts']['camera_messages']==200
+    assert measured['counts']['decisions']==4001
+    assert measured['carry_in_counts']==dict(joint=1,camera=1,info=1,clock=1)
+    assert measured['distributions']['camera_source_age_s']['max']>=.1
+
+
+@pytest.mark.parametrize('damage',['invalid','future_receipt','source_gap','source_collision','changed_copy','missing_reference'])
+def test_carry_in_never_substitutes_counts_or_forgives_bad_originals(damage):
+    raw=with_carry_in()
+    if damage=='invalid':raw['carry_in']['joint']['valid']=False
+    elif damage=='future_receipt':raw['carry_in']['camera']['wall_s']=100.002
+    elif damage=='source_gap':raw['carry_in']['joint']['source_ns']-=10_000_000
+    elif damage=='source_collision':raw['carry_in']['camera']['source_ns']=raw['camera_messages'][0]['source_ns']
+    elif damage=='changed_copy':raw['decisions'][0]['joint']['wall_s']-=.001
+    else:del raw['carry_in']
+    with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)

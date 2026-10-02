@@ -3589,6 +3589,9 @@ def _measure_qualification_readback(
 
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ['measure-feedback-bootstrap']:
+        from .head_feedback_bootstrap import main as bootstrap
+        return bootstrap(arguments[1:])
     # Step 1's gate is stack-free and runs before any run root is claimed: it must not be routed through
     # the qualifier's four-subcommand parser, which owns the runners that do start things
     if arguments[:1] == ["check-ownership"]:

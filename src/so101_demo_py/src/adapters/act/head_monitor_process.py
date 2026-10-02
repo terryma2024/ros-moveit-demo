@@ -6,6 +6,7 @@ bind the independently reviewed native/ROS monitor before using that authority.
 """
 
 import argparse
+from concurrent.futures import Future
 import json
 import math
 import os
@@ -17,10 +18,11 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 import time
 
 from so101_demo.act.head_monitor_ipc import HeadMonitorChannel, HeadMonitorCodec
-from .controller_reservation_provision import _private_parent, _process_start_ticks
+from .controller_reservation_provision import _private_parent, _process_start_ticks, _publish_private_provision
 
 
 def _peer(pid):
@@ -48,6 +50,8 @@ class MonitorProcess:
         self._identity, self._receipt = dict(identity), dict(receipt)
         self._channel, self._log_handle = channel, log_handle
         self._closed = False
+        self._runtime_requested = False
+        self._runtime_receipt = None
 
     @property
     def identity(self): return dict(self._identity)
@@ -74,6 +78,61 @@ class MonitorProcess:
             raise PermissionError('HEAD_MONITOR_EXEC_ACK_INVALID')
         return reply
 
+    def request_runtime(self,value):
+        """The staged calibration protocol; an EXEC_ONLY receipt grants none."""
+        if self._closed or not self.is_alive():
+            raise PermissionError('HEAD_MONITOR_EXEC_RETIRED')
+        if type(value) is not dict or type(value.get('operation')) is not str:
+            raise ValueError('HEAD_MONITOR_RUNTIME_REQUEST_INVALID')
+        if value['operation']=='CONFIGURE':self._runtime_requested=True
+        elif not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
+        reply=self._channel.exchange(value)
+        codec=self._channel._codec
+        if (type(reply) is not dict or reply.get('request')!=value['operation']
+                or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'
+                or reply.get('epoch')!=codec.epoch or reply.get('generation')!=codec.generation
+                or reply.get('session_id')!=codec.session_id or reply.get('motion_authority') is not False
+                or reply.get('stage') not in ('CONFIGURE_PENDING','CONFIGURED','POLICY_READY',
+                                             'POLICY_PENDING','ARMED_READY','PRESENT','RETIRE_PENDING','RETIRED')):
+            self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_ACK_INVALID')
+        if value['operation']=='CONFIGURATION' and reply['stage']=='CONFIGURED':
+            self._runtime_receipt=reply
+        return reply
+
+    def await_runtime(self,*,phase,timeout_s):
+        """Wait for stopped setup work, then obtain the real authenticated ACK.
+
+        The private marker signals completion only. It grants no policy,
+        readiness or dispatch authority and never changes a channel deadline.
+        """
+        names={'configuration':('runtime-config-complete.json','CONFIGURATION'),
+               'policy':('runtime-policy-complete.json','POLICY_STATUS'),
+               'retirement':('runtime-retire-complete.json','RETIRE_STATUS')}
+        if phase not in names or type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<timeout_s<=10:
+            raise ValueError('HEAD_MONITOR_SETUP_WAIT_INVALID')
+        filename,operation=names[phase]
+        path=Path(self._channel._connection.getpeername()).parent/filename
+        deadline=time.monotonic()+timeout_s
+        while time.monotonic()<deadline:
+            if not self.is_alive():raise PermissionError('HEAD_MONITOR_EXEC_RETIRED')
+            try:fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+            except FileNotFoundError:
+                time.sleep(.002);continue
+            with os.fdopen(fd,'rb') as handle:
+                info=os.fstat(handle.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_uid!=self._identity['uid'] or stat.S_IMODE(info.st_mode)!=0o600:
+                    raise PermissionError('HEAD_MONITOR_SETUP_MARKER_INVALID')
+                body=handle.read(2049)
+            if len(body)>2048:raise PermissionError('HEAD_MONITOR_SETUP_MARKER_INVALID')
+            record=json.loads(body);codec=self._channel._codec
+            if (type(record) is not dict or set(record)!={'phase','epoch','generation','session_id','monitor_peer','success'}
+                    or record['phase']!=phase or record['epoch']!=codec.epoch or record['generation']!=codec.generation
+                    or record['session_id']!=codec.session_id or record['monitor_peer']!=self._identity
+                    or type(record['success']) is not bool):
+                raise PermissionError('HEAD_MONITOR_SETUP_MARKER_INVALID')
+            return self.request_runtime({'operation':operation})
+        raise TimeoutError('HEAD_MONITOR_STOPPED_SETUP_DEADLINE')
+
     def close(self):
         if self._closed:
             return dict(event='OWNED_REAP', peer=self.identity, exit_code=self._process.returncode)
@@ -81,9 +140,13 @@ class MonitorProcess:
         try:
             if self.is_alive():
                 try:
-                    self.request({'operation':'SHUTDOWN'}); ack = True
-                except (OSError, PermissionError):
-                    # This is an unarmed exec-only teardown, never a stop proof.
+                    if self._runtime_requested:
+                        self.request_runtime({'operation':'RETIRE'})
+                        receipt=self.await_runtime(phase='retirement',timeout_s=.5)
+                        if receipt['stage']=='RETIRED':self._runtime_receipt=receipt;ack=True
+                    else:self.request({'operation':'SHUTDOWN'}); ack = True
+                except (OSError, PermissionError, RuntimeError, ValueError):
+                    # Reaping is containment, never authoritative robot stop.
                     ack = False
         finally:
             self._channel.close()
@@ -95,6 +158,130 @@ class MonitorProcess:
                 self._log_handle.close()
                 self._closed = True
         return result
+
+
+class MonitorRuntimeProtocol:
+    """The authenticated server's lazy CPU configuration and owned retirement.
+
+    Slow imports, ROS discovery and fsync run on owned workers. Every exchange
+    retains the existing 10 ms channel deadline; no configuration time is motion
+    authority and no unknown runtime operation falls back to EXEC_ONLY.
+    """
+    def __init__(self,config,directory):
+        self.config=config;self._future=None;self._runtime=None;self._retire=None
+        self._policy_future=None
+        self._directory=Path(directory);self._after_send=None
+
+    def _completed(self,phase,future):
+        filename={'configuration':'runtime-config-complete.json','policy':'runtime-policy-complete.json',
+                  'retirement':'runtime-retire-complete.json'}[phase]
+        path=self._directory/filename;parent=_private_parent(path)
+        body=json.dumps(dict(phase=phase,epoch=self.config['epoch'],generation=self.config['generation'],
+            session_id=self.config['session_id'],monitor_peer=_peer(os.getpid()),success=future.exception() is None),
+            sort_keys=True).encode('ascii')
+        _publish_private_provision(path,body,parent)
+
+    def after_send(self):
+        work,self._after_send=self._after_send,None
+        if work is not None:work()
+
+    def handle(self,request):
+        operation=request['operation']
+        if operation=='CONFIGURE':
+            if set(request)!={'operation','configuration'} or self._future is not None:
+                raise PermissionError('HEAD_MONITOR_CONFIGURE_REUSED')
+            configuration=json.loads(json.dumps(request['configuration'],allow_nan=False))
+            self._future=Future()
+            def configure():
+                try:
+                    from .head_monitor_runtime import HeadMonitorRuntime
+                    self._runtime=HeadMonitorRuntime(epoch=self.config['epoch'],generation=self.config['generation'],
+                        session_id=self.config['session_id'],primary=self.config['primary'])
+                    self._runtime.configure(configuration)
+                    self._future.set_result(self._runtime)
+                    self._runtime._configure_future.add_done_callback(lambda f:self._completed('configuration',f))
+                except BaseException as error:
+                    if not self._future.done():self._future.set_exception(error)
+                    self._completed('configuration',self._future)
+            self._after_send=lambda:threading.Thread(target=configure,name='head-monitor-runtime-import',daemon=True).start()
+            result=dict(stage='CONFIGURE_PENDING',motion_authority=False)
+        elif operation=='CONFIGURATION':
+            if set(request)!={'operation'} or self._future is None:
+                raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
+            result=(self._future.result().configuration() if self._future.done() else
+                    dict(stage='CONFIGURE_PENDING',motion_authority=False))
+        elif operation=='RETIRE':
+            if set(request)!={'operation'} or self._retire is not None:
+                raise PermissionError('HEAD_MONITOR_RETIRE_REUSED')
+            self._retire=Future()
+            def retire():
+                try:
+                    if self._future is not None:self._future.result(timeout=.5)
+                    if self._runtime is not None and self._runtime._configure_future is not None:
+                        self._runtime._configure_future.result(timeout=.5)
+                    result=(self._runtime.close() if self._runtime is not None else
+                            dict(stage='RETIRED',motion_authority=False))
+                    self._retire.set_result(result)
+                except BaseException as error:
+                    if self._runtime is not None:self._runtime.fault('HEAD_MONITOR_RETIRE_FAILED',time.monotonic())
+                    self._retire.set_exception(error)
+                finally:self._completed('retirement',self._retire)
+            self._after_send=lambda:threading.Thread(target=retire,name='head-monitor-runtime-retire',daemon=True).start()
+            result=dict(stage='RETIRE_PENDING',motion_authority=False)
+        elif operation=='RETIRE_STATUS':
+            if set(request)!={'operation'} or self._retire is None:
+                raise PermissionError('HEAD_MONITOR_RETIRE_REQUIRED')
+            result=(self._retire.result() if self._retire.done() else
+                    dict(stage='RETIRE_PENDING',motion_authority=False))
+        elif operation=='POLICY_STATUS':
+            if set(request)!={'operation'} or self._policy_future is None:
+                raise PermissionError('HEAD_MONITOR_POLICY_REQUIRED')
+            result=(self._policy_future.result() if self._policy_future.done() else
+                    dict(stage='POLICY_PENDING',motion_authority=False))
+        else:
+            if self._future is None or not self._future.done():
+                raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
+            runtime=self._future.result();runtime.configuration()
+            fields={'POLICY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
+                    'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault'}
+            if operation not in fields or set(request)!={'operation',fields[operation]}:
+                raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_REFUSED')
+            value=request[fields[operation]]
+            if operation=='POLICY':
+                if self._policy_future is not None:raise PermissionError('HEAD_MONITOR_POLICY_REUSED')
+                self._policy_future=Future()
+                def policy():
+                    try:self._policy_future.set_result(runtime.bind_policy(value))
+                    except BaseException as error:
+                        runtime.fault('HEAD_MONITOR_POLICY_FAILED',time.monotonic())
+                        self._policy_future.set_exception(error)
+                    finally:self._completed('policy',self._policy_future)
+                self._after_send=lambda:threading.Thread(target=policy,name='head-monitor-policy-validation',daemon=True).start()
+                result=dict(stage='POLICY_PENDING',motion_authority=False)
+            elif operation=='ARMED_READY':
+                if self._policy_future is None or not self._policy_future.done():
+                    raise PermissionError('HEAD_MONITOR_POLICY_ACK_REQUIRED')
+                self._policy_future.result()
+                result=runtime.armed_ready(value)
+            elif operation=='REGISTER':result=runtime.register(value)
+            elif operation=='DISPATCH':result=runtime.dispatch(value)
+            elif operation=='HEARTBEAT':result=runtime.heartbeat(value)
+            elif operation=='REJECTION':
+                runtime.rejection(value);result=dict(stage=runtime.epoch.stage,motion_authority=False)
+            else:
+                if type(value) is not dict or set(value)!={'reason','fault_wall_s'}:
+                    raise ValueError('HEAD_MONITOR_FAULT_INVALID')
+                runtime.fault(value['reason'],value['fault_wall_s'])
+                # A fault is irreversible and is not a successful dispatch ACK.
+                raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
+        return dict(result,request=operation,monitor_peer=_peer(os.getpid()),purpose='calibration',
+                    epoch=self.config['epoch'],generation=self.config['generation'],
+                    session_id=self.config['session_id'])
+
+    def disconnected(self):
+        if self._runtime is not None and not self._runtime._finished:
+            self._runtime.fault('HEAD_MONITOR_CHANNEL_LOST',time.monotonic())
+            self._runtime.close()
 
 
 def _retire(process, pid_fd, identity, handle, *, shutdown_ack):
@@ -250,6 +437,7 @@ def main():
     parser.add_argument('--bootstrap-fd',type=int,required=True)
     parser.add_argument('--socket',required=True)
     args=parser.parse_args()
+    runtime_protocol=None
     try:
         config=_bootstrap(args.bootstrap_fd)
         codec=HeadMonitorCodec(secret=bytes.fromhex(config['secret']),epoch=config['epoch'],
@@ -261,6 +449,7 @@ def main():
         if not cpu_only or os.environ.get('CUDA_VISIBLE_DEVICES')!='':
             raise PermissionError('HEAD_MONITOR_EXEC_CPU_ONLY_REQUIRED')
         identity=_peer(os.getpid());primary=config['primary']
+        runtime_protocol=MonitorRuntimeProtocol(config,Path(args.socket).parent)
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
             previous_mask=os.umask(0o177)
             try:server.bind(str(path))
@@ -278,9 +467,19 @@ def main():
                         raise PermissionError('HEAD_MONITOR_EXEC_PRIMARY_LOST')
                     if not select.select([connection],[],[],.002)[0]:continue
                     request=channel.receive()
-                    if type(request) is not dict or set(request)!={'operation'}:
+                    if type(request) is not dict or type(request.get('operation')) is not str:
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     operation=request['operation']
+                    if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','ARMED_READY',
+                            'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS'):
+                        channel.send(runtime_protocol.handle(request))
+                        runtime_protocol.after_send()
+                        continue
+                    if operation=='HEARTBEAT' and runtime_protocol._future is not None:
+                        channel.send(runtime_protocol.handle(request))
+                        continue
+                    if set(request)!={'operation'} or runtime_protocol._future is not None:
+                        raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     if operation=='PRESENCE' and not presented:presented=True
                     elif operation in ('HEARTBEAT','SHUTDOWN') and presented:pass
                     else:raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
@@ -300,6 +499,11 @@ def main():
         # No bootstrap payload, key, capability or exception data is logged.
         print(json.dumps(dict(event='EXEC_ONLY_REFUSED',motion_authority=False)),flush=True)
         return 2
+    finally:
+        if runtime_protocol is not None:
+            try:runtime_protocol.disconnected()
+            except BaseException:
+                print(json.dumps(dict(event='RUNTIME_RETIRE_UNCONFIRMED',motion_authority=False)),flush=True)
 
 
 if __name__=='__main__':
