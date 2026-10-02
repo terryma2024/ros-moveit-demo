@@ -111,7 +111,7 @@ def main(argv=None):
         status='REFUSED',epoch=epoch,generation=generation,session_id=session,dependencies=dependencies,
         before=before,seed_config=_reference(args.production_config),entry=_reference(__file__),
         python=sys.executable,started_wall_s=time.monotonic(),native_arm_count=0,goal_send_count=0)
-    _write(root/'attempt-declaration.json',dict(result,window_rule='stable10s then first future boundary at latest original camera receipt + stable p50 receipt gap / 2; at most two fixed 100ms source periods waiting before the single declaration; end=start+20s; no retry',
+    _write(root/'attempt-declaration.json',dict(result,window_rule='stable10s then first future boundary at latest original camera receipt + max(stable p50 receipt gap / 2, stable linear p99 original CUDA receipt-to-completion wall duration + stable linear p99 original Joint receipt gap); phase must remain shorter than one receipt period; at most two fixed 100ms source periods waiting before the single declaration; end=start+20s; no retry',
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
     monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=original_router=None

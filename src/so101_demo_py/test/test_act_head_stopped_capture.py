@@ -206,3 +206,16 @@ def test_late_original_waits_for_next_exposure_before_window_is_declared():
 
 def test_equal_midpoint_is_not_a_future_window_and_cannot_start_in_past():
     assert stopped_window_boundary([10.,10.1,10.2],now_ns=10_250_000_000) is None
+
+
+def test_predeclared_window_phase_leaves_measured_stable_processing_margin():
+    assert stopped_window_boundary([10.,10.1,10.2],now_ns=10_240_000_000,
+        processing_margin_s=.06)==10_260_000_000
+    assert stopped_window_boundary([10.,10.1,10.2],now_ns=10_270_000_000,
+        processing_margin_s=.06) is None
+
+
+@pytest.mark.parametrize('margin',[float('nan'),-.001,.1001])
+def test_window_phase_cannot_hide_invalid_processing_or_extend_one_source_period(margin):
+    with pytest.raises(ValueError,match='WINDOW_PHASE'):
+        stopped_window_boundary([10.,10.1,10.2],now_ns=10_210_000_000,processing_margin_s=margin)

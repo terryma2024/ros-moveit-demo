@@ -16,7 +16,7 @@ from sensor_msgs.msg import Image, CameraInfo
 from rclpy.qos import qos_profile_sensor_data
 
 from so101_demo.act.head_feedback import decision_clocks, nanoseconds
-from so101_demo.act.head_feedback_measurement import evaluate_feedback_window
+from so101_demo.act.head_feedback_measurement import evaluate_feedback_window, _quantile
 from .ros_search import RGB_QOS, rotation_matrix
 
 
@@ -24,10 +24,14 @@ def _source(message):
     return message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
 
 
-def stopped_window_boundary(receipts,*,now_ns):
-    """Wait for a future half-period boundary without declaring an attempt."""
+def stopped_window_boundary(receipts,*,now_ns,processing_margin_s=0.):
+    """Choose a future phase before declaring the immutable full20s window."""
     gaps=sorted(right-left for left,right in zip(receipts,receipts[1:]))
-    midpoint=nanoseconds(receipts[-1])+nanoseconds(gaps[len(gaps)//2]/2)
+    period=gaps[len(gaps)//2]
+    if (type(processing_margin_s) not in (int,float) or not math.isfinite(processing_margin_s)
+            or not 0<=processing_margin_s<period):
+        raise ValueError('HEAD_STOPPED_WINDOW_PHASE_INVALID')
+    midpoint=nanoseconds(receipts[-1])+nanoseconds(max(period/2,processing_margin_s))
     return midpoint if midpoint>now_ns else None
 
 
@@ -291,12 +295,27 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                         or any(abs((right['source_ns']-left['source_ns'])*1e-9-.01)>1e-6
                                for left,right in zip(stable_joints,stable_joints[1:]))):
                     raise ValueError('HEAD_STOPPED_STABLE_STREAM_INVALID')
-                midpoint=stopped_window_boundary(receipts,now_ns=time.monotonic_ns())
+                # Choose the phase from the preceding stable cohort before the
+                # first declaration. Both budgets use original monotonic wall
+                # durations; no source-clock or real-time-factor conversion.
+                stable_inferences=[row for row in inferences if row['image_received_wall_s']>=stable_start]
+                latencies=[row['completion_wall_s']-row['image_received_wall_s'] for row in stable_inferences]
+                receipt_gaps=[right['wall_s']-left['wall_s'] for left,right in zip(stable_joints,stable_joints[1:])]
+                if (len(latencies)<90 or not receipt_gaps
+                        or any(not math.isfinite(value) or value<0 for value in latencies+receipt_gaps)):
+                    raise ValueError('HEAD_STOPPED_WINDOW_PHASE_INVALID')
+                processing_p99=_quantile(latencies,.99);joint_receipt_p99=_quantile(receipt_gaps,.99)
+                phase_budget=dict(stable_inferences=len(latencies),stable_joint_receipt_gaps=len(receipt_gaps),
+                    processing_wall_p99_s=processing_p99,joint_receipt_gap_wall_p99_s=joint_receipt_p99,
+                    processing_margin_s=processing_p99+joint_receipt_p99,quantile='linear (n-1)*p',
+                    clock='original monotonic wall durations')
+                midpoint=stopped_window_boundary(receipts,now_ns=time.monotonic_ns(),
+                    processing_margin_s=phase_budget['processing_margin_s'])
                 if midpoint is not None:
                     start_ns=midpoint;end_ns=start_ns+20_000_000_000
                     capture.declare_window(start_ns=start_ns,end_ns=end_ns)
-                    capture.workload.update(start_ns=start_ns,end_ns=end_ns)
-                    progress(stage='window',start_ns=start_ns,end_ns=end_ns)
+                    capture.workload.update(start_ns=start_ns,end_ns=end_ns,boundary_processing_budget=phase_budget)
+                    progress(stage='window',start_ns=start_ns,end_ns=end_ns,boundary_processing_budget=phase_budget)
                 elif time.monotonic()-stable_start>10.2:
                     # The fixed 10 Hz source gets at most two source periods
                     # to present the next original. Keep consuming stable
