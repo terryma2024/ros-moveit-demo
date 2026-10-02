@@ -74,7 +74,7 @@ class OwnedHeadSearch:
         if self._active is None:return True
         command=self._active;gid=command['goal_uuid']
         with self.port._lock:
-            state=dict(self.port._goals[gid]);samples=tuple(deepcopy(row) for row in self.port._head_samples)
+            state=dict(self.port._goals[gid])
         response=state.get('result')
         command['accepted']=state.get('accepted');command['terminal_status']=getattr(response,'status',None)
         command['result_error_code']=getattr(getattr(response,'result',None),'error_code',None)
@@ -85,6 +85,11 @@ class OwnedHeadSearch:
         if 'terminal_observed_wall_s' not in command:
             command['terminal_observed_wall_s']=self.monotonic()
             command['terminal_source_floor_ns']=current['decision']['sim_ns']
+            return False
+        # Originals are append-only. The cache lock copies references only;
+        # sealed bootstrap history is neither decoded nor copied by this loop.
+        with self.port._lock:originals=tuple(self.port._head_samples)
+        samples=tuple(row for row in originals if row['wall_s']>command['terminal_observed_wall_s'])
         proof=self.settlement(samples,state,target_rad=command['target_rad'],
             position_tolerance_rad=self.controller.config['goal_tolerance_rad'],
             velocity_tolerance_rad_s=min(self.stop_velocity,self.controller.config['settle_velocity_rad_s']),

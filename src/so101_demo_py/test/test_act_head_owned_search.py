@@ -160,3 +160,31 @@ def test_owned_goal_failure_never_permits_a_lock(damage):
     c.port._goals[gid]=state;c.clock[0]=1.02
     with pytest.raises(PermissionError):c.search.tick()
     assert c.faults and c.search.result is None and len(c.sent)==1
+
+
+@pytest.mark.parametrize('accepted',[None,True])
+def test_pending_goal_does_not_copy_or_scan_the_historical_joint_cache(accepted):
+    c=driver();c.rows.append(exposure(detections=[dict(BOX,xyxy=[340.,200.,380.,280.])]))
+    c.clock[0]=1.01;c.search.tick();gid=c.sent[0][0]
+    c.port._goals[gid]['accepted']=accepted
+    class ForbiddenHistory:
+        def __iter__(self):raise AssertionError('pending goal touched sealed historical joints')
+    c.port._head_samples=ForbiddenHistory();c.clock[0]=1.02
+    assert c.search.tick() is None and c.faults==[]
+
+
+def test_terminal_goal_copies_only_three_fresh_proof_samples_outside_cache_lock():
+    c=driver();c.rows.append(exposure(detections=[dict(BOX,xyxy=[340.,200.,380.,280.])]))
+    c.clock[0]=1.01;c.search.tick();gid,target,_=c.sent[0]
+    c.port._goals[gid]=dict(accepted=True,result=SimpleNamespace(status=4,
+        result=SimpleNamespace(error_code=0)))
+    c.clock[0]=1.02;c.search.tick()
+    class Historical(dict):
+        def __deepcopy__(self,memo):raise AssertionError('historical sample deep-copied')
+    c.port._head_samples=[Historical(sequence=i,source_ns=i,wall_s=.9,valid=True,
+        positions=[0.],velocities=[0.]) for i in range(1,3500)]
+    c.port._head_samples.extend(dict(sequence=4000+i,source_ns=round((1.02+i*.01)*1e9),
+        wall_s=1.02+i*.01,valid=True,positions=[target],velocities=[0.]) for i in (1,2,3))
+    c.clock[0]=1.06;assert c.search.tick() is None
+    assert [sample['sequence'] for sample in c.search.commands[0]['confirming_samples']]==[4001,4002,4003]
+    assert not c.port._lock.locked() and c.faults==[]
