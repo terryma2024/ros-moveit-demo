@@ -143,7 +143,13 @@ def _bind_live_exposures(*,capture,port,buffer,detector,primary,monitor,camera_s
     return reader
 
 
-def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit,live=None):
+def _start_owned_detector(*,factory,fault_callback):
+    from so101_demo.adapters.act.head_inference_owner import HeadInferenceOwner
+    return HeadInferenceOwner(factory=factory,fault_callback=fault_callback)
+
+
+def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit,live=None,
+                             owned_inference=False):
     """One real sealed-domain endpoint goal, through the existing bound SDK."""
     from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
     from so101_demo.act.head_search_calibration_run import check_trajectory_contract
@@ -183,10 +189,16 @@ def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,
         evidence['goal_uuid']=gid;evidence['inventory']=dispatcher.inventory
         evidence['main_exchange_receipts']=list(authority.exchange_receipts)
         deadline=evidence['dispatch_wall_s']+values['search_timeout_s']
+        next_tick=time.monotonic()
+        if owned_inference:evidence['control_period_s']=.005
         terminal_wall=None;floor=None
         while True:
             if live is not None:live.infer()
             primary.dispatch_guard();current=port.feedback_snapshot()
+            if owned_inference:
+                emit('BOUND_GOAL_CONTROL_DECISION',goal_uuid=gid,decision=current['decision'],
+                    original_joint={key:value for key,value in current.items() if key!='decision'},
+                    controller_thread_native_id=threading.get_native_id())
             with port._lock:
                 state=dict(port._goals[gid])
                 samples=tuple(dict(row) for row in port._head_samples
@@ -213,7 +225,14 @@ def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,
                     evidence['settled']=True;evidence['settled_wall_s']=time.monotonic()
                     emit('BOUND_GOAL_SETTLED',**evidence);return evidence
             if time.monotonic()>=deadline:raise TimeoutError('HEAD_DIAGNOSTIC_GOAL_SETTLEMENT_TIMEOUT')
-            time.sleep(.001)
+            if owned_inference:
+                next_tick+=.005;delay=next_tick-time.monotonic()
+                if delay<0:
+                    emit('BOUND_GOAL_CONTROL_TICK_LATE',scheduled_wall_s=next_tick,
+                        observed_wall_s=time.monotonic())
+                    next_tick=time.monotonic();delay=0.
+                time.sleep(delay)
+            else:time.sleep(.001)
     except Exception:
         primary.fault('HEAD_BOUND_GOAL_DIAGNOSTIC_FAILED')
         raise
@@ -268,9 +287,13 @@ def main(argv=None):
         help='after stopped measurement and three-party native binding, dispatch one sealed-domain endpoint goal; diagnostic only')
     parser.add_argument('--moving-exposure-diagnostic',action='store_true',
         help='during the one bound endpoint goal, admit original frames on the CPU monitor and infer on the same C2a; diagnostic only')
+    parser.add_argument('--owned-inference-diagnostic',action='store_true',
+        help='build and infer on one owned thread while main advances original5ms control decisions; requires moving exposure diagnostic')
     args=parser.parse_args(argv)
     if args.moving_exposure_diagnostic and not args.bound_goal_diagnostic:
         parser.error('--moving-exposure-diagnostic requires --bound-goal-diagnostic')
+    if args.owned_inference_diagnostic and not args.moving_exposure_diagnostic:
+        parser.error('--owned-inference-diagnostic requires --moving-exposure-diagnostic')
     # Import CPU resources first. No torch/model import precedes monitor exec.
     from so101_demo.act.head_search_restarts import (
         RestartStack,TimedHeadDetector,_operating_point,publish_provisions,stack_environment,
@@ -317,7 +340,7 @@ def main(argv=None):
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
     monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=original_router=None
-    primary=primary_writer=live=None
+    primary=primary_writer=live=inference_owner=None
     try:
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
@@ -403,8 +426,12 @@ def main(argv=None):
         result['detector_runtime']=dict(torch_version=torch.__version__,ultralytics_version=ultralytics.__version__,
             cuda_version=torch.version.cuda,torch_threads=torch.get_num_threads(),
             torch_interop_threads=torch.get_num_interop_threads(),allow_cpu_fallback=False,requested_device=args.device)
-        built=TimedHeadDetector.build(weights_path=dependencies['weights']['path'],model_id=production['runtime_id'],
-            device=args.device,values=values,operating_point=_operating_point(args.frozen_candidate))
+        inference_owner=_start_owned_detector(factory=lambda:TimedHeadDetector.build(
+            weights_path=dependencies['weights']['path'],model_id=production['runtime_id'],
+            device=args.device,values=values,operating_point=_operating_point(args.frozen_candidate)),
+            fault_callback=original_failure)
+        built=inference_owner.configuration(timeout_s=90.)
+        result['inference_owner']=built['inference_owner']
         if built['runtime_device']!=args.device:raise PermissionError('HEAD_BOOTSTRAP_CUDA_REQUIRED')
         result['cuda_loaded_wall_s']=time.monotonic();result['detector_count']=1
         result['cuda_compute_apps']=measure_gpu_compute_apps()
@@ -448,11 +475,17 @@ def main(argv=None):
                 camera_frame_id=production['camera']['frame_id'],
                 emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
             if args.moving_exposure_diagnostic:
-                live=_bind_live_exposures(capture=capture,port=port,buffer=buffer,detector=built['runtime'],
-                    primary=primary,monitor=monitor,camera_skew_s=measured['camera_seed_values']['max_skew_s'],
-                    emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                def bind_live(detector):
+                    return _bind_live_exposures(capture=capture,port=port,buffer=buffer,detector=detector,
+                        primary=primary,monitor=monitor,camera_skew_s=measured['camera_seed_values']['max_skew_s'],
+                        emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                if args.owned_inference_diagnostic:
+                    result['live_binding']=inference_owner.bind_live(bind_live,timeout_s=1.)
+                    live=inference_owner
+                else:live=bind_live(built['runtime'])
                 result['live_exposure_diagnostic']=dict(diagnostic_only=True,qualification=False,
-                    detector_count=1,inference_thread='owned main',records=live.results)
+                    detector_count=1,inference_thread='owned worker' if args.owned_inference_diagnostic else 'owned main',
+                    records=live.results)
             primary.start()
             # Before the first activation, wait only for newly received matching
             # originals. No cached bootstrap sample is seeded into the primary.
@@ -475,6 +508,7 @@ def main(argv=None):
                 arm_guard=primary.prearm_guard,fault_callback=primary.fault)
             result['native_identity']=_bind_native_diagnostic(primary,authority,result)
             result['primary_ready']=primary.ready
+            if args.owned_inference_diagnostic:inference_owner.activate_live()
             if args.bound_goal_diagnostic:
                 def counted_send(*positional,**named):
                     primary.dispatch_guard()
@@ -484,7 +518,9 @@ def main(argv=None):
                 try:
                     _run_bound_goal_diagnostic(node=node,port=port,primary=primary,authority=authority,
                         monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
-                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)),live=live)
+                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)),
+                        live=live,owned_inference=args.owned_inference_diagnostic)
+                    if live is not None:result['live_exposure_diagnostic']['records']=live.results
                 finally:client.send_goal_async=forbid_send
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()
@@ -500,7 +536,18 @@ def main(argv=None):
         _record_refusal(result,error)
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
-        if live is not None:
+        inference_retired=True
+        if inference_owner is not None:
+            try:
+                result['inference_owner_teardown']=inference_owner.close()
+                if result['inference_owner_teardown']['error'] is not None:result['status']='REFUSED'
+                if live is inference_owner:
+                    result['live_exposure_teardown']=result['inference_owner_teardown']['live']
+                    result['live_exposure_diagnostic']['records']=live.results
+            except Exception as error:
+                inference_retired=False;result['inference_owner_teardown_error']=str(error)
+                result['producer_seals_withheld']=True;result['status']='REFUSED'
+        if live is not None and live is not inference_owner:
             try:result['live_exposure_teardown']=live.close()
             except Exception as error:result['live_exposure_teardown_error']=str(error);result['status']='REFUSED'
         if primary is not None:
@@ -535,14 +582,14 @@ def main(argv=None):
         if context is not None:
             try:context.try_shutdown()
             except Exception as error:result['context_teardown_error']=str(error);result['status']='REFUSED'
-        if writer is not None:
+        if writer is not None and inference_retired:
             try:result['images']=writer.close()
             except Exception as error:result['image_seal_error']=str(error);result['status']='REFUSED'
         if original_router is not None:original_router.retire()
-        if original_writer is not None:
+        if original_writer is not None and inference_retired:
             try:result['primary_original_journal']=original_writer.close(timeout_s=10.)
             except Exception as error:result['primary_original_seal_error']=str(error);result['status']='REFUSED'
-        if primary_writer is not None:
+        if primary_writer is not None and inference_retired:
             try:result['primary_events_journal']=primary_writer.close(timeout_s=10.)
             except Exception as error:result['primary_event_seal_error']=str(error);result['status']='REFUSED'
         if monitor is not None:

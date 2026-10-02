@@ -161,6 +161,8 @@ class HeadLiveExposures:
                 **done,deadline_ns=deadline)
             self._guard(deadline)
             row=_wire(dict(epoch=epoch.epoch,generation=epoch.generation,session_id=epoch.session_id,
+                exposure_pipeline_owner=dict(name=threading.current_thread().name,
+                    ident=threading.get_ident(),native_id=threading.get_native_id()),
                 sequence=sequence,source_ns=source,info_source_ns=info['source_ns'],
                 joint_source_ns=causal['source_ns'],tf_source_ns=tf_source,causal_joint=causal,
                 payload_sha256=image['payload_sha256'],image_received_wall_s=image['wall_s'],
@@ -171,13 +173,19 @@ class HeadLiveExposures:
                 completion_rpc_received_wall_s=finish_received,detections=detections,result_sha256=result_sha))
             self.emit('LIVE_EXPOSURE_FINISHED',record=row)
             self._guard(deadline)
-            self.results.append(_wire(row));self.primary.inference_deadline(None)
+            saved=_wire(row)
+            with self._lock:self.results.append(saved)
+            self.primary.inference_deadline(None)
             return row
         except Exception:
             self.primary.fault('HEAD_LIVE_EXPOSURE_REFUSED');raise
         finally:
             if entered:
                 with self._lock:self._busy=False
+
+    def records_snapshot(self):
+        with self._lock:records=list(self.results)
+        return _wire(records)
 
     def close(self):
         with self._lock:
