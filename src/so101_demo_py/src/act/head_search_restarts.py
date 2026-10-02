@@ -1454,9 +1454,12 @@ class ReservationAuthority:
         except Exception as error:
             if before_reserve is not None:
                 self._registration_failed = True
+            # Head inventory failures must reach the owned fault closer before
+            # any arbitrary exception formatter can run on the dispatch worker.
+            detail = type(error).__name__ if before_reserve is not None else repr(error)
             raise _refuse(
                 RESTART_RESERVATION_REFUSED,
-                f"the {role} controller refused the bound reservation: {error!r}",
+                f"the {role} controller refused the bound reservation: {detail}",
             ) from error
         if not accepted:
             if before_reserve is not None:
