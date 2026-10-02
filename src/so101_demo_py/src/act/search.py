@@ -5,6 +5,7 @@ import math
 from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
 from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
+from .head_feedback import FeedbackPolicy, nanoseconds
 
 
 class HeadSearchController:
@@ -150,7 +151,7 @@ class HeadSearchController:
             status, self.last_feedback or {"neck_yaw_rad": None}, self.last_frame_s or 0.0
         )
 
-    def tick(self, frame, feedback, now_wall_s):
+    def tick(self, frame, feedback, now_wall_s, *, joint_context=None):
         now = finite(now_wall_s, nonnegative=True)
         for value in (frame, feedback):
             if (value["session_id"], value["attempt_id"]) != (
@@ -168,12 +169,37 @@ class HeadSearchController:
         self.last_feedback = dict(feedback)
         if feedback["safe_observe"] is not True:
             return self._result("SEARCH_UNSAFE", feedback, stamp)
-        fresh = all(
-            0
-            <= now - finite(value["received_wall_s"], nonnegative=True)
-            <= self.config["max_age_s"]
-            for value in (frame, feedback)
-        )
+        if joint_context is None:
+            fresh = all(
+                0 <= now - finite(value["received_wall_s"], nonnegative=True)
+                <= self.config["max_age_s"] for value in (frame, feedback)
+            )
+        else:
+            # The source-bound historical JointState supplies the exposure's
+            # pose. Current motion freshness belongs to a separately measured
+            # original JointState/dual-clock decision, never the camera age.
+            try:
+                fields(joint_context,("session_id","attempt_id","sample","decision","policy"))
+                if (joint_context['session_id'],joint_context['attempt_id']) != (
+                        self.config['session_id'],self.config['attempt_id']):
+                    raise ValueError('SEARCH_JOINT_CONTEXT_IDENTITY_INVALID')
+                policy=FeedbackPolicy.parse(joint_context['policy']);decision=joint_context['decision']
+                fields(decision,('wall_before_s','wall_after_s','sim_ns','sim_s'))
+                if (type(decision['sim_ns']) is not int or decision['sim_ns']<=0
+                        or nanoseconds(decision['sim_s'])!=decision['sim_ns']
+                        or not nanoseconds(decision['wall_before_s'])<=nanoseconds(decision['wall_after_s'])
+                        or not 0<=nanoseconds(now)-nanoseconds(decision['wall_after_s'])
+                        <=math.floor(policy.watchdog_reaction_limit_s*1e9)):
+                    raise ValueError('SEARCH_JOINT_CONTEXT_CLOCK_INVALID')
+                policy.check_joint(joint_context['sample'],decision)
+                if not (0<=nanoseconds(now)-nanoseconds(joint_context['sample']['wall_s'])
+                        <=math.floor(policy.joint_max_receipt_age_s*1e9)):
+                    raise ValueError('HEAD_FEEDBACK_RECEIPT_STALE')
+                fresh=(0<=now-finite(frame['received_wall_s'],nonnegative=True)<=self.config['max_age_s']
+                    and 0<=now-finite(feedback['received_wall_s'],nonnegative=True))
+            except (ValueError,KeyError,TypeError):
+                self.lock_count=0
+                raise
         if (
             not fresh
             or frame["frame_id"] != self.config["frame_id"]

@@ -128,9 +128,16 @@ class OwnedHeadSearch:
             if type(deadline) is not int or nanoseconds(self.monotonic())>=deadline:
                 raise PermissionError('HEAD_SEARCH_SELECTED_EXPOSURE_EXPIRED')
             frame,feedback=map_owned_search_exposure(row,self.controller.config)
-            decision=self.controller.tick(frame,feedback,self.monotonic())
+            core_wall=self.monotonic()
+            context=dict(session_id=self.controller.config['session_id'],
+                attempt_id=self.controller.config['attempt_id'],policy=self.port.feedback_policy,
+                sample={key:value for key,value in current.items()
+                    if key not in ('decision','receipt_age_s','source_age_s')},decision=current['decision'])
+            decision=self.controller.tick(frame,feedback,core_wall,joint_context=context)
             self.observations.append(dict(sequence=self._sequence,source_ns=row['source_ns'],
-                track_id=self.controller.track,lock_count=self.controller.lock_count,decision=deepcopy(decision)))
+                track_id=self.controller.track,lock_count=self.controller.lock_count,
+                core_tick_wall_s=core_wall,current_joint=context['sample'],
+                current_joint_decision=context['decision'],decision=deepcopy(decision)))
             self.emit('SEARCH_EXPOSURE_DECISION',observation=deepcopy(self.observations[-1]))
             self.primary.dispatch_guard()
             if nanoseconds(self.monotonic())>=deadline:

@@ -26,8 +26,11 @@ def driver():
     from so101_demo.adapters.act.head_owned_search import OwnedHeadSearch
     clock=[1.];events=[];faults=[];sent=[];deadlines=[];rows=[]
     port=SimpleNamespace(_lock=threading.Lock(),_goals={},_head_samples=[])
-    port.feedback_snapshot=lambda:dict(positions=[0.],velocities=[0.],wall_s=clock[0],
-        source_ns=round(clock[0]*1e9),decision=dict(sim_ns=round(clock[0]*1e9)))
+    from test_act_head_feedback_freshness import policy
+    port.feedback_policy=policy()
+    port.feedback_snapshot=lambda:dict(sequence=1,valid=True,positions=[0.],velocities=[0.],wall_s=clock[0],
+        source_ns=round(clock[0]*1e9),decision=dict(sim_ns=round(clock[0]*1e9),sim_s=clock[0],
+            wall_before_s=clock[0],wall_after_s=clock[0]))
     class Primary:
         def dispatch_guard(self):return True
         def fault(self,*args):faults.append(args)
