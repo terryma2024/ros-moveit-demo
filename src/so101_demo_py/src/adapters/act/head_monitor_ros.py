@@ -331,11 +331,11 @@ class HeadROSMonitor:
             self.fault('HEAD_MONITOR_HEARTBEAT_REGRESSION');raise ValueError('HEAD_MONITOR_HEARTBEAT_REGRESSION')
         if self.failed:raise PermissionError('HEAD_MONITOR_ROS_REVOKED')
 
-    def activate(self):
+    def activate(self,*,watchdog=True):
         if self.failed or self._policy is None or self._primary is None:
             raise PermissionError('HEAD_MONITOR_ROS_NOT_READY')
         self._active=True
-        self.poll()
+        self.poll(watchdog=watchdog)
         if self.failed:raise PermissionError('HEAD_MONITOR_ROS_REVOKED')
 
     def poll(self,*,watchdog=True):

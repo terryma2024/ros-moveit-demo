@@ -86,6 +86,7 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
 
 
 @pytest.mark.parametrize('operation',[
+    {'operation':'PREARM_READY','policy':{'policy_sha256':'a'*64}},
     {'operation':'ARMED_READY','identities':{}},
     {'operation':'REGISTER','inventory':{}},
     {'operation':'DISPATCH','binding':{}},

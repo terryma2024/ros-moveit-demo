@@ -19,6 +19,7 @@ import time
 
 from so101_demo.act.head_monitor import HeadMonitorEpoch, digest
 from so101_demo.act.head_feedback_measurement import evaluate_feedback_window
+from so101_demo.act.head_feedback import nanoseconds
 from .controller_reservation_provision import (
     _private_parent,_process_start_ticks,write_head_revocation_provision)
 from .head_monitor_goal_binding import validate_goal_inventory
@@ -98,6 +99,7 @@ class HeadMonitorRuntime:
         self._stop_done=threading.Event();self._close_done=threading.Event()
         self._watchdog_wall=None;self._fault=None;self._native_close=None;self._native_close_error=None
         self._policy=None;self._dependencies=None;self._provisions=None;self._revoker=None
+        self._prearm_guarded=False
         self._guard_lock=threading.Lock();self._threads=[]
 
     @property
@@ -260,9 +262,45 @@ class HeadMonitorRuntime:
         self._emit('POLICY_READY',ack=ack,policy_reference=record,purpose='calibration',motion_authority=False)
         return dict(ack,stage='POLICY_READY',motion_authority=False)
 
+    def prearm_ready(self,record):
+        """Check current own inputs before main ARM; grant no motion authority."""
+        watchdog_wall=self._watchdog_wall
+        now=time.monotonic() if self._observer is None else self._observer.monotonic()
+        fault_wall=now
+        try:
+            if (type(record) is not dict or set(record)!={'policy_sha256'}
+                    or not self._configured or self._finished or self._policy is None
+                    or self.epoch.stage!='POLICY_READY' or self.revoked
+                    or record['policy_sha256']!=self.epoch.policy_hash):
+                raise PermissionError('HEAD_MONITOR_PREARM_STAGE_INVALID')
+            if watchdog_wall is None:
+                raise PermissionError('HEAD_MONITOR_PREARM_WATCHDOG_STALE')
+            gap=nanoseconds(now)-nanoseconds(watchdog_wall)
+            limit=int(self._observer._policy.watchdog_reaction_limit_s*1e9)
+            if gap>limit:
+                fault_wall=(nanoseconds(watchdog_wall)+limit)*1e-9
+            if not 0<=gap<=limit:
+                raise PermissionError('HEAD_MONITOR_PREARM_WATCHDOG_STALE')
+            # This RPC cannot manufacture an independent watchdog tick. Once
+            # active, the owned2ms worker keeps checking while main ARM runs.
+            self._observer.activate(watchdog=False)
+            feedback=self._observer.port.feedback_snapshot()
+            if (self.revoked or self._observer.failed
+                    or any(abs(value)>self._observer.port.stop_velocity for value in feedback['velocities'])):
+                raise PermissionError('HEAD_MONITOR_PREARM_CURRENT_INPUTS_REFUSED')
+            self._prearm_guarded=True
+            ack=dict(stage='POLICY_READY',state='POLICY_READY',current_inputs_guarded=True,
+                policy_sha256=self.epoch.policy_hash,ack_wall_s=self._observer.monotonic(),
+                watchdog_wall_s=watchdog_wall,motion_authority=False)
+            self._emit('PREARM_READY',ack=ack)
+            return ack
+        except Exception as error:
+            self.fault('HEAD_MONITOR_PREARM_REFUSED',fault_wall)
+            raise PermissionError('HEAD_MONITOR_PREARM_REFUSED') from error
+
     def armed_ready(self,record):
         if (type(record) is not dict or set(record)!={'main','primary_fault'}
-                or self.epoch.stage!='POLICY_READY' or self.revoked):
+                or self.epoch.stage!='POLICY_READY' or self.revoked or not self._prearm_guarded):
             raise PermissionError('HEAD_MONITOR_READY_STAGE_INVALID')
         identities=[]
         for key in ('main','primary_fault'):
@@ -277,7 +315,7 @@ class HeadMonitorRuntime:
         actual=self._revoker.identity()
         monitor_identity={key:actual[key] for key in ('generation','incarnation','boot')}
         ack=self.epoch.armed_ready(identities[0],monitor_identity)
-        self._observer.activate()
+        self._observer.activate(watchdog=False)
         ack=dict(ack,stage='ARMED_READY',policy_sha256=self.epoch.policy_hash,
                  provisions=self._provisions,dependencies=self._dependencies,motion_authority=False)
         self._emit('ARMED_READY',ack=ack,monitor_identity_receipt=actual)
