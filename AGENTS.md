@@ -76,7 +76,8 @@
 | Task | Required model or tool |
 | --- | --- |
 | Discuss approaches; write designs, implementation plans, and guides | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
-| Independently review approaches, designs, implementation plans, and guides | GPT-6 Astra / High (`gpt-6-astra`, reasoning effort `high`) |
+| Review work performed by a GPT Sol model | Inline self review by the executing model |
+| Independently review work performed by `dst` or a GPT Luna model | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
 | Execute implementation plans | Requires explicit user confirmation before execution; use DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
 | Review checkpoints during `dst` plan execution | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`), through a Codex session in `tmux` on the execution machine |
 | Monitor execution and review execution results | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
@@ -84,9 +85,11 @@
 
 - Before executing an implementation plan, present the plan and obtain explicit user confirmation.
   Do not launch `dst` or begin plan execution before receiving that confirmation.
-- Use an independent GPT-6 Astra / High reviewer for approaches, designs, implementation plans,
-  and guides outside `dst` plan execution. Review checkpoints during `dst` plan execution follow
-  the workflow below instead.
+- Select the review workflow by the model performing the work. GPT Sol models must perform
+  inline self review in the current session; do not dispatch an independent Astra reviewer.
+  This applies to approaches, designs, implementation plans, guides, and implementation work.
+- Only work performed by `dst` or a GPT Luna model requires an independent reviewer. Use
+  GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) for that review.
 - When `dst` reaches a required review checkpoint, it must first start or reuse a Codex session
   in `tmux` on the machine where it is executing the plan, and select GPT-6.1 Sol / High
   (`gpt-6.1-sol`, reasoning effort `high`) to perform the review.
