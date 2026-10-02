@@ -1,0 +1,182 @@
+"""CPU exec presence is authenticated; it never grants motion readiness."""
+
+import json
+import io
+import os
+from pathlib import Path
+import sys
+import signal
+import subprocess
+import time
+import uuid
+
+import pytest
+
+from so101_demo.adapters.act.head_monitor_process import start_monitor
+from so101_demo.adapters.act.controller_reservation_provision import _process_start_ticks
+
+
+@pytest.fixture
+def config(tmp_path):
+    from so101_demo.adapters.act import head_monitor_process
+    source=Path(head_monitor_process.__file__).parents[2]
+    alias=tmp_path/'source-alias'/'so101_demo';alias.mkdir(parents=True)
+    (alias/'__init__.py').write_text('__path__='+repr([str(source)])+'\n')
+    environment=dict(os.environ)
+    environment['PYTHONPATH']=str(alias.parent)+os.pathsep+environment.get('PYTHONPATH','')
+    base=Path(environment.get('SO101_IPC_SOCKET_BASE',str(tmp_path)))
+    base.mkdir(mode=0o700,parents=True,exist_ok=True)
+    directory=base/('mp-'+uuid.uuid4().hex[:8]);directory.mkdir(mode=0o700)
+    return dict(python_executable=sys.executable,ipc_directory=directory,
+        log_path=tmp_path/'monitor.log',epoch='launch-a',generation=5,
+        session_id='head-launch-test',startup_timeout_s=2.,environment=environment)
+
+
+@pytest.mark.parametrize('damage', ['executable','epoch','generation','session','timeout',
+    'relative','permissions','occupied','symlink','overlong'])
+def test_invalid_start_never_returns_exec_presence(config,damage,tmp_path):
+    config=dict(config)
+    if damage=='executable':config['python_executable']=str(tmp_path/'missing-python')
+    elif damage=='epoch':config['epoch']='../other'
+    elif damage=='generation':config['generation']=True
+    elif damage=='session':config['session_id']=''
+    elif damage=='timeout':config['startup_timeout_s']=float('nan')
+    elif damage=='relative':config['ipc_directory']=Path('relative-dir')
+    elif damage=='permissions':config['ipc_directory'].chmod(0o755)
+    elif damage=='occupied':(config['ipc_directory']/'monitor.socket').write_text('owned-existing')
+    elif damage=='symlink':
+        link=config['ipc_directory'].parent/('ml-'+uuid.uuid4().hex[:8]);link.symlink_to(config['ipc_directory'])
+        config['ipc_directory']=link
+    else:
+        child=config['ipc_directory']/('x'*100);child.mkdir(mode=0o700);config['ipc_directory']=child
+    with pytest.raises((ValueError,PermissionError,FileExistsError,FileNotFoundError)):
+        start_monitor(**config)
+
+
+def test_actual_exec_identity_and_no_key_in_argv_environment_logs(config):
+    monitor=start_monitor(**config)
+    try:
+        assert monitor.identity['pid']!=os.getpid()
+        assert _process_start_ticks(monitor.identity['pid'])==monitor.identity['start_ticks']
+        assert monitor.receipt['stage']=='EXEC_ONLY'
+        assert monitor.receipt['motion_authority'] is False
+        assert monitor.receipt['cpu_only'] is True
+        assert monitor.is_alive()
+        pid=monitor.identity['pid']
+        argv=Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ')
+        env=Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+        assert b'--bootstrap-fd' in argv
+        assert not any(b'SECRET' in item or b'CAPABILITY' in item for item in env)
+        assert b'CUDA_VISIBLE_DEVICES=' in env
+        log=config['log_path'].read_text()
+        assert 'EXEC_ONLY' in log and 'key=' not in log and 'secret=' not in log
+        assert monitor.receipt['module_path']==str(Path(__file__).parents[1]/'src/adapters/act/head_monitor_process.py')
+    finally:monitor.close()
+    assert not monitor.is_alive()
+    monitor.close()
+
+
+def test_process_presence_refuses_inventory_and_revival(config):
+    monitor=start_monitor(**config)
+    try:
+        with pytest.raises((PermissionError,ConnectionError,OSError)):
+            monitor.request({'operation':'INVENTORY','record':{}})
+        with pytest.raises((PermissionError,ConnectionError,OSError)):
+            monitor.request({'operation':'PRESENCE'})
+    finally:monitor.close()
+    assert not monitor.is_alive()
+
+
+def test_owned_startup_failure_reaps_only_its_child(config,tmp_path):
+    config=dict(config)
+    config['environment']=dict(config['environment'],PYTHONPATH=str(tmp_path/'absent-alias'))
+    with pytest.raises((RuntimeError,ConnectionError,OSError)):
+        start_monitor(**config)
+    # The failed child's exact identity must be recorded even before IPC ready.
+    records=[json.loads(line) for line in config['log_path'].read_text().splitlines()
+             if line.startswith('{')]
+    ownership=next(record for record in records if record.get('event')=='OWNED_EXEC')
+    assert not Path('/proc/'+str(ownership['peer']['pid'])).exists()
+    assert any(record.get('event')=='OWNED_REAP' for record in records)
+
+
+def test_monitor_retires_if_primary_dies_before_connecting(config):
+    script=r'''
+import json,socket,sys
+from so101_demo.adapters.act.head_monitor_process import start_monitor
+original=socket.socket
+class PausedConnect(original):
+    def connect(self,path):
+        print('BEFORE_CONNECT',flush=True)
+        sys.stdin.readline()
+        return super().connect(path)
+socket.socket=PausedConnect
+start_monitor(**json.loads(sys.stdin.readline()))
+'''
+    owner=subprocess.Popen([sys.executable,'-c',script],env=config['environment'],
+        stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    owned_peer=None;pid_fd=None
+    try:
+        args={key:str(value) if isinstance(value,Path) else value
+              for key,value in config.items() if key!='environment'}
+        owner.stdin.write(json.dumps(args).encode()+b'\n');owner.stdin.flush()
+        assert owner.stdout.readline()==b'BEFORE_CONNECT\n'
+        records=[json.loads(line) for line in config['log_path'].read_text().splitlines()
+                 if line.startswith('{')]
+        owned_peer=next(record['peer'] for record in records if record.get('event')=='OWNED_EXEC')
+        pid_fd=os.pidfd_open(owned_peer['pid'])
+        owner.terminate();owner.wait(timeout=2.)
+        deadline=time.monotonic()+.5
+        while time.monotonic()<deadline:
+            try:_process_start_ticks(owned_peer['pid'])
+            except (OSError,RuntimeError):break
+            time.sleep(.002)
+        else:pytest.fail('CPU monitor survives primary death before IPC connect')
+    finally:
+        if owner.poll() is None:owner.terminate();owner.wait(timeout=2.)
+        if pid_fd is not None:
+            try:
+                if _process_start_ticks(owned_peer['pid'])==owned_peer['start_ticks']:
+                    signal.pidfd_send_signal(pid_fd,signal.SIGTERM)
+            except (OSError,RuntimeError):pass
+            os.close(pid_fd)
+
+
+def test_presence_ack_after_startup_deadline_cannot_publish_success(config,monkeypatch):
+    import so101_demo.adapters.act.head_monitor_process as process_module
+    exchange=process_module.HeadMonitorChannel.exchange
+    def delayed_return(channel,value):
+        reply=exchange(channel,value)
+        if value['operation']=='PRESENCE':time.sleep(.21)
+        return reply
+    monkeypatch.setattr(process_module.HeadMonitorChannel,'exchange',delayed_return)
+    config=dict(config,startup_timeout_s=.2)
+    monitor=None
+    try:
+        with pytest.raises(TimeoutError):monitor=start_monitor(**config)
+    finally:
+        if monitor is not None:monitor.close()
+    records=[json.loads(line) for line in config['log_path'].read_text().splitlines()
+             if line.startswith('{')]
+    assert not any(record.get('event')=='EXEC_ONLY' for record in records)
+    assert any(record.get('event')=='OWNED_REAP' for record in records)
+
+
+@pytest.mark.parametrize('race',[FileNotFoundError,RuntimeError])
+def test_owned_exit_race_finishes_wait_and_reap_record(monkeypatch,race):
+    import so101_demo.adapters.act.head_monitor_process as process_module
+    class Exited:
+        pid=123;returncode=None;waits=0
+        def wait(self,timeout):
+            self.waits+=1
+            if self.waits==1:raise subprocess.TimeoutExpired('owned monitor',timeout)
+            self.returncode=0;return 0
+        def poll(self):self.returncode=0;return 0
+    def exited_peer(pid):raise race('owned child exited during identity read')
+    def forbid_signal(*args):raise AssertionError('exited child was signalled')
+    monkeypatch.setattr(process_module,'_peer',exited_peer)
+    monkeypatch.setattr(process_module.signal,'pidfd_send_signal',forbid_signal)
+    handle=io.BytesIO();child=Exited()
+    result=process_module._retire(child,99,dict(uid=1,pid=123,start_ticks=456),handle,shutdown_ack=False)
+    assert result['exit_code']==0 and child.waits>=2
+    assert json.loads(handle.getvalue())['event']=='OWNED_REAP'
