@@ -63,6 +63,37 @@ def test_camera_and_joint_snapshot_precedes_decision_clock(capture):
     assert all((entry.topic_name if hasattr(entry,'topic_name') else entry[1])!='/joint_states' for entry in capture.subscriptions)
 
 
+def test_original_info_before_warm_boundary_pairs_image_after_boundary(capture):
+    capture._info(info());original=dict(capture.info_messages[-1])
+    capture.begin_capture();capture._image(image())
+    capture.port._head_samples.append(capture.port._head_feedback.copy())
+    transform=SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(sec=1,nanosec=0)),
+        transform=SimpleNamespace(rotation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.),
+            translation=SimpleNamespace(x=0.,y=0.,z=0.)))
+    class Buffer:
+        def can_transform(self,*args):return True
+        def lookup_transform(self,*args):return transform
+    class Detector:
+        calls=0
+        def detect(self,pixels,**identity):
+            assert not capture.port._lock._is_owned()
+            self.calls+=1;return []
+    detector=Detector()
+    result=capture.infer(detector,Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05)
+    assert result is not None and detector.calls==1
+    assert result['info_received_wall_s']==original['wall_s'] and result['info_source_ns']==original['source_ns']
+    assert capture.info_messages[-1]==original and capture._pending is None
+
+
+def test_warm_boundary_carries_only_last32_original_infos(capture):
+    for sequence in range(40):capture._info(info(1_000_000_000+sequence*100_000_000))
+    expected=list(capture.info_messages)[-32:]
+    capture.begin_capture()
+    assert list(capture.info_messages)==expected
+    capture._info(info(5_000_000_000))
+    assert len(capture.info_messages)==33
+
+
 @pytest.mark.parametrize('damage',['frame','size','encoding','step','bytes','source'])
 def test_invalid_payload_is_retained_and_consumes_capture(capture,damage):
     msg=image()

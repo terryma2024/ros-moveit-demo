@@ -54,9 +54,13 @@ class StoppedHeadCapture:
             if self._started:raise PermissionError('HEAD_STOPPED_CAPTURE_REUSED')
             self.check();self._started=True
             self.strict=True;self._pending=None
+            # CameraInfo may precede its Image across this boundary. Retain
+            # its bounded original Header/receipt/K/D, never latest geometry.
+            info_carry_in=tuple(self.info_messages)[-32:]
             # Startup is diagnostic only. From this boundary every original is
             # retained; overflow refuses instead of silently dropping history.
             for rows in (self.camera_messages,self.info_messages,self.clock_messages,self.events):rows.clear()
+            self.info_messages.extend(info_carry_in)
 
     def bind_original_sink(self,sink):
         if not callable(sink):raise ValueError('HEAD_STOPPED_ORIGINAL_SINK_INVALID')
