@@ -75,13 +75,15 @@
 
 | Task | Required model or tool |
 | --- | --- |
-| Discuss approaches; write designs, implementation plans, and guides | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
+| Discuss approaches; write designs, implementation plans, and guides | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
 | Independently review approaches, designs, implementation plans, and guides | GPT-6 Astra / High (`gpt-6-astra`, reasoning effort `high`) |
-| Execute implementation plans | DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
+| Execute implementation plans | Requires explicit user confirmation before execution; use DeepSeek Harness TUI, launched with `dst` in a `tmux` session |
 | Review checkpoints during `dst` plan execution | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`), through a Codex session in `tmux` on the execution machine |
-| Monitor execution and review execution results | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
-| Other tasks (default) | GPT-6 Sol / High (`gpt-6-sol`, reasoning effort `high`) |
+| Monitor execution and review execution results | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
+| Other tasks (default) | GPT-6.1 Sol / High (`gpt-6.1-sol`, reasoning effort `high`) |
 
+- Before executing an implementation plan, present the plan and obtain explicit user confirmation.
+  Do not launch `dst` or begin plan execution before receiving that confirmation.
 - Use an independent GPT-6 Astra / High reviewer for approaches, designs, implementation plans,
   and guides outside `dst` plan execution. Review checkpoints during `dst` plan execution follow
   the workflow below instead.
