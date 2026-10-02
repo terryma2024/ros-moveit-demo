@@ -42,6 +42,60 @@ def _record_refusal(result,error):
     result['error']=dict(type=type(error).__name__,message=str(error))
 
 
+def _require_monitor_closure(root,result,*,stop_velocity_rad_s):
+    """Read the owned CPU seal after reap; primary stop cannot stand in for it."""
+    from so101_demo.act.head_feedback import FeedbackPolicy,OrderedStopConfirmation,nanoseconds
+    try:
+        def require(condition):
+            if not condition:raise ValueError('missing or contradictory CPU closure evidence')
+        root=Path(root)
+        reap=result['monitor_teardown']
+        require(reap['shutdown_ack'] is True and reap['exit_code']==0)
+        seal=json.loads((root/'monitor.jsonl.seal.json').read_text())
+        require(seal['stage']=='RETIRED' and seal['epoch']==result['epoch']
+            and seal['motion_authority'] is False and seal['journal_error'] is None
+            and seal['journal_path']==str(root/'monitor.jsonl'))
+        payload=(root/'monitor.jsonl').read_bytes()
+        require(hashlib.sha256(payload).hexdigest()==seal['journal_sha256'])
+        rows=[json.loads(line) for line in payload.splitlines()]
+        require(len(rows)==seal['records'])
+        close=seal['native_close'];primary=result['primary_teardown']
+        require(seal['native_close_error'] is None and close['ack_validated'] is True
+            and close['generation']==result['generation']
+            and close['native_owner']==primary['native_close']['native_owner'])
+        started=nanoseconds(close['request_wall_s']);ended=nanoseconds(close['ack_wall_s'])
+        origin=min(nanoseconds(seal['fault']['fault_wall_s']),nanoseconds(primary['fault']['fault_wall_s']))
+        require(0<=ended-started<=2_000_000 and 0<=ended-origin<=10_000_000)
+        require(any(row['event']=='NATIVE_FAULT_CLOSE_ACK' and row['receipt']==close for row in rows))
+        require(not any(row['event'] in ('NATIVE_FAULT_CLOSE_UNCONFIRMED','STOP_UNCONFIRMED') for row in rows))
+        policy=FeedbackPolicy.parse(result['measured']['values'])
+        originals={row['sample']['sequence']:row['sample'] for row in rows if row['event']=='JOINT_ORIGINAL'}
+        inventory={row['inventory']['goal_uuid'] for row in rows if row['event']=='INVENTORY_ACK'}
+        proven=False
+        for row in rows:
+            if row['event']!='STOP_PREDICATE':continue
+            observed=row['observation']
+            if observed['stopped'] is not True:continue
+            epoch=observed['epoch'];samples=observed['confirming_samples'];states=observed['confirmation_inventory']
+            require(epoch['generation']==result['generation'] and len(samples)==3 and set(states)==inventory)
+            require(all(state['accepted'] is False or (state['accepted'] is True
+                and state['terminal_status'] in (4,5,6)) for state in states.values()))
+            proof=OrderedStopConfirmation(epoch)
+            for sample in samples:
+                original={key:value for key,value in sample.items() if key!='decision'}
+                require(originals.get(sample['sequence'])==original)
+                proof.observe(original,sample['decision'],policy,stop_velocity_rad_s)
+            require(proof.count>=3 and proof.within_deadline(observed['decision']))
+            require(0<=nanoseconds(observed['decision']['wall_after_s'])-origin
+                <=math.floor(epoch['stop_latency_s']*1e9))
+            proven=True
+        require(proven and any(row['event']=='STOP_CONFIRMED' for row in rows))
+        return dict(proven=True,seal=_reference(root/'monitor.jsonl.seal.json'),
+            native_close=close,stop_proven=True)
+    except (OSError,KeyError,TypeError,ValueError) as error:
+        raise PermissionError('HEAD_BOOTSTRAP_MONITOR_CLOSURE_UNPROVEN') from error
+
+
 def _bound_goal_settlement(samples,state,*,target_rad,position_tolerance_rad,
         velocity_tolerance_rad_s,source_floor_ns,dispatch_wall_s,terminal_wall_s):
     """Terminal success plus three advancing, original post-terminal samples."""
@@ -467,6 +521,10 @@ def main(argv=None):
         if monitor is not None:
             try:result['monitor_teardown']=monitor.close()
             except Exception as error:result['monitor_teardown_error']=str(error);result['status']='REFUSED'
+        if result['status'] in ('NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC'):
+            try:result['monitor_closure']=_require_monitor_closure(root,result,
+                stop_velocity_rad_s=values['stop_velocity_rad_s'])
+            except Exception as error:_record_refusal(result,error)
         if stack is not None:
             children=list(stack.processes)
             try:stack.stop();result['stack_children']=[dict(pid=p.pid,exit_code=p.returncode) for p in children]
