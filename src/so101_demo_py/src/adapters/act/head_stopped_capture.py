@@ -42,6 +42,7 @@ class StoppedHeadCapture:
         self.clock_messages=deque(maxlen=40000);self.events=deque(maxlen=40000)
         self._pending=None;self._last={};self._last_camera=None
         self._original_sink=None;self._window=None;self._window_finished=False
+        self._live_sink=None;self._live_floor=None
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
@@ -63,6 +64,36 @@ class StoppedHeadCapture:
             if self._original_sink is not None or self._failure is not None:
                 raise PermissionError('HEAD_STOPPED_ORIGINAL_SINK_REBOUND')
             self._original_sink=sink
+
+    def bind_live_sink(self,sink):
+        """Delegate future originals once; the finished calibration stays sealed.
+
+        This changes retention and delivery only. It cannot reopen stopped
+        inference, clear invalidity, create a subscription or grant authority.
+        """
+        if not callable(sink):raise ValueError('HEAD_STOPPED_LIVE_SINK_INVALID')
+        with self.port._lock:
+            self.check()
+            if (not self._started or not self._window_finished or self._pending is not None
+                    or self._original_sink is None or self._live_sink is not None):
+                raise PermissionError('HEAD_STOPPED_LIVE_HANDOFF_REFUSED')
+            # A callback already copied before this boundary is not a new live
+            # exposure even if its outside-lock delivery completes afterwards.
+            self._live_floor=dict(self._last)
+            self._live_sink=sink
+
+    def _forward_live(self,kind,record,*,payload=None):
+        sink=self._live_sink
+        if sink is None:return
+        if self._failure is None and record['source_ns']>self._live_floor.get(kind.lower(),0):
+            try:sink(kind,deepcopy(record),payload=payload)
+            except Exception:self._failure='HEAD_STOPPED_LIVE_SINK_FAILED'
+        if self._failure is not None:
+            self.port._head_policy_binding_failed=True
+            callback=getattr(self.port,'_head_fault_callback',None)
+            if callback is not None:
+                try:callback(self._failure)
+                except Exception:pass
 
     def _forward_original(self,kind,record):
         sink=self._original_sink
@@ -98,6 +129,7 @@ class StoppedHeadCapture:
             self._window_finished=True
 
     def _record(self,rows,record):
+        if self._live_sink is not None:return
         if self.strict and len(rows)==rows.maxlen:self._failure='HEAD_STOPPED_HISTORY_OVERFLOW'
         rows.append(record)
 
@@ -119,20 +151,22 @@ class StoppedHeadCapture:
         if not valid:record['error']='HEAD_STOPPED_IMAGE_INVALID'
         with self.port._lock:
             self._validate_source('image',record);self._record(self.camera_messages,record)
-            unadmitted=self._window is not None and nanoseconds(received)>self._window[1]
-            if unadmitted:
-                self._record(self.events,dict(event='IMAGE_UNADMITTED_PRESENCE',
-                    source_ns=record['source_ns'],wall_s=received))
-            elif self._pending is not None:
-                self._record(self.events,dict(event='IMAGE_DROPPED',source_ns=self._pending[0]['source_ns'],
-                                              replacing_source_ns=record['source_ns'],wall_s=received))
-                if self.strict:self._failure='HEAD_STOPPED_IMAGE_DROPPED'
-            if not unadmitted:self._pending=(record,data)
+            if self._live_sink is None:
+                unadmitted=self._window is not None and nanoseconds(received)>self._window[1]
+                if unadmitted:
+                    self._record(self.events,dict(event='IMAGE_UNADMITTED_PRESENCE',
+                        source_ns=record['source_ns'],wall_s=received))
+                elif self._pending is not None:
+                    self._record(self.events,dict(event='IMAGE_DROPPED',source_ns=self._pending[0]['source_ns'],
+                                                  replacing_source_ns=record['source_ns'],wall_s=received))
+                    if self.strict:self._failure='HEAD_STOPPED_IMAGE_DROPPED'
+                if not unadmitted:self._pending=(record,data)
             self._last_camera=record
         self._forward_original('IMAGE',record)
         if self.emit is not None and self._started:
             try:self.emit('IMAGE',record=record,payload=data)
             except Exception:self._failure='HEAD_STOPPED_EVIDENCE_FAILED'
+        self._forward_live('IMAGE',record,payload=data)
 
     def _info(self,message):
         received=self.monotonic()
@@ -147,6 +181,7 @@ class StoppedHeadCapture:
         with self.port._lock:
             self._validate_source('info',record);self._record(self.info_messages,record)
         self._forward_original('INFO',record)
+        self._forward_live('INFO',record)
 
     def _clock(self,message,*,received_wall_s=None):
         record=dict(source_ns=message.clock.sec*1_000_000_000+message.clock.nanosec,
@@ -154,6 +189,7 @@ class StoppedHeadCapture:
         with self.port._lock:
             self._validate_source('clock',record);self._record(self.clock_messages,record)
         self._forward_original('CLOCK',record)
+        self._forward_live('CLOCK',record)
 
     def check(self):
         if self._failure is not None:raise ValueError(self._failure)

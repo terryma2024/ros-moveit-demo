@@ -223,3 +223,117 @@ def test_predeclared_window_phase_leaves_measured_stable_processing_margin():
 def test_window_phase_cannot_hide_invalid_processing_or_extend_one_source_period(margin):
     with pytest.raises(ValueError,match='WINDOW_PHASE'):
         stopped_window_boundary([10.,10.1,10.2],now_ns=10_210_000_000,processing_margin_s=margin)
+
+
+
+def finished_live_capture(capture):
+    declare(capture);capture.monotonic=lambda:32.;capture.finish_window()
+    originals=[];capture.bind_original_sink(lambda kind,record:originals.append((kind,record)))
+    return originals
+
+
+def test_live_handoff_preserves_sealed_history_and_original_clock_receipts(capture):
+    originals=finished_live_capture(capture)
+    capture.clock_messages=deque(maxlen=1)
+    first=Clock();first.clock.sec=1;capture._clock(first)
+    sealed=tuple(dict(x) for x in capture.clock_messages);received=[]
+    capture.bind_live_sink(lambda kind,record,**kw:received.append((kind,record,kw)))
+    for second in (2,3):
+        msg=Clock();msg.clock.sec=second;capture._clock(msg)
+    capture.check()
+    assert tuple(capture.clock_messages)==sealed
+    assert [row[1]['source_ns'] for row in received]==[2_000_000_000,3_000_000_000]
+    assert all(row[1]['wall_s']==32. for row in received)
+    assert len(originals)==3 and capture.strict is True
+    assert capture._window==(11_000_000_000,31_000_000_000) and capture._window_finished
+
+
+def test_live_handoff_delivers_new_rgb_info_without_replay_or_second_subscriber(capture):
+    originals=finished_live_capture(capture)
+    capture._image(image());capture._info(info())
+    frozen=json.dumps(dict(camera=list(capture.camera_messages),info=list(capture.info_messages),
+        events=list(capture.events)),sort_keys=True)
+    received=[];subscriptions=tuple(capture.subscriptions)
+    def sink(kind,record,*,payload=None):
+        assert not capture.port._lock._is_owned()
+        received.append((kind,record,payload))
+        record['source_ns']=0
+    capture.bind_live_sink(sink)
+    assert received==[]
+    msg=image(1_100_000_000);capture._image(msg);capture._info(info(1_100_000_000))
+    assert [kind for kind,_,_ in received]==['IMAGE','INFO']
+    assert received[0][2]==bytes(msg.data) and received[1][2] is None
+    assert originals[-2][1]['source_ns']==1_100_000_000
+    assert capture._last_camera['source_ns']==1_100_000_000
+    assert frozen==json.dumps(dict(camera=list(capture.camera_messages),info=list(capture.info_messages),
+        events=list(capture.events)),sort_keys=True)
+    assert tuple(capture.subscriptions)==subscriptions
+    assert capture.infer(None,None,session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
+
+
+@pytest.mark.parametrize('damage',['early','no_journal','failed','pending'])
+def test_live_handoff_cannot_bypass_unfinished_or_failed_capture(capture,damage):
+    if damage=='early':declare(capture)
+    else:finished_live_capture(capture)
+    if damage=='no_journal':capture._original_sink=None
+    elif damage=='failed':capture._failure='HEAD_STOPPED_IMAGE_DROPPED'
+    elif damage=='pending':capture._pending=({'source_ns':1},b'pending')
+    with pytest.raises((PermissionError,ValueError)):capture.bind_live_sink(lambda *a,**k:None)
+
+
+def test_live_handoff_cannot_rebind_or_clear_failure(capture):
+    finished_live_capture(capture);capture.bind_live_sink(lambda *a,**k:None)
+    with pytest.raises(PermissionError):capture.bind_live_sink(lambda *a,**k:None)
+    invalid=image();invalid.encoding='bgr8';capture._image(invalid)
+    with pytest.raises(ValueError):capture.bind_live_sink(lambda *a,**k:None)
+    with pytest.raises(ValueError):capture.check()
+
+
+@pytest.mark.parametrize('damage',['invalid_rgb','nonadvancing_clock','sink_failure'])
+def test_live_invalidity_retains_original_and_faults_before_more_delivery(capture,damage):
+    originals=finished_live_capture(capture);faults=[];received=[]
+    capture.port._head_fault_callback=lambda reason:faults.append(reason)
+    def sink(kind,record,**kw):
+        if damage=='sink_failure':raise RuntimeError('live reader failed')
+        received.append(kind)
+    capture.bind_live_sink(sink)
+    if damage=='invalid_rgb':
+        msg=image();msg.encoding='bgr8';capture._image(msg)
+    else:
+        msg=Clock();msg.clock.sec=1;capture._clock(msg)
+        if damage=='nonadvancing_clock':capture._clock(msg)
+    assert faults and capture.port._head_policy_binding_failed
+    assert originals[-1][1]['valid'] is (damage=='sink_failure')
+    prior=len(received);capture._info(info())
+    assert len(received)==prior
+    with pytest.raises(ValueError):capture.check()
+
+
+def test_callback_copied_before_live_binding_cannot_be_replayed_after_handoff(capture):
+    declare(capture);capture.monotonic=lambda:32.;capture.finish_window()
+    copied=threading.Event();release=threading.Event();originals=[]
+    def journal(kind,record):
+        originals.append((kind,record))
+        if record['source_ns']==1_000_000_000:
+            copied.set();assert release.wait(1.)
+    capture.bind_original_sink(journal)
+    msg=Clock();msg.clock.sec=1
+    thread=threading.Thread(target=capture._clock,args=(msg,));thread.start()
+    try:
+        assert copied.wait(1.)
+        delivered=[];capture.bind_live_sink(lambda kind,record,**kw:delivered.append(record))
+    finally:release.set();thread.join(1.)
+    assert not thread.is_alive() and delivered==[]
+    msg.clock.sec=2;capture._clock(msg)
+    assert len(delivered)==1 and delivered[0]['source_ns']==2_000_000_000
+    assert len(originals)==2
+
+
+def test_live_reader_failure_before_pixel_evidence_does_not_grant_inference(capture):
+    finished_live_capture(capture);received=[];faults=[]
+    capture.port._head_fault_callback=lambda reason:faults.append(reason)
+    capture.bind_live_sink(lambda kind,record,**kw:received.append(record))
+    def writer(*a,**kw):raise RuntimeError('owned pixel writer failed')
+    capture.emit=writer;capture._image(image())
+    assert received==[] and faults==['HEAD_STOPPED_EVIDENCE_FAILED']
+    with pytest.raises(ValueError):capture.check()
