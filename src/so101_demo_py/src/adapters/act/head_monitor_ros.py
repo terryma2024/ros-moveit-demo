@@ -230,7 +230,7 @@ class HeadROSMonitor:
 
     def _on_info(self,message):
         record=dict(source_ns=self._stamp(message),wall_s=self.monotonic(),
-            frame_id=message.header.frame_id,valid=(message.width==640 and message.height==480
+            frame_id=message.header.frame_id,valid=bool(message.width==640 and message.height==480
             and message.header.frame_id==self.camera_frame and len(message.k)==9
             and all(math.isfinite(v) for v in message.k) and message.k[0]>0 and message.k[4]>0))
         self._camera_message(record,image=False)

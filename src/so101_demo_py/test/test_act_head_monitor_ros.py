@@ -304,3 +304,25 @@ def test_dispatch_checks_cannot_hide_stalled_owned_watchdog():
         assert monitor.failed, 'dispatch polling refreshed the stalled watchdog'
         assert faults[0][1]==pytest.approx(10.010,abs=1e-12)
     finally:monitor.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('valid',[True,False])
+def test_actual_camera_info_callback_emits_json_boolean_with_original_identity(valid):
+    import json
+    from sensor_msgs.msg import CameraInfo
+    node,monitor,_,faults=observer();records=[]
+    try:
+        monitor.emit=lambda event,**fields:records.append(json.loads(json.dumps(
+            dict(event=event,**fields),allow_nan=False)))
+        info=CameraInfo();info.header.stamp.sec=1;info.header.frame_id=monitor.camera_frame
+        info.width=640;info.height=480;info.k=[415.,0.,320.,0.,415.,240.,0.,0.,1.]
+        if not valid:info.k[0]=0.
+        monitor._on_info(info)
+        assert not faults
+        assert len(records)==1
+        assert records[0]['event']=='INFO_ORIGINAL'
+        assert records[0]['valid'] is valid
+        assert records[0]['source_ns']==1_000_000_000
+        assert records[0]['wall_s']==node.wall
+        assert records[0]['frame_id']==monitor.camera_frame
+    finally:monitor.close(timeout_s=1.)

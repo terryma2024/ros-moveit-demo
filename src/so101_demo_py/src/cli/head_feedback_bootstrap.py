@@ -165,6 +165,9 @@ def main(argv=None):
             for topic in ('/joint_states','/head_camera/color','/head_camera/camera_info','/clock')}
         if any(not rows for rows in result['ros_endpoints'].values()):
             raise PermissionError('HEAD_BOOTSTRAP_PUBLISHER_MISSING')
+        # Discovery can outlive the first sensor callbacks. A presence
+        # receipt from before discovery cannot hide a subsequent monitor fault.
+        result['monitor_pre_cuda_health']=monitor.request_runtime({'operation':'CONFIGURATION'})
         result['cuda_load_started_wall_s']=time.monotonic()
         import torch
         import ultralytics
