@@ -65,6 +65,13 @@ def write_controller_reservation_provision(
     body = (b"SOPR" + bytes((1, _ROLE_CODES[role], len(session), 0))
             + uid.to_bytes(4, "big") + pid.to_bytes(4, "big")
             + ticks.to_bytes(8, "big") + capability + session)
+    _publish_private_provision(destination,body,parent)
+    return capability
+
+
+def _publish_private_provision(destination,body,parent):
+    """Publish a fully synced credential file once; never expose partial bytes."""
+    uid=os.geteuid()
 
     directory = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     temporary = f".{destination.name}.{secrets.token_hex(8)}.tmp"
@@ -108,6 +115,35 @@ def write_controller_reservation_provision(
                 pass
     finally:
         os.close(directory)
+
+
+def write_head_revocation_provision(path,*,session_id,native_owner,socket_path):
+    """The independent monitor publishes SOPRv2 for its own exact process."""
+    destination=Path(path);endpoint=Path(socket_path)
+    parent=_private_parent(destination)
+    if (not isinstance(session_id,str) or not _SESSION.fullmatch(session_id)
+            or not isinstance(native_owner,dict)
+            or set(native_owner)!={'uid','pid','start_ticks'}
+            or any(type(value) is not int for value in native_owner.values())
+            or native_owner['uid']!=os.geteuid()
+            or not 0<native_owner['pid']<2**31
+            or native_owner['pid']==os.getpid()
+            or not 0<native_owner['start_ticks']<2**64
+            or _process_start_ticks(native_owner['pid'])!=native_owner['start_ticks']
+            or destination.name!='neck-revoke.provision'
+            or endpoint.name!='neck-revoke.sock' or endpoint.parent!=destination.parent
+            or not endpoint.is_absolute() or endpoint!=Path(os.path.normpath(endpoint))
+            or '\x00' in str(endpoint) or len(os.fsencode(endpoint))>107):
+        raise ValueError('HEAD_REVOKER_PROVISION_SCOPE_INVALID')
+    uid,pid,ticks=os.geteuid(),os.getpid(),_process_start_ticks(os.getpid())
+    capability=secrets.token_bytes(32)
+    if not any(capability):raise RuntimeError('CONTROLLER_RESERVATION_CAPABILITY_INVALID')
+    session=session_id.encode('ascii');socket_bytes=os.fsencode(endpoint)
+    body=(b'SOPR'+bytes((2,3,len(session),len(socket_bytes)))
+          +uid.to_bytes(4,'big')+pid.to_bytes(4,'big')+ticks.to_bytes(8,'big')+capability
+          +native_owner['uid'].to_bytes(4,'big')+native_owner['pid'].to_bytes(4,'big')
+          +native_owner['start_ticks'].to_bytes(8,'big')+session+socket_bytes)
+    _publish_private_provision(destination,body,parent)
     return capability
 
 
