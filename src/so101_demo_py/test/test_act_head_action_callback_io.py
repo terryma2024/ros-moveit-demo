@@ -196,3 +196,43 @@ def test_exceptional_async_future_closes_head_admission(monkeypatch,kind,raising
         with pytest.raises(PermissionError):port.send({})
         if raising_report:assert 'fault reporter failure' in port._head_fault_handler_error
     finally:port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('kind',['result','cancel'])
+def test_async_failure_closes_before_any_exception_formatter(monkeypatch,kind):
+    _,_,port,_,_,_,_=setup_ports(monkeypatch)
+    port._goals['owned']=record(None,accepted=True)
+    rendered=[];reported=[]
+    class DiagnosticError(Exception):
+        def __repr__(self):rendered.append(tuple(reported));return 'untrusted diagnostic'
+    def fault(reason):
+        assert port._head_policy_binding_failed
+        assert not port._lock._is_owned()
+        reported.append(reason)
+        raise DiagnosticError('reporter failure')
+    port._head_fault_callback=fault
+    future=Future();future.set_exception(DiagnosticError('asynchronous SDK failure'))
+    try:
+        if kind=='result':port._result('owned',future)
+        else:port._cancel_ack('owned',future)
+        assert not rendered and reported==['HEAD_CALLBACK_IO_FAILED']
+        assert port.accepted('owned') is True and port.result('owned') is None
+    finally:port.close_head_io(timeout_s=1.)
+
+
+def test_worker_error_closes_before_formatting_and_reports_original_exception():
+    from so101_demo.adapters.act.head_callback_io import HeadCallbackIO
+    worker=HeadCallbackIO('head-diagnostic-control');rendered=[];reported=threading.Event()
+    class DiagnosticError(Exception):
+        def __repr__(self):rendered.append(reported.is_set());return 'untrusted diagnostic'
+    error=DiagnosticError('SDK failure')
+    def operation():raise error
+    def fault(original):
+        assert original is error and worker._closed
+        reported.set();raise DiagnosticError('reporter failure')
+    try:
+        worker.submit(operation,fault)
+        assert reported.wait(1.)
+        assert worker.close(timeout_s=1.)['retired'] is True
+        assert not rendered
+    finally:worker.close(timeout_s=1.)

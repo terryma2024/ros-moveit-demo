@@ -13,7 +13,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from so101_demo.act.contracts import finite
 from so101_demo.act.head_feedback import FeedbackPolicy, OrderedStopConfirmation, decision_clocks
-from .head_callback_io import HeadCallbackIO
+from .head_callback_io import HeadCallbackIO, exception_metadata
 
 
 def seconds_message(value,message):
@@ -347,13 +347,16 @@ class RosControllerPort:
         except Exception as error:self._head_io_failed(gid,error)
 
     def _head_io_failed(self,gid,error):
-        with self._lock:
-            self._goals[gid]['error']=repr(error)
-            self._head_policy_binding_failed=True
+        self._head_policy_binding_failed=True
+        report_failure=None
         if self._head_fault_callback is not None:
             try:self._head_fault_callback('HEAD_CALLBACK_IO_FAILED')
-            except Exception as report_error:
-                with self._lock:self._head_fault_handler_error=repr(report_error)
+            except Exception as report_error:report_failure=report_error
+        diagnostic=exception_metadata(error)
+        reporting=None if report_failure is None else exception_metadata(report_failure)
+        with self._lock:
+            self._goals[gid]['error']=diagnostic
+            if reporting is not None:self._head_fault_handler_error=reporting
 
     def close_head_io(self,*,timeout_s):
         if self._head_io is None:return {}

@@ -6,6 +6,14 @@ import threading
 import time
 
 
+def exception_metadata(error):
+    """Bounded built-in metadata, without an exception's custom formatter."""
+    name=type(error).__name__
+    args=BaseException.args.__get__(error)
+    detail=args[0][:256] if args and type(args[0]) is str else ''
+    return name+(': '+detail if detail else '')
+
+
 class HeadCallbackIO:
     def __init__(self, name, *, capacity=32):
         if type(capacity) is not int or not 0 < capacity <= 128:
@@ -47,12 +55,16 @@ class HeadCallbackIO:
             except Exception as error:
                 # Close before calling external reporting code. A failed SDK
                 # operation or reporter must never leave a dead queue open.
-                with self._lock:
-                    self._closed = True
-                    self._error = repr(error)
+                with self._lock:self._closed = True
+                report_failure=None
                 try:on_error(error)
-                except Exception as report_error:
-                    with self._lock:self._report_error = repr(report_error)
+                except Exception as report_error:report_failure=report_error
+                # The owned fault callback runs before even bounded diagnostic
+                # metadata; neither formatter nor reporter owns the queue lock.
+                diagnostic=exception_metadata(error)
+                reporting=None if report_failure is None else exception_metadata(report_failure)
+                with self._lock:
+                    self._error=diagnostic;self._report_error=reporting
             finally:self._queue.task_done()
             with self._lock:
                 if self._closed:return
