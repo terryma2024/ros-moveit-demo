@@ -169,3 +169,40 @@ def test_carry_in_never_substitutes_counts_or_forgives_bad_originals(damage):
     elif damage=='changed_copy':raw['decisions'][0]['joint']['wall_s']-=.001
     else:del raw['carry_in']
     with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)
+
+
+def camera_transport_window():
+    """Every original is retained; a 12 ms pipeline delay is not phase clipping."""
+    raw=with_carry_in()
+    for field in ('camera_messages','info_messages'):
+        for message in raw[field]:message['wall_s']+=.012
+    for name in ('camera','info'):raw['carry_in'][name]['wall_s']+=.012
+    originals=[raw['carry_in']['camera']]+raw['camera_messages']
+    receipts=[original['wall_s'] for original in originals]
+    for decision in raw['decisions']:
+        index=bisect_right(receipts,decision['clocks']['wall_before_s'])-1
+        decision['camera']=dict(originals[index])
+    for inference in raw['inferences']:
+        for field in ('image_received_wall_s','info_received_wall_s','admission_wall_s','completion_wall_s'):
+            inference[field]+=.012
+    return raw
+
+
+def test_camera_source_margin_does_not_pay_an_exposure_interval_twice():
+    measured=evaluate_feedback_window(camera_transport_window(),stop_latency_s=.07)
+    assert measured['distributions']['camera_source_age_s']['count']==4001
+    assert measured['distributions']['camera_source_age_s']['p99']==pytest.approx(.112)
+    assert measured['values']['camera_max_source_age_s']==pytest.approx(.122)
+    assert measured['values']['camera_max_source_age_s']<=2*measured['periods']['camera_source_p50_s']
+    assert measured['formulas']['camera_max_source_age_s']=='camera_source_age_s.p99 + joint_source_period_s.p50'
+
+
+def test_original_camera_stale_inside_hard_ceiling_still_fails_tighter_bound():
+    raw=camera_transport_window();decision=raw['decisions'][695]
+    older=decision['camera']['source_ns']-100_000_000
+    originals={record['source_ns']:record for record in raw['camera_messages']}
+    decision['camera']=dict(originals[older])
+    age=(decision['clocks']['sim_ns']-older)*1e-9
+    assert .122<age<.2
+    with pytest.raises(ValueError,match='HEAD_WINDOW_OBSERVATION_EXCEEDS_BOUND'):
+        evaluate_feedback_window(raw,stop_latency_s=.07)

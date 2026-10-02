@@ -239,7 +239,7 @@ def _evaluate(window, stop_latency_s):
         joint_max_receipt_age_s=distributions['joint_receipt_age_s']['p99']+jm,
         joint_max_source_age_s=distributions['joint_source_age_s']['p99']+js,
         camera_interarrival_deadline_s=distributions['camera_receipt_gap_s']['p99']+jm,
-        camera_max_source_age_s=distributions['camera_source_age_s']['p99']+cs,
+        camera_max_source_age_s=distributions['camera_source_age_s']['p99']+js,
         clock_interarrival_deadline_s=distributions['clock_receipt_gap_s']['p99']+jm,
         watchdog_period_s=.002, watchdog_reaction_limit_s=.010,
         revoker_connection_deadline_s=.002)
@@ -279,7 +279,7 @@ def _evaluate(window, stop_latency_s):
         formulas=dict(joint_max_receipt_age_s='joint_receipt_age_s.p99 + joint_receipt_period_s.p50',
             joint_max_source_age_s='joint_source_age_s.p99 + joint_source_period_s.p50',
             camera_interarrival_deadline_s='camera_receipt_gap_s.p99 + joint_receipt_period_s.p50',
-            camera_max_source_age_s='camera_source_age_s.p99 + camera_source_period_s.p50',
+            camera_max_source_age_s='camera_source_age_s.p99 + joint_source_period_s.p50',
             clock_interarrival_deadline_s='clock_receipt_gap_s.p99 + joint_receipt_period_s.p50',
             max_age_s='nearest_rank_p99_9(camera_end_to_end_age_s) + .010 s',
             max_skew_s='nearest_rank_p99_9(camera_source_skew_s) + clock_resolution_s'))
