@@ -186,6 +186,8 @@ def _run_owned_search_diagnostic(*,driver,dispatcher,result,emit):
     finally:
         evidence.update(terminal=driver.result,commands=driver.commands,
             observations=driver.observations,inventory=dispatcher.inventory,
+            main_exchange_receipts=list(dispatcher.authority.exchange_receipts),
+            dispatch_traces=dispatcher.dispatch_traces,
             finished_wall_s=time.monotonic())
 
 

@@ -4,10 +4,12 @@ The owned composition supplies authenticated monitor transport, current guards
 and independent fault closure. This adapter creates no node, model or authority.
 """
 import base64
+import copy
 import hashlib
 import json
 import re
 import threading
+import time
 import uuid
 
 from control_msgs.action import FollowJointTrajectory
@@ -42,6 +44,7 @@ class HeadInventoryDispatcher:
         self._guard=guard;self._own=own_inventory;self._fault_callback=fault_callback;self._emit=emit
         self._failed=False;self._fault_handler_error=None;self._sequence=0
         self._inventory={};self._inventory_lock=threading.Lock();self._send_lock=threading.Lock()
+        self._dispatch_traces=[]
         self._check_scope()
 
     @property
@@ -54,6 +57,8 @@ class HeadInventoryDispatcher:
     def controller_identity(self):return json.loads(self._scope[3])
     @property
     def revoked(self):return self._failed
+    @property
+    def dispatch_traces(self):return copy.deepcopy(tuple(self._dispatch_traces))
     @property
     def inventory(self):
         # The fault worker never waits for a stalled reservation/SDK worker.
@@ -82,12 +87,17 @@ class HeadInventoryDispatcher:
                                          for key,value in expected.items()):
             raise PermissionError('HEAD_INVENTORY_ACK_INVALID')
 
-    def _dispatch(self,gid,inventory_sha):
+    def _dispatch(self,gid,inventory_sha,*,mark,phase):
+        mark(phase+'_entry')
         self._current()
+        mark(phase+'_current_guarded')
         reply=self.monitor.request_runtime(dict(operation='DISPATCH',
             binding=dict(goal_uuid=gid,inventory_sha256=inventory_sha)))
+        mark(phase+'_cpu_returned')
         self._ack(reply,'DISPATCH',goal_uuid=gid,inventory_sha256=inventory_sha)
+        mark(phase+'_cpu_validated')
         self._current()
+        mark(phase+'_final_guarded')
         return True
 
     def _fault(self):
@@ -101,11 +111,17 @@ class HeadInventoryDispatcher:
         if self._failed:raise PermissionError('HEAD_INVENTORY_DISPATCH_REVOKED')
         if not self._send_lock.acquire(blocking=False):
             self._fault();raise PermissionError('HEAD_INVENTORY_DISPATCH_BUSY')
+        trace=dict(goal_uuid=None,error_type=None,phases=[])
+        def mark(phase):trace['phases'].append(dict(phase=phase,wall_s=time.monotonic()))
+        mark('entry')
         try:
             self._current()
+            mark('current_guarded')
             message=FollowJointTrajectory.Goal(trajectory=trajectory_message(goal))
             parsed=uuid.uuid4();goal_uuid=UUID(uuid=list(parsed.bytes));gid=str(parsed)
+            trace['goal_uuid']=gid
             payload=serialize_message(message);typed=message_to_ordereddict(message)
+            mark('goal_encoded')
             self._sequence+=1;inventory_sha=None
             def register(binding):
                 nonlocal inventory_sha
@@ -117,6 +133,7 @@ class HeadInventoryDispatcher:
                         or binding.controller_boot_incarnation!=self.controller_identity['boot']
                         or binding.deadline_ns-binding.claim_monotonic_ns!=400_000_000):
                     raise PermissionError('HEAD_INVENTORY_NATIVE_BINDING_INVALID')
+                mark('native_binding_ready')
                 record=dict(goal_uuid=gid,typed_goal=typed,payload_sha256=hashlib.sha256(payload).hexdigest(),
                     generation=self.generation,controller_identity=self.controller_identity,
                     attempt_epoch=self.epoch,session_id=self.session_id,role='neck',
@@ -126,24 +143,34 @@ class HeadInventoryDispatcher:
                 with self._inventory_lock:self._inventory[gid]=body
                 if self._own(json.loads(body),payload) is not True:
                     raise PermissionError('HEAD_PRIMARY_INVENTORY_REFUSED')
+                mark('primary_inventory_owned')
                 reply=self.monitor.request_runtime(dict(operation='REGISTER',inventory=dict(
                     record=json.loads(body),goal_cdr_base64=base64.b64encode(payload).decode('ascii'))))
+                mark('cpu_register_returned')
                 self._ack(reply,'REGISTER',goal_uuid=gid,operation_sequence=self._sequence,
                           inventory_sha256=inventory_sha)
+                mark('cpu_register_validated')
                 self._emit('INVENTORY_ACK',inventory=json.loads(body),ack=reply,
                     permit_uuid=str(uuid.UUID(bytes=binding.permit_uuid)))
-                return self._dispatch(gid,inventory_sha)
+                return self._dispatch(gid,inventory_sha,mark=mark,phase='dispatch_1')
             self.authority.reserve('neck',goal=payload,goal_uuid=parsed.bytes,before_reserve=register)
+            mark('native_reserve_returned')
             if self._failed:raise PermissionError('HEAD_INVENTORY_DISPATCH_REVOKED')
             self._emit('NATIVE_RESERVATION_ACK',epoch=self.epoch,goal_uuid=gid,inventory_sha256=inventory_sha)
+            mark('sdk_entry')
             sent=self.port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=payload,
-                                        dispatch_guard=lambda:self._dispatch(gid,inventory_sha))
+                dispatch_guard=lambda:self._dispatch(gid,inventory_sha,mark=mark,phase='dispatch_2'))
+            mark('sdk_returned')
             if sent!=gid:raise PermissionError('HEAD_INVENTORY_SDK_UUID_MISMATCH')
+            mark('complete')
             return sent
-        except Exception:
+        except Exception as error:
+            trace['error_type']=type(error).__name__;mark('failed')
             self._fault()
             raise
-        finally:self._send_lock.release()
+        finally:
+            self._dispatch_traces.append(trace)
+            self._send_lock.release()
 
     def cancel(self,gid):return self.port.cancel(gid)
     def stopped(self):return self.port.stopped()

@@ -79,6 +79,37 @@ def test_exact_inventory_and_two_dispatch_acks_precede_native_and_sdk(composed):
     assert sender.inventory[gid]==record
 
 
+def test_dispatch_trace_distinguishes_authenticated_boundaries_without_changing_order(composed):
+    config,events,owned,faults,servers,calls=composed
+    sender=HeadInventoryDispatcher(**config);gid=sender.send(target())
+    trace=sender.dispatch_traces[0]
+    assert trace['goal_uuid']==gid and trace['error_type'] is None
+    assert [row['phase'] for row in trace['phases']]==[
+        'entry','current_guarded','goal_encoded','native_binding_ready','primary_inventory_owned',
+        'cpu_register_returned','cpu_register_validated','dispatch_1_entry',
+        'dispatch_1_current_guarded','dispatch_1_cpu_returned','dispatch_1_cpu_validated',
+        'dispatch_1_final_guarded','native_reserve_returned','sdk_entry',
+        'dispatch_2_entry','dispatch_2_current_guarded','dispatch_2_cpu_returned',
+        'dispatch_2_cpu_validated','dispatch_2_final_guarded','sdk_returned','complete']
+    times=[row['wall_s'] for row in trace['phases']]
+    assert all(a<=b for a,b in zip(times,times[1:]))
+    assert events==['OWN_INVENTORY','REGISTER','DISPATCH','NATIVE_RESERVE','DISPATCH','SDK_SEND']
+    trace['phases'].clear()
+    assert sender.dispatch_traces[0]['phases']
+
+
+def test_failed_dispatch_trace_retains_last_boundary_and_original_exception(composed):
+    config,events,owned,faults,servers,calls=composed
+    config['monitor'].damage=('epoch','foreign')
+    sender=HeadInventoryDispatcher(**config)
+    with pytest.raises(RestartRefused):sender.send(target())
+    trace=sender.dispatch_traces[0]
+    assert trace['error_type']=='RestartRefused'
+    assert trace['phases'][-2]['phase']=='cpu_register_returned'
+    assert trace['phases'][-1]['phase']=='failed'
+    assert 'NATIVE_RESERVE' not in events and 'SDK_SEND' not in events
+
+
 @pytest.mark.parametrize('damage',[
     ('epoch','foreign'),('generation',12),('session_id','foreign'),('operation_sequence',2),
     ('inventory_sha256','f'*64),('goal_uuid','foreign'),('stage','POLICY_READY'),

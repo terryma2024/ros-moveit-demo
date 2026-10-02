@@ -98,3 +98,21 @@ def test_trajectory_preparation_is_refused_before_reading_inputs_after_arm_or_se
     with pytest.raises(PermissionError):
         _prepare_bound_goal_plan(port=SimpleNamespace(feedback_snapshot=forbidden),
             production={},geometry={},result=result)
+
+
+def test_search_refusal_retains_post_arm_reserve_and_last_dispatch_boundaries():
+    from so101_demo.cli.head_feedback_bootstrap import _run_owned_search_diagnostic
+    def fail():raise PermissionError('original exposure expired')
+    driver=SimpleNamespace(tick=fail,result=None,commands=[],observations=[])
+    receipts=[dict(operation='SOGB',request_wall_s=1.,ack_wall_s=1.001)]
+    traces=[dict(error_type='PermissionError',phases=[dict(phase='dispatch_2_entry',wall_s=1.002)])]
+    dispatcher=SimpleNamespace(inventory={},authority=SimpleNamespace(exchange_receipts=receipts),
+        dispatch_traces=traces)
+    result=dict(search_controller_diagnostic={})
+    with pytest.raises(PermissionError,match='original exposure expired'):
+        _run_owned_search_diagnostic(driver=driver,dispatcher=dispatcher,result=result,emit=lambda *a,**k:None)
+    evidence=result['search_controller_diagnostic']
+    assert evidence['main_exchange_receipts']==receipts
+    assert evidence['dispatch_traces']==traces
+    receipts.clear()
+    assert evidence['main_exchange_receipts']
