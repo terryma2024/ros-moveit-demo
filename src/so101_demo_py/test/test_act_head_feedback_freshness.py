@@ -17,7 +17,7 @@ def policy():
                 watchdog_reaction_limit_s=.010, revoker_connection_deadline_s=.002)
 
 
-def setup_ports(monkeypatch):
+def setup_ports(monkeypatch, **options):
     wall, sim, calls, subscriptions = [10.], [1.], [], []
     node = SimpleNamespace(
         create_subscription=lambda *args: subscriptions.append(args),
@@ -36,7 +36,7 @@ def setup_ports(monkeypatch):
     client = Client(node, None, '/neck_controller/follow_joint_trajectory')
     port = RosControllerPort(node, client, ('neck_yaw_joint',),
         max_age_s=.01, stop_velocity_rad_s=.002, monotonic=lambda: wall[0],
-        feedback_policy=policy())
+        **{'feedback_policy':policy(),**options})
     return node, client, port, wall, sim, calls, subscriptions
 
 
@@ -278,3 +278,93 @@ def test_new_inventory_does_not_inherit_an_earlier_timely_stop(monkeypatch):
         wall[0], sim[0] = 10.+index*.01, 1.+index*.01
         port._feedback(sample(sim[0]))
         assert port.stopped() is False
+
+
+def test_stopped_bootstrap_keeps_originals_without_any_joint_policy_default(monkeypatch):
+    _, _, port, _, _, _, subscriptions = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    port._feedback(sample())
+    assert port._head_samples[-1]['source_ns']==1_000_000_000
+    assert port._head_samples[-1]['callback_sim_ns']==1_000_000_000
+    assert len(subscriptions)==1 and port.feedback_policy is None
+
+
+def test_stopped_bootstrap_cannot_send_before_measured_policy_binding(monkeypatch):
+    _, _, port, _, _, calls, _ = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    port._feedback(sample())
+    goal=dict(joint_names=('neck_yaw_joint',),header_stamp_s=1.004,
+        time_from_start_s=(0.,.05),positions=((.2,),(.3,)))
+    with pytest.raises(PermissionError,match='HEAD_FEEDBACK_POLICY_REQUIRED'):
+        port.send(goal)
+    assert not [call for call in calls if call[0]=='send']
+
+
+def test_stopped_bootstrap_freezes_policy_on_the_original_subscriber(monkeypatch):
+    _, _, port, _, _, _, subscriptions = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    port._feedback(sample())
+    port.bind_head_policy(policy())
+    assert port.feedback_snapshot()['source_ns']==1_000_000_000
+    assert len(subscriptions)==1
+    with pytest.raises(PermissionError,match='HEAD_FEEDBACK_POLICY_BINDING_REFUSED'):
+        port.bind_head_policy(dict(policy(),joint_max_receipt_age_s=.03))
+
+
+def test_invalid_bootstrap_policy_is_an_irreversible_binding_failure(monkeypatch):
+    _, _, port, _, _, calls, _ = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    with pytest.raises(ValueError):port.bind_head_policy({})
+    with pytest.raises(PermissionError):port.bind_head_policy(policy())
+    assert port.stopped() is False
+    assert port.feedback_policy is None and not [call for call in calls if call[0]=='send']
+
+
+@pytest.mark.parametrize('boundary',['snapshot','send'])
+def test_failed_rebind_cannot_race_snapshot_or_dispatch(monkeypatch,boundary):
+    node, _, port, _, _, calls, _ = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    port._feedback(sample());port.bind_head_policy(policy())
+    def invalidate():
+        with pytest.raises(ValueError):port.bind_head_policy({})
+    if boundary=='snapshot':
+        original=node.get_clock
+        def clock():invalidate();return original()
+        node.get_clock=clock
+        with pytest.raises(PermissionError):port.feedback_snapshot()
+    else:
+        from so101_demo.adapters.act import ros_execution
+        original=ros_execution.trajectory_message
+        def wire(goal):invalidate();return original(goal)
+        monkeypatch.setattr(ros_execution,'trajectory_message',wire)
+        goal=dict(joint_names=('neck_yaw_joint',),header_stamp_s=1.004,
+            time_from_start_s=(0.,.05),positions=((.2,),(.3,)))
+        with pytest.raises(PermissionError):port.send(goal)
+    assert not [call for call in calls if call[0]=='send']
+
+
+def test_bootstrap_policy_has_no_public_rebinding_bypass(monkeypatch):
+    _, _, port, _, _, _, _ = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    with pytest.raises(AttributeError):port.feedback_policy=policy()
+
+
+def test_stopped_bootstrap_refuses_a_prebound_policy_constructor(monkeypatch):
+    with pytest.raises(ValueError,match='HEAD_BOOTSTRAP_CONFIG_INVALID'):
+        setup_ports(monkeypatch,head_bootstrap=True)
+
+
+def test_failed_rebind_keeps_original_policy_for_actual_safe_stop(monkeypatch):
+    _, _, port, wall, sim, calls, _ = setup_ports(monkeypatch,
+        feedback_policy=None,head_bootstrap=True)
+    port._feedback(sample());port.bind_head_policy(policy())
+    with pytest.raises(ValueError):port.bind_head_policy({})
+    assert port.original_feedback_snapshot()['sample']['source_ns']==1_000_000_000
+    with pytest.raises(PermissionError):port.feedback_snapshot()
+    port.begin_stop(dict(epoch='stop-1',generation=5,request_wall_s=10.,
+        request_sim_s=1.,fault_wall_s=10.,stop_latency_s=.07))
+    for index in range(1,4):
+        wall[0],sim[0]=10.+index*.01,1.+index*.01
+        port._feedback(sample(sim[0]))
+        assert port.stopped() is (index==3)
+    assert not [call for call in calls if call[0]=='send']

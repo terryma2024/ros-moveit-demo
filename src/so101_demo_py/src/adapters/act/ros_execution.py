@@ -42,10 +42,14 @@ class RosControllerPort:
     """Inject the sole underlying broker action client, never create a bypass."""
 
     def __init__(self,node,action_client,names,*,stop_velocity_rad_s,max_age_s,
-                 monotonic=time.monotonic,feedback_policy=None):
+                 monotonic=time.monotonic,feedback_policy=None,head_bootstrap=False):
         self.client=action_client;self.names=tuple(names);self.monotonic=monotonic
+        if type(head_bootstrap) is not bool or (head_bootstrap and feedback_policy is not None):
+            raise ValueError('HEAD_BOOTSTRAP_CONFIG_INVALID')
+        self._head_bootstrap=head_bootstrap
+        self._head_policy_binding_failed=False
         self.node=node
-        self.feedback_policy=None if feedback_policy is None else FeedbackPolicy.parse(feedback_policy)
+        self._feedback_policy=None if feedback_policy is None else FeedbackPolicy.parse(feedback_policy)
         self._stop_epoch=None;self._head_sequence=0;self._head_samples=deque(maxlen=4096)
         self._head_feedback=None;self._head_stop_proof=None
         self._head_source_watermark=None
@@ -55,6 +59,22 @@ class RosControllerPort:
         self._lock=threading.RLock();self._goals={};self._velocity=None;self._received=None
         self._subscription=node.create_subscription(JointState,'/joint_states',self._feedback,
                                                     qos_profile_sensor_data)
+
+    @property
+    def feedback_policy(self):return self._feedback_policy
+
+    def bind_head_policy(self,values):
+        """Freeze measured policy on the original stopped-bootstrap subscriber."""
+        try:parsed=FeedbackPolicy.parse(values)
+        except (TypeError,ValueError):
+            with self._lock:self._head_policy_binding_failed=True
+            raise
+        with self._lock:
+            if (not self._head_bootstrap or self.feedback_policy is not None
+                    or self._head_policy_binding_failed):
+                self._head_policy_binding_failed=True
+                raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
+            self._feedback_policy=parsed
 
     def begin_stop(self,epoch):
         if self.feedback_policy is None:raise ValueError('HEAD_FEEDBACK_POLICY_REQUIRED')
@@ -70,13 +90,23 @@ class RosControllerPort:
             self._stop_epoch=dict(epoch);self._head_stop_proof=proof
 
     def feedback_snapshot(self):
-        with self._lock:sample=None if self._head_feedback is None else dict(self._head_feedback)
-        decision=decision_clocks(self.node,self.monotonic)
+        if self.feedback_policy is None:raise PermissionError('HEAD_FEEDBACK_POLICY_REQUIRED')
+        if self._head_policy_binding_failed:raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
+        original=self.original_feedback_snapshot()
+        sample,decision=original['sample'],original['decision']
         ages=self.feedback_policy.check_joint(sample,decision)
+        with self._lock:
+            if self._head_policy_binding_failed:raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
         return dict(sample,decision=decision,**ages)
 
+    def original_feedback_snapshot(self):
+        """Measurement-only originals; this does not establish fresh feedback."""
+        with self._lock:sample=None if self._head_feedback is None else dict(self._head_feedback)
+        decision=decision_clocks(self.node,self.monotonic)
+        return dict(sample=sample,decision=decision)
+
     def _feedback(self,message):
-        if self.feedback_policy is not None:
+        if self.feedback_policy is not None or self._head_bootstrap:
             self._head_feedback_message(message)
             return
         if (len(set(message.name))!=len(message.name)
@@ -119,13 +149,19 @@ class RosControllerPort:
             self._head_samples.append(sample);self._head_feedback=sample
 
     def send(self,goal,*,goal_uuid=None):
+        if self._head_policy_binding_failed:
+            raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
+        if self._head_bootstrap and self.feedback_policy is None:
+            raise PermissionError('HEAD_FEEDBACK_POLICY_REQUIRED')
         wire=trajectory_message(goal)
         if tuple(wire.joint_names)!=self.names: raise ValueError('CONTROLLER_JOINT_ORDER_INVALID')
         message=FollowJointTrajectory.Goal();message.trajectory=wire
         gid=secrets.token_hex(16)
         record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
                     cancel_ack=False,error=None,goal=goal)
-        with self._lock:self._goals[gid]=record
+        with self._lock:
+            if self._head_policy_binding_failed:raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
+            self._goals[gid]=record
         try:
             options={}
             if goal_uuid is not None:
@@ -178,6 +214,7 @@ class RosControllerPort:
             if record['accepted'] is True:self._cancel_handle(gid)
 
     def stopped(self):
+        if self._head_bootstrap and self.feedback_policy is None:return False
         if self.feedback_policy is not None:return self._head_stopped()
         with self._lock:
             if (self._received is None or not 0<=self.monotonic()-self._received<=self.max_age
