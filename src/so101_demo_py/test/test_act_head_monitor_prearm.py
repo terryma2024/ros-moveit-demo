@@ -178,3 +178,23 @@ def test_authenticated_server_passive_inputs_routes_real_runtime_without_activat
         with pytest.raises(PermissionError,match='POLICY_ACK_REQUIRED'):
             protocol.handle({'operation':'PREARM_INPUTS','policy':{'policy_sha256':'a'*64}})
     finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('pending',[False,True])
+def test_passive_original_receipt_traverses_actual_authenticated_codec(tmp_path,pending):
+    from so101_demo.act.head_monitor_ipc import HeadMonitorCodec
+    _,runtime,observer=input_ready()
+    if pending:observer._images.clear()
+    configuration=dict(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
+    protocol=MonitorRuntimeProtocol(configuration,tmp_path)
+    protocol._future=completed(runtime);protocol._policy_future=completed(True)
+    try:
+        reply=protocol.handle({'operation':'PREARM_INPUTS','policy':{'policy_sha256':'a'*64}})
+        scope=dict(secret=b'x'*32,epoch='attempt',generation=5,session_id='session')
+        sender=HeadMonitorCodec(**scope,role='monitor');receiver=HeadMonitorCodec(**scope,role='primary')
+        received=receiver.decode(sender.encode(reply))
+        assert received['inputs_ready'] is (not pending)
+        assert received['original_snapshot']['joint']['positions']==list(observer.port._head_feedback['positions'])
+        assert received['original_snapshot']['joint']['source_ns']==observer.port._head_feedback['source_ns']
+        assert not observer._active and not runtime._prearm_guarded
+    finally:observer.close(timeout_s=1.)

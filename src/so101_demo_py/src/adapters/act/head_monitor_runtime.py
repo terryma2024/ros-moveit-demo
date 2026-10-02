@@ -307,10 +307,13 @@ class HeadMonitorRuntime:
             if pair is None:raise ValueError('HEAD_MONITOR_PREARM_INPUTS_CAMERA_PENDING')
             ready=not observer.failed
         except (KeyError,TypeError,ValueError) as error:reason=str(error)
+        # The immutable JSON wire snapshot preserves every original value;
+        # in-memory joint tuples are not types accepted by the strict codec.
+        snapshot=json.loads(json.dumps(dict(decision=decision,joint=original['sample'],camera_pair=pair,
+            clock=clock,primary=primary,executor_wall_s=executor),allow_nan=False))
         ack=dict(stage='POLICY_READY',inputs_ready=ready,policy_sha256=self.epoch.policy_hash,
             ack_wall_s=observer.monotonic(),watchdog_wall_s=watchdog,motion_authority=False,
-            original_snapshot=dict(decision=decision,joint=original['sample'],camera_pair=pair,
-                clock=clock,primary=primary,executor_wall_s=executor),pending_reason=reason)
+            original_snapshot=snapshot,pending_reason=reason)
         self._emit('PREARM_INPUTS',ack=ack)
         return ack
 
