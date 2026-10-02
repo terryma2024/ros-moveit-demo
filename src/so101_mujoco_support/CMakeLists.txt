@@ -80,6 +80,13 @@ target_link_libraries(so101_controller_reservation_protocol PUBLIC Threads::Thre
 target_link_libraries(so101_broker_owned_trajectory_controller PRIVATE
   so101_controller_reservation_protocol)
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_library(so101_head_revocation_transport SHARED src/head_revocation_transport.cpp)
+  target_compile_features(so101_head_revocation_transport PRIVATE cxx_std_17)
+  target_include_directories(so101_head_revocation_transport PRIVATE include)
+  install(TARGETS so101_head_revocation_transport LIBRARY DESTINATION lib)
+endif()
+
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
 target_include_directories(graceful_shutdown_move_group PRIVATE ${Boost_INCLUDE_DIRS})
@@ -210,6 +217,11 @@ if(BUILD_TESTING)
     so101_controller_reservation_protocol)
 
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ament_add_gtest(test_head_revocation_transport test/test_head_revocation_transport.cpp)
+    target_compile_features(test_head_revocation_transport PRIVATE cxx_std_17)
+    target_include_directories(test_head_revocation_transport PRIVATE include)
+    target_link_libraries(test_head_revocation_transport so101_head_revocation_transport)
+
     ament_add_gtest(test_controller_reservation_provision
       test/test_controller_reservation_provision.cpp
       APPEND_LIBRARY_DIRS ${so101_test_library_dirs})

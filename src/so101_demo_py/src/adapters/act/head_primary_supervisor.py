@@ -50,7 +50,7 @@ class HeadPrimarySupervisor:
             raise ValueError('HEAD_PRIMARY_POLICY_REFERENCE_INVALID')
         self._ack(policy_ack, 'POLICY_STATUS', 'POLICY_READY',
                   policy_sha256=self._policy['sha256'])
-        self._ack(configuration_ack, 'CONFIGURATION', 'CONFIGURED')
+        self._ack(configuration_ack, 'CONFIGURATION', 'CONFIGURED',native_transport=revoker.transport_origin)
         self._provisions = deepcopy(configuration_ack['provisions'])
         self._dependencies = deepcopy(configuration_ack['dependencies'])
         if (set(self._provisions) != {'main', 'primary_fault', 'monitor_fault'}

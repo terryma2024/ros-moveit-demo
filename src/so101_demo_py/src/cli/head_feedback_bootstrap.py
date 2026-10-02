@@ -423,6 +423,7 @@ def main(argv=None):
                 raise PermissionError('HEAD_BOOTSTRAP_PRIMARY_PROVISION_CHANGED')
             revoker=NativeRevocationClient(directory/'neck-primary-revoke.sock',capability=fault_cap,
                 native_owner=native,generation=generation,timeout_s=.002)
+            result['primary_native_transport']=dict(revoker.transport_origin)
             primary=HeadPrimarySupervisor(node=node,port=port,router=original_router,monitor=monitor,
                 revoker=revoker,epoch=epoch,generation=generation,session_id=session,policy_reference=reference,
                 policy_ack=result['policy_ack'],configuration_ack=result['monitor_configured'],

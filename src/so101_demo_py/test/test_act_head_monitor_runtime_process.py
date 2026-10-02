@@ -72,6 +72,9 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
     assert reply['camera_qos']==dict(depth=32,reliability='RELIABLE')
     assert reply['clock_qos']==dict(depth=1,reliability='BEST_EFFORT')
     assert reply['clock_subscription_count']==1
+    native_transport=reply['native_transport']
+    assert native_transport['abi']==1 and native_transport['clock']=='CLOCK_MONOTONIC'
+    assert native_transport['sha256']==hashlib.sha256(Path(native_transport['path']).read_bytes()).hexdigest()
     assert reply['goal_codec_warmup']['native_arm_count']==reply['goal_codec_warmup']['sdk_send_count']==0
     assert reply['goal_codec_warmup']['payload_bytes']>0
     assert reply['node_name']=='head_monitor_launch_a'

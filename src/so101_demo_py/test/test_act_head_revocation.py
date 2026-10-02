@@ -12,7 +12,9 @@ import uuid
 import pytest
 
 from so101_demo.adapters.act.head_revocation import NativeRevocationClient
+from so101_demo.adapters.act import head_revocation
 from so101_demo.adapters.act.controller_reservation_provision import _process_start_ticks
+from so101_demo.adapters.act.controller_reservation_provision import _private_parent
 from so101_demo.adapters.act.controller_reservation_provision import write_head_revocation_provision
 
 pytestmark=pytest.mark.skipif(sys.platform!='linux',reason='native revoker requires Linux peer credentials')
@@ -32,6 +34,7 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
         if data:
             time.sleep(float(sys.argv[3]))
             connection.sendall(bytes.fromhex(sys.argv[2]))
+            print(data.hex(),flush=True)
         sys.stdin.readline()
 """
 
@@ -70,31 +73,91 @@ def client(path,owner):
 
 def test_actual_close_ack_from_exact_owned_process(native_server):
     path,owner,process=native_server(ack())
-    receipt=client(path,owner).close_strict()
+    revoker=client(path,owner);receipt=revoker.close_strict()
     assert receipt['ack_validated'] is True and receipt['native_owner']==owner
     assert receipt['ack_wall_s']>=receipt['request_wall_s']
     assert process.stdout.readline()=='RECEIVED\n'
+    body=b'SOGR'+bytes((1,2))+revoker.capability+int(5).to_bytes(8,'big')+bytes(16)
+    assert bytes.fromhex(process.stdout.readline())==len(body).to_bytes(4,'big')+body
 
 
-@pytest.mark.parametrize('failure',[None,'receive','post_reply_peer'])
+def test_close_checks_execute_outside_python_syscall_scheduling(native_server,monkeypatch):
+    path,owner,_=native_server(ack())
+    original=_private_parent
+    def delayed_python_checks(endpoint):
+        original(endpoint);time.sleep(.003)
+    monkeypatch.setattr(head_revocation,'_private_parent',delayed_python_checks,raising=False)
+    revoker=client(path,owner)
+    receipt=revoker.close_strict()
+    assert receipt['ack_validated'] is True
+    assert receipt['ack_wall_s']-receipt['request_wall_s']<=.002
+    assert revoker.transport_origin['abi']==1
+    assert Path(revoker.transport_origin['path']).is_file()
+
+
+@pytest.mark.parametrize('damage',['parent_mode','socket_mode','endpoint_symlink','ancestor_symlink','regular_file'])
+def test_compiled_path_checks_refuse_before_connecting(native_server,damage,tmp_path):
+    path,owner,_=native_server(ack())
+    destination=path
+    if damage=='parent_mode':path.parent.chmod(0o755)
+    elif damage=='socket_mode':path.chmod(0o666)
+    elif damage=='endpoint_symlink':
+        destination=path.parent/'link.sock';destination.symlink_to(path)
+    elif damage=='ancestor_symlink':
+        alias=path.parent.parent/('hs-link-'+uuid.uuid4().hex[:8]);alias.symlink_to(path.parent)
+        destination=alias/path.name
+    else:destination=path.parent/'regular';destination.write_text('not a socket')
+    revoker=client(destination,owner)
+    try:
+        with pytest.raises(PermissionError):revoker.close_strict()
+        assert revoker.exchange_trace['phase']=='path'
+        assert 'connected' not in revoker.exchange_trace['phases']
+    finally:
+        if damage=='parent_mode':path.parent.chmod(0o700)
+
+
+@pytest.mark.parametrize('damage',['capability','generation','peer','budget'])
+def test_mutated_client_scope_cannot_wrap_or_silently_substitute_original_authority(native_server,damage):
+    path,owner,_=native_server(ack());revoker=client(path,owner)
+    if damage=='capability':revoker.capability+=b'additional bytes'
+    elif damage=='generation':revoker.generation+=2**64
+    elif damage=='peer':revoker.native_owner['start_ticks']+=1
+    else:revoker.timeout=.010
+    with pytest.raises(PermissionError,match='HEAD_REVOKER_SCOPE_CHANGED'):revoker.close_strict()
+
+
+@pytest.mark.parametrize('damage',['absent','abi'])
+def test_native_library_is_required_without_python_transport_fallback(native_server,monkeypatch,tmp_path,damage):
+    path,owner,_=native_server(ack())
+    if damage=='absent':
+        import ament_index_python.packages
+        monkeypatch.setattr(ament_index_python.packages,'get_package_prefix',lambda _:str(tmp_path/'no-prefix'))
+    else:
+        from types import SimpleNamespace
+        class Function:
+            def __call__(self):return 2
+        monkeypatch.setattr(head_revocation.ctypes,'CDLL',lambda _:SimpleNamespace(
+            so101_head_revocation_abi=Function(),so101_head_revocation_result_size=Function()))
+    with pytest.raises(RuntimeError,match='HEAD_REVOKER_NATIVE_TRANSPORT_REQUIRED'):client(path,owner)
+
+
+@pytest.mark.parametrize('failure',[None,'receive','late_native_entry'])
 def test_original_native_transport_trace_distinguishes_timeout_boundary(native_server,failure):
     path,owner,_=native_server(ack(),delay=.010 if failure=='receive' else 0.)
     revoker=client(path,owner)
-    if failure=='post_reply_peer':
-        original=revoker._verify_peer;checks=[]
-        def verify(connection):
-            original(connection);checks.append(True)
-            if len(checks)==2:time.sleep(.003)
-        revoker._verify_peer=verify
+    if failure=='late_native_entry':
+        original=revoker._native_exchange
+        def delayed_entry(*args):time.sleep(.003);return original(*args)
+        revoker._native_exchange=delayed_entry
     if failure is None:assert revoker.close_strict()['ack_validated'] is True
     else:
         with pytest.raises(TimeoutError):revoker.close_strict()
     trace=revoker.exchange_trace
     assert trace['native_owner']==owner and trace['generation']==5
-    assert trace['deadline_wall_s']==trace['request_wall_s']+.002
+    assert abs(trace['deadline_wall_s']-trace['request_wall_s']-.002)<1e-9
     assert trace['ended_wall_s']>=trace['request_wall_s']
     assert all(trace['request_wall_s']<=value<=trace['ended_wall_s'] for value in trace['phases'].values())
-    assert trace['phases']['sent']<=trace['ended_wall_s']
+    if failure!='late_native_entry':assert trace['phases']['sent']<=trace['ended_wall_s']
     if failure is None:
         assert trace['phase']=='complete' and trace['error_type'] is None
         assert trace['phases']['reply_received']<=trace['phases']['reply_peer_verified']
@@ -102,8 +165,8 @@ def test_original_native_transport_trace_distinguishes_timeout_boundary(native_s
         assert trace['phase']=='receive' and trace['error_type']=='TimeoutError'
         assert 'reply_received' not in trace['phases']
     else:
-        assert trace['phase']=='final_deadline' and trace['error_type']=='TimeoutError'
-        assert trace['phases']['reply_received']<trace['phases']['reply_peer_verified']
+        assert trace['phase']=='path' and trace['error_type']=='TimeoutError'
+        assert trace['phases']=={} and trace['entry_wall_s']>trace['deadline_wall_s']
     assert 'capability' not in repr(trace) and 'body' not in trace
 
 

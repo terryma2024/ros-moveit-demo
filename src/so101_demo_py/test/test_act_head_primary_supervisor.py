@@ -28,7 +28,7 @@ except ModuleNotFoundError:
         def close(self):return {}
 
 
-def setup(tmp_path):
+def setup(tmp_path,native_damage=None):
     node=Node();node.create_timer=lambda period,callback,**kw:SimpleNamespace(period=period,callback=callback,**kw)
     node.destroy_timer=lambda timer:True
     events=[];requests=[]
@@ -51,14 +51,32 @@ def setup(tmp_path):
     revoker.close_strict=lambda:dict(ack_validated=True,native_owner=owner,generation=5)
     refs={key:dict(path=str(endpoint/(key+'.provision')),socket_path=str(endpoint/(stem+'.sock')),sha256=letter*64)
         for key,stem,letter in [('main','neck','b'),('primary_fault','neck-primary-revoke','c'),('monitor_fault','neck-revoke','d')]}
-    configuration=reply('CONFIGURATION','CONFIGURED',provisions=refs,dependencies={'controlled':True})
+    origin=dict(revoker.transport_origin)
+    if native_damage=='path':origin['path']='/different/library.so'
+    elif native_damage=='sha256':origin['sha256']='e'*64
+    elif native_damage=='abi':origin['abi']=2
+    elif native_damage=='clock':origin['clock']='CLOCK_REALTIME'
+    configuration=reply('CONFIGURATION','CONFIGURED',provisions=refs,dependencies={'controlled':True},
+        native_transport=origin)
     ack=reply('POLICY_STATUS','POLICY_READY',policy_sha256='a'*64)
     router=HeadOriginalRouter(port,lambda *args:None)
-    sup=HeadPrimarySupervisor(node=node,port=port,router=router,monitor=monitor,revoker=revoker,
-        epoch='attempt',generation=5,session_id='session',policy_reference={'path':str(tmp_path/'policy.json'),'sha256':'a'*64},
-        policy_ack=ack,configuration_ack=configuration,stop_latency_s=.07,camera_max_age_s=.05,
-        camera_frame_id='head_camera_frame',emit=lambda event,**kw:events.append((event,kw)))
+    try:
+        sup=HeadPrimarySupervisor(node=node,port=port,router=router,monitor=monitor,revoker=revoker,
+            epoch='attempt',generation=5,session_id='session',policy_reference={'path':str(tmp_path/'policy.json'),'sha256':'a'*64},
+            policy_ack=ack,configuration_ack=configuration,stop_latency_s=.07,camera_max_age_s=.05,
+            camera_frame_id='head_camera_frame',emit=lambda event,**kw:events.append((event,kw)))
+    except BaseException:
+        port.close_head_io(timeout_s=1.);raise
     return node,port,sup,requests,events,revoker
+
+
+@pytest.mark.parametrize('damage',['path','sha256','abi','clock'])
+def test_primary_refuses_cpu_with_different_installed_native_transport(tmp_path,damage):
+    value=None
+    try:
+        with pytest.raises(PermissionError):value=setup(tmp_path,native_damage=damage)
+    finally:
+        if value is not None:value[2].close();value[1].close_head_io(timeout_s=1.)
 
 
 def test_four_owned_workers_and_real_executor_tick_feed_actual_heartbeat(tmp_path):

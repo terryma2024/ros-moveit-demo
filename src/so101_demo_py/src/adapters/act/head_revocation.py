@@ -4,14 +4,42 @@ No ROS action, arm, reservation, inference, or fallback close authority lives he
 The entrypoint supplies the actual owned native PID/start identity and capability.
 """
 
+import ctypes
+import hashlib
 import os
 from pathlib import Path
-import socket
-import stat
-import struct
 import time
 
-from .controller_reservation_provision import _private_parent, _process_start_ticks
+
+class _NativeResult(ctypes.Structure):
+    _fields_=[('phase',ctypes.c_uint32),('error_number',ctypes.c_uint32),
+        ('reply_size',ctypes.c_uint32),('phases_present',ctypes.c_uint32),
+        ('entry_ns',ctypes.c_uint64),('ack_ns',ctypes.c_uint64),('ended_ns',ctypes.c_uint64),
+        ('phases_ns',ctypes.c_uint64*6),('reply',ctypes.c_uint8*145)]
+
+
+def _load_transport():
+    from ament_index_python.packages import get_package_prefix
+    path=Path(get_package_prefix('so101_mujoco_support'))/'lib/libso101_head_revocation_transport.so'
+    try:
+        if not path.is_file() or path.is_symlink():raise RuntimeError('native transport is not a copied artifact')
+        library=ctypes.CDLL(str(path))
+        for name in ('so101_head_revocation_abi','so101_head_revocation_result_size'):
+            function=getattr(library,name);function.argtypes=[];function.restype=ctypes.c_uint32
+        abi=library.so101_head_revocation_abi()
+        if abi!=1 or library.so101_head_revocation_result_size()!=ctypes.sizeof(_NativeResult):
+            raise RuntimeError('native transport ABI mismatch')
+        exchange=library.so101_head_revocation_exchange
+        exchange.argtypes=[ctypes.c_char_p,ctypes.POINTER(ctypes.c_uint8),ctypes.c_uint64,
+            ctypes.c_uint32,ctypes.c_int32,ctypes.c_uint64,ctypes.c_uint64,ctypes.c_uint64,
+            ctypes.c_uint32,ctypes.POINTER(_NativeResult)]
+        exchange.restype=ctypes.c_uint32
+        if time.get_clock_info('monotonic').implementation!='clock_gettime(CLOCK_MONOTONIC)':
+            raise RuntimeError('native transport clock mismatch')
+        return library,exchange,dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            abi=abi,clock='CLOCK_MONOTONIC')
+    except (OSError,AttributeError,RuntimeError) as error:
+        raise RuntimeError('HEAD_REVOKER_NATIVE_TRANSPORT_REQUIRED') from error
 
 
 class NativeRevocationClient:
@@ -28,87 +56,62 @@ class NativeRevocationClient:
         self._last_exchange=None
         if (type(generation) is not int or not 0<generation<2**64
                 or type(timeout_s) not in (int,float) or not 0<timeout_s<=self._connection_bound_s
-                or not callable(monotonic)
+                or monotonic is not time.monotonic
                 or not isinstance(capability,bytes) or len(capability)!=32 or not any(capability)
                 or set(self.native_owner)!= {'uid','pid','start_ticks'}
                 or any(type(value) is not int for value in self.native_owner.values())
                 or not 0<=self.native_owner['uid']<2**32
                 or not 0<self.native_owner['pid']<2**31
                 or not 0<self.native_owner['start_ticks']<2**64
-                or len(os.fsencode(self.path))>107):
+                or len(os.fsencode(self.path))>107 or '\x00' in str(self.path)
+                or not self.path.is_absolute() or self.path!=Path(os.path.normpath(self.path))):
             raise ValueError('HEAD_REVOKER_CONFIG_INVALID')
-
-    def _verify_peer(self,connection):
-        pid,uid,_=struct.unpack('3i',connection.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
-        if (uid!=self.native_owner['uid'] or pid!=self.native_owner['pid']
-                or _process_start_ticks(pid)!=self.native_owner['start_ticks']):
-            raise PermissionError('HEAD_REVOKER_NATIVE_PEER_INVALID')
-
-    def _remaining(self, deadline):
-        remaining=deadline-self.monotonic()
-        if remaining<=0:raise TimeoutError('HEAD_REVOKER_TIMEOUT')
-        return remaining
+        # Resolve the exact installed ABI before safety activation, never on a
+        # fault path. Only the implementation is cached; authentication is not.
+        self._library,self._native_exchange,self.transport_origin=_load_transport()
+        self._scope=(self.capability,self.generation,dict(self.native_owner),self.path,self.timeout)
 
     @property
     def exchange_trace(self):
         trace=self._last_exchange
         return None if trace is None else dict(trace,native_owner=dict(trace['native_owner']),phases=dict(trace['phases']))
 
-    def _exchange(self, body, *, identity=False):
-        started=self.monotonic();deadline=started+self.timeout
-        trace=dict(request_wall_s=started,deadline_wall_s=deadline,
-            native_owner=dict(self.native_owner),generation=self.generation,phase='path',phases={},error_type=None)
-        self._last_exchange=trace
-        try:
-            result=self._exchange_bound(body,identity=identity,started=started,deadline=deadline,trace=trace)
-            trace['phase']='complete'
-            return result
-        except BaseException as error:
-            trace['error_type']=type(error).__name__
-            raise
-        finally:trace['ended_wall_s']=self.monotonic()
-
-    def _exchange_bound(self, body, *, identity, started, deadline, trace):
-        _private_parent(self.path)
-        endpoint=self.path.lstat()
-        if (not stat.S_ISSOCK(endpoint.st_mode) or endpoint.st_uid!=os.geteuid()
-                or stat.S_IMODE(endpoint.st_mode)!=0o600):
-            raise PermissionError('HEAD_REVOKER_PATH_INVALID')
-        trace['phases']['path_verified']=self.monotonic();trace['phase']='connect'
-        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
-            connection.settimeout(self._remaining(deadline))
-            connection.connect(str(self.path))
-            trace['phases']['connected']=self.monotonic();trace['phase']='request_peer'
-            # Authenticate the connected endpoint before writing capability
-            # bytes. A correct-looking reply from another process has no value.
-            self._verify_peer(connection)
-            trace['phases']['request_peer_verified']=self.monotonic();trace['phase']='send'
-            connection.settimeout(self._remaining(deadline))
-            connection.sendall(len(body).to_bytes(4,'big')+body)
-            trace['phases']['sent']=self.monotonic();trace['phase']='receive'
-            def read(size):
-                result=bytearray()
-                while len(result)<size:
-                    connection.settimeout(self._remaining(deadline))
-                    value=connection.recv(size-len(result))
-                    if not value:raise RuntimeError('HEAD_REVOKER_REPLY_INCOMPLETE')
-                    result.extend(value)
-                return bytes(result)
-            if identity:
-                size=int.from_bytes(read(4),'big')
-                if not 17<=size<=145:raise RuntimeError('HEAD_REVOKER_IDENTITY_INVALID')
-                reply=read(size)
-            else:reply=read(16)
-            trace['phases']['reply_received']=self.monotonic();trace['phase']='reply_peer'
-            self._verify_peer(connection)
-            trace['phases']['reply_peer_verified']=self.monotonic();trace['phase']='final_deadline'
-            self._remaining(deadline)
-        return reply,dict(request_wall_s=started,ack_wall_s=self.monotonic(),
-                          native_owner=dict(self.native_owner),generation=self.generation)
+    def _exchange(self, *, identity=False):
+        # The compiled ABI can construct only close and identity frames, never
+        # ARM/reserve. Refuse changed scope before serialization or C coercion.
+        if (self.capability,self.generation,self.native_owner,self.path,self.timeout)!=self._scope:
+            raise PermissionError('HEAD_REVOKER_SCOPE_CHANGED')
+        capability=(ctypes.c_uint8*32).from_buffer_copy(self.capability)
+        output=_NativeResult();path=os.fsencode(self.path);owner=dict(self.native_owner)
+        started=self.monotonic();request_ns=round(started*1e9);budget_ns=round(self.timeout*1e9)
+        # CDLL releases the GIL once. The compiled transport checks every path
+        # and peer on this exchange and includes delayed native entry in the
+        # same absolute caller-request deadline. It creates no worker.
+        code=self._native_exchange(path,capability,self.generation,owner['uid'],owner['pid'],
+            owner['start_ticks'],request_ns,budget_ns,1 if identity else 2,ctypes.byref(output))
+        returned=self.monotonic()
+        names=('path_verified','connected','request_peer_verified','sent','reply_received','reply_peer_verified')
+        phases=('path','connect','request_peer','send','receive','reply_peer','final_deadline','complete')
+        error_type={1:'ValueError',2:'PermissionError',3:'PermissionError',4:'OSError',5:'TimeoutError',
+                    6:'RuntimeError',7:'RuntimeError'}.get(code)
+        self._last_exchange=dict(request_wall_s=request_ns*1e-9,deadline_wall_s=(request_ns+budget_ns)*1e-9,
+            native_owner=owner,generation=self.generation,phase=phases[output.phase] if output.phase<8 else 'invalid',
+            phases={name:output.phases_ns[i]*1e-9 for i,name in enumerate(names) if output.phases_present&(1<<i)},
+            entry_wall_s=output.entry_ns*1e-9,ended_wall_s=output.ended_ns*1e-9,
+            caller_return_wall_s=returned,error_type=error_type,error_number=output.error_number,
+            native_transport=dict(self.transport_origin),operation='identity' if identity else 'close')
+        if code:
+            exception={1:ValueError,2:PermissionError,3:PermissionError,4:OSError,5:TimeoutError,
+                       6:RuntimeError,7:RuntimeError}.get(code,RuntimeError)
+            raise exception('HEAD_REVOKER_NATIVE_EXCHANGE_REFUSED_'+str(code))
+        if (output.phase!=7 or not request_ns<=output.ack_ns<request_ns+budget_ns
+                or output.reply_size>145):raise RuntimeError('HEAD_REVOKER_NATIVE_RECEIPT_INVALID')
+        return bytes(output.reply[:output.reply_size]),dict(request_wall_s=request_ns*1e-9,
+            ack_wall_s=output.ack_ns*1e-9,native_owner=owner,generation=self.generation,
+            native_transport=dict(self.transport_origin),caller_return_wall_s=returned)
 
     def close_strict(self):
-        body=b'SOGR'+bytes((1,2))+self.capability+self.generation.to_bytes(8,'big')+bytes(16)
-        reply,receipt=self._exchange(body)
+        reply,receipt=self._exchange()
         if (len(reply)!=16 or reply[:5]!=b'SOGA\x01' or reply[6:8]!=bytes(2)
                 or reply[5] not in (0,1)
                 or int.from_bytes(reply[8:16],'big')!=self.generation):
@@ -117,7 +120,7 @@ class NativeRevocationClient:
         return dict(receipt,ack_validated=True)
 
     def identity(self):
-        reply,receipt=self._exchange(b'SOIA'+bytes((1,1))+self.capability+bytes((3,)),identity=True)
+        reply,receipt=self._exchange(identity=True)
         if (reply[:7]!=b'SOID\x01\x01\x03'
                 or int.from_bytes(reply[7:15],'big')!=self.generation):
             raise RuntimeError('HEAD_REVOKER_IDENTITY_INVALID')
