@@ -326,3 +326,63 @@ def test_actual_camera_info_callback_emits_json_boolean_with_original_identity(v
         assert records[0]['wall_s']==node.wall
         assert records[0]['frame_id']==monitor.camera_frame
     finally:monitor.close(timeout_s=1.)
+
+
+def test_later_report_of_earlier_fault_reaches_owned_fault_closer():
+    node,monitor,_,faults=observer()
+    try:
+        monitor.fault('first observed',fault_wall_s=10.)
+        monitor.fault('earlier origin',fault_wall_s=9.95)
+        monitor.fault('later origin',fault_wall_s=10.01)
+        assert faults==[('first observed',10.),('earlier origin',9.95)]
+        assert monitor._fault_wall==9.95 and monitor.failed
+    finally:monitor.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('earliest,valid',[(9.95,False),(9.99,True)])
+def test_original_stop_request_is_preserved_when_deadline_tightens(earliest,valid):
+    node,monitor,_,_=observer()
+    try:
+        monitor.begin_stop(fault_wall_s=10.)
+        for index in range(1,4):
+            node.wall=10.+index*.01;node.sim=1.+index*.01
+            monitor.port._feedback(sample(node.sim))
+            monitor.port.stopped()
+        assert monitor.port.stopped()
+        sequence=monitor.port._head_stop_proof.last_sequence
+        monitor.begin_stop(fault_wall_s=earliest)
+        assert monitor.port._stop_epoch['request_wall_s']==10.
+        assert monitor.port._stop_epoch['request_sim_s']==1.
+        assert monitor.port._head_stop_proof.last_sequence==sequence
+        assert monitor.port._stop_epoch['fault_wall_s']==earliest
+        assert monitor.port.stopped() is valid
+        # A later origin cannot extend the original deadline or repair failure.
+        monitor.begin_stop(fault_wall_s=10.)
+        assert monitor.port._stop_epoch['fault_wall_s']==earliest
+        for index in range(4,11):
+            node.wall=10.+index*.01;node.sim=1.+index*.01
+            monitor.port._feedback(sample(node.sim))
+            assert monitor.port.stopped() is valid
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_owned_runtime_receives_earliest_fault_after_stop_worker_completed():
+    import os
+    from so101_demo.adapters.act.head_monitor_runtime import HeadMonitorRuntime,_peer
+    node,monitor,_,_=observer()
+    runtime=HeadMonitorRuntime(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
+    runtime._observer=monitor;monitor.fault_callback=runtime.fault
+    try:
+        monitor.fault('first observed',fault_wall_s=10.)
+        monitor.begin_stop(fault_wall_s=10.)
+        for index in range(1,4):
+            node.wall=10.+index*.01;node.sim=1.+index*.01
+            monitor.port._feedback(sample(node.sim));monitor.port.stopped()
+        assert monitor.port.stopped()
+        runtime._stop_done.set()  # independent worker has already completed
+        monitor.fault('earlier origin',fault_wall_s=9.95)
+        assert runtime._fault_event.is_set() and runtime.revoked
+        assert runtime._fault['fault_wall_s']==runtime.epoch.fault['fault_wall_s']==9.95
+        assert monitor.port._stop_epoch['fault_wall_s']==9.95
+        assert monitor.port.stopped() is False
+    finally:monitor.close(timeout_s=1.)

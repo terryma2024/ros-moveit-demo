@@ -55,7 +55,7 @@ class HeadROSMonitor:
         self.stop_latency=stop_latency_s;self.camera_age=camera_max_age_s
         self.camera_frame=camera_frame_id;self.emit=emit;self.fault_callback=fault_callback
         self.failed=False;self._fault_wall=None;self._fault_reason=None;self._closed=False
-        self._lock=threading.RLock();self._policy=None;self._active=False
+        self._lock=threading.RLock();self._stop_lock=threading.Lock();self._policy=None;self._active=False
         self._primary=None;self._executor_wall=None;self._clock=None;self._camera=None
         self._images={};self._infos={};self._camera_watermark=0
         self._image_source=self._info_source=0
@@ -86,9 +86,10 @@ class HeadROSMonitor:
         self.failed=True;self.port._head_policy_binding_failed=True
         with self._lock:
             first=self._fault_wall is None
-            if first or wall<self._fault_wall:
+            earlier=first or wall<self._fault_wall
+            if earlier:
                 self._fault_wall=wall;self._fault_reason=reason
-        if first and report:
+        if earlier and report:
             try:self.fault_callback(reason,wall)
             except Exception:
                 self._fault_reason='HEAD_MONITOR_FAULT_REPORT_FAILED'
@@ -200,13 +201,20 @@ class HeadROSMonitor:
         for gid in ids:self._request(gid,'result')
 
     def begin_stop(self,*,fault_wall_s):
-        if self._stop_started:return
-        clocks=decision_clocks(self.node,self.monotonic)
-        self.port.begin_stop(dict(epoch=self.epoch+'-stop',generation=self.generation,
-            request_wall_s=clocks['wall_after_s'],request_sim_s=clocks['sim_s'],
-            fault_wall_s=fault_wall_s,stop_latency_s=self.stop_latency))
-        self._stop_started=True
-        self._event('STOP_REQUEST',fault_wall_s=fault_wall_s,clocks=clocks)
+        with self._stop_lock:
+            with self._lock:
+                if self._fault_wall is not None:fault_wall_s=min(fault_wall_s,self._fault_wall)
+            if self._stop_started:
+                tightened=self.port.tighten_stop_fault(fault_wall_s)
+                clocks=None
+            else:
+                clocks=decision_clocks(self.node,self.monotonic)
+                self.port.begin_stop(dict(epoch=self.epoch+'-stop',generation=self.generation,
+                    request_wall_s=clocks['wall_after_s'],request_sim_s=clocks['sim_s'],
+                    fault_wall_s=fault_wall_s,stop_latency_s=self.stop_latency))
+                self._stop_started=True;tightened=False
+        if clocks is not None:self._event('STOP_REQUEST',fault_wall_s=fault_wall_s,clocks=clocks)
+        elif tightened:self._event('STOP_DEADLINE_TIGHTENED',fault_wall_s=fault_wall_s)
 
     @staticmethod
     def _stamp(message):

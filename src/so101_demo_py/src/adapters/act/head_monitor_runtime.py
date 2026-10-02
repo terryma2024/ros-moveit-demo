@@ -334,6 +334,10 @@ class HeadMonitorRuntime:
         if self._observer is not None:
             self._observer.failed=True;self._observer.port._head_policy_binding_failed=True
         self.epoch.revoke(reason,fault_wall_s=wall)
+        # Wake the independent native closer before touching the observer's
+        # short stop-state lock; later reports may reveal an earlier origin.
+        if self._observer is not None and self._observer._stop_started:
+            self._observer.begin_stop(fault_wall_s=self._fault['fault_wall_s'])
 
     def _close_native(self):
         self._fault_event.wait()
@@ -355,6 +359,7 @@ class HeadMonitorRuntime:
             self._observer.request_cancel_all()
             self._emit('CANCEL_INITIATED',fault=self._fault,wall_s=time.monotonic())
             while time.monotonic()-self._fault['fault_wall_s']<=self._observer.stop_latency:
+                self._observer.begin_stop(fault_wall_s=self._fault['fault_wall_s'])
                 self._observer.request_cancel_all();self._observer.request_results()
                 stopped=self._observer.port.stopped()
                 self._emit('STOP_PREDICATE',observation=self._observer.port.stop_predicate_observations[-1])

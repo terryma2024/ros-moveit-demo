@@ -98,6 +98,18 @@ class RosControllerPort:
             proof.last_sequence=self._head_sequence
             self._stop_epoch=dict(epoch);self._head_stop_proof=proof
 
+    def tighten_stop_fault(self, fault_wall_s):
+        """Keep the original request and samples; only shorten its fault deadline."""
+        from so101_demo.act.head_feedback import nanoseconds
+        fault_ns=nanoseconds(fault_wall_s)
+        with self._lock:
+            if self._head_stop_proof is None:return False
+            proof=self._head_stop_proof
+            if fault_ns>=nanoseconds(proof.epoch['fault_wall_s']):return False
+            proof.epoch['fault_wall_s']=fault_wall_s
+            self._stop_epoch['fault_wall_s']=fault_wall_s
+            return True
+
     def feedback_snapshot(self):
         if self.feedback_policy is None:raise PermissionError('HEAD_FEEDBACK_POLICY_REQUIRED')
         if self._head_policy_binding_failed:raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
@@ -403,7 +415,8 @@ class RosControllerPort:
             # A timely proof is historical. Continue requiring fresh quiet
             # feedback and terminal inventory for the current hold predicate.
             # A missed deadline can never be repaired by late quiet samples.
-            stopped=physical and proof.confirmed_at is not None and not proof.inventory_changed
+            stopped=(physical and proof.confirmed_at is not None and not proof.inventory_changed
+                     and proof.within_deadline(proof.confirmed_at))
             self.stop_predicate_observations.append(dict(
                 epoch=None if proof is None else dict(proof.epoch),
                 decision=None if decision is None else dict(decision),
