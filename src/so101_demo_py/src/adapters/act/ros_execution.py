@@ -299,7 +299,12 @@ class RosControllerPort:
             if parsed.version!=4:raise ValueError('HEAD_PREPARED_UUID_INVALID')
             gid=str(parsed)
             owned_uuid=UUID(uuid=list(parsed.bytes))
-            if serialize_message(message)!=expected_cdr:
+            with self._lock:inventoried=gid in self._goals
+            # Native admission verifies the original CDR digest and every
+            # decoded field. Re-encoding an identical Goal can change ROS CDR
+            # padding/trailing bytes; the immutable inventory below binds its
+            # original byte digest and complete typed identity instead.
+            if not inventoried and serialize_message(message)!=expected_cdr:
                 raise ValueError('HEAD_PREPARED_CDR_MISMATCH')
             record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
                 cancel_ack=False,error=None,goal=message_to_ordereddict(message),
@@ -321,7 +326,8 @@ class RosControllerPort:
             # No cache lock covers IPC, serialisation or the SDK call. Check the
             # original feedback after the guard, so guard latency adds no age.
             if dispatch_guard() is not True:raise PermissionError('HEAD_PREPARED_GUARD_REFUSED')
-            if serialize_message(message)!=expected_cdr:
+            if (canonical_bytes(message_to_ordereddict(message))!=typed if inventoried
+                    else serialize_message(message)!=expected_cdr):
                 raise ValueError('HEAD_PREPARED_CDR_MISMATCH')
             self.feedback_snapshot()
             if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')

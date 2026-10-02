@@ -34,6 +34,64 @@ def test_pre_native_inventory_is_adopted_without_replacing_unknown_record(monkey
     finally:port.close_head_io(timeout_s=1.)
 
 
+def test_sdk_uses_verified_original_inventory_not_a_second_cdr_encoding(monkeypatch):
+    import rclpy.serialization
+    _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
+    message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr)
+    port._head_fault_callback=lambda reason:None
+    try:
+        port.inventory_prepared(record,cdr)
+        # The live ROS codec has process-dependent padding/trailing bytes for
+        # identical complete goals. Native admission already binds decoded
+        # fields to the digest of the original inventoried bytes.
+        monkeypatch.setattr(rclpy.serialization,'serialize_message',lambda value:cdr+b'padding')
+        assert port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr,
+            dispatch_guard=lambda:True)==record['goal_uuid']
+        sent=[row for row in calls if row[0]=='send']
+        assert len(sent)==1 and sent[0][1] is message
+        assert port._goals[record['goal_uuid']]['prepared_cdr_sha256']==record['payload_sha256']
+    finally:port.close_head_io(timeout_s=1.)
+
+
+def test_changed_original_raw_padding_still_fails_immutable_inventory_digest(monkeypatch):
+    _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
+    message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr)
+    port._head_fault_callback=lambda reason:None
+    try:
+        port.inventory_prepared(record,cdr)
+        with pytest.raises((PermissionError,ValueError)):
+            port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr+b'padding',dispatch_guard=lambda:True)
+        assert not [row for row in calls if row[0]=='send']
+        assert port.accepted(record['goal_uuid']) is None
+    finally:port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('field',['header','target','velocity','goal_tolerance','path_tolerance',
+    'goal_time_tolerance','multi_dof','component_tolerance'])
+def test_complete_inventory_goal_mutation_during_last_guard_never_sends(monkeypatch,field):
+    from control_msgs.msg import JointComponentTolerance
+    _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
+    message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr)
+    port._head_fault_callback=lambda reason:None
+    def guard():
+        if field=='header':message.trajectory.header.stamp.nanosec+=1
+        elif field=='target':message.trajectory.points[1].positions=[.9]
+        elif field=='velocity':message.trajectory.points[1].velocities=[.2]
+        elif field=='goal_tolerance':message.goal_tolerance[0].velocity+=.1
+        elif field=='path_tolerance':message.path_tolerance[0].position+=.1
+        elif field=='goal_time_tolerance':message.goal_time_tolerance.nanosec+=1
+        elif field=='multi_dof':message.multi_dof_trajectory.header.frame_id='foreign'
+        else:message.component_goal_tolerance=[JointComponentTolerance(name='neck_yaw_joint',component=1,position=.1)]
+        return True
+    try:
+        port.inventory_prepared(record,cdr)
+        with pytest.raises(ValueError,match='HEAD_PREPARED_CDR_MISMATCH'):
+            port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr,dispatch_guard=guard)
+        assert not [row for row in calls if row[0]=='send']
+        assert port._head_policy_binding_failed and port.accepted(record['goal_uuid']) is None
+    finally:port.close_head_io(timeout_s=1.)
+
+
 @pytest.mark.parametrize('damage',['cdr','typed_goal','extra','claim_window','expiry','role','uuid','sequence'])
 def test_invalid_inventory_consumes_primary_without_inventing_send_or_rejection(monkeypatch,damage):
     _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
