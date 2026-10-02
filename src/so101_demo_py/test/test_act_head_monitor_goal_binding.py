@@ -143,3 +143,22 @@ def test_invalid_raw_goal_has_no_inventory_binding(damage):
     elif damage=='nonbytes':payload=bytearray(payload)
     else:payload=b'x'*1_048_577
     with pytest.raises(ValueError):validate_goal_inventory(record,payload)
+
+
+def test_warm_codec_exercises_complete_bind_without_inventory_or_motion(monkeypatch):
+    import so101_demo.adapters.act.head_monitor_goal_binding as module
+    calls=[];actual=module.validate_goal_inventory
+    def inspect(record,payload,**kw):
+        calls.append((json.loads(json.dumps(record)),payload))
+        return actual(record,payload,**kw)
+    monkeypatch.setattr(module,'validate_goal_inventory',inspect)
+    warm=getattr(module,'warm_goal_binding',lambda:dict(payload_bytes=0))
+    receipt=warm()
+    assert len(calls)==1 and receipt['native_arm_count']==receipt['sdk_send_count']==0
+    record,payload=calls[0]
+    assert receipt['payload_bytes']==len(payload)>0
+    assert receipt['payload_sha256']==hashlib.sha256(payload).hexdigest()
+    assert record['typed_goal']['trajectory']['joint_names']==['neck_yaw_joint']
+    assert len(record['typed_goal']['trajectory']['points'])==2
+    assert all(row['positions']==[0.] for row in record['typed_goal']['trajectory']['points'])
+    assert set(record)=={'typed_goal','payload_sha256'}  # no UUID/generation/native inventory

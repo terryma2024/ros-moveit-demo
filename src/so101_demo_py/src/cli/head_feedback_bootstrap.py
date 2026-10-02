@@ -68,6 +68,18 @@ def _bound_goal_settlement(samples,state,*,target_rad,position_tolerance_rad,
     return None
 
 
+def _prepare_bound_goal_dispatch():
+    # Resolve cold trajectory modules and full codecs before primary activation,
+    # while the one SDK remains send-disabled and native admission is closed.
+    started=time.monotonic()
+    from so101_demo.act import head_search_calibration_admission_document,head_search_calibration_run
+    from so101_demo.adapters.act import head_inventory_dispatch,ros_neck
+    from so101_demo.adapters.act.head_monitor_goal_binding import warm_goal_binding
+    return dict(goal_codec=warm_goal_binding(),elapsed_s=time.monotonic()-started,
+        modules={module.__name__:module.__file__ for module in (
+            head_search_calibration_admission_document,head_search_calibration_run,head_inventory_dispatch,ros_neck)})
+
+
 def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit):
     """One real sealed-domain endpoint goal, through the existing bound SDK."""
     from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
@@ -285,6 +297,9 @@ def main(argv=None):
         port.bind_head_original_sink(original_router)
         capture.bind_original_sink(original_router)
         buffer=Buffer();listener=TransformListener(buffer,node)
+        if args.bound_goal_diagnostic:
+            result['primary_goal_dispatch_preparation']=_prepare_bound_goal_dispatch()
+            _write(root/'goal-dispatch-preparation.json',result['primary_goal_dispatch_preparation'])
         executor=SingleThreadedExecutor(context=context);executor.add_node(node)
         spinner=threading.Thread(target=executor.spin,name='head-bootstrap-ros');spinner.start()
         deadline=time.monotonic()+90.

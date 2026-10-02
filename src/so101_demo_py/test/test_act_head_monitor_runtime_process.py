@@ -70,6 +70,8 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
     assert reply['executor']=='SingleThreadedExecutor'
     assert reply['joint_qos']==dict(depth=5,reliability='BEST_EFFORT')
     assert reply['camera_qos']==dict(depth=32,reliability='RELIABLE')
+    assert reply['goal_codec_warmup']['native_arm_count']==reply['goal_codec_warmup']['sdk_send_count']==0
+    assert reply['goal_codec_warmup']['payload_bytes']>0
     assert reply['node_name']=='head_monitor_launch_a'
     assert set(reply['provisions'])=={'main','primary_fault','monitor_fault'}
     for provision in reply['provisions'].values():

@@ -22,7 +22,7 @@ from so101_demo.act.head_feedback_measurement import evaluate_feedback_window
 from so101_demo.act.head_feedback import nanoseconds
 from .controller_reservation_provision import (
     _private_parent,_process_start_ticks,write_head_revocation_provision)
-from .head_monitor_goal_binding import validate_goal_inventory
+from .head_monitor_goal_binding import validate_goal_inventory,warm_goal_binding
 from .head_monitor_ros import HeadROSMonitor
 from .head_revocation import NativeRevocationClient
 
@@ -99,7 +99,7 @@ class HeadMonitorRuntime:
         self._stop_done=threading.Event();self._close_done=threading.Event()
         self._watchdog_wall=None;self._fault=None;self._native_close=None;self._native_close_error=None
         self._policy=None;self._dependencies=None;self._provisions=None;self._revoker=None
-        self._prearm_guarded=False
+        self._prearm_guarded=False;self._goal_codec_warmup=None
         self._guard_lock=threading.Lock();self._threads=[]
 
     @property
@@ -151,7 +151,7 @@ class HeadMonitorRuntime:
         return dict(stage='CONFIGURED',motion_authority=False,monitor_peer=dict(self.identity),
             provisions=self._provisions,dependencies=self._dependencies,node_name=self._node.get_name(),
             executor='SingleThreadedExecutor',joint_qos=dict(depth=5,reliability='BEST_EFFORT'),
-            camera_qos=dict(depth=32,reliability='RELIABLE'))
+            camera_qos=dict(depth=32,reliability='RELIABLE'),goal_codec_warmup=self._goal_codec_warmup)
 
     def _configure(self,record):
         fields={'native_owner','reservation_directory','journal_path','dependencies','observer','purpose'}
@@ -203,6 +203,7 @@ class HeadMonitorRuntime:
         self._context=Context();rclpy.init(context=self._context)
         self._node=Node('head_monitor_'+self.epoch.epoch.replace('-','_'),context=self._context,
                          parameter_overrides=[Parameter('use_sim_time',value=True)])
+        self._goal_codec_warmup=warm_goal_binding()
         self._observer=HeadROSMonitor(self._node,epoch=self.epoch.epoch,generation=self.epoch.generation,
             **observer,emit=self._emit,fault_callback=self.fault)
         self._node.create_timer(.002,self._observer.executor_progress,
@@ -220,7 +221,7 @@ class HeadMonitorRuntime:
         self._emit('CONFIGURED',epoch=self.epoch.epoch,generation=self.epoch.generation,
             monitor_peer=self.identity,primary_peer=self.primary,native_owner=native,
             dependencies=dependencies,provisions=self._provisions,observer=observer,
-            cpu_only=True,motion_authority=False)
+            cpu_only=True,motion_authority=False,goal_codec_warmup=self._goal_codec_warmup)
         self._configured=True
 
     def bind_policy(self,record):

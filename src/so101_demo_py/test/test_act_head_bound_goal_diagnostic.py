@@ -54,3 +54,19 @@ def test_late_failure_irreversibly_refuses_attempt(stage):
     _record_refusal(result,RuntimeError('later failure'))
     assert result['status']=='REFUSED'
     assert result['error']['type']=='RuntimeError'
+
+
+def test_prepare_imports_and_goal_codecs_constructs_no_runtime_resources(monkeypatch):
+    from rclpy.node import Node
+    from rclpy.action import ActionClient
+    from so101_demo.adapters.act.head_reservation_authority import HeadReservationAuthority
+    from so101_demo.act.head_search_restarts import TimedHeadDetector
+    from so101_demo.cli.head_feedback_bootstrap import _prepare_bound_goal_dispatch
+    def forbidden(*args,**kw):raise AssertionError('new runtime resource or motion factory')
+    monkeypatch.setattr(Node,'__init__',forbidden)
+    monkeypatch.setattr(ActionClient,'__init__',forbidden)
+    monkeypatch.setattr(HeadReservationAuthority,'__init__',forbidden)
+    monkeypatch.setattr(TimedHeadDetector,'build',forbidden)
+    receipt=_prepare_bound_goal_dispatch()
+    assert receipt['goal_codec']['native_arm_count']==receipt['goal_codec']['sdk_send_count']==0
+    assert receipt['goal_codec']['payload_bytes']>0 and len(receipt['modules'])==4
