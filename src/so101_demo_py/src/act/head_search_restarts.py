@@ -61,6 +61,7 @@ import time
 import traceback
 import uuid
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
@@ -1205,6 +1206,23 @@ def encode_bound_reservation_frame(
     return struct.pack(">I", len(body)) + body
 
 
+@dataclass(frozen=True)
+class PreparedReservation:
+    """Owned immutable binding; no native capability crosses the inventory hook."""
+
+    role: str
+    generation: int
+    goal_cdr: bytes
+    goal_uuid: bytes
+    permit_uuid: bytes
+    claim_monotonic_ns: int
+    deadline_ns: int
+    session_id: str
+    broker_incarnation: str
+    controller_incarnation: str
+    controller_boot_incarnation: str
+
+
 class ReservationAuthority:
     """The single owner's own bound reservations for the admission-wrapped production controllers.
 
@@ -1242,6 +1260,8 @@ class ReservationAuthority:
         self._exchange = exchange or self._socket_exchange
         self._identities: dict[str, dict] = {}
         self._armed: set[str] = set()
+        self._registration_failed = False
+        self._registration_required = False
         self.reserved: list[dict] = []
         self.transport_attempts = int(transport_attempts)
         #: transport-level failures that were retried, so the receipt carries them instead of hiding them
@@ -1302,7 +1322,8 @@ class ReservationAuthority:
 
     @staticmethod
     def _ack(response: bytes, generation: int) -> bool:
-        if len(response) != 16 or response[:4] != b"SOGA" or response[4] != 1:
+        if (len(response) != 16 or response[:4] != b"SOGA" or response[4] != 1
+                or response[6:8] != bytes(2) or response[5] not in (0, 1)):
             raise RuntimeError("the reservation reply is not a frozen SOGA acknowledgement")
         if int.from_bytes(response[8:16], "big") != generation:
             raise RuntimeError("the reservation reply names another generation")
@@ -1312,6 +1333,8 @@ class ReservationAuthority:
     def arm(self, role: str) -> int:
         """Arm one generation on this role's gate; the controller's identity is readable afterwards."""
 
+        if self._registration_failed:
+            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory failure consumed this authority")
         capability = self._capabilities.get(role)
         if capability is None:
             raise _refuse(
@@ -1376,14 +1399,31 @@ class ReservationAuthority:
             raise RuntimeError("the identity reply carries trailing bytes")
         return {"generation": generation, "incarnation": values[0], "boot": values[1]}
 
-    def reserve(self, role: str, *, goal: bytes, goal_uuid: bytes) -> bool:
+    def reserve(self, role: str, *, goal: bytes, goal_uuid: bytes, before_reserve=None) -> bool:
         """Reserve exactly this goal, once, before its action goal is sent."""
 
+        if self._registration_failed:
+            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory failure consumed this authority")
+        if self._registration_required and before_reserve is None:
+            self._registration_failed = True
+            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory acknowledgement is required")
+        if before_reserve is not None and not callable(before_reserve):
+            self._registration_failed = True
+            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory hook must be callable")
+        if before_reserve is not None:
+            self._registration_required = True
+        goal, goal_uuid = bytes(goal), bytes(goal_uuid)
         identity = self.identity(role)
         capability = self._capabilities[role]
         claim = int(self.clock()) - RESERVATION_CLAIM_LEAD_NS
         deadline = claim + self.claim_window_ns
         permit = uuid.uuid4().bytes
+        binding = PreparedReservation(role=role, generation=self.generation, goal_cdr=goal,
+            goal_uuid=goal_uuid, permit_uuid=permit, claim_monotonic_ns=claim,
+            deadline_ns=deadline, session_id=self.session_id,
+            broker_incarnation=self.broker_incarnation,
+            controller_incarnation=str(identity["incarnation"]),
+            controller_boot_incarnation=str(identity["boot"]))
         try:
             frame = encode_bound_reservation_frame(
                 generation=self.generation,
@@ -1400,21 +1440,34 @@ class ReservationAuthority:
                 goal_cdr=bytes(goal),
                 capability=capability,
             )
+            if before_reserve is not None:
+                if before_reserve(binding) is not True:
+                    raise PermissionError("the exact inventory was not acknowledged")
+                if (self.generation != binding.generation or role not in self._armed
+                        or self._identities.get(role) != identity
+                        or self.session_id != binding.session_id
+                        or self.broker_incarnation != binding.broker_incarnation
+                        or not binding.claim_monotonic_ns <= int(self.clock()) <= binding.deadline_ns):
+                    raise PermissionError("the authority changed during inventory registration")
             response = self._exchange_with_retry(role, frame, expect="ack")
-            accepted = self._ack(response, self.generation)
+            accepted = self._ack(response, binding.generation)
         except Exception as error:
+            if before_reserve is not None:
+                self._registration_failed = True
             raise _refuse(
                 RESTART_RESERVATION_REFUSED,
                 f"the {role} controller refused the bound reservation: {error!r}",
             ) from error
         if not accepted:
+            if before_reserve is not None:
+                self._registration_failed = True
             raise _refuse(
                 RESTART_RESERVATION_REFUSED,
                 f"the {role} controller rejected the bound reservation for the goal "
                 f"{bytes(goal_uuid).hex()}",
             )
         self.reserved.append(
-            {"role": role, "generation": self.generation, "goal_uuid": bytes(goal_uuid)}
+            {"role": role, "generation": binding.generation, "goal_uuid": binding.goal_uuid}
         )
         return True
 

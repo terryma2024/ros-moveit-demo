@@ -1274,3 +1274,93 @@ def test_the_reserved_port_reserves_the_wire_message_the_controller_digests(sock
     finally:
         for server in servers.values():
             server.stop()
+
+
+def test_inventory_registration_sees_complete_frozen_binding_before_native_reserve(socket_root):
+    authority,servers=reservation_authority(socket_root);seen=[]
+    goal=bytearray(b'original-cdr');goal_uuid=bytearray(uuid.uuid4().bytes)
+    def register(binding):
+        assert servers['neck'].socket_state.reserved==[]
+        seen.append(binding)
+        goal[:]=b'mutated-cdr!';goal_uuid[:]=uuid.uuid4().bytes
+        return True
+    try:
+        assert authority.reserve('neck',goal=goal,goal_uuid=goal_uuid,before_reserve=register)
+        assert len(seen)==1
+        binding=seen[0]
+        assert binding.goal_cdr==b'original-cdr'
+        assert binding.generation==11 and binding.role=='neck'
+        assert binding.session_id=='head-search-restarts'
+        assert (binding.controller_incarnation,binding.controller_boot_incarnation)==('inc-1','boot1')
+        assert binding.deadline_ns-binding.claim_monotonic_ns==400_000_000
+        assert uuid.UUID(bytes=binding.permit_uuid).version==4
+        expected=encode_bound_reservation_frame(generation=binding.generation,
+            goal_uuid=binding.goal_uuid,role=3,permit_uuid=binding.permit_uuid,
+            target_digest=goal_digest(binding.goal_cdr),claim_monotonic_ns=binding.claim_monotonic_ns,
+            deadline_ns=binding.deadline_ns,session_id=binding.session_id,
+            broker_incarnation=binding.broker_incarnation,
+            controller_incarnation=binding.controller_incarnation,
+            controller_boot_incarnation=binding.controller_boot_incarnation,
+            goal_cdr=binding.goal_cdr,capability=authority._capabilities['neck'])
+        assert servers['neck'].socket_state.reserved==[expected]
+        assert authority.reserved[0]['goal_uuid']==binding.goal_uuid
+        with pytest.raises((AttributeError,TypeError)):
+            binding.deadline_ns+=1
+    finally:
+        for server in servers.values():server.stop()
+
+
+@pytest.mark.parametrize('outcome',['false','none','exception'])
+def test_inventory_registration_refusal_never_sends_native_reservation(socket_root,outcome):
+    authority,servers=reservation_authority(socket_root)
+    def reject(binding):
+        if outcome=='exception':raise PermissionError('monitor refused exact epoch')
+        return False if outcome=='false' else None
+    try:
+        with pytest.raises(RestartRefused):
+            authority.reserve('neck',goal=b'cdr',goal_uuid=uuid.uuid4().bytes,before_reserve=reject)
+        assert servers['neck'].socket_state.reserved==[]
+        assert authority.reserved==[]
+    finally:
+        for server in servers.values():server.stop()
+
+
+@pytest.mark.parametrize('reserved_byte',[6,7])
+def test_native_main_ack_rejects_nonzero_reserved_fields(reserved_byte):
+    reply=bytearray(b'SOGA\x01\x00\x00\x00'+int(11).to_bytes(8,'big'))
+    reply[reserved_byte]=1
+    with pytest.raises(RuntimeError):ReservationAuthority._ack(bytes(reply),11)
+
+
+@pytest.mark.parametrize('damage',['generation','session','broker','identity','closed','deadline'])
+def test_authority_change_or_expiry_during_inventory_prevents_native_reserve(socket_root,damage):
+    authority,servers=reservation_authority(socket_root);now=[10_000_000_000]
+    authority.clock=lambda:now[0]
+    def register(binding):
+        if damage=='generation':authority.generation+=1
+        elif damage=='session':authority.session_id='foreign-session'
+        elif damage=='broker':authority.broker_incarnation='foreign-broker'
+        elif damage=='identity':authority._identities['neck']['incarnation']='foreign-inc'
+        elif damage=='closed':authority._armed.clear()
+        else:now[0]=binding.deadline_ns+1
+        return True
+    try:
+        with pytest.raises(RestartRefused):
+            authority.reserve('neck',goal=b'cdr',goal_uuid=uuid.uuid4().bytes,before_reserve=register)
+        assert servers['neck'].socket_state.reserved==[]
+        with pytest.raises(RestartRefused):authority.arm('neck')
+        with pytest.raises(RestartRefused):authority.reserve('neck',goal=b'cdr',goal_uuid=uuid.uuid4().bytes)
+    finally:
+        for server in servers.values():server.stop()
+
+
+def test_inventory_enrolled_authority_cannot_fall_back_to_unregistered_reserve(socket_root):
+    authority,servers=reservation_authority(socket_root)
+    try:
+        authority.reserve('neck',goal=b'cdr',goal_uuid=uuid.uuid4().bytes,before_reserve=lambda binding:True)
+        with pytest.raises(RestartRefused):
+            authority.reserve('neck',goal=b'next-cdr',goal_uuid=uuid.uuid4().bytes)
+        assert len(servers['neck'].socket_state.reserved)==1
+        with pytest.raises(RestartRefused):authority.arm('neck')
+    finally:
+        for server in servers.values():server.stop()
