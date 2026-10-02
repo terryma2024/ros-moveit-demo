@@ -244,6 +244,10 @@ def main(argv=None):
         result['after']=after;result['gpu_after_in_process']=measure_gpu_compute_apps()
         result['gpu_release_requires_parent_readback']=True
         if after['processes'] or after['nodes']:result['status']='REFUSED';result['teardown_unproven']=True
+        # Seal ownership readback before serializing raw sensor values: an
+        # evidence encoder failure must still leave an auditable owned reap.
+        _write(root/'teardown.json',{key:value for key,value in result.items()
+                                   if key!='raw_observations_pending'})
         if 'raw_observations_pending' in result:
             result['raw_observations']=_write(root/'raw-observations.json',result.pop('raw_observations_pending'))
         result['ended_wall_s']=time.monotonic();_write(root/'result.json',result)

@@ -2,6 +2,7 @@
 from collections import deque
 from types import SimpleNamespace
 import threading
+import json
 
 import pytest
 from sensor_msgs.msg import Image, CameraInfo
@@ -91,3 +92,23 @@ def test_invalid_camera_info_is_retained(capture):
     capture._info(msg)
     assert capture.info_messages[-1]['valid'] is False
     with pytest.raises(ValueError):capture.check()
+
+
+def test_valid_ros_info_keeps_builtin_boolean_for_lossless_json(capture):
+    capture._info(info())
+    assert type(capture.info_messages[-1]['valid']) is bool
+    assert json.loads(json.dumps(capture.info_messages[-1]))['valid'] is True
+
+
+def test_pending_original_waits_for_exact_tf_before_admission(capture):
+    capture._image(image());capture._info(info())
+    capture.port._head_samples.append(capture.port._head_feedback.copy())
+    original=capture._pending
+    class Buffer:
+        def can_transform(self,*args):return False
+        def lookup_transform(self,*args):raise AssertionError('SDK_LOOKUP_BEFORE_TF_READY')
+    class Detector:
+        def detect(self,*args,**kwargs):raise AssertionError('CUDA_BEFORE_TF_READY')
+    assert capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
+    assert capture._pending is original
+    assert capture._pending[0]['wall_s']==10.001

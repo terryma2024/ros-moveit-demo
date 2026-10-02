@@ -106,3 +106,12 @@ def test_modified_weights_identity_cannot_publish_configured_presence(runtime_se
     with pytest.raises((OSError,PermissionError,RuntimeError,ValueError)):
         monitor.await_runtime(phase='configuration',timeout_s=2.)
     assert not Path(configuration['journal_path']).exists()
+
+
+def test_authenticated_unarmed_retirement_exits_cleanly(runtime_setup):
+    monitor,configuration,_=runtime_setup
+    monitor.request_runtime({'operation':'CONFIGURE','configuration':configuration})
+    monitor.await_runtime(phase='configuration',timeout_s=2.)
+    receipt=monitor.close()
+    assert receipt['shutdown_ack'] is True
+    assert receipt['exit_code']==0

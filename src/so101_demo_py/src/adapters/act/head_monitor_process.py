@@ -472,8 +472,19 @@ def main():
                     operation=request['operation']
                     if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','ARMED_READY',
                             'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS'):
-                        channel.send(runtime_protocol.handle(request))
+                        reply=runtime_protocol.handle(request)
+                        channel.send(reply)
                         runtime_protocol.after_send()
+                        if operation=='RETIRE_STATUS' and reply.get('stage')=='RETIRED':
+                            # The owner must finish its post-ACK live-peer check
+                            # before this exact exec peer exits. EOF after a
+                            # verified retirement is normal, not protocol refusal.
+                            while _peer(primary['pid'])==primary:
+                                if select.select([connection],[],[],.002)[0]:
+                                    if connection.recv(1):
+                                        raise PermissionError('HEAD_MONITOR_EXEC_RETIRE_TRAILING_BYTES')
+                                    break
+                            break
                         continue
                     if operation=='HEARTBEAT' and runtime_protocol._future is not None:
                         channel.send(runtime_protocol.handle(request))

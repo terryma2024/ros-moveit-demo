@@ -78,7 +78,7 @@ class StoppedHeadCapture:
 
     def _info(self,message):
         received=self.monotonic()
-        valid=(message.header.frame_id==self.frame_id and message.width==640 and message.height==480
+        valid=bool(message.header.frame_id==self.frame_id and message.width==640 and message.height==480
             and len(message.k)==9 and all(math.isfinite(value) for value in message.k)
             and message.k[0]>0 and message.k[4]>0 and message.k[8]==1.)
         record=dict(source_ns=_source(message),wall_s=received,valid=valid,
@@ -121,7 +121,7 @@ class StoppedHeadCapture:
             record,data=pending
             matches=[row for row in self.info_messages if row['source_ns']==record['source_ns']]
             if not matches:return None
-            info=dict(matches[-1]);self._pending=None
+            info=dict(matches[-1])
             causal=next((row for row in reversed(self.port._head_samples)
                          if row['source_ns']<=record['source_ns']),None)
             joint=None if causal is None else dict(causal)
@@ -130,13 +130,22 @@ class StoppedHeadCapture:
             raise ValueError('HEAD_STOPPED_INFERENCE_INPUT_INVALID')
         from rclpy.time import Time
         import numpy as np
-        transform=tf_buffer.lookup_transform('base',self.frame_id,Time(nanoseconds=record['source_ns']))
+        target_time=Time(nanoseconds=record['source_ns'])
+        # TF delivery is an admission prerequisite. Waiting keeps the one
+        # original exposure/receipt intact; it never reruns an admitted job or
+        # substitutes latest TF. A replacement still consumes this attempt.
+        if not tf_buffer.can_transform('base',self.frame_id,target_time):return None
+        transform=tf_buffer.lookup_transform('base',self.frame_id,target_time)
         tf_source=_source(transform)
         rotation_matrix(transform.transform.rotation)
         translation=transform.transform.translation
         if (tf_source<=0 or tf_source>record['source_ns']
                 or any(not math.isfinite(getattr(translation,key)) for key in ('x','y','z'))):
             raise ValueError('HEAD_STOPPED_TF_INVALID')
+        with self.port._lock:
+            self.check()
+            if self._pending is not pending:raise ValueError('HEAD_STOPPED_IMAGE_DROPPED')
+            self._pending=None
         admission=self.monotonic()
         if joint['wall_s']>admission:raise ValueError('HEAD_STOPPED_JOINT_FUTURE')
         result=detector.detect(np.frombuffer(data,dtype=np.uint8).reshape(480,640,3),
