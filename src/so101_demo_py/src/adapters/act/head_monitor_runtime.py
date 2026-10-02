@@ -25,6 +25,7 @@ from .controller_reservation_provision import (
     _private_parent,_process_start_ticks,write_head_revocation_provision)
 from .head_monitor_goal_binding import validate_goal_inventory,warm_goal_binding
 from .head_monitor_ros import HeadROSMonitor
+from .head_monitor_exposure import HeadMonitorExposures
 from .head_revocation import NativeRevocationClient
 
 _SHA=re.compile(r'[0-9a-f]{64}\Z')
@@ -102,6 +103,7 @@ class HeadMonitorRuntime:
         self._policy=None;self._dependencies=None;self._provisions=None;self._revoker=None
         self._prearm_guarded=False;self._goal_codec_warmup=None
         self._guard_lock=threading.Lock();self._threads=[]
+        self._exposures=HeadMonitorExposures(self)
 
     @property
     def configured(self):return self._configured
@@ -265,6 +267,7 @@ class HeadMonitorRuntime:
             raise ValueError('HEAD_MONITOR_CAMERA_POLICY_INVALID')
         ack=self.epoch.bind_policy(policy['values'],record['sha256'])
         self._observer.bind_policy(policy['values']);self._observer.camera_age=camera['max_age_s']
+        self._observer.camera_skew=camera['max_skew_s']
         self._policy=record
         self._emit('POLICY_READY',ack=ack,policy_reference=record,purpose='calibration',motion_authority=False)
         return dict(ack,stage='POLICY_READY',motion_authority=False)
@@ -414,6 +417,10 @@ class HeadMonitorRuntime:
         return dict(stage=self.epoch.stage,epoch=self.epoch.epoch,watchdog_wall_s=self._watchdog_wall,
             executor_wall_s=self._observer._executor_wall,ack_wall_s=now,motion_authority=False)
 
+    def exposure_admit(self,record):return self._exposures.admit(record)
+
+    def exposure_finish(self,record):return self._exposures.finish(record)
+
     def _watchdog(self):
         next_poll=time.monotonic()
         while not self._shutdown.is_set():
@@ -421,6 +428,7 @@ class HeadMonitorRuntime:
             try:
                 if _peer(self.primary['pid'])!=self.primary:
                     self.fault('HEAD_MONITOR_PRIMARY_LOST',now)
+                self._exposures.poll(now)
                 self._observer.poll()
             except BaseException:self.fault('HEAD_MONITOR_WATCHDOG_FAILED',now)
             next_poll+=.002
@@ -532,6 +540,7 @@ class HeadMonitorRuntime:
             result=dict(stage='RETIRED',motion_authority=False,epoch=self.epoch.epoch,
                 journal_path=str(self._journal_path),journal_sha256=hashlib.sha256(_read(self._journal_path,128*1024*1024)).hexdigest(),
                 records=self._journal_count,journal_error=self._journal_error,fault=self._fault,
+                exposures=self._exposures.summary(),
                 native_close=self._native_close,native_close_error=self._native_close_error)
             seal=self._journal_path.with_name(self._journal_path.name+'.seal.json')
             with seal.open('x') as handle:json.dump(result,handle,sort_keys=True);handle.write('\n');handle.flush();os.fsync(handle.fileno())

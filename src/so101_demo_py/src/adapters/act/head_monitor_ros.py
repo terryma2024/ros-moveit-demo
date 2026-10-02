@@ -5,6 +5,7 @@ UUIDs remain unresolved until authoritative action state is actually observed.
 The composition owns its executor, strict native close worker and journal writer.
 """
 from collections import deque
+import hashlib
 import math
 import threading
 import time
@@ -53,6 +54,7 @@ class HeadROSMonitor:
             raise ValueError('HEAD_MONITOR_ROS_CONFIG_INVALID')
         self.node=node;self.epoch=epoch;self.generation=generation;self.monotonic=monotonic
         self.stop_latency=stop_latency_s;self.camera_age=camera_max_age_s
+        self.camera_skew=None
         self.camera_frame=camera_frame_id;self.emit=emit;self.fault_callback=fault_callback
         self.failed=False;self._fault_wall=None;self._fault_reason=None;self._closed=False
         self._lock=threading.RLock();self._stop_lock=threading.Lock();self._policy=None;self._active=False
@@ -248,7 +250,9 @@ class HeadROSMonitor:
         record=dict(source_ns=self._stamp(message),wall_s=self.monotonic(),
             frame_id=message.header.frame_id,valid=(message.encoding=='rgb8'
             and message.width==640 and message.height==480 and message.step==1920
-            and len(message.data)==640*480*3 and message.header.frame_id==self.camera_frame))
+            and message.is_bigendian==0 and len(message.data)==640*480*3
+            and message.header.frame_id==self.camera_frame))
+        record['payload_sha256']=hashlib.sha256(message.data).hexdigest() if record['valid'] else None
         self._camera_message(record,image=True)
 
     def _on_info(self,message):

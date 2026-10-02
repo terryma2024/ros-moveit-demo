@@ -97,6 +97,8 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
     {'operation':'ARMED_READY','identities':{}},
     {'operation':'REGISTER','inventory':{}},
     {'operation':'DISPATCH','binding':{}},
+    {'operation':'EXPOSURE_ADMIT','exposure':{}},
+    {'operation':'EXPOSURE_FINISH','completion':{}},
 ])
 def test_configured_presence_cannot_grant_prepolicy_ready_or_inventory(runtime_setup,operation):
     monitor,configuration,_=runtime_setup

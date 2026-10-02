@@ -245,7 +245,8 @@ class MonitorRuntimeProtocol:
             runtime=self._future.result()
             if operation!='FAULT':runtime.configuration()
             fields={'POLICY':'policy','PREARM_INPUTS':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
-                    'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault'}
+                    'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault',
+                    'EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}
             if operation not in fields or set(request)!={'operation',fields[operation]}:
                 raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_REFUSED')
             value=request[fields[operation]]
@@ -260,12 +261,14 @@ class MonitorRuntimeProtocol:
                     finally:self._completed('policy',self._policy_future)
                 self._after_send=lambda:threading.Thread(target=policy,name='head-monitor-policy-validation',daemon=True).start()
                 result=dict(stage='POLICY_PENDING',motion_authority=False)
-            elif operation in ('PREARM_INPUTS','PREARM_READY','ARMED_READY'):
+            elif operation in ('PREARM_INPUTS','PREARM_READY','ARMED_READY','EXPOSURE_ADMIT','EXPOSURE_FINISH'):
                 if self._policy_future is None or not self._policy_future.done():
                     raise PermissionError('HEAD_MONITOR_POLICY_ACK_REQUIRED')
                 self._policy_future.result()
                 result=(runtime.prearm_inputs(value) if operation=='PREARM_INPUTS' else
-                        runtime.prearm_ready(value) if operation=='PREARM_READY' else runtime.armed_ready(value))
+                        runtime.prearm_ready(value) if operation=='PREARM_READY' else
+                        runtime.exposure_admit(value) if operation=='EXPOSURE_ADMIT' else
+                        runtime.exposure_finish(value) if operation=='EXPOSURE_FINISH' else runtime.armed_ready(value))
             elif operation=='REGISTER':result=runtime.register(value)
             elif operation=='DISPATCH':result=runtime.dispatch(value)
             elif operation=='HEARTBEAT':result=runtime.heartbeat(value)
@@ -472,7 +475,8 @@ def main():
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     operation=request['operation']
                     if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_INPUTS','PREARM_READY','ARMED_READY',
-                            'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS'):
+                            'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS',
+                            'EXPOSURE_ADMIT','EXPOSURE_FINISH'):
                         reply=runtime_protocol.handle(request)
                         channel.send(reply)
                         runtime_protocol.after_send()

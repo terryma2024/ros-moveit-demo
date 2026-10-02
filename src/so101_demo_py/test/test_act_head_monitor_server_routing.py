@@ -10,11 +10,12 @@ from test_act_head_monitor_process import config
 from so101_demo.adapters.act import head_monitor_process as server
 
 
-@pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY'])
+@pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY','EXPOSURE_ADMIT','EXPOSURE_FINISH'])
 def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation):
     identity=server._peer(os.getpid());handled=[];replies=[]
+    field={'EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}.get(operation,'policy')
     requests=iter([dict(operation='PRESENCE'),dict(operation='CONFIGURE',configuration={}),
-        dict(operation=operation,policy=dict(policy_sha256='a'*64)),dict(operation='RETIRE_STATUS')])
+        dict(operation=operation,**{field:dict(policy_sha256='a'*64)}),dict(operation='RETIRE_STATUS')])
     class Socket:
         def __enter__(self):return self
         def __exit__(self,*args):pass
