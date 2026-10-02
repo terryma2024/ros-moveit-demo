@@ -4,15 +4,17 @@ This guards server routing, not crypto, real ROS freshness, or qualification.
 """
 import os
 import sys
+import pytest
 
 from test_act_head_monitor_process import config
 from so101_demo.adapters.act import head_monitor_process as server
 
 
-def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch):
+@pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY'])
+def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation):
     identity=server._peer(os.getpid());handled=[];replies=[]
     requests=iter([dict(operation='PRESENCE'),dict(operation='CONFIGURE',configuration={}),
-        dict(operation='PREARM_READY',policy=dict(policy_sha256='a'*64)),dict(operation='RETIRE_STATUS')])
+        dict(operation=operation,policy=dict(policy_sha256='a'*64)),dict(operation='RETIRE_STATUS')])
     class Socket:
         def __enter__(self):return self
         def __exit__(self,*args):pass
@@ -41,5 +43,5 @@ def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(c
     monkeypatch.setattr(server,'MonitorRuntimeProtocol',Runtime)
     monkeypatch.setenv('CUDA_VISIBLE_DEVICES','')
     assert server.main()==0
-    assert handled==['CONFIGURE','PREARM_READY','RETIRE_STATUS']
-    assert [reply['request'] for reply in replies]==['PRESENCE','CONFIGURE','PREARM_READY','RETIRE_STATUS']
+    assert handled==['CONFIGURE',operation,'RETIRE_STATUS']
+    assert [reply['request'] for reply in replies]==['PRESENCE','CONFIGURE',operation,'RETIRE_STATUS']

@@ -242,7 +242,7 @@ class MonitorRuntimeProtocol:
             if self._future is None or not self._future.done():
                 raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
             runtime=self._future.result();runtime.configuration()
-            fields={'POLICY':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
+            fields={'POLICY':'policy','PREARM_INPUTS':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
                     'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault'}
             if operation not in fields or set(request)!={'operation',fields[operation]}:
                 raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_REFUSED')
@@ -258,11 +258,12 @@ class MonitorRuntimeProtocol:
                     finally:self._completed('policy',self._policy_future)
                 self._after_send=lambda:threading.Thread(target=policy,name='head-monitor-policy-validation',daemon=True).start()
                 result=dict(stage='POLICY_PENDING',motion_authority=False)
-            elif operation in ('PREARM_READY','ARMED_READY'):
+            elif operation in ('PREARM_INPUTS','PREARM_READY','ARMED_READY'):
                 if self._policy_future is None or not self._policy_future.done():
                     raise PermissionError('HEAD_MONITOR_POLICY_ACK_REQUIRED')
                 self._policy_future.result()
-                result=(runtime.prearm_ready(value) if operation=='PREARM_READY' else runtime.armed_ready(value))
+                result=(runtime.prearm_inputs(value) if operation=='PREARM_INPUTS' else
+                        runtime.prearm_ready(value) if operation=='PREARM_READY' else runtime.armed_ready(value))
             elif operation=='REGISTER':result=runtime.register(value)
             elif operation=='DISPATCH':result=runtime.dispatch(value)
             elif operation=='HEARTBEAT':result=runtime.heartbeat(value)
@@ -470,7 +471,7 @@ def main():
                     if type(request) is not dict or type(request.get('operation')) is not str:
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     operation=request['operation']
-                    if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_READY','ARMED_READY',
+                    if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_INPUTS','PREARM_READY','ARMED_READY',
                             'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS'):
                         reply=runtime_protocol.handle(request)
                         channel.send(reply)

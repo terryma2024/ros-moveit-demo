@@ -207,7 +207,6 @@ def test_arm_requires_three_same_scoped_native_identity_receipts(tmp_path,damage
     from so101_demo.adapters.act.head_reservation_authority import HeadReservationAuthority
     _,port,sup,_,_,revoker=setup(tmp_path);calls=[]
     try:
-        guarded(sup,port);prearm=sup.monitor.request_runtime
         identity=dict(generation=5,incarnation='controlled-incarnation',boot='controlled-boot')
         authority=HeadReservationAuthority(directory=Path(sup._provisions['main']['socket_path']).parent,
             capability=secrets.token_bytes(32),native_owner=revoker.native_owner,generation=5,session_id='session',
@@ -232,6 +231,8 @@ def test_arm_requires_three_same_scoped_native_identity_receipts(tmp_path,damage
             elif damage=='policy':ack['policy_sha256']='e'*64
             elif damage=='purpose':ack['motion_authority']=True
             return ack
+        # Start the controlled current-input interval after provision setup.
+        guarded(sup,port);prearm=sup.monitor.request_runtime
         sup.monitor.request_runtime=request
         if damage is None:
             assert sup.arm(authority)==identity and sup.ready
@@ -268,3 +269,53 @@ def test_diagnostic_later_identity_failure_cannot_report_zero_native_arms(acknow
     with pytest.raises(PermissionError):_bind_native_diagnostic(primary,authority,result)
     assert result['native_arm_count']==(1 if acknowledged else None)
     assert result['main_exchange_receipts']==[]
+
+
+def input_status(sup,*,ready=True,**overrides):
+    return dict(request='PREARM_INPUTS',stage='POLICY_READY',epoch='attempt',generation=5,
+        session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False,
+        policy_sha256='a'*64,inputs_ready=ready,ack_wall_s=time.monotonic(),**overrides)
+
+
+def test_passive_cpu_pending_then_fresh_does_not_activate_primary_or_arm(tmp_path):
+    _,port,sup,_,events,_=setup(tmp_path);requests=[]
+    def reply(record):
+        requests.append(record)
+        return input_status(sup,ready=len(requests)==2)
+    sup.monitor.request_runtime=reply
+    try:
+        ack=sup.wait_cpu_inputs(timeout_s=.1)
+        assert ack['inputs_ready'] and len(requests)==2
+        assert not sup.ready and sup.epoch.stage=='POLICY_READY'
+        assert not sup.observer._active and sup._watchdog_wall is None
+        assert not port._goals and any(event=='CPU_INPUTS_READY' for event,_ in events)
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['purpose','hash','generation','age','boolean'])
+def test_invalid_passive_receipt_cannot_skip_current_prearm_or_reopen_scope(tmp_path,damage):
+    _,port,sup,_,_,_=setup(tmp_path)
+    reply=input_status(sup)
+    if damage=='purpose':reply['purpose']='qualification'
+    elif damage=='hash':reply['policy_sha256']='b'*64
+    elif damage=='generation':reply['generation']=6
+    elif damage=='age':reply['ack_wall_s']-=.1
+    else:reply['inputs_ready']=1
+    sup.monitor.request_runtime=lambda record:reply
+    try:
+        with pytest.raises(PermissionError):sup.wait_cpu_inputs(timeout_s=.1)
+        assert sup.failed and not sup.ready and port._head_policy_binding_failed
+        with pytest.raises(PermissionError):sup.wait_cpu_inputs(timeout_s=.1)
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_passive_wait_bound_includes_exchange_that_returns_fresh_but_too_late(tmp_path):
+    _,port,sup,_,_,_=setup(tmp_path)
+    def reply(record):
+        time.sleep(.010)
+        return input_status(sup)
+    sup.monitor.request_runtime=reply
+    try:
+        with pytest.raises(TimeoutError):sup.wait_cpu_inputs(timeout_s=.004)
+        assert sup.failed and not sup.ready
+    finally:sup.close();port.close_head_io(timeout_s=1.)

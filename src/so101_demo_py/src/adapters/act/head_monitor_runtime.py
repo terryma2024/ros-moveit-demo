@@ -262,6 +262,58 @@ class HeadMonitorRuntime:
         self._emit('POLICY_READY',ack=ack,policy_reference=record,purpose='calibration',motion_authority=False)
         return dict(ack,stage='POLICY_READY',motion_authority=False)
 
+    def prearm_inputs(self,record):
+        """Passive own-input receipt before activation; never a watchdog tick."""
+        if (type(record) is not dict or set(record)!={'policy_sha256'}
+                or not self._configured or self._finished or self._policy is None
+                or self.epoch.stage!='POLICY_READY' or self.revoked or self._prearm_guarded
+                or record['policy_sha256']!=self.epoch.policy_hash):
+            raise PermissionError('HEAD_MONITOR_PREARM_INPUTS_STAGE_INVALID')
+        observer=self._observer;watchdog=self._watchdog_wall
+        with observer._lock:
+            images={key:dict(value) for key,value in observer._images.items()}
+            infos={key:dict(value) for key,value in observer._infos.items()}
+            clock=None if observer._clock is None else dict(observer._clock)
+            primary=None if observer._primary is None else dict(observer._primary)
+            executor=observer._executor_wall
+        original=observer.port.original_feedback_snapshot();decision=original['decision']
+        now=decision['wall_after_s'];sim=decision['sim_ns'];policy=observer._policy
+        def fresh(wall,limit):
+            return wall is not None and 0<=nanoseconds(now)-nanoseconds(wall)<=int(limit*1e9)
+        ready=False;reason=None;pair=None
+        try:
+            policy.check_joint(original['sample'],decision)
+            if any(abs(value)>observer.port.stop_velocity for value in original['sample']['velocities']):
+                raise ValueError('HEAD_MONITOR_PREARM_INPUTS_NOT_QUIET')
+            if (not fresh(watchdog,policy.watchdog_reaction_limit_s)
+                    or not fresh(executor,policy.watchdog_reaction_limit_s)
+                    or primary is None
+                    or any(not fresh(primary[key],policy.watchdog_reaction_limit_s)
+                           for key in ('wall_s','executor_wall_s'))):
+                raise ValueError('HEAD_MONITOR_PREARM_INPUTS_PROGRESS_STALE')
+            inference_deadline=primary['inference_deadline_wall_s']
+            if inference_deadline is not None and now>=inference_deadline:
+                raise ValueError('HEAD_MONITOR_PREARM_INPUTS_INFERENCE_EXPIRED')
+            if (clock is None or not clock['valid'] or clock['source_ns']>sim
+                    or not fresh(clock['wall_s'],policy.clock_interarrival_deadline_s)):
+                raise ValueError('HEAD_MONITOR_PREARM_INPUTS_CLOCK_STALE')
+            for source,image in images.items():
+                info=infos.get(source)
+                if (info is not None and image['valid'] and info['valid']
+                        and fresh(image['wall_s'],observer.camera_age)
+                        and fresh(info['wall_s'],observer.camera_age)
+                        and 0<=sim-source<=int(policy.camera_max_source_age_s*1e9)):
+                    pair=dict(image=image,info=info);break
+            if pair is None:raise ValueError('HEAD_MONITOR_PREARM_INPUTS_CAMERA_PENDING')
+            ready=not observer.failed
+        except (KeyError,TypeError,ValueError) as error:reason=str(error)
+        ack=dict(stage='POLICY_READY',inputs_ready=ready,policy_sha256=self.epoch.policy_hash,
+            ack_wall_s=observer.monotonic(),watchdog_wall_s=watchdog,motion_authority=False,
+            original_snapshot=dict(decision=decision,joint=original['sample'],camera_pair=pair,
+                clock=clock,primary=primary,executor_wall_s=executor),pending_reason=reason)
+        self._emit('PREARM_INPUTS',ack=ack)
+        return ack
+
     def prearm_ready(self,record):
         """Check current own inputs before main ARM; grant no motion authority."""
         watchdog_wall=self._watchdog_wall

@@ -372,6 +372,7 @@ def main(argv=None):
                         for source,row in images.items()):break
                 if now>=deadline:raise TimeoutError('HEAD_BOOTSTRAP_NEW_ORIGINAL_PAIR_MISSING')
                 time.sleep(.001)
+            result['cpu_inputs_before_prearm']=primary.wait_cpu_inputs(timeout_s=.2)
             authority=HeadReservationAuthority(directory=directory,capability=provisions.capabilities['neck'],
                 native_owner=native,generation=generation,session_id=session,
                 arm_guard=primary.prearm_guard,fault_callback=primary.fault)

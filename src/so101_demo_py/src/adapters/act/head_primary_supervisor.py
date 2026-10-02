@@ -189,6 +189,31 @@ class HeadPrimarySupervisor:
             raise PermissionError('HEAD_PRIMARY_CURRENT_GUARD_REFUSED')
         return self.port.feedback_snapshot()
 
+    def wait_cpu_inputs(self,*,timeout_s):
+        if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<timeout_s<=.2:
+            raise ValueError('HEAD_PRIMARY_INPUT_WAIT_INVALID')
+        deadline=time.monotonic()+timeout_s
+        try:
+            while True:
+                if self.failed or self.epoch.stage!='POLICY_READY':
+                    raise PermissionError('HEAD_PRIMARY_INPUT_WAIT_REVOKED')
+                if time.monotonic()>=deadline:raise TimeoutError('HEAD_PRIMARY_OWN_CPU_INPUTS_MISSING')
+                reply=self.monitor.request_runtime(dict(operation='PREARM_INPUTS',
+                    policy=dict(policy_sha256=self.epoch.policy_hash)))
+                if time.monotonic()>=deadline:raise TimeoutError('HEAD_PRIMARY_OWN_CPU_INPUTS_MISSING')
+                self._ack(reply,'PREARM_INPUTS','POLICY_READY',policy_sha256=self.epoch.policy_hash)
+                if type(reply.get('inputs_ready')) is not bool:
+                    raise PermissionError('HEAD_PRIMARY_INPUT_STATUS_INVALID')
+                if reply['inputs_ready']:
+                    if not 0<=nanoseconds(time.monotonic())-nanoseconds(reply['ack_wall_s'])<=10_000_000:
+                        raise PermissionError('HEAD_PRIMARY_INPUT_STATUS_STALE')
+                    self._emit('CPU_INPUTS_READY',ack=reply)
+                    return reply
+                if time.monotonic()>=deadline:raise TimeoutError('HEAD_PRIMARY_OWN_CPU_INPUTS_MISSING')
+                self._shutdown.wait(.002)
+        except Exception:
+            self.fault('HEAD_PRIMARY_OWN_CPU_INPUTS_REFUSED');raise
+
     def prearm_guard(self):
         try:
             if self.epoch.stage != 'POLICY_READY': raise PermissionError('HEAD_PRIMARY_PREARM_STAGE_INVALID')

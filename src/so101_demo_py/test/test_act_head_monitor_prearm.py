@@ -111,3 +111,70 @@ def test_three_reported_identities_cannot_skip_the_current_prearm_guard():
         with pytest.raises(PermissionError,match='READY_STAGE_INVALID'):runtime.armed_ready(reports)
         assert not queries and runtime.epoch.stage=='POLICY_READY' and not observer._active
     finally:observer.close(timeout_s=1.)
+
+
+def input_ready():
+    node,runtime,observer=prepared()
+    observer._images={1_000_000_000:dict(observer._camera)}
+    return node,runtime,observer
+
+
+def test_passive_cpu_inputs_receipt_does_not_activate_or_refresh_watchdog():
+    _,runtime,observer=input_ready()
+    try:
+        before=runtime._watchdog_wall;polls=list(observer.watchdog_polls)
+        ack=runtime.prearm_inputs({'policy_sha256':'a'*64})
+        assert ack['inputs_ready'] is True and ack['motion_authority'] is False
+        assert not observer._active and not runtime._prearm_guarded
+        assert runtime._watchdog_wall==before and list(observer.watchdog_polls)==polls
+        assert runtime.epoch.stage=='POLICY_READY'
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['image_missing','image_old','info_mismatch','info_old',
+        'future_source','joint_stale','clock_missing','heartbeat_stale','watchdog_stale','moving','inference_expired'])
+def test_passive_cpu_status_waits_for_own_current_originals_without_granting_arm(damage):
+    node,runtime,observer=input_ready()
+    if damage=='image_missing':observer._images.clear()
+    elif damage=='image_old':observer._images[1_000_000_000]['wall_s']=9.94
+    elif damage=='info_mismatch':observer._infos={1_100_000_000:dict(observer._infos[1_000_000_000])}
+    elif damage=='info_old':observer._infos[1_000_000_000]['wall_s']=9.94
+    elif damage=='future_source':node.sim=.999
+    elif damage=='joint_stale':observer.port._head_feedback['wall_s']=9.9
+    elif damage=='clock_missing':observer._clock=None
+    elif damage=='heartbeat_stale':observer._primary['wall_s']=9.98
+    elif damage=='watchdog_stale':runtime._watchdog_wall=9.98
+    elif damage=='moving':observer.port._head_feedback['velocities']=(.1,)
+    else:observer._primary['inference_deadline_wall_s']=9.9
+    try:
+        ack=runtime.prearm_inputs({'policy_sha256':'a'*64})
+        assert ack['inputs_ready'] is False
+        assert not observer._active and not runtime._prearm_guarded
+        assert not runtime.revoked and runtime.epoch.stage=='POLICY_READY'
+    finally:observer.close(timeout_s=1.)
+
+
+def test_bad_policy_or_revoked_status_cannot_report_ready():
+    _,runtime,observer=input_ready()
+    try:
+        with pytest.raises(PermissionError):runtime.prearm_inputs({'policy_sha256':'b'*64})
+        runtime.fault('already revoked',10.)
+        with pytest.raises(PermissionError):runtime.prearm_inputs({'policy_sha256':'a'*64})
+    finally:observer.close(timeout_s=1.)
+
+
+def test_authenticated_server_passive_inputs_routes_real_runtime_without_activation(tmp_path):
+    _,runtime,observer=input_ready()
+    configuration=dict(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
+    protocol=MonitorRuntimeProtocol(configuration,tmp_path)
+    protocol._future=completed(runtime);protocol._policy_future=completed(True)
+    try:
+        ack=protocol.handle({'operation':'PREARM_INPUTS','policy':{'policy_sha256':'a'*64}})
+        assert ack['request']=='PREARM_INPUTS' and ack['inputs_ready'] is True
+        assert ack['policy_sha256']=='a'*64 and ack['monitor_peer']==_peer(os.getpid())
+        assert ack['stage']=='POLICY_READY' and ack['motion_authority'] is False
+        assert not observer._active and not runtime._prearm_guarded
+        protocol._policy_future=Future()
+        with pytest.raises(PermissionError,match='POLICY_ACK_REQUIRED'):
+            protocol.handle({'operation':'PREARM_INPUTS','policy':{'policy_sha256':'a'*64}})
+    finally:observer.close(timeout_s=1.)
