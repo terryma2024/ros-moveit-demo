@@ -148,8 +148,9 @@ ControllerReservationCapability capability()
 std::filesystem::path socket_path(const std::string & name)
 {
   const auto scratch_tmp = std::filesystem::path(std::getenv("TMPDIR"));
-  const auto task_root = scratch_tmp.parent_path().parent_path().parent_path();
-  const auto ipc_root = task_root / "ipc";
+  const auto * socket_base = std::getenv("SO101_IPC_SOCKET_BASE");
+  if (!socket_base) {throw std::runtime_error("TEST_IPC_BASE_REQUIRED");}
+  const auto ipc_root = std::filesystem::path(socket_base);
   const auto scratch_name = scratch_tmp.parent_path().filename().string();
   const auto parent = ipc_root / scratch_name.substr(scratch_name.size() - 8);
   if (!std::filesystem::exists(ipc_root) && mkdir(ipc_root.c_str(), 0700) != 0) {
@@ -207,7 +208,7 @@ TEST(ControllerReservationSocket, BoundModeServiceRejectsALegacyRawReservation)
   auto gate = std::make_shared<ControllerGoalAdmission>(
     [] {return 1000000000LL;}, 2000000000, 1048576, 2048,
     so101_mujoco_support::ServiceControllerIdentity{
-      so101_mujoco_support::ControllerReservationRole::ARM, "inc-1", "boot-1"});
+    so101_mujoco_support::ControllerReservationRole::ARM, "inc-1", "boot-1"});
   ASSERT_TRUE(gate->has_service_identity());
   ASSERT_TRUE(gate->arm(5));
   ControllerReservationSocket server(path, gate, key, client.peer(),
@@ -347,7 +348,9 @@ TEST(ControllerReservationSocket, PythonBrokerOwnsBothRoleArmsBeforePreparedGoal
   gripper_key.fill(0x5a);
   ClientProcess client(arm_path, arm_key, gripper_path, gripper_key);
   auto arm_gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
-  auto gripper_gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  auto gripper_gate = std::make_shared<ControllerGoalAdmission>([] {
+        return 1000000000LL;
+    }, 2000000000);
   ControllerReservationService arm_service(arm_path, arm_gate, arm_key, client.peer(),
     std::chrono::milliseconds(50), [] {return true;});
   ControllerReservationService gripper_service(
