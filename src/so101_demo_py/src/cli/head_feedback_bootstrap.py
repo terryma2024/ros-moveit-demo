@@ -1,4 +1,4 @@
-"""Installed stopped-only CUDA calibration diagnostic, before any native ARM."""
+"""Installed CUDA bootstrap and optional native binding, with SDK send disabled."""
 import argparse
 import hashlib
 import json
@@ -66,6 +66,8 @@ def main(argv=None):
                  'frozen-candidate','urdf','scene','plugin-config','controller-config'):
         parser.add_argument('--'+name,required=True,type=Path)
     parser.add_argument('--device',choices=['cuda'],default='cuda')
+    parser.add_argument('--native-binding-diagnostic',action='store_true',
+        help='after the full stopped measurement, bind all three native identities and prove owned fault stop; SDK sends remain forbidden')
     args=parser.parse_args(argv)
     # Import CPU resources first. No torch/model import precedes monitor exec.
     from so101_demo.act.head_search_restarts import (
@@ -77,6 +79,10 @@ def main(argv=None):
     from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture,measure_stopped_workload
     from so101_demo.adapters.act.head_original_journal import HeadOriginalJournal
     from so101_demo.adapters.act.head_original_router import HeadOriginalRouter
+    from so101_demo.adapters.act.head_primary_supervisor import HeadPrimarySupervisor
+    from so101_demo.adapters.act.head_revocation import NativeRevocationClient
+    from so101_demo.adapters.act.head_reservation_authority import HeadReservationAuthority
+    from so101_demo.adapters.act.head_monitor_runtime import _provision,_peer
     from so101_demo.adapters.act.ros_execution import RosControllerPort
     import rclpy
     from rclpy.context import Context
@@ -109,6 +115,7 @@ def main(argv=None):
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
     monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=original_router=None
+    primary=primary_writer=None
     try:
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
@@ -214,10 +221,59 @@ def main(argv=None):
         capture.check()
         port.bind_head_policy(measured['values'])
         result['status']='STOPPED_BOOTSTRAP_MEASURED'
+        if args.native_binding_diagnostic:
+            primary_writer=HeadOriginalJournal(root/'primary-events.jsonl',fault_callback=original_failure)
+            own=_peer(os.getpid())
+            provision,fault_cap=_provision(directory/'neck-primary-revoke.provision',authority='primary',
+                actor=own,native_owner=native,session_id=session)
+            if provision!=result['monitor_configured']['provisions']['primary_fault']:
+                raise PermissionError('HEAD_BOOTSTRAP_PRIMARY_PROVISION_CHANGED')
+            revoker=NativeRevocationClient(directory/'neck-primary-revoke.sock',capability=fault_cap,
+                native_owner=native,generation=generation,timeout_s=.002)
+            primary=HeadPrimarySupervisor(node=node,port=port,router=original_router,monitor=monitor,
+                revoker=revoker,epoch=epoch,generation=generation,session_id=session,policy_reference=reference,
+                policy_ack=result['policy_ack'],configuration_ack=result['monitor_configured'],
+                stop_latency_s=values['stop_latency_s'],camera_max_age_s=measured['camera_seed_values']['max_age_s'],
+                camera_frame_id=production['camera']['frame_id'],
+                emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+            primary.start()
+            # Before the first activation, wait only for newly received matching
+            # originals. No cached bootstrap sample is seeded into the primary.
+            deadline=time.monotonic()+.2
+            while True:
+                if primary.failed:raise PermissionError('HEAD_BOOTSTRAP_PRIMARY_PREARM_FAILED')
+                with port._lock:
+                    images=dict(primary.observer._images);infos=dict(primary.observer._infos)
+                    hb=primary.observer._primary
+                now=time.monotonic();sim_ns=node.get_clock().now().nanoseconds
+                if hb is not None and any(source in infos and 0<=now-row['wall_s']<=primary.observer.camera_age
+                        and 0<=now-infos[source]['wall_s']<=primary.observer.camera_age
+                        and 0<=sim_ns-source<=int(port.feedback_policy.camera_max_source_age_s*1e9)
+                        for source,row in images.items()):break
+                if now>=deadline:raise TimeoutError('HEAD_BOOTSTRAP_NEW_ORIGINAL_PAIR_MISSING')
+                time.sleep(.001)
+            authority=HeadReservationAuthority(directory=directory,capability=provisions.capabilities['neck'],
+                native_owner=native,generation=generation,session_id=session,
+                arm_guard=primary.prearm_guard,fault_callback=primary.fault)
+            result['native_identity']=primary.arm(authority)
+            result['native_arm_count']=sum(row['operation']=='SOGR' for row in authority.exchange_receipts)
+            result['main_exchange_receipts']=authority.exchange_receipts
+            result['primary_ready']=primary.ready
+            primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
+            result['primary_teardown']=primary.close()
+            receipt=result['primary_teardown']
+            if (receipt['native_close'] is None or receipt['native_close'].get('ack_validated') is not True
+                    or not any(row['stopped'] for row in receipt['stop_observations'])
+                    or result['native_arm_count']!=1 or result['goal_send_count']!=0):
+                raise PermissionError('HEAD_BOOTSTRAP_NATIVE_BOUNDARY_UNPROVEN')
+            result['status']='NATIVE_BINDING_STOPPED_DIAGNOSTIC'
     except Exception as error:
         result['error']=dict(type=type(error).__name__,message=str(error))
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
+        if primary is not None:
+            try:result['primary_teardown']=primary.close()
+            except Exception as error:result['primary_teardown_error']=str(error);result['status']='REFUSED'
         if capture is not None:
             with port._lock:
                 raw=dict(joint_messages=list(port._head_samples),camera_messages=list(capture.camera_messages),
@@ -254,6 +310,9 @@ def main(argv=None):
         if original_writer is not None:
             try:result['primary_original_journal']=original_writer.close(timeout_s=10.)
             except Exception as error:result['primary_original_seal_error']=str(error);result['status']='REFUSED'
+        if primary_writer is not None:
+            try:result['primary_events_journal']=primary_writer.close(timeout_s=10.)
+            except Exception as error:result['primary_event_seal_error']=str(error);result['status']='REFUSED'
         if monitor is not None:
             try:result['monitor_teardown']=monitor.close()
             except Exception as error:result['monitor_teardown_error']=str(error);result['status']='REFUSED'
@@ -279,4 +338,4 @@ def main(argv=None):
             result['raw_observations']=_write(root/'raw-observations.json',result.pop('raw_observations_pending'))
         result['ended_wall_s']=time.monotonic();_write(root/'result.json',result)
     print(result['status']+' run_root='+str(root),flush=True)
-    return 0 if result['status']=='STOPPED_BOOTSTRAP_MEASURED' else 2
+    return 0 if result['status'] in ('STOPPED_BOOTSTRAP_MEASURED','NATIVE_BINDING_STOPPED_DIAGNOSTIC') else 2
