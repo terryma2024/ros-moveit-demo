@@ -127,14 +127,23 @@ def _prepare_bound_goal_dispatch():
     # while the one SDK remains send-disabled and native admission is closed.
     started=time.monotonic()
     from so101_demo.act import head_search_calibration_admission_document,head_search_calibration_run
-    from so101_demo.adapters.act import head_inventory_dispatch,ros_neck
+    from so101_demo.adapters.act import head_inventory_dispatch,ros_neck,head_live_exposure
     from so101_demo.adapters.act.head_monitor_goal_binding import warm_goal_binding
     return dict(goal_codec=warm_goal_binding(),elapsed_s=time.monotonic()-started,
         modules={module.__name__:module.__file__ for module in (
-            head_search_calibration_admission_document,head_search_calibration_run,head_inventory_dispatch,ros_neck)})
+            head_search_calibration_admission_document,head_search_calibration_run,head_inventory_dispatch,ros_neck,head_live_exposure)})
 
 
-def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit):
+def _bind_live_exposures(*,capture,port,buffer,detector,primary,monitor,camera_skew_s,emit):
+    from so101_demo.adapters.act.head_live_exposure import HeadLiveExposures
+    detector.reset()
+    reader=HeadLiveExposures(port=port,buffer=buffer,detector=detector,primary=primary,
+        monitor=monitor,camera_skew_s=camera_skew_s,emit=emit)
+    capture.bind_live_sink(reader.observe)
+    return reader
+
+
+def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit,live=None):
     """One real sealed-domain endpoint goal, through the existing bound SDK."""
     from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
     from so101_demo.act.head_search_calibration_run import check_trajectory_contract
@@ -176,6 +185,7 @@ def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,
         deadline=evidence['dispatch_wall_s']+values['search_timeout_s']
         terminal_wall=None;floor=None
         while True:
+            if live is not None:live.infer()
             primary.dispatch_guard();current=port.feedback_snapshot()
             with port._lock:
                 state=dict(port._goals[gid])
@@ -196,6 +206,9 @@ def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,
                     velocity_tolerance_rad_s=evidence['velocity_tolerance_rad_s'],source_floor_ns=floor,
                     dispatch_wall_s=evidence['dispatch_wall_s'],terminal_wall_s=terminal_wall)
                 if proof is not None:
+                    if live is not None and not any(any(abs(value)>values['stop_velocity_rad_s']
+                            for value in row['causal_joint']['velocities']) for row in live.results):
+                        raise PermissionError('HEAD_DIAGNOSTIC_MOVING_CUDA_EXPOSURE_MISSING')
                     evidence['confirming_samples']=proof;evidence['settled_source_floor_ns']=proof[-1]['source_ns']
                     evidence['settled']=True;evidence['settled_wall_s']=time.monotonic()
                     emit('BOUND_GOAL_SETTLED',**evidence);return evidence
@@ -253,7 +266,11 @@ def main(argv=None):
         help='after the full stopped measurement, bind all three native identities and prove owned fault stop; SDK sends remain forbidden')
     parser.add_argument('--bound-goal-diagnostic',action='store_true',
         help='after stopped measurement and three-party native binding, dispatch one sealed-domain endpoint goal; diagnostic only')
+    parser.add_argument('--moving-exposure-diagnostic',action='store_true',
+        help='during the one bound endpoint goal, admit original frames on the CPU monitor and infer on the same C2a; diagnostic only')
     args=parser.parse_args(argv)
+    if args.moving_exposure_diagnostic and not args.bound_goal_diagnostic:
+        parser.error('--moving-exposure-diagnostic requires --bound-goal-diagnostic')
     # Import CPU resources first. No torch/model import precedes monitor exec.
     from so101_demo.act.head_search_restarts import (
         RestartStack,TimedHeadDetector,_operating_point,publish_provisions,stack_environment,
@@ -300,7 +317,7 @@ def main(argv=None):
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
     monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=original_router=None
-    primary=primary_writer=None
+    primary=primary_writer=live=None
     try:
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
@@ -430,6 +447,12 @@ def main(argv=None):
                 stop_latency_s=values['stop_latency_s'],camera_max_age_s=measured['camera_seed_values']['max_age_s'],
                 camera_frame_id=production['camera']['frame_id'],
                 emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
+            if args.moving_exposure_diagnostic:
+                live=_bind_live_exposures(capture=capture,port=port,buffer=buffer,detector=built['runtime'],
+                    primary=primary,monitor=monitor,camera_skew_s=measured['camera_seed_values']['max_skew_s'],
+                    emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                result['live_exposure_diagnostic']=dict(diagnostic_only=True,qualification=False,
+                    detector_count=1,inference_thread='owned main',records=live.results)
             primary.start()
             # Before the first activation, wait only for newly received matching
             # originals. No cached bootstrap sample is seeded into the primary.
@@ -461,7 +484,7 @@ def main(argv=None):
                 try:
                     _run_bound_goal_diagnostic(node=node,port=port,primary=primary,authority=authority,
                         monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
-                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)),live=live)
                 finally:client.send_goal_async=forbid_send
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()
@@ -477,6 +500,9 @@ def main(argv=None):
         _record_refusal(result,error)
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
+        if live is not None:
+            try:result['live_exposure_teardown']=live.close()
+            except Exception as error:result['live_exposure_teardown_error']=str(error);result['status']='REFUSED'
         if primary is not None:
             try:result['primary_teardown']=primary.close()
             except Exception as error:result['primary_teardown_error']=str(error);result['status']='REFUSED'

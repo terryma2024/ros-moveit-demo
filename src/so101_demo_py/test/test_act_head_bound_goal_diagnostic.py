@@ -69,4 +69,10 @@ def test_prepare_imports_and_goal_codecs_constructs_no_runtime_resources(monkeyp
     monkeypatch.setattr(TimedHeadDetector,'build',forbidden)
     receipt=_prepare_bound_goal_dispatch()
     assert receipt['goal_codec']['native_arm_count']==receipt['goal_codec']['sdk_send_count']==0
-    assert receipt['goal_codec']['payload_bytes']>0 and len(receipt['modules'])==4
+    assert receipt['goal_codec']['payload_bytes']>0
+    assert set(receipt['modules'])=={
+        'so101_demo.act.head_search_calibration_admission_document',
+        'so101_demo.act.head_search_calibration_run',
+        'so101_demo.adapters.act.head_inventory_dispatch',
+        'so101_demo.adapters.act.ros_neck',
+        'so101_demo.adapters.act.head_live_exposure'}
