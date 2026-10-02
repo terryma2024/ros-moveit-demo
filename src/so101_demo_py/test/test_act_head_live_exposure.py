@@ -73,6 +73,20 @@ def composition(tmp_path):
 def retire(c):c.root.close(timeout_s=1.);c.cpu.close(timeout_s=1.)
 
 
+def test_completed_original_info_and_single_record_handoff_are_independent(tmp_path):
+    c=composition(tmp_path)
+    try:
+        c.info.update(k=[400.,0.,320.,0.,400.,240.,0.,0.,1.],d=[0.]*5)
+        c.originals();c.reader.infer()
+        row=c.reader.next_completed_exposure(0)
+        assert row['original_info']==c.info
+        row['original_info']['k'][0]=1.
+        assert c.reader.next_completed_exposure(0)['original_info']['k'][0]==400.
+        assert c.reader.next_completed_exposure(1) is None
+        with pytest.raises(ValueError):c.reader.next_completed_exposure(True)
+    finally:retire(c)
+
+
 def test_actual_cpu_protocol_pairs_original_pixels_and_one_detector_call(tmp_path):
     c=composition(tmp_path)
     try:

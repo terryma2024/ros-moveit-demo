@@ -66,6 +66,9 @@ class Live:
         value=self.detector.detect(b'live',source_stamp_ns=8)
         self.records.append(dict(value=value,owner=threading.get_native_id()))
     def records_snapshot(self):return [dict(row) for row in self.records]
+    def next_completed_exposure(self,after_sequence):
+        from copy import deepcopy
+        return None if after_sequence>=len(self.records) else deepcopy(self.records[after_sequence])
     def close(self):
         self.closed=True
         return dict(retired=True,inference_calls=self.count,completed_exposures=len(self.records),
@@ -88,11 +91,15 @@ def test_live_construction_and_inference_keep_same_actual_owner_and_main_respons
         # A blocked inference does not own the controller's caller thread.
         before=time.monotonic();worker.infer();snapshot=worker.results
         assert time.monotonic()-before<.1 and snapshot==[]
+        before=time.monotonic();assert worker.next_completed_exposure(0) is None
+        assert time.monotonic()-before<.1
         assert live.count==1 and construction==[live.owner]
         live.release.set()
         deadline=time.monotonic()+.5
         while not worker.results and time.monotonic()<deadline:time.sleep(.001)
         assert worker.results[0]['owner']==construction[0]
+        completed=worker.next_completed_exposure(0);completed['value'].append('changed caller copy')
+        assert 'changed caller copy' not in worker.next_completed_exposure(0)['value']
         live.primary.failed=True;live.primary.ready=False
         retired=worker.close(timeout_s=1.)
         assert retired['retired'] and retired['live']['retired'] and live.closed

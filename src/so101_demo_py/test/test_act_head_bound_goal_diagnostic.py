@@ -75,4 +75,26 @@ def test_prepare_imports_and_goal_codecs_constructs_no_runtime_resources(monkeyp
         'so101_demo.act.head_search_calibration_run',
         'so101_demo.adapters.act.head_inventory_dispatch',
         'so101_demo.adapters.act.ros_neck',
-        'so101_demo.adapters.act.head_live_exposure'}
+        'so101_demo.adapters.act.head_live_exposure',
+        'so101_demo.adapters.act.head_owned_search'}
+
+
+def test_search_controller_flag_requires_the_existing_once_owned_pipeline(capsys):
+    from so101_demo.cli.head_feedback_bootstrap import main
+    argv=[]
+    for name in ('run-root','reservation-root','runtime-manifest','production-config','geometry-seal',
+                 'frozen-candidate','urdf','scene','plugin-config','controller-config'):
+        argv+=['--'+name,'/nonexistent/head-input']
+    with pytest.raises(SystemExit) as error:main(argv+['--search-controller-diagnostic'])
+    assert error.value.code==2
+    assert '--search-controller-diagnostic requires --owned-inference-diagnostic' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('counts',[(1,0),(0,1),(None,0)])
+def test_trajectory_preparation_is_refused_before_reading_inputs_after_arm_or_send(counts):
+    from so101_demo.cli.head_feedback_bootstrap import _prepare_bound_goal_plan
+    def forbidden():raise AssertionError('trajectory input read after ARM or an SDK send')
+    result=dict(native_arm_count=counts[0],goal_send_count=counts[1])
+    with pytest.raises(PermissionError):
+        _prepare_bound_goal_plan(port=SimpleNamespace(feedback_snapshot=forbidden),
+            production={},geometry={},result=result)

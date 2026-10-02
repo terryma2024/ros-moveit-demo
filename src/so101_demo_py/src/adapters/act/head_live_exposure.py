@@ -166,7 +166,7 @@ class HeadLiveExposures:
                 sequence=sequence,source_ns=source,info_source_ns=info['source_ns'],
                 joint_source_ns=causal['source_ns'],tf_source_ns=tf_source,causal_joint=causal,
                 payload_sha256=image['payload_sha256'],image_received_wall_s=image['wall_s'],
-                info_received_wall_s=info['wall_s'],deadline_ns=deadline,tf_translation=translation,
+                info_received_wall_s=info['wall_s'],original_info=info,deadline_ns=deadline,tf_translation=translation,
                 tf_rotation=rotation,admission_ack=ack,admission_rpc_started_wall_s=started,
                 admission_rpc_received_wall_s=received,cuda_started_wall_s=cuda_started,
                 completion_wall_s=completion,completion_ack=finish,completion_rpc_started_wall_s=finish_started,
@@ -186,6 +186,13 @@ class HeadLiveExposures:
     def records_snapshot(self):
         with self._lock:records=list(self.results)
         return _wire(records)
+
+    def next_completed_exposure(self,after_sequence):
+        if type(after_sequence) is not int or after_sequence<0:
+            raise ValueError('HEAD_COMPLETED_EXPOSURE_SEQUENCE_INVALID')
+        with self._lock:
+            record=next((row for row in self.results if row['sequence']>after_sequence),None)
+        return None if record is None else _wire(record)
 
     def close(self):
         with self._lock:

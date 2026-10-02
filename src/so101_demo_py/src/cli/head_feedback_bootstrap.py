@@ -127,11 +127,66 @@ def _prepare_bound_goal_dispatch():
     # while the one SDK remains send-disabled and native admission is closed.
     started=time.monotonic()
     from so101_demo.act import head_search_calibration_admission_document,head_search_calibration_run
-    from so101_demo.adapters.act import head_inventory_dispatch,ros_neck,head_live_exposure
+    from so101_demo.adapters.act import head_inventory_dispatch,ros_neck,head_live_exposure,head_owned_search
     from so101_demo.adapters.act.head_monitor_goal_binding import warm_goal_binding
     return dict(goal_codec=warm_goal_binding(),elapsed_s=time.monotonic()-started,
         modules={module.__name__:module.__file__ for module in (
-            head_search_calibration_admission_document,head_search_calibration_run,head_inventory_dispatch,ros_neck,head_live_exposure)})
+            head_search_calibration_admission_document,head_search_calibration_run,head_inventory_dispatch,ros_neck,head_live_exposure,head_owned_search)})
+
+
+def _prepare_bound_goal_plan(*,port,production,geometry,result):
+    if (type(result.get('native_arm_count')) is not int or result['native_arm_count']!=0
+            or type(result.get('goal_send_count')) is not int or result['goal_send_count']!=0):
+        raise PermissionError('HEAD_BOOTSTRAP_TRAJECTORY_AFTER_ARM_OR_SEND')
+    from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
+    from so101_demo.act.head_search_calibration_run import check_trajectory_contract
+    initial=port.feedback_snapshot()
+    config=derive_measurement_plan(production_config=production,geometry_document=geometry,
+        generation=result['epoch'],search_start_rad=initial['positions'][0])
+    config.update(session_id=result['session_id'],attempt_id=result['epoch'])
+    trajectory=check_trajectory_contract(production_search_config=config)
+    return dict(initial=initial,config=config,trajectory_contract=trajectory,
+        prepared_wall_s=time.monotonic(),native_arm_count=result['native_arm_count'],
+        sdk_send_count=result['goal_send_count'])
+
+
+def _bind_search_transport(*,node,port,primary,authority,monitor,production,result,emit,trajectory):
+    from so101_demo.act.head_search_restarts import _neck_goal_duration
+    from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
+    from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
+    low,high=trajectory['safe_interval_rad'];values=production['values']
+    dispatcher=HeadInventoryDispatcher(port,authority,monitor,epoch=result['epoch'],
+        generation=result['generation'],session_id=result['session_id'],
+        controller_identity=result['native_identity'],guard=primary.dispatch_guard,
+        own_inventory=primary.own_inventory,fault_callback=primary.fault,emit=emit)
+    neck=RosNeckSearchPort(node,session_id=result['session_id'],attempt_id=result['epoch'],
+        goal_duration_s=_neck_goal_duration(values),submit_lead_s=values['submit_lead_s'],
+        stop_timeout_s=values['stop_latency_s'],stop_velocity_rad_s=values['stop_velocity_rad_s'],
+        max_age_s=values['max_age_s'],command_guard=lambda current,end:low<=current<=high and low<=end<=high,
+        controller_port=dispatcher,feedback_policy=port.feedback_policy)
+    return dispatcher,neck
+
+
+def _run_owned_search_diagnostic(*,driver,dispatcher,result,emit):
+    evidence=result['search_controller_diagnostic']
+    next_tick=time.monotonic()
+    try:
+        while True:
+            terminal=driver.tick()
+            if terminal is not None:
+                evidence['terminal']=terminal
+                if terminal['status']!='TARGET_LOCKED':
+                    raise PermissionError('HEAD_SEARCH_DIAGNOSTIC_'+terminal['status'])
+                return evidence
+            next_tick+=.005;delay=next_tick-time.monotonic()
+            if delay<0:
+                emit('SEARCH_CONTROL_TICK_LATE',scheduled_wall_s=next_tick,observed_wall_s=time.monotonic())
+                next_tick=time.monotonic();delay=0.
+            time.sleep(delay)
+    finally:
+        evidence.update(terminal=driver.result,commands=driver.commands,
+            observations=driver.observations,inventory=dispatcher.inventory,
+            finished_wall_s=time.monotonic())
 
 
 def _bind_live_exposures(*,capture,port,buffer,detector,primary,monitor,camera_skew_s,emit):
@@ -149,33 +204,19 @@ def _start_owned_detector(*,factory,fault_callback):
 
 
 def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit,live=None,
-                             owned_inference=False):
+                             owned_inference=False,prepared=None):
     """One real sealed-domain endpoint goal, through the existing bound SDK."""
-    from so101_demo.act.head_search_calibration_admission_document import derive_measurement_plan
-    from so101_demo.act.head_search_calibration_run import check_trajectory_contract
-    from so101_demo.act.head_search_restarts import _neck_goal_duration
-    from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
-    from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
     # All actual resources and the measured policy already exist before this
     # precondition; the formal entry must eventually share this composition.
-    initial=port.feedback_snapshot()
-    config=derive_measurement_plan(production_config=production,geometry_document=geometry,
-        generation=result['epoch'],search_start_rad=initial['positions'][0])
-    trajectory=check_trajectory_contract(production_search_config=config)
-    low,high=trajectory['safe_interval_rad'];domain=trajectory['required_search_domain_rad']
+    prepared=prepared or _prepare_bound_goal_plan(port=port,production=production,geometry=geometry,result=result)
+    initial=prepared['initial'];trajectory=prepared['trajectory_contract']
+    domain=trajectory['required_search_domain_rad']
     target=max(domain,key=lambda value:abs(value-initial['positions'][0]))
     if abs(target-initial['positions'][0])<=production['motion']['goal_tolerance_rad']:
         raise PermissionError('HEAD_DIAGNOSTIC_NONMOVING_ENDPOINT')
-    dispatcher=HeadInventoryDispatcher(port,authority,monitor,epoch=result['epoch'],
-        generation=result['generation'],session_id=result['session_id'],
-        controller_identity=result['native_identity'],guard=primary.dispatch_guard,
-        own_inventory=primary.own_inventory,fault_callback=primary.fault,emit=emit)
     values=production['values']
-    neck=RosNeckSearchPort(node,session_id=result['session_id'],attempt_id=result['epoch'],
-        goal_duration_s=_neck_goal_duration(values),submit_lead_s=values['submit_lead_s'],
-        stop_timeout_s=values['stop_latency_s'],stop_velocity_rad_s=values['stop_velocity_rad_s'],
-        max_age_s=values['max_age_s'],command_guard=lambda current,end:low<=current<=high and low<=end<=high,
-        controller_port=dispatcher,feedback_policy=port.feedback_policy)
+    dispatcher,neck=_bind_search_transport(node=node,port=port,primary=primary,authority=authority,
+        monitor=monitor,production=production,result=result,emit=emit,trajectory=trajectory)
     evidence=dict(diagnostic_only=True,trajectory_contract=trajectory,initial=initial,target_rad=target,
         target_rule='farthest endpoint of the sealed required search domain; diagnostic motion, not a search terminal',
         duration_s=neck.duration,position_tolerance_rad=production['motion']['goal_tolerance_rad'],
@@ -289,11 +330,15 @@ def main(argv=None):
         help='during the one bound endpoint goal, admit original frames on the CPU monitor and infer on the same C2a; diagnostic only')
     parser.add_argument('--owned-inference-diagnostic',action='store_true',
         help='build and infer on one owned thread while main advances original5ms control decisions; requires moving exposure diagnostic')
+    parser.add_argument('--search-controller-diagnostic',action='store_true',
+        help='drive the real HeadSearchController on once-owned completed frames and SDK transport; calibration diagnostic only')
     args=parser.parse_args(argv)
     if args.moving_exposure_diagnostic and not args.bound_goal_diagnostic:
         parser.error('--moving-exposure-diagnostic requires --bound-goal-diagnostic')
     if args.owned_inference_diagnostic and not args.moving_exposure_diagnostic:
         parser.error('--owned-inference-diagnostic requires --moving-exposure-diagnostic')
+    if args.search_controller_diagnostic and not args.owned_inference_diagnostic:
+        parser.error('--search-controller-diagnostic requires --owned-inference-diagnostic')
     # Import CPU resources first. No torch/model import precedes monitor exec.
     from so101_demo.act.head_search_restarts import (
         RestartStack,TimedHeadDetector,_operating_point,publish_provisions,stack_environment,
@@ -487,6 +532,23 @@ def main(argv=None):
                     detector_count=1,inference_thread='owned worker' if args.owned_inference_diagnostic else 'owned main',
                     records=live.results)
             primary.start()
+            prepared=None;search_driver=None
+            if args.bound_goal_diagnostic:
+                prepared=_prepare_bound_goal_plan(port=port,production=production,
+                    geometry=json.loads(args.geometry_seal.read_text()),result=result)
+                if prepared['native_arm_count']!=0 or prepared['sdk_send_count']!=0:
+                    raise PermissionError('HEAD_BOOTSTRAP_TRAJECTORY_AFTER_ARM_OR_SEND')
+                result['prearm_trajectory']=prepared
+            if args.search_controller_diagnostic:
+                from so101_demo.adapters.act.head_owned_search import OwnedHeadSearch
+                search_config=dict(prepared['config'],**measured['camera_seed_values'])
+                search_driver=OwnedHeadSearch(config=search_config,primary=primary,port=port,owner=live,
+                    settlement=_bound_goal_settlement,stop_velocity_rad_s=values['stop_velocity_rad_s'],
+                    emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                result['search_controller_diagnostic']=dict(diagnostic_only=True,qualification=False,
+                    config=search_config,trajectory_contract=prepared['trajectory_contract'],
+                    control_period_s=.005,prepared_before_arm=True,
+                    camera_parameters='unapproved measured calibration seed; all other thresholds unchanged')
             # Before the first activation, wait only for newly received matching
             # originals. No cached bootstrap sample is seeded into the primary.
             deadline=time.monotonic()+.2
@@ -516,20 +578,36 @@ def main(argv=None):
                     return sdk_send(*positional,**named)
                 client.send_goal_async=counted_send
                 try:
-                    _run_bound_goal_diagnostic(node=node,port=port,primary=primary,authority=authority,
-                        monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
-                        result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)),
-                        live=live,owned_inference=args.owned_inference_diagnostic)
+                    emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields))
+                    if search_driver is not None:
+                        dispatcher,neck=_bind_search_transport(node=node,port=port,primary=primary,
+                            authority=authority,monitor=monitor,production=production,result=result,
+                            emit=emit,trajectory=prepared['trajectory_contract'])
+                        search_driver.bind_transport(neck)
+                        _run_owned_search_diagnostic(driver=search_driver,dispatcher=dispatcher,result=result,emit=emit)
+                    else:
+                        _run_bound_goal_diagnostic(node=node,port=port,primary=primary,authority=authority,
+                            monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
+                            result=result,emit=emit,live=live,owned_inference=args.owned_inference_diagnostic,
+                            prepared=prepared)
                     if live is not None:result['live_exposure_diagnostic']['records']=live.results
                 finally:client.send_goal_async=forbid_send
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()
             receipt=result['primary_teardown']
+            expected_sends=1 if args.bound_goal_diagnostic else 0
+            if args.search_controller_diagnostic:
+                search=result['search_controller_diagnostic'];expected_sends=len(search['commands'])
+                if (search['terminal']['status']!='TARGET_LOCKED'
+                        or {command['goal_uuid'] for command in search['commands']}!=set(search['inventory'])
+                        or any(len(command.get('confirming_samples',[]))!=3 for command in search['commands'])):
+                    raise PermissionError('HEAD_BOOTSTRAP_SEARCH_INVENTORY_UNPROVEN')
             if (receipt['native_close'] is None or receipt['native_close'].get('ack_validated') is not True
                     or not any(row['stopped'] for row in receipt['stop_observations'])
-                    or result['native_arm_count']!=1 or result['goal_send_count']!=(1 if args.bound_goal_diagnostic else 0)):
+                    or result['native_arm_count']!=1 or result['goal_send_count']!=expected_sends):
                 raise PermissionError('HEAD_BOOTSTRAP_NATIVE_BOUNDARY_UNPROVEN')
             result['status']='BOUND_GOAL_STOPPED_DIAGNOSTIC' if args.bound_goal_diagnostic else 'NATIVE_BINDING_STOPPED_DIAGNOSTIC'
+            if args.search_controller_diagnostic:result['status']='SEARCH_CONTROLLER_STOPPED_DIAGNOSTIC'
     except Exception as error:
         result['status']='REFUSED'
         if primary is not None:primary.fault('HEAD_BOOTSTRAP_ATTEMPT_FAILED')
@@ -595,7 +673,7 @@ def main(argv=None):
         if monitor is not None:
             try:result['monitor_teardown']=monitor.close()
             except Exception as error:result['monitor_teardown_error']=str(error);result['status']='REFUSED'
-        if result['status'] in ('NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC'):
+        if result['status'] in ('NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC','SEARCH_CONTROLLER_STOPPED_DIAGNOSTIC'):
             try:result['monitor_closure']=_require_monitor_closure(root,result,
                 stop_velocity_rad_s=values['stop_velocity_rad_s'])
             except Exception as error:_record_refusal(result,error)

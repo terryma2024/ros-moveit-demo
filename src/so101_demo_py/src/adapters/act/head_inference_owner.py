@@ -164,6 +164,12 @@ class HeadInferenceOwner:
         live=self._live
         return [] if live is None else deepcopy(live.records_snapshot())
 
+    def next_completed_exposure(self,after_sequence):
+        self.infer()  # Status only; never wait for the CUDA worker.
+        live=self._live
+        if live is None:raise PermissionError('HEAD_INFERENCE_LIVE_NOT_BOUND')
+        return live.next_completed_exposure(after_sequence)
+
     def close(self,*,timeout_s=1.):
         if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<=timeout_s<=10:
             raise ValueError('HEAD_INFERENCE_RETIRE_TIMEOUT_INVALID')

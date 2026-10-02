@@ -93,6 +93,45 @@ def test_root_completion_discharges_both_original_and_earliest_cpu_deadlines(tmp
     finally:sup.close();port.close_head_io(timeout_s=1.)
 
 
+@pytest.mark.parametrize('damage',['expiry','extension','duplicate','revoked_clear'])
+def test_selected_original_dispatch_deadline_cannot_extend_or_clear_late(tmp_path,damage):
+    node,port,sup,_,_,_=setup(tmp_path)
+    sup.observer.monotonic=lambda:node.wall
+    try:
+        sup.dispatch_observation_deadline(10.05)
+        if damage=='expiry':node.wall=10.05
+        elif damage=='revoked_clear':sup.fault('controlled prior revoke',10.)
+        with pytest.raises(PermissionError):
+            sup.dispatch_observation_deadline(10.06 if damage=='extension' else
+                10.05 if damage=='duplicate' else None)
+        assert sup.failed and sup._dispatch_observation_deadline==10.05
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_selected_original_deadline_is_separate_from_completed_cuda_deadline(tmp_path):
+    node,port,sup,_,_,_=setup(tmp_path)
+    sup.observer.monotonic=lambda:node.wall
+    try:
+        sup.inference_deadline(10.05);sup.inference_deadline(None)
+        sup.dispatch_observation_deadline(10.05)
+        node.wall=10.049;sup.dispatch_observation_deadline(None)
+        assert sup._dispatch_observation_deadline is None and not sup.failed
+        assert sup.observer._completed_inference_deadlines
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_expired_selected_frame_faults_even_when_its_cuda_job_was_completed(tmp_path):
+    node,port,sup,_,_,_=setup(tmp_path)
+    sup.observer.monotonic=lambda:node.wall
+    try:
+        sup.inference_deadline(10.05);sup.inference_deadline(None)
+        sup.dispatch_observation_deadline(10.05);node.wall=10.05
+        with pytest.raises(PermissionError):sup._check_dispatch_observation_deadline()
+        assert sup.failed and sup._fault['fault_wall_s']==10.05
+        assert port._head_policy_binding_failed and sup._fault_event.is_set()
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
 def test_root_cannot_clear_a_deadline_after_completion_boundary(tmp_path):
     node,port,sup,_,_,_=setup(tmp_path)
     sup.observer.monotonic=lambda:node.wall

@@ -44,6 +44,7 @@ class HeadPrimarySupervisor:
         self._fault_lock = threading.Lock(); self._deadline_lock = threading.Lock()
         self._inference_deadline = None; self._watchdog_wall = None
         self._inference_deadlines=[]
+        self._dispatch_observation_deadline=None
         self._started = False; self._finished = False; self._ready = False; self._arming = False
         self._threads = []; self.threads = self._threads; self.timer = None
         self._observer = None; self._started_wall = None
@@ -208,6 +209,7 @@ class HeadPrimarySupervisor:
                     elif not 0 <= now-heartbeat['wall_s'] <= .010:
                         self.fault('HEAD_PRIMARY_HEARTBEAT_STALE', heartbeat['wall_s']+.010)
                 self.observer.poll()
+                self._check_dispatch_observation_deadline()
             except BaseException: self.fault('HEAD_PRIMARY_WATCHDOG_FAILED', now)
             self._shutdown.wait(.002)
 
@@ -237,6 +239,32 @@ class HeadPrimarySupervisor:
             self.fault('HEAD_PRIMARY_INFERENCE_COMPLETION_REFUSED')
             raise
         if receipt is not None:self._emit('INFERENCE_DEADLINES_DISCHARGED',receipt=receipt)
+
+    def _check_dispatch_observation_deadline(self):
+        with self._deadline_lock:
+            deadline=self._dispatch_observation_deadline
+            expired=deadline is not None and nanoseconds(self.observer.monotonic())>=nanoseconds(deadline)
+        if expired:
+            self.fault('HEAD_PRIMARY_SELECTED_EXPOSURE_EXPIRED',deadline)
+            raise PermissionError('HEAD_PRIMARY_SELECTED_EXPOSURE_EXPIRED')
+
+    def dispatch_observation_deadline(self,value):
+        try:
+            if value is not None and (type(value) not in (int,float)
+                    or not math.isfinite(value) or value<=0):
+                raise PermissionError('HEAD_PRIMARY_SELECTED_EXPOSURE_INVALID')
+            with self._deadline_lock:
+                previous=self._dispatch_observation_deadline
+                now=nanoseconds(self.observer.monotonic())
+                if (self.failed or (previous is not None and now>=nanoseconds(previous))
+                        or (value is not None and (previous is not None or now>=nanoseconds(value)))
+                        or (value is None and previous is None)):
+                    raise PermissionError('HEAD_PRIMARY_SELECTED_EXPOSURE_REFUSED')
+                self._dispatch_observation_deadline=value
+        except PermissionError:
+            self.fault('HEAD_PRIMARY_SELECTED_EXPOSURE_REFUSED',min(self.observer.monotonic(),previous)
+                if 'previous' in locals() and previous is not None else None)
+            raise
 
     def _current(self):
         tick = self._watchdog_wall; now = time.monotonic()
@@ -323,7 +351,8 @@ class HeadPrimarySupervisor:
     def dispatch_guard(self):
         if not self.ready:
             self.fault('HEAD_PRIMARY_DISPATCH_NOT_READY'); raise PermissionError('HEAD_PRIMARY_DISPATCH_NOT_READY')
-        self._current(); return self.ready
+        self._check_dispatch_observation_deadline()
+        self._current();self._check_dispatch_observation_deadline();return self.ready
 
     def own_inventory(self, record, payload):
         try:
