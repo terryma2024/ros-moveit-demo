@@ -43,6 +43,7 @@ def setup(tmp_path,native_damage=None):
     def request(value):
         requests.append(value);return reply(value['operation'],'POLICY_READY')
     monitor.request_runtime=request
+    monitor.request_heartbeat=lambda factory:monitor.request_runtime(dict(operation='HEARTBEAT',heartbeat=factory()))
     owner=_peer(os.getpid())
     # UNIX endpoint length stays production-valid; no socket is created here.
     endpoint=Path('/tmp')/('hs-primary-test-'+uuid.uuid4().hex[:8])
@@ -418,7 +419,7 @@ def test_original_heartbeat_round_trip_is_retained_on_ack_and_transport_failure(
         record=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
         assert record['request']['executor_wall_s']==sup.observer._executor_wall
         assert record['request']['executor_wall_s']<=record['request']['wall_s']
-        assert record['request']['wall_s']<=record['rpc_started_wall_s']<=record['rpc_ended_wall_s']
+        assert record['rpc_started_wall_s']<=record['request']['wall_s']<=record['rpc_ended_wall_s']
         if refused:
             assert record['reply'] is None and record['error_type']=='TimeoutError'
             assert sup.failed and not sup.ready and port._head_policy_binding_failed
@@ -426,6 +427,53 @@ def test_original_heartbeat_round_trip_is_retained_on_ack_and_transport_failure(
             assert record['reply']['ack_wall_s']<=record['rpc_ended_wall_s']
             assert record['error_type'] is None and not sup.failed and not sup.ready
         assert sup.epoch.stage==('REVOKED' if refused else 'POLICY_READY')
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_heartbeat_copies_executor_progress_after_shared_channel_slot(tmp_path,monkeypatch):
+    from so101_demo.act import head_monitor_ipc as ipc
+    from so101_demo.adapters.act import head_primary_supervisor as primary
+    _,port,sup,_,events,_=setup(tmp_path)
+    clock=[10.0];writes=[]
+    class OccupiedSlot:
+        def acquire(self,timeout):
+            assert timeout==pytest.approx(.010)
+            clock[0]=10.006
+            # A real executor callback progresses while the RPC caller queues.
+            sup.observer.executor_progress()
+            return True
+        def release(self):pass
+    channel=object.__new__(ipc.HeadMonitorChannel)
+    channel._timeout=.010;channel._io_lock=OccupiedSlot()
+    channel._codec=ipc.HeadMonitorCodec(secret=secrets.token_bytes(32),epoch='attempt',
+        generation=5,session_id='session',role='primary')
+    channel._connection=SimpleNamespace(close=lambda:None)
+    channel._verify_peer=lambda:None
+    def write(payload,deadline):
+        channel._remaining(deadline);writes.append((payload,deadline));sup._shutdown.set()
+    channel._write=write
+    channel._read=lambda deadline:dict(request='HEARTBEAT',stage='POLICY_READY',epoch='attempt',
+        generation=5,session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+        motion_authority=False,ack_wall_s=clock[0])
+    sup.monitor._closed=False;sup.monitor._runtime_requested=True;sup.monitor._channel=channel
+    sup.monitor.request_runtime=MonitorProcess.request_runtime.__get__(sup.monitor)
+    sup.monitor.request_heartbeat=MonitorProcess.request_heartbeat.__get__(sup.monitor)
+    try:
+        with monkeypatch.context() as controlled:
+            controlled.setattr(ipc,'time',SimpleNamespace(monotonic=lambda:clock[0]))
+            controlled.setattr(primary,'time',SimpleNamespace(monotonic=lambda:clock[0]))
+            controlled.setattr(sup.observer,'monotonic',lambda:clock[0])
+            sup._started_wall=9.999;sup.observer.executor_progress()
+            sup._heartbeat()
+        assert not sup.failed and len(writes)==1
+        payload,deadline=writes[0]
+        assert payload['heartbeat']==dict(wall_s=10.006,executor_wall_s=10.006,
+            inference_deadline_wall_s=None)
+        assert deadline==pytest.approx(10.010)
+        receipt=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
+        assert receipt['rpc_started_wall_s']==10.0
+        assert receipt['request']['wall_s']==10.006
+        assert receipt['rpc_ended_wall_s']==10.006
     finally:sup.close();port.close_head_io(timeout_s=1.)
 
 

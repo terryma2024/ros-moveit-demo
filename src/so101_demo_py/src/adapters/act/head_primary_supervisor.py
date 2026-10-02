@@ -135,27 +135,35 @@ class HeadPrimarySupervisor:
         while not self._shutdown.is_set():
             if self.failed:
                 self._notify_cpu_fault(); return
-            # Copy original progress before reading the observation clock.
-            executor = self.observer._executor_wall
-            with self._deadline_lock: deadline = self._inference_deadline
             now = time.monotonic()
-            if executor is None:
+            if self.observer._executor_wall is None:
                 if now-self._started_wall > .010:
                     self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010); return
                 self._shutdown.wait(.002); continue
-            record = dict(wall_s=now, executor_wall_s=executor, inference_deadline_wall_s=deadline)
+            record = None
             reply = None; error_type = None; rpc_started = time.monotonic()
-            try:
+            def snapshot():
+                nonlocal record
+                if self.failed:raise PermissionError('HEAD_PRIMARY_REVOKED')
+                # The existing channel slot is owned. Copy actual progress before
+                # reading its clock; never refresh an already created heartbeat.
+                executor = self.observer._executor_wall
+                with self._deadline_lock: deadline = self._inference_deadline
+                wall = time.monotonic()
+                record = dict(wall_s=wall,executor_wall_s=executor,inference_deadline_wall_s=deadline)
                 self.observer.heartbeat(record)
+                return record
+            try:
                 stage = self.epoch.stage; arming = self._arming
-                reply = self.monitor.request_runtime(dict(operation='HEARTBEAT', heartbeat=record))
+                reply = self.monitor.request_heartbeat(snapshot)
                 allowed = {stage, self.epoch.stage}
                 if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
                 if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
                 self._ack(reply, 'HEARTBEAT', reply['stage'])
             except BaseException as error:
                 error_type = type(error).__name__
-                self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED', now); return
+                self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED',
+                    rpc_started if record is None else record['wall_s']); return
             finally:
                 rpc_ended = time.monotonic()
                 try:

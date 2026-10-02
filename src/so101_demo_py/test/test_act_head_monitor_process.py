@@ -9,10 +9,11 @@ import signal
 import subprocess
 import time
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.adapters.act.head_monitor_process import start_monitor
+from so101_demo.adapters.act.head_monitor_process import MonitorProcess,start_monitor
 from so101_demo.adapters.act.controller_reservation_provision import _process_start_ticks
 
 
@@ -51,6 +52,32 @@ def test_invalid_start_never_returns_exec_presence(config,damage,tmp_path):
         child=config['ipc_directory']/('x'*100);child.mkdir(mode=0o700);config['ipc_directory']=child
     with pytest.raises((ValueError,PermissionError,FileExistsError,FileNotFoundError)):
         start_monitor(**config)
+
+
+@pytest.mark.parametrize('damage',['none','closed','unconfigured','peer','purpose','epoch','generation',
+    'session_id','motion_authority','stage','request'])
+def test_sampled_heartbeat_requires_configuration_and_complete_runtime_ack(damage):
+    calls=[]
+    reply=dict(request='HEARTBEAT',stage='POLICY_READY',monitor_peer={'pid':123},purpose='calibration',
+        epoch='attempt',generation=5,session_id='session',motion_authority=False)
+    if damage not in ('none','closed','unconfigured'):
+        key='monitor_peer' if damage=='peer' else damage
+        reply[key]={'pid':124} if damage=='peer' else True if damage=='motion_authority' else 'foreign'
+    def exchange(factory):
+        calls.append(factory());return reply
+    channel=SimpleNamespace(exchange_built=exchange,close=lambda:calls.append('closed'),
+        _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
+    monitor=object.__new__(MonitorProcess)
+    monitor._channel=channel;monitor._identity={'pid':123};monitor._closed=damage=='closed'
+    monitor._runtime_requested=damage!='unconfigured';monitor.is_alive=lambda:True
+    snapshot=dict(wall_s=10.006,executor_wall_s=10.005,inference_deadline_wall_s=None)
+    if damage=='none':
+        assert monitor.request_heartbeat(lambda:snapshot)==reply
+        assert calls==[dict(operation='HEARTBEAT',heartbeat=snapshot)]
+    else:
+        with pytest.raises(PermissionError):monitor.request_heartbeat(lambda:snapshot)
+        if damage in ('closed','unconfigured'):assert calls==[]
+        else:assert calls[-1]=='closed'
 
 
 def test_actual_exec_identity_and_no_key_in_argv_environment_logs(config):

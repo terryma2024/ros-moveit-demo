@@ -87,6 +87,19 @@ class MonitorProcess:
         if value['operation']=='CONFIGURE':self._runtime_requested=True
         elif not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
         reply=self._channel.exchange(value)
+        return self._runtime_reply(value,reply)
+
+    def request_heartbeat(self,snapshot_factory):
+        """Sample original progress only when the authenticated channel is owned."""
+        if self._closed or not self.is_alive():
+            raise PermissionError('HEAD_MONITOR_EXEC_RETIRED')
+        if not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
+        if not callable(snapshot_factory):raise ValueError('HEAD_MONITOR_HEARTBEAT_FACTORY_INVALID')
+        reply=self._channel.exchange_built(
+            lambda:dict(operation='HEARTBEAT',heartbeat=snapshot_factory()))
+        return self._runtime_reply({'operation':'HEARTBEAT'},reply)
+
+    def _runtime_reply(self,value,reply):
         codec=self._channel._codec
         if (type(reply) is not dict or reply.get('request')!=value['operation']
                 or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'

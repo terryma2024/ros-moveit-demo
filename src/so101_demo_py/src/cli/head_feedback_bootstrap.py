@@ -20,6 +20,20 @@ def _reference(path):
     return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
 
 
+def _owned_runtime_environment(peer):
+    """Read only the two public runtime selectors from this exact owned process."""
+    from so101_demo.adapters.act.head_monitor_runtime import _peer
+    if _peer(peer['pid'])!=peer:raise PermissionError('HEAD_BOOTSTRAP_ENVIRONMENT_PEER_CHANGED')
+    entries=Path('/proc/'+str(peer['pid'])+'/environ').read_bytes().split(b'\0')
+    selected={name:None for name in ('ROS_DOMAIN_ID','GZ_PARTITION')}
+    for entry in entries:
+        key,separator,value=entry.partition(b'=')
+        if separator and key in (b'ROS_DOMAIN_ID',b'GZ_PARTITION'):
+            selected[key.decode('ascii')]=value.decode('utf-8')
+    if _peer(peer['pid'])!=peer:raise PermissionError('HEAD_BOOTSTRAP_ENVIRONMENT_PEER_CHANGED')
+    return dict(peer=dict(peer),values=selected,read_wall_s=time.monotonic(),source='original /proc/pid/environ')
+
+
 def _write(path,record):
     with Path(path).open('x',encoding='ascii') as handle:
         json.dump(record,handle,sort_keys=True,allow_nan=False);handle.write('\n')
@@ -382,6 +396,7 @@ def main(argv=None):
     result=dict(purpose='calibration',motion_authority=False,qualification=False,diagnostic_only=True,
         status='REFUSED',epoch=epoch,generation=generation,session_id=session,dependencies=dependencies,
         before=before,seed_config=_reference(args.production_config),entry=_reference(__file__),
+        runtime_environment={'root':_owned_runtime_environment(_peer(os.getpid()))},
         python=sys.executable,started_wall_s=time.monotonic(),native_arm_count=0,goal_send_count=0)
     _write(root/'attempt-declaration.json',dict(result,window_rule='stable10s then first future boundary at latest original camera receipt + max(stable p50 receipt gap / 2, stable linear p99 original CUDA receipt-to-completion wall duration + stable linear p99 original Joint receipt gap); phase must remain shorter than one receipt period; at most two fixed 100ms source periods waiting before the single declaration; end=start+20s; no retry',
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
@@ -398,12 +413,15 @@ def main(argv=None):
             log_path=root/'monitor-process.log',epoch=epoch,generation=generation,session_id=session,
             startup_timeout_s=5.)
         result['monitor_exec']=monitor.receipt
+        result['runtime_environment']['monitor']=_owned_runtime_environment(monitor.identity)
         environment=stack_environment(directory,session)
         environment['SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED']='1';environment['MUJOCO_GL']='egl'
         stack=RestartStack(urdf_path=args.urdf,scene_path=args.scene,plugin_config_path=args.plugin_config,
             controller_config_path=args.controller_config,workspace=root/'stack',session_id=session,
             environment=environment,logger=lambda message:print(message,flush=True))
         stack.workspace.mkdir();stack.start()
+        result['runtime_environment']['stack']=[_owned_runtime_environment(_peer(process.pid))
+            for process in stack.processes]
         native=dict(uid=os.geteuid(),pid=stack.processes[0].pid,
                     start_ticks=_process_start_ticks(stack.processes[0].pid))
         write_head_primary_fault_provision(directory/'neck-primary-revoke.provision',session_id=session,

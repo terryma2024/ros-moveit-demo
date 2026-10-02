@@ -332,3 +332,21 @@ class HeadMonitorChannel:
             self._write(payload, deadline)
             return self._read(deadline)
         return self._operation(request)
+
+    def exchange_built(self, payload_factory):
+        """Sample one new payload after the slot, within the caller's deadline."""
+        def request(deadline):
+            self._remaining(deadline)
+            self._verify_peer()
+            self._remaining(deadline)
+            if not callable(payload_factory):
+                raise ValueError('HEAD_MONITOR_CHANNEL_BUILDER_INVALID')
+            try:
+                payload = payload_factory()
+            except BaseException:
+                self._fail()
+                raise
+            self._remaining(deadline)
+            self._write(payload, deadline)
+            return self._read(deadline)
+        return self._operation(request)

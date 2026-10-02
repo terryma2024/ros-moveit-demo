@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -156,6 +157,65 @@ def test_real_connected_peer_authenticates_reply(server):
     assert child.stdout.readline()==b'PREFIX 4\n'
 
 
+def test_built_request_uses_real_connected_peer_authentication(server):
+    connection,peer,child=server
+    channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.010)
+    assert channel.exchange_built(lambda:{'operation':'PRESENCE'})=={'ack':'PRESENT'}
+    assert child.stdout.readline()==b'PREFIX 4\n'
+
+
+@pytest.mark.parametrize('field',['uid','pid','start_ticks'])
+def test_built_request_rechecks_peer_before_original_snapshot(server,field):
+    connection,peer,child=server
+    primary=codec('primary')
+    channel=HeadMonitorChannel(connection,codec=primary,peer=peer,timeout_s=.010)
+    channel._peer[field]+=1
+    def forbidden():raise AssertionError('foreign peer reached the snapshot')
+    with pytest.raises(PermissionError):channel.exchange_built(forbidden)
+    assert primary.failed and connection.fileno()==-1
+    assert child.stdout.readline()==b'PREFIX 0\n'
+
+
+@pytest.mark.parametrize('damage',['none','wait_expired','builder_expired','peer','builder_error','invalid_builder'])
+def test_built_request_includes_slot_wait_and_sampling_in_original_deadline(monkeypatch,damage):
+    import so101_demo.act.head_monitor_ipc as ipc
+    clock=[10.0];events=[]
+    monkeypatch.setattr(ipc,'time',SimpleNamespace(monotonic=lambda:clock[0]))
+    class Occupied:
+        def acquire(self,timeout):
+            assert timeout==pytest.approx(.010)
+            clock[0]=10.010 if damage=='wait_expired' else 10.006
+            events.append('slot');return True
+        def release(self):events.append('release')
+    channel=object.__new__(HeadMonitorChannel)
+    channel._timeout=.010;channel._io_lock=Occupied();channel._codec=codec('primary')
+    channel._connection=SimpleNamespace(close=lambda:events.append('closed'))
+    def peer():
+        events.append('peer')
+        if damage=='peer':raise PermissionError('controlled peer changed while queued')
+    channel._verify_peer=peer
+    def builder():
+        events.append('snapshot')
+        if damage=='builder_error':raise TypeError('controlled snapshot refusal')
+        clock[0]+=.005 if damage=='builder_expired' else .001
+        return {'operation':'HEARTBEAT','original_snapshot_wall':clock[0]}
+    def write(payload,deadline):
+        events.append('write');channel._remaining(deadline)
+        assert deadline==pytest.approx(10.010)
+        assert payload=={'operation':'HEARTBEAT','original_snapshot_wall':pytest.approx(10.007)}
+    channel._write=write;channel._read=lambda deadline:{'ack':'PRESENT'}
+    if damage=='none':
+        assert channel.exchange_built(builder)=={'ack':'PRESENT'}
+        assert events==['slot','peer','snapshot','write','release']
+        assert not channel._codec.failed
+    else:
+        with pytest.raises((OSError,PermissionError,TypeError,ValueError)):
+            channel.exchange_built(None if damage=='invalid_builder' else builder)
+        assert 'write' not in events and channel._codec.failed and 'closed' in events
+        assert events[-1]=='release'
+        assert events.count('snapshot')==(1 if damage in ('builder_expired','builder_error') else 0)
+
+
 @pytest.mark.parametrize('field', ['uid','pid','start_ticks'])
 def test_foreign_connected_peer_gets_no_message(server,field):
     connection,peer,child=server
@@ -167,15 +227,17 @@ def test_foreign_connected_peer_gets_no_message(server,field):
 
 
 @pytest.mark.parametrize('server',['tamper','partial','oversize','timeout'],indirect=True)
-def test_channel_fault_never_recovers_on_a_later_exchange(server):
+@pytest.mark.parametrize('built',[False,True])
+def test_channel_fault_never_recovers_on_a_later_exchange(server,built):
     connection,peer,_=server
     primary=codec('primary')
     channel=HeadMonitorChannel(connection,codec=primary,peer=peer,timeout_s=.010)
+    exchange=(lambda payload:channel.exchange_built(lambda:payload)) if built else channel.exchange
     with pytest.raises((OSError,PermissionError)):
-        channel.exchange({'operation':'PRESENCE'})
+        exchange({'operation':'PRESENCE'})
     assert primary.failed
     with pytest.raises((OSError,PermissionError)):
-        channel.exchange({'operation':'HEARTBEAT'})
+        exchange({'operation':'HEARTBEAT'})
 
 
 def test_fault_latch_never_waits_for_contended_codec_lock():
