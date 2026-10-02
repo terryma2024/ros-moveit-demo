@@ -43,6 +43,7 @@ class HeadPrimarySupervisor:
         self._stop_done = threading.Event(); self._close_done = threading.Event()
         self._fault_lock = threading.Lock(); self._deadline_lock = threading.Lock()
         self._inference_deadline = None; self._watchdog_wall = None
+        self._inference_deadlines=[]
         self._started = False; self._finished = False; self._ready = False; self._arming = False
         self._threads = []; self.threads = self._threads; self.timer = None
         self._observer = None; self._started_wall = None
@@ -214,7 +215,28 @@ class HeadPrimarySupervisor:
         if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value <= 0):
             self.fault('HEAD_PRIMARY_INFERENCE_DEADLINE_INVALID')
             raise ValueError('HEAD_PRIMARY_INFERENCE_DEADLINE_INVALID')
-        with self._deadline_lock: self._inference_deadline = value
+        receipt=None
+        try:
+            with self._deadline_lock:
+                if value is None and self._inference_deadlines:
+                    if self.failed:raise PermissionError('HEAD_PRIMARY_INFERENCE_COMPLETION_REVOKED')
+                    receipt=self.observer.discharge_inference_deadlines(
+                        list(self._inference_deadlines),completion_wall_s=self.observer.monotonic())
+                    self._inference_deadlines=[]
+                elif value is not None:
+                    deadline=nanoseconds(value)
+                    if (self.failed or (self._inference_deadline is not None
+                            and deadline>nanoseconds(self._inference_deadline))):
+                        raise PermissionError('HEAD_PRIMARY_INFERENCE_DEADLINE_EXTENDED')
+                    if deadline not in self._inference_deadlines:
+                        if len(self._inference_deadlines)>=2:
+                            raise PermissionError('HEAD_PRIMARY_INFERENCE_DEADLINE_REUSED')
+                        self._inference_deadlines.append(deadline)
+                self._inference_deadline=value
+        except (ValueError,PermissionError):
+            self.fault('HEAD_PRIMARY_INFERENCE_COMPLETION_REFUSED')
+            raise
+        if receipt is not None:self._emit('INFERENCE_DEADLINES_DISCHARGED',receipt=receipt)
 
     def _current(self):
         tick = self._watchdog_wall; now = time.monotonic()

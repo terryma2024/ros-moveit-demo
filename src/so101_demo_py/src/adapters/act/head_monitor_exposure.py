@@ -183,9 +183,14 @@ class HeadMonitorExposures:
                     raise _Expired(active['deadline_ns'])
                 if runtime.revoked or observer.failed or self._active is not active:
                     raise PermissionError('HEAD_MONITOR_EXPOSURE_COMPLETION_REVOKED')
+                discharge=observer.discharge_inference_deadlines(
+                    sorted(set([active['deadline_ns'],active['root_claim']['deadline_ns']])),
+                    completion_wall_s=record['completion_wall_s'])
                 self._active=None
-            ack=dict(record,stage='ARMED_READY',exposure_finished=True,ack_wall_s=now,
+            ack=dict(record,stage='ARMED_READY',exposure_finished=True,
+                ack_wall_s=discharge['observed_wall_s'],
                 deadline_ns=active['deadline_ns'],motion_authority=False,
+                deadline_discharge=discharge,
                 original_snapshot=_wire(dict(current_joint=original['sample'],decision=original['decision'],
                     clock=clock,watchdog_wall_s=watchdog)))
             runtime._emit('EXPOSURE_FINISHED',ack=ack)

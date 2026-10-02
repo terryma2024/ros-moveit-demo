@@ -42,6 +42,40 @@ def completion(ack,wall=10.):
         image_source_ns=ack['image_source_ns'],completion_wall_s=wall,result_sha256='b'*64)
 
 
+@pytest.mark.parametrize('root_receipt',[10.,10.002])
+def test_authenticated_finished_exposure_discharges_only_its_exact_old_heartbeat_deadlines(root_receipt):
+    node,runtime,observer,record=ready()
+    record.update(image_received_wall_s=root_receipt,info_received_wall_s=root_receipt,
+        deadline_ns=nanoseconds(root_receipt)+50_000_000)
+    try:
+        refresh(node,runtime,observer,10.003)
+        ack=runtime.exposure_admit(record)
+        refresh(node,runtime,observer,10.048)
+        heartbeat=dict(wall_s=10.048,executor_wall_s=10.048,
+            inference_deadline_wall_s=record['deadline_ns']*1e-9)
+        # Preserve a real advancing heartbeat that already copied the deadline.
+        heartbeat['wall_s']=10.0481;node.wall=10.0481
+        observer.heartbeat(heartbeat)
+        finished=runtime.exposure_finish(completion(ack,10.048))
+        assert finished['deadline_discharge']['deadlines_ns']==sorted(set([ack['deadline_ns'],record['deadline_ns']]))
+        for wall in [10.0501,10.0521]:
+            node.wall=wall;node.sim=1.+wall-10.
+            observer.port._feedback(sample(node.sim))
+            source=nanoseconds(node.sim)
+            observer._on_clock(Clock(clock=Time(sec=source//10**9,nanosec=source%10**9)))
+            observer.executor_progress();observer.watchdog_polls.append(wall-.001)
+            observer.poll()
+            assert not runtime.revoked and not observer.failed
+            assert observer._primary==heartbeat
+        # A different uncompleted deadline still expires at its original time.
+        node.wall=10.053
+        observer.heartbeat(dict(wall_s=node.wall,executor_wall_s=node.wall,
+            inference_deadline_wall_s=10.0525))
+        observer.poll()
+        assert runtime.revoked and observer._fault_wall==10.0525
+    finally:observer.close(timeout_s=1.)
+
+
 def test_polled_original_is_admitted_once_without_motion_or_new_watchdog_tick():
     _,runtime,observer,record=ready()
     try:

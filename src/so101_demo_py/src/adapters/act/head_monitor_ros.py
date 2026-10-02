@@ -59,6 +59,7 @@ class HeadROSMonitor:
         self.failed=False;self._fault_wall=None;self._fault_reason=None;self._closed=False
         self._lock=threading.RLock();self._stop_lock=threading.Lock();self._policy=None;self._active=False
         self._primary=None;self._executor_wall=None;self._clock=None;self._camera=None
+        self._completed_inference_deadlines={}
         self._images={};self._infos={};self._camera_watermark=0
         self._image_source=self._info_source=0
         self._outstanding={};self._stop_started=False;self.watchdog_polls=deque(maxlen=20000)
@@ -336,6 +337,31 @@ class HeadROSMonitor:
             self.fault('HEAD_MONITOR_HEARTBEAT_REGRESSION');raise ValueError('HEAD_MONITOR_HEARTBEAT_REGRESSION')
         if self.failed:raise PermissionError('HEAD_MONITOR_ROS_REVOKED')
 
+    def discharge_inference_deadlines(self,deadlines_ns,*,completion_wall_s):
+        """Retain exact completion tombstones without rewriting a heartbeat.
+
+        Only the owned Root result publication or an authenticated CPU lease
+        completion calls this boundary. An expired deadline cannot be discharged.
+        """
+        if (type(deadlines_ns) is not list or not 1<=len(deadlines_ns)<=2
+                or any(type(value) is not int or value<=0 for value in deadlines_ns)
+                or len(set(deadlines_ns))!=len(deadlines_ns)):
+            raise ValueError('HEAD_INFERENCE_DISCHARGE_INVALID')
+        completed=nanoseconds(completion_wall_s)
+        with self._lock:
+            observed=self.monotonic()
+            if (self.failed or self._closed or completed>nanoseconds(observed)
+                    or any(nanoseconds(observed)>=deadline for deadline in deadlines_ns)
+                    or any(deadline in self._completed_inference_deadlines for deadline in deadlines_ns)):
+                raise PermissionError('HEAD_INFERENCE_DISCHARGE_REFUSED')
+            receipt=dict(deadlines_ns=sorted(deadlines_ns),completion_wall_s=completion_wall_s,
+                observed_wall_s=observed)
+            for deadline in deadlines_ns:
+                self._completed_inference_deadlines[deadline]=dict(receipt,deadlines_ns=list(receipt['deadlines_ns']))
+            while len(self._completed_inference_deadlines)>32:
+                self._completed_inference_deadlines.pop(next(iter(self._completed_inference_deadlines)))
+        return receipt
+
     def activate(self,*,watchdog=True):
         if self.failed or self._policy is None or self._primary is None:
             raise PermissionError('HEAD_MONITOR_ROS_NOT_READY')
@@ -379,7 +405,12 @@ class HeadROSMonitor:
             for value in (primary['wall_s'],primary['executor_wall_s'],executor):
                 expired('HEAD_MONITOR_HEARTBEAT_STALE',value,self._policy.watchdog_reaction_limit_s)
             if primary['inference_deadline_wall_s'] is not None and after>=primary['inference_deadline_wall_s']:
-                violations.append((primary['inference_deadline_wall_s'],'HEAD_MONITOR_INFERENCE_DEADLINE'))
+                # Recheck after reading decision clocks: a completed lease may
+                # have committed since this poll copied the original heartbeat.
+                with self._lock:
+                    completed=nanoseconds(primary['inference_deadline_wall_s']) in self._completed_inference_deadlines
+                if not completed:
+                    violations.append((primary['inference_deadline_wall_s'],'HEAD_MONITOR_INFERENCE_DEADLINE'))
             if clock is None or not clock['valid']:raise ValueError('HEAD_MONITOR_CLOCK_STALE')
             expired('HEAD_MONITOR_CLOCK_STALE',clock['wall_s'],self._policy.clock_interarrival_deadline_s)
             # Images retain reception order and capacity one. No sorting can

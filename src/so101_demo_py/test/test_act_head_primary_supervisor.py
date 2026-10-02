@@ -79,6 +79,31 @@ def test_primary_refuses_cpu_with_different_installed_native_transport(tmp_path,
         if value is not None:value[2].close();value[1].close_head_io(timeout_s=1.)
 
 
+def test_root_completion_discharges_both_original_and_earliest_cpu_deadlines(tmp_path):
+    node,port,sup,_,events,_=setup(tmp_path)
+    sup.observer.monotonic=lambda:node.wall
+    try:
+        sup.inference_deadline(10.05)
+        sup.inference_deadline(10.048)
+        node.wall=10.047
+        sup.inference_deadline(None)
+        receipt=next(row[1]['receipt'] for row in events if row[0]=='INFERENCE_DEADLINES_DISCHARGED')
+        assert receipt['deadlines_ns']==[10_048_000_000,10_050_000_000]
+        assert sup._inference_deadline is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_root_cannot_clear_a_deadline_after_completion_boundary(tmp_path):
+    node,port,sup,_,_,_=setup(tmp_path)
+    sup.observer.monotonic=lambda:node.wall
+    try:
+        sup.inference_deadline(10.05)
+        node.wall=10.05
+        with pytest.raises(PermissionError):sup.inference_deadline(None)
+        assert sup.failed and sup._inference_deadline==10.05
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
 def test_four_owned_workers_and_real_executor_tick_feed_actual_heartbeat(tmp_path):
     node,port,sup,requests,_,_=setup(tmp_path)
     try:

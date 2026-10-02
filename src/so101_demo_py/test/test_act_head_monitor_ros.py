@@ -264,6 +264,22 @@ def test_known_expiry_fault_retains_threshold_crossing_time(expired):
     finally:monitor.close(timeout_s=1.)
 
 
+@pytest.mark.parametrize('deadlines,completed,observed',[
+    ([10_005_000_000],10.005,10.005),
+    ([10_005_000_000],10.004,10.005),
+    ([10_005_000_000],10.004,10.003),
+    ([True],10.,10.),([],10.,10.),
+    ([10_005_000_000,10_005_000_000],10.,10.),
+])
+def test_deadline_discharge_refuses_late_future_or_invalid_completion(deadlines,completed,observed):
+    node,monitor,_,_=ready_monitor()
+    try:
+        node.wall=observed
+        with pytest.raises((ValueError,PermissionError)):
+            monitor.discharge_inference_deadlines(deadlines,completion_wall_s=completed)
+    finally:monitor.close(timeout_s=1.)
+
+
 def test_conflicting_terminal_response_consumes_attempt_without_replacing_proof():
     node,monitor,_,faults=observer();gid=inventory(monitor)
     try:
