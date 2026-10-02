@@ -106,7 +106,7 @@ def main(argv=None):
     _write(root/'attempt-declaration.json',dict(result,window_rule='stable10s then latest original camera receipt + stable p50 receipt gap / 2; end=start+20s; no retry',
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
-    monitor=stack=context=node=executor=spinner=port=writer=capture=None
+    monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=None
     try:
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
@@ -218,6 +218,14 @@ def main(argv=None):
         if port is not None:
             try:result['port_io_teardown']=port.close_head_io(timeout_s=.010)
             except Exception as error:result['port_io_teardown_error']=str(error);result['status']='REFUSED'
+        # rclpy Node.destroy_node destroys services/subscriptions, but leaves
+        # ActionClient waitables owned until their explicit destroy().
+        if client is not None:
+            try:client.destroy();result['action_client_destroyed']=True
+            except Exception as error:result['action_client_teardown_error']=str(error);result['status']='REFUSED'
+        if listener is not None:
+            try:listener.unregister();result['tf_listener_unregistered']=True
+            except Exception as error:result['tf_listener_teardown_error']=str(error);result['status']='REFUSED'
         if node is not None:
             try:node.destroy_node()
             except Exception as error:result['node_teardown_error']=str(error);result['status']='REFUSED'
