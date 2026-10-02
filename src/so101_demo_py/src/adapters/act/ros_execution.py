@@ -13,6 +13,7 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 from so101_demo.act.contracts import finite
 from so101_demo.act.head_feedback import FeedbackPolicy, OrderedStopConfirmation, decision_clocks
+from .head_callback_io import HeadCallbackIO
 
 
 def seconds_message(value,message):
@@ -42,12 +43,20 @@ class RosControllerPort:
     """Inject the sole underlying broker action client, never create a bypass."""
 
     def __init__(self,node,action_client,names,*,stop_velocity_rad_s,max_age_s,
-                 monotonic=time.monotonic,feedback_policy=None,head_bootstrap=False):
+                 monotonic=time.monotonic,feedback_policy=None,head_bootstrap=False,
+                 head_fault_callback=None):
         self.client=action_client;self.names=tuple(names);self.monotonic=monotonic
         if type(head_bootstrap) is not bool or (head_bootstrap and feedback_policy is not None):
             raise ValueError('HEAD_BOOTSTRAP_CONFIG_INVALID')
         self._head_bootstrap=head_bootstrap
         self._head_policy_binding_failed=False
+        if head_fault_callback is not None and not callable(head_fault_callback):
+            raise ValueError('HEAD_CALLBACK_FAULT_HANDLER_INVALID')
+        self._head_fault_callback=head_fault_callback
+        self._head_fault_handler_error=None
+        self._head_io=None if feedback_policy is None and not head_bootstrap else {
+            'result':HeadCallbackIO('head-result-rpc'),
+            'cancel':HeadCallbackIO('head-cancel-rpc')}
         self.node=node
         self._feedback_policy=None if feedback_policy is None else FeedbackPolicy.parse(feedback_policy)
         self._stop_epoch=None;self._head_sequence=0;self._head_samples=deque(maxlen=4096)
@@ -174,6 +183,20 @@ class RosControllerPort:
         return gid
 
     def _accepted(self,gid,future):
+        if self._head_io is not None:
+            try:handle=future.result();accepted=bool(handle.accepted)
+            except Exception as error:
+                self._head_io_failed(gid,error)
+                return
+            with self._lock:
+                record=self._goals[gid]
+                record['handle']=handle;record['accepted']=accepted
+                cancel=record['cancel_requested']
+            if accepted:
+                if cancel:self._cancel_handle(gid)
+                self._head_dispatch_io(gid,'result',lambda:
+                    handle.get_result_async().add_done_callback(lambda f:self._result(gid,f)))
+            return
         with self._lock:
             record=self._goals[gid]
             try:
@@ -184,6 +207,13 @@ class RosControllerPort:
             except Exception as error:record['accepted']=None;record['error']=repr(error)
 
     def _result(self,gid,future):
+        if self._head_io is not None:
+            try:result=future.result()
+            except Exception as error:
+                self._head_io_failed(gid,error)
+                return
+            with self._lock:self._goals[gid]['result']=result
+            return
         with self._lock:
             try:self._goals[gid]['result']=future.result()
             except Exception as error:self._goals[gid]['error']=repr(error)
@@ -192,12 +222,27 @@ class RosControllerPort:
         with self._lock:return self._goals[gid]['accepted']
 
     def _cancel_handle(self,gid):
+        if self._head_io is not None:
+            with self._lock:
+                record=self._goals[gid]
+                if record.get('cancel_enqueued'):return
+                record['cancel_enqueued']=True;handle=record['handle']
+            self._head_dispatch_io(gid,'cancel',lambda:
+                handle.cancel_goal_async().add_done_callback(lambda f:self._cancel_ack(gid,f)))
+            return
         record=self._goals[gid]
         try:
             record['handle'].cancel_goal_async().add_done_callback(lambda f:self._cancel_ack(gid,f))
         except Exception as error:record['error']=repr(error)
 
     def _cancel_ack(self,gid,future):
+        if self._head_io is not None:
+            try:ack=future.result().return_code==0
+            except Exception as error:
+                self._head_io_failed(gid,error)
+                return
+            with self._lock:self._goals[gid]['cancel_ack']=ack
+            return
         with self._lock:
             try:
                 response=future.result()
@@ -207,11 +252,44 @@ class RosControllerPort:
             except Exception as error:self._goals[gid]['error']=repr(error)
 
     def cancel(self,gid):
+        if self._head_io is not None:
+            with self._lock:
+                record=self._goals[gid]
+                if record['cancel_requested']:return
+                record['cancel_requested']=True;accepted=record['accepted']
+            if accepted is True:self._cancel_handle(gid)
+            return
         with self._lock:
             record=self._goals[gid]
             if record['cancel_requested']:return
             record['cancel_requested']=True
             if record['accepted'] is True:self._cancel_handle(gid)
+
+    def _head_dispatch_io(self,gid,kind,operation):
+        def run():
+            started=self.monotonic()
+            with self._lock:self._goals[gid][kind+'_rpc_started_wall_s']=started
+            operation()
+            finished=self.monotonic()
+            with self._lock:self._goals[gid][kind+'_rpc_returned_wall_s']=finished
+        try:self._head_io[kind].submit(run,lambda error:self._head_io_failed(gid,error))
+        except Exception as error:self._head_io_failed(gid,error)
+
+    def _head_io_failed(self,gid,error):
+        with self._lock:
+            self._goals[gid]['error']=repr(error)
+            self._head_policy_binding_failed=True
+        if self._head_fault_callback is not None:
+            try:self._head_fault_callback('HEAD_CALLBACK_IO_FAILED')
+            except Exception as report_error:
+                with self._lock:self._head_fault_handler_error=repr(report_error)
+
+    def close_head_io(self,*,timeout_s):
+        if self._head_io is None:return {}
+        with self._lock:self._head_policy_binding_failed=True
+        deadline=time.monotonic()+timeout_s
+        return {kind:worker.close(timeout_s=max(0.,deadline-time.monotonic()))
+                for kind,worker in self._head_io.items()}
 
     def stopped(self):
         if self._head_bootstrap and self.feedback_policy is None:return False
