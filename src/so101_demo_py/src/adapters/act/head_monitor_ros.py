@@ -44,7 +44,7 @@ class _ObservationPort(RosControllerPort):
 
 class HeadROSMonitor:
     def __init__(self,node,*,epoch,generation,stop_velocity_rad_s,stop_latency_s,
-                 camera_max_age_s,camera_frame_id,emit,fault_callback,monotonic=time.monotonic):
+                 camera_max_age_s,camera_frame_id,emit,fault_callback,monotonic=time.monotonic,controller_port=None):
         if (type(epoch) is not str or not epoch or type(generation) is not int or generation<=0
                 or any(type(value) not in (int,float) or not math.isfinite(value) or value<=0
                        for value in (stop_velocity_rad_s,stop_latency_s,camera_max_age_s))
@@ -60,19 +60,33 @@ class HeadROSMonitor:
         self._images={};self._infos={};self._camera_watermark=0
         self._image_source=self._info_source=0
         self._outstanding={};self._stop_started=False;self.watchdog_polls=deque(maxlen=20000)
-        self.port=_ObservationPort(node,_NoMotion(),('neck_yaw_joint',),
-            stop_velocity_rad_s=stop_velocity_rad_s,max_age_s=camera_max_age_s,
-            monotonic=monotonic,head_bootstrap=True,
-            head_fault_callback=lambda reason:self.fault(reason),observe=self._event)
+        self._external_inputs=controller_port is not None
+        if controller_port is None:
+            self.port=_ObservationPort(node,_NoMotion(),('neck_yaw_joint',),
+                stop_velocity_rad_s=stop_velocity_rad_s,max_age_s=camera_max_age_s,
+                monotonic=monotonic,head_bootstrap=True,
+                head_fault_callback=lambda reason:self.fault(reason),observe=self._event)
+        else:
+            if (not isinstance(controller_port,RosControllerPort) or controller_port.node is not node
+                    or controller_port.names!=('neck_yaw_joint',) or controller_port.feedback_policy is None
+                    or controller_port._head_policy_binding_failed
+                    or controller_port._head_fault_callback is not None
+                    or controller_port.stop_velocity!=stop_velocity_rad_s):
+                raise ValueError('HEAD_PRIMARY_SHARED_PORT_INVALID')
+            self.port=controller_port;self._lock=controller_port._lock
+            self._policy=controller_port.feedback_policy
+            controller_port._head_fault_callback=lambda reason:self.fault(reason)
         self.service_names=(_ACTION+'get_result',_ACTION+'cancel_goal')
         self._result_client=node.create_client(FollowJointTrajectory.Impl.GetResultService,
                                                 self.service_names[0])
         self._cancel_client=node.create_client(CancelGoal,self.service_names[1])
         self.subscriptions=[node.create_subscription(GoalStatusArray,_ACTION+'status',self._status,
-                                                     qos_profile_sensor_data),
-            node.create_subscription(Clock,'/clock',self._on_clock,qos_profile_sensor_data),
-            node.create_subscription(Image,'/head_camera/color',self._on_image,RGB_QOS),
-            node.create_subscription(CameraInfo,'/head_camera/camera_info',self._on_info,RGB_QOS)]
+                                                     qos_profile_sensor_data)]
+        if not self._external_inputs:
+            self.subscriptions.extend([
+                node.create_subscription(Clock,'/clock',self._on_clock,qos_profile_sensor_data),
+                node.create_subscription(Image,'/head_camera/color',self._on_image,RGB_QOS),
+                node.create_subscription(CameraInfo,'/head_camera/camera_info',self._on_info,RGB_QOS)])
 
     def _event(self,event,**fields):
         # The supplied sink must enqueue bounded owned records without disk I/O.
@@ -263,7 +277,32 @@ class HeadROSMonitor:
         self._event('IMAGE_ORIGINAL' if image else 'INFO_ORIGINAL',**record)
         if dropped is not None:
             self._event('DROPPED_EXPOSURE',**dropped,reason='replaced-before-admission')
-        if invalid and self._active:self.fault('HEAD_MONITOR_CAMERA_INVALID')
+        if invalid and (self._active or self._external_inputs):self.fault('HEAD_MONITOR_CAMERA_INVALID')
+
+    def observe_original(self,kind,record):
+        """Primary-only original metadata, delivered after the shared cache lock.
+
+        No new receipt clock, source clock, subscription or readiness is made.
+        The independent CPU monitor continues to use its own ROS subscribers.
+        """
+        if not self._external_inputs:raise PermissionError('HEAD_MONITOR_EXTERNAL_INPUT_FORBIDDEN')
+        if (kind not in ('CLOCK','IMAGE','INFO') or type(record) is not dict
+                or type(record.get('source_ns')) is not int or record['source_ns']<=0
+                or type(record.get('wall_s')) not in (int,float)
+                or not math.isfinite(record['wall_s']) or record['wall_s']<0
+                or record.get('valid') is not True
+                or (kind!='CLOCK' and record.get('frame_id')!=self.camera_frame)):
+            self.fault('HEAD_PRIMARY_ORIGINAL_INVALID');raise ValueError('HEAD_PRIMARY_ORIGINAL_INVALID')
+        original=dict(record)
+        if kind=='CLOCK':
+            with self._lock:
+                previous=self._clock
+                invalid=previous is not None and original['source_ns']<=previous['source_ns']
+                if invalid:original['valid']=False
+                self._clock=original
+            if invalid:self.fault('HEAD_MONITOR_CLOCK_NONADVANCING')
+            self._event('CLOCK_ORIGINAL',**original)
+        else:self._camera_message(original,image=kind=='IMAGE')
 
     def executor_progress(self):
         self._executor_wall=self.monotonic()
