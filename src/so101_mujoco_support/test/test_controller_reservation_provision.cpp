@@ -17,6 +17,8 @@
 
 #include "so101_mujoco_support/controller_reservation_provision.hpp"
 
+using so101_mujoco_support::read_controller_primary_fault_provision;
+
 namespace
 {
 using so101_mujoco_support::ControllerReservationRole;
@@ -254,6 +256,22 @@ TEST(ControllerReservationProvision, MonitorProvisionBindsNativeOwnerEndpointAnd
   EXPECT_EQ(provision.peer.pid, monitor.pid());
   EXPECT_NE(provision.peer.pid, getpid());
   EXPECT_EQ(provision.capability, monitor.key());
+  // Same private encoding, distinct authority and endpoint: neither provision
+  // may be interpreted as the other's authorization.
+  const auto primary_endpoint = parent / "neck-primary-revoke.sock";
+  auto primary_bytes = std::vector<uint8_t>(bytes.begin(), bytes.begin() + 72 + bytes[6]);
+  primary_bytes[5] = 4;
+  primary_bytes[7] = static_cast<uint8_t>(primary_endpoint.string().size());
+  const auto primary_text = primary_endpoint.string();
+  primary_bytes.insert(primary_bytes.end(), primary_text.begin(), primary_text.end());
+  const auto primary_path = parent / "neck-primary-revoke.provision";
+  write_copy(primary_path, primary_bytes);
+  EXPECT_EQ(read_controller_primary_fault_provision(primary_path, "session-17",
+    primary_endpoint).peer.pid, monitor.pid());
+  EXPECT_THROW(read_controller_revocation_provision(primary_path, "session-17",
+    primary_endpoint), std::runtime_error);
+  EXPECT_THROW(read_controller_primary_fault_provision(path, "session-17", endpoint),
+    std::runtime_error);
   auto native_as_monitor = bytes;
   std::copy(bytes.begin() + 56, bytes.begin() + 72, native_as_monitor.begin() + 8);
   const auto self_path = parent / "native-as-monitor.provision";

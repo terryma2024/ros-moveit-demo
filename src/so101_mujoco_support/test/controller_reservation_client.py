@@ -27,6 +27,7 @@ else:
         {"arm": sys.argv[1]}, capability=capability, timeout_s=1.0,
     )
 broker_state = None
+held_other_connections = []
 
 
 class PreparedDriver:
@@ -67,10 +68,11 @@ def frame_for(mode: str) -> bytes:
         generation = 6 if mode == "arm_next" else 5
         body = b"SOGR\x01\x03" + key + generation.to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
-    if mode in ("close_generation", "close_stale", "close_wrong_capability", "close_drop_reply"):
+    if mode in ("close_generation", "close_stale", "close_zero", "close_wrong_capability", "close_drop_reply"):
         if mode == "close_wrong_capability":
             key = bytes([key[0] ^ 1]) + key[1:]
-        body = b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
+        generation = 0 if mode == "close_zero" else 5
+        body = b"SOGR\x01\x02" + key + generation.to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
     payload = bytes.fromhex(
         (Path(__file__).parent / "fixtures/follow_joint_trajectory_goal.cdr.hex")
@@ -96,6 +98,15 @@ def frame_for(mode: str) -> bytes:
 
 def request(mode: str) -> str:
     global broker_state
+    report_sent = mode.startswith("sent_")
+    if report_sent:
+        mode = mode[5:]
+    if mode == "hold_other":
+        conn = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        conn.connect(sys.argv[2])
+        conn.sendall(b'\0')
+        held_other_connections.append(conn)
+        return "PARTIAL"
     if mode == "ingress_snapshot":
         snapshot = wire_client.snapshot_generation(
             (5, 0, "act", "session", "attempt"), "arm")
@@ -160,6 +171,8 @@ def request(mode: str) -> str:
                 pass
         else:
             conn.sendall(frame)
+        if report_sent:
+            print("REQUEST_SENT", flush=True)
         if mode == "close_drop_reply":
             conn.shutdown(socket.SHUT_RDWR)
             return "CLOSE_SENT_WITHOUT_ACK"

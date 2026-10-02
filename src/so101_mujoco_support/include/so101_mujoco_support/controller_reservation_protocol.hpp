@@ -50,6 +50,10 @@ uint64_t parse_controller_reservation_close_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability);
 
+uint64_t parse_controller_primary_fault_close_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability);
+
 uint64_t parse_controller_reservation_arm_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability);

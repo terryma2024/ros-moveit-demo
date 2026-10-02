@@ -119,6 +119,13 @@ def _publish_private_provision(destination,body,parent):
 
 def write_head_revocation_provision(path,*,session_id,native_owner,socket_path):
     """The independent monitor publishes SOPRv2 for its own exact process."""
+    return _write_head_close_only_provision(path,session_id=session_id,
+        native_owner=native_owner,socket_path=socket_path,primary=False)
+
+
+def _write_head_close_only_provision(path,*,session_id,native_owner,socket_path,primary):
+    stem='neck-primary-revoke' if primary else 'neck-revoke'
+    authority=4 if primary else 3
     destination=Path(path);endpoint=Path(socket_path)
     parent=_private_parent(destination)
     if (not isinstance(session_id,str) or not _SESSION.fullmatch(session_id)
@@ -130,8 +137,8 @@ def write_head_revocation_provision(path,*,session_id,native_owner,socket_path):
             or native_owner['pid']==os.getpid()
             or not 0<native_owner['start_ticks']<2**64
             or _process_start_ticks(native_owner['pid'])!=native_owner['start_ticks']
-            or destination.name!='neck-revoke.provision'
-            or endpoint.name!='neck-revoke.sock' or endpoint.parent!=destination.parent
+            or destination.name!=stem+'.provision'
+            or endpoint.name!=stem+'.sock' or endpoint.parent!=destination.parent
             or not endpoint.is_absolute() or endpoint!=Path(os.path.normpath(endpoint))
             or '\x00' in str(endpoint) or len(os.fsencode(endpoint))>107):
         raise ValueError('HEAD_REVOKER_PROVISION_SCOPE_INVALID')
@@ -139,12 +146,19 @@ def write_head_revocation_provision(path,*,session_id,native_owner,socket_path):
     capability=secrets.token_bytes(32)
     if not any(capability):raise RuntimeError('CONTROLLER_RESERVATION_CAPABILITY_INVALID')
     session=session_id.encode('ascii');socket_bytes=os.fsencode(endpoint)
-    body=(b'SOPR'+bytes((2,3,len(session),len(socket_bytes)))
+    body=(b'SOPR'+bytes((2,authority,len(session),len(socket_bytes)))
           +uid.to_bytes(4,'big')+pid.to_bytes(4,'big')+ticks.to_bytes(8,'big')+capability
           +native_owner['uid'].to_bytes(4,'big')+native_owner['pid'].to_bytes(4,'big')
           +native_owner['start_ticks'].to_bytes(8,'big')+session+socket_bytes)
     _publish_private_provision(destination,body,parent)
     return capability
+
+
+
+def write_head_primary_fault_provision(path,*,session_id,native_owner,socket_path):
+    """The primary publishes its separate fault-close authority for its own PID."""
+    return _write_head_close_only_provision(path,session_id=session_id,
+        native_owner=native_owner,socket_path=socket_path,primary=True)
 
 
 def _remove_owned_provisions(directory: Path, identities: dict[str, tuple[int, int]]) -> None:

@@ -20,7 +20,7 @@ namespace so101_mujoco_support
 class ControllerReservationSocket final
 {
 public:
-  enum class Authority {PRIMARY, REVOKER};
+  enum class Authority {PRIMARY, REVOKER, PRIMARY_FAULT};
   using StopProof = std::function<bool()>;
   using IngressSnapshot =
     std::function<std::optional<ControllerIngressWitness::Snapshot>()>;

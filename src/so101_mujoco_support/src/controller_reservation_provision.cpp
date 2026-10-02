@@ -98,7 +98,8 @@ void verify_path(const std::filesystem::path & path)
 
 static ControllerReservationProvision read_provision(
   const std::filesystem::path & path, ControllerReservationRole expected_role,
-  const std::string & expected_session, const std::filesystem::path & expected_socket)
+  const std::string & expected_session, const std::filesystem::path & expected_socket,
+  uint8_t authority_code = 0)
 {
 #ifndef __linux__
   (void)path;
@@ -141,7 +142,8 @@ static ControllerReservationProvision read_provision(
   const bool revoker = !expected_socket.empty();
   const size_t header_size = revoker ? 72 : 56;
   if (bytes[0] != 'S' || bytes[1] != 'O' || bytes[2] != 'P' || bytes[3] != 'R' ||
-    bytes[4] != (revoker ? 2 : 1) || bytes[5] != static_cast<uint8_t>(expected_role) ||
+    bytes[4] != (revoker ? 2 : 1) ||
+    bytes[5] != (authority_code ? authority_code : static_cast<uint8_t>(expected_role)) ||
     bytes[6] == 0 || bytes[6] > 64 ||
     (!revoker && bytes[7] != 0) ||
     (revoker && (bytes[7] == 0 || bytes[7] > 107)) ||
@@ -195,6 +197,18 @@ ControllerReservationProvision read_controller_revocation_provision(
 {
   if (expected_socket.empty()) {throw std::runtime_error("CONTROLLER_REVOKER_PROVISION_INVALID");}
   return read_provision(path, ControllerReservationRole::NECK, expected_session, expected_socket);
+}
+
+ControllerReservationProvision read_controller_primary_fault_provision(
+  const std::filesystem::path & path, const std::string & expected_session,
+  const std::filesystem::path & expected_socket)
+{
+  if (expected_socket.empty() || path.filename() != "neck-primary-revoke.provision" ||
+    expected_socket.filename() != "neck-primary-revoke.sock")
+  {
+    throw std::runtime_error("CONTROLLER_PRIMARY_FAULT_PROVISION_INVALID");
+  }
+  return read_provision(path, ControllerReservationRole::NECK, expected_session, expected_socket, 4);
 }
 
 }  // namespace so101_mujoco_support

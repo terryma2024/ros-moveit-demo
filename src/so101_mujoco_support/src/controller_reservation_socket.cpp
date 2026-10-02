@@ -166,7 +166,10 @@ ControllerReservationSocket::ControllerReservationSocket(
   ingress_snapshot_(std::move(ingress_snapshot)), authority_(authority)
 {
   if (!gate_) {throw std::invalid_argument("CONTROLLER_RESERVATION_GATE_REQUIRED");}
-  if (authority_ == Authority::REVOKER && role_ != ControllerReservationRole::NECK) {
+  if ((authority_ != Authority::PRIMARY && authority_ != Authority::REVOKER &&
+    authority_ != Authority::PRIMARY_FAULT) ||
+    (authority_ != Authority::PRIMARY && role_ != ControllerReservationRole::NECK))
+  {
     throw std::invalid_argument("CONTROLLER_REVOKER_NECK_REQUIRED");
   }
 #ifndef __linux__
@@ -255,7 +258,7 @@ bool ControllerReservationSocket::peer_matches(int connection) const
 
 void ControllerReservationSocket::close_gate()
 {
-  if (authority_ == Authority::REVOKER) {gate_->fault_revoke();} else {gate_->close();}
+  if (authority_ != Authority::PRIMARY) {gate_->fault_revoke();} else {gate_->close();}
 }
 
 bool ControllerReservationSocket::serve_one()
@@ -293,7 +296,7 @@ bool ControllerReservationSocket::serve_one()
     (static_cast<uint32_t>(frame[2]) << 8) |
     static_cast<uint32_t>(frame[3]);
   if (body_size == 0 || body_size > max_body_size ||
-    (authority_ == Authority::REVOKER && body_size > 62))
+    (authority_ != Authority::PRIMARY && body_size > 62))
   {
     close_gate();
     return false;
@@ -331,13 +334,15 @@ bool ControllerReservationSocket::serve_one()
       framed.insert(framed.end(), body.begin(), body.end());
       return write_exact(connection.get(), framed.data(), framed.size(), deadline);
     }
-    // No decoding of goal CDR or ingress state is reachable by the monitor.
-    if (authority_ == Authority::REVOKER) {
+    // Neither close-only endpoint can decode goal CDR or authorize ingress.
+    if (authority_ != Authority::PRIMARY) {
       if (frame.size() != 66 || frame[9] != 2) {
         close_gate();
         return false;
       }
-      const auto generation = parse_controller_reservation_close_frame(frame, capability_);
+      const auto generation = authority_ == Authority::PRIMARY_FAULT ?
+        parse_controller_primary_fault_close_frame(frame, capability_) :
+        parse_controller_reservation_close_frame(frame, capability_);
       const bool revoked = gate_->revoke_generation(generation);
       const auto reply = encode_controller_reservation_reply(
         revoked ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT, generation);
@@ -452,7 +457,7 @@ ControllerReservationService::ControllerReservationService(
             try {
               socket_.serve_one();
             } catch (...) {
-              if (authority == ControllerReservationSocket::Authority::REVOKER) {
+              if (authority != ControllerReservationSocket::Authority::PRIMARY) {
                 gate_->fault_revoke();
               } else {
                 gate_->close();
@@ -462,7 +467,7 @@ ControllerReservationService::ControllerReservationService(
           }
       });
   } catch (...) {
-    if (authority == ControllerReservationSocket::Authority::REVOKER) {
+    if (authority != ControllerReservationSocket::Authority::PRIMARY) {
       gate_->fault_revoke();
     } else {
       gate_->close();

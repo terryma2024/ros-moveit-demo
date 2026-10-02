@@ -264,7 +264,11 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
       }
       revocation_socket_path_ = directory / "neck-revoke.sock";
       revocation_provision_path_ = directory / "neck-revoke.provision";
-      if (revocation_socket_path_.string().size() > 107) {
+      primary_fault_socket_path_ = directory / "neck-primary-revoke.sock";
+      primary_fault_provision_path_ = directory / "neck-primary-revoke.provision";
+      if (revocation_socket_path_.string().size() > 107 ||
+        primary_fault_socket_path_.string().size() > 107)
+      {
         throw std::runtime_error("CONTROLLER_REVOKER_PATH_TOO_LONG");
       }
     }
@@ -306,6 +310,7 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
     const auto identity = generate_service_identity(reservation_role_, provision.capability);
     auto gate = make_scoped_goal_admission(identity);
     std::optional<ControllerReservationProvision> revoker;
+    std::optional<ControllerReservationProvision> primary_fault;
     if (!revocation_provision_path_.empty()) {
       const auto current_revoker = std::filesystem::symlink_status(revocation_provision_path_,
           error);
@@ -320,6 +325,43 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
       if (revoker->peer.pid == provision.peer.pid || revoker->capability == provision.capability) {
         throw std::runtime_error("CONTROLLER_REVOKER_SEPARATE_PEER_REQUIRED");
       }
+      const auto current_primary = std::filesystem::symlink_status(primary_fault_provision_path_,
+          error);
+      if (current_primary.type() == std::filesystem::file_type::not_found ||
+        error == std::errc::no_such_file_or_directory)
+      {
+        return;
+      }
+      if (error) {throw std::runtime_error("CONTROLLER_PRIMARY_FAULT_PROVISION_UNREADABLE");}
+      primary_fault = read_controller_primary_fault_provision(
+        primary_fault_provision_path_, reservation_session_, primary_fault_socket_path_);
+      if (primary_fault->peer.uid != provision.peer.uid ||
+        primary_fault->peer.pid != provision.peer.pid ||
+        primary_fault->peer.start_ticks != provision.peer.start_ticks ||
+        primary_fault->capability == provision.capability ||
+        primary_fault->capability == revoker->capability)
+      {
+        throw std::runtime_error("CONTROLLER_PRIMARY_FAULT_EXACT_PRIMARY_REQUIRED");
+      }
+    }
+    // Publish the main admission endpoint only after both independently scoped
+    // close-only services are constructed. They initially see a closed gate.
+    if (revoker && primary_fault) {
+      try {
+        revocation_service_ = std::make_unique<ControllerReservationService>(
+          revocation_socket_path_, gate, revoker->capability, revoker->peer,
+          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
+          ControllerReservationSocket::IngressSnapshot{},
+          ControllerReservationSocket::Authority::REVOKER);
+        primary_fault_service_ = std::make_unique<ControllerReservationService>(
+          primary_fault_socket_path_, gate, primary_fault->capability, primary_fault->peer,
+          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
+          ControllerReservationSocket::IngressSnapshot{},
+          ControllerReservationSocket::Authority::PRIMARY_FAULT);
+      } catch (...) {
+        gate->fault_revoke();
+        throw;
+      }
     }
     reservation_service_ = std::make_unique<ControllerReservationService>(
       reservation_socket_path_, gate, provision.capability, provision.peer,
@@ -328,18 +370,6 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
           std::chrono::steady_clock::now().time_since_epoch()).count();
         return controller_stop_proof(now).has_value();
       }, reservation_role_, [this]() {return controller_ingress_snapshot();});
-    if (revoker) {
-      try {
-        revocation_service_ = std::make_unique<ControllerReservationService>(
-          revocation_socket_path_, gate, revoker->capability, revoker->peer,
-          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
-          ControllerReservationSocket::IngressSnapshot{},
-            ControllerReservationSocket::Authority::REVOKER);
-      } catch (...) {
-        gate->fault_revoke();
-        throw;
-      }
-    }
     active_goal_admission_ = std::move(gate);      // publish under the same lock
     reservation_timer_->cancel();
   } catch (const std::exception & failure) {
@@ -358,10 +388,12 @@ void BrokerOwnedTrajectoryController::close_reservation_service()
   neck_stop_witness_.reset();
   std::unique_ptr<ControllerReservationService> service;
   std::unique_ptr<ControllerReservationService> revoker;
+  std::unique_ptr<ControllerReservationService> primary_fault;
   std::shared_ptr<ControllerGoalAdmission> gate;
-  detach_reservation_lifecycle(&service, &revoker, &gate);   // atomic detach, mutex released
+  detach_reservation_lifecycle(&service, &revoker, &primary_fault, &gate);
   if (gate) {gate->close();}                       // close outside the lock
   revoker.reset();
+  primary_fault.reset();
   service.reset();                                 // destroy outside the lock
 }
 

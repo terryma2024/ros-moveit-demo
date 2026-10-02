@@ -40,7 +40,7 @@ bool capability_matches(
 uint64_t parse_generation_control_frame(
   const std::vector<uint8_t> & frame,
   const ControllerReservationCapability & expected_capability,
-  uint8_t operation, const char * invalid)
+  uint8_t operation, const char * invalid, bool allow_zero = false)
 {
   if (frame.size() != prefix_size + request_header_size ||
     frame[0] != 0 || frame[1] != 0 || frame[2] != 0 || frame[3] != request_header_size ||
@@ -52,7 +52,7 @@ uint64_t parse_generation_control_frame(
     throw std::invalid_argument(invalid);
   }
   const auto generation = read_u64(frame.data() + 42);
-  if (generation == 0) {throw std::invalid_argument(invalid);}
+  if (generation == 0 && !allow_zero) {throw std::invalid_argument(invalid);}
   return generation;
 }
 }  // namespace
@@ -122,6 +122,14 @@ uint64_t parse_controller_reservation_arm_frame(
 {
   return parse_generation_control_frame(
     frame, expected_capability, 3, "CONTROLLER_RESERVATION_ARM_FRAME_INVALID");
+}
+
+uint64_t parse_controller_primary_fault_close_frame(
+  const std::vector<uint8_t> & frame,
+  const ControllerReservationCapability & expected_capability)
+{
+  return parse_generation_control_frame(
+    frame, expected_capability, 2, "CONTROLLER_PRIMARY_FAULT_CLOSE_FRAME_INVALID", true);
 }
 
 uint64_t parse_controller_ingress_query_frame(

@@ -25,6 +25,10 @@ ControllerReservationProvision read_controller_revocation_provision(
   const std::filesystem::path & path, const std::string & expected_session,
   const std::filesystem::path & expected_socket);
 
+ControllerReservationProvision read_controller_primary_fault_provision(
+  const std::filesystem::path & path, const std::string & expected_session,
+  const std::filesystem::path & expected_socket);
+
 }  // namespace so101_mujoco_support
 
 #endif  // SO101_MUJOCO_SUPPORT__CONTROLLER_RESERVATION_PROVISION_HPP_

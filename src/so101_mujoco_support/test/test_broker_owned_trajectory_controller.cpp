@@ -330,7 +330,7 @@ uint64_t query_neck_generation(const std::filesystem::path & path, uint8_t capab
 class ScopedNativeMonitor
 {
 public:
-  explicit ScopedNativeMonitor(const std::filesystem::path & directory)
+  explicit ScopedNativeMonitor(const std::filesystem::path & directory, bool primary = false)
   {
     int commands[2];
     int replies[2];
@@ -344,20 +344,24 @@ public:
       close(replies[0]);
       try {
         const std::string session = "session-17";
-        const auto endpoint = directory / "neck-revoke.sock";
+        const auto endpoint = directory /
+          (primary ? "neck-primary-revoke.sock" : "neck-revoke.sock");
+        const uint8_t capability_byte = primary ? 0x3c : 0x5a;
+        if (primary) {write_self_provision(directory / "neck.provision", 3);}
         const auto endpoint_text = endpoint.string();
-        std::vector<uint8_t> bytes{'S', 'O', 'P', 'R', 2, 3,
+        std::vector<uint8_t> bytes{'S', 'O', 'P', 'R', 2, static_cast<uint8_t>(primary ? 4 : 3),
           static_cast<uint8_t>(session.size()), static_cast<uint8_t>(endpoint_text.size())};
         append_big_endian(bytes, geteuid(), 4);
         append_big_endian(bytes, getpid(), 4);
         append_big_endian(bytes, self_start_ticks(), 8);
-        bytes.insert(bytes.end(), 32, 0x5a);
+        bytes.insert(bytes.end(), 32, capability_byte);
         append_big_endian(bytes, geteuid(), 4);
         append_big_endian(bytes, native_pid, 4);
         append_big_endian(bytes, native_ticks, 8);
         bytes.insert(bytes.end(), session.begin(), session.end());
         bytes.insert(bytes.end(), endpoint_text.begin(), endpoint_text.end());
-        const auto path = directory / "neck-revoke.provision";
+        const auto path = directory /
+          (primary ? "neck-primary-revoke.provision" : "neck-revoke.provision");
         std::ofstream output(path, std::ios::binary);
         output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
         output.close();
@@ -366,9 +370,17 @@ public:
         if (write(replies[1], &ready, 1) != 1) {_exit(1);}
         char operation;
         while (read(commands[0], &operation, 1) == 1) {
-          const uint8_t reply = operation == 'I' ? query_neck_generation(endpoint, 0x5a) :
-            send_generation_request(endpoint, operation, 0x5a);
-          if (write(replies[1], &reply, 1) != 1) {_exit(1);}
+          uint8_t response;
+          if (operation == 'M') {
+            response = query_neck_generation(directory / "neck.sock", 0xa5);
+          } else if (operation == 'A' || operation == 'N') {
+            response = send_generation_request(directory / "neck.sock", 3, 0xa5,
+              operation == 'N' ? 6 : 5);
+          } else {
+            response = operation == 'I' ? query_neck_generation(endpoint, capability_byte) :
+              send_generation_request(endpoint, operation, capability_byte);
+          }
+          if (write(replies[1], &response, 1) != 1) {_exit(1);}
         }
         _exit(0);
       } catch (...) {
@@ -412,8 +424,15 @@ public:
     if (write(input_, &operation, 1) != 1) {throw std::runtime_error("MONITOR_QUERY_FAILED");}
     return reply();
   }
+  uint8_t main_generation() {return request('M');}
+  uint8_t arm(bool next = false) {return request(next ? 'N' : 'A');}
 
 private:
+  uint8_t request(char operation)
+  {
+    if (write(input_, &operation, 1) != 1) {throw std::runtime_error("PRIMARY_REQUEST_FAILED");}
+    return reply();
+  }
   uint8_t reply()
   {
     pollfd ready{output_, POLLIN, 0};
@@ -856,17 +875,19 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   rclcpp::shutdown();
 }
 
-static void exercise_neck_native_scope(bool monitor_required)
+static void exercise_neck_native_scope(bool monitor_required, bool primary_fault_trigger = false)
 {
   const auto directory = private_socket_directory();
-  write_self_provision(directory / "neck.provision", 3);
+  if (!monitor_required) {write_self_provision(directory / "neck.provision", 3);}
   const ScopedReservationEnvironment scope(directory, "session-17");
   const auto socket = directory / "neck.sock";
   std::unique_ptr<ScopedNativeMonitor> monitor;
+  std::unique_ptr<ScopedNativeMonitor> primary;
   std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
   if (monitor_required) {
     requirement = std::make_unique<ScopedHeadMonitorRequirement>();
     monitor = std::make_unique<ScopedNativeMonitor>(directory);
+    primary = std::make_unique<ScopedNativeMonitor>(directory, true);
   }
   rclcpp::init(0, nullptr);
   InspectableController controller;
@@ -887,8 +908,14 @@ static void exercise_neck_native_scope(bool monitor_required)
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   ASSERT_TRUE(std::filesystem::exists(socket));
-  if (monitor_required) {ASSERT_TRUE(std::filesystem::exists(directory / "neck-revoke.sock"));}
-  EXPECT_EQ(send_generation_request(socket, 3), 1u);
+  if (monitor_required) {
+    ASSERT_TRUE(std::filesystem::exists(directory / "neck-revoke.sock"));
+    ASSERT_TRUE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+    EXPECT_EQ(primary->main_generation(), 0u);
+    EXPECT_EQ(primary->armed_generation(), 0u);
+    EXPECT_EQ(monitor->armed_generation(), 0u);
+  }
+  EXPECT_EQ(primary ? primary->arm() : send_generation_request(socket, 3), 1u);
   hardware_interface::InterfaceInfo position;
   position.name = "position";
   position.initial_value = "0";
@@ -918,21 +945,28 @@ static void exercise_neck_native_scope(bool monitor_required)
     std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
   ASSERT_TRUE(stopped.has_value());
   EXPECT_EQ(stopped->sample_count, 51u);
-  EXPECT_EQ(send_generation_request(socket, 3), 0u);
+  EXPECT_EQ(primary ? primary->arm() : send_generation_request(socket, 3), 0u);
   if (monitor) {
-    ASSERT_EQ(query_neck_generation(socket, 0xa5), 5u);
+    ASSERT_EQ(primary->main_generation(), 5u);
+    ASSERT_EQ(primary->armed_generation(), 5u);
     ASSERT_EQ(monitor->armed_generation(), 5u);
-    ASSERT_EQ(monitor->revoke(), 0u);
-    EXPECT_EQ(query_neck_generation(socket, 0xa5), 0u);
+    ASSERT_EQ(primary_fault_trigger ? primary->revoke() : monitor->revoke(), 0u);
+    EXPECT_EQ(primary->main_generation(), 0u);
+    EXPECT_EQ(primary->armed_generation(), 0u);
     EXPECT_EQ(monitor->armed_generation(), 0u);
-    EXPECT_EQ(send_generation_request(socket, 3, 0xa5, 6), 1u);
+    EXPECT_EQ(primary->revoke(), 0u);
+    EXPECT_EQ(monitor->revoke(), 0u);
+    EXPECT_EQ(primary->arm(true), 1u);
   } else {
     EXPECT_EQ(send_generation_request(socket, 3), 1u);
   }
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(std::filesystem::exists(socket));
-  if (monitor_required) {EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));}
+  if (monitor_required) {
+    EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));
+    EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  }
   controller.release_interfaces();
   rclcpp::shutdown();
 }
@@ -942,17 +976,52 @@ TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleServ
   exercise_neck_native_scope(false);
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2ProvisionStartsTwoIndependentNativeRoleServices)
+TEST(BrokerOwnedTrajectoryController, HeadV2ProvisionStartsThreeIndependentNativeRoleServices)
 {
   exercise_neck_native_scope(true);
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2MissingMonitorProvisionCannotOpenPrimaryEndpoint)
+TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultUsesItsOwnIdentityAndLatchesTheSharedGate)
+{
+  exercise_neck_native_scope(true, true);
+}
+
+static void exercise_head_missing_provision(
+  bool monitor_present, const std::string & primary_damage = {})
 {
   const auto directory = private_socket_directory();
   write_self_provision(directory / "neck.provision", 3);
   const ScopedReservationEnvironment scope(directory, "session-17");
   const ScopedHeadMonitorRequirement requirement;
+  std::unique_ptr<ScopedNativeMonitor> monitor;
+  if (monitor_present) {monitor = std::make_unique<ScopedNativeMonitor>(directory);}
+  std::unique_ptr<ScopedNativeMonitor> primary;
+  std::unique_ptr<ScopedNativeMonitor> other_primary;
+  if (!primary_damage.empty()) {
+    primary = std::make_unique<ScopedNativeMonitor>(directory, true);
+    const auto path = directory / "neck-primary-revoke.provision";
+    std::ifstream input(path, std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)),
+      std::istreambuf_iterator<char>());
+    if (primary_damage == "peer") {
+      const auto other = private_socket_directory();
+      other_primary = std::make_unique<ScopedNativeMonitor>(other, true);
+      std::ifstream other_file(other / "neck-primary-revoke.provision", std::ios::binary);
+      const std::vector<uint8_t> other_bytes((std::istreambuf_iterator<char>(other_file)),
+        std::istreambuf_iterator<char>());
+      std::copy(other_bytes.begin() + 8, other_bytes.begin() + 24, bytes.begin() + 8);
+    } else {
+      std::fill(bytes.begin() + 24, bytes.begin() + 56,
+        primary_damage == "main_capability" ? 0xa5 : 0x5a);
+    }
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    output.close();
+    // Standalone provision decoding is valid: rejection must come from the
+    // configured controller's cross-endpoint binding checks.
+    EXPECT_NO_THROW(so101_mujoco_support::read_controller_primary_fault_provision(
+        path, "session-17", directory / "neck-primary-revoke.sock"));
+  }
   rclcpp::init(0, nullptr);
   InspectableController controller;
   rclcpp::NodeOptions options;
@@ -973,6 +1042,32 @@ TEST(BrokerOwnedTrajectoryController, HeadV2MissingMonitorProvisionCannotOpenPri
   }
   EXPECT_FALSE(std::filesystem::exists(directory / "neck.sock"));
   EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
   executor.remove_node(controller.get_node()->get_node_base_interface());
   rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2MissingMonitorProvisionCannotOpenPrimaryEndpoint)
+{
+  exercise_head_missing_provision(false);
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2MissingPrimaryFaultProvisionCannotOpenPrimaryEndpoint)
+{
+  exercise_head_missing_provision(true);
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultForeignActorCannotPublishEndpoints)
+{
+  exercise_head_missing_provision(true, "peer");
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultMainCapabilityCollisionCannotPublishEndpoints)
+{
+  exercise_head_missing_provision(true, "main_capability");
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultMonitorCapabilityCollisionCannotPublishEndpoints)
+{
+  exercise_head_missing_provision(true, "monitor_capability");
 }

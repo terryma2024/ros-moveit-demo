@@ -791,6 +791,115 @@ TEST(ControllerReservationSocket, RevokerListenerDoesNotWaitForAnIncompletePrima
   EXPECT_NE(primary.result(), "ACK");
 }
 
+TEST(ControllerReservationSocket, PrimaryFaultCloseLatchesAndRepeatsIdempotently)
+{
+  const auto path = socket_path("primary-fault-close.sock");
+  ClientProcess primary(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, capability(), primary.peer(),
+    std::chrono::milliseconds(2), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  for (int repeat = 0; repeat < 2; ++repeat) {
+    primary.start("close_generation");
+    EXPECT_TRUE(server.serve_one());
+    EXPECT_EQ(primary.result(), "ACK");
+    EXPECT_FALSE(gate->arm(6));
+  }
+}
+
+TEST(ControllerReservationSocket, PrimaryFaultZeroAndStaleCloseRejectWithoutAnotherLatch)
+{
+  for (const auto * mode : {"close_zero", "close_stale"}) {
+    const auto path = socket_path(std::string("primary-fault-") + mode + ".sock");
+    ClientProcess primary(path, capability());
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(6));
+    ControllerReservationSocket server(path, gate, capability(), primary.peer(),
+      std::chrono::milliseconds(2), {}, ControllerReservationRole::NECK, {},
+      ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    primary.start(mode);
+    EXPECT_FALSE(server.serve_one());
+    EXPECT_EQ(primary.result(), "REJECT") << mode;
+    EXPECT_EQ(gate->generation(), 6u) << mode;
+    EXPECT_TRUE(gate->arm(7)) << mode;
+  }
+}
+
+TEST(ControllerReservationSocket, PrimaryFaultCannotArmReserveOrAuthorizeIngress)
+{
+  for (const auto * mode : {"arm_next", "raw_reserve", "ingress_neck"}) {
+    const auto path = socket_path(std::string("primary-fault-") + mode + ".sock");
+    ClientProcess primary(path, capability());
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
+    ControllerReservationSocket server(path, gate, capability(), primary.peer(),
+      std::chrono::milliseconds(2), [] {return true;}, ControllerReservationRole::NECK, {},
+      ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    primary.start(std::string("sent_") + mode);
+    ASSERT_EQ(primary.result(), "REQUEST_SENT");
+    EXPECT_FALSE(server.serve_one()) << mode;
+    EXPECT_NE(primary.result(), "ACK") << mode;
+    EXPECT_FALSE(gate->arm(7)) << mode;
+  }
+}
+
+TEST(ControllerReservationSocket, PrimaryFaultWorkerBypassesItsOwnIncompleteMainConnection)
+{
+  const auto main_path = socket_path("own-main-held.sock");
+  const auto fault_path = socket_path("own-primary-fault.sock");
+  auto fault_key = capability();
+  fault_key.fill(0x5a);
+  ClientProcess primary(fault_path, fault_key, main_path, capability());
+  ClientProcess live_monitor(socket_path("unused-live-monitor.sock"), capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationService main_service(main_path, gate, capability(), primary.peer(),
+    std::chrono::milliseconds(50));
+  ControllerReservationService fault_service(fault_path, gate, fault_key, primary.peer(),
+    std::chrono::milliseconds(2), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  primary.start("hold_other");
+  ASSERT_EQ(primary.result(), "PARTIAL");
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(10);
+  while (!main_service.connection_in_progress() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  ASSERT_TRUE(main_service.connection_in_progress());
+  ASSERT_EQ(kill(live_monitor.pid(), 0), 0);
+  RecordProperty("native_primary_processing_observed", "true");
+  RecordProperty("unresponsive_monitor_still_alive", "true");
+  const auto started = std::chrono::steady_clock::now();
+  primary.start("close_generation");
+  ASSERT_EQ(primary.result(), "ACK");
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  RecordProperty("close_elapsed_ns",
+    std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
+  EXPECT_LT(elapsed, std::chrono::milliseconds(10));
+  EXPECT_FALSE(gate->arm(6));
+}
+
+TEST(ControllerReservationSocket, PrimaryFaultRejectsForeignPeerAndWrongCapabilityWithLatch)
+{
+  for (const auto * damage : {"peer", "capability"}) {
+    const auto path = socket_path(std::string("primary-fault-invalid-") + damage + ".sock");
+    ClientProcess primary(path, capability());
+    ClientProcess foreign(path, capability());
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
+    ControllerReservationSocket server(path, gate, capability(), primary.peer(),
+      std::chrono::milliseconds(2), {}, ControllerReservationRole::NECK, {},
+      ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    auto & actor = std::string(damage) == "peer" ? foreign : primary;
+    actor.start(std::string(damage) == "peer" ? "sent_close_generation" :
+      "sent_close_wrong_capability");
+    ASSERT_EQ(actor.result(), "REQUEST_SENT");
+    EXPECT_FALSE(server.serve_one());
+    EXPECT_NE(actor.result(), "ACK");
+    EXPECT_FALSE(gate->arm(6));
+  }
+}
+
 TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmedGeneration)
 {
   const auto path = socket_path("ingress-query.sock");
