@@ -120,3 +120,23 @@ def test_authenticated_unarmed_retirement_exits_cleanly(runtime_setup):
     receipt=monitor.close()
     assert receipt['shutdown_ack'] is True
     assert receipt['exit_code']==0
+
+
+def test_actual_owned_cpu_fault_receipt_and_retirement_do_not_invent_native_ack(runtime_setup):
+    monitor,configuration,config=runtime_setup
+    configured(monitor,configuration)
+    wall=time.monotonic()
+    ack=monitor.request_runtime(dict(operation='FAULT',fault=dict(reason='controlled primary fault',fault_wall_s=wall)))
+    assert ack['stage']=='REVOKED' and ack['motion_authority'] is False
+    assert ack['fault']==dict(reason='controlled primary fault',fault_wall_s=wall)
+    assert ack['monitor_peer']==monitor.identity and ack['epoch']==config['epoch']
+    receipt=monitor.close()
+    assert receipt['shutdown_ack'] is True and receipt['exit_code']==0
+    seal=json.loads(Path(configuration['journal_path']+'.seal.json').read_text())
+    assert seal['stage']=='RETIRED' and seal['motion_authority'] is False
+    assert seal['native_close'] is None and seal['native_close_error'] is not None
+    body=Path(configuration['journal_path']).read_bytes()
+    assert seal['journal_sha256']==hashlib.sha256(body).hexdigest()
+    records=[json.loads(line) for line in body.splitlines()]
+    notice=next(row for row in records if row['event']=='PRIMARY_FAULT_NOTICE')
+    assert notice['reported_fault']==ack['fault']

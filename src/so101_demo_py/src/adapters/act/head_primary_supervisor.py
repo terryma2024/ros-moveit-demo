@@ -38,6 +38,7 @@ class HeadPrimarySupervisor:
         self.epoch = HeadMonitorEpoch(epoch=epoch, generation=generation, session_id=session_id)
         self._policy = deepcopy(policy_reference); self._sink = emit; self._revoker = revoker
         self._fault = None; self._native_close = None; self._native_close_error = None
+        self._fault_notice = None; self._fault_notice_error = None
         self._shutdown = threading.Event(); self._fault_event = threading.Event()
         self._stop_done = threading.Event(); self._close_done = threading.Event()
         self._fault_lock = threading.Lock(); self._deadline_lock = threading.Lock()
@@ -129,7 +130,9 @@ class HeadPrimarySupervisor:
             self.fault('HEAD_PRIMARY_START_FAILED'); raise
 
     def _heartbeat(self):
-        while not self._shutdown.is_set() and not self.failed:
+        while not self._shutdown.is_set():
+            if self.failed:
+                self._notify_cpu_fault(); return
             # Copy original progress before reading the observation clock.
             executor = self.observer._executor_wall
             with self._deadline_lock: deadline = self._inference_deadline
@@ -159,7 +162,33 @@ class HeadPrimarySupervisor:
                         error_type=error_type)
                 except BaseException:
                     self.fault('HEAD_PRIMARY_HEARTBEAT_JOURNAL_FAILED', rpc_ended)
-            self._shutdown.wait(.002)
+            self._fault_event.wait(.002)
+
+    def _notify_cpu_fault(self):
+        # This worker performs no native close or cancellation. Those workers
+        # already woke at the local latch and never wait for this receipt.
+        with self._fault_lock: original = deepcopy(self._fault)
+        started = time.monotonic()
+        try:
+            reply = self.monitor.request_runtime(dict(operation='FAULT', fault=original))
+            self._ack(reply, 'FAULT', 'REVOKED')
+            fault = reply['fault']; ended = time.monotonic()
+            if (type(fault) is not dict or set(fault) != {'reason','fault_wall_s'}
+                    or type(fault['reason']) is not str or not fault['reason']
+                    or type(fault['fault_wall_s']) not in (int,float)
+                    or not math.isfinite(fault['fault_wall_s'])
+                    or not 0 <= fault['fault_wall_s'] <= original['fault_wall_s']
+                    or not nanoseconds(started) <= nanoseconds(reply['ack_wall_s']) <= nanoseconds(ended)
+                    or nanoseconds(ended)-nanoseconds(started) > 10_000_000):
+                raise PermissionError('HEAD_PRIMARY_FAULT_NOTICE_ACK_INVALID')
+            self.fault(fault['reason'], fault['fault_wall_s'])
+            self._fault_notice = dict(ack=reply, request_wall_s=started, reply_wall_s=ended)
+            self._emit('MONITOR_FAULT_NOTICE', **self._fault_notice)
+        except BaseException as error:
+            self._fault_notice_error = type(error).__name__
+            try:self._emit('MONITOR_FAULT_NOTICE_UNCONFIRMED', error=self._fault_notice_error,
+                request_wall_s=started, reply_wall_s=time.monotonic())
+            except BaseException:pass
 
     def _watchdog(self):
         while not self._shutdown.is_set():
@@ -307,6 +336,7 @@ class HeadPrimarySupervisor:
             raise PermissionError('HEAD_PRIMARY_ACTION_IO_RETIRE_UNCONFIRMED')
         self._receipt = dict(stage='RETIRED', motion_authority=False, fault=deepcopy(self._fault),
             native_close=self._native_close, native_close_error=self._native_close_error,
+            monitor_fault_notice=deepcopy(self._fault_notice), monitor_fault_notice_error=self._fault_notice_error,
             workers=[dict(name=t.name, alive=t.is_alive()) for t in self._threads], action_io=retired,
             stop_observations=deepcopy(list(self.port.stop_predicate_observations)))
         self._finished = True

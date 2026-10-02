@@ -92,8 +92,9 @@ class MonitorProcess:
                 or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'
                 or reply.get('epoch')!=codec.epoch or reply.get('generation')!=codec.generation
                 or reply.get('session_id')!=codec.session_id or reply.get('motion_authority') is not False
-                or reply.get('stage') not in ('CONFIGURE_PENDING','CONFIGURED','POLICY_READY',
-                                             'POLICY_PENDING','ARMED_READY','PRESENT','RETIRE_PENDING','RETIRED')):
+                or (reply.get('stage') not in ('CONFIGURE_PENDING','CONFIGURED','POLICY_READY',
+                                             'POLICY_PENDING','ARMED_READY','PRESENT','RETIRE_PENDING','RETIRED')
+                    and not (value['operation']=='FAULT' and reply.get('stage')=='REVOKED'))):
             self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_ACK_INVALID')
         if value['operation']=='CONFIGURATION' and reply['stage']=='CONFIGURED':
             self._runtime_receipt=reply
@@ -241,7 +242,8 @@ class MonitorRuntimeProtocol:
         else:
             if self._future is None or not self._future.done():
                 raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
-            runtime=self._future.result();runtime.configuration()
+            runtime=self._future.result()
+            if operation!='FAULT':runtime.configuration()
             fields={'POLICY':'policy','PREARM_INPUTS':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
                     'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault'}
             if operation not in fields or set(request)!={'operation',fields[operation]}:
@@ -270,11 +272,9 @@ class MonitorRuntimeProtocol:
             elif operation=='REJECTION':
                 runtime.rejection(value);result=dict(stage=runtime.epoch.stage,motion_authority=False)
             else:
-                if type(value) is not dict or set(value)!={'reason','fault_wall_s'}:
-                    raise ValueError('HEAD_MONITOR_FAULT_INVALID')
-                runtime.fault(value['reason'],value['fault_wall_s'])
-                # A fault is irreversible and is not a successful dispatch ACK.
-                raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
+                # This receipt confirms only irreversible local revocation;
+                # the owned native closer still has to prove its own ACK.
+                result=runtime.notice_fault(value)
         return dict(result,request=operation,monitor_peer=_peer(os.getpid()),purpose='calibration',
                     epoch=self.config['epoch'],generation=self.config['generation'],
                     session_id=self.config['session_id'])

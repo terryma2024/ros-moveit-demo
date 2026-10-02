@@ -345,3 +345,95 @@ def test_original_heartbeat_round_trip_is_retained_on_ack_and_transport_failure(
             assert record['error_type'] is None and not sup.failed and not sup.ready
         assert sup.epoch.stage==('REVOKED' if refused else 'POLICY_READY')
     finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_owned_heartbeat_worker_reports_original_fault_without_new_heartbeat(tmp_path):
+    _,port,sup,_,events,_=setup(tmp_path);requests=[]
+    wall=time.monotonic()
+    def request(record):
+        requests.append(record)
+        assert sup.failed and port._head_policy_binding_failed and not sup.ready
+        return dict(request='FAULT',stage='REVOKED',epoch='attempt',generation=5,
+            session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+            motion_authority=False,fault=dict(record['fault']),ack_wall_s=time.monotonic())
+    sup.monitor.request_runtime=request
+    try:
+        sup.fault('controlled original fault',wall)
+        sup._heartbeat()
+        assert requests==[dict(operation='FAULT',fault=dict(reason='controlled original fault',fault_wall_s=wall))]
+        receipt=next(fields for event,fields in events if event=='MONITOR_FAULT_NOTICE')
+        assert receipt['ack']['fault']['fault_wall_s']==wall
+        assert sup.failed and not sup.ready and sup.epoch.stage=='REVOKED'
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_cpu_fault_notice_is_independent_of_blocked_native_close_and_cancel(tmp_path):
+    node,port,sup,_,events,revoker=setup(tmp_path)
+    native_entered=threading.Event();release=threading.Event();noticed=threading.Event()
+    def close():native_entered.set();release.wait(.3);return dict(ack_validated=True)
+    revoker.close_strict=close
+    def request(record):
+        if record['operation']=='FAULT':
+            noticed.set()
+            return dict(request='FAULT',stage='REVOKED',epoch='attempt',generation=5,
+                session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+                motion_authority=False,fault=dict(record['fault']),ack_wall_s=time.monotonic())
+        return dict(request='HEARTBEAT',stage='POLICY_READY',epoch='attempt',generation=5,
+            session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False)
+    sup.monitor.request_runtime=request
+    gid=str(uuid.uuid4());port._goals[gid]=dict(accepted=None,handle=None,result=None,
+        cancel_requested=False,cancel_ack=False,error=None)
+    try:
+        sup.start();sup.timer.callback();sup.fault('controlled original fault',time.monotonic())
+        assert native_entered.wait(.1) and noticed.wait(.1) and not release.is_set()
+        deadline=time.monotonic()+.1
+        while len(node.calls)<2 and time.monotonic()<deadline:time.sleep(.001)
+        assert len(node.calls)>=2 and not release.is_set()
+        assert len(sup.threads)==4 and sup.failed and not sup.ready
+    finally:release.set();sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['peer','purpose','generation','authority','later_origin','late_ack','transport'])
+def test_fault_notice_failure_never_confers_ready_or_native_close(tmp_path,damage):
+    _,port,sup,_,events,_=setup(tmp_path)
+    wall=time.monotonic();requests=[]
+    def request(record):
+        requests.append(record)
+        if damage=='transport':raise TimeoutError('controlled unavailable peer')
+        reply=dict(request='FAULT',stage='REVOKED',epoch='attempt',generation=5,
+            session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+            motion_authority=False,fault=dict(record['fault']),ack_wall_s=time.monotonic())
+        if damage=='peer':reply['monitor_peer']=dict(sup.monitor.identity,pid=1)
+        elif damage=='purpose':reply['purpose']='qualification'
+        elif damage=='generation':reply['generation']=6
+        elif damage=='authority':reply['motion_authority']=True
+        elif damage=='later_origin':reply['fault']['fault_wall_s']+=.001
+        elif damage=='late_ack':reply['ack_wall_s']-=.1
+        return reply
+    sup.monitor.request_runtime=request
+    try:
+        sup.fault('original root fault',wall);sup._heartbeat()
+        assert len(requests)==1 and requests[0]['operation']=='FAULT'
+        assert sup._fault_notice is None and sup._fault_notice_error is not None
+        assert sup._native_close is None and sup.failed and not sup.ready
+        assert port._head_policy_binding_failed and sup._fault['fault_wall_s']==wall
+        assert any(event=='MONITOR_FAULT_NOTICE_UNCONFIRMED' for event,_ in events)
+        assert not any(event=='MONITOR_FAULT_NOTICE' for event,_ in events)
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_fault_ack_tightens_earliest_shared_origin_without_reactivation(tmp_path):
+    _,port,sup,_,events,_=setup(tmp_path);wall=time.monotonic()
+    def request(record):
+        return dict(request='FAULT',stage='REVOKED',epoch='attempt',generation=5,
+            session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+            motion_authority=False,fault=dict(reason='earlier CPU fault',fault_wall_s=wall-.002),
+            ack_wall_s=time.monotonic())
+    sup.monitor.request_runtime=request
+    try:
+        sup.fault('later root fault',wall);sup._heartbeat()
+        assert sup._fault==dict(reason='earlier CPU fault',fault_wall_s=wall-.002)
+        assert sup.epoch.stage=='REVOKED' and sup.failed and not sup.ready
+        assert sup._fault_notice['ack']['fault']==sup._fault
+        assert port._head_policy_binding_failed and sup._native_close is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)

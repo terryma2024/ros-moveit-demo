@@ -9,6 +9,7 @@ import base64
 from concurrent.futures import Future
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -435,6 +436,22 @@ class HeadMonitorRuntime:
         # short stop-state lock; later reports may reveal an earlier origin.
         if self._observer is not None and self._observer._stop_started:
             self._observer.begin_stop(fault_wall_s=self._fault['fault_wall_s'])
+
+    def notice_fault(self,record):
+        if not self._configured or self._finished:
+            raise PermissionError('HEAD_MONITOR_FAULT_NOTICE_STAGE_INVALID')
+        now=time.monotonic()
+        if (type(record) is not dict or set(record)!={'reason','fault_wall_s'}
+                or type(record['reason']) is not str or not record['reason']
+                or type(record['fault_wall_s']) not in (int,float)
+                or not math.isfinite(record['fault_wall_s'])
+                or not 0<=record['fault_wall_s']<=now):
+            self.fault('HEAD_MONITOR_FAULT_NOTICE_INVALID',now)
+            raise ValueError('HEAD_MONITOR_FAULT_NOTICE_INVALID')
+        self.fault(record['reason'],record['fault_wall_s'])
+        ack=dict(stage='REVOKED',fault=dict(self._fault),ack_wall_s=time.monotonic(),motion_authority=False)
+        self._emit('PRIMARY_FAULT_NOTICE',reported_fault=dict(record),ack=ack)
+        return ack
 
     def _close_native(self):
         self._fault_event.wait()
