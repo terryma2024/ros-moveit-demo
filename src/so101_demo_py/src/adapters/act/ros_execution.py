@@ -182,6 +182,65 @@ class RosControllerPort:
             raise
         return gid
 
+    def send_prepared(self,message,*,goal_uuid,expected_cdr,dispatch_guard):
+        """Send the complete inventory/native-bound Head message without rebuilding it.
+
+        The composition owns inventory/native admission. Its authenticated last
+        guard is mandatory here; this method grants neither authority itself.
+        """
+        import hashlib
+        import uuid
+        from rclpy.serialization import serialize_message
+        from rosidl_runtime_py.convert import message_to_ordereddict
+        from unique_identifier_msgs.msg import UUID
+        gid=None
+        try:
+            if (self.feedback_policy is None or self.names!=('neck_yaw_joint',)
+                    or self._head_policy_binding_failed):
+                raise PermissionError('HEAD_PREPARED_POLICY_REQUIRED')
+            if (not isinstance(message,FollowJointTrajectory.Goal)
+                    or tuple(message.trajectory.joint_names)!=self.names
+                    or type(expected_cdr) is not bytes or not 0<len(expected_cdr)<=1_048_576
+                    or not callable(dispatch_guard)):
+                raise ValueError('HEAD_PREPARED_GOAL_INVALID')
+            parsed=uuid.UUID(bytes=bytes(goal_uuid.uuid))
+            if parsed.version!=4:raise ValueError('HEAD_PREPARED_UUID_INVALID')
+            gid=str(parsed)
+            owned_uuid=UUID(uuid=list(parsed.bytes))
+            if serialize_message(message)!=expected_cdr:
+                raise ValueError('HEAD_PREPARED_CDR_MISMATCH')
+            record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
+                cancel_ack=False,error=None,goal=message_to_ordereddict(message),
+                prepared_cdr_sha256=hashlib.sha256(expected_cdr).hexdigest())
+            with self._lock:
+                if gid in self._goals:raise PermissionError('HEAD_PREPARED_UUID_REUSED')
+                if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
+                self._goals[gid]=record
+            # No cache lock covers IPC, serialisation or the SDK call. Check the
+            # original feedback after the guard, so guard latency adds no age.
+            if dispatch_guard() is not True:raise PermissionError('HEAD_PREPARED_GUARD_REFUSED')
+            if serialize_message(message)!=expected_cdr:
+                raise ValueError('HEAD_PREPARED_CDR_MISMATCH')
+            self.feedback_snapshot()
+            if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
+            record['sdk_dispatch_wall_s']=self.monotonic()
+            response=self.client.send_goal_async(message,goal_uuid=owned_uuid)
+            record['sdk_returned_wall_s']=self.monotonic()
+            response.add_done_callback(lambda future:self._accepted(gid,future))
+            return gid
+        except Exception as error:
+            # Unknown SDK acceptance remains unknown. Admission closes before
+            # reporting, even if the reporter or SDK is unavailable.
+            self._head_policy_binding_failed=True
+            if self._head_fault_callback is not None:
+                try:self._head_fault_callback('HEAD_PREPARED_DISPATCH_FAILED')
+                except Exception as report_error:
+                    with self._lock:self._head_fault_handler_error=type(report_error).__name__
+            if gid is not None:
+                with self._lock:
+                    if gid in self._goals:self._goals[gid]['error']=type(error).__name__
+            raise
+
     def _accepted(self,gid,future):
         if self._head_io is not None:
             try:handle=future.result();accepted=bool(handle.accepted)
