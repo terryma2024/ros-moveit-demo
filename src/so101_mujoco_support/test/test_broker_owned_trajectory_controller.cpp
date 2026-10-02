@@ -13,6 +13,9 @@
 #include <stdexcept>
 #include <string>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <poll.h>
+#include <signal.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <sys/un.h>
@@ -200,11 +203,13 @@ void write_self_provision(const std::filesystem::path & path, uint8_t role)
   if (chmod(path.c_str(), 0600) != 0) {throw std::runtime_error("TEST_PROVISION_MODE_FAILED");}
 }
 
-uint8_t send_generation_request(const std::filesystem::path & path, uint8_t operation)
+uint8_t send_generation_request(
+  const std::filesystem::path & path, uint8_t operation,
+  uint8_t capability_byte = 0xa5, uint64_t generation = 5)
 {
   std::vector<uint8_t> frame{0, 0, 0, 62, 'S', 'O', 'G', 'R', 1, operation};
-  frame.insert(frame.end(), 32, 0xa5);
-  append_big_endian(frame, 5, 8);
+  frame.insert(frame.end(), 32, capability_byte);
+  append_big_endian(frame, generation, 8);
   frame.insert(frame.end(), 16, 0);
   sockaddr_un address{};
   address.sun_family = AF_UNIX;
@@ -247,12 +252,203 @@ uint8_t send_generation_request(const std::filesystem::path & path, uint8_t oper
   }
   close(connection);
   if (reply[0] != 'S' || reply[1] != 'O' || reply[2] != 'G' || reply[3] != 'A' ||
-    reply[4] != 1 || reply[15] != 5)
+    reply[4] != 1 || reply[15] != generation)
   {
     throw std::runtime_error("TEST_SOCKET_REPLY_INVALID");
   }
   return reply[5];
 }
+
+uint64_t query_neck_generation(const std::filesystem::path & path, uint8_t capability_byte)
+{
+  sockaddr_un address{};
+  address.sun_family = AF_UNIX;
+  const auto name = path.string();
+  if (name.size() >= sizeof(address.sun_path)) {
+    throw std::runtime_error("TEST_IDENTITY_PATH_LONG");
+  }
+  std::memcpy(address.sun_path, name.c_str(), name.size() + 1);
+  const int connection = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (connection < 0) {throw std::runtime_error("TEST_IDENTITY_SOCKET_FAILED");}
+  try {
+    timeval timeout{2, 0};
+    if (setsockopt(connection, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ||
+      connect(connection, reinterpret_cast<sockaddr *>(&address),
+        static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + name.size() + 1)))
+    {
+      throw std::runtime_error("TEST_IDENTITY_CONNECT_FAILED");
+    }
+    std::vector<uint8_t> frame{0, 0, 0, 39, 'S', 'O', 'I', 'A', 1, 1};
+    frame.insert(frame.end(), 32, capability_byte);
+    frame.push_back(3);
+    if (send(connection, frame.data(), frame.size(), MSG_NOSIGNAL) !=
+      static_cast<ssize_t>(frame.size()))
+    {
+      throw std::runtime_error("TEST_IDENTITY_SEND_FAILED");
+    }
+    const auto read_bytes = [connection](size_t size) {
+        std::vector<uint8_t> bytes(size);
+        size_t received = 0;
+        while (received < size) {
+          const auto count = recv(connection, bytes.data() + received, size - received, 0);
+          if (count <= 0) {throw std::runtime_error("TEST_IDENTITY_REPLY_FAILED");}
+          received += static_cast<size_t>(count);
+        }
+        return bytes;
+      };
+    const auto prefix = read_bytes(4);
+    uint32_t size = 0;
+    for (const auto byte : prefix) {
+      size = (size << 8) | byte;
+    }
+    if (size < 6 || size > so101_mujoco_support::kMaxIdentityReplyBytes) {
+      throw std::runtime_error("TEST_IDENTITY_REPLY_SIZE");
+    }
+    const auto body = read_bytes(size);
+    if (body == std::vector<uint8_t>{'S', 'O', 'I', 'D', 1, 0}) {
+      close(connection);
+      return 0;
+    }
+    so101_mujoco_support::ServiceControllerIdentity identity;
+    if (!so101_mujoco_support::parse_identity_reply(
+        body, so101_mujoco_support::ControllerReservationRole::NECK, &identity))
+    {
+      throw std::runtime_error("TEST_IDENTITY_REPLY_INVALID");
+    }
+    uint64_t generation = 0;
+    for (size_t index = 7; index != 15; ++index) {
+      generation = (generation << 8) | body[index];
+    }
+    close(connection);
+    return generation;
+  } catch (...) {
+    close(connection);
+    throw;
+  }
+}
+
+class ScopedNativeMonitor
+{
+public:
+  explicit ScopedNativeMonitor(const std::filesystem::path & directory)
+  {
+    int commands[2];
+    int replies[2];
+    if (pipe(commands) || pipe(replies)) {throw std::runtime_error("MONITOR_PIPE_FAILED");}
+    const auto native_pid = getpid();
+    const auto native_ticks = self_start_ticks();
+    pid_ = fork();
+    if (pid_ < 0) {throw std::runtime_error("MONITOR_FORK_FAILED");}
+    if (pid_ == 0) {
+      close(commands[1]);
+      close(replies[0]);
+      try {
+        const std::string session = "session-17";
+        const auto endpoint = directory / "neck-revoke.sock";
+        const auto endpoint_text = endpoint.string();
+        std::vector<uint8_t> bytes{'S', 'O', 'P', 'R', 2, 3,
+          static_cast<uint8_t>(session.size()), static_cast<uint8_t>(endpoint_text.size())};
+        append_big_endian(bytes, geteuid(), 4);
+        append_big_endian(bytes, getpid(), 4);
+        append_big_endian(bytes, self_start_ticks(), 8);
+        bytes.insert(bytes.end(), 32, 0x5a);
+        append_big_endian(bytes, geteuid(), 4);
+        append_big_endian(bytes, native_pid, 4);
+        append_big_endian(bytes, native_ticks, 8);
+        bytes.insert(bytes.end(), session.begin(), session.end());
+        bytes.insert(bytes.end(), endpoint_text.begin(), endpoint_text.end());
+        const auto path = directory / "neck-revoke.provision";
+        std::ofstream output(path, std::ios::binary);
+        output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+        output.close();
+        if (chmod(path.c_str(), 0600)) {_exit(1);}
+        const char ready = 'R';
+        if (write(replies[1], &ready, 1) != 1) {_exit(1);}
+        char operation;
+        while (read(commands[0], &operation, 1) == 1) {
+          const uint8_t reply = operation == 'I' ? query_neck_generation(endpoint, 0x5a) :
+            send_generation_request(endpoint, operation, 0x5a);
+          if (write(replies[1], &reply, 1) != 1) {_exit(1);}
+        }
+        _exit(0);
+      } catch (...) {
+        _exit(1);
+      }
+    }
+    close(commands[0]);
+    close(replies[1]);
+    input_ = commands[1];
+    output_ = replies[0];
+    try {
+      if (reply() != 'R') {throw std::runtime_error("MONITOR_NOT_READY");}
+    } catch (...) {
+      close(input_);
+      close(output_);
+      kill(pid_, SIGTERM);
+      int child_rc;
+      waitpid(pid_, &child_rc, 0);
+      throw;
+    }
+  }
+  ~ScopedNativeMonitor()
+  {
+    close(input_);
+    close(output_);
+    int child_rc;
+    if (waitpid(pid_, &child_rc, WNOHANG) == 0) {
+      kill(pid_, SIGTERM);
+      waitpid(pid_, &child_rc, 0);
+    }
+  }
+  uint8_t revoke()
+  {
+    const char operation = 2;
+    if (write(input_, &operation, 1) != 1) {throw std::runtime_error("MONITOR_REQUEST_FAILED");}
+    return reply();
+  }
+  uint8_t armed_generation()
+  {
+    const char operation = 'I';
+    if (write(input_, &operation, 1) != 1) {throw std::runtime_error("MONITOR_QUERY_FAILED");}
+    return reply();
+  }
+
+private:
+  uint8_t reply()
+  {
+    pollfd ready{output_, POLLIN, 0};
+    uint8_t value;
+    if (poll(&ready, 1, 2000) <= 0 || read(output_, &value, 1) != 1) {
+      throw std::runtime_error("MONITOR_RESPONSE_FAILED");
+    }
+    return value;
+  }
+  pid_t pid_{-1};
+  int input_{-1};
+  int output_{-1};
+};
+
+class ScopedHeadMonitorRequirement
+{
+public:
+  ScopedHeadMonitorRequirement()
+  {
+    const auto * previous = std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
+    if (previous) {previous_ = previous;}
+    setenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED", "1", 1);
+  }
+  ~ScopedHeadMonitorRequirement()
+  {
+    if (previous_) {
+      setenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED", previous_->c_str(), 1);
+    } else {
+      unsetenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
+    }
+  }
+
+private:
+  std::optional<std::string> previous_;
+};
 }
 
 TEST(BrokerOwnedTrajectoryController, ControllerBeforeBrokerStartsClosedRegistrationService)
@@ -660,12 +856,18 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   rclcpp::shutdown();
 }
 
-TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleService)
+static void exercise_neck_native_scope(bool monitor_required)
 {
   const auto directory = private_socket_directory();
   write_self_provision(directory / "neck.provision", 3);
   const ScopedReservationEnvironment scope(directory, "session-17");
   const auto socket = directory / "neck.sock";
+  std::unique_ptr<ScopedNativeMonitor> monitor;
+  std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
+  if (monitor_required) {
+    requirement = std::make_unique<ScopedHeadMonitorRequirement>();
+    monitor = std::make_unique<ScopedNativeMonitor>(directory);
+  }
   rclcpp::init(0, nullptr);
   InspectableController controller;
   rclcpp::NodeOptions options;
@@ -685,6 +887,7 @@ TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleServ
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   ASSERT_TRUE(std::filesystem::exists(socket));
+  if (monitor_required) {ASSERT_TRUE(std::filesystem::exists(directory / "neck-revoke.sock"));}
   EXPECT_EQ(send_generation_request(socket, 3), 1u);
   hardware_interface::InterfaceInfo position;
   position.name = "position";
@@ -716,10 +919,60 @@ TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleServ
   ASSERT_TRUE(stopped.has_value());
   EXPECT_EQ(stopped->sample_count, 51u);
   EXPECT_EQ(send_generation_request(socket, 3), 0u);
-  EXPECT_EQ(send_generation_request(socket, 3), 1u);
+  if (monitor) {
+    ASSERT_EQ(query_neck_generation(socket, 0xa5), 5u);
+    ASSERT_EQ(monitor->armed_generation(), 5u);
+    ASSERT_EQ(monitor->revoke(), 0u);
+    EXPECT_EQ(query_neck_generation(socket, 0xa5), 0u);
+    EXPECT_EQ(monitor->armed_generation(), 0u);
+    EXPECT_EQ(send_generation_request(socket, 3, 0xa5, 6), 1u);
+  } else {
+    EXPECT_EQ(send_generation_request(socket, 3), 1u);
+  }
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(std::filesystem::exists(socket));
+  if (monitor_required) {EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));}
   controller.release_interfaces();
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleService)
+{
+  exercise_neck_native_scope(false);
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2ProvisionStartsTwoIndependentNativeRoleServices)
+{
+  exercise_neck_native_scope(true);
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadV2MissingMonitorProvisionCannotOpenPrimaryEndpoint)
+{
+  const auto directory = private_socket_directory();
+  write_self_provision(directory / "neck.provision", 3);
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  const ScopedHeadMonitorRequirement requirement;
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+  while (std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));
+  executor.remove_node(controller.get_node()->get_node_base_interface());
   rclcpp::shutdown();
 }

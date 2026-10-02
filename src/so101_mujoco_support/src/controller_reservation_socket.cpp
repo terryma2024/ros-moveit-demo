@@ -38,6 +38,17 @@ private:
   int value_;
 };
 
+class ConnectionProgress final
+{
+public:
+  explicit ConnectionProgress(std::atomic<bool> & processing)
+  : processing_(processing) {processing_.store(true);}
+  ~ConnectionProgress() {processing_.store(false);}
+
+private:
+  std::atomic<bool> & processing_;
+};
+
 bool wait_for(int fd, short events, Deadline deadline)
 {
   while (true) {
@@ -148,12 +159,16 @@ ControllerReservationSocket::ControllerReservationSocket(
   std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
   ControllerReservationCapability capability, ExpectedPeer expected_peer,
   std::chrono::milliseconds deadline, StopProof stop_proof,
-  ControllerReservationRole role, IngressSnapshot ingress_snapshot)
-: path_(std::move(path)), gate_(std::move(gate)), capability_(capability), expected_peer_(expected_peer),
+  ControllerReservationRole role, IngressSnapshot ingress_snapshot, Authority authority)
+: path_(std::move(path)), gate_(std::move(gate)), capability_(capability),
+  expected_peer_(expected_peer),
   deadline_(deadline), stop_proof_(std::move(stop_proof)), role_(role),
-  ingress_snapshot_(std::move(ingress_snapshot))
+  ingress_snapshot_(std::move(ingress_snapshot)), authority_(authority)
 {
   if (!gate_) {throw std::invalid_argument("CONTROLLER_RESERVATION_GATE_REQUIRED");}
+  if (authority_ == Authority::REVOKER && role_ != ControllerReservationRole::NECK) {
+    throw std::invalid_argument("CONTROLLER_REVOKER_NECK_REQUIRED");
+  }
 #ifndef __linux__
   throw std::runtime_error("CONTROLLER_RESERVATION_SOCKET_LINUX_REQUIRED");
 #else
@@ -238,32 +253,38 @@ bool ControllerReservationSocket::peer_matches(int connection) const
 #endif
 }
 
+void ControllerReservationSocket::close_gate()
+{
+  if (authority_ == Authority::REVOKER) {gate_->fault_revoke();} else {gate_->close();}
+}
+
 bool ControllerReservationSocket::serve_one()
 {
 #ifndef __linux__
-  gate_->close();
+  close_gate();
   return false;
 #else
   const auto ready = wait_for_listener(listener_, std::chrono::steady_clock::now() + deadline_);
   if (ready == ListenerWait::IDLE) {
     if (process_start_ticks(expected_peer_.pid) != expected_peer_.start_ticks) {
-      gate_->close();
+      close_gate();
     }
     return false;
   }
   if (ready != ListenerWait::READY) {
-    gate_->close();
+    close_gate();
     return false;
   }
   FileDescriptor connection(accept4(listener_, nullptr, nullptr, SOCK_CLOEXEC | SOCK_NONBLOCK));
   if (connection.get() < 0 || !peer_matches(connection.get())) {
-    gate_->close();
+    close_gate();
     return false;
   }
+  ConnectionProgress processing(processing_);
   const auto deadline = std::chrono::steady_clock::now() + deadline_;
   std::vector<uint8_t> frame(4);
   if (!read_exact(connection.get(), frame.data(), frame.size(), deadline)) {
-    gate_->close();
+    close_gate();
     return false;
   }
   const uint32_t body_size =
@@ -271,13 +292,15 @@ bool ControllerReservationSocket::serve_one()
     (static_cast<uint32_t>(frame[1]) << 16) |
     (static_cast<uint32_t>(frame[2]) << 8) |
     static_cast<uint32_t>(frame[3]);
-  if (body_size == 0 || body_size > max_body_size) {
-    gate_->close();
+  if (body_size == 0 || body_size > max_body_size ||
+    (authority_ == Authority::REVOKER && body_size > 62))
+  {
+    close_gate();
     return false;
   }
   frame.resize(4 + body_size);
   if (!read_exact(connection.get(), frame.data() + 4, body_size, deadline)) {
-    gate_->close();
+    close_gate();
     return false;
   }
   try {
@@ -294,7 +317,7 @@ bool ControllerReservationSocket::serve_one()
         std::memcmp(frame.data() + 10, capability_.data(), capability_.size()) != 0 ||
         frame[42] != static_cast<uint8_t>(role_))
       {
-        gate_->close();          // impersonating or malformed query: fail closed
+        close_gate();          // impersonating or malformed query: fail closed
         return reject();
       }
       const auto identity = gate_->service_identity();
@@ -307,6 +330,18 @@ bool ControllerReservationSocket::serve_one()
       std::vector<uint8_t> framed{0, 0, 0, static_cast<uint8_t>(body.size())};
       framed.insert(framed.end(), body.begin(), body.end());
       return write_exact(connection.get(), framed.data(), framed.size(), deadline);
+    }
+    // No decoding of goal CDR or ingress state is reachable by the monitor.
+    if (authority_ == Authority::REVOKER) {
+      if (frame.size() != 66 || frame[9] != 2) {
+        close_gate();
+        return false;
+      }
+      const auto generation = parse_controller_reservation_close_frame(frame, capability_);
+      const bool revoked = gate_->revoke_generation(generation);
+      const auto reply = encode_controller_reservation_reply(
+        revoked ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT, generation);
+      return write_exact(connection.get(), reply.data(), reply.size(), deadline) && revoked;
     }
     // SOGB v2 bound reservation: detected before the legacy SOGR dispatch
     if (is_bound_reservation_frame(frame)) {
@@ -334,7 +369,7 @@ bool ControllerReservationSocket::serve_one()
     if (frame.size() > 9 && frame[9] == 3) {
       const auto generation = parse_controller_reservation_arm_frame(frame, capability_);
       if (!stop_proof_ || !stop_proof_() || !gate_->arm(generation) || !stop_proof_()) {
-        gate_->close();
+        close_gate();
         const auto reply = encode_controller_reservation_reply(
           ReservationReplyStatus::REJECT, generation);
         write_exact(connection.get(), reply.data(), reply.size(), deadline);
@@ -343,7 +378,7 @@ bool ControllerReservationSocket::serve_one()
       const auto reply = encode_controller_reservation_reply(
         ReservationReplyStatus::ACK, generation);
       if (write_exact(connection.get(), reply.data(), reply.size(), deadline)) {return true;}
-      gate_->close();
+      close_gate();
       return false;
     }
     if (frame.size() > 9 && frame[9] == 4) {
@@ -368,7 +403,7 @@ bool ControllerReservationSocket::serve_one()
       // a bound-mode service must never authorize a legacy raw reservation: the
       // opcode is refused fail-closed and the gate is closed
       const auto request = parse_controller_reservation_frame(frame, capability_);
-      gate_->close();
+      close_gate();
       const auto reply = encode_controller_reservation_reply(
         ReservationReplyStatus::REJECT, request.generation);
       write_exact(connection.get(), reply.data(), reply.size(), deadline);
@@ -376,14 +411,14 @@ bool ControllerReservationSocket::serve_one()
     }
     const auto request = parse_controller_reservation_frame(frame, capability_);
     if (stop_proof_ && !stop_proof_()) {
-      gate_->close();
+      close_gate();
       const auto reply = encode_controller_reservation_reply(
         ReservationReplyStatus::REJECT, request.generation);
       write_exact(connection.get(), reply.data(), reply.size(), deadline);
       return false;
     }
     if (!gate_->reserve(request.uuid, request.goal, request.generation)) {
-      gate_->close();
+      close_gate();
       return false;
     }
     const auto reply = encode_controller_reservation_reply(
@@ -392,7 +427,7 @@ bool ControllerReservationSocket::serve_one()
   } catch (...) {
     // Bad credentials, malformed CDR or an allocation failure cannot leave the gate armed.
   }
-  gate_->close();
+  close_gate();
   return false;
 #endif
 }
@@ -404,25 +439,34 @@ ControllerReservationService::ControllerReservationService(
   std::chrono::milliseconds deadline,
   ControllerReservationSocket::StopProof stop_proof,
   ControllerReservationRole role,
-  ControllerReservationSocket::IngressSnapshot ingress_snapshot)
+  ControllerReservationSocket::IngressSnapshot ingress_snapshot,
+  ControllerReservationSocket::Authority authority)
 : gate_(gate), socket_(std::move(path), std::move(gate), capability, expected_peer,
     bounded_service_deadline(deadline), std::move(stop_proof), role,
-    std::move(ingress_snapshot))
+    std::move(ingress_snapshot), authority)
 {   // a service without an active gate is misconfigured, not merely idle
   if (!gate_) {throw std::invalid_argument("CONTROLLER_RESERVATION_GATE_REQUIRED");}
   try {
-    worker_ = std::thread([this]() {
+    worker_ = std::thread([this, authority]() {
           while (!stop_.load()) {
             try {
               socket_.serve_one();
             } catch (...) {
-              gate_->close();
+              if (authority == ControllerReservationSocket::Authority::REVOKER) {
+                gate_->fault_revoke();
+              } else {
+                gate_->close();
+              }
               return;
             }
           }
       });
   } catch (...) {
-    gate_->close();
+    if (authority == ControllerReservationSocket::Authority::REVOKER) {
+      gate_->fault_revoke();
+    } else {
+      gate_->close();
+    }
     throw;
   }
 }

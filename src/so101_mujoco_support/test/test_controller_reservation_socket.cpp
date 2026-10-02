@@ -592,6 +592,205 @@ TEST(ControllerReservationSocket, StaleCloseCannotRevokeANewerGeneration)
   EXPECT_EQ(gate->admit(uuid, goal(), 6), ControllerGoalAdmission::Result::ALLOW);
 }
 
+TEST(ControllerReservationSocket, MonitorCloseIrreversiblyRevokesTheIncarnation)
+{
+  const auto path = socket_path("fault-close.sock");
+  const auto key = capability();
+  ClientProcess monitor(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerGoalAdmission::GoalUUID uuid{};
+  uuid.fill(0x11);
+  ASSERT_TRUE(gate->reserve(uuid, goal(), 5));
+  {
+    ControllerReservationSocket server(path, gate, key, monitor.peer(),
+      std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+      ControllerReservationSocket::Authority::REVOKER);
+    monitor.start("close_generation");
+    ASSERT_TRUE(server.serve_one());
+    ASSERT_EQ(monitor.result(), "ACK");
+  }
+  EXPECT_EQ(gate->admit(uuid, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_FALSE(gate->arm(6));
+  gate->close();
+  EXPECT_FALSE(gate->arm(7));
+}
+
+TEST(ControllerReservationSocket, MonitorCannotArmReserveOrReadIngress)
+{
+  for (const auto mode : {"arm_next", "raw_valid", "ingress_neck"}) {
+    const auto path = socket_path(std::string("revoker-") + mode + ".sock");
+    const auto key = capability();
+    ClientProcess monitor(path, key);
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
+    ControllerReservationSocket server(path, gate, key, monitor.peer(),
+      std::chrono::milliseconds(100), [] {return true;}, ControllerReservationRole::NECK,
+      [] {return std::optional{ControllerIngressWitness::Snapshot{7, 123, 140}};},
+      ControllerReservationSocket::Authority::REVOKER);
+    monitor.start(mode);
+    EXPECT_FALSE(server.serve_one()) << mode;
+    EXPECT_NE(monitor.result(), "ACK") << mode;
+    EXPECT_FALSE(gate->arm(6)) << mode;
+  }
+}
+
+TEST(ControllerReservationSocket, NormalPrimaryCloseStillAllowsANewerGeneration)
+{
+  const auto path = socket_path("normal-rearm.sock");
+  const auto key = capability();
+  ClientProcess primary(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, key, primary.peer(),
+    std::chrono::milliseconds(100));
+  primary.start("close_generation");
+  ASSERT_TRUE(server.serve_one());
+  ASSERT_EQ(primary.result(), "ACK");
+  EXPECT_TRUE(gate->arm(6));
+}
+
+TEST(ControllerReservationSocket, MonitorIdentityIsUnavailableUntilPrimaryArm)
+{
+  const auto path = socket_path("revoker-identity.sock");
+  ClientProcess monitor(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>(
+    [] {return 1000000000LL;}, 2000000000, 1048576, 2048,
+    so101_mujoco_support::ServiceControllerIdentity{ControllerReservationRole::NECK, "inc",
+      "boot"});
+  ControllerReservationSocket server(path, gate, capability(), monitor.peer(),
+    std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::REVOKER);
+  monitor.start("identity_neck");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(monitor.result(), "REJECT");
+  ASSERT_TRUE(gate->arm(5));
+  monitor.start("identity_neck");
+  EXPECT_TRUE(server.serve_one());
+  EXPECT_EQ(monitor.result(), "IDENTITY 5");
+  EXPECT_EQ(gate->generation(), 5u);
+}
+
+TEST(ControllerReservationSocket, MonitorStaleCloseCannotRevokeAnotherGeneration)
+{
+  const auto path = socket_path("revoker-stale.sock");
+  ClientProcess monitor(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(6));
+  ControllerReservationSocket server(path, gate, capability(), monitor.peer(),
+    std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::REVOKER);
+  monitor.start("close_stale");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(monitor.result(), "REJECT");
+  EXPECT_EQ(gate->generation(), 6u);
+  EXPECT_TRUE(gate->arm(7));
+}
+
+TEST(ControllerReservationSocket, RevokerInvalidCredentialRoleOrReusedPidLatchesFault)
+{
+  for (const auto mode : {"close_wrong_capability", "identity_wrong_role", "reused_pid"}) {
+    const auto path = socket_path(std::string(mode) + ".sock");
+    ClientProcess monitor(path, capability());
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(5));
+    auto peer = monitor.peer();
+    if (std::string(mode) == "reused_pid") {++peer.start_ticks;}
+    ControllerReservationSocket server(path, gate, capability(), peer,
+      std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+      ControllerReservationSocket::Authority::REVOKER);
+    monitor.start(std::string(mode) == "reused_pid" ? "close_generation" : mode);
+    EXPECT_FALSE(server.serve_one()) << mode;
+    EXPECT_NE(monitor.result(), "ACK") << mode;
+    EXPECT_FALSE(gate->arm(6)) << mode;
+  }
+}
+
+TEST(ControllerReservationSocket, MonitorCannotUseThePrimaryEndpointEvenWithItsCapability)
+{
+  const auto path = socket_path("primary-exact-peer.sock");
+  ClientProcess primary(path, capability());
+  ClientProcess monitor(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, capability(), primary.peer(),
+    std::chrono::milliseconds(100));
+  monitor.start("close_generation");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_NE(monitor.result(), "ACK");
+  // Wrong-primary-peer refusal keeps the legacy closure semantics.
+  EXPECT_TRUE(gate->arm(6));
+}
+
+TEST(ControllerReservationSocket, ForeignPeerCannotUseTheRevokerEndpoint)
+{
+  const auto path = socket_path("revoker-exact-peer.sock");
+  ClientProcess monitor(path, capability());
+  ClientProcess foreign(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, capability(), monitor.peer(),
+    std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::REVOKER);
+  foreign.start("close_generation");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_NE(foreign.result(), "ACK");
+  EXPECT_FALSE(gate->arm(6));
+}
+
+TEST(ControllerReservationSocket, LostMonitorAckNeverReopensTheNativeGate)
+{
+  const auto path = socket_path("revoker-lost-ack.sock");
+  ClientProcess monitor(path, capability());
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, capability(), monitor.peer(),
+    std::chrono::milliseconds(100), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::REVOKER);
+  monitor.start("close_drop_reply");
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(monitor.result(), "CLOSE_SENT_WITHOUT_ACK");
+  EXPECT_EQ(gate->generation(), 0u);
+  EXPECT_FALSE(gate->arm(6));
+}
+
+TEST(ControllerReservationSocket, RevokerListenerDoesNotWaitForAnIncompletePrimaryFrame)
+{
+  const auto primary_path = socket_path("blocked-primary.sock");
+  const auto revoke_path = socket_path("independent-revoke.sock");
+  auto revoke_key = capability();
+  revoke_key.fill(0x5a);
+  ClientProcess primary(primary_path, capability());
+  ClientProcess monitor(revoke_path, revoke_key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationService main_service(primary_path, gate, capability(), primary.peer(),
+    std::chrono::milliseconds(50));
+  ControllerReservationService revoke_service(revoke_path, gate, revoke_key, monitor.peer(),
+    std::chrono::milliseconds(2), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::REVOKER);
+  primary.start("hold_prefix");
+  ASSERT_EQ(primary.result().rfind("PARTIAL ", 0), 0u);
+  const auto accept_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(10);
+  while (!main_service.connection_in_progress() &&
+    std::chrono::steady_clock::now() < accept_deadline)
+  {
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+  }
+  ASSERT_TRUE(main_service.connection_in_progress());
+  RecordProperty("native_primary_processing_observed", "true");
+  const auto started = std::chrono::steady_clock::now();
+  monitor.start("close_generation");
+  ASSERT_EQ(monitor.result(), "ACK");
+  const auto elapsed = std::chrono::steady_clock::now() - started;
+  EXPECT_LT(elapsed, std::chrono::milliseconds(10));
+  RecordProperty("close_elapsed_ns",
+    std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count());
+  EXPECT_EQ(gate->generation(), 0u);
+  EXPECT_FALSE(gate->arm(6));
+  EXPECT_NE(primary.result(), "ACK");
+}
+
 TEST(ControllerReservationSocket, AuthenticatedIngressSnapshotDoesNotMutateArmedGeneration)
 {
   const auto path = socket_path("ingress-query.sock");

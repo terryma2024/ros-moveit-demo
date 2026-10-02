@@ -53,16 +53,23 @@ def start_ticks() -> int:
 
 def frame_for(mode: str) -> bytes:
     key = capability
-    if mode in ("ingress_snapshot", "ingress_wrong_role", "ingress_stale_generation"):
+    if mode in ("identity_neck", "identity_wrong_role"):
+        role = 3 if mode == "identity_neck" else 1
+        body = b"SOIA\x01\x01" + key + bytes([role])
+        return len(body).to_bytes(4, "big") + body
+    if mode in ("ingress_snapshot", "ingress_wrong_role", "ingress_stale_generation", "ingress_neck"):
         generation = 4 if mode == "ingress_stale_generation" else 5
-        role = 3 if mode == "ingress_wrong_role" else 1
+        role = 3 if mode in ("ingress_wrong_role", "ingress_neck") else 1
         body = (b"SOGR\x01\x04" + key + generation.to_bytes(8, "big")
                 + bytes([role]) + bytes(15))
         return len(body).to_bytes(4, "big") + body
-    if mode == "arm_generation":
-        body = b"SOGR\x01\x03" + key + (5).to_bytes(8, "big") + bytes(16)
+    if mode in ("arm_generation", "arm_next"):
+        generation = 6 if mode == "arm_next" else 5
+        body = b"SOGR\x01\x03" + key + generation.to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
-    if mode in ("close_generation", "close_stale"):
+    if mode in ("close_generation", "close_stale", "close_wrong_capability", "close_drop_reply"):
+        if mode == "close_wrong_capability":
+            key = bytes([key[0] ^ 1]) + key[1:]
         body = b"SOGR\x01\x02" + key + (5).to_bytes(8, "big") + bytes(16)
         return len(body).to_bytes(4, "big") + body
     payload = bytes.fromhex(
@@ -142,8 +149,10 @@ def request(mode: str) -> str:
         conn.settimeout(2.0)
         conn.connect(sys.argv[1])
         frame = frame_for(mode)
-        if mode == "slow_prefix":
+        if mode in ("slow_prefix", "hold_prefix"):
             conn.sendall(frame[:1])
+            if mode == "hold_prefix":
+                print(f"PARTIAL {time.monotonic_ns()}", flush=True)
             time.sleep(0.3)
             try:
                 conn.sendall(frame[1:])
@@ -151,6 +160,23 @@ def request(mode: str) -> str:
                 pass
         else:
             conn.sendall(frame)
+        if mode == "close_drop_reply":
+            conn.shutdown(socket.SHUT_RDWR)
+            return "CLOSE_SENT_WITHOUT_ACK"
+        if mode.startswith("identity_"):
+            prefix = conn.recv(4)
+            if len(prefix) != 4:
+                return "EOF"
+            size = int.from_bytes(prefix, "big")
+            reply = bytearray()
+            while len(reply) < size:
+                chunk = conn.recv(size - len(reply))
+                if not chunk:
+                    return "EOF"
+                reply.extend(chunk)
+            if reply[:7] == b"SOID\x01\x01\x03":
+                return f"IDENTITY {int.from_bytes(reply[7:15], 'big')}"
+            return "REJECT"
         if mode == "truncated":
             conn.shutdown(socket.SHUT_WR)
         try:

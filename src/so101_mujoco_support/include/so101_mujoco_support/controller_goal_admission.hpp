@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -42,26 +43,32 @@ public:
   using GoalUUID = ControllerGoalUUID;
   using Goal = ControllerGoal;
   using Clock = std::function<int64_t()>;
+  using RevocationLatch = std::shared_ptr<std::atomic<bool>>;
 
   enum class Result {ALLOW, DENY_CLOSED, DENY_FAULT};
 
   explicit ControllerGoalAdmission(
     Clock clock = steady_now_ns, int64_t validity_ns = 250000000,
-    size_t max_goal_bytes = 1048576, size_t max_goals_per_generation = 2048)
+    size_t max_goal_bytes = 1048576, size_t max_goals_per_generation = 2048,
+    RevocationLatch revocation_latch = std::make_shared<std::atomic<bool>>(false))
   : clock_(std::move(clock)), validity_ns_(validity_ns), max_goal_bytes_(max_goal_bytes),
-    max_goals_per_generation_(max_goals_per_generation)
+    max_goals_per_generation_(max_goals_per_generation),
+    revocation_latch_(std::move(revocation_latch))
   {
-    if (!clock_ || validity_ns_ <= 0 || max_goal_bytes_ == 0 || max_goals_per_generation_ == 0) {
+    if (!clock_ || validity_ns_ <= 0 || max_goal_bytes_ == 0 || max_goals_per_generation_ == 0 ||
+      !revocation_latch_)
+    {
       throw std::invalid_argument("CONTROLLER_GOAL_ADMISSION_CONFIG_INVALID");
     }
   }
 
   explicit ControllerGoalAdmission(
     Clock clock, int64_t validity_ns, size_t max_goal_bytes, size_t max_goals_per_generation,
-    ServiceControllerIdentity identity)
+    ServiceControllerIdentity identity,
+    RevocationLatch revocation_latch = std::make_shared<std::atomic<bool>>(false))
   : ControllerGoalAdmission(
       std::move(clock), validity_ns, max_goal_bytes,
-      max_goals_per_generation)
+      max_goals_per_generation, std::move(revocation_latch))
   {
     const int role = static_cast<int>(identity.role);
     if (role < 1 || role > 3 || identity.incarnation.empty() || identity.boot.empty() ||
@@ -92,13 +99,15 @@ public:
   uint64_t generation() const
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    return mode_ == Mode::EXCLUSIVE ? generation_ : 0;
+    return mode_ == Mode::EXCLUSIVE && !revocation_latch_->load() ? generation_ : 0;
   }
 
   std::optional<ServiceControllerIdentity> service_identity() const
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (mode_ != Mode::EXCLUSIVE || !service_identity_) {return std::nullopt;}
+    if (mode_ != Mode::EXCLUSIVE || !service_identity_ || revocation_latch_->load()) {
+      return std::nullopt;
+    }
     return service_identity_;
   }
 
@@ -129,8 +138,11 @@ public:
       fault_close();
       return BoundReserveStatus::DENY_CLOSED;
     }
+    const bool goal_matches = digest == request.target_digest && *verified_goal == request.goal;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (mode_ != Mode::EXCLUSIVE || closed_) {return BoundReserveStatus::DENY_CLOSED;}
+    if (mode_ != Mode::EXCLUSIVE || closed_ || revocation_latch_->load()) {
+      return BoundReserveStatus::DENY_CLOSED;
+    }
     if (clock_bad_) {return BoundReserveStatus::DENY_CLOSED;}
     const auto now = bound_now_locked();
     if (!now) {return BoundReserveStatus::DENY_CLOSED;}
@@ -150,7 +162,7 @@ public:
     if (*now > request.deadline_ns || *now < request.claim_monotonic_ns) {
       return tombstone_and_close(request, BoundReserveStatus::DENY_EXPIRED);
     }
-    if (digest != request.target_digest || *verified_goal != request.goal) {
+    if (!goal_matches) {
       return tombstone_and_close(request, BoundReserveStatus::DENY_DIGEST_MISMATCH);
     }
     if (bound_.count(request.uuid) != 0 || used_bound_uuids_.count(request.uuid) != 0 ||
@@ -185,8 +197,16 @@ public:
       fault_close();
       return BoundReserveStatus::DENY_CLOSED;
     }
+    std::shared_ptr<const Goal> owned_goal;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      const auto entry = bound_.find(uuid);
+      if (entry != bound_.end()) {owned_goal = entry->second.goal;}
+    }
+    // Potentially large typed comparisons cannot delay the revocation listener.
+    const bool goal_matches = owned_goal && goal == *owned_goal;
     std::lock_guard<std::mutex> lock(mutex_);
-    if (mode_ != Mode::EXCLUSIVE || closed_ || clock_bad_) {
+    if (mode_ != Mode::EXCLUSIVE || closed_ || clock_bad_ || revocation_latch_->load()) {
       return BoundReserveStatus::DENY_CLOSED;
     }
     const auto now = bound_now_locked();
@@ -205,7 +225,7 @@ public:
     if (*now > entry->second.deadline_ns) {
       return drop_and_close(uuid, BoundReserveStatus::DENY_EXPIRED);
     }
-    if (goal != *entry->second.goal) {
+    if (!goal_matches || entry->second.goal != owned_goal) {
       return drop_and_close(uuid, BoundReserveStatus::DENY_DIGEST_MISMATCH);
     }
     used_bound_uuids_.insert(uuid);
@@ -231,7 +251,9 @@ public:
   {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto now = read_clock();
-    if (!now || generation == 0 || generation <= generation_ || clock_bad_) {
+    if (!now || generation == 0 || generation <= generation_ || clock_bad_ ||
+      revocation_latch_->load())
+    {
       return false;
     }
     generation_ = generation;
@@ -266,17 +288,35 @@ public:
     return true;
   }
 
+  // Only the independently provisioned close-only endpoint invokes these paths.
+  // The latch belongs to the controller object and survives gate recreation.
+  bool revoke_generation(uint64_t generation)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (generation == 0 || generation != generation_) {return false;}
+    revocation_latch_->store(true);
+    fault_close();
+    return true;
+  }
+
+  void fault_revoke()
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    revocation_latch_->store(true);
+    fault_close();
+  }
+
   bool is_exclusive_generation(uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
     return generation != 0 && generation == generation_ && mode_ == Mode::EXCLUSIVE &&
-           !clock_bad_;
+           !clock_bad_ && !revocation_latch_->load();
   }
 
   bool reserve(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
-    if (mode_ != Mode::EXCLUSIVE) {
+    if (mode_ != Mode::EXCLUSIVE || revocation_latch_->load()) {
       return false;
     }
     const auto now = read_clock();
@@ -394,7 +434,7 @@ private:
   std::optional<int64_t> last_bound_now_;
   Result admit_locked(const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
-    if (mode_ != Mode::EXCLUSIVE) {
+    if (mode_ != Mode::EXCLUSIVE || revocation_latch_->load()) {
       return Result::DENY_CLOSED;
     }
     const auto now = read_clock();
@@ -459,6 +499,7 @@ private:
   int64_t validity_ns_;
   size_t max_goal_bytes_;
   size_t max_goals_per_generation_;
+  RevocationLatch revocation_latch_;
   Mode mode_{Mode::CLOSED};
   uint64_t generation_{0};
   std::optional<int64_t> last_now_ns_;

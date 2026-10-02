@@ -219,6 +219,8 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
     reservation_provision_path_.clear();
     reservation_socket_path_.clear();
     reservation_session_.clear();
+    revocation_provision_path_.clear();
+    revocation_socket_path_.clear();
   }
   const auto name = std::string(get_node()->get_name());
   monitored_joints_.store(name == "arm_controller" ? 5 :
@@ -255,6 +257,17 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
     reservation_session_ = session_text;
     reservation_provision_path_ = directory / (std::string(basename) + ".provision");
     reservation_socket_path_ = socket_path;
+    const auto * head_v2 = std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
+    if (role == ControllerReservationRole::NECK && head_v2) {
+      if (std::string(head_v2) != "1") {
+        throw std::runtime_error("CONTROLLER_REVOKER_SCOPE_INVALID");
+      }
+      revocation_socket_path_ = directory / "neck-revoke.sock";
+      revocation_provision_path_ = directory / "neck-revoke.provision";
+      if (revocation_socket_path_.string().size() > 107) {
+        throw std::runtime_error("CONTROLLER_REVOKER_PATH_TOO_LONG");
+      }
+    }
   }
   start_reservation_monitor();
 }
@@ -291,11 +304,23 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
       reservation_provision_path_, reservation_role_, reservation_session_);
     // one service incarnation: identity from OS entropy, gate created with it
     const auto identity = generate_service_identity(reservation_role_, provision.capability);
-    auto gate = std::make_shared<ControllerGoalAdmission>(
-      []() {
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::steady_clock::now().time_since_epoch()).count();
-      }, 250000000, 1048576, 2048, identity);
+    auto gate = make_scoped_goal_admission(identity);
+    std::optional<ControllerReservationProvision> revoker;
+    if (!revocation_provision_path_.empty()) {
+      const auto current_revoker = std::filesystem::symlink_status(revocation_provision_path_,
+          error);
+      if (current_revoker.type() == std::filesystem::file_type::not_found ||
+        error == std::errc::no_such_file_or_directory)
+      {
+        return;
+      }
+      if (error) {throw std::runtime_error("CONTROLLER_REVOKER_PROVISION_UNREADABLE");}
+      revoker = read_controller_revocation_provision(
+        revocation_provision_path_, reservation_session_, revocation_socket_path_);
+      if (revoker->peer.pid == provision.peer.pid || revoker->capability == provision.capability) {
+        throw std::runtime_error("CONTROLLER_REVOKER_SEPARATE_PEER_REQUIRED");
+      }
+    }
     reservation_service_ = std::make_unique<ControllerReservationService>(
       reservation_socket_path_, gate, provision.capability, provision.peer,
       std::chrono::milliseconds(50), [this]() {
@@ -303,6 +328,18 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
           std::chrono::steady_clock::now().time_since_epoch()).count();
         return controller_stop_proof(now).has_value();
       }, reservation_role_, [this]() {return controller_ingress_snapshot();});
+    if (revoker) {
+      try {
+        revocation_service_ = std::make_unique<ControllerReservationService>(
+          revocation_socket_path_, gate, revoker->capability, revoker->peer,
+          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
+          ControllerReservationSocket::IngressSnapshot{},
+            ControllerReservationSocket::Authority::REVOKER);
+      } catch (...) {
+        gate->fault_revoke();
+        throw;
+      }
+    }
     active_goal_admission_ = std::move(gate);      // publish under the same lock
     reservation_timer_->cancel();
   } catch (const std::exception & failure) {
@@ -320,9 +357,11 @@ void BrokerOwnedTrajectoryController::close_reservation_service()
   gripper_stop_witness_.reset();
   neck_stop_witness_.reset();
   std::unique_ptr<ControllerReservationService> service;
+  std::unique_ptr<ControllerReservationService> revoker;
   std::shared_ptr<ControllerGoalAdmission> gate;
-  detach_reservation_lifecycle(&service, &gate);   // atomic detach, mutex released
+  detach_reservation_lifecycle(&service, &revoker, &gate);   // atomic detach, mutex released
   if (gate) {gate->close();}                       // close outside the lock
+  revoker.reset();
   service.reset();                                 // destroy outside the lock
 }
 

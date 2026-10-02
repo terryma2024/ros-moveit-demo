@@ -73,6 +73,7 @@ protected:
   // Atomically detach the service and the active gate, then release the mutex.
   void detach_reservation_lifecycle(
     std::unique_ptr<ControllerReservationService> * service,
+    std::unique_ptr<ControllerReservationService> * revoker,
     std::shared_ptr<ControllerGoalAdmission> * gate)
   {
     std::lock_guard<std::mutex> lock(reservation_mutex_);
@@ -81,7 +82,17 @@ protected:
       reservation_timer_.reset();
     }
     *service = std::move(reservation_service_);
+    *revoker = std::move(revocation_service_);
     *gate = std::move(active_goal_admission_);
+  }
+  std::shared_ptr<ControllerGoalAdmission> make_scoped_goal_admission(
+    const ServiceControllerIdentity & identity)
+  {
+    return std::make_shared<ControllerGoalAdmission>(
+      []() {
+        return std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now().time_since_epoch()).count();
+      }, 250000000, 1048576, 2048, identity, revocation_latch_);
   }
   std::optional<ControllerStopWitness::Proof> controller_stop_proof(
     int64_t now_monotonic_ns);
@@ -94,9 +105,14 @@ private:
 
   mutable std::mutex reservation_mutex_;
   std::unique_ptr<ControllerReservationService> reservation_service_;
+  std::unique_ptr<ControllerReservationService> revocation_service_;
+  ControllerGoalAdmission::RevocationLatch revocation_latch_{
+    std::make_shared<std::atomic<bool>>(false)};
   rclcpp::TimerBase::SharedPtr reservation_timer_;
   std::filesystem::path reservation_provision_path_;
   std::filesystem::path reservation_socket_path_;
+  std::filesystem::path revocation_provision_path_;
+  std::filesystem::path revocation_socket_path_;
   std::string reservation_session_;
   ControllerReservationRole reservation_role_{ControllerReservationRole::ARM};
   std::chrono::steady_clock::time_point reservation_deadline_;

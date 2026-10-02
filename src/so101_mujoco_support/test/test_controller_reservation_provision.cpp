@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -20,6 +21,7 @@ namespace
 {
 using so101_mujoco_support::ControllerReservationRole;
 using so101_mujoco_support::read_controller_reservation_provision;
+using so101_mujoco_support::read_controller_revocation_provision;
 
 std::filesystem::path private_directory(const char * suffix)
 {
@@ -206,4 +208,87 @@ TEST(ControllerReservationProvision, RejectsWrongScopeAndUnsafeFileMetadata)
   std::filesystem::create_hard_link(path, parent / "hard.provision");
   EXPECT_THROW(read_controller_reservation_provision(
       path, ControllerReservationRole::ARM, "session-17"), std::runtime_error);
+}
+
+TEST(ControllerReservationProvision, MonitorProvisionBindsNativeOwnerEndpointAndDistinctLivePeer)
+{
+  const auto * base = std::getenv("SO101_IPC_SOCKET_BASE");
+  ASSERT_NE(base, nullptr);
+  const auto parent = std::filesystem::path(base) /
+    ("rev-provision-" + std::to_string(getpid()));
+  ASSERT_TRUE(std::filesystem::create_directory(parent));
+  ASSERT_EQ(chmod(parent.c_str(), 0700), 0);
+  const auto original_path = parent / "neck.provision";
+  ProvisionWriter monitor(original_path, "neck", "session-17");
+  std::ifstream input(original_path, std::ios::binary);
+  const std::vector<uint8_t> original(
+    (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+  ASSERT_EQ(original.size(), 66u);
+  const auto endpoint = parent / "neck-revoke.sock";
+  const auto endpoint_text = endpoint.string();
+  ASSERT_LE(endpoint_text.size(), 107u);
+  auto bytes = std::vector<uint8_t>(original.begin(), original.begin() + 56);
+  bytes[4] = 2;
+  bytes[7] = static_cast<uint8_t>(endpoint_text.size());
+  const auto append_integer = [&bytes](uint64_t value, int width) {
+      for (int shift = (width - 1) * 8; shift >= 0; shift -= 8) {
+        bytes.push_back(static_cast<uint8_t>((value >> shift) & 0xff));
+      }
+    };
+  std::ifstream process("/proc/self/stat");
+  std::string line;
+  ASSERT_TRUE(std::getline(process, line));
+  std::istringstream fields(line.substr(line.rfind(')') + 2));
+  std::string token;
+  for (int index = 3; index <= 22; ++index) {
+    if (!(fields >> token)) {throw std::runtime_error("NATIVE_PROCESS_IDENTITY_UNAVAILABLE");}
+  }
+  append_integer(geteuid(), 4);
+  append_integer(getpid(), 4);
+  append_integer(std::stoull(token), 8);
+  bytes.insert(bytes.end(), original.begin() + 56, original.end());
+  bytes.insert(bytes.end(), endpoint_text.begin(), endpoint_text.end());
+  const auto path = parent / "neck-revoke.provision";
+  write_copy(path, bytes);
+  const auto provision = read_controller_revocation_provision(path, "session-17", endpoint);
+  EXPECT_EQ(provision.peer.pid, monitor.pid());
+  EXPECT_NE(provision.peer.pid, getpid());
+  EXPECT_EQ(provision.capability, monitor.key());
+  auto native_as_monitor = bytes;
+  std::copy(bytes.begin() + 56, bytes.begin() + 72, native_as_monitor.begin() + 8);
+  const auto self_path = parent / "native-as-monitor.provision";
+  write_copy(self_path, native_as_monitor);
+  EXPECT_THROW(read_controller_revocation_provision(self_path, "session-17", endpoint),
+    std::runtime_error);
+  EXPECT_THROW(read_controller_reservation_provision(
+      path, ControllerReservationRole::NECK, "session-17"), std::runtime_error);
+  EXPECT_THROW(read_controller_revocation_provision(path, "wrong-session", endpoint),
+    std::runtime_error);
+  EXPECT_THROW(read_controller_revocation_provision(path, "session-17", parent / "wrong.sock"),
+    std::runtime_error);
+  for (const size_t index : {size_t{5}, size_t{23}, size_t{60}, size_t{71}, bytes.size() - 1}) {
+    auto altered = bytes;
+    altered[index] ^= 1;
+    const auto altered_path = parent / ("altered-" + std::to_string(index) + ".provision");
+    write_copy(altered_path, altered);
+    EXPECT_THROW(read_controller_revocation_provision(altered_path, "session-17", endpoint),
+      std::runtime_error) << index;
+  }
+  ASSERT_EQ(chmod(path.c_str(), 0644), 0);
+  EXPECT_THROW(read_controller_revocation_provision(path, "session-17", endpoint),
+    std::runtime_error);
+  ASSERT_EQ(chmod(path.c_str(), 0600), 0);
+  std::filesystem::create_symlink(path, parent / "alias.provision");
+  EXPECT_THROW(read_controller_revocation_provision(parent / "alias.provision", "session-17",
+    endpoint),
+    std::runtime_error);
+  std::filesystem::create_hard_link(path, parent / "hard.provision");
+  EXPECT_THROW(read_controller_revocation_provision(path, "session-17", endpoint),
+    std::runtime_error);
+  // Keep the hard-link refusal fixture; use a separate regular file for peer death.
+  const auto live_path = parent / "live.provision";
+  write_copy(live_path, bytes);
+  monitor.stop();
+  EXPECT_THROW(read_controller_revocation_provision(live_path, "session-17", endpoint),
+    std::runtime_error);
 }

@@ -71,6 +71,12 @@ public:
   void close_lifecycle() {close_reservation_service();}   // the real production path
   void install(std::shared_ptr<Admission> gate) {install_active_gate_for_testing(std::move(gate));}
   void clear() {install_active_gate_for_testing(nullptr);}
+  std::shared_ptr<Admission> recreate_scoped_gate()
+  {
+    auto gate = make_scoped_goal_admission(Identity{Role::NECK, "inc", "boot"});
+    install(gate);
+    return gate;
+  }
   rclcpp_action::GoalResponse decide(
     const Admission::GoalUUID & uuid,
     const std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> & goal)
@@ -220,4 +226,19 @@ TEST(Gate6Lifecycle, RestartCreatesADifferentServiceIdentity)
                                                second);
   EXPECT_TRUE(restarted->has_service_identity());
   EXPECT_FALSE(restarted->has_service_identity() && first.incarnation == second.incarnation);
+}
+
+TEST(Gate6Lifecycle, MonitorFaultSurvivesRealLifecycleDetachAndGateRecreation)
+{
+  InspectableController controller;
+  auto first = controller.recreate_scoped_gate();
+  ASSERT_TRUE(first->arm(1));
+  ASSERT_TRUE(first->revoke_generation(1));
+  controller.close_lifecycle();
+  auto reconfigured = controller.recreate_scoped_gate();
+  EXPECT_FALSE(reconfigured->arm(2));
+  reconfigured->close();
+  EXPECT_FALSE(reconfigured->arm(3));
+  InspectableController fresh_controller;
+  EXPECT_TRUE(fresh_controller.recreate_scoped_gate()->arm(1));
 }

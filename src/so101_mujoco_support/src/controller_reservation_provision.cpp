@@ -96,14 +96,15 @@ void verify_path(const std::filesystem::path & path)
 }
 }  // namespace
 
-ControllerReservationProvision read_controller_reservation_provision(
+static ControllerReservationProvision read_provision(
   const std::filesystem::path & path, ControllerReservationRole expected_role,
-  const std::string & expected_session)
+  const std::string & expected_session, const std::filesystem::path & expected_socket)
 {
 #ifndef __linux__
   (void)path;
   (void)expected_role;
   (void)expected_session;
+  (void)expected_socket;
   throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_LINUX_REQUIRED");
 #else
   if (!valid_session(expected_session) ||
@@ -118,7 +119,7 @@ ControllerReservationProvision read_controller_reservation_provision(
   struct stat info {};
   if (file.get() < 0 || fstat(file.get(), &info) != 0 || !S_ISREG(info.st_mode) ||
     info.st_uid != geteuid() || (info.st_mode & 07777) != 0600 || info.st_nlink != 1 ||
-    info.st_size < 57 || info.st_size > 120)
+    info.st_size < 57 || info.st_size > (expected_socket.empty() ? 120 : 243))
   {
     throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_INVALID");
   }
@@ -137,14 +138,32 @@ ControllerReservationProvision read_controller_reservation_provision(
   {
     throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_INVALID");
   }
+  const bool revoker = !expected_socket.empty();
+  const size_t header_size = revoker ? 72 : 56;
   if (bytes[0] != 'S' || bytes[1] != 'O' || bytes[2] != 'P' || bytes[3] != 'R' ||
-    bytes[4] != 1 || bytes[5] != static_cast<uint8_t>(expected_role) ||
-    bytes[6] == 0 || bytes[6] > 64 || bytes[7] != 0 ||
-    bytes.size() != 56 + bytes[6])
+    bytes[4] != (revoker ? 2 : 1) || bytes[5] != static_cast<uint8_t>(expected_role) ||
+    bytes[6] == 0 || bytes[6] > 64 ||
+    (!revoker && bytes[7] != 0) ||
+    (revoker && (bytes[7] == 0 || bytes[7] > 107)) ||
+    bytes.size() != header_size + bytes[6] + bytes[7])
   {
     throw std::runtime_error("CONTROLLER_RESERVATION_PROVISION_INVALID");
   }
-  const std::string session(bytes.begin() + 56, bytes.end());
+  const std::string session(bytes.begin() + header_size, bytes.begin() + header_size + bytes[6]);
+  if (revoker) {
+    const std::string socket(bytes.begin() + header_size + bytes[6], bytes.end());
+    const auto native_ticks = process_start_ticks(getpid());
+    if (expected_role != ControllerReservationRole::NECK || socket != expected_socket.string() ||
+      !expected_socket.is_absolute() || expected_socket != expected_socket.lexically_normal() ||
+      expected_socket.parent_path() != path.parent_path() ||
+      integer(bytes, 56, 4) != geteuid() ||
+      integer(bytes, 60, 4) != static_cast<uint64_t>(getpid()) ||
+      native_ticks == 0 || integer(bytes, 64, 8) != native_ticks ||
+      integer(bytes, 12, 4) == static_cast<uint64_t>(getpid()))
+    {
+      throw std::runtime_error("CONTROLLER_REVOKER_PROVISION_INVALID");
+    }
+  }
   const auto uid = integer(bytes, 8, 4);
   const auto pid = integer(bytes, 12, 4);
   const auto ticks = integer(bytes, 16, 8);
@@ -161,6 +180,21 @@ ControllerReservationProvision read_controller_reservation_provision(
   }
   return {{static_cast<uid_t>(uid), static_cast<pid_t>(pid), ticks}, capability};
 #endif
+}
+
+ControllerReservationProvision read_controller_reservation_provision(
+  const std::filesystem::path & path, ControllerReservationRole expected_role,
+  const std::string & expected_session)
+{
+  return read_provision(path, expected_role, expected_session, {});
+}
+
+ControllerReservationProvision read_controller_revocation_provision(
+  const std::filesystem::path & path, const std::string & expected_session,
+  const std::filesystem::path & expected_socket)
+{
+  if (expected_socket.empty()) {throw std::runtime_error("CONTROLLER_REVOKER_PROVISION_INVALID");}
+  return read_provision(path, ControllerReservationRole::NECK, expected_session, expected_socket);
 }
 
 }  // namespace so101_mujoco_support
