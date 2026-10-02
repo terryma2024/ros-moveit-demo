@@ -470,7 +470,7 @@ def main():
                     if type(request) is not dict or type(request.get('operation')) is not str:
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     operation=request['operation']
-                    if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','ARMED_READY',
+                    if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_READY','ARMED_READY',
                             'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS'):
                         reply=runtime_protocol.handle(request)
                         channel.send(reply)

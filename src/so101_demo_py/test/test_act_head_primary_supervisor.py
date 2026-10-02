@@ -1,5 +1,6 @@
 """Owned primary workers and original shared inputs; no simulator qualification."""
 import os
+import json
 import secrets
 import threading
 import time
@@ -114,6 +115,30 @@ def test_close_requires_all_owned_threads_to_exit_before_retirement_receipt(tmp_
         with pytest.raises(PermissionError,match='RETIRE_UNCONFIRMED'):sup.close()
         assert thread.is_alive()
     finally:release.set();thread.join(1.);sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_retirement_receipt_serializes_original_stop_observations(tmp_path):
+    _,port,sup,_,_,_=setup(tmp_path)
+    port.stop_predicate_observations.append(dict(stopped=False,goal_states={}))
+    try:
+        receipt=sup.close()
+        assert json.loads(json.dumps(receipt,allow_nan=False))['stop_observations']==[dict(stopped=False,goal_states={})]
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_real_heartbeat_in_flight_across_explicit_arm_transition_cannot_grant_ready(tmp_path):
+    _,port,sup,_,_,_=setup(tmp_path)
+    try:
+        sup._started_wall=time.monotonic();sup.observer.executor_progress()
+        def transition(record):
+            assert record['operation']=='HEARTBEAT' and not sup.ready
+            sup._arming=True;sup._shutdown.set()
+            return dict(request='HEARTBEAT',stage='ARMED_READY',epoch='attempt',generation=5,
+                session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False)
+        sup.monitor.request_runtime=transition
+        sup._heartbeat()
+        assert not sup.failed and not sup.ready and sup.epoch.stage=='POLICY_READY'
+    finally:sup.close();port.close_head_io(timeout_s=1.)
 
 
 def guarded(sup,port):

@@ -143,7 +143,8 @@ class HeadPrimarySupervisor:
                 self.observer.heartbeat(record)
                 stage = self.epoch.stage; arming = self._arming
                 reply = self.monitor.request_runtime(dict(operation='HEARTBEAT', heartbeat=record))
-                allowed = {'POLICY_READY', 'ARMED_READY'} if arming else {stage}
+                allowed = {stage, self.epoch.stage}
+                if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
                 if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
                 self._ack(reply, 'HEARTBEAT', reply['stage'])
             except BaseException:
@@ -272,6 +273,6 @@ class HeadPrimarySupervisor:
         self._receipt = dict(stage='RETIRED', motion_authority=False, fault=deepcopy(self._fault),
             native_close=self._native_close, native_close_error=self._native_close_error,
             workers=[dict(name=t.name, alive=t.is_alive()) for t in self._threads], action_io=retired,
-            stop_observations=deepcopy(self.port.stop_predicate_observations))
+            stop_observations=deepcopy(list(self.port.stop_predicate_observations)))
         self._finished = True
         return deepcopy(self._receipt)
