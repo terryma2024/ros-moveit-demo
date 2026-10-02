@@ -66,6 +66,7 @@ class RosControllerPort:
         self.stop_velocity=finite(stop_velocity_rad_s);self.max_age=finite(max_age_s)
         if self.stop_velocity<0 or self.max_age<=0: raise ValueError('STOP_CONFIG_INVALID')
         self._lock=threading.RLock();self._goals={};self._velocity=None;self._received=None
+        self._head_inventory_scope=None;self._head_inventory_sequence=0
         self._subscription=node.create_subscription(JointState,'/joint_states',self._feedback,
                                                     qos_profile_sensor_data)
 
@@ -194,6 +195,68 @@ class RosControllerPort:
             raise
         return gid
 
+    def inventory_prepared(self,record,payload):
+        """Own an unknown UUID before native reservation, without sending it.
+
+        This local inventory grants no native or CPU authority. The dispatcher
+        separately freezes scope and requires the authenticated monitor ACK.
+        """
+        import json
+        import re
+        import uuid
+        from so101_demo.act.head_monitor import canonical_bytes
+        from .head_monitor_goal_binding import validate_goal_inventory
+        try:
+            if (self.feedback_policy is None or self.names!=('neck_yaw_joint',)
+                    or self._head_policy_binding_failed or self._head_fault_callback is None):
+                raise PermissionError('HEAD_PRIMARY_INVENTORY_POLICY_REQUIRED')
+            required={'goal_uuid','typed_goal','payload_sha256','generation','controller_identity',
+                'attempt_epoch','session_id','role','operation_sequence','claim_monotonic_ns','deadline_ns'}
+            if type(record) is not dict or set(record)!=required:
+                raise ValueError('HEAD_PRIMARY_INVENTORY_FIELDS_INVALID')
+            owned=validate_goal_inventory(record,payload)
+            gid=owned['goal_uuid'];parsed=uuid.UUID(gid)
+            identity=owned['controller_identity'];generation=owned['generation']
+            claim,deadline=owned['claim_monotonic_ns'],owned['deadline_ns']
+            sequence=owned['operation_sequence']
+            if (str(parsed)!=gid or parsed.version!=4 or owned['role']!='neck'
+                    or type(generation) is not int or not 0<generation<2**64
+                    or type(sequence) is not int or sequence<=0
+                    or any(type(owned[key]) is not str
+                        or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',owned[key])
+                        for key in ('attempt_epoch','session_id'))
+                    or type(identity) is not dict or set(identity)!={'generation','incarnation','boot'}
+                    or type(identity['generation']) is not int or identity['generation']!=generation
+                    or any(type(identity[key]) is not str or not re.fullmatch(r'[\x20-\x7e]{1,64}',identity[key])
+                        for key in ('incarnation','boot'))
+                    or type(claim) is not int or type(deadline) is not int
+                    or not 0<claim<deadline<2**63 or deadline-claim!=400_000_000):
+                raise ValueError('HEAD_PRIMARY_INVENTORY_SCOPE_INVALID')
+            body=canonical_bytes(owned)
+            if len(body)>65536:raise ValueError('HEAD_PRIMARY_INVENTORY_TOO_LARGE')
+            scope=canonical_bytes({key:owned[key] for key in
+                ('generation','controller_identity','attempt_epoch','session_id','role')})
+            pending=dict(accepted=None,handle=None,result=None,cancel_requested=False,
+                cancel_ack=False,error=None,goal=json.loads(canonical_bytes(owned['typed_goal'])),
+                prepared_cdr_sha256=owned['payload_sha256'],primary_inventory=body,
+                prepared_typed_goal_bytes=canonical_bytes(owned['typed_goal']),
+                primary_claim_window_ns=(claim,deadline),sdk_claimed=False)
+            with self._lock:
+                if (self._head_policy_binding_failed or gid in self._goals or len(self._goals)>=128
+                        or sequence!=self._head_inventory_sequence+1
+                        or (self._head_inventory_scope is not None and self._head_inventory_scope!=scope)
+                        or not claim<=time.monotonic_ns()<=deadline):
+                    raise PermissionError('HEAD_PRIMARY_INVENTORY_REFUSED')
+                self._goals[gid]=pending
+                self._head_inventory_scope=scope;self._head_inventory_sequence=sequence
+            return True
+        except Exception:
+            self._head_policy_binding_failed=True
+            if self._head_fault_callback is not None:
+                try:self._head_fault_callback('HEAD_PRIMARY_INVENTORY_FAILED')
+                except Exception as error:self._head_fault_handler_error=type(error).__name__
+            raise
+
     def send_prepared(self,message,*,goal_uuid,expected_cdr,dispatch_guard):
         """Send the complete inventory/native-bound Head message without rebuilding it.
 
@@ -224,10 +287,20 @@ class RosControllerPort:
             record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
                 cancel_ack=False,error=None,goal=message_to_ordereddict(message),
                 prepared_cdr_sha256=hashlib.sha256(expected_cdr).hexdigest())
+            from so101_demo.act.head_monitor import canonical_bytes
+            typed=canonical_bytes(record['goal'])
             with self._lock:
-                if gid in self._goals:raise PermissionError('HEAD_PREPARED_UUID_REUSED')
                 if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
-                self._goals[gid]=record
+                if gid in self._goals:
+                    existing=self._goals[gid]
+                    if (type(existing.get('primary_inventory')) is not bytes
+                            or existing.get('sdk_claimed') is not False
+                            or existing.get('prepared_cdr_sha256')!=record['prepared_cdr_sha256']
+                            or existing.get('prepared_typed_goal_bytes')!=typed):
+                        raise PermissionError('HEAD_PREPARED_UUID_REUSED')
+                    record=existing
+                else:self._goals[gid]=record
+                record['sdk_claimed']=True
             # No cache lock covers IPC, serialisation or the SDK call. Check the
             # original feedback after the guard, so guard latency adds no age.
             if dispatch_guard() is not True:raise PermissionError('HEAD_PREPARED_GUARD_REFUSED')
@@ -235,6 +308,9 @@ class RosControllerPort:
                 raise ValueError('HEAD_PREPARED_CDR_MISMATCH')
             self.feedback_snapshot()
             if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
+            claim=record.get('primary_claim_window_ns')
+            if claim is not None and not claim[0]<=time.monotonic_ns()<=claim[1]:
+                raise PermissionError('HEAD_PREPARED_CLAIM_EXPIRED')
             record['sdk_dispatch_wall_s']=self.monotonic()
             response=self.client.send_goal_async(message,goal_uuid=owned_uuid)
             record['sdk_returned_wall_s']=self.monotonic()
