@@ -112,3 +112,76 @@ def test_pending_original_waits_for_exact_tf_before_admission(capture):
     assert capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
     assert capture._pending is original
     assert capture._pending[0]['wall_s']==10.001
+
+
+def declare(capture):
+    capture.begin_capture()
+    getattr(capture,'declare_window',lambda **kw:None)(start_ns=11_000_000_000,end_ns=31_000_000_000)
+
+
+def test_export_after_predeclared_end_does_not_admit_or_drop_new_presence(capture):
+    declare(capture)
+    capture.monotonic=lambda:31.001
+    capture._image(image());capture._image(image(1_100_000_000))
+    capture.check()
+    assert capture.take_image() is None
+    assert [row['event'] for row in capture.events]==['IMAGE_UNADMITTED_PRESENCE']*2
+    assert len(capture.camera_messages)==2
+
+
+def test_post_end_presence_cannot_hide_unconsumed_in_window_exposure(capture):
+    declare(capture)
+    capture.monotonic=lambda:30.999;capture._image(image())
+    capture.monotonic=lambda:31.001;capture._image(image(1_100_000_000))
+    assert capture._pending[0]['source_ns']==1_000_000_000
+    with pytest.raises(ValueError,match='UNCONSUMED'):
+        getattr(capture,'finish_window',lambda:None)()
+
+
+def test_camera_info_and_clock_forward_original_metadata_after_cache_release(capture):
+    records=[]
+    def sink(kind,record):
+        assert not capture.port._lock._is_owned()
+        records.append((kind,record.copy()))
+        if kind=='INFO':record['k'][0]=-1.
+    getattr(capture,'bind_original_sink',lambda sink:None)(sink)
+    capture._image(image());capture._info(info())
+    msg=Clock();msg.clock.sec=1;capture._clock(msg)
+    assert [kind for kind,_ in records]==['IMAGE','INFO','CLOCK']
+    assert all(record['wall_s']==10.001 and record['source_ns']==1_000_000_000 for _,record in records)
+    assert capture.info_messages[-1]['k'][0]==415.
+
+
+def test_original_sink_failure_consumes_capture_before_return(capture):
+    def sink(kind,record):raise RuntimeError('writer unavailable')
+    getattr(capture,'bind_original_sink',lambda sink:None)(sink)
+    capture._info(info())
+    with pytest.raises(ValueError,match='ORIGINAL_SINK_FAILED'):capture.check()
+
+
+def test_failure_before_capture_boundary_cannot_be_cleared(capture):
+    capture._image(image(0))
+    with pytest.raises(ValueError):capture.begin_capture()
+
+
+def test_declared_window_and_original_sink_cannot_be_rebound(capture):
+    declare(capture)
+    with pytest.raises(PermissionError):capture.declare_window(start_ns=12_000_000_000,end_ns=32_000_000_000)
+    capture.bind_original_sink(lambda *a:None)
+    with pytest.raises(PermissionError):capture.bind_original_sink(lambda *a:None)
+
+
+def test_in_window_drop_and_post_window_invalidity_still_fail(capture):
+    declare(capture);capture.monotonic=lambda:30.
+    capture._image(image());capture._image(image(1_100_000_000))
+    capture.monotonic=lambda:32.;capture._image(image(1_200_000_000))
+    with pytest.raises(ValueError,match='DROPPED'):capture.finish_window()
+
+
+def test_finished_window_cannot_replay_exposure_or_reopen(capture):
+    declare(capture);capture.monotonic=lambda:32.;capture.finish_window()
+    capture._image(image())
+    assert capture.infer(None,None,session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
+    with pytest.raises(PermissionError):capture.finish_window()
+    invalid=image(1_100_000_000);invalid.header.frame_id='foreign';capture._image(invalid)
+    with pytest.raises(ValueError,match='INVALID'):capture.check()

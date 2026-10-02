@@ -5,6 +5,7 @@ snapshots share its short cache lock; clocks are read after copying originals.
 No method here arms a controller, sends a goal or grants motion authority.
 """
 from collections import deque
+from copy import deepcopy
 import hashlib
 import math
 import threading
@@ -30,6 +31,7 @@ class StoppedHeadCapture:
         self.camera_messages=deque(maxlen=40000);self.info_messages=deque(maxlen=40000)
         self.clock_messages=deque(maxlen=40000);self.events=deque(maxlen=40000)
         self._pending=None;self._last={};self._last_camera=None
+        self._original_sink=None;self._window=None;self._window_finished=False
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
@@ -37,13 +39,53 @@ class StoppedHeadCapture:
 
     def begin_capture(self):
         """Declare the first workload boundary once, after CUDA/discovery warmup."""
-        if self._started:raise PermissionError('HEAD_STOPPED_CAPTURE_REUSED')
-        self._started=True
         with self.port._lock:
-            self.strict=True;self._pending=None;self._failure=None
+            if self._started:raise PermissionError('HEAD_STOPPED_CAPTURE_REUSED')
+            self.check();self._started=True
+            self.strict=True;self._pending=None
             # Startup is diagnostic only. From this boundary every original is
             # retained; overflow refuses instead of silently dropping history.
             for rows in (self.camera_messages,self.info_messages,self.clock_messages,self.events):rows.clear()
+
+    def bind_original_sink(self,sink):
+        if not callable(sink):raise ValueError('HEAD_STOPPED_ORIGINAL_SINK_INVALID')
+        with self.port._lock:
+            if self._original_sink is not None or self._failure is not None:
+                raise PermissionError('HEAD_STOPPED_ORIGINAL_SINK_REBOUND')
+            self._original_sink=sink
+
+    def _forward_original(self,kind,record):
+        sink=self._original_sink
+        if sink is None:return
+        try:sink(kind,deepcopy(record))
+        except Exception:
+            self._failure='HEAD_STOPPED_ORIGINAL_SINK_FAILED'
+            self.port._head_policy_binding_failed=True
+            callback=getattr(self.port,'_head_fault_callback',None)
+            if callback is not None:
+                try:callback(self._failure)
+                except Exception:pass
+
+    def declare_window(self,*,start_ns,end_ns):
+        if (type(start_ns) is not int or type(end_ns) is not int
+                or end_ns-start_ns!=20_000_000_000 or start_ns<=nanoseconds(self.monotonic())):
+            raise ValueError('HEAD_STOPPED_WINDOW_DECLARATION_INVALID')
+        with self.port._lock:
+            self.check()
+            if not self._started or self._window is not None:
+                raise PermissionError('HEAD_STOPPED_WINDOW_REDECLARED')
+            self._window=(start_ns,end_ns)
+
+    def finish_window(self):
+        with self.port._lock:
+            self.check()
+            if (self._window is None or self._window_finished
+                    or nanoseconds(self.monotonic())<self._window[1]):
+                raise PermissionError('HEAD_STOPPED_WINDOW_FINISH_INVALID')
+            if self._pending is not None:
+                self._failure='HEAD_STOPPED_IN_WINDOW_UNCONSUMED'
+                self.check()
+            self._window_finished=True
 
     def _record(self,rows,record):
         if self.strict and len(rows)==rows.maxlen:self._failure='HEAD_STOPPED_HISTORY_OVERFLOW'
@@ -67,11 +109,17 @@ class StoppedHeadCapture:
         if not valid:record['error']='HEAD_STOPPED_IMAGE_INVALID'
         with self.port._lock:
             self._validate_source('image',record);self._record(self.camera_messages,record)
-            if self._pending is not None:
+            unadmitted=self._window is not None and nanoseconds(received)>self._window[1]
+            if unadmitted:
+                self._record(self.events,dict(event='IMAGE_UNADMITTED_PRESENCE',
+                    source_ns=record['source_ns'],wall_s=received))
+            elif self._pending is not None:
                 self._record(self.events,dict(event='IMAGE_DROPPED',source_ns=self._pending[0]['source_ns'],
                                               replacing_source_ns=record['source_ns'],wall_s=received))
                 if self.strict:self._failure='HEAD_STOPPED_IMAGE_DROPPED'
-            self._pending=(record,data);self._last_camera=record
+            if not unadmitted:self._pending=(record,data)
+            self._last_camera=record
+        self._forward_original('IMAGE',record)
         if self.emit is not None and self._started:
             try:self.emit('IMAGE',record=record,payload=data)
             except Exception:self._failure='HEAD_STOPPED_EVIDENCE_FAILED'
@@ -88,12 +136,14 @@ class StoppedHeadCapture:
         if not valid:record['error']='HEAD_STOPPED_INFO_INVALID'
         with self.port._lock:
             self._validate_source('info',record);self._record(self.info_messages,record)
+        self._forward_original('INFO',record)
 
     def _clock(self,message):
         record=dict(source_ns=message.clock.sec*1_000_000_000+message.clock.nanosec,
                     wall_s=self.monotonic(),valid=True)
         with self.port._lock:
             self._validate_source('clock',record);self._record(self.clock_messages,record)
+        self._forward_original('CLOCK',record)
 
     def check(self):
         if self._failure is not None:raise ValueError(self._failure)
@@ -116,6 +166,7 @@ class StoppedHeadCapture:
         """Consume an advancing exposure once; all SDK/CUDA work is outside cache."""
         self.check()
         with self.port._lock:
+            if self._window_finished:return None
             pending=self._pending
             if pending is None:return None
             record,data=pending
@@ -238,6 +289,7 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                 if midpoint<=time.monotonic_ns():
                     raise ValueError('HEAD_STOPPED_WINDOW_DECLARATION_LATE')
                 start_ns=midpoint;end_ns=start_ns+20_000_000_000
+                capture.declare_window(start_ns=start_ns,end_ns=end_ns)
                 capture.workload.update(start_ns=start_ns,end_ns=end_ns)
                 progress(stage='window',start_ns=start_ns,end_ns=end_ns)
             result=capture.infer(detector,tf_buffer,session_id=session_id,attempt_id='bootstrap_workload',
@@ -249,6 +301,7 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
         for thread in threads:thread.join(timeout=1.)
         if any(thread.is_alive() for thread in threads):raise RuntimeError('HEAD_STOPPED_WORKER_TEARDOWN_FAILED')
     if errors:raise errors[0]
+    capture.finish_window()
     window=capture.window(start_ns=start_ns,end_ns=end_ns,decisions=decisions,polls=polls,inferences=inferences)
     progress(stage='collected',window=window)
     measured=evaluate_feedback_window(window,stop_latency_s=stop_latency_s)

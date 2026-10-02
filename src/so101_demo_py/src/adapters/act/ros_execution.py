@@ -53,6 +53,7 @@ class RosControllerPort:
         if head_fault_callback is not None and not callable(head_fault_callback):
             raise ValueError('HEAD_CALLBACK_FAULT_HANDLER_INVALID')
         self._head_fault_callback=head_fault_callback
+        self._head_original_sink=None
         self._head_fault_handler_error=None
         self._head_io=None if feedback_policy is None and not head_bootstrap else {
             'result':HeadCallbackIO('head-result-rpc'),
@@ -72,6 +73,14 @@ class RosControllerPort:
 
     @property
     def feedback_policy(self):return self._feedback_policy
+
+    def bind_head_original_sink(self,sink):
+        if not callable(sink):raise ValueError('HEAD_ORIGINAL_SINK_INVALID')
+        with self._lock:
+            if (self._head_original_sink is not None or self._head_policy_binding_failed
+                    or (not self._head_bootstrap and self.feedback_policy is None)):
+                raise PermissionError('HEAD_ORIGINAL_SINK_REBOUND')
+            self._head_original_sink=sink
 
     def bind_head_policy(self,values):
         """Freeze measured policy on the original stopped-bootstrap subscriber."""
@@ -169,6 +178,14 @@ class RosControllerPort:
                 else:self._head_source_watermark=source_ns
             self._head_sequence+=1;sample['sequence']=self._head_sequence
             self._head_samples.append(sample);self._head_feedback=sample
+        if self._head_original_sink is not None:
+            from copy import deepcopy
+            try:self._head_original_sink('JOINT',deepcopy(sample))
+            except Exception:
+                self._head_policy_binding_failed=True
+                if self._head_fault_callback is not None:
+                    try:self._head_fault_callback('HEAD_ORIGINAL_SINK_FAILED')
+                    except Exception:self._head_fault_handler_error='HEAD_ORIGINAL_FAULT_HANDLER_FAILED'
 
     def send(self,goal,*,goal_uuid=None):
         if self._head_policy_binding_failed:

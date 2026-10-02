@@ -75,6 +75,7 @@ def main(argv=None):
         _process_start_ticks,write_head_primary_fault_provision)
     from so101_demo.adapters.act.head_monitor_process import start_monitor
     from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture,measure_stopped_workload
+    from so101_demo.adapters.act.head_original_journal import HeadOriginalJournal
     from so101_demo.adapters.act.ros_execution import RosControllerPort
     import rclpy
     from rclpy.context import Context
@@ -106,7 +107,7 @@ def main(argv=None):
     _write(root/'attempt-declaration.json',dict(result,window_rule='stable10s then latest original camera receipt + stable p50 receipt gap / 2; end=start+20s; no retry',
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
-    monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=None
+    monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=None
     try:
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
@@ -146,6 +147,14 @@ def main(argv=None):
                                max_age_s=values['max_age_s'],head_bootstrap=True)
         writer=_ImageWriter(root)
         capture=StoppedHeadCapture(node,port,frame_id=production['camera']['frame_id'],strict=False,emit=writer.emit)
+        def original_failure(reason):
+            # An owned writer failure invalidates this attempt before any
+            # diagnostic formatting, policy binding or future ARM decision.
+            capture._failure=reason;port._head_policy_binding_failed=True
+            if port._head_fault_callback is not None:port._head_fault_callback(reason)
+        original_writer=HeadOriginalJournal(root/'primary-originals.jsonl',fault_callback=original_failure)
+        port.bind_head_original_sink(original_writer)
+        capture.bind_original_sink(original_writer)
         buffer=Buffer();listener=TransformListener(buffer,node)
         executor=SingleThreadedExecutor(context=context);executor.add_node(node)
         spinner=threading.Thread(target=executor.spin,name='head-bootstrap-ros');spinner.start()
@@ -200,6 +209,7 @@ def main(argv=None):
         policy['sha256']=digest(policy);reference=_write(root/'provisional-policy.json',policy)
         monitor.request_runtime(dict(operation='POLICY',policy=reference))
         result['policy_ack']=monitor.await_runtime(phase='policy',timeout_s=10.)
+        capture.check()
         port.bind_head_policy(measured['values'])
         result['status']='STOPPED_BOOTSTRAP_MEASURED'
     except Exception as error:
@@ -238,6 +248,9 @@ def main(argv=None):
         if writer is not None:
             try:result['images']=writer.close()
             except Exception as error:result['image_seal_error']=str(error);result['status']='REFUSED'
+        if original_writer is not None:
+            try:result['primary_original_journal']=original_writer.close(timeout_s=10.)
+            except Exception as error:result['primary_original_seal_error']=str(error);result['status']='REFUSED'
         if monitor is not None:
             try:result['monitor_teardown']=monitor.close()
             except Exception as error:result['monitor_teardown_error']=str(error);result['status']='REFUSED'

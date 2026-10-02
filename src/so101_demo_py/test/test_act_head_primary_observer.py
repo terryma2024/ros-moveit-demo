@@ -90,3 +90,29 @@ def test_independent_cpu_observer_never_accepts_primary_injected_originals():
             cpu.observe_original('CLOCK',dict(source_ns=1_000_000_000,wall_s=9.999,valid=True))
         assert cpu._clock is None
     finally:cpu.close(timeout_s=1.)
+
+
+def test_original_joint_sink_keeps_receipt_and_never_runs_inside_port_cache():
+    node,port,primary,_,_=shared();records=[]
+    def sink(kind,record):
+        assert not port._lock._is_owned()
+        records.append((kind,record.copy()))
+        record['positions']=(99.,)
+    try:
+        getattr(port,'bind_head_original_sink',lambda sink:None)(sink)
+        message=sample();message.header.stamp.nanosec=10_000_000
+        port._feedback(message)
+        assert len(records)==1 and records[0][0]=='JOINT'
+        assert records[0][1]['wall_s']==10. and records[0][1]['source_ns']==1_010_000_000
+        assert port._head_feedback['positions']!=(99.,)
+    finally:primary.close(timeout_s=1.);port.close_head_io(timeout_s=1.)
+
+
+def test_original_joint_sink_failure_latches_owned_fault_before_return():
+    node,port,primary,_,faults=shared()
+    def sink(kind,record):raise RuntimeError('owned journal unavailable')
+    try:
+        getattr(port,'bind_head_original_sink',lambda sink:None)(sink)
+        message=sample();message.header.stamp.nanosec=10_000_000;port._feedback(message)
+        assert port._head_policy_binding_failed and primary.failed and faults
+    finally:primary.close(timeout_s=1.);port.close_head_io(timeout_s=1.)
