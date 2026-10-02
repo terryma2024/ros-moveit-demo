@@ -26,6 +26,16 @@ def _write(path,record):
     return _reference(path)
 
 
+def _bind_native_diagnostic(primary,authority,result):
+    # A later identity/RPC failure cannot erase an already acknowledged ARM.
+    # Without a complete reply the physical outcome remains unknown, never zero.
+    result['native_arm_count']=None
+    try:return primary.arm(authority)
+    finally:
+        result['main_exchange_receipts']=list(authority.exchange_receipts)
+        if 'neck' in authority._armed:result['native_arm_count']=1
+
+
 class _ImageWriter:
     """Bounded owned worker: callbacks never write pixels to disk."""
     def __init__(self,root):
@@ -255,9 +265,7 @@ def main(argv=None):
             authority=HeadReservationAuthority(directory=directory,capability=provisions.capabilities['neck'],
                 native_owner=native,generation=generation,session_id=session,
                 arm_guard=primary.prearm_guard,fault_callback=primary.fault)
-            result['native_identity']=primary.arm(authority)
-            result['native_arm_count']=sum(row['operation']=='SOGR' for row in authority.exchange_receipts)
-            result['main_exchange_receipts']=authority.exchange_receipts
+            result['native_identity']=_bind_native_diagnostic(primary,authority,result)
             result['primary_ready']=primary.ready
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()

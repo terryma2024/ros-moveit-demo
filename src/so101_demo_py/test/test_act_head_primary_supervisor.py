@@ -257,3 +257,14 @@ def test_epoch_shadow_unknown_uuid_is_cancelled_when_local_sdk_insertion_failed(
         assert len(port.node.calls)==2
         assert port.stopped() is False
     finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('acknowledged',[False,True])
+def test_diagnostic_later_identity_failure_cannot_report_zero_native_arms(acknowledged):
+    from so101_demo.cli.head_feedback_bootstrap import _bind_native_diagnostic
+    authority=SimpleNamespace(_armed={'neck'} if acknowledged else set(),exchange_receipts=[])
+    def fail(value):raise PermissionError('controlled identity-stage failure')
+    primary=SimpleNamespace(arm=fail);result=dict(native_arm_count=0)
+    with pytest.raises(PermissionError):_bind_native_diagnostic(primary,authority,result)
+    assert result['native_arm_count']==(1 if acknowledged else None)
+    assert result['main_exchange_receipts']==[]
