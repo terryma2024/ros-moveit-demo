@@ -15,6 +15,8 @@ from .controller_reservation_provision import _private_parent, _process_start_ti
 
 
 class NativeRevocationClient:
+    _connection_bound_s=.002
+
     def __init__(self, path, *, capability, native_owner, generation,
                  timeout_s, monotonic=time.monotonic):
         self.path=Path(path)
@@ -24,7 +26,7 @@ class NativeRevocationClient:
         self.timeout=timeout_s
         self.monotonic=monotonic
         if (type(generation) is not int or not 0<generation<2**64
-                or type(timeout_s) not in (int,float) or not 0<timeout_s<=.002
+                or type(timeout_s) not in (int,float) or not 0<timeout_s<=self._connection_bound_s
                 or not callable(monotonic)
                 or not isinstance(capability,bytes) or len(capability)!=32 or not any(capability)
                 or set(self.native_owner)!= {'uid','pid','start_ticks'}
