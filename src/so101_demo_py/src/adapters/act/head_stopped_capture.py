@@ -24,6 +24,13 @@ def _source(message):
     return message.header.stamp.sec*1_000_000_000+message.header.stamp.nanosec
 
 
+def stopped_window_boundary(receipts,*,now_ns):
+    """Wait for a future half-period boundary without declaring an attempt."""
+    gaps=sorted(right-left for left,right in zip(receipts,receipts[1:]))
+    midpoint=nanoseconds(receipts[-1])+nanoseconds(gaps[len(gaps)//2]/2)
+    return midpoint if midpoint>now_ns else None
+
+
 class StoppedHeadCapture:
     def __init__(self,node,port,*,frame_id,monotonic=time.monotonic,strict=True,emit=None):
         self.node,self.port,self.frame_id,self.monotonic=node,port,frame_id,monotonic
@@ -284,14 +291,17 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                         or any(abs((right['source_ns']-left['source_ns'])*1e-9-.01)>1e-6
                                for left,right in zip(stable_joints,stable_joints[1:]))):
                     raise ValueError('HEAD_STOPPED_STABLE_STREAM_INVALID')
-                gaps=sorted(right-left for left,right in zip(receipts,receipts[1:]))
-                midpoint=nanoseconds(receipts[-1])+nanoseconds(gaps[len(gaps)//2]/2)
-                if midpoint<=time.monotonic_ns():
+                midpoint=stopped_window_boundary(receipts,now_ns=time.monotonic_ns())
+                if midpoint is not None:
+                    start_ns=midpoint;end_ns=start_ns+20_000_000_000
+                    capture.declare_window(start_ns=start_ns,end_ns=end_ns)
+                    capture.workload.update(start_ns=start_ns,end_ns=end_ns)
+                    progress(stage='window',start_ns=start_ns,end_ns=end_ns)
+                elif time.monotonic()-stable_start>10.2:
+                    # The fixed 10 Hz source gets at most two source periods
+                    # to present the next original. Keep consuming stable
+                    # exposures while waiting; never retry a declared window.
                     raise ValueError('HEAD_STOPPED_WINDOW_DECLARATION_LATE')
-                start_ns=midpoint;end_ns=start_ns+20_000_000_000
-                capture.declare_window(start_ns=start_ns,end_ns=end_ns)
-                capture.workload.update(start_ns=start_ns,end_ns=end_ns)
-                progress(stage='window',start_ns=start_ns,end_ns=end_ns)
             result=capture.infer(detector,tf_buffer,session_id=session_id,attempt_id='bootstrap_workload',
                                  stop_velocity_rad_s=stop_velocity_rad_s)
             if result is not None:inferences.append(result)

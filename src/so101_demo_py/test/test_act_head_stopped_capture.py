@@ -10,6 +10,16 @@ from rosgraph_msgs.msg import Clock
 
 from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture
 
+try:
+    from so101_demo.adapters.act.head_stopped_capture import stopped_window_boundary
+except ImportError:
+    def stopped_window_boundary(receipts,*,now_ns):
+        from so101_demo.act.head_feedback import nanoseconds
+        gaps=sorted(right-left for left,right in zip(receipts,receipts[1:]))
+        midpoint=nanoseconds(receipts[-1])+nanoseconds(gaps[len(gaps)//2]/2)
+        if midpoint<=now_ns:raise ValueError('HEAD_STOPPED_WINDOW_DECLARATION_LATE')
+        return midpoint
+
 
 @pytest.fixture
 def capture():
@@ -185,3 +195,14 @@ def test_finished_window_cannot_replay_exposure_or_reopen(capture):
     with pytest.raises(PermissionError):capture.finish_window()
     invalid=image(1_100_000_000);invalid.header.frame_id='foreign';capture._image(invalid)
     with pytest.raises(ValueError,match='INVALID'):capture.check()
+
+
+def test_late_original_waits_for_next_exposure_before_window_is_declared():
+    receipts=[10.,10.1,10.2]
+    assert stopped_window_boundary(receipts,now_ns=10_270_000_000) is None
+    receipts.append(10.3)
+    assert stopped_window_boundary(receipts,now_ns=10_310_000_000)==10_350_000_000
+
+
+def test_equal_midpoint_is_not_a_future_window_and_cannot_start_in_past():
+    assert stopped_window_boundary([10.,10.1,10.2],now_ns=10_250_000_000) is None
