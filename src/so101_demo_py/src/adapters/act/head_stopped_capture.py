@@ -11,13 +11,12 @@ import math
 import threading
 import time
 
-from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import Image, CameraInfo
-from rclpy.qos import qos_profile_sensor_data
 
 from so101_demo.act.head_feedback import decision_clocks, nanoseconds
 from so101_demo.act.head_feedback_measurement import evaluate_feedback_window, _quantile
 from .ros_search import RGB_QOS, rotation_matrix
+from .head_clock_binding import bind_head_clock
 
 
 def _source(message):
@@ -46,7 +45,7 @@ class StoppedHeadCapture:
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
-            node.create_subscription(Clock,'/clock',self._clock,qos_profile_sensor_data)]
+            bind_head_clock(node,self._clock,monotonic=self.monotonic)]
 
     def begin_capture(self):
         """Declare the first workload boundary once, after CUDA/discovery warmup."""
@@ -149,9 +148,9 @@ class StoppedHeadCapture:
             self._validate_source('info',record);self._record(self.info_messages,record)
         self._forward_original('INFO',record)
 
-    def _clock(self,message):
+    def _clock(self,message,*,received_wall_s=None):
         record=dict(source_ns=message.clock.sec*1_000_000_000+message.clock.nanosec,
-                    wall_s=self.monotonic(),valid=True)
+                    wall_s=self.monotonic() if received_wall_s is None else received_wall_s,valid=True)
         with self.port._lock:
             self._validate_source('clock',record);self._record(self.clock_messages,record)
         self._forward_original('CLOCK',record)

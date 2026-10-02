@@ -151,7 +151,10 @@ class HeadMonitorRuntime:
         return dict(stage='CONFIGURED',motion_authority=False,monitor_peer=dict(self.identity),
             provisions=self._provisions,dependencies=self._dependencies,node_name=self._node.get_name(),
             executor='SingleThreadedExecutor',joint_qos=dict(depth=5,reliability='BEST_EFFORT'),
-            camera_qos=dict(depth=32,reliability='RELIABLE'),goal_codec_warmup=self._goal_codec_warmup)
+            camera_qos=dict(depth=32,reliability='RELIABLE'),goal_codec_warmup=self._goal_codec_warmup,
+            clock_qos=dict(depth=self._node._time_source._clock_sub.qos_profile.depth,
+                reliability=self._node._time_source._clock_sub.qos_profile.reliability.name),
+            clock_subscription_count=sum(sub.topic_name=='/clock' for sub in self._node.subscriptions))
 
     def _configure(self,record):
         fields={'native_owner','reservation_directory','journal_path','dependencies','observer','purpose'}

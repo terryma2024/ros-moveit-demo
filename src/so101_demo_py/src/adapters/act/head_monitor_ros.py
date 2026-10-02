@@ -14,13 +14,13 @@ from action_msgs.msg import GoalStatusArray
 from action_msgs.srv import CancelGoal
 from control_msgs.action import FollowJointTrajectory
 from rclpy.qos import qos_profile_sensor_data
-from rosgraph_msgs.msg import Clock
 from sensor_msgs.msg import CameraInfo, Image
 from unique_identifier_msgs.msg import UUID
 
 from so101_demo.act.head_feedback import FeedbackPolicy, decision_clocks, nanoseconds
 from .ros_execution import RosControllerPort
 from .ros_search import RGB_QOS
+from .head_clock_binding import bind_head_clock
 
 _ACTION='/neck_controller/follow_joint_trajectory/_action/'
 
@@ -84,7 +84,7 @@ class HeadROSMonitor:
                                                      qos_profile_sensor_data)]
         if not self._external_inputs:
             self.subscriptions.extend([
-                node.create_subscription(Clock,'/clock',self._on_clock,qos_profile_sensor_data),
+                bind_head_clock(node,self._on_clock,monotonic=self.monotonic),
                 node.create_subscription(Image,'/head_camera/color',self._on_image,RGB_QOS),
                 node.create_subscription(CameraInfo,'/head_camera/camera_info',self._on_info,RGB_QOS)])
 
@@ -234,8 +234,9 @@ class HeadROSMonitor:
     def _stamp(message):
         return message.header.stamp.sec*10**9+message.header.stamp.nanosec
 
-    def _on_clock(self,message):
-        wall=self.monotonic();source=message.clock.sec*10**9+message.clock.nanosec
+    def _on_clock(self,message,*,received_wall_s=None):
+        wall=self.monotonic() if received_wall_s is None else received_wall_s
+        source=message.clock.sec*10**9+message.clock.nanosec
         with self._lock:
             previous=self._clock
             valid=source>0 and (previous is None or source>previous['source_ns'])

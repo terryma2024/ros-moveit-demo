@@ -14,11 +14,24 @@ from test_act_head_feedback_freshness import policy, sample
 from so101_demo.adapters.act.head_monitor_ros import HeadROSMonitor
 
 
+class SubscriptionSpec(tuple):
+    @property
+    def topic_name(self):return self[1]
+
+
 class Node:
     def __init__(self):
         self.wall=10.;self.sim=1.;self.calls=[];self.subscriptions=[]
+        def update(message):self.sim=message.clock.sec+message.clock.nanosec*1e-9
+        self._time_source=SimpleNamespace(ros_time_is_active=True,clock_callback=update)
+        from rosgraph_msgs.msg import Clock
+        from rclpy.qos import QoSProfile
+        # This fixture records application-created subscriptions; TimeSource preexists.
+        self._time_source._clock_sub=SimpleNamespace(callback=update,qos_profile=QoSProfile(depth=1),topic_name='/clock')
     def get_clock(self):return SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=round(self.sim*1e9)))
-    def create_subscription(self,*args):self.subscriptions.append(args);return object()
+    def create_subscription(self,*args):
+        self.subscriptions.append(SubscriptionSpec(args))
+        return SimpleNamespace(callback=args[2],qos_profile=args[3],topic_name=args[1])
     def create_client(self,kind,name):
         node=self
         class Client:

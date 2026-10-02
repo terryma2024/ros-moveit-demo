@@ -27,6 +27,10 @@ def capture():
         _head_feedback=dict(source_ns=1_000_000_000,wall_s=10.,valid=True,
                             positions=(0.,),velocities=(0.,)))
     class Node:
+        def __init__(self):
+            update=lambda message:None
+            self._time_source=SimpleNamespace(ros_time_is_active=True,clock_callback=update,
+                _clock_sub=SimpleNamespace(callback=update,topic_name='/clock'))
         def create_subscription(self,kind,topic,callback,qos):return (kind,topic,callback,qos)
         def get_clock(self):
             assert not port._lock._is_owned()
@@ -56,7 +60,7 @@ def test_camera_and_joint_snapshot_precedes_decision_clock(capture):
     assert snapshot['clocks']['sim_ns']==1_010_000_000
     capture.port._head_feedback['wall_s']=11.
     assert snapshot['joint']['wall_s']==10.
-    assert all(entry[1]!='/joint_states' for entry in capture.subscriptions)
+    assert all((entry.topic_name if hasattr(entry,'topic_name') else entry[1])!='/joint_states' for entry in capture.subscriptions)
 
 
 @pytest.mark.parametrize('damage',['frame','size','encoding','step','bytes','source'])

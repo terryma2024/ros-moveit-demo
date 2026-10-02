@@ -287,6 +287,10 @@ def main(argv=None):
                                max_age_s=values['max_age_s'],head_bootstrap=True)
         writer=_ImageWriter(root)
         capture=StoppedHeadCapture(node,port,frame_id=production['camera']['frame_id'],strict=False,emit=writer.emit)
+        result['clock_binding']=dict(owner='rclpy.TimeSource',
+            depth=node._time_source._clock_sub.qos_profile.depth,
+            reliability=node._time_source._clock_sub.qos_profile.reliability.name,
+            subscription_count=sum(sub.topic_name=='/clock' for sub in node.subscriptions))
         def original_failure(reason):
             # An owned writer failure invalidates this attempt before any
             # diagnostic formatting, policy binding or future ARM decision.
