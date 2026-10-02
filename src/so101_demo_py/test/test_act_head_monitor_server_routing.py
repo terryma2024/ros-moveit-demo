@@ -11,7 +11,9 @@ from so101_demo.adapters.act import head_monitor_process as server
 
 
 @pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY','EXPOSURE_ADMIT','EXPOSURE_FINISH'])
-def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation):
+@pytest.mark.parametrize('parent_module',[None,'torch','mujoco'])
+def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation,parent_module):
+    if parent_module is not None:monkeypatch.setitem(sys.modules,parent_module,object())
     identity=server._peer(os.getpid());handled=[];replies=[]
     field={'EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}.get(operation,'policy')
     requests=iter([dict(operation='PRESENCE'),dict(operation='CONFIGURE',configuration={}),
@@ -43,6 +45,10 @@ def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(c
     monkeypatch.setattr(server,'HeadMonitorChannel',Channel)
     monkeypatch.setattr(server,'MonitorRuntimeProtocol',Runtime)
     monkeypatch.setenv('CUDA_VISIBLE_DEVICES','')
+    # This controlled loop represents a fresh CPU-only exec. Other tests may
+    # already have loaded these modules in the parent pytest worker. Actual
+    # child-process CPU isolation remains covered by the exec tests.
+    for module in ('torch','mujoco'):monkeypatch.delitem(sys.modules,module,raising=False)
     assert server.main()==0
     assert handled==['CONFIGURE',operation,'RETIRE_STATUS']
     assert [reply['request'] for reply in replies]==['PRESENCE','CONFIGURE',operation,'RETIRE_STATUS']
