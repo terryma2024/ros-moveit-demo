@@ -309,6 +309,7 @@ BoundControllerReservationRequest parse_bound_controller_reservation_frame(
   if (goal_length == 0 || goal_length > kMaxGoalCdrBytes || offset + goal_length != body_size) {
     throw std::invalid_argument("BOUND_FRAME_GOAL_LENGTH_INVALID");
   }
+  request.goal_cdr.assign(body + offset, body + offset + goal_length);
   rclcpp::SerializedMessage serialized(goal_length);
   auto & raw = serialized.get_rcl_serialized_message();
   std::memcpy(raw.buffer, body + offset, goal_length);

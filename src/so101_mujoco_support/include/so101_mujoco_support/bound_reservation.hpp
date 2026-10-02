@@ -18,6 +18,7 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "so101_mujoco_support/controller_goal_types.hpp"
 #include "so101_mujoco_support/controller_reservation_role.hpp"
@@ -27,8 +28,8 @@ namespace so101_mujoco_support
 
 // Frozen v2 bound reservation schema. The binding block is explicit and separate
 // from the goal bytes, so a legacy reserve can never treat a bound frame as a bare
-// goal. The gate never trusts a digest carried in this struct: it re-serializes
-// `goal` and hashes it outside the lock on every reserve/admit.
+// goal. The gate verifies the digest against retained wire bytes, independently
+// decodes them, and binds the action hop to the complete verified typed goal.
 constexpr uint8_t kBoundProtocolVersion = 2;
 constexpr uint8_t kBoundReservationOperation = 1;
 constexpr uint32_t kMaxBoundBodyBytes = 1048640;
@@ -86,6 +87,7 @@ struct BoundControllerReservationRequest
   std::string broker_incarnation;
   std::string controller_incarnation;
   std::string controller_boot_incarnation;
+  std::vector<uint8_t> goal_cdr;
   ControllerGoal goal;
 };
 

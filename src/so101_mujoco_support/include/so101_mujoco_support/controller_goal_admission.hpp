@@ -9,6 +9,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
@@ -28,6 +29,7 @@
 #include "control_msgs/action/follow_joint_trajectory.hpp"
 #include "rclcpp/serialization.hpp"
 #include "rclcpp/serialized_message.hpp"
+#include "rcutils/error_handling.h"
 
 namespace so101_mujoco_support
 {
@@ -101,14 +103,28 @@ public:
   }
 
   // --- bound reservation state machine (v2 protocol) ----------------------
-  // No serialization happens under this lock: the parser already stored the goal
-  // digest in the request, and admit_bound_action digests before taking the lock.
+  // Wire verification, decoding and goal ownership happen outside the gate lock.
+  // Action identity uses the complete verified typed goal, never reserialized CDR.
   BoundReserveStatus reserve_bound(const BoundControllerReservationRequest & request)
   {
-    // digest the *actual* goal before taking the lock: nothing in the request is
-    // trusted as a precomputed authority value
-    const auto digest = compute_goal_digest(request.goal);
-    if (!digest) {
+    std::shared_ptr<const Goal> verified_goal;
+    std::array<uint8_t, 32> digest;
+    try {
+      if (request.goal_cdr.empty() || request.goal_cdr.size() > max_goal_bytes_ ||
+        request.goal_cdr.size() > kMaxGoalCdrBytes)
+      {
+        throw std::invalid_argument("BOUND_GOAL_SIZE_INVALID");
+      }
+      digest = sha256::digest(request.goal_cdr);
+      rclcpp::SerializedMessage serialized(request.goal_cdr.size());
+      auto & raw = serialized.get_rcl_serialized_message();
+      std::copy(request.goal_cdr.begin(), request.goal_cdr.end(), raw.buffer);
+      raw.buffer_length = request.goal_cdr.size();
+      Goal decoded;
+      rclcpp::Serialization<Goal>().deserialize_message(&serialized, &decoded);
+      verified_goal = std::make_shared<const Goal>(std::move(decoded));
+    } catch (...) {
+      rcutils_reset_error();
       std::lock_guard<std::mutex> lock(mutex_);
       fault_close();
       return BoundReserveStatus::DENY_CLOSED;
@@ -134,7 +150,7 @@ public:
     if (*now > request.deadline_ns || *now < request.claim_monotonic_ns) {
       return tombstone_and_close(request, BoundReserveStatus::DENY_EXPIRED);
     }
-    if (*digest != request.target_digest) {
+    if (digest != request.target_digest || *verified_goal != request.goal) {
       return tombstone_and_close(request, BoundReserveStatus::DENY_DIGEST_MISMATCH);
     }
     if (bound_.count(request.uuid) != 0 || used_bound_uuids_.count(request.uuid) != 0 ||
@@ -154,7 +170,7 @@ public:
     {
       return tombstone_and_close(request, BoundReserveStatus::DENY_UUID_REPLAY);
     }
-    bound_[request.uuid] = BoundReservation{request.permit_uuid, request.target_digest,
+    bound_[request.uuid] = BoundReservation{request.permit_uuid, std::move(verified_goal),
       request.claim_monotonic_ns, request.deadline_ns};
     bound_permits_[request.permit_uuid] = request.uuid;
     return BoundReserveStatus::ACCEPTED;
@@ -163,9 +179,8 @@ public:
   BoundReserveStatus admit_bound_action(
     const GoalUUID & uuid, const Goal & goal, uint64_t generation)
   {
-    // serialize and digest *before* the lock: no large copy under the gate mutex
-    const auto digest = compute_goal_digest(goal);
-    if (!digest) {
+    // Serialization is used only for the size bound, outside the gate mutex.
+    if (!goal_fits_size_bound(goal)) {
       std::lock_guard<std::mutex> lock(mutex_);
       fault_close();
       return BoundReserveStatus::DENY_CLOSED;
@@ -190,7 +205,7 @@ public:
     if (*now > entry->second.deadline_ns) {
       return drop_and_close(uuid, BoundReserveStatus::DENY_EXPIRED);
     }
-    if (*digest != entry->second.target_digest) {
+    if (goal != *entry->second.goal) {
       return drop_and_close(uuid, BoundReserveStatus::DENY_DIGEST_MISMATCH);
     }
     used_bound_uuids_.insert(uuid);
@@ -307,7 +322,7 @@ private:
   struct BoundReservation
   {
     std::array<uint8_t, 16> permit_uuid;
-    std::array<uint8_t, 32> target_digest;
+    std::shared_ptr<const Goal> goal;
     int64_t claim_monotonic_ns;
     int64_t deadline_ns;
   };
@@ -356,19 +371,17 @@ private:
     }
   }
 
-  std::optional<std::array<uint8_t, 32>> compute_goal_digest(const Goal & goal) const
+  bool goal_fits_size_bound(const Goal & goal) const
   {
     try {
       rclcpp::SerializedMessage serialized;
       rclcpp::Serialization<Goal>().serialize_message(&goal, &serialized);
       const auto & raw = serialized.get_rcl_serialized_message();
-      if (raw.buffer_length == 0 || raw.buffer_length > max_goal_bytes_) {
-        return std::nullopt;                       // oversize goals close the gate
-      }
-      const std::vector<uint8_t> bytes(raw.buffer, raw.buffer + raw.buffer_length);
-      return sha256::digest(bytes);
+      return raw.buffer_length > 0 && raw.buffer_length <= max_goal_bytes_ &&
+             raw.buffer_length <= kMaxGoalCdrBytes;
     } catch (...) {
-      return std::nullopt;
+      rcutils_reset_error();
+      return false;
     }
   }
 
