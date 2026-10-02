@@ -33,6 +33,9 @@ class HeadLiveExposures:
         self._sequence=0;self._source_floor=0;self._image_source=0;self._info_source=0
         self._inference_calls=0;self._busy=False;self.results=[]
         self._inference_owner=threading.get_ident()
+        # Only the existing inference owner mutates these small original records.
+        # Formatting and readback happen at retirement, outside the live path.
+        self._original_attempts=[];self._pending_trace=None
 
     def observe(self,kind,record,*,payload=None):
         if kind=='CLOCK':return  # The existing primary observer owns Clock admission.
@@ -75,7 +78,7 @@ class HeadLiveExposures:
             raise PermissionError('HEAD_LIVE_CONTEXT_REVOKED')
 
     def infer(self):
-        entered=False
+        entered=False;trace=None
         try:
             if threading.get_ident()!=self._inference_owner:
                 raise PermissionError('HEAD_LIVE_INFERENCE_OWNER_INVALID')
@@ -86,22 +89,38 @@ class HeadLiveExposures:
                 image,data=pending;info=self._infos.get(image['source_ns'])
                 info=None if info is None else dict(info)
             deadline=nanoseconds(image['wall_s'])+self.age_ns
+            source=image['source_ns']
+            trace=self._pending_trace
+            if trace is None or trace['source_ns']!=source:
+                if trace is not None and trace['outcome']=='WAITING':
+                    trace['outcome']='SUPERSEDED_BEFORE_ADMISSION'
+                trace=dict(source_ns=source,image_received_wall_s=image['wall_s'],
+                    root_deadline_ns=deadline,phases={'first_pending':self.monotonic()},
+                    outcome='WAITING',error_type=None)
+                self._original_attempts.append(trace);self._pending_trace=trace
+            def mark(phase,wall=None):
+                if phase not in trace['phases']:
+                    trace['phases'][phase]=self.monotonic() if wall is None else wall
             self._guard(deadline)
             if info is None:return None
             deadline=min(deadline,nanoseconds(info['wall_s'])+self.age_ns)
+            trace['info_received_wall_s']=info['wall_s'];trace['root_deadline_ns']=deadline
+            mark('info_ready')
             self._guard(deadline)
             current=self.port.original_feedback_snapshot()
             self.port.feedback_policy.check_joint(current['sample'],current['decision'])
-            source=image['source_ns']
             if source>current['decision']['sim_ns']:return None
+            mark('clock_ready')
             if current['decision']['sim_ns']-source>math.floor(self.port.feedback_policy.camera_max_source_age_s*1e9):
                 raise PermissionError('HEAD_LIVE_ORIGINAL_SOURCE_STALE')
             with self.port._lock:
                 causal=next((dict(row) for row in reversed(self.port._head_samples)
                     if row['source_ns']<=image['source_ns']),None)
             target=Time(nanoseconds=source)
+            mark('tf_probe_started')
             if not self.buffer.can_transform('base',self.frame,target):return None
             transform=self.buffer.lookup_transform('base',self.frame,target)
+            mark('tf_ready')
             tf_source=transform.header.stamp.sec*10**9+transform.header.stamp.nanosec
             rotation_matrix(transform.transform.rotation)
             translation=[getattr(transform.transform.translation,key) for key in ('x','y','z')]
@@ -120,6 +139,8 @@ class HeadLiveExposures:
                 self._pending=None;self._busy=True;self._sequence+=1;self._source_floor=source
                 entered=True
                 sequence=self._sequence
+            trace['sequence']=sequence;trace['outcome']='ADMITTED'
+            mark('admission_committed')
             self.primary.inference_deadline(deadline*1e-9)
             epoch=self.primary.epoch
             claim=dict(epoch=epoch.epoch,generation=epoch.generation,session_id=epoch.session_id,
@@ -129,8 +150,10 @@ class HeadLiveExposures:
                 image_received_wall_s=image['wall_s'],info_received_wall_s=info['wall_s'],deadline_ns=deadline)
             self._guard(deadline)
             started=self.monotonic()
+            mark('admission_request_started',started)
             ack=self.monitor.request_runtime(dict(operation='EXPOSURE_ADMIT',exposure=claim))
             received=self.monotonic()
+            mark('admission_reply_received',received)
             self.primary._ack(ack,'EXPOSURE_ADMIT','ARMED_READY',exposure_admitted=True,
                 sequence=sequence,image_source_ns=source,root_claim=claim)
             snapshot=ack['original_snapshot'];cpu_image=snapshot['image'];cpu_info=snapshot['info']
@@ -144,19 +167,30 @@ class HeadLiveExposures:
                     or snapshot['joint']['source_ns']!=causal['source_ns']):
                 raise PermissionError('HEAD_LIVE_CPU_ADMISSION_INVALID')
             deadline=expected;self.primary.inference_deadline(deadline*1e-9)
+            trace['cpu_deadline_ns']=deadline
+            trace['cpu_image_received_wall_s']=cpu_image['wall_s']
+            trace['cpu_info_received_wall_s']=cpu_info['wall_s']
+            mark('admission_validated')
             self._guard(deadline)
             cuda_started=self.monotonic();self._inference_calls+=1
-            detections=self.detector.detect(np.frombuffer(data,dtype=np.uint8).reshape(480,640,3),
-                session_id=epoch.session_id,attempt_id=epoch.epoch,source_stamp_ns=source,
-                source_frame_id=self.frame)
+            mark('cuda_started',cuda_started)
+            try:
+                detections=self.detector.detect(np.frombuffer(data,dtype=np.uint8).reshape(480,640,3),
+                    session_id=epoch.session_id,attempt_id=epoch.epoch,source_stamp_ns=source,
+                    source_frame_id=self.frame)
+            except BaseException:
+                mark('cuda_raised');raise
             completion=self.monotonic()
+            mark('cuda_returned',completion)
             self._guard(deadline)
             detections=_wire(detections);result_sha=digest(detections)
             done=dict(exposure_sha256=ack['exposure_sha256'],sequence=sequence,image_source_ns=source,
                 completion_wall_s=completion,result_sha256=result_sha)
             finish_started=self.monotonic()
+            mark('completion_request_started',finish_started)
             finish=self.monitor.request_runtime(dict(operation='EXPOSURE_FINISH',completion=done))
             finish_received=self.monotonic()
+            mark('completion_reply_received',finish_received)
             self.primary._ack(finish,'EXPOSURE_FINISH','ARMED_READY',exposure_finished=True,
                 **done,deadline_ns=deadline)
             self._guard(deadline)
@@ -175,9 +209,14 @@ class HeadLiveExposures:
             self._guard(deadline)
             saved=_wire(row)
             with self._lock:self.results.append(saved)
+            mark('record_saved')
             self.primary.inference_deadline(None)
+            mark('deadlines_discharged');trace['outcome']='COMPLETED'
             return row
-        except Exception:
+        except Exception as error:
+            if trace is not None:
+                trace['error_type']=type(error).__name__;trace['outcome']='REFUSED'
+                trace['phases']['refused']=self.monotonic()
             self.primary.fault('HEAD_LIVE_EXPOSURE_REFUSED');raise
         finally:
             if entered:
@@ -201,4 +240,5 @@ class HeadLiveExposures:
         if pending is not None:self.emit('LIVE_EXPOSURE_UNADMITTED_AT_RETIRE',original=pending[0])
         return dict(retired=True,inference_calls=self._inference_calls,
             completed_exposures=len(self.results),sequence=self._sequence,source_floor_ns=self._source_floor,
+            original_attempts=_wire(self._original_attempts),
             inference_thread='owned caller; no child workers')

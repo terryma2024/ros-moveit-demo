@@ -114,6 +114,50 @@ def test_tf_wait_keeps_original_source_and_receipt_until_it_can_be_admitted(tmp_
     finally:retire(c)
 
 
+def test_retirement_retains_original_tf_wait_without_refreshing_receipts(tmp_path):
+    c=composition(tmp_path)
+    try:
+        c.originals();c.tf.available=False
+        assert c.reader.infer() is None
+        c.node.wall=10.002;refresh(c.cpu_node,c.runtime,c.cpu,10.002)
+        c.tf.available=True;row=c.reader.infer()
+        proof=c.reader.close();trace=proof['original_attempts'][0]
+        assert trace['source_ns']==10**9
+        assert trace['image_received_wall_s']==10.0 and trace['info_received_wall_s']==10.0
+        assert trace['root_deadline_ns']==10_050_000_000
+        assert trace['cpu_deadline_ns']==10_050_000_000
+        assert trace['phases']['first_pending']==10.0
+        assert trace['phases']['tf_probe_started']==10.0
+        assert trace['phases']['tf_ready']==10.002
+        assert trace['phases']['cuda_started']==10.002
+        assert trace['phases']['cuda_returned']==row['completion_wall_s']==10.002
+        assert trace['error_type'] is None and trace['outcome']=='COMPLETED'
+        trace['phases']['tf_ready']=99.0
+        assert c.reader.close()['original_attempts'][0]['phases']['tf_ready']==10.002
+    finally:retire(c)
+
+
+def test_expired_cuda_return_is_retained_without_completion_or_result(tmp_path):
+    c=composition(tmp_path)
+    try:
+        c.originals()
+        def late():
+            c.node.wall=10.051;refresh(c.cpu_node,c.runtime,c.cpu,10.051)
+        c.detector.during=late
+        with pytest.raises(PermissionError,match='HEAD_LIVE_EXPOSURE_DEADLINE'):c.reader.infer()
+        assert [row['operation'] for row in c.calls]==['EXPOSURE_ADMIT']
+        assert not c.reader.results and c.primary.failed and c.faults[0][1]==pytest.approx(10.05)
+        trace=c.reader.close()['original_attempts'][0]
+        assert trace['source_ns']==10**9 and trace['sequence']==1
+        assert trace['root_deadline_ns']==trace['cpu_deadline_ns']==10_050_000_000
+        assert trace['phases']['cuda_started']==10.0
+        assert trace['phases']['cuda_returned']==10.051
+        assert 'completion_request_started' not in trace['phases']
+        assert trace['outcome']=='REFUSED' and trace['error_type']=='PermissionError'
+        assert trace['phases']['refused']==10.051
+    finally:retire(c)
+
+
 @pytest.mark.parametrize('damage',['tf_future','tf_skew','tf_invalid','payload','info_missing','root_fault'])
 def test_invalid_live_original_cannot_enter_cuda(tmp_path,damage):
     c=composition(tmp_path)
