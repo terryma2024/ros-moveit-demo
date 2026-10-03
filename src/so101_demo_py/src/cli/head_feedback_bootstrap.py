@@ -69,7 +69,7 @@ def _record_refusal(result,error):
     result['error']=dict(type=type(error).__name__,message=str(error))
 
 
-def _retire_entry_inference(*,primary,inference_owner,live,result):
+def _retire_entry_inference(*,primary,inference_owner,live,result,execution_trace=None):
     # Keep Root/CPU/ROS/journals alive while the original GPU call retires,
     # but finish native/Stop/FAULT/HB workers before any growing audit copy.
     if primary is not None:
@@ -95,6 +95,8 @@ def _retire_entry_inference(*,primary,inference_owner,live,result):
         except Exception as error:
             inference_retired=False;result['live_exposure_teardown_error']=str(error)
             result['producer_seals_withheld']=True;result['status']='REFUSED'
+    if execution_trace is not None:
+        result['root_execution_trace']=execution_trace.finish()
     return inference_retired
 
 
@@ -522,7 +524,7 @@ def main(argv=None):
         probe_owners,_require_empty,measure_gpu_compute_apps,classify_nodes)
     from so101_demo.adapters.act.controller_reservation_provision import (
         _process_start_ticks,write_head_primary_fault_provision)
-    from so101_demo.adapters.act.head_monitor_process import start_monitor
+    from so101_demo.adapters.act.head_monitor_process import start_monitor,MonitorExecutionTrace
     from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture,measure_stopped_workload
     from so101_demo.adapters.act.head_original_journal import HeadOriginalJournal
     from so101_demo.adapters.act.head_original_router import HeadOriginalRouter
@@ -563,8 +565,9 @@ def main(argv=None):
         startup_retention='bounded diagnostic metadata, no pixels before CUDA warmup; all stable/window originals and RGB retained',
         controlled_inputs={name:_reference(getattr(args,name)) for name in ('urdf','scene','plugin_config','controller_config')}))
     monitor=stack=context=node=executor=spinner=port=writer=capture=client=listener=original_writer=original_router=None
-    primary=primary_writer=live=inference_owner=None
+    primary=primary_writer=live=inference_owner=execution_trace=None
     try:
+        execution_trace=MonitorExecutionTrace()
         provisions=publish_provisions(args.reservation_root,session)
         directory=provisions.directory
         if len(os.fsencode(directory/'neck-primary-revoke.sock'))>107:
@@ -824,7 +827,7 @@ def main(argv=None):
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
         inference_retired=_retire_entry_inference(primary=primary,inference_owner=inference_owner,
-            live=live,result=result)
+            live=live,result=result,execution_trace=execution_trace)
         if (inference_retired and result.get('live_pipeline_measurement',{}).get('status')
                 =='LIVE_PIPELINE_MEASURED_UNPROMOTED'):
             try:_write(root/'live-pipeline-measurement.json',result['live_pipeline_measurement'])

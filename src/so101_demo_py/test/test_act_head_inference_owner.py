@@ -287,6 +287,32 @@ def test_actual_owner_exits_without_bulk_readback_then_caller_retains_originals(
         if worker._thread.is_alive():worker.close(timeout_s=1.)
 
 
+def test_root_execution_trace_detaches_after_primary_and_model_retirement():
+    import gc
+    from so101_demo.adapters.act.head_monitor_process import MonitorExecutionTrace
+    before=(gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))
+    trace=MonitorExecutionTrace()
+    class Primary:
+        def close(self):
+            assert trace._result is None
+            trace.mark('primary_closed')
+            return dict(stage='RETIRED',motion_authority=False)
+    class Owner:
+        def close(self):
+            assert trace._result is None
+            trace.mark('model_retired')
+            return dict(error=None,retired=True)
+    result=dict(status='REFUSED')
+    try:
+        assert bootstrap._retire_entry_inference(primary=Primary(),inference_owner=Owner(),
+            live=None,result=result,execution_trace=trace)
+    finally:trace.finish()
+    retained=result['root_execution_trace']
+    assert [r[1] for r in retained['server_phases']]==['primary_closed','model_retired']
+    assert retained['qualification'] is False and retained['motion_authority'] is False
+    assert (gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))==before
+
+
 @pytest.mark.parametrize('primary_failure',[False,True])
 def test_entry_closes_reactive_primary_before_joined_owner_bulk_snapshot(primary_failure):
     detector=Detector();construction=[];faults=[];lives=[];snapshots=[]
