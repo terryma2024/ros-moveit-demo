@@ -782,3 +782,37 @@ def test_negative_heartbeat_preserves_original_cpu_fault_and_reports_without_new
             assert sup._fault_notice is None and sup._fault['reason']=='HEAD_PRIMARY_HEARTBEAT_FAILED'
             assert sup._fault['fault_wall_s']>original and receipt['error_type']=='PermissionError'
     finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('rpc_elapsed_s',[.0005,.0095])
+def test_valid_heartbeat_exchange_does_not_add_idle_time_to_its_original_period(tmp_path,monkeypatch,rpc_elapsed_s):
+    from so101_demo.adapters.act import head_primary_supervisor as primary
+    _,port,sup,_,events,_=setup(tmp_path,prepolicy=True)
+    wall=[100.]
+    monotonic=lambda:wall[0]
+    monkeypatch.setattr(primary,'time',SimpleNamespace(monotonic=monotonic))
+    sup.observer.monotonic=monotonic
+    sup._started_wall=wall[0];sup.observer.executor_progress()
+    original_requests=[];waits=[]
+    def exchange(record):
+        original_requests.append(dict(record['heartbeat']))
+        wall[0]+=rpc_elapsed_s
+        return dict(request='HEARTBEAT',stage='PRESENT',epoch='attempt',generation=5,
+            session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False)
+    def idle(duration):
+        waits.append(duration);wall[0]+=duration
+        # Model the unchanged watchdog reading the actual original heartbeat.
+        if wall[0]-sup.observer._primary['wall_s']>.010:
+            sup.fault('HEAD_PRIMARY_HEARTBEAT_STALE',sup.observer._primary['wall_s']+.010)
+        sup._shutdown.set()
+    sup.monitor.request_runtime=exchange
+    monkeypatch.setattr(sup._fault_event,'wait',idle)
+    try:
+        sup._heartbeat()
+        assert not sup.failed, 'Valid delayed RPC was followed by avoidable idle time that expired its original heartbeat'
+        assert waits==[pytest.approx(max(0.,.002-rpc_elapsed_s))]
+        assert original_requests==[dict(wall_s=100.,executor_wall_s=100.,inference_deadline_wall_s=None)]
+        receipt=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
+        assert receipt['request']==original_requests[0] and receipt['error_type'] is None
+        assert not sup.ready and not port._goals and sup.epoch.stage=='PRESENT'
+    finally:sup.close();port.close_head_io(timeout_s=1.)

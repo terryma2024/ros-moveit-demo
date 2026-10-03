@@ -239,7 +239,10 @@ class HeadPrimarySupervisor:
                     self.fault('HEAD_PRIMARY_HEARTBEAT_JOURNAL_FAILED', rpc_ended)
             if rejected:
                 self._notify_cpu_fault();return
-            self._fault_event.wait(.002)
+            # The nominal period includes this actual exchange and its audit
+            # publication. Never add another full idle period after a slow
+            # valid reply; the next exchange still samples new real progress.
+            self._fault_event.wait(max(0.,rpc_started+.002-time.monotonic()))
 
     def _notify_cpu_fault(self):
         # This worker performs no native close or cancellation. Those workers
