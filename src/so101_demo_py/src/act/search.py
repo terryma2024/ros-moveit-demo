@@ -6,13 +6,29 @@ from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
 from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
 from .head_feedback import FeedbackPolicy, nanoseconds
+from .head_monitor import canonical_bytes
+from .head_simulation_policy import HeadSimulationPolicy
 
 
 class HeadSearchController:
-    def __init__(self, config):
+    def __init__(self, config, *, simulation_policy=None):
+        self._simulation_policy=(None if simulation_policy is None else HeadSimulationPolicy.parse(
+            simulation_policy.readback() if type(simulation_policy) is HeadSimulationPolicy else simulation_policy))
         self.reset(config)
 
     def reset(self, config):
+        if self._simulation_policy is not None:
+            policy=self._simulation_policy
+            if (type(config) is not dict or not {'required_search_domain_rad','lock_valid_neck_rad'}<=set(config)
+                    or 'required_domain_rad' in config
+                    or any(type(config.get(name)) not in (int,float) or config[name]!=value for name,value in
+                        (('max_age_s',policy.perception_max_age_s),('search_timeout_s',policy.search_timeout_s)))):
+                raise ValueError('HEAD_SEARCH_SIMULATION_CONFIG_INVALID')
+            for name in ('required_search_domain_rad','lock_valid_neck_rad'):
+                interval=config[name]
+                if (type(interval) not in (list,tuple) or len(interval)!=2
+                        or any(type(v) not in (int,float) or not math.isfinite(v) for v in interval)):
+                    raise ValueError('HEAD_SEARCH_SIMULATION_DOMAIN_INVALID')
         keys = (
             "attempt_id",
             "session_id",
@@ -184,6 +200,10 @@ class HeadSearchController:
                         self.config['session_id'],self.config['attempt_id']):
                     raise ValueError('SEARCH_JOINT_CONTEXT_IDENTITY_INVALID')
                 policy=FeedbackPolicy.parse(joint_context['policy']);decision=joint_context['decision']
+                if self._simulation_policy is not None and (policy._bound_simulation_policy is None
+                        or canonical_bytes(policy._bound_simulation_policy.readback())
+                            !=canonical_bytes(self._simulation_policy.readback())):
+                    raise ValueError('HEAD_SEARCH_SIMULATION_FEEDBACK_MISMATCH')
                 fields(decision,('wall_before_s','wall_after_s','sim_ns','sim_s'))
                 if (type(decision['sim_ns']) is not int or decision['sim_ns']<=0
                         or nanoseconds(decision['sim_s'])!=decision['sim_ns']
@@ -284,6 +304,9 @@ class HeadSearchController:
         if self.plan is not None:
             target = self.next_target()
             if target is None:
+                if self._simulation_policy is not None:
+                    return self._result(TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL if self.plan.coverage_complete
+                        else 'SEARCH_COVERAGE_INCOMPLETE',feedback,stamp)
                 # a bound was reached first, so this is not a clean negative
                 return self._result(
                     self.plan.not_found_status(reached_bound=not self.plan.coverage_complete),
