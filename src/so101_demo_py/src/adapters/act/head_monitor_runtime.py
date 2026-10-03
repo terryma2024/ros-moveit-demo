@@ -445,6 +445,12 @@ class HeadMonitorRuntime:
 
     def exposure_finish(self,record):return self._exposures.finish(record)
 
+    def calibration_frame_inputs(self,record):return self._exposures.measure(record)
+
+    def calibration_frame_completion(self,record):
+        claim=record.get('claim') if type(record) is dict else None
+        return self._exposures.measure(claim,completion=record)
+
     def _watchdog(self):
         next_poll=time.monotonic()
         while not self._shutdown.is_set():

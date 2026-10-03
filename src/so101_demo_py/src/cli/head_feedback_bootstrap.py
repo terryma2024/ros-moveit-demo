@@ -594,6 +594,11 @@ def main(argv=None):
                                max_age_s=values['max_age_s'],head_bootstrap=True)
         writer=_ImageWriter(root)
         capture=StoppedHeadCapture(node,port,frame_id=production['camera']['frame_id'],strict=False,emit=writer.emit)
+        if args.live_pipeline_measurement:
+            capture.bind_measurement_monitor(monitor,epoch=epoch,generation=generation,session_id=session)
+            result['stopped_consumer_measurement']=dict(bound_at_entry=True,monitor_peer=monitor.identity,
+                stage='configured pre-policy',inference_admission=False,motion_authority=False,
+                mode='matching physical CPU originals, actual CUDA, CPU completion, Main consumption')
         result['clock_binding']=dict(owner='rclpy.TimeSource',
             depth=node._time_source._clock_sub.qos_profile.depth,
             reliability=node._time_source._clock_sub.qos_profile.reliability.name,

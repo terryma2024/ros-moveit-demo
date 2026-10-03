@@ -108,6 +108,91 @@ def test_original_info_before_warm_boundary_pairs_image_after_boundary(capture):
     assert capture.info_messages[-1]==original and capture._pending is None
 
 
+def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_after_reply(capture):
+    capture._image(image());capture._info(info())
+    capture.port._head_samples.append(capture.port._head_feedback.copy())
+    original=capture._pending;requests=[];wall=[10.001]
+    capture.monotonic=lambda:wall[0]
+    transform=SimpleNamespace(header=SimpleNamespace(stamp=SimpleNamespace(sec=1,nanosec=0)),
+        transform=SimpleNamespace(rotation=SimpleNamespace(x=0.,y=0.,z=0.,w=1.),
+            translation=SimpleNamespace(x=0.,y=0.,z=0.)))
+    class Buffer:
+        def can_transform(self,*args):return True
+        def lookup_transform(self,*args):return transform
+    class Monitor:
+        identity=dict(uid=1,pid=2,start_ticks=3)
+        ready=False
+        def request_runtime(self,request):
+            from copy import deepcopy
+            requests.append(deepcopy(request));operation=request['operation']
+            claim=request['exposure'] if operation=='CALIBRATION_FRAME_INPUTS' else request['completion']['claim']
+            value=dict(request=operation,stage='CONFIGURED',purpose='calibration',calibration_measurement=True,
+                motion_authority=False,epoch='entry',generation=7,session_id='test',monitor_peer=self.identity,
+                root_claim=claim,inputs_ready=self.ready,ack_wall_s=wall[0],original_snapshot=dict(
+                    image=dict(original[0],wall_s=10.000),info=dict(capture.info_messages[-1],wall_s=10.000),
+                    decision=dict(wall_before_s=wall[0],wall_after_s=wall[0],sim_ns=1_010_000_000)))
+            if operation=='CALIBRATION_FRAME_COMPLETION':
+                value.update(measurement_complete=True,completion=request['completion'])
+                # Completion transport/consumer work consumes real elapsed
+                # time before Main can read its own decision clocks.
+                wall[0]=10.015
+            return value
+    monitor=Monitor();detector_calls=[]
+    class Detector:
+        def detect(self,pixels,**identity):
+            detector_calls.append(identity);wall[0]=10.010;return []
+    capture.bind_measurement_monitor(monitor,epoch='entry',generation=7,session_id='test')
+    with pytest.raises(PermissionError):
+        capture.bind_measurement_monitor(monitor,epoch='entry',generation=7,session_id='test')
+    assert capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
+    assert capture._pending is original and not detector_calls
+    monitor.ready=True
+    row=capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05)
+    assert len(detector_calls)==1 and capture._pending is None
+    assert [r['operation'] for r in requests]==['CALIBRATION_FRAME_INPUTS']*2+['CALIBRATION_FRAME_COMPLETION']
+    assert all((r.get('exposure') or r['completion']['claim'])['image_received_wall_s']==10.001 for r in requests)
+    assert row['image_received_wall_s']==10.001 and row['completion_wall_s']==10.010
+    proof=row['matched_consumer_measurement']
+    assert proof['cpu_image_received_wall_s']==proof['cpu_info_received_wall_s']==10.000
+    assert proof['root_handoff_decision_wall_s']==10.015
+    assert row['cpu_measurement_completion']['completion']['completion_wall_s']==10.010
+
+
+@pytest.mark.parametrize('damage',['foreign_peer','generation_bool','authority','claimed_original','late',
+    'decision_future','missing_completion','completion_changed','original_hash'])
+def test_capture_measurement_rejects_bad_ack_before_granting_any_new_work(capture,damage):
+    wall=[10.001];capture.monotonic=lambda:wall[0]
+    capture._image(image());capture._info(info())
+    claim=dict(epoch='entry',generation=7,session_id='test',image_source_ns=10**9,
+        info_source_ns=10**9,joint_source_ns=10**9,tf_source_ns=10**9,image_frame_id=capture.frame_id,
+        payload_sha256=capture._pending[0]['payload_sha256'],image_received_wall_s=10.001,info_received_wall_s=10.001)
+    completion=dict(claim=claim,completion_wall_s=10.001,result_sha256='b'*64)
+    class Monitor:
+        identity=dict(uid=1,pid=2,start_ticks=3)
+        def request_runtime(self,request):
+            value=dict(request=request['operation'],stage='CONFIGURED',purpose='calibration',
+                calibration_measurement=True,motion_authority=False,epoch='entry',generation=7,session_id='test',
+                monitor_peer=self.identity,root_claim=dict(claim),inputs_ready=True,ack_wall_s=10.001,
+                original_snapshot=dict(image=dict(capture._pending[0]),info=dict(capture.info_messages[-1]),
+                    decision=dict(wall_before_s=10.001,wall_after_s=10.001,sim_ns=1_010_000_000)),
+                measurement_complete=True,completion=dict(completion))
+            if damage=='foreign_peer':value['monitor_peer']=dict(self.identity,pid=99)
+            elif damage=='generation_bool':value['generation']=True
+            elif damage=='authority':value['motion_authority']=True
+            elif damage=='claimed_original':value['root_claim']['image_received_wall_s']=10.000
+            elif damage=='late':wall[0]=10.012
+            elif damage=='decision_future':value['original_snapshot']['decision']['wall_after_s']=10.002
+            elif damage=='missing_completion':value.pop('measurement_complete')
+            elif damage=='completion_changed':value['completion']['completion_wall_s']=10.000
+            elif damage=='original_hash':value['original_snapshot']['image']['payload_sha256']='c'*64
+            return value
+    capture.bind_measurement_monitor(Monitor(),epoch='entry',generation=7,session_id='test')
+    with pytest.raises(PermissionError):
+        capture._measurement_request('CALIBRATION_FRAME_COMPLETION',completion)
+    assert capture._pending is not None
+    with pytest.raises(ValueError):capture.check()
+
+
 def test_warm_boundary_carries_only_last32_original_infos(capture):
     for sequence in range(40):capture._info(info(1_000_000_000+sequence*100_000_000))
     expected=list(capture.info_messages)[-32:]

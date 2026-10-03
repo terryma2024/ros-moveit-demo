@@ -50,6 +50,47 @@ def test_complete_window_derives_explicit_separate_clock_bounds():
     assert measured['purpose']=='calibration' and measured['motion_authority'] is False
 
 
+def test_stopped_frame_guard_includes_actual_cpu_receipts_and_main_consumer():
+    raw=window()
+    for row in raw['inferences']:
+        row['matched_consumer_measurement']=dict(motion_authority=False,
+            image_source_ns=row['source_ns'],
+            cpu_image_received_wall_s=row['image_received_wall_s']-.002,
+            cpu_info_received_wall_s=row['info_received_wall_s']-.003,
+            cpu_inputs_decision_wall_s=row['admission_wall_s'],
+            cpu_completion_decision_wall_s=row['completion_wall_s']+.012,
+            root_handoff_decision_wall_s=row['completion_wall_s']+.020)
+    measured=evaluate_feedback_window(raw,stop_latency_s=.07)
+    # Old direct CUDA population tops at 4ms. The independent slowest
+    # consumer is Main at 24ms after Root, 27ms after actual CPU Info.
+    assert measured['camera_seed_values']['max_age_s']==pytest.approx(.037)
+    assert measured['distributions']['camera_end_to_end_age_s']['count']==2400
+
+
+@pytest.mark.parametrize('damage',['future_receipt','early_completion','early_main','source','authority','partial','stripped'])
+def test_full_consumer_measurement_refuses_changed_or_missing_original_clocks(damage):
+    raw=window()
+    raw['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
+    for row in raw['inferences']:
+        row['matched_consumer_measurement']=dict(motion_authority=False,
+            image_source_ns=row['source_ns'],
+            cpu_image_received_wall_s=row['image_received_wall_s'],
+            cpu_info_received_wall_s=row['info_received_wall_s'],
+            cpu_inputs_decision_wall_s=row['admission_wall_s'],
+            cpu_completion_decision_wall_s=row['completion_wall_s'],
+            root_handoff_decision_wall_s=row['completion_wall_s']+.002)
+    target=raw['inferences'][42];proof=target['matched_consumer_measurement']
+    if damage=='future_receipt':proof['cpu_image_received_wall_s']=proof['cpu_inputs_decision_wall_s']+.001
+    elif damage=='early_completion':proof['cpu_completion_decision_wall_s']=target['completion_wall_s']-.001
+    elif damage=='early_main':proof['root_handoff_decision_wall_s']=target['completion_wall_s']-.001
+    elif damage=='source':proof['image_source_ns']+=1
+    elif damage=='authority':proof['motion_authority']=True
+    elif damage=='partial':target.pop('matched_consumer_measurement')
+    else:
+        for row in raw['inferences']:row.pop('matched_consumer_measurement')
+    with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)
+
+
 def test_source_period_is_never_a_monotonic_margin():
     measured=evaluate_feedback_window(window(.96),stop_latency_s=.07)
     periods=measured['periods'];series=measured['distributions']

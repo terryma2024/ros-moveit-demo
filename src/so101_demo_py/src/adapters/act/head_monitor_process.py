@@ -282,7 +282,8 @@ class MonitorRuntimeProtocol:
             runtime=self._future.result()
             fields={'POLICY':'policy','PREARM_INPUTS':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
                     'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault',
-                    'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}
+                    'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion',
+                    'CALIBRATION_FRAME_INPUTS':'exposure','CALIBRATION_FRAME_COMPLETION':'completion'}
             if operation not in fields or set(request)!={'operation',fields[operation]}:
                 raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_REFUSED')
             if operation not in ('FAULT','HEARTBEAT'):runtime.configuration()
@@ -298,6 +299,8 @@ class MonitorRuntimeProtocol:
                     finally:self._completed('policy',self._policy_future)
                 self._after_send=lambda:threading.Thread(target=policy,name='head-monitor-policy-validation',daemon=True).start()
                 result=dict(stage='POLICY_PENDING',motion_authority=False)
+            elif operation=='CALIBRATION_FRAME_INPUTS':result=runtime.calibration_frame_inputs(value)
+            elif operation=='CALIBRATION_FRAME_COMPLETION':result=runtime.calibration_frame_completion(value)
             elif operation in ('PREARM_INPUTS','PREARM_READY','ARMED_READY','EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH'):
                 if self._policy_future is None or not self._policy_future.done():
                     raise PermissionError('HEAD_MONITOR_POLICY_ACK_REQUIRED')

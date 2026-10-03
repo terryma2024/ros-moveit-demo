@@ -44,6 +44,7 @@ class StoppedHeadCapture:
         self._pending=None;self._last={};self._last_camera=None
         self._original_sink=None;self._window=None;self._window_finished=False
         self._live_sink=None;self._live_floor=None
+        self._measurement_monitor=None;self._measurement_scope=None
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
@@ -69,6 +70,64 @@ class StoppedHeadCapture:
             if self._original_sink is not None or self._failure is not None:
                 raise PermissionError('HEAD_STOPPED_ORIGINAL_SINK_REBOUND')
             self._original_sink=sink
+
+    def bind_measurement_monitor(self,monitor,*,epoch,generation,session_id):
+        if (not callable(getattr(monitor,'request_runtime',None))
+                or type(epoch) is not str or not epoch or type(session_id) is not str or not session_id
+                or type(generation) is not int or not 0<generation<2**64):
+            raise ValueError('HEAD_STOPPED_MEASUREMENT_BINDING_INVALID')
+        with self.port._lock:
+            if self._measurement_monitor is not None or self._started or self._failure is not None:
+                raise PermissionError('HEAD_STOPPED_MEASUREMENT_REBOUND')
+            self._measurement_monitor=monitor
+            self._measurement_scope=dict(epoch=epoch,generation=generation,session_id=session_id,
+                monitor_peer=dict(monitor.identity))
+
+    def _measurement_request(self,operation,value):
+        try:
+            self.check()
+            return self._read_measurement_request(operation,value)
+        except Exception:
+            self._failure='HEAD_STOPPED_MEASUREMENT_REFUSED'
+            self.port._head_policy_binding_failed=True
+            callback=getattr(self.port,'_head_fault_callback',None)
+            if callable(callback):callback(self._failure)
+            raise
+
+    def _read_measurement_request(self,operation,value):
+        field='exposure' if operation=='CALIBRATION_FRAME_INPUTS' else 'completion'
+        claim=value if field=='exposure' else value['claim']
+        started=self.monotonic()
+        reply=deepcopy(self._measurement_monitor.request_runtime(dict(operation=operation,**{field:value})))
+        received=self.monotonic()
+        if (type(reply) is not dict or reply.get('request')!=operation or reply.get('stage')!='CONFIGURED'
+                or reply.get('purpose')!='calibration' or reply.get('calibration_measurement') is not True
+                or reply.get('motion_authority') is not False or reply.get('root_claim')!=claim
+                or type(reply.get('inputs_ready')) is not bool
+                or type(reply.get('generation')) is not int
+                or any(reply.get(key)!=val for key,val in self._measurement_scope.items())
+                or not 0<=received-started<=.010
+                or type(reply.get('ack_wall_s')) not in (int,float)
+                or not math.isfinite(reply['ack_wall_s']) or not started<=reply['ack_wall_s']<=received):
+            raise PermissionError('HEAD_STOPPED_MEASUREMENT_ACK_INVALID')
+        snapshot=reply['original_snapshot'];decision=snapshot['decision']
+        if (not started<=decision['wall_before_s']<=decision['wall_after_s']<=reply['ack_wall_s']
+                or type(decision['sim_ns']) is not int or decision['sim_ns']<claim['image_source_ns']):
+            raise PermissionError('HEAD_STOPPED_MEASUREMENT_CLOCK_INVALID')
+        if reply['inputs_ready']:
+            for kind in ('image','info'):
+                row=snapshot[kind]
+                if (type(row) is not dict or row.get('valid') is not True
+                        or row['source_ns']!=claim['image_source_ns']
+                        or row['frame_id']!=claim['image_frame_id']
+                        or type(row['wall_s']) not in (int,float) or not math.isfinite(row['wall_s'])
+                        or not 0<=row['wall_s']<=decision['wall_before_s']
+                        or kind=='image' and row['payload_sha256']!=claim['payload_sha256']):
+                    raise PermissionError('HEAD_STOPPED_MEASUREMENT_ORIGINAL_INVALID')
+        if field=='completion' and (reply.get('measurement_complete') is not True
+                or reply.get('completion')!=value or reply['inputs_ready'] is not True):
+            raise PermissionError('HEAD_STOPPED_MEASUREMENT_COMPLETION_INVALID')
+        return reply
 
     def bind_live_sink(self,sink):
         """Delegate future originals once; the finished calibration stays sealed.
@@ -249,6 +308,17 @@ class StoppedHeadCapture:
         if (tf_source<=0 or tf_source>record['source_ns']
                 or any(not math.isfinite(getattr(translation,key)) for key in ('x','y','z'))):
             raise ValueError('HEAD_STOPPED_TF_INVALID')
+        cpu_inputs=claim=None
+        if self._measurement_monitor is not None:
+            if session_id!=self._measurement_scope['session_id']:
+                raise PermissionError('HEAD_STOPPED_MEASUREMENT_SESSION_CHANGED')
+            claim={key:self._measurement_scope[key] for key in ('epoch','generation','session_id')}
+            claim.update(image_source_ns=record['source_ns'],info_source_ns=info['source_ns'],
+                joint_source_ns=joint['source_ns'],tf_source_ns=tf_source,image_frame_id=self.frame_id,
+                payload_sha256=record['payload_sha256'],image_received_wall_s=record['wall_s'],
+                info_received_wall_s=info['wall_s'])
+            cpu_inputs=self._measurement_request('CALIBRATION_FRAME_INPUTS',claim)
+            if not cpu_inputs['inputs_ready']:return None
         with self.port._lock:
             self.check()
             if self._pending is not pending:raise ValueError('HEAD_STOPPED_IMAGE_DROPPED')
@@ -260,13 +330,31 @@ class StoppedHeadCapture:
             source_frame_id=self.frame_id)
         completion=self.monotonic()
         sources=(record['source_ns'],info['source_ns'],joint['source_ns'],tf_source)
-        return dict(source_ns=record['source_ns'],info_source_ns=info['source_ns'],
+        row=dict(source_ns=record['source_ns'],info_source_ns=info['source_ns'],
             joint_source_ns=joint['source_ns'],tf_source_ns=tf_source,
             image_received_wall_s=record['wall_s'],info_received_wall_s=info['wall_s'],
             admission_wall_s=admission,completion_wall_s=completion,
             source_skew_s=(max(sources)-min(sources))*1e-9,detections=result,
             tf_translation=[getattr(translation,key) for key in ('x','y','z')],
             tf_rotation=[getattr(transform.transform.rotation,key) for key in ('x','y','z','w')])
+        if cpu_inputs is not None:
+            from so101_demo.act.head_monitor import digest
+            cpu_completion=self._measurement_request('CALIBRATION_FRAME_COMPLETION',dict(
+                claim=claim,completion_wall_s=completion,result_sha256=digest(result)))
+            if any(cpu_completion['original_snapshot'][key]!=cpu_inputs['original_snapshot'][key]
+                    for key in ('image','info')):
+                raise PermissionError('HEAD_STOPPED_MEASUREMENT_ORIGINAL_CHANGED')
+            # Consume the copied CPU completion before reading Main clocks.
+            handoff=self.snapshot()
+            row.update(cpu_measurement_inputs=cpu_inputs,cpu_measurement_completion=cpu_completion,
+                root_handoff=handoff,matched_consumer_measurement=dict(motion_authority=False,
+                    image_source_ns=record['source_ns'],
+                    cpu_image_received_wall_s=cpu_inputs['original_snapshot']['image']['wall_s'],
+                    cpu_info_received_wall_s=cpu_inputs['original_snapshot']['info']['wall_s'],
+                    cpu_inputs_decision_wall_s=cpu_inputs['original_snapshot']['decision']['wall_after_s'],
+                    cpu_completion_decision_wall_s=cpu_completion['original_snapshot']['decision']['wall_after_s'],
+                    root_handoff_decision_wall_s=handoff['clocks']['wall_after_s']))
+        return row
 
     def window(self,*,start_ns,end_ns,decisions,polls,inferences):
         """Build one declared cohort; keep pre-window originals as carry-in only."""
@@ -281,7 +369,7 @@ class StoppedHeadCapture:
             camera,carry_camera=series(self.camera_messages)
             info,carry_info=series(self.info_messages)
             clock,carry_clock=series(self.clock_messages)
-        return dict(start_wall_s=start_ns*1e-9,end_wall_s=end_ns*1e-9,
+        window=dict(start_wall_s=start_ns*1e-9,end_wall_s=end_ns*1e-9,
             joint_messages=joint,camera_messages=camera,info_messages=info,clock_messages=clock,
             carry_in=dict(joint=carry_joint,camera=carry_camera,info=carry_info,clock=carry_clock),
             decisions=[row for row in decisions if inside(row['clocks']['wall_before_s'])],
@@ -289,6 +377,8 @@ class StoppedHeadCapture:
             inferences=[row for row in inferences if inside(row['image_received_wall_s'])],
             clock_resolution_s=min((right['source_ns']-left['source_ns'])*1e-9
                 for left,right in zip(clock,clock[1:])))
+        if self._measurement_monitor is not None:window['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
+        return window
 
 
 def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_velocity_rad_s,
@@ -344,7 +434,9 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                 # first declaration. Both budgets use original monotonic wall
                 # durations; no source-clock or real-time-factor conversion.
                 stable_inferences=[row for row in inferences if row['image_received_wall_s']>=stable_start]
-                latencies=[row['completion_wall_s']-row['image_received_wall_s'] for row in stable_inferences]
+                latencies=[row.get('matched_consumer_measurement',{}).get(
+                    'root_handoff_decision_wall_s',row['completion_wall_s'])-row['image_received_wall_s']
+                    for row in stable_inferences]
                 receipt_gaps=[right['wall_s']-left['wall_s'] for left,right in zip(stable_joints,stable_joints[1:])]
                 if (len(latencies)<90 or not receipt_gaps
                         or any(not math.isfinite(value) or value<0 for value in latencies+receipt_gaps)):

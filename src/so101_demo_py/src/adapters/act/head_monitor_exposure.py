@@ -18,12 +18,22 @@ _CLAIM={'epoch','generation','session_id','policy_sha256','sequence',
     'image_source_ns','info_source_ns','joint_source_ns','tf_source_ns','image_frame_id',
     'payload_sha256','image_received_wall_s','info_received_wall_s','deadline_ns'}
 _COMPLETION={'exposure_sha256','sequence','image_source_ns','completion_wall_s','result_sha256'}
+_MEASUREMENT_CLAIM=_CLAIM-{'policy_sha256','sequence','deadline_ns'}
 
 
 def _integer(value):return type(value) is int and 0<value<2**64
 def _wall(value):return type(value) in (int,float) and math.isfinite(value) and value>=0
 def _sha(value):return type(value) is str and _SHA.fullmatch(value) is not None
 def _wire(value):return json.loads(json.dumps(value,allow_nan=False))
+
+
+def _received_original(value,*,source,frame,decision_ns,payload_sha256=None):
+    """Common physical original checks; this never issues an admission."""
+    if (type(value) is not dict or value.get('valid') is not True
+            or value.get('source_ns')!=source or value.get('frame_id')!=frame
+            or not _wall(value.get('wall_s')) or nanoseconds(value['wall_s'])>decision_ns
+            or payload_sha256 is not None and value.get('payload_sha256')!=payload_sha256):
+        raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
 
 
 class _Expired(PermissionError):
@@ -80,6 +90,92 @@ class HeadMonitorExposures:
                 or runtime.revoked or observer.failed):
             raise PermissionError('HEAD_MONITOR_EXPOSURE_CURRENT_INPUTS_INVALID')
         return original,clock,watchdog
+
+    def measure(self,claim,*,completion=None):
+        """Read actual pre-policy CPU consumers, without leases or readiness.
+
+        No unknown camera/J age bound is guessed here. The complete stopped
+        cohort measures those bounds; the existing 10ms progress limits and
+        original validity, scope, source order and quietness still apply.
+        """
+        runtime=self.runtime;observer=runtime._observer
+        try:
+            if (not runtime.configured or runtime._finished or runtime.revoked
+                    or runtime.epoch.stage!='PRESENT' or runtime._policy is not None
+                    or observer is None or observer._active or observer.failed
+                    or observer.port.feedback_policy is not None):
+                raise PermissionError('HEAD_MONITOR_MEASUREMENT_STAGE_INVALID')
+            if (type(claim) is not dict or set(claim)!=_MEASUREMENT_CLAIM
+                    or any(not _integer(claim[key]) for key in ('generation','image_source_ns',
+                        'info_source_ns','joint_source_ns','tf_source_ns'))
+                    or claim['epoch']!=runtime.epoch.epoch or claim['generation']!=runtime.epoch.generation
+                    or claim['session_id']!=runtime.epoch.session_id or not _sha(claim['payload_sha256'])
+                    or claim['image_frame_id']!=observer.camera_frame):
+                raise PermissionError('HEAD_MONITOR_MEASUREMENT_CLAIM_INVALID')
+            source=claim['image_source_ns']
+            with observer._lock:
+                image=observer._images.get(source)
+                if image is None and observer._camera is not None and observer._camera['source_ns']==source:
+                    image=observer._camera
+                image=None if image is None else dict(image)
+                info=observer._infos.get(source);info=None if info is None else dict(info)
+                watermarks=(observer._image_source,observer._info_source)
+                clock=None if observer._clock is None else dict(observer._clock)
+                executor=observer._executor_wall
+            with observer.port._lock:
+                causal=next((dict(row) for row in reversed(observer.port._head_samples)
+                    if row['source_ns']<=source),None)
+            watchdog=runtime._watchdog_wall
+            original=observer.port.original_feedback_snapshot();decision=original['decision']
+            now_ns=nanoseconds(decision['wall_after_s']);current=original['sample']
+            if (any(not _wall(wall) or not 0<=now_ns-nanoseconds(wall)<=10_000_000
+                    for wall in (watchdog,executor))
+                    or current is None or current.get('valid') is not True
+                    or not _wall(current['wall_s']) or nanoseconds(current['wall_s'])>now_ns
+                    or not 0<current['source_ns']<=decision['sim_ns']
+                    or any(not math.isfinite(value) or abs(value)>observer.port.stop_velocity
+                        for value in current['velocities'])
+                    or clock is None or clock.get('valid') is not True
+                    or not 0<clock['source_ns']<=decision['sim_ns']
+                    or not _wall(clock['wall_s']) or nanoseconds(clock['wall_s'])>now_ns):
+                raise PermissionError('HEAD_MONITOR_MEASUREMENT_CURRENT_INVALID')
+            if (claim['info_source_ns']!=source or source>decision['sim_ns']
+                    or causal is None or causal.get('valid') is not True
+                    or claim['joint_source_ns']!=causal['source_ns']
+                    or not 0<claim['tf_source_ns']<=source
+                    or not _wall(causal['wall_s']) or nanoseconds(causal['wall_s'])>now_ns
+                    or any(not _wall(claim[key]) or nanoseconds(claim[key])>now_ns
+                        for key in ('image_received_wall_s','info_received_wall_s'))):
+                raise PermissionError('HEAD_MONITOR_MEASUREMENT_ORIGINAL_INVALID')
+            for value,watermark in zip((image,info),watermarks):
+                if value is None:
+                    if watermark>=source:raise PermissionError('HEAD_MONITOR_MEASUREMENT_RECEIVED_MISSING')
+                else:_received_original(value,source=source,frame=claim['image_frame_id'],
+                    decision_ns=now_ns,payload_sha256=claim['payload_sha256'] if value is image else None)
+            ready=image is not None and info is not None
+            if completion is not None:
+                if (not ready or type(completion) is not dict
+                        or set(completion)!={'claim','completion_wall_s','result_sha256'}
+                        or completion['claim']!=claim or not _sha(completion['result_sha256'])
+                        or not _wall(completion['completion_wall_s'])
+                        or not max(nanoseconds(claim['image_received_wall_s']),
+                            nanoseconds(claim['info_received_wall_s']))
+                            <=nanoseconds(completion['completion_wall_s'])<=now_ns):
+                    raise PermissionError('HEAD_MONITOR_MEASUREMENT_COMPLETION_INVALID')
+            if runtime.revoked or observer.failed:raise PermissionError('HEAD_MONITOR_MEASUREMENT_REVOKED')
+            snapshot=_wire(dict(image=image,info=info,joint=causal,current_joint=current,
+                decision=decision,clock=clock,watchdog_wall_s=watchdog,executor_wall_s=executor))
+            reply=dict(stage='CONFIGURED',calibration_measurement=True,motion_authority=False,
+                inputs_ready=ready,root_claim=_wire(claim),original_snapshot=snapshot,
+                ack_wall_s=observer.monotonic())
+            if completion is not None:reply.update(measurement_complete=True,completion=_wire(completion))
+            if ready:runtime._emit('CALIBRATION_FRAME_COMPLETION' if completion is not None else
+                'CALIBRATION_FRAME_INPUTS',measurement=reply)
+            return reply
+        except Exception as error:
+            runtime.fault('HEAD_MONITOR_MEASUREMENT_REFUSED',
+                observer.monotonic() if observer is not None else time.monotonic())
+            raise PermissionError('HEAD_MONITOR_MEASUREMENT_REFUSED') from error
 
     def inputs(self,record):
         """Observe matching CPU originals without creating an inference lease.
@@ -143,6 +239,8 @@ class HeadMonitorExposures:
                         or value['frame_id']!=record['image_frame_id']
                         or nanoseconds(value['wall_s'])>now_ns):
                     raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
+                _received_original(value,source=source,frame=record['image_frame_id'],decision_ns=now_ns,
+                    payload_sha256=record['payload_sha256'] if value is image else None)
                 deadline=min(deadline,nanoseconds(value['wall_s'])+age)
             if image is not None and image['payload_sha256']!=record['payload_sha256']:
                 raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
@@ -204,6 +302,9 @@ class HeadMonitorExposures:
                     or not 0<=source-causal['source_ns']<=math.floor(skew*1e9)
                     or not 0<=source-record['tf_source_ns']<=math.floor(skew*1e9)):
                 raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
+            _received_original(image,source=source,frame=record['image_frame_id'],
+                decision_ns=now_ns,payload_sha256=record['payload_sha256'])
+            _received_original(info,source=source,frame=record['image_frame_id'],decision_ns=now_ns)
             root_deadline=min(nanoseconds(record['image_received_wall_s']),
                 nanoseconds(record['info_received_wall_s']))+age
             if record['deadline_ns']!=root_deadline:

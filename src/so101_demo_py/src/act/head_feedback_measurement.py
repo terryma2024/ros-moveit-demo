@@ -185,9 +185,15 @@ def _evaluate(window, stop_latency_s):
     _within(poll_gaps, .010)
 
     frame_ages, skews, seen = [], [], set()
+    inferences=_series(window['inferences'])
+    mode=window.get('consumer_measurement')
+    if mode not in (None,'MATCHED_CPU_CUDA_MAIN'):
+        raise ValueError('HEAD_WINDOW_CONSUMER_MODE_INVALID')
+    matched_consumers=(mode=='MATCHED_CPU_CUDA_MAIN'
+        or any('matched_consumer_measurement' in row for row in inferences))
     previous_completion = start
     previous_image_source = 0
-    for inference in _series(window['inferences']):
+    for inference in inferences:
         source = _stamp(inference['source_ns'])
         frame = cameras.get(source)
         if frame is None or source not in camera_cohort or source in seen or source <= previous_image_source:
@@ -217,8 +223,28 @@ def _evaluate(window, stop_latency_s):
                 or nanoseconds(causal_joint['wall_s']) > admission):
             raise ValueError('HEAD_WINDOW_INFERENCE_CLOCK')
         previous_completion = completion
-        frame_ages.extend([(admission-image)*1e-9, (completion-image)*1e-9,
-                           (admission-info)*1e-9, (completion-info)*1e-9])
+        if matched_consumers:
+            proof=inference.get('matched_consumer_measurement')
+            fields={'motion_authority','image_source_ns','cpu_image_received_wall_s',
+                'cpu_info_received_wall_s','cpu_inputs_decision_wall_s',
+                'cpu_completion_decision_wall_s','root_handoff_decision_wall_s'}
+            if (type(proof) is not dict or set(proof)!=fields or proof['motion_authority'] is not False
+                    or proof['image_source_ns']!=source or type(proof['image_source_ns']) is not int):
+                raise ValueError('HEAD_WINDOW_MATCHED_CONSUMERS_INVALID')
+            cpu_image=nanoseconds(_number(proof['cpu_image_received_wall_s']))
+            cpu_info=nanoseconds(_number(proof['cpu_info_received_wall_s']))
+            cpu_inputs=nanoseconds(_number(proof['cpu_inputs_decision_wall_s']))
+            cpu_completion=nanoseconds(_number(proof['cpu_completion_decision_wall_s']))
+            main=nanoseconds(_number(proof['root_handoff_decision_wall_s']))
+            if (not max(image,info,cpu_image,cpu_info)<=cpu_inputs<=admission<=completion
+                    <=cpu_completion<=main<=end or cpu_image<0 or cpu_info<0):
+                raise ValueError('HEAD_WINDOW_MATCHED_CONSUMER_CLOCK')
+            frame_ages.extend((consumer-receipt)*1e-9
+                for consumer in (cpu_inputs,cpu_completion,main)
+                for receipt in (image,info,cpu_image,cpu_info))
+        else:
+            frame_ages.extend([(admission-image)*1e-9, (completion-image)*1e-9,
+                               (admission-info)*1e-9, (completion-info)*1e-9])
         skews.append(spread)
     if seen != camera_cohort or seen != info_cohort:
         raise ValueError('HEAD_WINDOW_INFERENCE_MISSING')
