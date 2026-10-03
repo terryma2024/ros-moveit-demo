@@ -6,7 +6,9 @@ bind the independently reviewed native/ROS monitor before using that authority.
 """
 
 import argparse
+from collections import deque
 from concurrent.futures import Future
+import gc
 import json
 import math
 import os
@@ -27,6 +29,50 @@ from .controller_reservation_provision import _private_parent, _process_start_ti
 
 def _peer(pid):
     return dict(uid=os.geteuid(), pid=pid, start_ticks=_process_start_ticks(pid))
+
+
+class MonitorExecutionTrace:
+    """Bounded original CPU clocks, read back only after owned retirement.
+
+    This diagnoses a stalled exec without changing GC configuration, channel
+    deadlines, heartbeat freshness, or any readiness decision. No payload,
+    capability, bootstrap configuration or exception message is retained.
+    """
+    _operations=frozenset(('PRESENCE','SHUTDOWN','CONFIGURE','CONFIGURATION','POLICY',
+        'POLICY_STATUS','PREARM_INPUTS','PREARM_READY','ARMED_READY','REGISTER','DISPATCH',
+        'REJECTION','FAULT','RETIRE','RETIRE_STATUS','HEARTBEAT','EXPOSURE_INPUTS',
+        'EXPOSURE_ADMIT','EXPOSURE_FINISH','CALIBRATION_FRAME_INPUTS','CALIBRATION_FRAME_COMPLETION'))
+
+    def __init__(self):
+        self._phases=deque(maxlen=4096);self._gc=deque(maxlen=256)
+        self._phase_count=0;self._gc_count=0;self._result=None
+        self._collector=dict(enabled=gc.isenabled(),thresholds=gc.get_threshold())
+        self._callback=self._on_gc
+        gc.callbacks.append(self._callback)
+
+    def mark(self,phase,operation=None):
+        if self._result is not None:return
+        self._phase_count+=1
+        self._phases.append((time.monotonic(),phase,
+            operation if operation in self._operations else None,threading.get_native_id()))
+
+    def _on_gc(self,phase,info):
+        # Scalar tuples only: no lock, I/O, serialization or explicit collection.
+        self._gc_count+=1
+        self._gc.append((time.monotonic(),phase,info['generation'],threading.get_native_id(),
+            info.get('collected',0),info.get('uncollectable',0)))
+
+    def finish(self):
+        if self._result is None:
+            gc.callbacks.remove(self._callback);self._callback=None
+            self._result=dict(clock='CLOCK_MONOTONIC',qualification=False,motion_authority=False,
+                collector_at_entry=self._collector,
+                collector_at_exit=dict(enabled=gc.isenabled(),thresholds=gc.get_threshold()),
+                server_phases=list(self._phases),server_phase_count=self._phase_count,
+                server_phase_dropped=self._phase_count-len(self._phases),
+                gc_events=list(self._gc),gc_event_count=self._gc_count,
+                gc_event_dropped=self._gc_count-len(self._gc))
+        return self._result
 
 
 def _revoked_heartbeat_reply(reply,now):
@@ -483,7 +529,7 @@ def main():
     parser.add_argument('--bootstrap-fd',type=int,required=True)
     parser.add_argument('--socket',required=True)
     args=parser.parse_args()
-    runtime_protocol=None
+    runtime_protocol=None;execution_trace=None
     try:
         config=_bootstrap(args.bootstrap_fd)
         codec=HeadMonitorCodec(secret=bytes.fromhex(config['secret']),epoch=config['epoch'],
@@ -495,6 +541,7 @@ def main():
         if not cpu_only or os.environ.get('CUDA_VISIBLE_DEVICES')!='':
             raise PermissionError('HEAD_MONITOR_EXEC_CPU_ONLY_REQUIRED')
         identity=_peer(os.getpid());primary=config['primary']
+        execution_trace=MonitorExecutionTrace()
         runtime_protocol=MonitorRuntimeProtocol(config,Path(args.socket).parent)
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
             previous_mask=os.umask(0o177)
@@ -512,16 +559,20 @@ def main():
                     if _peer(primary['pid'])!=primary:
                         raise PermissionError('HEAD_MONITOR_EXEC_PRIMARY_LOST')
                     if not select.select([connection],[],[],.002)[0]:continue
+                    execution_trace.mark('receive_started')
                     request=channel.receive()
                     if type(request) is not dict or type(request.get('operation')) is not str:
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     operation=request['operation']
+                    execution_trace.mark('request_received',operation)
                     if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_INPUTS','PREARM_READY','ARMED_READY',
                             'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS',
                             'EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH',
                             'CALIBRATION_FRAME_INPUTS','CALIBRATION_FRAME_COMPLETION'):
                         reply=runtime_protocol.handle(request)
+                        execution_trace.mark('handle_finished',operation)
                         channel.send(reply)
+                        execution_trace.mark('reply_sent',operation)
                         runtime_protocol.after_send()
                         if operation=='RETIRE_STATUS' and reply.get('stage')=='RETIRED':
                             # The owner must finish its post-ACK live-peer check
@@ -535,7 +586,10 @@ def main():
                             break
                         continue
                     if operation=='HEARTBEAT' and runtime_protocol._future is not None:
-                        channel.send(runtime_protocol.handle(request))
+                        reply=runtime_protocol.handle(request)
+                        execution_trace.mark('handle_finished',operation)
+                        channel.send(reply)
+                        execution_trace.mark('reply_sent',operation)
                         continue
                     if set(request)!={'operation'} or runtime_protocol._future is not None:
                         raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
@@ -545,6 +599,7 @@ def main():
                     reply=dict(request=operation,stage='EXEC_ONLY',motion_authority=False,
                         monitor_peer=identity,cpu_only=cpu_only,module_path=str(Path(__file__).resolve()))
                     channel.send(reply)
+                    execution_trace.mark('reply_sent',operation)
                     if operation=='SHUTDOWN':
                         # Remain live for the owner's post-reply peer check.
                         while _peer(primary['pid'])==primary:
@@ -563,6 +618,12 @@ def main():
             try:runtime_protocol.disconnected()
             except BaseException:
                 print(json.dumps(dict(event='RUNTIME_RETIRE_UNCONFIRMED',motion_authority=False)),flush=True)
+        if execution_trace is not None:
+            # Capture ends after the actual runtime has retired. JSON formatting
+            # and stdout flushing cannot delay its fault/native/Stop workers.
+            print(json.dumps(dict(event='CPU_EXECUTION_TRACE',monitor_peer=identity,
+                epoch=config['epoch'],generation=config['generation'],session_id=config['session_id'],
+                trace=execution_trace.finish()),allow_nan=False),flush=True)
 
 
 if __name__=='__main__':

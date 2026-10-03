@@ -13,7 +13,7 @@ from so101_demo.adapters.act import head_monitor_process as server
 @pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY','EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH',
     'CALIBRATION_FRAME_INPUTS','CALIBRATION_FRAME_COMPLETION'])
 @pytest.mark.parametrize('parent_module',[None,'torch','mujoco'])
-def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation,parent_module):
+def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,capsys,operation,parent_module):
     if parent_module is not None:monkeypatch.setitem(sys.modules,parent_module,object())
     identity=server._peer(os.getpid());handled=[];replies=[]
     field={'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion',
@@ -54,3 +54,12 @@ def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(c
     assert server.main()==0
     assert handled==['CONFIGURE',operation,'RETIRE_STATUS']
     assert [reply['request'] for reply in replies]==['PRESENCE','CONFIGURE',operation,'RETIRE_STATUS']
+    import json
+    records=[json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    trace=[r for r in records if r.get('event')=='CPU_EXECUTION_TRACE']
+    assert len(trace)==1 and trace[0]['monitor_peer']==identity
+    phases=trace[0]['trace']['server_phases']
+    assert [r[2] for r in phases if r[1]=='reply_sent']==[
+        'PRESENCE','CONFIGURE',operation,'RETIRE_STATUS']
+    assert trace[0]['trace']['collector_at_entry']==trace[0]['trace']['collector_at_exit']
+    assert 'policy_sha256' not in json.dumps(trace)

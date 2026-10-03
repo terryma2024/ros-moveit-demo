@@ -2,6 +2,7 @@
 
 import json
 import io
+import gc
 import os
 from pathlib import Path
 import sys
@@ -15,6 +16,41 @@ import pytest
 
 from so101_demo.adapters.act.head_monitor_process import MonitorProcess,start_monitor
 from so101_demo.adapters.act.controller_reservation_provision import _process_start_ticks
+
+
+def test_cpu_execution_trace_retains_actual_gc_without_changing_collector():
+    from so101_demo.adapters.act.head_monitor_process import MonitorExecutionTrace
+    before=(gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))
+    trace=MonitorExecutionTrace()
+    try:
+        trace.mark('request_received','HEARTBEAT')
+        gc.collect(0)
+        trace.mark('reply_sent','HEARTBEAT')
+        result=trace.finish()
+    finally:trace.finish()
+    assert (gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))==before
+    assert result['qualification'] is False and result['motion_authority'] is False
+    assert result['collector_at_entry']==result['collector_at_exit']
+    assert [r[1:3] for r in result['server_phases']]==[
+        ('request_received','HEARTBEAT'),('reply_sent','HEARTBEAT')]
+    events=[r for r in result['gc_events'] if r[2]==0]
+    assert [r[1] for r in events][-2:]==['start','stop']
+    assert events[-2][0]<=events[-1][0]
+    assert json.loads(json.dumps(result,allow_nan=False))['clock']=='CLOCK_MONOTONIC'
+
+
+def test_cpu_execution_trace_is_bounded_and_does_not_store_unknown_operation_payload():
+    from so101_demo.adapters.act.head_monitor_process import MonitorExecutionTrace
+    trace=MonitorExecutionTrace()
+    try:
+        for _ in range(4100):trace.mark('receive_started')
+        trace.mark('request_received','unknown-secret-payload')
+        result=trace.finish()
+    finally:trace.finish()
+    assert len(result['server_phases'])==4096
+    assert result['server_phase_count']==4101 and result['server_phase_dropped']==5
+    assert result['server_phases'][-1][2] is None
+    assert 'unknown-secret-payload' not in json.dumps(result)
 
 
 @pytest.fixture
