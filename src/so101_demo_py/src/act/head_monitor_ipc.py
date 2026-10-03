@@ -294,11 +294,11 @@ class HeadMonitorChannel:
         self._verify_peer()
         self._remaining(deadline)
 
-    def _read(self, deadline):
+    def _read(self, deadline, operation=None):
         self._verify_peer()
         if self._pending is None:
             self._pending = dict(started_wall_s=self._operation_started_wall_s, prefix=bytearray(),
-                body=bytearray(), size=None, decoded=None)
+                body=bytearray(), size=None, decoded=None, operation=operation)
         pending = self._pending
         def read(result, size):
             while len(result) < size:
@@ -321,7 +321,7 @@ class HeadMonitorChannel:
         self._pending = None
         return value
 
-    def _operation(self, operation, *, trace=None):
+    def _operation(self, operation, *, trace=None, wait_other_operation=None):
         started = time.monotonic();deadline = started+self._timeout
         acquired = False
         if trace is not None:
@@ -333,6 +333,10 @@ class HeadMonitorChannel:
                 raise TimeoutError('HEAD_MONITOR_CHANNEL_BUSY')
             if trace is not None:trace['slot_owned_wall_s']=time.monotonic()
             if self._pending is not None:
+                if (self._simulation_policy is not None and type(wait_other_operation) is str
+                        and type(self._pending['operation']) is str
+                        and self._pending['operation']!=wait_other_operation):
+                    raise TimeoutError('HEAD_MONITOR_CHANNEL_OTHER_OWNER_PENDING')
                 raise PermissionError('HEAD_MONITOR_CHANNEL_PENDING_FRAME')
             self._operation_started_wall_s = started
             return operation(deadline)
@@ -390,11 +394,12 @@ class HeadMonitorChannel:
             mark('write')
             self._write(payload, deadline)
             mark('read')
-            reply=self._read(deadline)
+            reply=(self._read(deadline) if self._simulation_policy is None else
+                self._read(deadline,operation=payload.get('operation')))
             mark('complete');return reply
         return self._operation(request,trace=trace)
 
-    def exchange_built(self, payload_factory, *, trace=None):
+    def exchange_built(self, payload_factory, *, trace=None, wait_other_operation=None):
         """Sample one new payload after the slot, within the caller's deadline."""
         def mark(phase):
             if trace is not None:
@@ -417,6 +422,7 @@ class HeadMonitorChannel:
             mark('write')
             self._write(payload, deadline)
             mark('read')
-            reply=self._read(deadline)
+            reply=(self._read(deadline) if self._simulation_policy is None else
+                self._read(deadline,operation=payload.get('operation')))
             mark('complete');return reply
-        return self._operation(request,trace=trace)
+        return self._operation(request,trace=trace,wait_other_operation=wait_other_operation)

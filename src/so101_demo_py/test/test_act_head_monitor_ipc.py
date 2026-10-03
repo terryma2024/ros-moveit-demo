@@ -148,7 +148,7 @@ def server(tmp_path,request):
         if type(parameter) is dict:
             from so101_demo.act.head_monitor import digest
             simulation=simulation_document()
-            payload=dict(request='HEARTBEAT',stage='PRESENT',monitor_peer=peer,
+            payload=dict(request=parameter.get('operation','HEARTBEAT'),stage='PRESENT',monitor_peer=peer,
                 purpose='calibration',epoch='attempt-a',generation=5,session_id='head-test',
                 motion_authority=False,simulation_policy=simulation,
                 simulation_policy_sha256=digest(simulation))
@@ -160,6 +160,8 @@ def server(tmp_path,request):
             elif damage=='digest':payload['simulation_policy_sha256']='0'*64
             elif damage=='authority':payload['motion_authority']=True
             elif damage=='generation':payload['generation']=6
+            elif damage=='generation_type':payload['generation']=5.0
+            elif damage=='peer_type':payload['monitor_peer']=dict(peer,uid=float(peer['uid']))
         response=codec('monitor').encode(payload)
         if mode=='tamper':response=response.replace(b'PRESENT',b'INVALID')
         child.stdin.write(response.hex().encode()+b'\n');child.stdin.flush()
@@ -227,6 +229,92 @@ def runtime_process_for_wire(connection,peer,child):
     return monitor,channel
 
 
+@pytest.mark.parametrize('server',[{'mode':'fragment','operation':'EXPOSURE_INPUTS'}],indirect=True)
+def test_runtime_operation_completes_only_original_fragment_without_resend_or_changed_operation(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    request=dict(operation='EXPOSURE_INPUTS',exposure={'wire_only_original':True});trace={}
+    try:
+        with pytest.raises(TimeoutError):monitor.request_runtime(request,trace=trace)
+        original=channel._pending;request['operation']='HEARTBEAT'
+        assert monitor.runtime_pending and not monitor.heartbeat_pending and channel._codec.sequence==1
+        assert monitor.pending_runtime_deadline_wall_s==original['started_wall_s']+.5
+        child.stdin.write(b'\n');child.stdin.flush()
+        reply=monitor.complete_pending_runtime(time.monotonic()+.1)
+        assert reply['request']=='EXPOSURE_INPUTS' and reply['stage']=='PRESENT'
+        assert reply['motion_authority'] is False and not monitor.runtime_pending
+        assert channel._codec.sequence==1 and channel._pending is None
+        assert trace['error_type']=='TimeoutError' and trace['recovery']['completed_wall_s']<original['started_wall_s']+.5
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment','operation':'EXPOSURE_INPUTS','damage':damage}
+    for damage in ('peer','simulation','digest','authority','generation','generation_type','peer_type')],indirect=True)
+def test_pending_runtime_reply_keeps_all_authenticated_identity_and_exact_policy_refusals(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'EXPOSURE_INPUTS'})
+        child.stdin.write(b'\n');child.stdin.flush()
+        with pytest.raises(PermissionError):monitor.complete_pending_runtime(time.monotonic()+.1)
+        assert channel._codec.failed and channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment','operation':'EXPOSURE_INPUTS'}],indirect=True)
+def test_pending_runtime_operation_cannot_extend_its_original_supervision_cap(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'EXPOSURE_INPUTS'})
+        with pytest.raises(ValueError):monitor.complete_pending_runtime(monitor.pending_runtime_deadline_wall_s+.001)
+        assert channel._codec.failed and channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_unsent_runtime_request_cannot_borrow_original_heartbeat_frame(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        original=channel._pending
+        assert channel._io_lock.acquire(blocking=False)
+        try:
+            with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'EXPOSURE_INPUTS'})
+        finally:channel._io_lock.release()
+        assert monitor.heartbeat_pending and not monitor.runtime_pending and channel._pending is original
+        with pytest.raises(PermissionError):monitor.complete_pending_runtime(time.monotonic()+.1)
+        assert channel._codec.failed and channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment','operation':'EXPOSURE_INPUTS'}],indirect=True)
+def test_heartbeat_waits_without_closing_or_borrowing_original_pending_runtime(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'EXPOSURE_INPUTS'})
+        original=channel._pending
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        assert channel._pending is original and not channel._codec.failed
+        assert monitor.runtime_pending and not monitor.heartbeat_pending and channel._codec.sequence==1
+        child.stdin.write(b'\n');child.stdin.flush()
+        assert monitor.complete_pending_runtime(time.monotonic()+.1)['request']=='EXPOSURE_INPUTS'
+        assert channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_runtime_waits_without_closing_or_borrowing_original_pending_heartbeat(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        original=channel._pending
+        with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'EXPOSURE_INPUTS'})
+        assert channel._pending is original and not channel._codec.failed
+        assert monitor.heartbeat_pending and not monitor.runtime_pending and channel._codec.sequence==1
+        child.stdin.write(b'\n');child.stdin.flush()
+        assert monitor.complete_pending_heartbeat(time.monotonic()+.1)['request']=='HEARTBEAT'
+        assert channel._codec.sequence==1
+    finally:channel.close()
+
+
 @pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
 def test_runtime_wrapper_without_original_heartbeat_rejects_without_masking_error(server):
     connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
@@ -281,7 +369,7 @@ def test_runtime_wrapper_finishes_original_heartbeat_without_sequence_or_clock_r
 
 
 @pytest.mark.parametrize('server',[{'mode':'fragment','damage':damage}
-    for damage in ('peer','simulation','digest','authority','generation')],indirect=True)
+    for damage in ('peer','simulation','digest','authority','generation','generation_type','peer_type')],indirect=True)
 def test_runtime_wrapper_rejects_wrong_pending_reply_after_actual_authentication(server):
     connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
     try:

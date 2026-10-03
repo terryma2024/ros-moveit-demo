@@ -24,8 +24,8 @@ import sys
 import threading
 import time
 
-from so101_demo.act.head_monitor_ipc import HeadMonitorChannel, HeadMonitorCodec
-from so101_demo.act.head_monitor import digest
+from so101_demo.act.head_monitor_ipc import HeadMonitorChannel, HeadMonitorCodec, _bounded_payload
+from so101_demo.act.head_monitor import canonical_bytes, digest
 from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
 from .controller_reservation_provision import _private_parent, _process_start_ticks, _publish_private_provision
 
@@ -131,6 +131,7 @@ class MonitorProcess:
         self._runtime_receipt = None
         self._pending_heartbeat = None
         self._heartbeat_trace = None
+        self._pending_runtime = None
 
     @property
     def identity(self): return dict(self._identity)
@@ -150,6 +151,15 @@ class MonitorProcess:
     def pending_heartbeat_deadline_wall_s(self):
         pending=self._pending_heartbeat
         return (None if pending is None else pending['started_wall_s']+
+            self._channel._simulation_policy.supervision_stale_s)
+
+    @property
+    def runtime_pending(self):return self._pending_runtime is not None
+
+    @property
+    def pending_runtime_deadline_wall_s(self):
+        pending=self._pending_runtime
+        return (None if pending is None else pending['frame']['started_wall_s']+
             self._channel._simulation_policy.supervision_stale_s)
 
     def is_alive(self):
@@ -183,9 +193,39 @@ class MonitorProcess:
             raise ValueError('HEAD_MONITOR_RUNTIME_REQUEST_INVALID')
         if value['operation']=='CONFIGURE':self._runtime_requested=True
         elif not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
-        reply=(self._channel.exchange(value) if trace is None
-               else self._channel.exchange(value,trace=trace))
-        return self._runtime_reply(value,reply)
+        if self._channel._simulation_policy is None:
+            reply=(self._channel.exchange(value) if trace is None
+                   else self._channel.exchange(value,trace=trace))
+            return self._runtime_reply(value,reply)
+        operation=value['operation'];built=False;original_trace={} if trace is None else trace
+        def payload():
+            nonlocal built
+            owned=_bounded_payload(value,original_trace['deadline_wall_s'])
+            if owned['operation']!=operation:raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_CHANGED')
+            built=True;return owned
+        try:reply=self._channel.exchange_built(payload,trace=original_trace,wait_other_operation=operation)
+        except TimeoutError:
+            if built and self._channel._pending is not None:
+                self._pending_runtime=dict(frame=self._channel._pending,operation=operation,trace=original_trace)
+            raise
+        return self._runtime_reply({'operation':operation},reply)
+
+    def complete_pending_runtime(self,deadline_wall_s):
+        """Finish this original operation; no send, sequence or deadline renewal."""
+        pending=self._pending_runtime
+        recovery=dict(started_wall_s=time.monotonic(),deadline_wall_s=deadline_wall_s)
+        try:
+            if (self._closed or not self.is_alive() or self._channel._simulation_policy is None
+                    or pending is None or pending['frame'] is not self._channel._pending):
+                raise PermissionError('HEAD_MONITOR_PENDING_RUNTIME_REQUIRED')
+            reply=self._channel.complete_pending(deadline_wall_s)
+            reply=self._runtime_reply({'operation':pending['operation']},reply)
+            self._pending_runtime=None;recovery['completed_wall_s']=time.monotonic()
+            return reply
+        except BaseException as error:
+            recovery['error_type']=type(error).__name__;self._channel.close();raise
+        finally:
+            if pending is not None:pending['trace']['recovery']=recovery
 
     def request_heartbeat(self,snapshot_factory):
         """Sample original progress only when the authenticated channel is owned."""
@@ -201,8 +241,9 @@ class MonitorProcess:
             built=True
             return dict(operation='HEARTBEAT',heartbeat=heartbeat)
         try:
-            reply=self._channel.exchange_built(
-                payload,trace=self._heartbeat_trace)
+            reply=(self._channel.exchange_built(payload,trace=self._heartbeat_trace)
+                if self._channel._simulation_policy is None else
+                self._channel.exchange_built(payload,trace=self._heartbeat_trace,wait_other_operation='HEARTBEAT'))
         except TimeoutError:
             if built and self._channel._simulation_policy is not None and self._channel._pending is not None:
                 self._pending_heartbeat=self._channel._pending
@@ -237,6 +278,11 @@ class MonitorProcess:
             self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_SIMULATION_ACK_INVALID')
         negative=(type(reply) is dict and (reply.get('stage')=='REVOKED'
                   or 'heartbeat_rejected' in reply) and value['operation']=='HEARTBEAT')
+        scope=dict(request=value['operation'],monitor_peer=self._identity,purpose='calibration',
+            epoch=codec.epoch,generation=codec.generation,session_id=codec.session_id,motion_authority=False)
+        if simulation is not None and (type(reply) is not dict or any(key not in reply
+                or canonical_bytes(reply[key])!=canonical_bytes(expected) for key,expected in scope.items())):
+            self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_ACK_INVALID')
         if (type(reply) is not dict or reply.get('request')!=value['operation']
                 or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'
                 or reply.get('epoch')!=codec.epoch or reply.get('generation')!=codec.generation
