@@ -272,3 +272,34 @@ def test_original_camera_stale_inside_hard_ceiling_still_fails_tighter_bound():
     assert .122<age<.2
     with pytest.raises(ValueError,match='HEAD_WINDOW_OBSERVATION_EXCEEDS_BOUND'):
         evaluate_feedback_window(raw,stop_latency_s=.07)
+
+
+def test_cooperative_evaluation_preserves_every_original_and_the_full_result(monkeypatch):
+    from types import SimpleNamespace
+    from so101_demo.act import head_feedback_measurement as measurement
+    raw=window();original=copy.deepcopy(raw)
+    expected=evaluate_feedback_window(raw,stop_latency_s=.07)
+    yields=[]
+    def yield_existing_workers(duration):
+        assert duration==0
+        yields.append(len(raw['clock_messages']))
+    monkeypatch.setattr(measurement,'time',SimpleNamespace(sleep=yield_existing_workers),raising=False)
+    actual=evaluate_feedback_window(raw,stop_latency_s=.07)
+    assert yields, 'Full audit computation never yielded to existing progress workers'
+    assert actual==expected and raw==original
+
+
+@pytest.mark.parametrize('population',['joint_messages','clock_messages','decisions'])
+def test_cooperative_evaluation_still_refuses_an_invalid_original_after_yield(monkeypatch,population):
+    from types import SimpleNamespace
+    from so101_demo.act import head_feedback_measurement as measurement
+    raw=window();yielded=[]
+    def intervening_invalid_original(duration):
+        assert duration==0
+        yielded.append(True)
+        if population=='decisions':raw[population][-1]['clocks']['wall_before_s']=0.
+        else:raw[population][-1]['valid']=False
+    monkeypatch.setattr(measurement,'time',SimpleNamespace(sleep=intervening_invalid_original),raising=False)
+    with pytest.raises(ValueError,match='HEAD_WINDOW_(ORIGINAL_INVALID|DECISION_CLOCK)'):
+        evaluate_feedback_window(raw,stop_latency_s=.07)
+    assert yielded

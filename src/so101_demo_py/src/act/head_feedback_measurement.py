@@ -5,9 +5,18 @@ These computations do not prove CUDA execution, payload validity or approval.
 """
 
 import math
+import time
 
 from .head_feedback import FeedbackPolicy, nanoseconds
 from .head_search_timing_params import nearest_rank_percentile
+
+
+def _paced(values):
+    """Yield existing progress workers without changing the original cohort."""
+    for index, value in enumerate(values):
+        if index and index % 64 == 0:
+            time.sleep(0)
+        yield value
 
 
 def _number(value):
@@ -36,7 +45,7 @@ def _quantile(values, probability):
 
 
 def _distribution(values):
-    checked = [_number(value) for value in _series(values)]
+    checked = [_number(value) for value in _paced(_series(values))]
     return dict(count=len(checked), p50=_quantile(checked, .5),
                 p95=_quantile(checked, .95), p99=_quantile(checked, .99),
                 max=max(checked), negative_count=0)
@@ -48,7 +57,7 @@ def _messages(values, *, start, end, minimum, source_period=None):
         raise ValueError('HEAD_WINDOW_MESSAGE_COUNT')
     identities, source_gaps, receipt_gaps = {}, [], []
     previous_source = previous_receipt = None
-    for sample in records:
+    for sample in _paced(records):
         if not isinstance(sample, dict) or sample.get('valid') is not True:
             raise ValueError('HEAD_WINDOW_ORIGINAL_INVALID')
         source = _stamp(sample['source_ns'])
@@ -83,7 +92,7 @@ def _original(copy, identities, wall_before):
 
 
 def _within(values, bound):
-    if any(value > bound for value in values):
+    if any(value > bound for value in _paced(values)):
         raise ValueError('HEAD_WINDOW_OBSERVATION_EXCEEDS_BOUND')
 
 
@@ -154,7 +163,7 @@ def _evaluate(window, stop_latency_s):
     joint_receipt_ages, joint_source_ages, camera_source_ages = [], [], []
     decision_gaps = []
     previous_wall = previous_sim = None
-    for decision in decisions:
+    for decision in _paced(decisions):
         clocks = decision['clocks']
         before = nanoseconds(_number(clocks['wall_before_s']))
         after = nanoseconds(_number(clocks['wall_after_s']))
@@ -174,10 +183,10 @@ def _evaluate(window, stop_latency_s):
     if (decisions[-1]['clocks']['sim_ns']-decisions[0]['clocks']['sim_ns'])*1e-9 < 19.:
         raise ValueError('HEAD_WINDOW_DECISION_COVERAGE')
 
-    polls = [nanoseconds(_number(value)) for value in _series(window['watchdog_polls'])]
+    polls = [nanoseconds(_number(value)) for value in _paced(_series(window['watchdog_polls']))]
     if polls[0] < start or polls[-1] > end:
         raise ValueError('HEAD_WINDOW_WATCHDOG_OUTSIDE_WINDOW')
-    poll_gaps = [(right-left)*1e-9 for left, right in zip(polls, polls[1:])]
+    poll_gaps = [(right-left)*1e-9 for left, right in _paced(zip(polls, polls[1:]))]
     if any(gap <= 0 for gap in poll_gaps):
         raise ValueError('HEAD_WINDOW_WATCHDOG_REGRESSION')
     # Missing the beginning/end is also a missed poll.
@@ -195,11 +204,11 @@ def _evaluate(window, stop_latency_s):
     if schedule not in (None,'EXISTING_5MS_DECISION_WORKER') or schedule is not None and not matched_consumers:
         raise ValueError('HEAD_WINDOW_MAIN_SCHEDULE_INVALID')
     decision_index={tuple(row['clocks'][key] for key in ('wall_before_s','wall_after_s','sim_ns')):row
-        for row in decisions} if schedule is not None else None
+        for row in _paced(decisions)} if schedule is not None else None
     main_actor=None
     previous_completion = start
     previous_image_source = 0
-    for inference in inferences:
+    for inference in _paced(inferences):
         source = _stamp(inference['source_ns'])
         frame = cameras.get(source)
         if frame is None or source not in camera_cohort or source in seen or source <= previous_image_source:
