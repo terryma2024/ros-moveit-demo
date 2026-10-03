@@ -186,10 +186,10 @@ class HeadMonitorExposures:
                 info=observer._infos.get(source)
                 info=None if info is None else dict(info)
             with observer.port._lock:
-                samples=tuple(dict(value) for value in observer.port._head_samples)
-            causal=None
-            for value in samples:
-                if value['source_ns']<=source:causal=value
+                # Preserve the last causal original without cloning the
+                # append-only bootstrap history under the feedback cache lock.
+                causal=next((dict(value) for value in reversed(observer.port._head_samples)
+                    if value['source_ns']<=source),None)
             age=math.floor(observer.camera_age*1e9)
             skew=observer.camera_skew
             if (not _wall(skew) or not 0<skew<=.05 or image is None or info is None

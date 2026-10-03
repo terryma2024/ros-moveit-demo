@@ -285,6 +285,31 @@ def test_fresh_current_joint_does_not_substitute_for_causal_exposure_joint():
     finally:observer.close(timeout_s=1.)
 
 
+def test_irrelevant_history_copy_work_cannot_exhaust_original_admission_deadline():
+    from collections.abc import Mapping
+    import json
+    node,runtime,observer,record=ready()
+    causal=dict(observer.port._head_samples[-1])
+    class HistoricalOriginal(Mapping):
+        def __init__(self,value):self.value=value
+        def __getitem__(self,key):return self.value[key]
+        def __len__(self):return len(self.value)
+        def __iter__(self):
+            # Charge elapsed copy work to the original monotonic clock.
+            # This is controlled latency, not an actual-host timing claim.
+            node.wall+=.00002
+            return iter(self.value)
+    history=[HistoricalOriginal(dict(causal,source_ns=100_000_000+i*100_000,
+        wall_s=9.0+i*.0001)) for i in range(3500)]
+    observer.port._head_samples.clear();observer.port._head_samples.extend(history+[causal])
+    try:
+        ack=runtime.exposure_admit(record)
+        assert ack['original_snapshot']['joint']==json.loads(json.dumps(causal))
+        assert ack['ack_wall_s']<10.05 and not runtime.revoked
+        assert len(observer.port._head_samples)==3501
+    finally:observer.close(timeout_s=1.)
+
+
 @pytest.mark.parametrize('expire_in_watchdog',[False,True])
 def test_late_receipt_and_deadline_free_heartbeat_cannot_release_expired_claim(expire_in_watchdog):
     node,runtime,observer,record=ready()
