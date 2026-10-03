@@ -13,19 +13,22 @@ from so101_demo.adapters.act.head_monitor_process import MonitorRuntimeProtocol
 from so101_demo.cli import head_feedback_bootstrap as bootstrap
 
 
-def composition(tmp_path):
-    cpu_node,runtime,cpu,_=ready()
-    node,root,_,_=ready_monitor();events=[];faults=[];calls=[];deadlines=[]
-    protocol=MonitorRuntimeProtocol(dict(epoch='attempt',generation=5,session_id='session',primary=runtime.primary),tmp_path)
+def composition(tmp_path,simulation=False):
+    cpu_node,runtime,cpu,_=ready(simulation=simulation)
+    if simulation:runtime._progress_timer=SimpleNamespace(timer_period_ns=20_000_000)
+    node,root,_,_=ready_monitor(simulation=simulation);events=[];faults=[];calls=[];deadlines=[]
+    config=dict(epoch='attempt',generation=5,session_id='session',primary=runtime.primary)
+    if simulation:config['simulation_policy']=runtime._simulation_policy.readback()
+    protocol=MonitorRuntimeProtocol(config,tmp_path)
     protocol._future=completed(runtime);protocol._policy_future=completed(True)
     scope=dict(secret=b'x'*32,epoch='attempt',generation=5,session_id='session')
     sender=HeadMonitorCodec(**scope,role='monitor');receiver=HeadMonitorCodec(**scope,role='primary')
     class Monitor:
-        def request_runtime(self,record):
+        def request_runtime(self,record,*,trace=None):
             calls.append(record)
             return receiver.decode(sender.encode(protocol.handle(record)))
     class Primary:
-        _simulation_policy=None
+        _simulation_policy=runtime._simulation_policy
         epoch=runtime.epoch;primary=runtime.identity;port=root.port
         observer=root
         failed=False;ready=True
@@ -40,12 +43,12 @@ def composition(tmp_path):
     class Capture:
         def bind_live_sink(self,sink):self.sink=sink
     class Detector:
-        count=0;resets=0;during=None
+        count=0;resets=0;during=None;expected_source_ns=10**9
         def reset(self):self.resets+=1
         def detect(self,pixels,**identity):
             self.count+=1
             assert pixels.shape==(480,640,3) and pixels[0,0,0]==0
-            assert identity==dict(session_id='session',attempt_id='attempt',source_stamp_ns=10**9,
+            assert identity==dict(session_id='session',attempt_id='attempt',source_stamp_ns=self.expected_source_ns,
                 source_frame_id=root.camera_frame)
             if self.during:self.during()
             return [dict(xyxy=(1.,2.,3.,4.),confidence=.9,class_id=0,track_id='head-cup-0')]

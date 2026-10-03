@@ -40,7 +40,7 @@ frame-identity、reservation-binding、undeclared-fields 的身份/鉴权/闭合
 | `native_close_timeout_s` | 0.05 / 0.25 s | close 请求的 connect/frame/validated ACK deadline；monotonic，各 native endpoint/客户端。迟到/错 ACK 不算 closure，仍取消并在总 stop budget 内对账 |
 | `stop_confirmation_timeout_s` | 1 / 3 s | 最早确认 fault 至 native closure、完整 UUID terminal reconciliation、actual predicate、三条 post-request quiet originals 全部成立；monotonic，Root 或 CPU 的独立缓存。缺一即 FAILED_STOP_UNCONFIRMED |
 | `perception_max_age_s` | 0.15 / 0.15 s | 原始 image/CameraInfo receipt 至准入、结果返回、实际使用；monotonic，capture/inference/search。每次使用均验证；过期只丢弃，绝不重写时间或增 lock |
-| `perception_job_timeout_s` | 1 / 3 s | 已准入 CUDA job 开始至返回；monotonic，唯一 inference owner。年龄先到期则结果废弃，但 job 仍被占有；不能并发另起 detector。job 超时结束 run，安全 owner证明停止、精确资源退休 |
+| `perception_job_timeout_s` | 1 / 3 s | 从 Root 首次选定原始 image/Info pair 到正确 completion 解除租约；monotonic，唯一 inference owner。预算包含 CPU 准入等待，实际 CUDA 开始和返回时间另行记录；同一候选 pair 的期限不续期。年龄先到期则丢弃结果，已准入 job 仍被占有，不能并发另起 detector。job 超时结束 run，安全 owner证明停止、精确资源退休 |
 | `camera_loss_timeout_s` | 0.5 / 2 s | 最新有效 advancing camera 原始 receipt 至现在；monotonic，两 reader 独立。短 gap 等待，持续 loss fault |
 | `feedback_receipt_timeout_s` | 0.25 / 1 s | 当前原始 joint/clock receipt 至 decision；monotonic，两个独立 reader。超界 fault，不用缓冲旧样本刷新 |
 | `joint_source_age_s` | 0.05 / 0.1 sim s | decision node sim time 减原 joint source；各 reader。未来、倒退、过界拒绝；不与 wall budget 相加 |

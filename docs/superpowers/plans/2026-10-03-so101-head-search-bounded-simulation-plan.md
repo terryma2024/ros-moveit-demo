@@ -69,9 +69,11 @@
 
 ## Task 3: 生产停点搜索、有限重观察和可靠锁定
 
-**Files:** Modify `act/search.py`, `act/head_simulation_policy.py`, `adapters/act/head_owned_search.py`, `head_live_exposure.py`, `head_monitor_exposure.py`, `head_inference_owner.py`, `ros_search.py`, `ros_neck.py`, `head_inventory_dispatch.py`, `act/head_search_binding.py`, `head_search_restarts.py`；对应现有tests。
+**Files:** Modify `act/search.py`, `act/head_simulation_policy.py`, `adapters/act/head_owned_search.py`, `head_live_exposure.py`, `head_monitor_exposure.py`, `head_inference_owner.py`, `ros_search.py`, `ros_neck.py`, `head_inventory_dispatch.py`, `act/head_search_binding.py`, `head_search_restarts.py`；对应现有tests，并新增 `test/test_act_head_stopped_live_exposure.py`。
 
 **Interfaces:** `BoundedObservationBudget(policy, *, started_wall_s)`；`reobserve(stop_id, reason, now_wall_s) -> bool` 计数且不重置总deadline；entry-owned inference增加 stopped observation请求，request携带generation/motion_epoch/settled source+wall floors，existingowner queue capacity1。生产模式在 terminal+三freshsettled samples成立前不启动 YOLO。
+
+`perception_job_timeout_s` 从 Root 首次选定原始 image/Info pair 开始，包含 CPU 准入等待，至正确 completion 解除租约；同一候选 pair 不重置期限。独立保留实际 CUDA 开始、返回和是否执行推理。准入后图像已过期时，完成原租约并记为 discard，不再启动 CUDA；准入后重新发现运动则 fail-closed。
 
 - [ ] RED：移动中不推理；初始/每次fine/nextstop新epoch；全轨迹验证先于reserve/send；expired/miss/drop清lock并有限重观察，identity错误立即fault；3 distinct frame才lock。
 - [ ] 实现MOVE/WAIT/ACQUIRE/INFER/VALIDATE状态切换，只使用原native/SDK/capture/model资源。所有 late result进入 discard evidence，未知goal不能被下一个停点替代。
