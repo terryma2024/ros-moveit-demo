@@ -69,6 +69,41 @@ def test_probe_current_clock_copies_precede_decision_and_cannot_renew_progress(t
     finally:observer.close(timeout_s=1.)
 
 
+@pytest.mark.parametrize('damage',['watchdog','executor','moving','original','completion'])
+def test_cpu_refusal_retains_original_guard_context_only_after_fault_latch(tmp_path,damage,monkeypatch):
+    _,runtime,observer,claim,protocol=measurement(tmp_path)
+    reports=[]
+    emit=runtime._emit
+    def original_emit(event,**fields):
+        if event=='CALIBRATION_MEASUREMENT_REFUSED':
+            assert runtime.revoked and observer.port._head_policy_binding_failed
+            reports.append(fields)
+        emit(event,**fields)
+    monkeypatch.setattr(runtime,'_emit',original_emit)
+    if damage=='watchdog':runtime._watchdog_wall=9.98
+    elif damage=='executor':observer._executor_wall=9.98
+    elif damage=='moving':observer.port._head_feedback['velocities']=(.1,)
+    elif damage=='original':claim['joint_source_ns']=999_000_000
+    request=dict(operation='CALIBRATION_FRAME_INPUTS',exposure=claim)
+    if damage=='completion':request=dict(operation='CALIBRATION_FRAME_COMPLETION',completion=dict(
+        claim=claim,completion_wall_s=10.001,result_sha256='b'*64))
+    try:
+        with pytest.raises(PermissionError):protocol.handle(request)
+        assert len(reports)==1, 'CPU refusal loses original guard context'
+        report=reports[0]
+        assert report['operation']==request['operation'] and report['root_claim']==claim
+        assert report['error_code']==('HEAD_MONITOR_MEASUREMENT_CURRENT_INVALID'
+            if damage in ('watchdog','executor','moving') else
+            'HEAD_MONITOR_MEASUREMENT_ORIGINAL_INVALID' if damage=='original' else
+            'HEAD_MONITOR_MEASUREMENT_COMPLETION_INVALID')
+        snapshot=report['original_snapshot']
+        assert snapshot['watchdog_wall_s']==runtime._watchdog_wall
+        assert snapshot['executor_wall_s']==observer._executor_wall
+        assert snapshot['decision']['wall_after_s']==10.
+        assert runtime._exposures.summary()['sequence']==0 and not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
+
+
 @pytest.mark.parametrize('damage',['epoch','generation','session','payload','frame','future_receipt',
     'future_header','cached_missing','invalid_image','wrong_hash','joint','moving','clock',
     'watchdog','executor','policy','active','revoked','extra','deadline','completion_future'])

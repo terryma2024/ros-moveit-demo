@@ -99,12 +99,14 @@ class HeadMonitorExposures:
         original validity, scope, source order and quietness still apply.
         """
         runtime=self.runtime;observer=runtime._observer
+        phase='stage';snapshot=None;original_claim=None
         try:
             if (not runtime.configured or runtime._finished or runtime.revoked
                     or runtime.epoch.stage!='PRESENT' or runtime._policy is not None
                     or observer is None or observer._active or observer.failed
                     or observer.port.feedback_policy is not None):
                 raise PermissionError('HEAD_MONITOR_MEASUREMENT_STAGE_INVALID')
+            phase='claim'
             if (type(claim) is not dict or set(claim)!=_MEASUREMENT_CLAIM
                     or any(not _integer(claim[key]) for key in ('generation','image_source_ns',
                         'info_source_ns','joint_source_ns','tf_source_ns'))
@@ -112,6 +114,7 @@ class HeadMonitorExposures:
                     or claim['session_id']!=runtime.epoch.session_id or not _sha(claim['payload_sha256'])
                     or claim['image_frame_id']!=observer.camera_frame):
                 raise PermissionError('HEAD_MONITOR_MEASUREMENT_CLAIM_INVALID')
+            original_claim=claim;phase='snapshot'
             source=claim['image_source_ns']
             with observer._lock:
                 image=observer._images.get(source)
@@ -128,6 +131,9 @@ class HeadMonitorExposures:
             watchdog=runtime._watchdog_wall
             original=observer.port.original_feedback_snapshot();decision=original['decision']
             now_ns=nanoseconds(decision['wall_after_s']);current=original['sample']
+            snapshot=dict(image=image,info=info,joint=causal,current_joint=current,
+                decision=decision,clock=clock,watchdog_wall_s=watchdog,executor_wall_s=executor)
+            phase='current'
             if (any(not _wall(wall) or not 0<=now_ns-nanoseconds(wall)<=10_000_000
                     for wall in (watchdog,executor))
                     or current is None or current.get('valid') is not True
@@ -139,6 +145,7 @@ class HeadMonitorExposures:
                     or not 0<clock['source_ns']<=decision['sim_ns']
                     or not _wall(clock['wall_s']) or nanoseconds(clock['wall_s'])>now_ns):
                 raise PermissionError('HEAD_MONITOR_MEASUREMENT_CURRENT_INVALID')
+            phase='original'
             if (claim['info_source_ns']!=source or source>decision['sim_ns']
                     or causal is None or causal.get('valid') is not True
                     or claim['joint_source_ns']!=causal['source_ns']
@@ -147,12 +154,14 @@ class HeadMonitorExposures:
                     or any(not _wall(claim[key]) or nanoseconds(claim[key])>now_ns
                         for key in ('image_received_wall_s','info_received_wall_s'))):
                 raise PermissionError('HEAD_MONITOR_MEASUREMENT_ORIGINAL_INVALID')
+            phase='received'
             for value,watermark in zip((image,info),watermarks):
                 if value is None:
                     if watermark>=source:raise PermissionError('HEAD_MONITOR_MEASUREMENT_RECEIVED_MISSING')
                 else:_received_original(value,source=source,frame=claim['image_frame_id'],
                     decision_ns=now_ns,payload_sha256=claim['payload_sha256'] if value is image else None)
             ready=image is not None and info is not None
+            phase='completion'
             if completion is not None:
                 if (not ready or type(completion) is not dict
                         or set(completion)!={'claim','completion_wall_s','result_sha256'}
@@ -163,8 +172,7 @@ class HeadMonitorExposures:
                             <=nanoseconds(completion['completion_wall_s'])<=now_ns):
                     raise PermissionError('HEAD_MONITOR_MEASUREMENT_COMPLETION_INVALID')
             if runtime.revoked or observer.failed:raise PermissionError('HEAD_MONITOR_MEASUREMENT_REVOKED')
-            snapshot=_wire(dict(image=image,info=info,joint=causal,current_joint=current,
-                decision=decision,clock=clock,watchdog_wall_s=watchdog,executor_wall_s=executor))
+            phase='reply';snapshot=_wire(snapshot)
             reply=dict(stage='CONFIGURED',calibration_measurement=True,motion_authority=False,
                 inputs_ready=ready,root_claim=_wire(claim),original_snapshot=snapshot,
                 ack_wall_s=observer.monotonic())
@@ -175,6 +183,18 @@ class HeadMonitorExposures:
         except Exception as error:
             runtime.fault('HEAD_MONITOR_MEASUREMENT_REFUSED',
                 observer.monotonic() if observer is not None else time.monotonic())
+            # Admission/native-fault latches precede all audit encoding. Retain
+            # the originals already copied for this decision, never new clocks
+            # or a refreshed snapshot after failure. No exception formatter runs.
+            try:
+                args=BaseException.args.__get__(error)
+                code=(args[0] if args and type(args[0]) is str and len(args[0])<=128
+                    and args[0].startswith('HEAD_') else None)
+                runtime._emit('CALIBRATION_MEASUREMENT_REFUSED',
+                    operation='CALIBRATION_FRAME_INPUTS' if completion is None else 'CALIBRATION_FRAME_COMPLETION',
+                    phase=phase,error_type=type(error).__name__,error_code=code,
+                    root_claim=_wire(original_claim),original_snapshot=_wire(snapshot))
+            except Exception:pass
             raise PermissionError('HEAD_MONITOR_MEASUREMENT_REFUSED') from error
 
     def inputs(self,record):
