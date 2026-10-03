@@ -92,6 +92,7 @@ def test_client_accepts_revoked_receipt_only_for_fault_operation(operation):
     closed=[];reply=dict(request=operation,stage='REVOKED',monitor_peer=monitor.identity,
         purpose='calibration',epoch='attempt',generation=5,session_id='session',motion_authority=False)
     monitor._channel=SimpleNamespace(exchange=lambda request:reply,close=lambda:closed.append(True),
+        _simulation_policy=None,
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
     if operation=='FAULT':
         assert monitor.request_runtime(dict(operation=operation))==reply and not closed

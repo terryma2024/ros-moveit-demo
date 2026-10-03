@@ -353,8 +353,10 @@ class MonitorRuntimeProtocol:
             def configure():
                 try:
                     from .head_monitor_runtime import HeadMonitorRuntime
+                    options=({'simulation_policy':self.config['simulation_policy']}
+                        if 'simulation_policy' in self.config else {})
                     self._runtime=HeadMonitorRuntime(epoch=self.config['epoch'],generation=self.config['generation'],
-                        session_id=self.config['session_id'],primary=self.config['primary'])
+                        session_id=self.config['session_id'],primary=self.config['primary'],**options)
                     self._runtime.configure(configuration)
                     self._future.set_result(self._runtime)
                     self._runtime._configure_future.add_done_callback(lambda f:self._completed('configuration',f))

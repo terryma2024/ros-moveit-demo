@@ -20,6 +20,7 @@ import time
 
 from so101_demo.act.head_monitor import HeadMonitorEpoch, digest
 from so101_demo.act.head_feedback import nanoseconds
+from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
 from .controller_reservation_provision import (
     _private_parent,_process_start_ticks,write_head_revocation_provision)
 from .head_monitor_goal_binding import validate_goal_inventory,warm_goal_binding
@@ -27,6 +28,7 @@ from .head_monitor_ros import HeadROSMonitor
 from .head_monitor_exposure import HeadMonitorExposures
 from .head_revocation import NativeRevocationClient
 from .head_policy_audit_worker import PolicyAuditWorker
+from .head_native_policy_readback import read_native_policy
 
 _SHA=re.compile(r'[0-9a-f]{64}\Z')
 _C2A='2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a'
@@ -89,10 +91,14 @@ def _provision(path,*,authority,actor,native_owner,session_id):
 
 class HeadMonitorRuntime:
     """Only the authenticated exec server constructs and calls this object."""
-    def __init__(self,*,epoch,generation,session_id,primary):
+    def __init__(self,*,epoch,generation,session_id,primary,simulation_policy=None):
+        self._simulation_policy=(None if simulation_policy is None else
+            simulation_policy if isinstance(simulation_policy,HeadSimulationPolicy)
+            else HeadSimulationPolicy.parse(simulation_policy))
         if primary!=_peer(os.getppid()):raise PermissionError('HEAD_MONITOR_RUNTIME_PRIMARY_INVALID')
         self.primary=dict(primary);self.identity=_peer(os.getpid())
-        self.epoch=HeadMonitorEpoch(epoch=epoch,generation=generation,session_id=session_id)
+        self.epoch=HeadMonitorEpoch(epoch=epoch,generation=generation,session_id=session_id,
+            simulation_policy=self._simulation_policy)
         self._configure_future=None;self._configure_thread=None;self._configured=False
         self._observer=None;self._context=None;self._node=None;self._executor=None;self._spinner=None
         self._journal_handle=None;self._journal_path=None;self._journal_thread=None
@@ -104,6 +110,7 @@ class HeadMonitorRuntime:
         self._policy_audit_worker=None;self._policy_audit_receipt=None;self._policy_audit_retirement=None
         self._policy_audit_owner_release=threading.Event()
         self._prearm_guarded=False;self._goal_codec_warmup=None
+        self._native_policy_readback=None;self._native_policy_readback_sha256=None;self._progress_timer=None
         self._guard_lock=threading.Lock();self._threads=[]
         self._exposures=HeadMonitorExposures(self)
 
@@ -158,7 +165,7 @@ class HeadMonitorRuntime:
         if not self._configure_future.done():return dict(stage='CONFIGURE_PENDING',motion_authority=False)
         self._configure_future.result()
         if self.revoked:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
-        return dict(stage='CONFIGURED',motion_authority=False,monitor_peer=dict(self.identity),
+        reply=dict(stage='CONFIGURED',motion_authority=False,monitor_peer=dict(self.identity),
             provisions=self._provisions,dependencies=self._dependencies,node_name=self._node.get_name(),
             executor='SingleThreadedExecutor',joint_qos=dict(depth=5,reliability='BEST_EFFORT'),
             camera_qos=dict(depth=32,reliability='RELIABLE'),goal_codec_warmup=self._goal_codec_warmup,
@@ -167,11 +174,33 @@ class HeadMonitorRuntime:
             clock_qos=dict(depth=self._node._time_source._clock_sub.qos_profile.depth,
                 reliability=self._node._time_source._clock_sub.qos_profile.reliability.name),
             clock_subscription_count=sum(sub.topic_name=='/clock' for sub in self._node.subscriptions))
+        if self._simulation_policy is not None:
+            reply.update(simulation_policy=self._simulation_policy.readback(),
+                simulation_policy_sha256=digest(self._simulation_policy.readback()),
+                native_policy_readback=self._native_policy_readback,
+                scheduling_readback=dict(executor_progress_timer_period_ns=self._progress_timer.timer_period_ns,
+                    watchdog_period_ns=round(self._watchdog_period_s*1e9),
+                    supervision_stale_ns=round(self._simulation_policy.supervision_stale_s*1e9)))
+        return reply
+
+    @property
+    def _watchdog_period_s(self):
+        return .002 if self._simulation_policy is None else self._simulation_policy.watchdog_period_s
 
     def _configure(self,record):
         fields={'native_owner','reservation_directory','journal_path','dependencies','observer','purpose'}
+        if self._simulation_policy is not None:fields.add('simulation_policy')
         if type(record) is not dict or set(record)!=fields or record['purpose']!='calibration':
             raise PermissionError('HEAD_MONITOR_CONFIGURATION_INVALID')
+        if self._simulation_policy is not None:
+            simulation=HeadSimulationPolicy.parse(record['simulation_policy'])
+            if (digest(simulation.readback())!=digest(self._simulation_policy.readback())
+                    or type(record['observer']) is not dict
+                    or type(record['observer'].get('stop_latency_s')) not in (int,float)
+                    or type(record['observer'].get('camera_max_age_s')) not in (int,float)
+                    or record['observer']['stop_latency_s']!=simulation.stop_confirmation_timeout_s
+                    or record['observer']['camera_max_age_s']!=simulation.perception_max_age_s):
+                raise PermissionError('HEAD_MONITOR_SIMULATION_CONFIGURATION_BINDING_INVALID')
         native=record['native_owner']
         if (type(native) is not dict or set(native)!={'uid','pid','start_ticks'}
                 or native!=_peer(native['pid']) or native in (self.primary,self.identity)):
@@ -213,7 +242,9 @@ class HeadMonitorRuntime:
             generation=self.epoch.generation,session_id=self.epoch.session_id,dependencies=dependencies))
         # This client cannot arm, reserve or use the primary's exact-peer endpoint.
         self._revoker=NativeRevocationClient(directory/'neck-revoke.sock',capability=capability,
-            native_owner=native,generation=self.epoch.generation,timeout_s=.002)
+            native_owner=native,generation=self.epoch.generation,
+            timeout_s=.002 if self._simulation_policy is None else self._simulation_policy.native_close_timeout_s,
+            simulation_policy=self._simulation_policy)
         import rclpy
         from rclpy.context import Context
         from rclpy.executors import SingleThreadedExecutor
@@ -224,8 +255,8 @@ class HeadMonitorRuntime:
                          parameter_overrides=[Parameter('use_sim_time',value=True)])
         self._goal_codec_warmup=warm_goal_binding()
         self._observer=HeadROSMonitor(self._node,epoch=self.epoch.epoch,generation=self.epoch.generation,
-            **observer,emit=self._emit,fault_callback=self.fault)
-        self._node.create_timer(.002,self._observer.executor_progress,
+            **observer,emit=self._emit,fault_callback=self.fault,simulation_policy=self._simulation_policy)
+        self._progress_timer=self._node.create_timer(self._watchdog_period_s,self._observer.executor_progress,
             clock=rclpy.clock.Clock(clock_type=rclpy.clock.ClockType.STEADY_TIME))
         self._executor=SingleThreadedExecutor(context=self._context);self._executor.add_node(self._node)
         def spin():
@@ -233,6 +264,10 @@ class HeadMonitorRuntime:
             except BaseException:self.fault('HEAD_MONITOR_EXECUTOR_FAILED',time.monotonic())
         self._spinner=threading.Thread(target=spin,name='head-monitor-ros-executor',daemon=True)
         self._spinner.start()
+        if self._simulation_policy is not None:
+            self._native_policy_readback=read_native_policy(self._node,self._simulation_policy,
+                cancelled=lambda:self._shutdown.is_set() or self.revoked)
+            self._native_policy_readback_sha256=digest(self._native_policy_readback)
         for target,name in ((self._watchdog,'head-monitor-watchdog'),
                             (self._close_native,'head-monitor-native-close'),
                             (self._cancel_and_stop,'head-monitor-cancel-stop')):
@@ -243,6 +278,12 @@ class HeadMonitorRuntime:
             cpu_only=True,motion_authority=False,goal_codec_warmup=self._goal_codec_warmup,
             policy_audit_entry=self._policy_audit_worker.entry,
             native_transport=dict(self._revoker.transport_origin))
+        if self._simulation_policy is not None:
+            self._emit('SIMULATION_CONFIGURATION_BOUND',simulation_policy=self._simulation_policy.readback(),
+                simulation_policy_sha256=digest(self._simulation_policy.readback()),
+                native_policy_readback=self._native_policy_readback,
+                executor_progress_timer_period_ns=self._progress_timer.timer_period_ns,
+                watchdog_period_ns=round(self._watchdog_period_s*1e9))
         self._configured=True
 
     def bind_policy(self,record):
@@ -287,6 +328,13 @@ class HeadMonitorRuntime:
         self._emit('POLICY_READY',ack=ack,policy_reference=record,purpose='calibration',motion_authority=False)
         return dict(ack,stage='POLICY_READY',motion_authority=False)
 
+    def _require_native_policy_readback(self):
+        if self._simulation_policy is None:return
+        if (type(self._native_policy_readback) is not dict
+                or self._native_policy_readback_sha256!=digest(self._native_policy_readback)
+                or self._native_policy_readback.get('simulation_policy_sha256')!=digest(self._simulation_policy.readback())):
+            raise PermissionError('HEAD_MONITOR_NATIVE_POLICY_UNBOUND')
+
     def prearm_inputs(self,record):
         """Passive own-input receipt before activation; never a watchdog tick."""
         if (type(record) is not dict or set(record)!={'policy_sha256'}
@@ -304,16 +352,21 @@ class HeadMonitorRuntime:
         original=observer.port.original_feedback_snapshot();decision=original['decision']
         now=decision['wall_after_s'];sim=decision['sim_ns'];policy=observer._policy
         def fresh(wall,limit):
-            return wall is not None and 0<=nanoseconds(now)-nanoseconds(wall)<=int(limit*1e9)
+            if wall is None:return False
+            gap=nanoseconds(now)-nanoseconds(wall);bound=int(limit*1e9)
+            return 0<=gap and (gap<=bound if self._simulation_policy is None else gap<bound)
+        supervision=(policy.watchdog_reaction_limit_s if self._simulation_policy is None
+            else self._simulation_policy.supervision_stale_s)
         ready=False;reason=None;pair=None
         try:
+            self._require_native_policy_readback()
             policy.check_joint(original['sample'],decision)
             if any(abs(value)>observer.port.stop_velocity for value in original['sample']['velocities']):
                 raise ValueError('HEAD_MONITOR_PREARM_INPUTS_NOT_QUIET')
-            if (not fresh(watchdog,policy.watchdog_reaction_limit_s)
-                    or not fresh(executor,policy.watchdog_reaction_limit_s)
+            if (not fresh(watchdog,supervision)
+                    or not fresh(executor,supervision)
                     or primary is None
-                    or any(not fresh(primary[key],policy.watchdog_reaction_limit_s)
+                    or any(not fresh(primary[key],supervision)
                            for key in ('wall_s','executor_wall_s'))):
                 raise ValueError('HEAD_MONITOR_PREARM_INPUTS_PROGRESS_STALE')
             inference_deadline=primary['inference_deadline_wall_s']
@@ -353,13 +406,16 @@ class HeadMonitorRuntime:
                     or self.epoch.stage!='POLICY_READY' or self.revoked
                     or record['policy_sha256']!=self.epoch.policy_hash):
                 raise PermissionError('HEAD_MONITOR_PREARM_STAGE_INVALID')
+            self._require_native_policy_readback()
             if watchdog_wall is None:
                 raise PermissionError('HEAD_MONITOR_PREARM_WATCHDOG_STALE')
             gap=nanoseconds(now)-nanoseconds(watchdog_wall)
-            limit=int(self._observer._policy.watchdog_reaction_limit_s*1e9)
-            if gap>limit:
+            limit=int((self._observer._policy.watchdog_reaction_limit_s if self._simulation_policy is None
+                else self._simulation_policy.supervision_stale_s)*1e9)
+            expired=gap>limit or self._simulation_policy is not None and gap==limit
+            if expired:
                 fault_wall=(nanoseconds(watchdog_wall)+limit)*1e-9
-            if not 0<=gap<=limit:
+            if gap<0 or expired:
                 raise PermissionError('HEAD_MONITOR_PREARM_WATCHDOG_STALE')
             # This RPC cannot manufacture an independent watchdog tick. Once
             # active, the owned2ms worker keeps checking while main ARM runs.
@@ -382,6 +438,7 @@ class HeadMonitorRuntime:
         if (type(record) is not dict or set(record)!={'main','primary_fault'}
                 or self.epoch.stage!='POLICY_READY' or self.revoked or not self._prearm_guarded):
             raise PermissionError('HEAD_MONITOR_READY_STAGE_INVALID')
+        self._require_native_policy_readback()
         identities=[]
         for key in ('main','primary_fault'):
             value=record[key]
@@ -478,7 +535,7 @@ class HeadMonitorRuntime:
                 self._exposures.poll(now)
                 self._observer.poll()
             except BaseException:self.fault('HEAD_MONITOR_WATCHDOG_FAILED',now)
-            next_poll+=.002
+            next_poll+=self._watchdog_period_s
             self._shutdown.wait(max(0.,next_poll-time.monotonic()))
 
     def fault(self,reason,wall):
@@ -538,7 +595,7 @@ class HeadMonitorRuntime:
                 self._emit('STOP_PREDICATE',observation=self._observer.port.stop_predicate_observations[-1])
                 if stopped:
                     self._emit('STOP_CONFIRMED',wall_s=time.monotonic());break
-                self._shutdown.wait(.002)
+                self._shutdown.wait(self._watchdog_period_s)
             else:self._emit('STOP_UNCONFIRMED',wall_s=time.monotonic())
         except BaseException as error:
             try:self._emit('STOP_UNCONFIRMED',error=type(error).__name__,wall_s=time.monotonic())
@@ -603,6 +660,10 @@ class HeadMonitorRuntime:
                 exposures=self._exposures.summary(),
                 policy_audit_retirement=self._policy_audit_retirement,
                 native_close=self._native_close,native_close_error=self._native_close_error)
+            if self._simulation_policy is not None:
+                result.update(simulation_policy=self._simulation_policy.readback(),
+                    simulation_policy_sha256=digest(self._simulation_policy.readback()),
+                    native_policy_readback=self._native_policy_readback)
             seal=self._journal_path.with_name(self._journal_path.name+'.seal.json')
             with seal.open('x') as handle:json.dump(result,handle,sort_keys=True);handle.write('\n');handle.flush();os.fsync(handle.fileno())
         else:result=dict(stage='RETIRED',motion_authority=False,fault=self._fault)

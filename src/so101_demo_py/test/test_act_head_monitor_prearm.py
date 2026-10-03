@@ -13,14 +13,67 @@ def completed(value):
     future=Future();future.set_result(value);return future
 
 
-def prepared():
-    node,observer,_,_=ready_monitor();observer._active=False;observer.watchdog_polls.clear()
-    runtime=HeadMonitorRuntime(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
+def prepared(simulation=False):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    from so101_demo.act.head_monitor import digest
+    bound=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document()) if simulation else None
+    node,observer,_,_=ready_monitor(simulation=simulation);observer._active=False;observer.watchdog_polls.clear()
+    options={'simulation_policy':bound} if simulation else {}
+    runtime=HeadMonitorRuntime(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()),**options)
     runtime._observer=observer;runtime._configured=True;runtime._configure_future=completed(True)
-    runtime.epoch.bind_policy(policy(),'a'*64);runtime._watchdog_wall=10.
+    runtime.epoch.bind_policy(bound.feedback_values() if simulation else policy(),'a'*64);runtime._watchdog_wall=10.
     runtime._policy={'sha256':'a'*64}
     runtime._node=node;node.get_name=lambda:'controlled_cpu_observer'
+    if simulation:
+        # This guard fixture supplies a frozen unit-only readback. Actual owned
+        # CPU/native readonly service queries are covered in runtime_process.
+        runtime._native_policy_readback=dict(unit_only=True,simulation_policy_sha256=digest(bound.readback()))
+        runtime._native_policy_readback_sha256=digest(runtime._native_policy_readback)
     return node,runtime,observer
+
+
+def test_simulation_prearm_progress_uses_supervision_budget_not_reaction_budget():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer=prepared(simulation=True)
+    try:
+        node.wall=10.3;node.sim=1.3;refresh_simulation_inputs(node,observer)
+        ack=runtime.prearm_ready({'policy_sha256':'a'*64})
+        assert ack['current_inputs_guarded'] is True and not runtime.revoked
+        assert runtime._watchdog_wall==10. and runtime.epoch.stage=='POLICY_READY'
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_passive_prearm_inputs_preserve_original_supervision_progress():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer=prepared(simulation=True)
+    try:
+        node.wall=10.3;node.sim=1.3;refresh_simulation_inputs(node,observer)
+        ack=runtime.prearm_inputs({'policy_sha256':'a'*64})
+        assert ack['inputs_ready'] is True and ack['watchdog_wall_s']==10.
+        assert not observer._active and runtime._watchdog_wall==10. and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_prearm_exact_supervision_expiry_closes_original_generation():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer=prepared(simulation=True)
+    try:
+        node.wall=10.5;node.sim=1.5;refresh_simulation_inputs(node,observer)
+        with pytest.raises(PermissionError):runtime.prearm_ready({'policy_sha256':'a'*64})
+        assert runtime.revoked and runtime.epoch.fault['fault_wall_s']==pytest.approx(10.5,abs=1e-12)
+        assert runtime._watchdog_wall==10.
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['missing','changed'])
+def test_simulation_prearm_cannot_skip_or_replace_bound_native_readback(damage):
+    _,runtime,observer=prepared(simulation=True)
+    if damage=='missing':runtime._native_policy_readback=None
+    else:runtime._native_policy_readback['simulation_policy_sha256']='f'*64
+    try:
+        with pytest.raises(PermissionError):runtime.prearm_ready({'policy_sha256':'a'*64})
+        assert runtime.revoked and not runtime._prearm_guarded and runtime.epoch.inventory=={}
+    finally:observer.close(timeout_s=1.)
 
 
 def prearm(runtime,record):

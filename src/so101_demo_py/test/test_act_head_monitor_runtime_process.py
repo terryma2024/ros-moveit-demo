@@ -20,11 +20,35 @@ from so101_demo.adapters.act.controller_reservation_provision import (
 from so101_demo.adapters.act.head_monitor_process import start_monitor
 
 
+SIMULATION_OWNER=r'''
+import sys,threading
+import rclpy
+from rcl_interfaces.msg import ParameterDescriptor
+from rclpy.node import Node
+from rclpy.executors import SingleThreadedExecutor
+rclpy.init();node=Node('neck_controller')
+node.declare_parameter('head_simulation_mode','mujoco_bounded_stop_search',ParameterDescriptor(read_only=True))
+node.declare_parameter('head_fault_connection_timeout_ns',int(sys.argv[1]),ParameterDescriptor(read_only=True))
+executor=SingleThreadedExecutor();executor.add_node(node)
+thread=threading.Thread(target=executor.spin);thread.start()
+print('READONLY_SERVICE_READY',flush=True)
+sys.stdin.read()
+assert executor.shutdown(timeout_sec=2.) is True
+thread.join(2.);assert not thread.is_alive()
+node.destroy_node();rclpy.shutdown()
+'''
+
+
 @pytest.fixture
-def runtime_setup(config,tmp_path):
-    owner=subprocess.Popen([sys.executable,'-c','import sys;sys.stdin.read()'],stdin=subprocess.PIPE)
+def runtime_setup(config,tmp_path,request):
+    mode=getattr(request,'param','legacy');simulation=mode.startswith('simulation')
+    environment=dict(config['environment'],ROS_DOMAIN_ID=str(130+int(uuid.uuid4().hex[:4],16)%90))
+    assert os.access(sys.executable,os.X_OK)
+    command=[sys.executable,'-c',SIMULATION_OWNER,'50000001' if mode.endswith('wrong-budget') else '50000000'] if simulation else [sys.executable,'-c','import sys;sys.stdin.read()']
+    owner=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=environment)
     monitor=None
     try:
+        if simulation:assert owner.stdout.readline()==b'READONLY_SERVICE_READY\n'
         native=dict(uid=os.geteuid(),pid=owner.pid,start_ticks=_process_start_ticks(owner.pid))
         directory=config['ipc_directory']
         write_controller_reservation_provision(directory/'neck.provision',role='neck',session_id=config['session_id'])
@@ -42,15 +66,72 @@ def runtime_setup(config,tmp_path):
         for path in sources.values():assert path.is_file()
         dependencies={key:dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
                       for key,path in sources.items()}
-        environment=dict(config['environment'],ROS_DOMAIN_ID=str(130+int(uuid.uuid4().hex[:4],16)%90))
-        monitor=start_monitor(**dict(config,environment=environment))
+        options={}
+        if simulation:
+            from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+            options['simulation_policy']=HeadSimulationPolicy.default_document()
+        monitor=start_monitor(**dict(config,environment=environment),**options)
         configuration=dict(native_owner=native,reservation_directory=str(directory),journal_path=str(tmp_path/'monitor-journal.jsonl'),
             dependencies=dependencies,purpose='calibration',observer=dict(stop_velocity_rad_s=.002,stop_latency_s=.07,
                 camera_max_age_s=.05,camera_frame_id='head_camera_optical_frame'))
+        if simulation:
+            configuration.update(options)
+            configuration['observer'].update(stop_latency_s=1.,camera_max_age_s=.15)
         yield monitor,configuration,config
     finally:
         if monitor is not None:monitor.close()
         if owner.poll() is None:owner.stdin.close();owner.wait(timeout=2.)
+
+
+@pytest.mark.parametrize('runtime_setup',['simulation'],indirect=True)
+def test_owned_cpu_runtime_binds_same_simulation_to_actual_consumers_without_arming(runtime_setup):
+    from so101_demo.act.head_monitor import digest
+    monitor,configuration,_=runtime_setup
+    reply=configured(monitor,configuration);simulation=configuration['simulation_policy']
+    assert reply['simulation_policy']==simulation and reply['simulation_policy_sha256']==digest(simulation)
+    assert reply['stage']=='CONFIGURED' and reply['motion_authority'] is False
+    assert reply['native_policy_readback']['values']['head_fault_connection_timeout_ns']==50_000_000
+    assert reply['native_policy_readback']['reader_node']=='/head_monitor_launch_a'
+    assert reply['native_policy_readback']['motion_authority'] is False
+    assert reply['scheduling_readback']==dict(executor_progress_timer_period_ns=20_000_000,
+        watchdog_period_ns=20_000_000,supervision_stale_ns=500_000_000)
+    assert reply['native_transport']['mode']==simulation['mode']
+    assert reply['native_transport']['simulation_policy_sha256']==digest(simulation)
+    fault=dict(reason='controlled simulation teardown',fault_wall_s=time.monotonic())
+    monitor.request_runtime(dict(operation='FAULT',fault=fault))
+    wall=time.monotonic()
+    ack=monitor.request_heartbeat(lambda:dict(wall_s=wall,executor_wall_s=wall,inference_deadline_wall_s=None))
+    assert ack['stage']=='REVOKED' and ack['heartbeat_rejected'] is True
+    assert ack['simulation_policy_sha256']==digest(simulation) and ack['fault']==fault
+    retired=monitor.close()
+    assert retired['shutdown_ack'] is True and retired['exit_code']==0
+    seal=json.loads(Path(configuration['journal_path']+'.seal.json').read_text())
+    assert seal['native_close'] is None and seal['native_close_error'] is not None
+    # Owned stand-in has read-only ROS params but no native controller or motion.
+    assert seal['simulation_policy']==simulation
+
+
+@pytest.mark.parametrize('runtime_setup',['simulation-wrong-budget'],indirect=True)
+def test_actual_cpu_refuses_different_readonly_native_budget_without_configured_or_arm(runtime_setup):
+    monitor,configuration,_=runtime_setup
+    monitor.request_runtime(dict(operation='CONFIGURE',configuration=configuration))
+    with pytest.raises((OSError,RuntimeError,PermissionError,ValueError)):
+        monitor.await_runtime(phase='configuration',timeout_s=3.)
+    assert not list(Path(configuration['reservation_directory']).glob('*.sock'))
+
+
+@pytest.mark.parametrize('runtime_setup',['simulation'],indirect=True)
+@pytest.mark.parametrize('damage',['stop','camera_age','policy'])
+def test_actual_cpu_rejects_different_effective_simulation_config_before_resources(runtime_setup,damage):
+    monitor,configuration,_=runtime_setup
+    if damage=='stop':configuration['observer']['stop_latency_s']=.07
+    elif damage=='camera_age':configuration['observer']['camera_max_age_s']=.05
+    else:configuration['simulation_policy']['supervision_stale_s']=.6
+    monitor.request_runtime(dict(operation='CONFIGURE',configuration=configuration)) if damage!='policy' else None
+    with pytest.raises((OSError,RuntimeError,PermissionError,ValueError)):
+        if damage=='policy':monitor.request_runtime(dict(operation='CONFIGURE',configuration=configuration))
+        else:monitor.await_runtime(phase='configuration',timeout_s=3.)
+    assert not Path(configuration['journal_path']).exists()
 
 
 def configured(monitor,configuration):

@@ -54,7 +54,7 @@
 
 ## Task 2: 一次绑定监督 policy 与真实 channel 状态
 
-**Files:** Modify `act/head_feedback.py`, `act/head_monitor.py`, `act/head_monitor_ipc.py`, `adapters/act/head_monitor_process.py`, `head_monitor_runtime.py`, `head_primary_supervisor.py`, `head_monitor_ros.py`, `head_revocation.py`；native `src/so101_mujoco_support/{include/so101_mujoco_support/head_revocation_transport.h,src/head_revocation_transport.cpp}`，以及 `broker_owned_trajectory_controller` 和 `controller_reservation_socket` 的源文件/头文件、`CMakeLists.txt`、`package.xml`；对应现有 feedback/IPC/process/primary/runtime/revocation 和 native lifecycle/socket tests。
+**Files:** Modify `act/head_feedback.py`, `act/head_monitor.py`, `act/head_monitor_ipc.py`, `adapters/act/head_monitor_process.py`, `head_monitor_runtime.py`, `head_primary_supervisor.py`, `head_monitor_ros.py`, `head_revocation.py`, `head_native_policy_readback.py`；native `src/so101_mujoco_support/{include/so101_mujoco_support/head_revocation_transport.h,src/head_revocation_transport.cpp}`，以及 `broker_owned_trajectory_controller` 和 `controller_reservation_socket` 的源文件/头文件、`CMakeLists.txt`、`package.xml`；对应现有 feedback/IPC/process/primary/runtime/revocation 和 native lifecycle/socket tests。
 
 **Interfaces:** 正式 entry 向 existing primary/CPU 配置传相同 `simulation_policy` reference/hash；`FeedbackPolicy.parse(values, *, simulation_policy=None)` 校验新 mode 的 exact8 mapping，legacy保持原固定调度值；channel新增 `complete_pending(deadline_wall_s: float) -> dict` 只完成同 sequence frame。channel保持原 codec/authentication，无隐式 reconnect/retry。
 
