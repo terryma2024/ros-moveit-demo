@@ -80,6 +80,28 @@ def test_sampled_heartbeat_requires_configuration_and_complete_runtime_ack(damag
         else:assert calls[-1]=='closed'
 
 
+@pytest.mark.parametrize('damage',['none','scope','transport'])
+def test_runtime_request_carries_local_trace_without_changing_request_or_ack_checks(damage):
+    trace={};request=dict(operation='CALIBRATION_FRAME_INPUTS',exposure={'original':'claim'})
+    reply=dict(request=request['operation'],stage='CONFIGURED',monitor_peer={'pid':123},
+        purpose='calibration',epoch='attempt',generation=5,session_id='session',motion_authority=False)
+    calls=[]
+    def exchange(value,*,trace=None):
+        calls.append(value);trace.update(phase='read',started_wall_s=10.,deadline_wall_s=10.010)
+        if damage=='transport':raise TimeoutError('controlled original timeout')
+        if damage=='scope':reply['epoch']='foreign'
+        return reply
+    monitor=object.__new__(MonitorProcess);monitor._closed=False;monitor._runtime_requested=True
+    monitor._identity={'pid':123};monitor.is_alive=lambda:True
+    monitor._channel=SimpleNamespace(exchange=exchange,close=lambda:calls.append('closed'),
+        _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
+    if damage=='none':assert monitor.request_runtime(request,trace=trace)==reply
+    else:
+        with pytest.raises((PermissionError,TimeoutError)):monitor.request_runtime(request,trace=trace)
+    assert calls[0] is request and trace['phase']=='read' and trace['deadline_wall_s']==10.010
+    if damage=='scope':assert calls[-1]=='closed'
+
+
 def test_actual_exec_identity_and_no_key_in_argv_environment_logs(config):
     monitor=start_monitor(**config)
     try:

@@ -336,11 +336,17 @@ class HeadMonitorChannel:
     def receive(self):
         return self._operation(self._read)
 
-    def exchange(self, payload):
+    def exchange(self, payload, *, trace=None):
+        def mark(phase):
+            if trace is not None:
+                trace['phase']=phase;trace[phase+'_wall_s']=time.monotonic()
         def request(deadline):
+            mark('write')
             self._write(payload, deadline)
-            return self._read(deadline)
-        return self._operation(request)
+            mark('read')
+            reply=self._read(deadline)
+            mark('complete');return reply
+        return self._operation(request,trace=trace)
 
     def exchange_built(self, payload_factory, *, trace=None):
         """Sample one new payload after the slot, within the caller's deadline."""

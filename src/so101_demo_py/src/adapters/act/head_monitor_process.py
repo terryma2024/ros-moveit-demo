@@ -98,7 +98,7 @@ class MonitorProcess:
             raise PermissionError('HEAD_MONITOR_EXEC_ACK_INVALID')
         return reply
 
-    def request_runtime(self,value):
+    def request_runtime(self,value,*,trace=None):
         """The staged calibration protocol; an EXEC_ONLY receipt grants none."""
         if self._closed or not self.is_alive():
             raise PermissionError('HEAD_MONITOR_EXEC_RETIRED')
@@ -106,7 +106,8 @@ class MonitorProcess:
             raise ValueError('HEAD_MONITOR_RUNTIME_REQUEST_INVALID')
         if value['operation']=='CONFIGURE':self._runtime_requested=True
         elif not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
-        reply=self._channel.exchange(value)
+        reply=(self._channel.exchange(value) if trace is None
+               else self._channel.exchange(value,trace=trace))
         return self._runtime_reply(value,reply)
 
     def request_heartbeat(self,snapshot_factory):

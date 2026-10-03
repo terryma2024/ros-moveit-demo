@@ -807,7 +807,8 @@ def main(argv=None):
             with port._lock:
                 raw=dict(joint_messages=list(port._head_samples),camera_messages=list(capture.camera_messages),
                     info_messages=list(capture.info_messages),clock_messages=list(capture.clock_messages),
-                    events=list(capture.events),workload=getattr(capture,'workload',None))
+                    events=list(capture.events),workload=getattr(capture,'workload',None),
+                    measurement_attempts=list(capture._measurement_attempts))
             result['raw_observations_pending']=raw
         if executor is not None:
             try:

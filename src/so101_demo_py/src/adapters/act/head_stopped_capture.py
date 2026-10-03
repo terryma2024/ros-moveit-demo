@@ -45,6 +45,7 @@ class StoppedHeadCapture:
         self._original_sink=None;self._window=None;self._window_finished=False
         self._live_sink=None;self._live_floor=None
         self._measurement_monitor=None;self._measurement_scope=None
+        self._measurement_attempts=[]
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
@@ -84,21 +85,36 @@ class StoppedHeadCapture:
                 monitor_peer=dict(monitor.identity))
 
     def _measurement_request(self,operation,value):
+        attempt=None
         try:
             self.check()
-            return self._read_measurement_request(operation,value)
-        except Exception:
+            if len(self._measurement_attempts)>=40000:
+                raise PermissionError('HEAD_STOPPED_MEASUREMENT_HISTORY_OVERFLOW')
+            claim=value if operation=='CALIBRATION_FRAME_INPUTS' else value['claim']
+            attempt=dict(operation=operation,root_claim=deepcopy(claim),channel_trace={},
+                outcome='PENDING',error_type=None,ack_wall_s=None,inputs_ready=None)
+            attempt['started_wall_s']=self.monotonic()
+            reply=self._read_measurement_request(operation,value,
+                started=attempt['started_wall_s'],trace=attempt['channel_trace'])
+            attempt.update(outcome='ACK',ack_wall_s=reply['ack_wall_s'],inputs_ready=reply['inputs_ready'],
+                ended_wall_s=self.monotonic())
+            self._measurement_attempts.append(attempt)
+            return reply
+        except Exception as error:
             self._failure='HEAD_STOPPED_MEASUREMENT_REFUSED'
             self.port._head_policy_binding_failed=True
+            if attempt is not None:
+                attempt.update(outcome='REFUSED',error_type=type(error).__name__,ended_wall_s=self.monotonic())
+                self._measurement_attempts.append(attempt)
             callback=getattr(self.port,'_head_fault_callback',None)
             if callable(callback):callback(self._failure)
             raise
 
-    def _read_measurement_request(self,operation,value):
+    def _read_measurement_request(self,operation,value,*,started,trace):
         field='exposure' if operation=='CALIBRATION_FRAME_INPUTS' else 'completion'
         claim=value if field=='exposure' else value['claim']
-        started=self.monotonic()
-        reply=deepcopy(self._measurement_monitor.request_runtime(dict(operation=operation,**{field:value})))
+        reply=deepcopy(self._measurement_monitor.request_runtime(
+            dict(operation=operation,**{field:value}),trace=trace))
         received=self.monotonic()
         if (type(reply) is not dict or reply.get('request')!=operation or reply.get('stage')!='CONFIGURED'
                 or reply.get('purpose')!='calibration' or reply.get('calibration_measurement') is not True

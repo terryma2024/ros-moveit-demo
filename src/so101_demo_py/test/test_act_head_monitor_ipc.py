@@ -157,6 +157,24 @@ def test_real_connected_peer_authenticates_reply(server):
     assert child.stdout.readline()==b'PREFIX 4\n'
 
 
+@pytest.mark.parametrize('server',['valid','timeout','tamper'],indirect=True)
+def test_runtime_exchange_original_trace_keeps_same_authenticated_deadline(server):
+    connection,peer,child=server
+    channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.010)
+    trace={}
+    if server[2].args[-1]=='valid':
+        assert channel.exchange({'operation':'PRESENCE'},trace=trace)=={'ack':'PRESENT'}
+        assert trace['phase']=='complete' and trace['error_type'] is None
+    else:
+        with pytest.raises((TimeoutError,PermissionError)):
+            channel.exchange({'operation':'PRESENCE'},trace=trace)
+        assert trace['phase']=='read' and trace['error_type'] is not None and channel._codec.failed
+    assert trace['deadline_wall_s']-trace['started_wall_s']==pytest.approx(.010)
+    assert (trace['started_wall_s']<=trace['slot_owned_wall_s']<=trace['write_wall_s']
+            <=trace['read_wall_s']<=trace['ended_wall_s'])
+    assert child.stdout.readline()==b'PREFIX 4\n'
+
+
 def test_built_request_uses_real_connected_peer_authentication(server):
     connection,peer,child=server
     channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.010)

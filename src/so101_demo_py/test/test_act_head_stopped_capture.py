@@ -122,7 +122,7 @@ def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_afte
     class Monitor:
         identity=dict(uid=1,pid=2,start_ticks=3)
         ready=False
-        def request_runtime(self,request):
+        def request_runtime(self,request,*,trace=None):
             from copy import deepcopy
             requests.append(deepcopy(request));operation=request['operation']
             claim=request['exposure'] if operation=='CALIBRATION_FRAME_INPUTS' else request['completion']['claim']
@@ -156,6 +156,8 @@ def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_afte
     assert proof['cpu_image_received_wall_s']==proof['cpu_info_received_wall_s']==10.000
     assert proof['root_handoff_decision_wall_s']==10.015
     assert row['cpu_measurement_completion']['completion']['completion_wall_s']==10.010
+    assert [a['outcome'] for a in capture._measurement_attempts]==['ACK']*3
+    assert [a['inputs_ready'] for a in capture._measurement_attempts]==[False,True,True]
 
 
 @pytest.mark.parametrize('damage',['foreign_peer','generation_bool','authority','claimed_original','late',
@@ -169,7 +171,7 @@ def test_capture_measurement_rejects_bad_ack_before_granting_any_new_work(captur
     completion=dict(claim=claim,completion_wall_s=10.001,result_sha256='b'*64)
     class Monitor:
         identity=dict(uid=1,pid=2,start_ticks=3)
-        def request_runtime(self,request):
+        def request_runtime(self,request,*,trace=None):
             value=dict(request=request['operation'],stage='CONFIGURED',purpose='calibration',
                 calibration_measurement=True,motion_authority=False,epoch='entry',generation=7,session_id='test',
                 monitor_peer=self.identity,root_claim=dict(claim),inputs_ready=True,ack_wall_s=10.001,
@@ -191,6 +193,39 @@ def test_capture_measurement_rejects_bad_ack_before_granting_any_new_work(captur
         capture._measurement_request('CALIBRATION_FRAME_COMPLETION',completion)
     assert capture._pending is not None
     with pytest.raises(ValueError):capture.check()
+    assert capture._measurement_attempts[-1]['outcome']=='REFUSED'
+    assert capture._measurement_attempts[-1]['ack_wall_s'] is None
+
+
+def test_failed_measurement_retains_original_request_before_fault_callback(capture):
+    wall=[10.001];capture.monotonic=lambda:wall[0]
+    capture._image(image());capture._info(info());pending=capture._pending
+    claim=dict(epoch='entry',generation=7,session_id='test',image_source_ns=10**9,
+        info_source_ns=10**9,joint_source_ns=10**9,tf_source_ns=10**9,image_frame_id=capture.frame_id,
+        payload_sha256=pending[0]['payload_sha256'],image_received_wall_s=10.001,info_received_wall_s=10.001)
+    class Monitor:
+        identity=dict(uid=1,pid=2,start_ticks=3)
+        def request_runtime(self,request,**kwargs):
+            wall[0]=10.012
+            raise TimeoutError('timed out')
+    observed=[]
+    capture.port._head_fault_callback=lambda reason:observed.append(
+        (reason,list(getattr(capture,'_measurement_attempts',[]))))
+    capture.bind_measurement_monitor(Monitor(),epoch='entry',generation=7,session_id='test')
+    with pytest.raises(TimeoutError,match='timed out'):
+        capture._measurement_request('CALIBRATION_FRAME_INPUTS',claim)
+    assert capture._pending is pending and capture.port._head_policy_binding_failed
+    with pytest.raises(ValueError,match='HEAD_STOPPED_MEASUREMENT_REFUSED'):capture.check()
+    attempts=getattr(capture,'_measurement_attempts',[])
+    assert len(attempts)==1, 'failed RPC loses original operation/claim/clock context'
+    attempt=attempts[0]
+    assert attempt['operation']=='CALIBRATION_FRAME_INPUTS' and attempt['root_claim']==claim
+    assert attempt['started_wall_s']==10.001 and attempt['ended_wall_s']==10.012
+    assert attempt['outcome']=='REFUSED' and attempt['error_type']=='TimeoutError'
+    assert attempt['ack_wall_s'] is None and attempt['inputs_ready'] is None
+    assert observed==[('HEAD_STOPPED_MEASUREMENT_REFUSED',attempts)]
+    claim['image_source_ns']=99
+    assert attempt['root_claim']['image_source_ns']==10**9
 
 
 def test_warm_boundary_carries_only_last32_original_infos(capture):
