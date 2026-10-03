@@ -10,12 +10,14 @@ from test_act_head_monitor_process import config
 from so101_demo.adapters.act import head_monitor_process as server
 
 
-@pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY','EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH'])
+@pytest.mark.parametrize('operation',['PREARM_INPUTS','PREARM_READY','EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH',
+    'CALIBRATION_FRAME_INPUTS','CALIBRATION_FRAME_COMPLETION'])
 @pytest.mark.parametrize('parent_module',[None,'torch','mujoco'])
 def test_exec_server_routes_prearm_to_runtime_after_presence_and_configuration(config,monkeypatch,operation,parent_module):
     if parent_module is not None:monkeypatch.setitem(sys.modules,parent_module,object())
     identity=server._peer(os.getpid());handled=[];replies=[]
-    field={'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}.get(operation,'policy')
+    field={'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion',
+        'CALIBRATION_FRAME_INPUTS':'exposure','CALIBRATION_FRAME_COMPLETION':'completion'}.get(operation,'policy')
     requests=iter([dict(operation='PRESENCE'),dict(operation='CONFIGURE',configuration={}),
         dict(operation=operation,**{field:dict(policy_sha256='a'*64)}),dict(operation='RETIRE_STATUS')])
     class Socket:

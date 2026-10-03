@@ -517,7 +517,8 @@ def main():
                     operation=request['operation']
                     if presented and operation in ('CONFIGURE','CONFIGURATION','POLICY','PREARM_INPUTS','PREARM_READY','ARMED_READY',
                             'POLICY_STATUS','REGISTER','DISPATCH','REJECTION','FAULT','RETIRE','RETIRE_STATUS',
-                            'EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH'):
+                            'EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH',
+                            'CALIBRATION_FRAME_INPUTS','CALIBRATION_FRAME_COMPLETION'):
                         reply=runtime_protocol.handle(request)
                         channel.send(reply)
                         runtime_protocol.after_send()
