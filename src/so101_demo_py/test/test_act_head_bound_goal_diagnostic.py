@@ -185,6 +185,34 @@ def test_full_live_pipeline_window_retains_all_four_receipts_and_200_frames():
     assert receipt['frame_age']['sample_count']==2400
 
 
+@pytest.mark.parametrize('late_boundary',['cuda_completion','main_copy'])
+def test_live_pipeline_refusal_latches_original_deadline_after_actual_main_copy(late_boundary):
+    from so101_demo.cli import head_feedback_bootstrap as module
+    c=pipeline_harness();query=c.owner.next_completed_exposure;copied=[]
+    deadline=c.rows[0]['deadline_ns']
+    if late_boundary=='cuda_completion':c.rows[0]['completion_wall_s']=deadline*1e-9
+    def completed(after_sequence):
+        row=query(after_sequence)
+        if row is not None and not copied:
+            copied.append(row)
+            if late_boundary=='main_copy':c.clock[0]=deadline*1e-9+.001
+        return row
+    c.owner.next_completed_exposure=completed
+    with pytest.raises(PermissionError,match='HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE'):
+        module._run_live_pipeline_measurement(port=c.port,primary=c.primary,owner=c.owner,
+            result=c.result,emit=lambda event,**fields:c.events.append((event,fields)),
+            monotonic=lambda:c.clock[0],sleep=c.sleep)
+    assert copied==[c.rows[0]] and c.result['live_pipeline_measurement']['frames']==[]
+    faults=[value for event,value in c.events if event=='fault']
+    assert faults[0]==('HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE',deadline*1e-9)
+    decisions=[value['decision'] for event,value in c.events if event=='LIVE_PIPELINE_CONTROL_DECISION']
+    assert decisions[-1]['wall_after_s']==c.clock[0]
+    refused=c.result['live_pipeline_measurement']['refused_exposure']
+    assert refused['original']==c.rows[0] and refused['control_decision']==decisions[-1]
+    assert refused['observed_wall_s']==c.clock[0]
+    assert c.result['goal_send_count']==0
+
+
 @pytest.mark.parametrize('damage',['missing','extra','sdk','source','late_completion','revoked'])
 def test_live_window_cannot_hide_missing_frames_motion_or_invalid_originals(damage):
     from so101_demo.cli import head_feedback_bootstrap as module

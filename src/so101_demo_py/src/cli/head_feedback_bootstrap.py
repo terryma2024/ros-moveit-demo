@@ -242,23 +242,33 @@ def _run_live_pipeline_measurement(*,port,primary,owner,result,emit,
     evidence.update(status='LIVE_PIPELINE_COLLECTING',qualification=False,frames=frames)
     try:
         while True:
-            owner.infer();primary.dispatch_guard();current=port.feedback_snapshot()
+            owner.infer();primary.dispatch_guard()
+            # The Main decision consumes the actual copied completion. Read
+            # its clocks afterwards; a slow copy cannot inherit an earlier
+            # control tick and hide an expired original frame.
+            row=owner.next_completed_exposure(sequence)
+            current=port.feedback_snapshot()
             now=monotonic();now_ns=nanoseconds(now)
             if not primary.ready or primary.failed or result['goal_send_count']!=0:
                 raise PermissionError('HEAD_LIVE_WINDOW_OWNER_OR_MOTION_INVALID')
             emit('LIVE_PIPELINE_CONTROL_DECISION',decision=current['decision'],
                 original_joint={key:value for key,value in current.items() if key!='decision'},
                 controller_thread_native_id=threading.get_native_id())
-            row=owner.next_completed_exposure(sequence)
             if row is not None:
                 if row['sequence']!=sequence+1:
                     raise PermissionError('HEAD_LIVE_WINDOW_EXPOSURE_SEQUENCE_INVALID')
                 sequence=row['sequence']
                 if start<=nanoseconds(row['image_received_wall_s'])<end:
                     deadline=row['deadline_ns'];admit=row['admission_ack'];finish=row['completion_ack']
-                    if (admit['exposure_admitted'] is not True or finish['exposure_finished'] is not True
-                            or nanoseconds(row['completion_wall_s'])>=deadline
-                            or nanoseconds(now)>=deadline):
+                    if admit['exposure_admitted'] is not True or finish['exposure_finished'] is not True:
+                        raise PermissionError('HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE')
+                    if nanoseconds(row['completion_wall_s'])>=deadline or nanoseconds(now)>=deadline:
+                        primary.fault('HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE',deadline*1e-9)
+                        evidence['refused_exposure']=dict(original=row,
+                            control_decision=current['decision'],observed_wall_s=now)
+                        emit('LIVE_PIPELINE_EXPOSURE_REFUSED',sequence=sequence,source_ns=row['source_ns'],
+                            original_deadline_ns=deadline,completion_wall_s=row['completion_wall_s'],
+                            decision=current['decision'],observed_wall_s=now)
                         raise PermissionError('HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE')
                     if frames and abs(row['source_ns']-frames[-1]['original']['source_ns']-100_000_000)>1:
                         raise PermissionError('HEAD_LIVE_WINDOW_SOURCE_CADENCE_INVALID')
