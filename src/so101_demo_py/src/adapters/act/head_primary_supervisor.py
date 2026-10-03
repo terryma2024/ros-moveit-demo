@@ -4,17 +4,19 @@ Calibration readiness is distinct from production qualification. No constructor,
 heartbeat, or local inventory implicitly arms the native controller.
 """
 from copy import deepcopy
+from dataclasses import asdict
+import json
 import math
 import threading
 import time
 
 from rclpy.clock import Clock, ClockType
 
-from so101_demo.act.head_feedback import nanoseconds
-from so101_demo.act.head_monitor import HeadMonitorEpoch, canonical_bytes
+from so101_demo.act.head_feedback import FeedbackPolicy,nanoseconds
+from so101_demo.act.head_monitor import HeadMonitorEpoch, canonical_bytes,digest
 from .head_monitor_process import MonitorProcess,_revoked_heartbeat_reply
 from .head_monitor_ros import HeadROSMonitor
-from .head_monitor_runtime import HeadMonitorRuntime
+from .head_monitor_runtime import HeadMonitorRuntime,_sha_file
 from .head_original_router import HeadOriginalRouter
 from .head_reservation_authority import HeadReservationAuthority
 from .head_revocation import NativeRevocationClient
@@ -25,8 +27,10 @@ class HeadPrimarySupervisor:
     def __init__(self, *, node, port, router, monitor, revoker, epoch, generation,
                  session_id, policy_reference, policy_ack, configuration_ack,
                  stop_latency_s, camera_max_age_s, camera_frame_id, emit):
+        prepolicy=(isinstance(port,RosControllerPort) and port._head_bootstrap
+            and port.feedback_policy is None and policy_reference is None and policy_ack is None)
         if (not isinstance(port, RosControllerPort) or port.node is not node
-                or port.feedback_policy is None or port.names != ('neck_yaw_joint',)
+                or (port.feedback_policy is None and not prepolicy) or port.names != ('neck_yaw_joint',)
                 or not isinstance(router, HeadOriginalRouter) or router.port is not port
                 or not isinstance(monitor, MonitorProcess) or not monitor.is_alive()
                 or type(revoker) is not NativeRevocationClient
@@ -46,25 +50,71 @@ class HeadPrimarySupervisor:
         self._inference_deadlines=[]
         self._dispatch_observation_deadline=None
         self._started = False; self._finished = False; self._ready = False; self._arming = False
+        self._policy_binding = False
         self._threads = []; self.threads = self._threads; self.timer = None
         self._observer = None; self._started_wall = None
-        if type(self._policy) is not dict or set(self._policy) != {'path', 'sha256'}:
-            raise ValueError('HEAD_PRIMARY_POLICY_REFERENCE_INVALID')
-        self._ack(policy_ack, 'POLICY_STATUS', 'POLICY_READY',
-                  policy_sha256=self._policy['sha256'])
+        if not prepolicy:
+            if type(self._policy) is not dict or set(self._policy) != {'path', 'sha256'}:
+                raise ValueError('HEAD_PRIMARY_POLICY_REFERENCE_INVALID')
+            self._ack(policy_ack, 'POLICY_STATUS', 'POLICY_READY',
+                      policy_sha256=self._policy['sha256'])
         self._ack(configuration_ack, 'CONFIGURATION', 'CONFIGURED',native_transport=revoker.transport_origin)
         self._provisions = deepcopy(configuration_ack['provisions'])
         self._dependencies = deepcopy(configuration_ack['dependencies'])
         if (set(self._provisions) != {'main', 'primary_fault', 'monitor_fault'}
                 or self._provisions['primary_fault']['socket_path'] != str(revoker.path)):
             raise PermissionError('HEAD_PRIMARY_PROVISION_SCOPE_INVALID')
-        self.epoch.bind_policy(port.feedback_policy, self._policy['sha256'])
+        if not prepolicy:self.epoch.bind_policy(port.feedback_policy, self._policy['sha256'])
         self._observer = HeadROSMonitor(node, epoch=epoch, generation=generation,
             stop_velocity_rad_s=port.stop_velocity, stop_latency_s=stop_latency_s,
             camera_max_age_s=camera_max_age_s, camera_frame_id=camera_frame_id,
             emit=self._emit, fault_callback=self.fault, controller_port=port,
             monotonic=port.monotonic)
         router.bind_primary(self._observer)
+
+    def begin_policy_binding(self):
+        # The CPU can complete its asynchronous validation before this Root
+        # receives the policy-status ACK. This transition grants no readiness.
+        if (self.failed or self._finished or self.epoch.stage!='PRESENT'
+                or self._policy is not None or self._policy_binding):
+            self.fault('HEAD_PRIMARY_POLICY_BINDING_REFUSED')
+            raise PermissionError('HEAD_PRIMARY_POLICY_BINDING_REFUSED')
+        self._policy_binding=True
+
+    def bind_measured_policy(self,*,policy_reference,policy_ack,values,camera_max_age_s):
+        """Bind one measured policy on the entry's existing PRESENT resources."""
+        self._policy_binding=True
+        try:
+            if (self.failed or self._finished or self.epoch.stage!='PRESENT'
+                    or self._policy is not None or self.port.feedback_policy is not None
+                    or self.observer._policy is not None
+                    or type(policy_reference) is not dict
+                    or set(policy_reference)!={'path','sha256'}
+                    or type(camera_max_age_s) not in (int,float)
+                    or not math.isfinite(camera_max_age_s) or not 0<camera_max_age_s<=.15):
+                raise PermissionError('HEAD_PRIMARY_POLICY_BINDING_REFUSED')
+            self._ack(policy_ack,'POLICY_STATUS','POLICY_READY',
+                policy_sha256=policy_reference['sha256'])
+            document=json.loads(_sha_file(policy_reference['path'],policy_reference['sha256'],1024*1024))
+            required={'purpose','motion_authority','epoch','generation','session_id','dependencies',
+                'measurement','values','camera_seed_values','sha256'}
+            parsed=FeedbackPolicy.parse(values)
+            if (type(document) is not dict or set(document)!=required
+                    or document['purpose']!='calibration' or document['motion_authority'] is not False
+                    or document['epoch']!=self.epoch.epoch or document['generation']!=self.epoch.generation
+                    or document['session_id']!=self.epoch.session_id
+                    or document['dependencies']!=self._dependencies
+                    or document['sha256']!=digest({k:v for k,v in document.items() if k!='sha256'})
+                    or canonical_bytes(document['values'])!=canonical_bytes(asdict(parsed))
+                    or canonical_bytes(document['camera_seed_values']['max_age_s'])!=canonical_bytes(camera_max_age_s)):
+                raise PermissionError('HEAD_PRIMARY_POLICY_BINDING_REFUSED')
+            self.observer.bind_policy(parsed)
+            self.epoch.bind_policy(self.port.feedback_policy,policy_reference['sha256'])
+            self.observer.camera_age=camera_max_age_s
+            self._policy=deepcopy(policy_reference)
+        except BaseException:
+            self.fault('HEAD_PRIMARY_POLICY_BINDING_REFUSED');raise
+        finally:self._policy_binding=False
 
     @property
     def observer(self): return self._observer
@@ -167,6 +217,7 @@ class HeadPrimarySupervisor:
                     error_type='MONITOR_REVOKED';rejected=True
                 else:
                     allowed = {stage, self.epoch.stage}
+                    if self._policy_binding:allowed.add('POLICY_READY')
                     if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
                     if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
                     self._ack(reply, 'HEARTBEAT', reply['stage'])

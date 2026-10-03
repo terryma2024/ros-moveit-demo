@@ -10,6 +10,21 @@ from rosgraph_msgs.msg import Clock
 
 from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture
 
+
+def test_real_entry_health_starts_after_warmup_before_stable_capture():
+    from so101_demo.adapters.act.head_stopped_capture import measure_stopped_workload
+    events=[]
+    def begin():
+        events.append('begin_capture')
+        raise RuntimeError('controlled before stable window')
+    capture=SimpleNamespace(check=lambda:None,infer=lambda *a,**k:events.append('warm') or {},
+        begin_capture=begin)
+    detector=SimpleNamespace(reset=lambda:events.append('reset'))
+    with pytest.raises(RuntimeError,match='controlled before stable window'):
+        measure_stopped_workload(capture,detector,None,session_id='s',stop_velocity_rad_s=.01,
+            stop_latency_s=.07,before_stable=lambda:events.append('real_root_start'))
+    assert events==['warm','reset','real_root_start','begin_capture']
+
 try:
     from so101_demo.adapters.act.head_stopped_capture import stopped_window_boundary
 except ImportError:

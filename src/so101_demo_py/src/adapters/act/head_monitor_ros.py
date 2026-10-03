@@ -72,7 +72,8 @@ class HeadROSMonitor:
                 head_fault_callback=lambda reason:self.fault(reason),observe=self._event)
         else:
             if (not isinstance(controller_port,RosControllerPort) or controller_port.node is not node
-                    or controller_port.names!=('neck_yaw_joint',) or controller_port.feedback_policy is None
+                    or controller_port.names!=('neck_yaw_joint',)
+                    or (controller_port.feedback_policy is None and not controller_port._head_bootstrap)
                     or controller_port._head_policy_binding_failed
                     or controller_port._head_fault_callback is not None
                     or controller_port.stop_velocity!=stop_velocity_rad_s):

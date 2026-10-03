@@ -28,12 +28,12 @@ except ModuleNotFoundError:
         def close(self):return {}
 
 
-def setup(tmp_path,native_damage=None):
+def setup(tmp_path,native_damage=None,*,prepolicy=False):
     node=Node();node.create_timer=lambda period,callback,**kw:SimpleNamespace(period=period,callback=callback,**kw)
     node.destroy_timer=lambda timer:True
     events=[];requests=[]
     port=RosControllerPort(node,_NoMotion(),('neck_yaw_joint',),stop_velocity_rad_s=.002,max_age_s=.05,
-        feedback_policy=policy())
+        feedback_policy=None if prepolicy else policy(),head_bootstrap=prepolicy)
     port._feedback(sample())
     monitor=object.__new__(MonitorProcess);monitor._identity=_peer(os.getppid())
     monitor.is_alive=lambda:True
@@ -41,7 +41,8 @@ def setup(tmp_path,native_damage=None):
         return dict(request=operation,stage=stage,epoch='attempt',generation=5,session_id='session',
             monitor_peer=monitor.identity,purpose='calibration',motion_authority=False,**kw)
     def request(value):
-        requests.append(value);return reply(value['operation'],'POLICY_READY')
+        requests.append(value);return reply(value['operation'],
+            'PRESENT' if port.feedback_policy is None else 'POLICY_READY')
     monitor.request_runtime=request
     monitor.request_heartbeat=lambda factory:monitor.request_runtime(dict(operation='HEARTBEAT',heartbeat=factory()))
     owner=_peer(os.getpid())
@@ -63,12 +64,155 @@ def setup(tmp_path,native_damage=None):
     router=HeadOriginalRouter(port,lambda *args:None)
     try:
         sup=HeadPrimarySupervisor(node=node,port=port,router=router,monitor=monitor,revoker=revoker,
-            epoch='attempt',generation=5,session_id='session',policy_reference={'path':str(tmp_path/'policy.json'),'sha256':'a'*64},
-            policy_ack=ack,configuration_ack=configuration,stop_latency_s=.07,camera_max_age_s=.05,
+            epoch='attempt',generation=5,session_id='session',policy_reference=None if prepolicy else
+                {'path':str(tmp_path/'policy.json'),'sha256':'a'*64},
+            policy_ack=None if prepolicy else ack,configuration_ack=configuration,stop_latency_s=.07,camera_max_age_s=.05,
             camera_frame_id='head_camera_frame',emit=lambda event,**kw:events.append((event,kw)))
     except BaseException:
         port.close_head_io(timeout_s=1.);raise
     return node,port,sup,requests,events,revoker
+
+
+def test_root_resources_bind_before_measured_policy_without_motion_authority(tmp_path):
+    try:
+        node,port,sup,requests,_,_=setup(tmp_path,prepolicy=True)
+    except ValueError as error:
+        pytest.fail('Actual Root rejects entry-bound pre-policy calibration resources: '+str(error))
+    try:
+        assert sup.epoch.stage=='PRESENT' and not sup.ready and not sup.failed
+        assert port.feedback_policy is None and sup.observer._policy is None
+        assert sup.observer.port is port and sup.router._primary is sup.observer
+        assert len([row for row in node.subscriptions if row[1]=='/joint_states'])==1
+        sup.start();sup.timer.callback()
+        deadline=time.monotonic()+.1
+        while not requests and time.monotonic()<deadline:time.sleep(.001)
+        assert len(sup.threads)==4 and requests and requests[0]['operation']=='HEARTBEAT'
+        assert sup.epoch.stage=='PRESENT' and not sup.ready
+        assert not port._goals and not any(r['operation']=='ARMED_READY' for r in requests)
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def measured_policy_ack(sup,policy_hash='a'*64):
+    return dict(request='POLICY_STATUS',stage='POLICY_READY',epoch='attempt',generation=5,
+        session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
+        motion_authority=False,policy_sha256=policy_hash)
+
+
+def measured_policy_reference(tmp_path,sup):
+    from so101_demo.act.head_monitor import digest
+    import hashlib
+    document=dict(purpose='calibration',motion_authority=False,epoch='attempt',generation=5,
+        session_id='session',dependencies=sup._dependencies,
+        measurement={'path':str(tmp_path/'measurement.json'),'sha256':'b'*64},
+        values=policy(),camera_seed_values=dict(max_age_s=.04,max_skew_s=.004))
+    document['sha256']=digest(document)
+    path=tmp_path/'measured-policy.json';path.write_text(json.dumps(document)+'\n')
+    return dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def test_measured_policy_binds_once_on_same_entry_root_resources(tmp_path):
+    node,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    observer,router,revoker=sup.observer,sup.router,sup._revoker
+    clients=observer._result_client,observer._cancel_client
+    try:
+        sup.begin_policy_binding()
+        assert sup._policy_binding and not sup.ready and sup.epoch.stage=='PRESENT'
+        reference=measured_policy_reference(tmp_path,sup)
+        sup.bind_measured_policy(policy_reference=reference,
+            policy_ack=measured_policy_ack(sup,reference['sha256']),values=policy(),camera_max_age_s=.04)
+        assert sup.epoch.stage=='POLICY_READY' and not sup.ready
+        assert sup.observer is observer and sup.router is router and sup._revoker is revoker
+        assert (observer._result_client,observer._cancel_client)==clients
+        assert sup.observer._policy is port.feedback_policy
+        assert not sup._policy_binding
+        assert sup.observer.camera_age==.04 and not port._goals
+        with pytest.raises(PermissionError):
+            sup.bind_measured_policy(policy_reference={'path':str(tmp_path/'second.json'),'sha256':'b'*64},
+                policy_ack=measured_policy_ack(sup),values=policy(),camera_max_age_s=.06)
+        assert sup.failed and port._head_policy_binding_failed
+        assert sup.observer is observer and sup.observer.camera_age==.04
+        assert sup.epoch.policy_hash==reference['sha256']
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_root_cannot_restart_pending_policy_transition(tmp_path):
+    _,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    try:
+        sup.begin_policy_binding()
+        with pytest.raises(PermissionError):sup.begin_policy_binding()
+        assert sup.failed and not sup.ready and port.feedback_policy is None
+        assert sup.epoch.policy_hash is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['hash','peer','generation','session','purpose','authority','values','camera_age'])
+def test_present_root_refuses_invalid_measured_binding_without_readiness(tmp_path,damage):
+    _,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    reference=measured_policy_reference(tmp_path,sup)
+    ack=measured_policy_ack(sup,reference['sha256']);values=policy();age=.04
+    if damage=='hash':ack['policy_sha256']='b'*64
+    elif damage=='peer':ack['monitor_peer']=dict(ack['monitor_peer'],pid=1)
+    elif damage=='generation':ack['generation']=6
+    elif damage=='session':ack['session_id']='other'
+    elif damage=='purpose':ack['purpose']='production'
+    elif damage=='authority':ack['motion_authority']=True
+    elif damage=='values':values['watchdog_reaction_limit_s']=.02
+    elif damage=='camera_age':age=.151
+    try:
+        with pytest.raises((PermissionError,ValueError)):
+            sup.bind_measured_policy(policy_reference=reference,
+                policy_ack=ack,values=values,camera_max_age_s=age)
+        assert sup.failed and not sup.ready and not port._goals
+        assert sup.epoch.policy_hash is None and port.feedback_policy is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['feedback_value','camera_age'])
+def test_root_cannot_mutate_cpu_authenticated_measured_policy_values(tmp_path,damage):
+    _,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    reference=measured_policy_reference(tmp_path,sup)
+    values=policy();age=.04
+    if damage=='feedback_value':values['joint_max_receipt_age_s']=.021
+    else:age=.041
+    try:
+        with pytest.raises(PermissionError):
+            sup.bind_measured_policy(policy_reference=reference,
+                policy_ack=measured_policy_ack(sup,reference['sha256']),
+                values=values,camera_max_age_s=age)
+        assert sup.failed and not sup.ready and port.feedback_policy is None
+        assert sup.epoch.policy_hash is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['dependencies','epoch','generation','session_id','body_digest',
+                                  'file_hash','symlink','camera_value'])
+def test_present_root_checks_original_policy_file_identity_and_scope(tmp_path,damage):
+    from so101_demo.act.head_monitor import digest
+    import hashlib
+    _,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    reference=measured_policy_reference(tmp_path,sup);path=Path(reference['path'])
+    document=json.loads(path.read_text())
+    if damage=='symlink':
+        link=tmp_path/'policy-link.json';link.symlink_to(path);reference['path']=str(link)
+    else:
+        if damage=='dependencies':document['dependencies']={'foreign':True}
+        elif damage=='epoch':document['epoch']='other'
+        elif damage=='generation':document['generation']=6
+        elif damage=='session_id':document['session_id']='other'
+        elif damage=='camera_value':document['camera_seed_values']['max_age_s']=.045
+        else:document['camera_seed_values']['max_skew_s']=.005
+        if damage!='body_digest':
+            document['sha256']=digest({k:v for k,v in document.items() if k!='sha256'})
+        path.write_text(json.dumps(document)+'\n')
+        if damage!='file_hash':reference['sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+    try:
+        with pytest.raises((PermissionError,ValueError,OSError)):
+            sup.bind_measured_policy(policy_reference=reference,
+                policy_ack=measured_policy_ack(sup,reference['sha256']),
+                values=policy(),camera_max_age_s=.04)
+        assert sup.failed and not sup.ready and port.feedback_policy is None
+        assert sup.epoch.policy_hash is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
 
 
 @pytest.mark.parametrize('damage',['path','sha256','abi','clock'])
@@ -224,21 +368,39 @@ def test_real_heartbeat_in_flight_across_explicit_arm_transition_cannot_grant_re
     finally:sup.close();port.close_head_io(timeout_s=1.)
 
 
-def guarded(sup,port):
+@pytest.mark.parametrize('cpu_stage',['POLICY_READY','ARMED_READY'])
+def test_present_heartbeat_across_measured_policy_transition_never_grants_arm(tmp_path,cpu_stage):
+    _,port,sup,_,_,_=setup(tmp_path,prepolicy=True)
+    try:
+        sup._policy_binding=True
+        sup._started_wall=time.monotonic();sup.observer.executor_progress()
+        def transition(record):
+            assert record['operation']=='HEARTBEAT' and not sup.ready
+            sup._shutdown.set()
+            return dict(request='HEARTBEAT',stage=cpu_stage,epoch='attempt',generation=5,
+                session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False)
+        sup.monitor.request_runtime=transition
+        sup._heartbeat()
+        assert sup.failed is (cpu_stage=='ARMED_READY')
+        assert not sup.ready and port.feedback_policy is None and sup.epoch.policy_hash is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def guarded(sup,port,*,monotonic=time.monotonic):
     """Controlled original callbacks and private ACK, never a live CPU receipt."""
-    now=time.monotonic()
+    now=monotonic()
     port.node.sim=1.01;port._feedback(sample(1.01))
     for kind in ('CLOCK','IMAGE','INFO'):
         sup.observer.observe_original(kind,dict(source_ns=1_010_000_000,wall_s=now,
             valid=True,frame_id='head_camera_frame'))
     sup.observer.executor_progress()
-    sup.observer.heartbeat(dict(wall_s=time.monotonic(),executor_wall_s=sup.observer._executor_wall,
+    sup.observer.heartbeat(dict(wall_s=monotonic(),executor_wall_s=sup.observer._executor_wall,
         inference_deadline_wall_s=None))
     sup._started=True;sup._started_wall=now;sup._watchdog_wall=now
     def request(record):
         return dict(request=record['operation'],stage='POLICY_READY',epoch='attempt',generation=5,
             session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False,
-            policy_sha256='a'*64,current_inputs_guarded=True,ack_wall_s=time.monotonic())
+            policy_sha256='a'*64,current_inputs_guarded=True,ack_wall_s=monotonic())
     sup.monitor.request_runtime=request
 
 
@@ -286,9 +448,15 @@ def test_primary_events_preserve_original_scope_and_fault_before_logger(tmp_path
 
 
 @pytest.mark.parametrize('damage',[None,'primary_identity','monitor_identity','dependencies','policy','purpose'])
-def test_arm_requires_three_same_scoped_native_identity_receipts(tmp_path,damage):
+def test_arm_requires_three_same_scoped_native_identity_receipts(tmp_path,damage,monkeypatch):
     from so101_demo.adapters.act.head_reservation_authority import HeadReservationAuthority
+    from so101_demo.adapters.act import head_primary_supervisor as primary_module
     _,port,sup,_,_,revoker=setup(tmp_path);calls=[]
+    # These service/native receipts are controlled unit boundaries, so host
+    # scheduling must not manufacture a >10 ms delay in their positive case.
+    unit_wall=time.monotonic();clock=lambda:unit_wall
+    monkeypatch.setattr(primary_module,'time',SimpleNamespace(monotonic=clock))
+    port.monotonic=clock;sup.observer.monotonic=clock
     try:
         identity=dict(generation=5,incarnation='controlled-incarnation',boot='controlled-boot')
         authority=HeadReservationAuthority(directory=Path(sup._provisions['main']['socket_path']).parent,
@@ -315,7 +483,7 @@ def test_arm_requires_three_same_scoped_native_identity_receipts(tmp_path,damage
             elif damage=='purpose':ack['motion_authority']=True
             return ack
         # Start the controlled current-input interval after provision setup.
-        guarded(sup,port);prearm=sup.monitor.request_runtime
+        guarded(sup,port,monotonic=clock);prearm=sup.monitor.request_runtime
         sup.monitor.request_runtime=request
         if damage is None:
             assert sup.arm(authority)==identity and sup.ready

@@ -616,6 +616,26 @@ def main(argv=None):
         if args.bound_goal_diagnostic or args.live_pipeline_measurement:
             result['primary_goal_dispatch_preparation']=_prepare_bound_goal_dispatch()
             _write(root/'goal-dispatch-preparation.json',result['primary_goal_dispatch_preparation'])
+        if args.native_binding_diagnostic or args.bound_goal_diagnostic or args.live_pipeline_measurement:
+            # Bind the real Root resources once, before CUDA or measurement.
+            # PRESENT grants no policy readiness, native ARM or SDK authority.
+            primary_writer=HeadOriginalJournal(root/'primary-events.jsonl',fault_callback=original_failure)
+            own=_peer(os.getpid())
+            provision,fault_cap=_provision(directory/'neck-primary-revoke.provision',authority='primary',
+                actor=own,native_owner=native,session_id=session)
+            if provision!=result['monitor_configured']['provisions']['primary_fault']:
+                raise PermissionError('HEAD_BOOTSTRAP_PRIMARY_PROVISION_CHANGED')
+            revoker=NativeRevocationClient(directory/'neck-primary-revoke.sock',capability=fault_cap,
+                native_owner=native,generation=generation,timeout_s=.002)
+            result['primary_native_transport']=dict(revoker.transport_origin)
+            primary=HeadPrimarySupervisor(node=node,port=port,router=original_router,monitor=monitor,
+                revoker=revoker,epoch=epoch,generation=generation,session_id=session,policy_reference=None,
+                policy_ack=None,configuration_ack=result['monitor_configured'],
+                stop_latency_s=values['stop_latency_s'],camera_max_age_s=values['max_age_s'],
+                camera_frame_id=production['camera']['frame_id'],
+                emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
+            result['primary_bound_at_entry']=dict(stage=primary.epoch.stage,policy_bound=False,
+                native_arm_count=result['native_arm_count'],sdk_send_count=result['goal_send_count'])
         executor=SingleThreadedExecutor(context=context);executor.add_node(node)
         spinner=threading.Thread(target=executor.spin,name='head-bootstrap-ros');spinner.start()
         deadline=time.monotonic()+90.
@@ -665,33 +685,22 @@ def main(argv=None):
                 print(json.dumps(fields),flush=True)
                 _write(root/(fields['stage']+'-declaration.json'),fields)
         window,measured=measure_stopped_workload(capture,built['runtime'],buffer,session_id=session,
-            stop_velocity_rad_s=values['stop_velocity_rad_s'],stop_latency_s=values['stop_latency_s'],progress=progress)
+            stop_velocity_rad_s=values['stop_velocity_rad_s'],stop_latency_s=values['stop_latency_s'],progress=progress,
+            before_stable=lambda:primary.start() if primary is not None else None)
         result['measured']=measured
         policy=dict(purpose='calibration',motion_authority=False,epoch=epoch,generation=generation,
             session_id=session,dependencies=dependencies,measurement=measurement_reference,
             values=measured['values'],camera_seed_values=measured['camera_seed_values'])
         policy['sha256']=digest(policy);reference=_write(root/'provisional-policy.json',policy)
+        if primary is not None:primary.begin_policy_binding()
         monitor.request_runtime(dict(operation='POLICY',policy=reference))
         result['policy_ack']=monitor.await_runtime(phase='policy',timeout_s=10.)
         capture.check()
-        port.bind_head_policy(measured['values'])
+        if primary is None:port.bind_head_policy(measured['values'])
+        else:primary.bind_measured_policy(policy_reference=reference,policy_ack=result['policy_ack'],
+            values=measured['values'],camera_max_age_s=measured['camera_seed_values']['max_age_s'])
         result['status']='STOPPED_BOOTSTRAP_MEASURED'
         if args.native_binding_diagnostic or args.bound_goal_diagnostic or args.live_pipeline_measurement:
-            primary_writer=HeadOriginalJournal(root/'primary-events.jsonl',fault_callback=original_failure)
-            own=_peer(os.getpid())
-            provision,fault_cap=_provision(directory/'neck-primary-revoke.provision',authority='primary',
-                actor=own,native_owner=native,session_id=session)
-            if provision!=result['monitor_configured']['provisions']['primary_fault']:
-                raise PermissionError('HEAD_BOOTSTRAP_PRIMARY_PROVISION_CHANGED')
-            revoker=NativeRevocationClient(directory/'neck-primary-revoke.sock',capability=fault_cap,
-                native_owner=native,generation=generation,timeout_s=.002)
-            result['primary_native_transport']=dict(revoker.transport_origin)
-            primary=HeadPrimarySupervisor(node=node,port=port,router=original_router,monitor=monitor,
-                revoker=revoker,epoch=epoch,generation=generation,session_id=session,policy_reference=reference,
-                policy_ack=result['policy_ack'],configuration_ack=result['monitor_configured'],
-                stop_latency_s=values['stop_latency_s'],camera_max_age_s=measured['camera_seed_values']['max_age_s'],
-                camera_frame_id=production['camera']['frame_id'],
-                emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
             if args.moving_exposure_diagnostic or args.live_pipeline_measurement:
                 def bind_live(detector):
                     return _bind_live_exposures(capture=capture,port=port,buffer=buffer,detector=detector,
@@ -704,7 +713,6 @@ def main(argv=None):
                 result['live_exposure_diagnostic']=dict(diagnostic_only=True,qualification=False,
                     detector_count=1,inference_thread='owned worker' if args.owned_inference_diagnostic or args.live_pipeline_measurement else 'owned main',
                     records=live.results)
-            primary.start()
             prepared=None;search_driver=None
             if args.bound_goal_diagnostic or args.live_pipeline_measurement:
                 prepared=_prepare_bound_goal_plan(port=port,production=production,

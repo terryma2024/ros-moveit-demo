@@ -437,7 +437,7 @@ class StoppedHeadCapture:
 
 
 def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_velocity_rad_s,
-                             stop_latency_s,progress=lambda **fields:None):
+                             stop_latency_s,progress=lambda **fields:None,before_stable=lambda:None):
     """Warm once, then stable 10 s and one complete 20 s original CUDA window."""
     capture.check();discovery_deadline=time.monotonic()+10.
     while True:
@@ -446,7 +446,7 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
         if result is not None:break
         if time.monotonic()>=discovery_deadline:raise TimeoutError('HEAD_STOPPED_DISCOVERY_TIMEOUT')
         time.sleep(.001)
-    detector.reset();capture.begin_capture()
+    detector.reset();before_stable();capture.begin_capture()
     decisions,polls,inferences=[],[],[];errors=[];stop=threading.Event()
     capture.workload=dict(decisions=decisions,watchdog_polls=polls,inferences=inferences)
     def worker(period,consume):
