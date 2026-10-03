@@ -380,9 +380,9 @@ def _bind_live_exposures(*,capture,port,buffer,detector,primary,monitor,camera_s
     return reader
 
 
-def _start_owned_detector(*,factory,fault_callback):
+def _start_owned_detector(*,factory,fault_callback,simulation_policy=None):
     from so101_demo.adapters.act.head_inference_owner import HeadInferenceOwner
-    return HeadInferenceOwner(factory=factory,fault_callback=fault_callback)
+    return HeadInferenceOwner(factory=factory,fault_callback=fault_callback,simulation_policy=simulation_policy)
 
 
 def _run_bound_goal_diagnostic(*,node,port,primary,authority,monitor,production,geometry,result,emit,live=None,

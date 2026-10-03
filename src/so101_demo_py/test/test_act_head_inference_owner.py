@@ -7,9 +7,10 @@ import pytest
 from so101_demo.cli import head_feedback_bootstrap as bootstrap
 
 
-def start(factory,faults):
+def start(factory,faults,simulation_policy=None):
     return bootstrap._start_owned_detector(factory=factory,
-        fault_callback=lambda reason:faults.append(reason))
+        fault_callback=lambda reason:faults.append(reason),
+        **({'simulation_policy':simulation_policy} if simulation_policy is not None else {}))
 
 
 class Detector:
@@ -86,6 +87,161 @@ class Live:
         assert self.closed
         return dict(retired=True,inference_calls=self.count,completed_exposures=len(self.records),
             sequence=self.count,source_floor_ns=8)
+
+
+class StoppedLive(Live):
+    """Controlled stopped-demand boundary; no real CUDA or simulator claims."""
+    def __init__(self,detector,policy):
+        from types import SimpleNamespace
+        super().__init__(detector)
+        self._simulation_policy=policy;self.monotonic=time.monotonic
+        self.primary._simulation_policy=policy
+        self.primary.epoch=SimpleNamespace(epoch='attempt',generation=5,session_id='session',policy_hash='a'*64)
+        self.requests=[];self.queried=threading.Event();self.pixels_ready=threading.Event()
+    def infer(self,*,observation_request):
+        from copy import deepcopy
+        assert self.activated and threading.get_native_id()==self.owner
+        self.requests.append(deepcopy(observation_request));self.queried.set()
+        if not self.pixels_ready.is_set():return None
+        self.count+=1
+        value=self.detector.detect(b'stopped',source_stamp_ns=9)
+        row=dict(sequence=self.count,value=value,request=deepcopy(observation_request))
+        self.records.append(row)
+        return row
+
+
+def stopped_worker():
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    policy=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+    detector=Detector();construction=[];faults=[];lives=[]
+    worker=start(factory(detector,construction),faults,policy)
+    worker.configuration(timeout_s=1.)
+    def build(d):
+        live=StoppedLive(d,policy);lives.append(live);return live
+    worker.bind_live(build,timeout_s=1.);worker.activate_live()
+    return worker,lives[0],detector,construction,faults
+
+
+def stopped_request(live,*,sequence=1,motion_epoch=0):
+    from so101_demo.act.head_monitor import digest
+    now=time.monotonic()
+    return dict(schema_version=1,epoch='attempt',generation=5,session_id='session',policy_sha256='a'*64,
+        simulation_policy_sha256=digest(live._simulation_policy.readback()),motion_epoch=motion_epoch,
+        observation_sequence=sequence,settled_source_floor_ns=1_000_000_000,
+        settled_wall_s=now-.01,requested_wall_s=now,search_deadline_ns=round((now+29.)*1e9))
+
+
+def wait_completed(worker):
+    deadline=time.monotonic()+1.
+    while (not worker.results or worker.observation_pending) and time.monotonic()<deadline:time.sleep(.001)
+    assert worker.results and not worker.observation_pending
+
+
+def test_simulation_owned_thread_never_starts_yolo_without_one_stopped_request():
+    worker,live,detector,construction,faults=stopped_worker()
+    try:
+        assert not live.queried.wait(.05) and detector.calls==[]
+        request=stopped_request(live);original=dict(request)
+        worker.request_observation(request);request['generation']=99
+        assert live.queried.wait(.5) and worker.observation_pending
+        assert detector.calls==[]
+        live.pixels_ready.set();wait_completed(worker)
+        assert len(detector.calls)==1 and detector.calls[0][1]==construction[0]
+        assert all(row==original for row in live.requests)
+        before=len(live.requests);time.sleep(.05)
+        assert len(live.requests)==before and live.count==1 and not faults
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_pending_original_request_survives_short_primary_progress_wait():
+    worker,live,detector,_,faults=stopped_worker()
+    try:
+        request=stopped_request(live);worker.request_observation(request)
+        assert live.queried.wait(.5)
+        live.primary.ready=False;time.sleep(.06)
+        assert worker.observation_pending and detector.calls==[] and not faults
+        live.primary.ready=True;live.pixels_ready.set();wait_completed(worker)
+        assert worker.results[0]['request']==request and live.count==1 and not faults
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_second_request_cannot_replace_pending_original_or_run_another_detector():
+    worker,live,detector,construction,faults=stopped_worker()
+    try:
+        worker.request_observation(stopped_request(live));assert live.queried.wait(.5)
+        with pytest.raises(PermissionError):worker.request_observation(stopped_request(live,sequence=2))
+        assert faults and detector.calls==[] and len(construction)==1
+    finally:worker.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['sequence','motion','settled_floor','settled_wall','search_deadline'])
+def test_simulation_next_request_cannot_replay_or_renew_motion_and_whole_deadline(damage):
+    worker,live,detector,_,faults=stopped_worker()
+    try:
+        request=stopped_request(live,motion_epoch=1);live.pixels_ready.set()
+        worker.request_observation(request);wait_completed(worker)
+        next_request=dict(request,observation_sequence=2,requested_wall_s=time.monotonic())
+        if damage=='sequence':next_request['observation_sequence']=1
+        elif damage=='motion':next_request['motion_epoch']=0
+        elif damage=='settled_floor':next_request['settled_source_floor_ns']+=1
+        elif damage=='settled_wall':next_request['settled_wall_s']+=.001
+        else:next_request['search_deadline_ns']+=1
+        with pytest.raises(PermissionError):worker.request_observation(next_request)
+        assert faults and len(detector.calls)==1
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_live_binding_cannot_hide_a_different_policy_document_in_numeric_equality():
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    document=HeadSimulationPolicy.default_document();policy=HeadSimulationPolicy.parse(document)
+    document['stop_confirmation_timeout_s']=1
+    different=HeadSimulationPolicy.parse(document)
+    detector=Detector();construction=[];faults=[]
+    worker=start(factory(detector,construction),faults,policy)
+    try:
+        worker.configuration(timeout_s=1.)
+        with pytest.raises(PermissionError):worker.bind_live(lambda d:StoppedLive(d,different),timeout_s=1.)
+        assert faults and detector.calls==[] and len(construction)==1
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_new_motion_can_request_one_new_observation_after_prior_completion():
+    worker,live,detector,construction,faults=stopped_worker()
+    try:
+        request=stopped_request(live);live.pixels_ready.set()
+        worker.request_observation(request);wait_completed(worker)
+        now=time.monotonic()
+        following=dict(request,observation_sequence=2,motion_epoch=1,
+            settled_source_floor_ns=1_100_000_000,settled_wall_s=now-.001,requested_wall_s=now)
+        worker.request_observation(following);wait_completed(worker)
+        assert len(detector.calls)==2 and live.count==2 and len(construction)==1 and not faults
+        assert worker.results[1]['request']==following
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_primary_wait_has_a_finite_original_supervision_cap_without_new_work():
+    worker,live,detector,_,faults=stopped_worker()
+    try:
+        worker.request_observation(stopped_request(live));assert live.queried.wait(.5)
+        wall=[time.monotonic()];live.monotonic=lambda:wall[0];live.primary.ready=False
+        time.sleep(.05);wall[0]+=.5
+        deadline=time.monotonic()+.5
+        while not faults and time.monotonic()<deadline:time.sleep(.001)
+        assert faults and detector.calls==[]
+        with pytest.raises(PermissionError):worker.infer()
+    finally:worker.close(timeout_s=1.)
+
+
+def test_simulation_quiescence_retains_unstarted_request_without_starting_yolo():
+    worker,live,detector,_,faults=stopped_worker()
+    try:
+        request=stopped_request(live);worker.request_observation(request)
+        assert live.queried.wait(.5);worker.quiesce_live()
+        deadline=time.monotonic()+.5
+        while worker.live_quiescence() is None and time.monotonic()<deadline:time.sleep(.001)
+        assert worker.live_quiescence()['unstarted_observation']==request
+        assert not worker.observation_pending and detector.calls==[] and not faults
+    finally:worker.close(timeout_s=1.)
 
 
 def bind(worker,constructed):
