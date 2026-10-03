@@ -13,8 +13,8 @@ from so101_demo.act.head_monitor_ipc import HeadMonitorCodec
 from so101_demo.adapters.act.head_monitor_process import MonitorRuntimeProtocol
 
 
-def ready():
-    node,runtime,observer=prepared()
+def ready(simulation=False):
+    node,runtime,observer=prepared(simulation=simulation)
     observer._active=True;observer.camera_skew=.01
     observer.fault_callback=runtime.fault
     identity=dict(generation=5,incarnation='native',boot='boot')
@@ -25,6 +25,29 @@ def ready():
         payload_sha256=hashlib.sha256(bytes(640*480*3)).hexdigest(),
         image_received_wall_s=10.,info_received_wall_s=10.,deadline_ns=10_050_000_000)
     return node,runtime,observer,record
+
+
+def test_simulation_exposure_keeps_original_watchdog_progress_inside_supervision_budget():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer,_=ready(simulation=True)
+    try:
+        node.wall=10.3;node.sim=1.3;refresh_simulation_inputs(node,observer)
+        original,_,watchdog=runtime._exposures._current()
+        assert original['decision']['wall_after_s']==10.3 and watchdog==10.
+        assert runtime._watchdog_wall==10. and not runtime.revoked
+        assert runtime._exposures.summary()['active'] is None and not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_exposure_exact_supervision_expiry_preserves_original_fault_time():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer,_=ready(simulation=True)
+    try:
+        node.wall=10.5;node.sim=1.5;refresh_simulation_inputs(node,observer)
+        with pytest.raises(PermissionError):runtime._exposures._current()
+        assert runtime.revoked and runtime._fault['fault_wall_s']==pytest.approx(10.5,abs=1e-12)
+        assert runtime._watchdog_wall==10. and not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
 
 
 def refresh(node,runtime,observer,wall):

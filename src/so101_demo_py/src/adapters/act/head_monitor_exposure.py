@@ -73,11 +73,14 @@ class HeadMonitorExposures:
         self.poll(now)
         if runtime.revoked:raise PermissionError('HEAD_MONITOR_EXPOSURE_REVOKED')
         if watchdog is None:raise PermissionError('HEAD_MONITOR_EXPOSURE_WATCHDOG_STALE')
-        limit=math.floor(observer._policy.watchdog_reaction_limit_s*1e9)
+        simulation=runtime._simulation_policy
+        limit=nanoseconds(simulation.supervision_stale_s) if simulation is not None else math.floor(
+            observer._policy.watchdog_reaction_limit_s*1e9)
         gap=nanoseconds(now)-nanoseconds(watchdog)
-        if not 0<=gap<=limit:
+        expired=gap>=limit if simulation is not None else gap>limit
+        if gap<0 or expired:
             runtime.fault('HEAD_MONITOR_EXPOSURE_WATCHDOG_STALE',
-                (nanoseconds(watchdog)+limit)*1e-9 if gap>limit else now)
+                (nanoseconds(watchdog)+limit)*1e-9 if expired else now)
             raise PermissionError('HEAD_MONITOR_EXPOSURE_WATCHDOG_STALE')
         observer.poll(watchdog=False)
         original=observer.port.original_feedback_snapshot()
@@ -95,8 +98,9 @@ class HeadMonitorExposures:
         """Read actual pre-policy CPU consumers, without leases or readiness.
 
         No unknown camera/J age bound is guessed here. The complete stopped
-        cohort measures those bounds; the existing 10ms progress limits and
-        original validity, scope, source order and quietness still apply.
+        cohort measures those bounds. Progress uses the explicit simulation
+        supervision policy or legacy 10ms limit; original validity, scope,
+        source order and quietness still apply.
         """
         runtime=self.runtime;observer=runtime._observer
         phase='stage';snapshot=None;original_claim=None
@@ -135,7 +139,16 @@ class HeadMonitorExposures:
             snapshot=dict(image=image,info=info,joint=causal,current_joint=current,
                 decision=decision,clock=clock,watchdog_wall_s=watchdog,executor_wall_s=executor)
             phase='current'
-            if (any(not _wall(wall) or not 0<=now_ns-nanoseconds(wall)<=10_000_000
+            simulation=runtime._simulation_policy
+            limit=nanoseconds(simulation.supervision_stale_s) if simulation is not None else 10_000_000
+            if simulation is not None:
+                expiries=[nanoseconds(wall)+limit for wall in (watchdog,executor)
+                    if _wall(wall) and now_ns>=nanoseconds(wall)+limit]
+                if expiries:
+                    runtime.fault('HEAD_MONITOR_MEASUREMENT_CURRENT_INVALID',min(expiries)*1e-9)
+                    raise PermissionError('HEAD_MONITOR_MEASUREMENT_CURRENT_INVALID')
+            if (any(not _wall(wall) or not 0<=now_ns-nanoseconds(wall)
+                    <=limit
                     for wall in (watchdog,executor))
                     or current is None or current.get('valid') is not True
                     or not _wall(current['wall_s']) or nanoseconds(current['wall_s'])>now_ns

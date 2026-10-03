@@ -4,6 +4,8 @@ import hashlib
 import json
 import math
 import time
+import base64
+import uuid
 
 from control_msgs.action import FollowJointTrajectory
 from control_msgs.msg import JointTolerance, JointComponentTolerance
@@ -40,6 +42,32 @@ def packet(message=None):
     record=dict(typed_goal=json.loads(json.dumps(message_to_ordereddict(message))),
                 payload_sha256=hashlib.sha256(payload).hexdigest())
     return record,payload
+
+
+@pytest.mark.parametrize('mode',['simulation','legacy','expired-claim'])
+def test_cpu_inventory_decode_uses_explicit_rpc_budget_but_never_extends_original_claim(monkeypatch,mode):
+    from test_act_head_monitor_exposure import ready
+    from so101_demo.adapters.act import head_monitor_goal_binding as binding
+    _,runtime,observer,_=ready(simulation=mode!='legacy')
+    record,payload=packet();now=time.monotonic_ns()
+    claim=now-380_000_000 if mode=='expired-claim' else now
+    record.update(goal_uuid=str(uuid.uuid4()),generation=5,controller_identity=runtime.epoch.identity,
+        attempt_epoch='attempt',session_id='session',role='neck',operation_sequence=1,
+        claim_monotonic_ns=claim,deadline_ns=claim+400_000_000)
+    decode=binding.deserialize_message
+    def delayed(*args):
+        value=decode(*args);time.sleep(.035);return value
+    monkeypatch.setattr(binding,'deserialize_message',delayed)
+    request=dict(record=record,goal_cdr_base64=base64.b64encode(payload).decode())
+    try:
+        if mode=='simulation':
+            ack=runtime.register(request)
+            assert ack['goal_uuid']==record['goal_uuid'] and ack['motion_authority'] is False
+            assert runtime.epoch.inventory[record['goal_uuid']]['deadline_ns']==claim+400_000_000
+        else:
+            with pytest.raises(TimeoutError):runtime.register(request)
+            assert not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
 
 
 def test_every_ros_goal_field_is_owned_and_digest_bound():

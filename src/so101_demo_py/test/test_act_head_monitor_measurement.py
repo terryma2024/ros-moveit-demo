@@ -8,9 +8,10 @@ from so101_demo.adapters.act.head_monitor_process import MonitorRuntimeProtocol
 from test_act_head_monitor_prearm import prepared,completed
 
 
-def measurement(tmp_path):
-    node,runtime,observer=prepared()
-    runtime.epoch=HeadMonitorEpoch(epoch='attempt',generation=5,session_id='session')
+def measurement(tmp_path,simulation=False):
+    node,runtime,observer=prepared(simulation=simulation)
+    runtime.epoch=HeadMonitorEpoch(epoch='attempt',generation=5,session_id='session',
+        **({'simulation_policy':runtime._simulation_policy} if simulation else {}))
     runtime._policy=None;observer._policy=None;observer._active=False
     observer.port._feedback_policy=None;observer.port._head_bootstrap=True
     claim=dict(epoch='attempt',generation=5,session_id='session',image_source_ns=10**9,
@@ -21,6 +22,36 @@ def measurement(tmp_path):
         primary=runtime.primary),tmp_path)
     protocol._future=completed(runtime)
     return node,runtime,observer,claim,protocol
+
+
+@pytest.mark.parametrize('operation',['inputs','completion'])
+def test_simulation_measurement_retains_slow_original_progress_without_authority(tmp_path,operation):
+    node,runtime,observer,claim,_=measurement(tmp_path,simulation=True)
+    node.wall=10.3;node.sim=1.3
+    try:
+        reply=runtime._exposures.measure(claim,**({'completion':dict(claim=claim,
+            completion_wall_s=10.3,result_sha256='b'*64)} if operation=='completion' else {}))
+        assert reply['inputs_ready'] and reply['motion_authority'] is False
+        assert reply['original_snapshot']['watchdog_wall_s']==10.
+        assert reply['original_snapshot']['executor_wall_s']==10.
+        assert runtime.epoch.stage=='PRESENT' and not runtime.revoked
+        assert runtime._exposures.summary()['active'] is None and not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('progress',['watchdog','executor'])
+@pytest.mark.parametrize('wall',[10.5,10.6])
+def test_simulation_measurement_original_expiry_cannot_be_renewed_by_a_probe(tmp_path,progress,wall):
+    node,runtime,observer,claim,_=measurement(tmp_path,simulation=True)
+    node.wall=wall;node.sim=wall-9.
+    if progress=='watchdog':observer._executor_wall=wall
+    else:runtime._watchdog_wall=wall
+    try:
+        with pytest.raises(PermissionError):runtime._exposures.measure(claim)
+        assert runtime.revoked and not runtime.epoch.inventory
+        assert runtime._exposures.summary()['active'] is None
+        assert runtime._fault['fault_wall_s']==pytest.approx(10.5,abs=1e-12)
+    finally:observer.close(timeout_s=1.)
 
 
 def test_configured_cpu_measures_both_real_originals_and_completion_without_a_lease(tmp_path):

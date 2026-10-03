@@ -463,8 +463,9 @@ class HeadMonitorRuntime:
             raise ValueError('HEAD_MONITOR_REGISTER_INVALID')
         if self.revoked:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
         payload=base64.b64decode(record['goal_cdr_base64'],validate=True)
+        budget=self._simulation_policy.heartbeat_rpc_timeout_s if self._simulation_policy is not None else .010
         owned=validate_goal_inventory(record['record'],payload,
-            deadline=min(time.monotonic()+.010,record['record']['deadline_ns']*1e-9))
+            deadline=min(time.monotonic()+budget,record['record']['deadline_ns']*1e-9))
         self._observer.poll(watchdog=False)
         if self.revoked or self._observer.failed:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
         ack=self.epoch.register(owned)
