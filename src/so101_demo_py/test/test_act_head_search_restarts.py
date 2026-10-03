@@ -14,10 +14,30 @@ import struct
 import tempfile
 import threading
 import uuid
+import sys
 from pathlib import Path
 
 import pytest
 from so101_demo.act import head_search_restarts as module
+
+
+@pytest.mark.parametrize('name,expected_tail',[
+    ('robot_state_publisher',['-p','publish_frequency:=100.0']),
+    ('ros2_control_node',[]),('spawner neck_controller',[])])
+def test_owned_head_tf_publisher_launch_uses_joint_cadence_without_changing_other_children(tmp_path,name,expected_tail):
+    stack=object.__new__(module.RestartStack)
+    stack.workspace=tmp_path;stack.log_path=tmp_path/'child.log';stack.handles=[];stack.logger=None
+    stack.environment={'HEAD_TEST_SCOPE':'original'}
+    script='import json,sys,os;print(json.dumps(dict(argv=sys.argv[1:],scope=os.environ["HEAD_TEST_SCOPE"])),flush=True)'
+    argv=[sys.executable,'-c',script,'--ros-args']
+    child=stack._spawn(argv,name)
+    try:
+        assert child.wait(timeout=2.)==0
+        assert json.loads(stack.log_path.read_text())==dict(argv=['--ros-args',*expected_tail],scope='original')
+        assert argv==[sys.executable,'-c',script,'--ros-args']
+    finally:
+        if child.poll() is None:child.terminate();child.wait(timeout=2.)
+        for handle in stack.handles:handle.close()
 from so101_demo.act.head_search_aggregate import (
     RESTART_KIND,
     _gate_restarts,

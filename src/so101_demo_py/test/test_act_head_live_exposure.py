@@ -114,6 +114,44 @@ def test_tf_wait_keeps_original_source_and_receipt_until_it_can_be_admitted(tmp_
     finally:retire(c)
 
 
+def test_activation_excludes_pre_arm_pending_frame_but_retains_original_audit(tmp_path):
+    c=composition(tmp_path)
+    try:
+        c.originals();c.node.wall=10.002
+        c.reader.activate()
+        assert c.reader.infer() is None and not c.calls and c.detector.count==0
+        dropped=next(row for row in c.events if row['event']=='LIVE_EXPOSURE_BEFORE_ACTIVATION')
+        assert dropped['original']==c.image and dropped['activation_wall_s']==10.002
+        assert dropped['reason']=='original received before activation'
+        assert c.reader._image_source==10**9 and c.reader._info_source==10**9
+        # A late-routed original keeps its old receipt and also cannot become
+        # an admission in the new activated context.
+        delayed=dict(c.image,source_ns=1_001_000_000,wall_s=10.001)
+        c.capture.sink('IMAGE',delayed,payload=c.data)
+        assert c.reader.infer() is None and c.detector.count==0
+        assert len([row for row in c.events if row['event']=='LIVE_EXPOSURE_BEFORE_ACTIVATION'])==2
+        with pytest.raises(PermissionError):c.reader.activate()
+        assert c.primary.failed and not c.calls
+    finally:retire(c)
+
+
+@pytest.mark.parametrize('expired',[False,True])
+def test_activation_keeps_fresh_original_admission_and_postactivation_expiry_guard(tmp_path,expired):
+    c=composition(tmp_path)
+    try:
+        c.reader.activate();c.originals()
+        if expired:
+            c.node.wall=10.051
+            with pytest.raises(PermissionError,match='HEAD_LIVE_EXPOSURE_DEADLINE'):c.reader.infer()
+            assert c.detector.count==0 and not c.calls and c.primary.failed
+        else:
+            row=c.reader.infer()
+            assert row['image_received_wall_s']==10.0 and row['source_ns']==10**9
+            assert c.detector.count==1 and row['completion_ack']['exposure_finished'] is True
+        assert not any(row['event']=='LIVE_EXPOSURE_BEFORE_ACTIVATION' for row in c.events)
+    finally:retire(c)
+
+
 def test_retirement_retains_original_tf_wait_without_refreshing_receipts(tmp_path):
     c=composition(tmp_path)
     try:

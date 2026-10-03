@@ -36,6 +36,30 @@ class HeadLiveExposures:
         # Only the existing inference owner mutates these small original records.
         # Formatting and readback happen at retirement, outside the live path.
         self._original_attempts=[];self._pending_trace=None
+        self._activation_wall=None
+
+    def _discard_before_activation(self):
+        with self._lock:
+            if self._closed or self._busy:return
+            pending=self._pending;wall=self._activation_wall
+            if pending is None or wall is None:return
+            info=self._infos.get(pending[0]['source_ns'])
+            if (pending[0]['wall_s']>=wall
+                    and (info is None or info['wall_s']>=wall)):return
+            self._pending=None
+        self.emit('LIVE_EXPOSURE_BEFORE_ACTIVATION',original=pending[0],
+            original_info=info,activation_wall_s=wall,reason='original received before activation')
+
+    def activate(self):
+        refused=False
+        with self._lock:
+            if (self._closed or self._busy or self._activation_wall is not None
+                    or not self.primary.ready):refused=True
+            else:self._activation_wall=self.monotonic()
+        if refused:
+            self.primary.fault('HEAD_LIVE_ACTIVATION_REFUSED')
+            raise PermissionError('HEAD_LIVE_ACTIVATION_REFUSED')
+        self._discard_before_activation()
 
     def observe(self,kind,record,*,payload=None):
         if kind=='CLOCK':return  # The existing primary observer owns Clock admission.
@@ -82,6 +106,7 @@ class HeadLiveExposures:
         try:
             if threading.get_ident()!=self._inference_owner:
                 raise PermissionError('HEAD_LIVE_INFERENCE_OWNER_INVALID')
+            self._discard_before_activation()
             with self._lock:
                 if self._closed or self._busy:raise PermissionError('HEAD_LIVE_REUSED_OR_RETIRED')
                 pending=self._pending

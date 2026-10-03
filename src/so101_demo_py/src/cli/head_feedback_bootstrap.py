@@ -591,6 +591,7 @@ def main(argv=None):
             result['native_identity']=_bind_native_diagnostic(primary,authority,result)
             result['primary_ready']=primary.ready
             if args.owned_inference_diagnostic:inference_owner.activate_live()
+            elif args.moving_exposure_diagnostic:live.activate()
             if args.bound_goal_diagnostic:
                 def counted_send(*positional,**named):
                     primary.dispatch_guard()

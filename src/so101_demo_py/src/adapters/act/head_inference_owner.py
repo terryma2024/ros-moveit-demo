@@ -77,7 +77,7 @@ class HeadInferenceOwner:
                 elif operation=='bind':
                     self._live=payload(self._detector)
                     if (not callable(self._live.infer) or not callable(self._live.close)
-                            or not callable(self._live.records_snapshot)):
+                            or not callable(self._live.records_snapshot) or not callable(self._live.activate)):
                         raise ValueError('HEAD_INFERENCE_LIVE_BINDING_INVALID')
                     with self._lock:self._stage='BOUND'
                     result=dict(bound=True,inference_owner=deepcopy(self._owner))
@@ -147,6 +147,17 @@ class HeadInferenceOwner:
             if (self._closed or self._error is not None or self._stage!='BOUND'
                     or not self._live.primary.ready):
                 refused=True
+            else:self._stage='ACTIVATING'
+        if refused:
+            self._fail('HEAD_INFERENCE_ACTIVATION_REFUSED')
+            raise PermissionError('HEAD_INFERENCE_ACTIVATION_REFUSED')
+        try:self._live.activate()
+        except BaseException as error:
+            self._fail('HEAD_INFERENCE_ACTIVATION_REFUSED',error)
+            raise PermissionError('HEAD_INFERENCE_ACTIVATION_REFUSED') from error
+        with self._lock:
+            if (self._closed or self._error is not None or self._stage!='ACTIVATING'
+                    or not self._live.primary.ready):refused=True
             else:self._stage='LIVE'
         if refused:
             self._fail('HEAD_INFERENCE_ACTIVATION_REFUSED')

@@ -57,8 +57,12 @@ class Live:
     def __init__(self,detector):
         self.detector=detector;self.primary=type('Primary',(),{'ready':True,'failed':False})()
         self.entered=threading.Event();self.release=threading.Event();self.count=0;self.records=[]
-        self.owner=threading.get_native_id();self.closed=False
+        self.owner=threading.get_native_id();self.closed=False;self.activated=False
+    def activate(self):
+        assert self.primary.ready and not self.activated
+        self.activated=True
     def infer(self):
+        assert self.activated
         assert threading.get_native_id()==self.owner
         if self.count:return None
         self.count+=1;self.entered.set()

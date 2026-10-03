@@ -1703,8 +1703,7 @@ class RestartStack(MujocoRosTransport):
 
     ``so101_demo.act.head_search_transport_measurement.MujocoRosTransport`` is the frozen, measured
     producer of exactly this transport (HS-308: EGL, headless, the camera plugin publishing ``/head_camera``
-    on the simulator's own clock). This subclass keeps that start path verbatim and adds the two things a
-    restart needs:
+    on the simulator's own clock). This subclass uses that composition with the settings a restart needs:
 
     * the remaining three controller spawners of the ACT profile (the base starts
       ``joint_state_broadcaster`` only), so the stack under test is the production composition; and
@@ -1712,6 +1711,8 @@ class RestartStack(MujocoRosTransport):
       ``SO101_ACT_CONTROLLER_RESERVATION_DIR`` and ``SO101_SIMULATION_SESSION_ID`` from the environment of
       the process that hosts them - ``ros2_control_node`` - so a scope that reached only the spawner
       clients would leave every neck goal rejected for ever.
+    * the Head TF publisher follows the original 100 Hz JointState cadence, so
+      exact Header transforms do not wait for the publisher's 20 Hz default.
     """
 
     def __init__(
@@ -1726,6 +1727,8 @@ class RestartStack(MujocoRosTransport):
         self.environment = dict(environment)
 
     def _spawn(self, argv, name: str):
+        argv=list(argv)
+        if name=='robot_state_publisher':argv.extend(('-p','publish_frequency:=100.0'))
         self.workspace.mkdir(parents=True, exist_ok=True)
         handle = open(self.log_path, "ab")  # noqa: SIM115 - one handle per child, closed on stop
         self.handles.append(handle)
