@@ -37,6 +37,119 @@ def refresh(node,runtime,observer,wall):
     runtime._watchdog_wall=wall
 
 
+def delayed_original():
+    node,runtime,observer,record=ready()
+    refresh(node,runtime,observer,10.001)
+    record.update(image_source_ns=1_001_000_000,info_source_ns=1_001_000_000,
+        joint_source_ns=1_001_000_000,tf_source_ns=1_001_000_000,
+        image_received_wall_s=10.001,info_received_wall_s=10.001,deadline_ns=10_051_000_000)
+    return node,runtime,observer,record
+
+
+def receive_original(observer,record,kind):
+    from sensor_msgs.msg import Image,CameraInfo
+    from std_msgs.msg import Header
+    source=record['image_source_ns']
+    header=Header(frame_id=observer.camera_frame,
+        stamp=Time(sec=source//10**9,nanosec=source%10**9))
+    if kind=='IMAGE':
+        observer._on_image(Image(header=header,width=640,height=480,encoding='rgb8',step=1920,
+            data=bytes(640*480*3)))
+    else:
+        observer._on_info(CameraInfo(header=header,width=640,height=480,
+            k=[200.,0.,320.,0.,200.,240.,0.,0.,1.]))
+
+
+@pytest.mark.parametrize('first',['IMAGE','INFO'])
+def test_authenticated_inputs_wait_for_each_cpu_original_without_consuming_admission(tmp_path,first):
+    node,runtime,observer,record=delayed_original()
+    protocol=MonitorRuntimeProtocol(dict(epoch='attempt',generation=5,session_id='session',
+        primary=runtime.primary),tmp_path)
+    protocol._future=completed(runtime);protocol._policy_future=completed(True)
+    scope=dict(secret=b'x'*32,epoch='attempt',generation=5,session_id='session')
+    sender=HeadMonitorCodec(**scope,role='monitor');receiver=HeadMonitorCodec(**scope,role='primary')
+    before=runtime._exposures.summary();polls=list(observer.watchdog_polls)
+    def inputs():
+        return receiver.decode(sender.encode(protocol.handle(dict(operation='EXPOSURE_INPUTS',exposure=record))))
+    try:
+        for received in (None,first,'INFO' if first=='IMAGE' else 'IMAGE'):
+            if received:receive_original(observer,record,received)
+            ack=inputs()
+            assert ack['inputs_ready'] is (received is not None and received!=first)
+            assert ack['motion_authority'] is False and ack['root_claim']==record
+            assert ack['request']=='EXPOSURE_INPUTS' and ack['stage']=='ARMED_READY'
+            assert runtime._exposures.summary()==before and not runtime.epoch.inventory
+            assert list(observer.watchdog_polls)==polls and runtime._watchdog_wall==10.001
+            assert not runtime.revoked
+        admitted=runtime.exposure_admit(record)
+        assert admitted['sequence']==1 and admitted['exposure_admitted']
+        assert runtime.exposure_finish(completion(admitted,10.001))['exposure_finished']
+    finally:observer.close(timeout_s=1.)
+
+
+def test_original_arriving_after_inputs_snapshot_waits_for_next_original_decision(monkeypatch):
+    node,runtime,observer,record=delayed_original()
+    snapshot=observer.port.original_feedback_snapshot;calls=[]
+    def arriving():
+        original=snapshot();calls.append(True)
+        if len(calls)==2:
+            # The callback happens after the query copied its decision. Its
+            # later original receipt must belong to a subsequent query.
+            node.wall=10.002
+            receive_original(observer,record,'INFO');receive_original(observer,record,'IMAGE')
+        return original
+    monkeypatch.setattr(observer.port,'original_feedback_snapshot',arriving)
+    try:
+        reply=runtime.exposure_inputs(record)
+        assert reply['inputs_ready'] is False and not runtime.revoked
+        assert observer._image_source==record['image_source_ns']
+        monkeypatch.setattr(observer.port,'original_feedback_snapshot',snapshot)
+        refresh(node,runtime,observer,10.002)
+        reply=runtime.exposure_inputs(record)
+        assert reply['inputs_ready'] is True
+        assert runtime._exposures.summary()['sequence']==0
+        assert runtime.exposure_admit(record)['deadline_ns']==10_051_000_000
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['future','payload','frame','receipt','deadline','extra','sequence',
+    'received_missing','received_invalid','received_hash','info_missing','expired','stage','watchdog',
+    'heartbeat','executor','clock','joint','revoked','overlap','old_source'])
+def test_inputs_wait_never_hides_invalid_or_previously_received_original(damage):
+    node,runtime,observer,record=delayed_original()
+    if damage=='future':record['image_source_ns']+=1
+    elif damage=='payload':record['payload_sha256']='bad'
+    elif damage=='frame':record['image_frame_id']='other'
+    elif damage=='receipt':record['image_received_wall_s']=10.002
+    elif damage=='deadline':record['deadline_ns']+=1
+    elif damage=='extra':record['extra']=True
+    elif damage=='sequence':record['sequence']=True
+    elif damage.startswith('received_'):
+        receive_original(observer,record,'IMAGE')
+        if damage=='received_missing':observer._images.clear()
+        elif damage=='received_invalid':observer._images[record['image_source_ns']]['valid']=False
+        else:observer._images[record['image_source_ns']]['payload_sha256']='b'*64
+    elif damage=='info_missing':
+        receive_original(observer,record,'INFO');observer._infos.pop(record['image_source_ns'])
+    elif damage=='expired':refresh(node,runtime,observer,10.051)
+    elif damage=='stage':runtime.epoch._stage='POLICY_READY'
+    elif damage=='watchdog':runtime._watchdog_wall=9.99
+    elif damage=='heartbeat':observer._primary['wall_s']=9.99
+    elif damage=='executor':observer._executor_wall=9.99
+    elif damage=='clock':observer._clock=None
+    elif damage=='joint':observer.port._head_feedback['valid']=False
+    elif damage=='revoked':runtime.fault('test',node.wall)
+    elif damage=='overlap':
+        receive_original(observer,record,'IMAGE');receive_original(observer,record,'INFO')
+        runtime.exposure_admit(record)
+    elif damage=='old_source':runtime._exposures._source_floor=record['image_source_ns']
+    try:
+        before=runtime._exposures.summary()
+        with pytest.raises(PermissionError):runtime.exposure_inputs(record)
+        assert runtime.revoked and runtime._exposures.summary()==before
+    finally:observer.close(timeout_s=1.)
+
+
 def completion(ack,wall=10.):
     return dict(exposure_sha256=ack['exposure_sha256'],sequence=ack['sequence'],
         image_source_ns=ack['image_source_ns'],completion_wall_s=wall,result_sha256='b'*64)
@@ -249,7 +362,8 @@ def test_cpu_hash_comes_from_actual_original_image_bytes(damage):
 
 
 @pytest.mark.parametrize('pending',[False,True])
-def test_actual_protocol_and_authenticated_codec_route_admission_and_completion(tmp_path,pending):
+@pytest.mark.parametrize('operation',['EXPOSURE_INPUTS','EXPOSURE_ADMIT'])
+def test_actual_protocol_and_authenticated_codec_route_admission_and_completion(tmp_path,pending,operation):
     _,runtime,observer,record=ready()
     config=dict(epoch='attempt',generation=5,session_id='session',primary=runtime.primary)
     protocol=MonitorRuntimeProtocol(config,tmp_path)
@@ -257,11 +371,15 @@ def test_actual_protocol_and_authenticated_codec_route_admission_and_completion(
     scope=dict(secret=b'x'*32,epoch='attempt',generation=5,session_id='session')
     sender=HeadMonitorCodec(**scope,role='monitor');receiver=HeadMonitorCodec(**scope,role='primary')
     try:
-        request=dict(operation='EXPOSURE_ADMIT',exposure=record)
+        request=dict(operation=operation,exposure=record)
         if pending:
             with pytest.raises(PermissionError,match='POLICY_ACK_REQUIRED'):protocol.handle(request)
             return
         ack=receiver.decode(sender.encode(protocol.handle(request)))
+        if operation=='EXPOSURE_INPUTS':
+            assert ack['request']==operation and ack['inputs_ready'] is True
+            assert runtime._exposures.summary()['active'] is None
+            ack=protocol.handle(dict(operation='EXPOSURE_ADMIT',exposure=record))
         assert ack['request']=='EXPOSURE_ADMIT' and ack['exposure_admitted']
         result=protocol.handle(dict(operation='EXPOSURE_FINISH',completion=completion(ack)))
         reply=receiver.decode(sender.encode(result))

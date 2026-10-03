@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from test_act_head_monitor_exposure import ready, refresh
+from test_act_head_monitor_exposure import ready, refresh, receive_original
 from test_act_head_monitor_prearm import completed
 from test_act_head_monitor_ros import ready_monitor
 from so101_demo.act.head_monitor_ipc import HeadMonitorCodec
@@ -73,6 +73,89 @@ def composition(tmp_path):
 def retire(c):c.root.close(timeout_s=1.);c.cpu.close(timeout_s=1.)
 
 
+def delay_cpu_image(c):
+    c.cpu._camera=dict(c.cpu._camera,source_ns=999_000_000)
+    c.cpu._image_source=999_000_000
+
+
+def test_cpu_original_wait_keeps_same_root_frame_deadline_and_no_cuda_or_admission(tmp_path):
+    c=composition(tmp_path)
+    try:
+        delay_cpu_image(c);c.originals()
+        for _ in range(3):
+            assert c.reader.infer() is None
+            assert c.reader._sequence==0 and c.reader._source_floor==0
+            assert not c.deadlines and c.detector.count==0 and not c.runtime.revoked
+        assert [row['operation'] for row in c.calls]==['EXPOSURE_INPUTS']*3
+        receive_original(c.cpu,dict(image_source_ns=10**9),'IMAGE')
+        row=c.reader.infer()
+        assert [r['operation'] for r in c.calls]==['EXPOSURE_INPUTS']*4+['EXPOSURE_ADMIT','EXPOSURE_FINISH']
+        assert row['sequence']==1 and c.detector.count==1
+        assert row['image_received_wall_s']==row['info_received_wall_s']==10.0
+        assert row['deadline_ns']==10_050_000_000 and row['source_ns']==c.tf.stamp==10**9
+        assert row['inputs_ack']['inputs_ready'] is True
+        trace=c.reader.close()['original_attempts'][0]
+        assert trace['inputs_queries']==4 and trace['phases']['inputs_wait_started']==10.0
+    finally:retire(c)
+
+
+def test_missing_cpu_image_expires_original_root_deadline_without_admission(tmp_path):
+    c=composition(tmp_path)
+    try:
+        delay_cpu_image(c);c.originals()
+        assert c.reader.infer() is None
+        c.node.wall=10.051
+        with pytest.raises(PermissionError,match='HEAD_LIVE_EXPOSURE_DEADLINE'):c.reader.infer()
+        assert c.detector.count==0 and not c.deadlines
+        assert [r['operation'] for r in c.calls]==['EXPOSURE_INPUTS']
+        assert c.faults[0][1]==pytest.approx(10.05)
+        trace=c.reader.close()['original_attempts'][0]
+        assert trace['root_deadline_ns']==10_050_000_000 and trace['outcome']=='REFUSED'
+    finally:retire(c)
+
+
+@pytest.mark.parametrize('damage',['hash','revoked'])
+def test_ready_receipt_cannot_replace_final_cpu_admission_recheck(tmp_path,damage):
+    c=composition(tmp_path)
+    request=c.reader.monitor.request_runtime
+    def changed(record):
+        reply=request(record)
+        if record['operation']=='EXPOSURE_INPUTS':
+            assert reply['inputs_ready'] is True
+            if damage=='hash':c.cpu._camera['payload_sha256']='b'*64
+            else:c.runtime.fault('post-readiness revocation',c.cpu_node.wall)
+        return reply
+    c.reader.monitor.request_runtime=changed
+    try:
+        c.originals()
+        with pytest.raises(PermissionError):c.reader.infer()
+        assert c.detector.count==0 and not c.reader.results and c.runtime.revoked
+        assert [row['operation'] for row in c.calls]==['EXPOSURE_INPUTS','EXPOSURE_ADMIT']
+    finally:retire(c)
+
+
+@pytest.mark.parametrize('damage',['boolean','deadline','wall','motion','scope'])
+def test_invalid_ready_reply_cannot_consume_original_or_enter_cuda(tmp_path,damage):
+    c=composition(tmp_path)
+    request=c.reader.monitor.request_runtime
+    def invalid(record):
+        reply=request(record)
+        if damage=='boolean':reply['inputs_ready']=1
+        elif damage=='deadline':reply['deadline_ns']+=1
+        elif damage=='wall':reply['observed_wall_s']+=.001
+        elif damage=='motion':reply['motion_authority']=True
+        else:reply['root_claim']['epoch']='other'
+        return reply
+    c.reader.monitor.request_runtime=invalid
+    try:
+        c.originals()
+        with pytest.raises(PermissionError):c.reader.infer()
+        assert c.detector.count==0 and c.reader._sequence==0 and c.reader._source_floor==0
+        assert not c.deadlines and c.primary.failed
+        assert [row['operation'] for row in c.calls]==['EXPOSURE_INPUTS']
+    finally:retire(c)
+
+
 def test_completed_original_info_and_single_record_handoff_are_independent(tmp_path):
     c=composition(tmp_path)
     try:
@@ -96,7 +179,7 @@ def test_actual_cpu_protocol_pairs_original_pixels_and_one_detector_call(tmp_pat
         assert row['admission_ack']['exposure_admitted'] is True
         assert row['payload_sha256']==c.image['payload_sha256'] and c.tf.stamp==10**9
         assert c.detector.count==1 and c.reader.infer() is None
-        assert [r['operation'] for r in c.calls]==['EXPOSURE_ADMIT','EXPOSURE_FINISH']
+        assert [r['operation'] for r in c.calls]==['EXPOSURE_INPUTS','EXPOSURE_ADMIT','EXPOSURE_FINISH']
         assert c.deadlines==[10.05,10.05,None] and not c.faults
         assert row['detections'][0]['xyxy']==[1.,2.,3.,4.]
         assert len(c.reader.results)==1
@@ -183,7 +266,7 @@ def test_expired_cuda_return_is_retained_without_completion_or_result(tmp_path):
             c.node.wall=10.051;refresh(c.cpu_node,c.runtime,c.cpu,10.051)
         c.detector.during=late
         with pytest.raises(PermissionError,match='HEAD_LIVE_EXPOSURE_DEADLINE'):c.reader.infer()
-        assert [row['operation'] for row in c.calls]==['EXPOSURE_ADMIT']
+        assert [row['operation'] for row in c.calls]==['EXPOSURE_INPUTS','EXPOSURE_ADMIT']
         assert not c.reader.results and c.primary.failed and c.faults[0][1]==pytest.approx(10.05)
         trace=c.reader.close()['original_attempts'][0]
         assert trace['source_ns']==10**9 and trace['sequence']==1

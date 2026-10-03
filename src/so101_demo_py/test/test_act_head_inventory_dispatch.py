@@ -43,6 +43,7 @@ def composed(socket_root,monkeypatch):
     authority,servers=reservation_authority(socket_root);identity=authority.identity('neck')
     _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
     events=[];owned=[];faults=[];monitor=Monitor(identity,events)
+    port._head_fault_callback=lambda reason:faults.append(reason)
     exchange=authority._exchange
     def native(role,frame,*,expect):
         if frame[4:8]==b'SOGB':events.append('NATIVE_RESERVE')
@@ -51,7 +52,9 @@ def composed(socket_root,monkeypatch):
     sdk=port.client.send_goal_async
     def send(*args,**kw):events.append('SDK_SEND');return sdk(*args,**kw)
     port.client.send_goal_async=send
-    def own(record,payload):events.append('OWN_INVENTORY');owned.append((record,payload));return True
+    def own(record,payload):
+        events.append('OWN_INVENTORY');owned.append((record,payload))
+        return port.inventory_prepared(record,payload)
     config=dict(port=port,authority=authority,monitor=monitor,epoch='attempt',generation=11,
         session_id='head-search-restarts',controller_identity=identity,guard=lambda:True,
         own_inventory=own,fault_callback=lambda reason:faults.append(reason))
@@ -77,6 +80,19 @@ def test_exact_inventory_and_two_dispatch_acks_precede_native_and_sdk(composed):
     assert record['deadline_ns']-record['claim_monotonic_ns']==400_000_000
     assert record['payload_sha256']==__import__('hashlib').sha256(payload).hexdigest()
     assert sender.inventory[gid]==record
+
+
+def test_composed_dispatch_uses_actual_primary_inventory_even_if_cdr_padding_changes(composed,monkeypatch):
+    from rclpy import serialization
+    config,events,owned,faults,servers,calls=composed
+    # The dispatcher already owns its original encoder. Re-encoding at the
+    # controller port is not a valid identity proof for an inventoried goal.
+    monkeypatch.setattr(serialization,'serialize_message',lambda message:b'other CDR padding')
+    sender=HeadInventoryDispatcher(**config);gid=sender.send(target())
+    record=config['port']._goals[gid]
+    assert record['primary_inventory'] and record['prepared_typed_goal_bytes']
+    assert record['sdk_claimed'] is True and not faults
+    assert events==['OWN_INVENTORY','REGISTER','DISPATCH','NATIVE_RESERVE','DISPATCH','SDK_SEND']
 
 
 def test_dispatch_trace_distinguishes_authenticated_boundaries_without_changing_order(composed):

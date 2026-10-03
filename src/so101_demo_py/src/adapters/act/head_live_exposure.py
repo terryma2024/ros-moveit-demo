@@ -157,6 +157,30 @@ class HeadLiveExposures:
                     or any(not math.isfinite(value) for value in translation)
                     or nanoseconds(causal['wall_s'])>nanoseconds(self.monotonic())):
                 raise PermissionError('HEAD_LIVE_SOURCE_MISMATCH')
+            epoch=self.primary.epoch
+            claim=dict(epoch=epoch.epoch,generation=epoch.generation,session_id=epoch.session_id,
+                policy_sha256=epoch.policy_hash,sequence=self._sequence+1,image_source_ns=source,
+                info_source_ns=info['source_ns'],joint_source_ns=causal['source_ns'],tf_source_ns=tf_source,
+                image_frame_id=self.frame,payload_sha256=image['payload_sha256'],
+                image_received_wall_s=image['wall_s'],info_received_wall_s=info['wall_s'],deadline_ns=deadline)
+            self._guard(deadline)
+            mark('inputs_request_started')
+            trace['inputs_queries']=trace.get('inputs_queries',0)+1
+            inputs_started=self.monotonic()
+            inputs=self.monitor.request_runtime(dict(operation='EXPOSURE_INPUTS',exposure=claim))
+            inputs_received=self.monotonic()
+            self.primary._ack(inputs,'EXPOSURE_INPUTS','ARMED_READY',root_claim=claim)
+            if (type(inputs.get('inputs_ready')) is not bool
+                    or type(inputs.get('deadline_ns')) is not int
+                    or not nanoseconds(inputs_started)<=nanoseconds(inputs['observed_wall_s'])
+                        <=nanoseconds(inputs_received)<inputs['deadline_ns']<=deadline):
+                raise PermissionError('HEAD_LIVE_CPU_INPUTS_INVALID')
+            self._guard(deadline)
+            if not inputs['inputs_ready']:
+                if 'inputs_wait_ack' not in trace:trace['inputs_wait_ack']=inputs
+                mark('inputs_wait_started');return None
+            mark('inputs_ready',inputs_received)
+            trace['inputs_ack']=inputs
             with self._lock:
                 if self._pending is not pending:return None
                 if self._closed or self._busy or source<=self._source_floor:
@@ -167,12 +191,6 @@ class HeadLiveExposures:
             trace['sequence']=sequence;trace['outcome']='ADMITTED'
             mark('admission_committed')
             self.primary.inference_deadline(deadline*1e-9)
-            epoch=self.primary.epoch
-            claim=dict(epoch=epoch.epoch,generation=epoch.generation,session_id=epoch.session_id,
-                policy_sha256=epoch.policy_hash,sequence=sequence,image_source_ns=source,
-                info_source_ns=info['source_ns'],joint_source_ns=causal['source_ns'],tf_source_ns=tf_source,
-                image_frame_id=self.frame,payload_sha256=image['payload_sha256'],
-                image_received_wall_s=image['wall_s'],info_received_wall_s=info['wall_s'],deadline_ns=deadline)
             self._guard(deadline)
             started=self.monotonic()
             mark('admission_request_started',started)
@@ -226,7 +244,8 @@ class HeadLiveExposures:
                 joint_source_ns=causal['source_ns'],tf_source_ns=tf_source,causal_joint=causal,
                 payload_sha256=image['payload_sha256'],image_received_wall_s=image['wall_s'],
                 info_received_wall_s=info['wall_s'],original_info=info,deadline_ns=deadline,tf_translation=translation,
-                tf_rotation=rotation,admission_ack=ack,admission_rpc_started_wall_s=started,
+                tf_rotation=rotation,inputs_ack=inputs,inputs_rpc_started_wall_s=inputs_started,
+                inputs_rpc_received_wall_s=inputs_received,admission_ack=ack,admission_rpc_started_wall_s=started,
                 admission_rpc_received_wall_s=received,cuda_started_wall_s=cuda_started,
                 completion_wall_s=completion,completion_ack=finish,completion_rpc_started_wall_s=finish_started,
                 completion_rpc_received_wall_s=finish_received,detections=detections,result_sha256=result_sha))

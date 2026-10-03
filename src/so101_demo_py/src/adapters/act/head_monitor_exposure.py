@@ -81,6 +81,85 @@ class HeadMonitorExposures:
             raise PermissionError('HEAD_MONITOR_EXPOSURE_CURRENT_INPUTS_INVALID')
         return original,clock,watchdog
 
+    def inputs(self,record):
+        """Observe matching CPU originals without creating an inference lease.
+
+        Only an original that has not physically arrived may be pending. A
+        received but missing, invalid or mismatched original is a refusal.
+        The subsequent admission independently rechecks the complete claim.
+        """
+        runtime=self.runtime;observer=runtime._observer
+        try:
+            if (type(record) is not dict or set(record)!=_CLAIM
+                    or not _integer(record['image_source_ns'])):
+                raise PermissionError('HEAD_MONITOR_EXPOSURE_CLAIM_INVALID')
+            source=record['image_source_ns']
+            # Copy originals and physical arrival watermarks before the
+            # decision clocks. Later callbacks belong to the next query.
+            with observer._lock:
+                image=observer._images.get(source)
+                if image is None and observer._camera is not None and observer._camera['source_ns']==source:
+                    image=observer._camera
+                image=None if image is None else dict(image)
+                info=observer._infos.get(source);info=None if info is None else dict(info)
+                image_source=observer._image_source;info_source=observer._info_source
+            original,_,_=self._current()
+            now_ns=nanoseconds(original['decision']['wall_after_s'])
+            if (type(record) is not dict or set(record)!=_CLAIM
+                    or any(not _integer(record[key]) for key in ('generation','sequence',
+                        'image_source_ns','info_source_ns','joint_source_ns','tf_source_ns','deadline_ns'))
+                    or record['epoch']!=runtime.epoch.epoch
+                    or record['generation']!=runtime.epoch.generation
+                    or record['session_id']!=runtime.epoch.session_id
+                    or record['policy_sha256']!=runtime.epoch.policy_hash
+                    or record['image_frame_id']!=observer.camera_frame
+                    or not _sha(record['payload_sha256'])
+                    or any(not _wall(record[key]) or nanoseconds(record[key])>now_ns
+                        for key in ('image_received_wall_s','info_received_wall_s'))):
+                raise PermissionError('HEAD_MONITOR_EXPOSURE_CLAIM_INVALID')
+            source=record['image_source_ns'];age=math.floor(observer.camera_age*1e9)
+            deadline=min(nanoseconds(record['image_received_wall_s']),
+                nanoseconds(record['info_received_wall_s']))+age
+            if deadline!=record['deadline_ns']:
+                raise PermissionError('HEAD_MONITOR_EXPOSURE_DEADLINE_CHANGED')
+            skew=observer.camera_skew
+            with observer.port._lock:
+                causal=next((dict(row) for row in reversed(observer.port._head_samples)
+                    if row['source_ns']<=source),None)
+            if (not _wall(skew) or not 0<skew<=.05 or record['info_source_ns']!=source
+                    or not 0<=original['decision']['sim_ns']-source
+                        <=math.floor(observer._policy.camera_max_source_age_s*1e9)
+                    or causal is None or not causal['valid'] or nanoseconds(causal['wall_s'])>now_ns
+                    or record['joint_source_ns']!=causal['source_ns']
+                    or not 0<=source-causal['source_ns']<=math.floor(skew*1e9)
+                    or not 0<=source-record['tf_source_ns']<=math.floor(skew*1e9)):
+                raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
+            for value,watermark in ((image,image_source),(info,info_source)):
+                if value is None:
+                    if watermark>=source:
+                        raise PermissionError('HEAD_MONITOR_EXPOSURE_RECEIVED_ORIGINAL_MISSING')
+                    continue
+                if (not value['valid'] or value['source_ns']!=source
+                        or value['frame_id']!=record['image_frame_id']
+                        or nanoseconds(value['wall_s'])>now_ns):
+                    raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
+                deadline=min(deadline,nanoseconds(value['wall_s'])+age)
+            if image is not None and image['payload_sha256']!=record['payload_sha256']:
+                raise PermissionError('HEAD_MONITOR_EXPOSURE_ORIGINAL_MISMATCH')
+            with self._lock:
+                observed=observer.monotonic()
+                if nanoseconds(observed)>=deadline:raise _Expired(deadline)
+                if (self._active is not None or record['sequence']!=self._sequence+1
+                        or source<=self._source_floor or runtime.revoked or observer.failed):
+                    raise PermissionError('HEAD_MONITOR_EXPOSURE_REUSED_OR_REVOKED')
+            return _wire(dict(stage='ARMED_READY',inputs_ready=image is not None and info is not None,
+                motion_authority=False,root_claim=record,observed_wall_s=observed,deadline_ns=deadline))
+        except Exception as error:
+            if isinstance(error,_Expired):runtime.fault('HEAD_MONITOR_EXPOSURE_DEADLINE',error.deadline*1e-9)
+            runtime.fault('HEAD_MONITOR_EXPOSURE_INPUTS_REFUSED',
+                observer.monotonic() if observer is not None else time.monotonic())
+            raise PermissionError('HEAD_MONITOR_EXPOSURE_INPUTS_REFUSED') from error
+
     def admit(self,record):
         runtime=self.runtime;observer=runtime._observer
         try:

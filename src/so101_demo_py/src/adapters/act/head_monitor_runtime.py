@@ -417,6 +417,8 @@ class HeadMonitorRuntime:
         return dict(stage=self.epoch.stage,epoch=self.epoch.epoch,watchdog_wall_s=self._watchdog_wall,
             executor_wall_s=self._observer._executor_wall,ack_wall_s=now,motion_authority=False)
 
+    def exposure_inputs(self,record):return self._exposures.inputs(record)
+
     def exposure_admit(self,record):return self._exposures.admit(record)
 
     def exposure_finish(self,record):return self._exposures.finish(record)
