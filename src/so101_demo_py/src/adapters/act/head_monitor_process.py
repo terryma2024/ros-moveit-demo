@@ -74,6 +74,11 @@ class MonitorProcess:
     @property
     def receipt(self): return dict(self._receipt, monitor_peer=dict(self._receipt['monitor_peer']))
 
+    @property
+    def heartbeat_trace(self):
+        trace=getattr(self,'_heartbeat_trace',None)
+        return None if trace is None else dict(trace)
+
     def is_alive(self):
         if self._closed or self._process.poll() is not None:
             return False
@@ -110,8 +115,9 @@ class MonitorProcess:
             raise PermissionError('HEAD_MONITOR_EXEC_RETIRED')
         if not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
         if not callable(snapshot_factory):raise ValueError('HEAD_MONITOR_HEARTBEAT_FACTORY_INVALID')
+        self._heartbeat_trace={}
         reply=self._channel.exchange_built(
-            lambda:dict(operation='HEARTBEAT',heartbeat=snapshot_factory()))
+            lambda:dict(operation='HEARTBEAT',heartbeat=snapshot_factory()),trace=self._heartbeat_trace)
         return self._runtime_reply({'operation':'HEARTBEAT'},reply)
 
     def _runtime_reply(self,value,reply):

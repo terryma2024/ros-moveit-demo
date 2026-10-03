@@ -216,6 +216,53 @@ def test_built_request_includes_slot_wait_and_sampling_in_original_deadline(monk
         assert events.count('snapshot')==(1 if damage in ('builder_expired','builder_error') else 0)
 
 
+@pytest.mark.parametrize('boundary',['none','slot','peer','snapshot','read'])
+def test_original_heartbeat_phase_trace_survives_same_deadline_refusal(monkeypatch,boundary):
+    import inspect
+    import so101_demo.act.head_monitor_ipc as ipc
+    clock=[10.];calls=[];trace={}
+    monkeypatch.setattr(ipc,'time',SimpleNamespace(monotonic=lambda:clock[0]))
+    class Slot:
+        def acquire(self,timeout):
+            assert timeout==pytest.approx(.010)
+            if boundary=='slot':clock[0]=10.010;return False
+            clock[0]=10.001;return True
+        def release(self):calls.append('release')
+    channel=object.__new__(HeadMonitorChannel);channel._timeout=.010;channel._io_lock=Slot()
+    channel._codec=codec('primary');channel._connection=SimpleNamespace(close=lambda:calls.append('closed'))
+    def peer():
+        calls.append('peer')
+        if boundary=='peer':clock[0]=10.011
+    def snapshot():
+        calls.append('snapshot')
+        if boundary=='snapshot':raise PermissionError('controlled pre-send snapshot refusal')
+        return dict(operation='HEARTBEAT')
+    def read(deadline):
+        calls.append('read')
+        if boundary=='read':clock[0]=10.011;raise TimeoutError('controlled original read deadline')
+        return dict(ack='PRESENT')
+    channel._verify_peer=peer;channel._read=read
+    channel._write=lambda payload,deadline:calls.append('write')
+    # On the uninstrumented source, run the actual intended boundary rather
+    # than counting an unknown optional keyword as the regression failure.
+    def exchange():
+        return channel.exchange_built(snapshot,trace=trace) if 'trace' in inspect.signature(
+            channel.exchange_built).parameters else channel.exchange_built(snapshot)
+    if boundary=='none':assert exchange()==dict(ack='PRESENT')
+    else:
+        with pytest.raises((PermissionError,TimeoutError)):exchange()
+    assert trace['started_wall_s']==10. and trace['deadline_wall_s']==pytest.approx(10.010)
+    assert trace['ended_wall_s']==clock[0]
+    if boundary=='none':
+        assert trace['phase']=='complete' and trace['error_type'] is None and not channel._codec.failed
+    else:
+        assert trace['phase']==dict(slot='slot_wait',peer='peer_check',snapshot='snapshot',read='read')[boundary]
+        assert trace['error_type']==('PermissionError' if boundary=='snapshot' else 'TimeoutError')
+        assert trace['error_code'] and channel._codec.failed and 'closed' in calls
+        if boundary in ('slot','peer'):assert 'snapshot' not in calls and 'write' not in calls
+    if boundary!='slot':assert trace['slot_owned_wall_s']==10.001 and calls[-1]=='release'
+
+
 @pytest.mark.parametrize('field', ['uid','pid','start_ticks'])
 def test_foreign_connected_peer_gets_no_message(server,field):
     connection,peer,child=server

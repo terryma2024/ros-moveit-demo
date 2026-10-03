@@ -63,7 +63,7 @@ def test_sampled_heartbeat_requires_configuration_and_complete_runtime_ack(damag
     if damage not in ('none','closed','unconfigured'):
         key='monitor_peer' if damage=='peer' else damage
         reply[key]={'pid':124} if damage=='peer' else True if damage=='motion_authority' else 'foreign'
-    def exchange(factory):
+    def exchange(factory,*,trace=None):
         calls.append(factory());return reply
     channel=SimpleNamespace(exchange_built=exchange,close=lambda:calls.append('closed'),
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
@@ -129,7 +129,7 @@ def test_only_complete_scoped_negative_heartbeat_keeps_channel_open(damage):
     elif damage=='ack_boolean':reply['ack_wall_s']=True
     elif damage=='ack_future':reply['ack_wall_s']=wall+1
     elif damage=='ack_negative':reply['ack_wall_s']=-1
-    channel=SimpleNamespace(exchange_built=lambda factory:reply,close=lambda:calls.append('closed'),
+    channel=SimpleNamespace(exchange_built=lambda factory,**kw:reply,close=lambda:calls.append('closed'),
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
     monitor=object.__new__(MonitorProcess);monitor._channel=channel;monitor._identity={'pid':123}
     monitor._closed=False;monitor._runtime_requested=True;monitor.is_alive=lambda:True

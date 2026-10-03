@@ -141,7 +141,7 @@ class HeadPrimarySupervisor:
                     self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010); return
                 self._shutdown.wait(.002); continue
             record = None
-            reply = None; error_type = None; rejected = False; rpc_started = time.monotonic()
+            reply = None; error_type = None; error_code = None; rejected = False; rpc_started = time.monotonic()
             def snapshot():
                 nonlocal record
                 if self.failed:raise PermissionError('HEAD_PRIMARY_REVOKED')
@@ -173,13 +173,17 @@ class HeadPrimarySupervisor:
             except BaseException as error:
                 error_type = type(error).__name__
                 self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED',
-                    rpc_started if record is None else record['wall_s']); return
+                    rpc_started if record is None else record['wall_s'])
+                args=BaseException.args.__get__(error)
+                error_code=args[0] if args and type(args[0]) is str and len(args[0])<=128 else None
+                return
             finally:
                 rpc_ended = time.monotonic()
                 try:
                     self._emit('HEARTBEAT_ROUND_TRIP', request=record, reply=reply,
                         rpc_started_wall_s=rpc_started, rpc_ended_wall_s=rpc_ended,
-                        error_type=error_type)
+                        error_type=error_type,error_code=error_code,
+                        channel_trace=self.monitor.heartbeat_trace)
                 except BaseException:
                     self.fault('HEAD_PRIMARY_HEARTBEAT_JOURNAL_FAILED', rpc_ended)
             if rejected:

@@ -306,20 +306,29 @@ class HeadMonitorChannel:
         self._remaining(deadline)
         return value
 
-    def _operation(self, operation):
-        deadline = time.monotonic()+self._timeout
+    def _operation(self, operation, *, trace=None):
+        started = time.monotonic();deadline = started+self._timeout
         acquired = False
+        if trace is not None:
+            trace.update(started_wall_s=started,deadline_wall_s=deadline,
+                         phase='slot_wait',error_type=None,error_code=None)
         try:
             acquired = self._io_lock.acquire(timeout=self._remaining(deadline))
             if not acquired:
                 raise TimeoutError('HEAD_MONITOR_CHANNEL_BUSY')
+            if trace is not None:trace['slot_owned_wall_s']=time.monotonic()
             return operation(deadline)
-        except (OSError, RuntimeError, ValueError, PermissionError):
-            self._fail()
+        except BaseException as error:
+            if trace is not None:
+                args=BaseException.args.__get__(error)
+                trace['error_type']=type(error).__name__
+                trace['error_code']=args[0] if args and type(args[0]) is str and len(args[0])<=128 else None
+            if isinstance(error,(OSError,RuntimeError,ValueError,PermissionError)):self._fail()
             raise
         finally:
             if acquired:
                 self._io_lock.release()
+            if trace is not None:trace['ended_wall_s']=time.monotonic()
 
     def send(self, payload):
         return self._operation(lambda deadline: self._write(payload, deadline))
@@ -333,20 +342,29 @@ class HeadMonitorChannel:
             return self._read(deadline)
         return self._operation(request)
 
-    def exchange_built(self, payload_factory):
+    def exchange_built(self, payload_factory, *, trace=None):
         """Sample one new payload after the slot, within the caller's deadline."""
+        def mark(phase):
+            if trace is not None:
+                trace['phase']=phase;trace[phase+'_wall_s']=time.monotonic()
         def request(deadline):
             self._remaining(deadline)
+            mark('peer_check')
             self._verify_peer()
+            if trace is not None:trace['peer_checked_wall_s']=time.monotonic()
             self._remaining(deadline)
             if not callable(payload_factory):
                 raise ValueError('HEAD_MONITOR_CHANNEL_BUILDER_INVALID')
             try:
+                mark('snapshot')
                 payload = payload_factory()
             except BaseException:
                 self._fail()
                 raise
             self._remaining(deadline)
+            mark('write')
             self._write(payload, deadline)
-            return self._read(deadline)
-        return self._operation(request)
+            mark('read')
+            reply=self._read(deadline)
+            mark('complete');return reply
+        return self._operation(request,trace=trace)

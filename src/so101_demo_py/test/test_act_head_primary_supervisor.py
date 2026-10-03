@@ -414,18 +414,25 @@ def test_original_heartbeat_round_trip_is_retained_on_ack_and_transport_failure(
             return dict(request='HEARTBEAT',stage='POLICY_READY',epoch='attempt',generation=5,
                 session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',
                 motion_authority=False,ack_wall_s=time.monotonic())
+        original_trace=dict(phase='controlled original phase',deadline_wall_s=time.monotonic()+.010)
+        sup.monitor._heartbeat_trace=original_trace
         sup.monitor.request_runtime=exchange
         sup._heartbeat()
         record=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
         assert record['request']['executor_wall_s']==sup.observer._executor_wall
         assert record['request']['executor_wall_s']<=record['request']['wall_s']
         assert record['rpc_started_wall_s']<=record['request']['wall_s']<=record['rpc_ended_wall_s']
+        assert record['channel_trace']==original_trace
+        original_trace.clear()
+        assert record['channel_trace']['phase']=='controlled original phase'
         if refused:
             assert record['reply'] is None and record['error_type']=='TimeoutError'
+            assert record['error_code']=='controlled original transport deadline'
             assert sup.failed and not sup.ready and port._head_policy_binding_failed
         else:
             assert record['reply']['ack_wall_s']<=record['rpc_ended_wall_s']
             assert record['error_type'] is None and not sup.failed and not sup.ready
+            assert record['error_code'] is None
         assert sup.epoch.stage==('REVOKED' if refused else 'POLICY_READY')
     finally:sup.close();port.close_head_io(timeout_s=1.)
 
