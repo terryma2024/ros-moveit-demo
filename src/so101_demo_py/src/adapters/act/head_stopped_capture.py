@@ -46,6 +46,8 @@ class StoppedHeadCapture:
         self._live_sink=None;self._live_floor=None
         self._measurement_monitor=None;self._measurement_scope=None
         self._measurement_attempts=[]
+        self._measurement_pending=None;self._measurement_handoff=None
+        self._measurement_consumed=threading.Event()
         self.subscriptions=[
             node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
             node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
@@ -274,19 +276,54 @@ class StoppedHeadCapture:
     def check(self):
         if self._failure is not None:raise ValueError(self._failure)
 
-    def snapshot(self):
+    def snapshot(self,*,consume_measurement=False):
         self.check()
         with self.port._lock:
             joint_candidates=_copy_current_original_candidates(self.port._head_feedback,self.port._head_samples)
             camera_candidates=_copy_current_original_candidates(self._last_camera,self.camera_messages)
+            pending=self._measurement_pending if consume_measurement else None
+            completed=None if pending is None else deepcopy(pending)
         clocks=decision_clocks(self.node,self.monotonic)
         joint=_causal_current_original(joint_candidates,clocks['sim_ns'])
         camera=_causal_current_original(camera_candidates,clocks['sim_ns'])
         if joint is None or camera is None:raise ValueError('HEAD_STOPPED_INPUT_MISSING')
-        return dict(joint=joint,camera=camera,clocks=clocks,
+        snapshot=dict(joint=joint,camera=camera,clocks=clocks,
             current_original_selection=dict(
                 joint_candidate_sources_ns=[row['source_ns'] for row in joint_candidates],
                 camera_candidate_sources_ns=[row['source_ns'] for row in camera_candidates]))
+        if completed is not None:
+            snapshot.update(calibration_consumed_source_ns=completed['root_claim']['image_source_ns'],
+                calibration_completion_ack_wall_s=completed['ack_wall_s'],
+                consumer_thread_native_id=threading.get_native_id())
+            with self.port._lock:
+                self.check()
+                if self._measurement_pending is not pending:
+                    raise PermissionError('HEAD_STOPPED_MAIN_HANDOFF_CHANGED')
+                self._measurement_handoff=snapshot;self._measurement_pending=None
+                self._measurement_consumed.set()
+        return snapshot
+
+    def _main_measurement_handoff(self,completion):
+        if not self._started:return self.snapshot()
+        with self.port._lock:
+            self.check()
+            if self._measurement_pending is not None:
+                raise PermissionError('HEAD_STOPPED_MAIN_HANDOFF_BUSY')
+            self._measurement_handoff=None;self._measurement_consumed.clear()
+            started=self.monotonic()
+            self._measurement_pending=completion
+        # The existing 5ms decision worker consumes the fixed original. The
+        # unchanged 10ms progress limit bounds waiting; no cache lock is held.
+        consumed=self._measurement_consumed.wait(.010)
+        if (not consumed or self._measurement_handoff is None
+                or not 0<=self._measurement_handoff['clocks']['wall_after_s']-started<=.010):
+            self._failure='HEAD_STOPPED_MAIN_PROGRESS_DEADLINE'
+            self.port._head_policy_binding_failed=True
+            callback=getattr(self.port,'_head_fault_callback',None)
+            if callable(callback):callback(self._failure)
+            self.check()
+        self.check()
+        return self._measurement_handoff
 
     def take_image(self):
         with self.port._lock:
@@ -361,7 +398,7 @@ class StoppedHeadCapture:
                     for key in ('image','info')):
                 raise PermissionError('HEAD_STOPPED_MEASUREMENT_ORIGINAL_CHANGED')
             # Consume the copied CPU completion before reading Main clocks.
-            handoff=self.snapshot()
+            handoff=self._main_measurement_handoff(cpu_completion)
             row.update(cpu_measurement_inputs=cpu_inputs,cpu_measurement_completion=cpu_completion,
                 root_handoff=handoff,matched_consumer_measurement=dict(motion_authority=False,
                     image_source_ns=record['source_ns'],
@@ -393,7 +430,9 @@ class StoppedHeadCapture:
             inferences=[row for row in inferences if inside(row['image_received_wall_s'])],
             clock_resolution_s=min((right['source_ns']-left['source_ns'])*1e-9
                 for left,right in zip(clock,clock[1:])))
-        if self._measurement_monitor is not None:window['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
+        if self._measurement_monitor is not None:
+            window['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
+            window['root_handoff_schedule']='EXISTING_5MS_DECISION_WORKER'
         return window
 
 
@@ -420,7 +459,7 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                 if delay<0:due=time.monotonic();delay=0
                 stop.wait(delay)
         except BaseException as error:errors.append(error);stop.set()
-    def decision():decisions.append(capture.snapshot())
+    def decision():decisions.append(capture.snapshot(consume_measurement=True))
     def watchdog():capture.check();polls.append(time.monotonic())
     threads=[threading.Thread(target=worker,args=(.005,decision),name='head-bootstrap-decisions'),
              threading.Thread(target=worker,args=(.002,watchdog),name='head-bootstrap-watchdog')]

@@ -91,6 +91,31 @@ def test_full_consumer_measurement_refuses_changed_or_missing_original_clocks(da
     with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)
 
 
+@pytest.mark.parametrize('damage',['none','source','actor','detached','changed','schedule'])
+def test_scheduled_main_handoff_must_be_an_original_decision_in_the_full_cohort(damage):
+    raw=window();raw['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
+    raw['root_handoff_schedule']='EXISTING_5MS_DECISION_WORKER'
+    for row in raw['inferences']:
+        decision=next(d for d in raw['decisions'] if d['clocks']['wall_after_s']>=row['completion_wall_s'])
+        decision.update(calibration_consumed_source_ns=row['source_ns'],
+            calibration_completion_ack_wall_s=row['completion_wall_s'],consumer_thread_native_id=77)
+        row['root_handoff']=copy.deepcopy(decision)
+        row['cpu_measurement_completion']={'ack_wall_s':row['completion_wall_s']}
+        row['matched_consumer_measurement']=dict(motion_authority=False,image_source_ns=row['source_ns'],
+            cpu_image_received_wall_s=row['image_received_wall_s'],cpu_info_received_wall_s=row['info_received_wall_s'],
+            cpu_inputs_decision_wall_s=row['admission_wall_s'],cpu_completion_decision_wall_s=row['completion_wall_s'],
+            root_handoff_decision_wall_s=decision['clocks']['wall_after_s'])
+    handoff=raw['inferences'][42]['root_handoff']
+    if damage=='source':handoff['calibration_consumed_source_ns']+=1
+    elif damage=='actor':handoff['consumer_thread_native_id']=0
+    elif damage=='detached':handoff['clocks']['wall_before_s']+=.00001
+    elif damage=='changed':handoff['joint']['wall_s']-=.00001
+    elif damage=='schedule':raw['root_handoff_schedule']='IMMEDIATE_CALLER'
+    if damage=='none':assert evaluate_feedback_window(raw,stop_latency_s=.07)['counts']['decisions']==4000
+    else:
+        with pytest.raises(ValueError):evaluate_feedback_window(raw,stop_latency_s=.07)
+
+
 def test_source_period_is_never_a_monotonic_margin():
     measured=evaluate_feedback_window(window(.96),stop_latency_s=.07)
     periods=measured['periods'];series=measured['distributions']

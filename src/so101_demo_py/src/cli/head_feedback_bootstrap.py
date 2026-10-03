@@ -808,7 +808,8 @@ def main(argv=None):
                 raw=dict(joint_messages=list(port._head_samples),camera_messages=list(capture.camera_messages),
                     info_messages=list(capture.info_messages),clock_messages=list(capture.clock_messages),
                     events=list(capture.events),workload=getattr(capture,'workload',None),
-                    measurement_attempts=list(capture._measurement_attempts))
+                    measurement_attempts=list(capture._measurement_attempts),
+                    measurement_pending=capture._measurement_pending)
             result['raw_observations_pending']=raw
         if executor is not None:
             try:

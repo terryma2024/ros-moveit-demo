@@ -191,6 +191,12 @@ def _evaluate(window, stop_latency_s):
         raise ValueError('HEAD_WINDOW_CONSUMER_MODE_INVALID')
     matched_consumers=(mode=='MATCHED_CPU_CUDA_MAIN'
         or any('matched_consumer_measurement' in row for row in inferences))
+    schedule=window.get('root_handoff_schedule')
+    if schedule not in (None,'EXISTING_5MS_DECISION_WORKER') or schedule is not None and not matched_consumers:
+        raise ValueError('HEAD_WINDOW_MAIN_SCHEDULE_INVALID')
+    decision_index={tuple(row['clocks'][key] for key in ('wall_before_s','wall_after_s','sim_ns')):row
+        for row in decisions} if schedule is not None else None
+    main_actor=None
     previous_completion = start
     previous_image_source = 0
     for inference in inferences:
@@ -239,6 +245,17 @@ def _evaluate(window, stop_latency_s):
             if (not max(image,info,cpu_image,cpu_info)<=cpu_inputs<=admission<=completion
                     <=cpu_completion<=main<=end or cpu_image<0 or cpu_info<0):
                 raise ValueError('HEAD_WINDOW_MATCHED_CONSUMER_CLOCK')
+            if schedule is not None:
+                handoff=inference['root_handoff'];clocks=handoff['clocks']
+                original=decision_index.get(tuple(clocks[key] for key in ('wall_before_s','wall_after_s','sim_ns')))
+                actor=handoff.get('consumer_thread_native_id')
+                if (handoff!=original or handoff.get('calibration_consumed_source_ns')!=source
+                        or type(actor) is not int or actor<=0 or main_actor not in (None,actor)
+                        or nanoseconds(_number(clocks['wall_after_s']))!=main
+                        or handoff.get('calibration_completion_ack_wall_s')!=
+                            inference['cpu_measurement_completion']['ack_wall_s']):
+                    raise ValueError('HEAD_WINDOW_MAIN_HANDOFF_LINKAGE')
+                main_actor=actor
             frame_ages.extend((consumer-receipt)*1e-9
                 for consumer in (cpu_inputs,cpu_completion,main)
                 for receipt in (image,info,cpu_image,cpu_info))

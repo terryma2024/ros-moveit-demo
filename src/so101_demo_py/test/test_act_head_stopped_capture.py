@@ -108,8 +108,9 @@ def test_original_info_before_warm_boundary_pairs_image_after_boundary(capture):
     assert capture.info_messages[-1]==original and capture._pending is None
 
 
-def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_after_reply(capture):
-    capture._image(image());capture._info(info())
+@pytest.mark.parametrize('scheduled',[False,True])
+def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_after_reply(capture,scheduled,monkeypatch):
+    if not scheduled:capture._image(image());capture._info(info())
     capture.port._head_samples.append(capture.port._head_feedback.copy())
     original=capture._pending;requests=[];wall=[10.001]
     capture.monotonic=lambda:wall[0]
@@ -142,12 +143,34 @@ def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_afte
         def detect(self,pixels,**identity):
             detector_calls.append(identity);wall[0]=10.010;return []
     capture.bind_measurement_monitor(monitor,epoch='entry',generation=7,session_id='test')
+    if scheduled:
+        capture.begin_capture();capture._image(image());capture._info(info());original=capture._pending
     with pytest.raises(PermissionError):
         capture.bind_measurement_monitor(monitor,epoch='entry',generation=7,session_id='test')
     assert capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05) is None
     assert capture._pending is original and not detector_calls
     monitor.ready=True
-    row=capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05)
+    done=threading.Event();snapshots=[];failures=[]
+    original_snapshot=capture.snapshot
+    def consumer_snapshot(**kwargs):
+        if scheduled:
+            assert threading.current_thread().name=='controlled-main-consumer', 'infer reads immediate Main clocks'
+        return original_snapshot(**kwargs)
+    monkeypatch.setattr(capture,'snapshot',consumer_snapshot)
+    def consume():
+        try:
+            while not done.wait(.001):
+                if getattr(capture,'_measurement_pending',None) is not None:
+                    snapshots.append(capture.snapshot(consume_measurement=True))
+        except BaseException as error:failures.append(error)
+    worker=threading.Thread(target=consume,name='controlled-main-consumer')
+    if scheduled:worker.start()
+    try:
+        row=capture.infer(Detector(),Buffer(),session_id='test',attempt_id='test',stop_velocity_rad_s=.05)
+    finally:
+        done.set()
+        if scheduled:worker.join(timeout=1.)
+    assert not failures
     assert len(detector_calls)==1 and capture._pending is None
     assert [r['operation'] for r in requests]==['CALIBRATION_FRAME_INPUTS']*2+['CALIBRATION_FRAME_COMPLETION']
     assert all((r.get('exposure') or r['completion']['claim'])['image_received_wall_s']==10.001 for r in requests)
@@ -156,6 +179,11 @@ def test_cpu_pending_preserves_root_original_and_cuda_waits_then_main_reads_afte
     assert proof['cpu_image_received_wall_s']==proof['cpu_info_received_wall_s']==10.000
     assert proof['root_handoff_decision_wall_s']==10.015
     assert row['cpu_measurement_completion']['completion']['completion_wall_s']==10.010
+    if scheduled:
+        assert row['root_handoff'] in snapshots
+        assert row['root_handoff']['calibration_consumed_source_ns']==10**9
+        assert row['root_handoff']['calibration_completion_ack_wall_s']==10.010
+        assert row['root_handoff']['consumer_thread_native_id']==worker.native_id
     assert [a['outcome'] for a in capture._measurement_attempts]==['ACK']*3
     assert [a['inputs_ready'] for a in capture._measurement_attempts]==[False,True,True]
 
@@ -226,6 +254,25 @@ def test_failed_measurement_retains_original_request_before_fault_callback(captu
     assert observed==[('HEAD_STOPPED_MEASUREMENT_REFUSED',attempts)]
     claim['image_source_ns']=99
     assert attempt['root_claim']['image_source_ns']==10**9
+
+
+@pytest.mark.parametrize('failure',['missing','late'])
+def test_scheduled_main_progress_refusal_keeps_completed_original_without_refresh(capture,failure):
+    wall=[10.001];capture.monotonic=lambda:wall[0]
+    capture._image(image());capture._info(info());capture._started=True
+    completion=dict(root_claim=dict(image_source_ns=10**9),ack_wall_s=10.001)
+    def wait(timeout):
+        assert timeout==.010 and not capture.port._lock._is_owned()
+        # Ordinary observations do not consume the completion mailbox.
+        capture.snapshot();assert capture._measurement_pending is completion
+        if failure=='missing':return False
+        wall[0]=10.012;capture.snapshot(consume_measurement=True);return True
+    capture._measurement_consumed=SimpleNamespace(clear=lambda:None,set=lambda:None,wait=wait)
+    with pytest.raises(ValueError,match='HEAD_STOPPED_MAIN_PROGRESS_DEADLINE'):
+        capture._main_measurement_handoff(completion)
+    assert capture.port._head_policy_binding_failed
+    assert capture._measurement_pending is completion if failure=='missing' else capture._measurement_handoff is not None
+    with pytest.raises(ValueError):capture.check()
 
 
 def test_warm_boundary_carries_only_last32_original_infos(capture):
