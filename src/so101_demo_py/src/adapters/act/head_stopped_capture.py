@@ -413,26 +413,40 @@ class StoppedHeadCapture:
         """Build one declared cohort; keep pre-window originals as carry-in only."""
         self.check()
         def inside(wall):return start_ns<=nanoseconds(wall)<=end_ns
+        def paced(rows):
+            for index,row in enumerate(rows):
+                if index and index%64==0:time.sleep(0)
+                yield row
         def series(rows):
-            before=[dict(row) for row in rows if nanoseconds(row['wall_s'])<start_ns]
-            if not before:raise ValueError('HEAD_STOPPED_CARRY_IN_MISSING')
-            return [dict(row) for row in rows if inside(row['wall_s'])],before[-1]
+            carry=None;selected=[]
+            for row in paced(rows):
+                wall=nanoseconds(row['wall_s'])
+                if wall<start_ns:carry=row
+                elif wall<=end_ns:selected.append(dict(row))
+            if carry is None:raise ValueError('HEAD_STOPPED_CARRY_IN_MISSING')
+            return selected,dict(carry)
         with self.port._lock:
-            joint,carry_joint=series(self.port._head_samples)
-            camera,carry_camera=series(self.camera_messages)
-            info,carry_info=series(self.info_messages)
-            clock,carry_clock=series(self.clock_messages)
+            # Callback records are immutable after publication. Own the four
+            # original reference sequences at one boundary, then release the
+            # shared cache before materializing the declared audit cohort.
+            originals=tuple(tuple(rows) for rows in (self.port._head_samples,
+                self.camera_messages,self.info_messages,self.clock_messages))
+        joint,carry_joint=series(originals[0])
+        camera,carry_camera=series(originals[1])
+        info,carry_info=series(originals[2])
+        clock,carry_clock=series(originals[3])
         window=dict(start_wall_s=start_ns*1e-9,end_wall_s=end_ns*1e-9,
             joint_messages=joint,camera_messages=camera,info_messages=info,clock_messages=clock,
             carry_in=dict(joint=carry_joint,camera=carry_camera,info=carry_info,clock=carry_clock),
-            decisions=[row for row in decisions if inside(row['clocks']['wall_before_s'])],
-            watchdog_polls=[wall for wall in polls if inside(wall)],
-            inferences=[row for row in inferences if inside(row['image_received_wall_s'])],
+            decisions=[row for row in paced(decisions) if inside(row['clocks']['wall_before_s'])],
+            watchdog_polls=[wall for wall in paced(polls) if inside(wall)],
+            inferences=[row for row in paced(inferences) if inside(row['image_received_wall_s'])],
             clock_resolution_s=min((right['source_ns']-left['source_ns'])*1e-9
-                for left,right in zip(clock,clock[1:])))
+                for left,right in paced(zip(clock,clock[1:]))))
         if self._measurement_monitor is not None:
             window['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
             window['root_handoff_schedule']='EXISTING_5MS_DECISION_WORKER'
+        self.check()
         return window
 
 

@@ -11,6 +11,72 @@ from rosgraph_msgs.msg import Clock
 from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture
 
 
+def test_window_materialization_does_not_block_actual_clock_callback(capture):
+    copying=threading.Event();callback_done=threading.Event();copies=[]
+    class CallbackConcurrentRecord(dict):
+        def __iter__(self):return super().__iter__()
+        def keys(self):
+            copying.set()
+            copies.append(callback_done.wait(.05))
+            return super().keys()
+    for rows in (capture.port._head_samples,capture.camera_messages,
+                 capture.info_messages,capture.clock_messages):
+        rows.extend([dict(wall_s=9.,source_ns=900000000,valid=True),
+            CallbackConcurrentRecord(wall_s=10.,source_ns=1000000000,valid=True),
+            dict(wall_s=20.,source_ns=1100000000,valid=True)])
+    def original_callback():
+        assert copying.wait(1.)
+        msg=Clock();msg.clock.sec=3
+        capture._clock(msg,received_wall_s=30.001)
+        callback_done.set()
+    thread=threading.Thread(target=original_callback);thread.start()
+    try:
+        window=capture.window(start_ns=10_000_000_000,end_ns=30_000_000_000,
+            decisions=[],polls=[],inferences=[])
+    finally:thread.join(1.)
+    assert not thread.is_alive() and callback_done.is_set()
+    assert copies and all(copies), 'cohort copying held the original callback cache lock'
+    assert [r['wall_s'] for r in window['clock_messages']]==[10.,20.]
+    assert window['carry_in']['clock']['wall_s']==9.
+    assert capture.clock_messages[-1]['wall_s']==30.001
+    capture.clock_messages[1]['valid']=False
+    assert window['clock_messages'][0]['valid'] is True
+
+
+def test_window_copies_only_last_original_carry_without_invalid_fallback(capture):
+    copied=[]
+    class Recorded(dict):
+        def __iter__(self):return super().__iter__()
+        def keys(self):copied.append(self['wall_s']);return super().keys()
+    for rows in (capture.port._head_samples,capture.camera_messages,
+                 capture.info_messages,capture.clock_messages):
+        rows.extend([Recorded(wall_s=8.,source_ns=800000000,valid=True),
+            Recorded(wall_s=9.,source_ns=900000000,valid=False),
+            Recorded(wall_s=10.,source_ns=1000000000,valid=True),
+            Recorded(wall_s=20.,source_ns=1100000000,valid=True)])
+    window=capture.window(start_ns=10_000_000_000,end_ns=30_000_000_000,
+        decisions=[],polls=[],inferences=[])
+    assert 8. not in copied and copied.count(9.)==4
+    assert all(row['wall_s']==9. and row['valid'] is False
+        for row in window['carry_in'].values())
+
+
+def test_window_refuses_original_callback_failure_during_materialization(capture):
+    class Invalidated(dict):
+        def __iter__(self):return super().__iter__()
+        def keys(self):
+            capture._failure='HEAD_STOPPED_SOURCE_NONADVANCING'
+            return super().keys()
+    for rows in (capture.port._head_samples,capture.camera_messages,
+                 capture.info_messages,capture.clock_messages):
+        rows.extend([dict(wall_s=9.,source_ns=900000000,valid=True),
+            Invalidated(wall_s=10.,source_ns=1000000000,valid=True),
+            dict(wall_s=20.,source_ns=1100000000,valid=True)])
+    with pytest.raises(ValueError,match='HEAD_STOPPED_SOURCE_NONADVANCING'):
+        capture.window(start_ns=10_000_000_000,end_ns=30_000_000_000,
+            decisions=[],polls=[],inferences=[])
+
+
 def test_real_entry_health_starts_after_warmup_before_stable_capture():
     from so101_demo.adapters.act.head_stopped_capture import measure_stopped_workload
     events=[]
