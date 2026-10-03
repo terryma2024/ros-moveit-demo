@@ -503,8 +503,16 @@ class RosControllerPort:
     def _head_stopped(self):
         with self._lock:
             latest=None if self._head_feedback is None else dict(self._head_feedback)
-            samples=tuple(dict(sample) for sample in self._head_samples)
             proof=self._head_stop_proof
+            samples=[]
+            if proof is not None:
+                # Callback sequences are strictly increasing. Keep the full
+                # archive, but copy only originals this stop has not consumed.
+                # All copies still precede the original decision clocks.
+                for sample in reversed(self._head_samples):
+                    if sample['sequence']<=proof.last_sequence:break
+                    samples.append(dict(sample))
+                samples.reverse()
             states={gid:dict(accepted=record['accepted'],
                 terminal_status=getattr(record.get('result'),'status',None))
                 for gid,record in self._goals.items()}

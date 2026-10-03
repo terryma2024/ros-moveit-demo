@@ -109,6 +109,78 @@ def test_distinct_post_stop_samples_and_terminal_inventory_establish_stop(monkey
     assert port.stopped() is False
 
 
+def test_stop_decision_does_not_materialize_consumed_feedback_history(monkeypatch):
+    from collections import deque
+    from collections.abc import Mapping
+
+    _, _, port, wall, sim, _, _ = setup_ports(monkeypatch)
+    for index in range(4096):
+        port._feedback(sample(.5 + index * .0001))
+    physical_history = tuple(port._head_samples)
+    materialized = []
+
+    class ArchivedOriginal(Mapping):
+        def __init__(self, original):
+            self.original = original
+
+        def __getitem__(self, key):
+            return self.original[key]
+
+        def __len__(self):
+            return len(self.original)
+
+        def __iter__(self):
+            # Account for expensive archived metadata copies in the original
+            # decision clock. The current three callbacks retain their clocks.
+            materialized.append(self.original['sequence'])
+            wall[0] += .0001
+            return iter(self.original)
+
+    port._head_samples = deque((ArchivedOriginal(row) for row in physical_history), maxlen=4096)
+    port.begin_stop(dict(epoch='stop-1', generation=5, request_wall_s=10.,
+                         request_sim_s=1., fault_wall_s=10., stop_latency_s=.07))
+    for index in range(1, 4):
+        wall[0], sim[0] = 10. + index * .01, 1. + index * .01
+        port._feedback(sample(sim[0]))
+    originals_before = tuple(port._head_samples)
+    assert port.stopped() is True
+    assert port.stop_predicate_observations[-1]['quiet_count'] == 3
+    assert tuple(port._head_samples) == originals_before
+    assert materialized == []
+    assert port.stopped() is True
+    assert port.stop_predicate_observations[-1]['quiet_count'] == 3
+    assert materialized == []
+
+
+@pytest.mark.parametrize('damage', ['moving', 'nonadvancing', 'invalid'])
+def test_unconsumed_bad_original_breaks_stop_run_between_polls(monkeypatch, damage):
+    _, _, port, wall, sim, _, _ = setup_ports(monkeypatch)
+    port._feedback(sample())
+    port.begin_stop(dict(epoch='stop-1', generation=5, request_wall_s=10.,
+                         request_sim_s=1., fault_wall_s=10., stop_latency_s=.07))
+    wall[0], sim[0] = 10.001, 1.001
+    port._feedback(sample(sim[0]))
+    assert port.stopped() is False
+    wall[0], sim[0] = 10.002, 1.002
+    bad = sample(1.001 if damage == 'nonadvancing' else sim[0],
+                 .01 if damage == 'moving' else 0.)
+    if damage == 'invalid':
+        bad.velocity = []
+    port._feedback(bad)
+    invalid_original = port._head_samples[-1]
+    for index in (3, 4):
+        wall[0], sim[0] = 10. + index * .001, 1. + index * .001
+        port._feedback(sample(sim[0]))
+    assert port.stopped() is False
+    assert port.stop_predicate_observations[-1]['quiet_count'] == 2
+    assert invalid_original in port._head_samples
+    assert port.stopped() is False
+    assert port.stop_predicate_observations[-1]['quiet_count'] == 2
+    wall[0], sim[0] = 10.005, 1.005
+    port._feedback(sample(sim[0]))
+    assert port.stopped() is True
+
+
 @pytest.mark.parametrize('damage', ['duplicate', 'regression', 'moving', 'pre_stop', 'deadline'])
 def test_stop_run_is_ordered_and_cannot_refresh_a_bad_sample(monkeypatch, damage):
     _, _, port, wall, sim, _, _ = setup_ports(monkeypatch)
