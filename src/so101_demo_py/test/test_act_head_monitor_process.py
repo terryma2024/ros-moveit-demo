@@ -102,6 +102,7 @@ def test_sampled_heartbeat_requires_configuration_and_complete_runtime_ack(damag
     def exchange(factory,*,trace=None):
         calls.append(factory());return reply
     channel=SimpleNamespace(exchange_built=exchange,close=lambda:calls.append('closed'),
+        _simulation_policy=None,
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
     monitor=object.__new__(MonitorProcess)
     monitor._channel=channel;monitor._identity={'pid':123};monitor._closed=damage=='closed'
@@ -130,6 +131,7 @@ def test_runtime_request_carries_local_trace_without_changing_request_or_ack_che
     monitor=object.__new__(MonitorProcess);monitor._closed=False;monitor._runtime_requested=True
     monitor._identity={'pid':123};monitor.is_alive=lambda:True
     monitor._channel=SimpleNamespace(exchange=exchange,close=lambda:calls.append('closed'),
+        _simulation_policy=None,
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
     if damage=='none':assert monitor.request_runtime(request,trace=trace)==reply
     else:
@@ -252,6 +254,7 @@ def test_only_complete_scoped_negative_heartbeat_keeps_channel_open(damage):
     elif damage=='ack_future':reply['ack_wall_s']=wall+1
     elif damage=='ack_negative':reply['ack_wall_s']=-1
     channel=SimpleNamespace(exchange_built=lambda factory,**kw:reply,close=lambda:calls.append('closed'),
+        _simulation_policy=None,
         _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
     monitor=object.__new__(MonitorProcess);monitor._channel=channel;monitor._identity={'pid':123}
     monitor._closed=False;monitor._runtime_requested=True;monitor.is_alive=lambda:True

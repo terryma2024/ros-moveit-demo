@@ -88,10 +88,13 @@ class MonitorExecutionTrace:
         return self._result
 
 
-def _revoked_heartbeat_reply(reply,now):
+def _revoked_heartbeat_reply(reply,now,*,simulation_policy=None):
     """A negative receipt preserves teardown, never heartbeat/readiness authority."""
     fields={'request','stage','monitor_peer','purpose','epoch','generation','session_id',
             'motion_authority','heartbeat_rejected','fault','ack_wall_s'}
+    if simulation_policy is not None:
+        fields|={'simulation_policy','simulation_policy_sha256'}
+        if not _simulation_ack_matches(reply,simulation_policy):return False
     if (type(reply) is not dict or set(reply)!=fields or reply['request']!='HEARTBEAT'
             or reply['stage']!='REVOKED' or reply['heartbeat_rejected'] is not True
             or reply['motion_authority'] is not False):return False
@@ -126,6 +129,8 @@ class MonitorProcess:
         self._closed = False
         self._runtime_requested = False
         self._runtime_receipt = None
+        self._pending_heartbeat = None
+        self._heartbeat_trace = None
 
     @property
     def identity(self): return dict(self._identity)
@@ -136,7 +141,16 @@ class MonitorProcess:
     @property
     def heartbeat_trace(self):
         trace=getattr(self,'_heartbeat_trace',None)
-        return None if trace is None else dict(trace)
+        return None if trace is None else deepcopy(trace)
+
+    @property
+    def heartbeat_pending(self):return self._pending_heartbeat is not None
+
+    @property
+    def pending_heartbeat_deadline_wall_s(self):
+        pending=self._pending_heartbeat
+        return (None if pending is None else pending['started_wall_s']+
+            self._channel._simulation_policy.supervision_stale_s)
 
     def is_alive(self):
         if self._closed or self._process.poll() is not None:
@@ -180,19 +194,54 @@ class MonitorProcess:
         if not self._runtime_requested:raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
         if not callable(snapshot_factory):raise ValueError('HEAD_MONITOR_HEARTBEAT_FACTORY_INVALID')
         self._heartbeat_trace={}
-        reply=self._channel.exchange_built(
-            lambda:dict(operation='HEARTBEAT',heartbeat=snapshot_factory()),trace=self._heartbeat_trace)
+        built=False
+        def payload():
+            nonlocal built
+            heartbeat=snapshot_factory()
+            built=True
+            return dict(operation='HEARTBEAT',heartbeat=heartbeat)
+        try:
+            reply=self._channel.exchange_built(
+                payload,trace=self._heartbeat_trace)
+        except TimeoutError:
+            if built and self._channel._simulation_policy is not None and self._channel._pending is not None:
+                self._pending_heartbeat=self._channel._pending
+            raise
         return self._runtime_reply({'operation':'HEARTBEAT'},reply)
+
+    def complete_pending_heartbeat(self,deadline_wall_s):
+        """Complete this original frame only; the caller still checks progress/readiness."""
+        recovery=dict(started_wall_s=time.monotonic(),deadline_wall_s=deadline_wall_s)
+        try:
+            if (self._closed or not self.is_alive() or self._channel._simulation_policy is None
+                    or self._pending_heartbeat is None
+                    or self._pending_heartbeat is not self._channel._pending):
+                raise PermissionError('HEAD_MONITOR_PENDING_HEARTBEAT_REQUIRED')
+            reply=self._channel.complete_pending(deadline_wall_s)
+            reply=self._runtime_reply({'operation':'HEARTBEAT'},reply)
+            self._pending_heartbeat=None
+            recovery['completed_wall_s']=time.monotonic()
+            return reply
+        except BaseException as error:
+            recovery['error_type']=type(error).__name__
+            self._channel.close();raise
+        finally:
+            if self._heartbeat_trace is not None:self._heartbeat_trace['recovery']=recovery
 
     def _runtime_reply(self,value,reply):
         codec=self._channel._codec
+        simulation=self._channel._simulation_policy
+        if ((simulation is not None and not _simulation_ack_matches(reply,simulation))
+                or (simulation is None and type(reply) is dict
+                    and {'simulation_policy','simulation_policy_sha256'}&set(reply))):
+            self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_SIMULATION_ACK_INVALID')
         negative=(type(reply) is dict and (reply.get('stage')=='REVOKED'
                   or 'heartbeat_rejected' in reply) and value['operation']=='HEARTBEAT')
         if (type(reply) is not dict or reply.get('request')!=value['operation']
                 or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'
                 or reply.get('epoch')!=codec.epoch or reply.get('generation')!=codec.generation
                 or reply.get('session_id')!=codec.session_id or reply.get('motion_authority') is not False
-                or (negative and not _revoked_heartbeat_reply(reply,time.monotonic()))
+                or (negative and not _revoked_heartbeat_reply(reply,time.monotonic(),simulation_policy=simulation))
                 or (reply.get('stage') not in ('CONFIGURE_PENDING','CONFIGURED','POLICY_READY',
                                              'POLICY_PENDING','ARMED_READY','PRESENT','RETIRE_PENDING','RETIRED')
                     and not (negative or value['operation']=='FAULT' and reply.get('stage')=='REVOKED'))):
@@ -390,6 +439,10 @@ class MonitorRuntimeProtocol:
                 # This receipt confirms only irreversible local revocation;
                 # the owned native closer still has to prove its own ACK.
                 result=runtime.notice_fault(value)
+        if 'simulation_policy' in self.config:
+            simulation=HeadSimulationPolicy.parse(self.config['simulation_policy'])
+            result=dict(result,simulation_policy=simulation.readback(),
+                simulation_policy_sha256=digest(simulation.readback()))
         return dict(result,request=operation,monitor_peer=_peer(os.getpid()),purpose='calibration',
                     epoch=self.config['epoch'],generation=self.config['generation'],
                     session_id=self.config['session_id'])

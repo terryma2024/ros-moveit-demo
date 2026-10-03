@@ -137,15 +137,32 @@ def server(tmp_path,request):
     base.mkdir(mode=0o700,parents=True,exist_ok=True)
     directory=base/('mi-'+uuid.uuid4().hex[:8]);directory.mkdir(mode=0o700)
     path=directory/'peer.socket'
-    mode=getattr(request,'param','valid')
+    parameter=getattr(request,'param','valid')
+    mode=parameter['mode'] if type(parameter) is dict else parameter
     child=subprocess.Popen([sys.executable,'-c',SERVER,str(path),mode],stdin=subprocess.PIPE,
                            stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         assert child.stdout.readline()==b'READY\n'
-        response=codec('monitor').encode({'ack':'PRESENT'})
+        peer=dict(uid=os.geteuid(),pid=child.pid,start_ticks=_process_start_ticks(child.pid))
+        payload={'ack':'PRESENT'}
+        if type(parameter) is dict:
+            from so101_demo.act.head_monitor import digest
+            simulation=simulation_document()
+            payload=dict(request='HEARTBEAT',stage='PRESENT',monitor_peer=peer,
+                purpose='calibration',epoch='attempt-a',generation=5,session_id='head-test',
+                motion_authority=False,simulation_policy=simulation,
+                simulation_policy_sha256=digest(simulation))
+            damage=parameter.get('damage')
+            if damage=='peer':payload['monitor_peer']=dict(peer,pid=peer['pid']+1)
+            elif damage=='simulation':
+                payload['simulation_policy']=dict(simulation,schema_version=True)
+                payload['simulation_policy_sha256']=digest(payload['simulation_policy'])
+            elif damage=='digest':payload['simulation_policy_sha256']='0'*64
+            elif damage=='authority':payload['motion_authority']=True
+            elif damage=='generation':payload['generation']=6
+        response=codec('monitor').encode(payload)
         if mode=='tamper':response=response.replace(b'PRESENT',b'INVALID')
         child.stdin.write(response.hex().encode()+b'\n');child.stdin.flush()
-        peer=dict(uid=os.geteuid(),pid=child.pid,start_ticks=_process_start_ticks(child.pid))
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
             connection.connect(str(path));yield connection,peer,child
     finally:
@@ -197,6 +214,104 @@ def test_expired_rpc_can_only_finish_same_authenticated_partial_frame(server):
     assert wire.sequence==1  # no re-encode/retry/new operation
     with pytest.raises(PermissionError): channel.complete_pending(time.monotonic()+.1)
     channel.close()
+
+
+def runtime_process_for_wire(connection,peer,child):
+    # The fixture owns/reaps this wire-only child. It supplies authenticated
+    # PRESENT metadata, never a configured ROS runtime or readiness authority.
+    from so101_demo.adapters.act.head_monitor_process import MonitorProcess
+    channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.03,
+        simulation_policy=simulation_document())
+    monitor=MonitorProcess(child,None,peer,channel,{},None)
+    monitor._runtime_requested=True
+    return monitor,channel
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_runtime_wrapper_without_original_heartbeat_rejects_without_masking_error(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        assert monitor.heartbeat_trace is None
+        with pytest.raises(PermissionError,match='HEAD_MONITOR_PENDING_HEARTBEAT_REQUIRED'):
+            monitor.complete_pending_heartbeat(time.monotonic()+.1)
+        assert channel._codec.failed and channel._codec.sequence==0
+        assert monitor.heartbeat_trace is None
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_unsent_heartbeat_cannot_borrow_other_operations_pending_frame(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    snapshots=[]
+    try:
+        with pytest.raises(TimeoutError):monitor.request_runtime({'operation':'CONFIGURATION'})
+        original=channel._pending
+        assert original is not None and monitor.heartbeat_pending is False
+        assert channel._io_lock.acquire(blocking=False)
+        try:
+            with pytest.raises(TimeoutError):
+                monitor.request_heartbeat(lambda:snapshots.append('unsent') or {})
+        finally:channel._io_lock.release()
+        assert snapshots==[] and channel._codec.sequence==1
+        assert channel._pending is original and monitor.heartbeat_pending is False
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_runtime_wrapper_finishes_original_heartbeat_without_sequence_or_clock_renewal(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    snapshots=[]
+    def snapshot():
+        record=dict(wall_s=time.monotonic(),executor_wall_s=time.monotonic()-.001,
+            inference_deadline_wall_s=None);snapshots.append(record);return record
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(snapshot)
+        assert monitor.heartbeat_pending is True and channel._codec.sequence==1
+        deadline=monitor.pending_heartbeat_deadline_wall_s
+        assert deadline==channel._pending['started_wall_s']+.5
+        child.stdin.write(b'\n');child.stdin.flush()
+        reply=monitor.complete_pending_heartbeat(time.monotonic()+.1)
+        assert reply['stage']=='PRESENT' and reply['motion_authority'] is False
+        assert monitor.heartbeat_pending is False and monitor.pending_heartbeat_deadline_wall_s is None
+        assert len(snapshots)==1 and channel._codec.sequence==1
+        trace=monitor.heartbeat_trace
+        assert trace['error_type']=='TimeoutError'
+        assert trace['recovery']['completed_wall_s']<deadline
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment','damage':damage}
+    for damage in ('peer','simulation','digest','authority','generation')],indirect=True)
+def test_runtime_wrapper_rejects_wrong_pending_reply_after_actual_authentication(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        child.stdin.write(b'\n');child.stdin.flush()
+        with pytest.raises(PermissionError):monitor.complete_pending_heartbeat(time.monotonic()+.1)
+        assert channel._codec.failed and channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_runtime_wrapper_cannot_extend_original_pending_supervision_deadline(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        with pytest.raises(ValueError):monitor.complete_pending_heartbeat(
+            monitor.pending_heartbeat_deadline_wall_s+.001)
+        assert channel._codec.failed and channel._codec.sequence==1
+    finally:channel.close()
+
+
+@pytest.mark.parametrize('server',[{'mode':'fragment'}],indirect=True)
+def test_runtime_wrapper_second_heartbeat_cannot_replace_pending_factory_or_frame(server):
+    connection,peer,child=server;monitor,channel=runtime_process_for_wire(connection,peer,child)
+    calls=[]
+    try:
+        with pytest.raises(TimeoutError):monitor.request_heartbeat(lambda:{})
+        with pytest.raises(PermissionError):monitor.request_heartbeat(lambda:calls.append('wrong') or {})
+        assert calls==[] and channel._codec.sequence==1 and channel._codec.failed
+    finally:channel.close()
 
 
 @pytest.mark.parametrize('server',['fragment'],indirect=True)
