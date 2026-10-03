@@ -12,7 +12,20 @@ import threading
 import time
 import uuid
 
-from so101_demo.act.head_monitor import digest
+def digest(value):
+    """Hash the identical canonical audit body without a full encoded copy.
+
+    Measurement publication shares this process with the actual Root watchdog
+    and heartbeat. Yield between bounded metadata chunks; never publish a
+    progress receipt here or change the original workers' deadlines.
+    """
+    result=hashlib.sha256();since_yield=0
+    encoder=json.JSONEncoder(sort_keys=True,separators=(',',':'),allow_nan=False)
+    for chunk in encoder.iterencode(value):
+        encoded=chunk.encode('ascii');result.update(encoded);since_yield+=len(encoded)
+        if since_yield>=16384:
+            time.sleep(0);since_yield=0
+    return result.hexdigest()
 
 
 def _reference(path):
@@ -679,8 +692,13 @@ def main(argv=None):
         def progress(**fields):
             nonlocal measurement_reference
             if fields['stage']=='collected':
+                phases=[];result['measurement_publication_phases']=phases
+                phases.append(('digest_started',time.monotonic()))
                 raw=dict(epoch=epoch,generation=generation,session_id=session,dependencies=dependencies,window=fields['window'])
-                raw['sha256']=digest(raw);measurement_reference=_write(root/'measurement.json',raw)
+                raw['sha256']=digest(raw)
+                phases.append(('digest_finished',time.monotonic()))
+                measurement_reference=_write(root/'measurement.json',raw)
+                phases.append(('write_finished',time.monotonic()))
             else:
                 print(json.dumps(fields),flush=True)
                 _write(root/(fields['stage']+'-declaration.json'),fields)

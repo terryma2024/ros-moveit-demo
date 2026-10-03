@@ -246,3 +246,38 @@ def test_live_window_boundary_uses_actual_measured_schema_and_original_receipt(p
         assert window['start_ns']==10_050_000_000 and window['end_ns']==30_050_000_000
         assert window['boundary_original']==image and image['wall_s']==10.
         assert window['phase_s']==.05
+def test_measurement_digest_bounds_auxiliary_memory_and_preserves_original_hash():
+    import hashlib
+    import json
+    import tracemalloc
+    from so101_demo.cli import head_feedback_bootstrap as entry
+    document={'epoch':'original','window':{'joint_messages':[
+        {'wall_s':10000.+i*.01,'source_ns':1000000000+i*10000000,
+         'positions':[0.],'velocities':[0.],'name':'physical-joint-feedback'}
+        for i in range(10000)]}}
+    expected=hashlib.sha256(json.dumps(document,sort_keys=True,separators=(',',':'),
+        allow_nan=False).encode('ascii')).hexdigest()
+    tracemalloc.start()
+    try:
+        actual=entry.digest(document)
+        peak=tracemalloc.get_traced_memory()[1]
+    finally:tracemalloc.stop()
+    assert actual==expected
+    assert peak<512*1024, 'measurement digest allocated a complete encoded audit copy'
+
+
+@pytest.mark.parametrize('value',[
+    {'z':[True,None,False],'a':{'é':'💡\\\"\n'}},
+    {'negative_zero':-0.,'large':2**63,'tiny':1e-99},
+    {'empty':[],'tuple':(0,.002,.010),'object':{}},
+])
+def test_incremental_entry_digest_is_exact_canonical_body_hash(value):
+    from so101_demo.act.head_monitor import digest as canonical_digest
+    from so101_demo.cli.head_feedback_bootstrap import digest as entry_digest
+    assert entry_digest(value)==canonical_digest(value)
+
+
+@pytest.mark.parametrize('value',[{'nan':float('nan')},{'infinity':[float('inf')]}])
+def test_incremental_entry_digest_refuses_nonfinite_audit_body(value):
+    from so101_demo.cli.head_feedback_bootstrap import digest
+    with pytest.raises(ValueError):digest(value)
