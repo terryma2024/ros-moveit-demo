@@ -205,7 +205,7 @@ void write_self_provision(const std::filesystem::path & path, uint8_t role)
 
 uint8_t send_generation_request(
   const std::filesystem::path & path, uint8_t operation,
-  uint8_t capability_byte = 0xa5, uint64_t generation = 5)
+  uint8_t capability_byte = 0xa5, uint64_t generation = 5, int fragment_delay_ms = 0)
 {
   std::vector<uint8_t> frame{0, 0, 0, 62, 'S', 'O', 'G', 'R', 1, operation};
   frame.insert(frame.end(), 32, capability_byte);
@@ -232,6 +232,14 @@ uint8_t send_generation_request(
     throw std::runtime_error("TEST_SOCKET_CONNECT_FAILED");
   }
   size_t sent = 0;
+  if (fragment_delay_ms > 0) {
+    if (send(connection, frame.data(), 4, MSG_NOSIGNAL) != 4) {
+      close(connection);
+      throw std::runtime_error("TEST_SOCKET_PREFIX_FAILED");
+    }
+    sent = 4;
+    std::this_thread::sleep_for(std::chrono::milliseconds(fragment_delay_ms));
+  }
   while (sent < frame.size()) {
     const auto count = send(connection, frame.data() + sent, frame.size() - sent, MSG_NOSIGNAL);
     if (count <= 0) {
@@ -330,7 +338,8 @@ uint64_t query_neck_generation(const std::filesystem::path & path, uint8_t capab
 class ScopedNativeMonitor
 {
 public:
-  explicit ScopedNativeMonitor(const std::filesystem::path & directory, bool primary = false)
+  explicit ScopedNativeMonitor(
+    const std::filesystem::path & directory, bool primary = false, int fragment_delay_ms = 0)
   {
     int commands[2];
     int replies[2];
@@ -378,7 +387,7 @@ public:
               operation == 'N' ? 6 : 5);
           } else {
             response = operation == 'I' ? query_neck_generation(endpoint, capability_byte) :
-              send_generation_request(endpoint, operation, capability_byte);
+              send_generation_request(endpoint, operation, capability_byte, 5, fragment_delay_ms);
           }
           if (write(replies[1], &response, 1) != 1) {_exit(1);}
         }
@@ -875,7 +884,9 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   rclcpp::shutdown();
 }
 
-static void exercise_neck_native_scope(bool monitor_required, bool primary_fault_trigger = false)
+static void exercise_neck_native_scope(
+  bool monitor_required, bool primary_fault_trigger = false, bool simulation = false,
+  int64_t native_timeout_ns = 50000000)
 {
   const auto directory = private_socket_directory();
   if (!monitor_required) {write_self_provision(directory / "neck.provision", 3);}
@@ -886,20 +897,38 @@ static void exercise_neck_native_scope(bool monitor_required, bool primary_fault
   std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
   if (monitor_required) {
     requirement = std::make_unique<ScopedHeadMonitorRequirement>();
-    monitor = std::make_unique<ScopedNativeMonitor>(directory);
-    primary = std::make_unique<ScopedNativeMonitor>(directory, true);
+    monitor = std::make_unique<ScopedNativeMonitor>(directory, false, simulation ? 20 : 0);
+    primary = std::make_unique<ScopedNativeMonitor>(directory, true, simulation ? 20 : 0);
   }
   rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
   InspectableController controller;
   rclcpp::NodeOptions options;
-  options.parameter_overrides({
+  std::vector<rclcpp::Parameter> parameters{
     rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
     rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
     rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
-  });
+  };
+  if (simulation) {
+    parameters.emplace_back("head_simulation_mode", "mujoco_bounded_stop_search");
+    parameters.emplace_back("head_fault_connection_timeout_ns", native_timeout_ns);
+  }
+  options.parameter_overrides(parameters);
   ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  if (simulation) {
+    ASSERT_TRUE(controller.get_node()->has_parameter("head_simulation_mode"));
+    ASSERT_TRUE(controller.get_node()->has_parameter("head_fault_connection_timeout_ns"));
+    EXPECT_EQ(controller.get_node()->get_parameter("head_simulation_mode").as_string(),
+      "mujoco_bounded_stop_search");
+    EXPECT_EQ(controller.get_node()->get_parameter("head_fault_connection_timeout_ns").as_int(),
+      native_timeout_ns);
+    EXPECT_TRUE(controller.get_node()->describe_parameter("head_simulation_mode").read_only);
+    EXPECT_TRUE(controller.get_node()->describe_parameter("head_fault_connection_timeout_ns").read_only);
+    EXPECT_FALSE(controller.get_node()->set_parameters_atomically({
+        rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(250000000))}).successful);
+  }
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(controller.get_node()->get_node_base_interface());
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -984,6 +1013,79 @@ TEST(BrokerOwnedTrajectoryController, HeadV2ProvisionStartsThreeIndependentNativ
 TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultUsesItsOwnIdentityAndLatchesTheSharedGate)
 {
   exercise_neck_native_scope(true, true);
+}
+
+TEST(BrokerOwnedTrajectoryController, ExplicitSimulationBudgetReachesBothNativeFaultServices)
+{
+  exercise_neck_native_scope(true, false, true);
+}
+
+TEST(BrokerOwnedTrajectoryController, ExplicitSimulationPrimaryFaultRetainsSharedIrrevocableLatch)
+{
+  exercise_neck_native_scope(true, true, true, 50000001);
+}
+
+static void exercise_head_policy_rejection(
+  rclcpp::Parameter mode, rclcpp::Parameter timeout, bool head_required = true,
+  bool predeclared_mutable = false)
+{
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
+  if (head_required) {requirement = std::make_unique<ScopedHeadMonitorRequirement>();}
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    mode, timeout,
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  if (predeclared_mutable) {
+    controller.get_node()->declare_parameter("head_simulation_mode", std::string{});
+    controller.get_node()->declare_parameter("head_fault_connection_timeout_ns", int64_t(2000000));
+  }
+  EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.action_server_exists());
+  for (const auto * endpoint : {"neck.sock", "neck-revoke.sock", "neck-primary-revoke.sock"}) {
+    EXPECT_FALSE(std::filesystem::exists(directory / endpoint));
+  }
+}
+
+TEST(BrokerOwnedTrajectoryController, ExplicitSimulationInvalidBudgetOrModeCannotPublishServices)
+{
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search");
+  for (const int64_t timeout : {int64_t(0), int64_t(-1), int64_t(250000001)}) {
+    exercise_head_policy_rejection(mode, rclcpp::Parameter("head_fault_connection_timeout_ns", timeout));
+  }
+  exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", "other"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
+  exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", ""),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
+}
+
+TEST(BrokerOwnedTrajectoryController, ExplicitSimulationWrongTypesCannotPublishServices)
+{
+  exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", true),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
+  for (const auto & timeout : {rclcpp::Parameter("head_fault_connection_timeout_ns", true),
+      rclcpp::Parameter("head_fault_connection_timeout_ns", 50000000.)})
+  {
+    exercise_head_policy_rejection(
+      rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search"), timeout);
+  }
+}
+
+TEST(BrokerOwnedTrajectoryController, ExplicitSimulationRequiresHeadV2AndImmutableBinding)
+{
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search");
+  const auto timeout = rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000));
+  exercise_head_policy_rejection(mode, timeout, false);
+  exercise_head_policy_rejection(mode, timeout, true, true);
 }
 
 static void exercise_head_missing_provision(

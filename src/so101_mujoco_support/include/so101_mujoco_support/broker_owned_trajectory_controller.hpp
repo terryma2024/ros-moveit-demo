@@ -121,6 +121,8 @@ private:
   std::string reservation_session_;
   ControllerReservationRole reservation_role_{ControllerReservationRole::ARM};
   std::chrono::steady_clock::time_point reservation_deadline_;
+  std::chrono::nanoseconds head_fault_connection_timeout_{2000000};
+  bool head_simulation_mode_{false};
   ControllerStopWitness arm_stop_witness_{5};
   ControllerStopWitness gripper_stop_witness_{1};
   ControllerStopWitness neck_stop_witness_{1};

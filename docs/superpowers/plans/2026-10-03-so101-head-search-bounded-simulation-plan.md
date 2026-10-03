@@ -46,21 +46,24 @@
 
 **Interfaces:** `HeadSimulationPolicy.parse(document: dict) -> HeadSimulationPolicy`；`default_document() -> dict` 提供显式待批准配置；`readback() -> dict` 返回封闭 scalar 文档；`feedback_values() -> dict` 返回8项原名称；`validate_search_values(values: dict) -> None` 验证 max_age/search_timeout/stop_latency 唯一有效值。此任务不把默认配置注入生产，也不批准 bundle。
 
-- [ ] 编写 test-body RED：missing API；parse非有限/bool/unknown/missing/mode；预算关系/上限；dual-clock 不混算；17关联值冲突；8字段 mapping exact。
-- [ ] 执行 fresh scratch 定向 runner，保存 RED 真实 rc/测试断言。
-- [ ] 实现冻结 dataclass、闭合 parse、spec 默认/上限、关系与 readback；不导入 ROS/Torch、不产生资源或 motion authority。
-- [ ] 定向 GREEN 加旧 `test_act_head_feedback_freshness.py`，确认 legacy 语义未被隐式修改。
-- [ ] self_review immutable diff/原始测试证据并 scoped commit。Expected: 全定向测试 rc0；生产/资格状态仍 pending。
+- [x] 编写 test-body RED：missing API；parse非有限/bool/unknown/missing/mode；预算关系/上限；dual-clock 不混算；17关联值冲突；8字段 mapping exact。
+- [x] 执行 fresh scratch 定向 runner，保存 RED 真实 rc/测试断言。
+- [x] 实现冻结 dataclass、闭合 parse、spec 默认/上限、关系与 readback；不导入 ROS/Torch、不产生资源或 motion authority。
+- [x] 定向 GREEN 加旧 `test_act_head_feedback_freshness.py`，确认 legacy 语义未被隐式修改。
+- [x] self_review immutable diff/原始测试证据并 scoped commit。Expected: 全定向测试 rc0；生产/资格状态仍 pending。
 
 ## Task 2: 一次绑定监督 policy 与真实 channel 状态
 
-**Files:** Modify `act/head_feedback.py`, `act/head_monitor_ipc.py`, `adapters/act/head_monitor_process.py`, `head_monitor_runtime.py`, `head_primary_supervisor.py`, `head_monitor_ros.py`, `head_revocation.py`；native `src/so101_mujoco_support/{include/so101_mujoco_support/head_revocation_transport.h,src/head_revocation_transport.cpp}`；对应现有 feedback/IPC/process/primary/runtime/revocation tests。
+**Files:** Modify `act/head_feedback.py`, `act/head_monitor_ipc.py`, `adapters/act/head_monitor_process.py`, `head_monitor_runtime.py`, `head_primary_supervisor.py`, `head_monitor_ros.py`, `head_revocation.py`；native `src/so101_mujoco_support/{include/so101_mujoco_support/head_revocation_transport.h,src/head_revocation_transport.cpp}`，以及 `broker_owned_trajectory_controller` 和 `controller_reservation_socket` 的源文件/头文件、`CMakeLists.txt`、`package.xml`；对应现有 feedback/IPC/process/primary/runtime/revocation 和 native lifecycle/socket tests。
 
 **Interfaces:** 正式 entry 向 existing primary/CPU 配置传相同 `simulation_policy` reference/hash；`FeedbackPolicy.parse(values, *, simulation_policy=None)` 校验新 mode 的 exact8 mapping，legacy保持原固定调度值；channel新增 `complete_pending(deadline_wall_s: float) -> dict` 只完成同 sequence frame。channel保持原 codec/authentication，无隐式 reconnect/retry。
 
 - [ ] RED：正确 peer reply 在10 ms后但RPC预算内仍有效；RPC budget到达后不能 dispatch；同在途reply仅可有界完成；原 progress不新鲜/negativeACK不能续 authority；true loss/malformed/death/expiry irrevocably fault。
 - [ ] 修改 primary/CPU 同一 policy 绑定及 runtime读回。RPC timeout使 operation无 authority，保留至原frame有界完成/stale；原 policy下测试保持其10 ms预期。
 - [ ] native close配置由一次 provisioning/entry传递，有有限 parser/service/client期限；main claim400 ms/UUID/raw digest不改变。default.05必须真正到达 native consumer，不能只改Python timeout。
+
+  native consumer 通过 `neck_controller` 的只读参数 `head_simulation_mode` 和 `head_fault_connection_timeout_ns` 一次绑定；默认仿真 deadline 是 50,000,000 ns。未显式选择模式时，原 ABI 和两个 fault 服务仍采用 2 ms。新模式使用有界 nanosecond deadline，main reservation 通道保留 50 ms 与原协议。正式入口须核验真实参数、只读 descriptor 和两个 reader 的 exact readback，不能用计划值代替服务配置。
+
 - [ ] RED/GREEN：pending send、fault前后队列、late acceptance、wrong peer/MAC/gen/opcode、incomplete main frame、lost/late ACK；两安全owner取消和strict close不能互相等待。
 - [ ] exact native targeted gate及相关Python gate，immutable self_review/commit。Expected: authority状态行为和原协议negative成立；实际 stop资格留Task6验证。
 

@@ -66,7 +66,12 @@ def ack(generation=5):
     return b'SOGA'+bytes((1,0,0,0))+generation.to_bytes(8,'big')
 
 
-def client(path,owner):
+def client(path,owner,simulation=False):
+    if simulation:
+        from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+        return NativeRevocationClient(path,capability=secrets.token_bytes(32),
+            native_owner=owner,generation=5,timeout_s=.05,
+            simulation_policy=HeadSimulationPolicy.default_document())
     return NativeRevocationClient(path,capability=secrets.token_bytes(32),
         native_owner=owner,generation=5,timeout_s=.002)
 
@@ -79,6 +84,41 @@ def test_actual_close_ack_from_exact_owned_process(native_server):
     assert process.stdout.readline()=='RECEIVED\n'
     body=b'SOGR'+bytes((1,2))+revoker.capability+int(5).to_bytes(8,'big')+bytes(16)
     assert bytes.fromhex(process.stdout.readline())==len(body).to_bytes(4,'big')+body
+
+
+def test_simulation_native_close_accepts_delayed_ack_only_under_explicit_bound(native_server):
+    path,owner,process=native_server(ack(),delay=.02)
+    revoker=client(path,owner,simulation=True)
+    receipt=revoker.close_strict()
+    assert receipt['ack_validated'] is True and receipt['native_owner']==owner
+    assert .02<=receipt['ack_wall_s']-receipt['request_wall_s']<.05
+    trace=revoker.exchange_trace
+    assert abs(trace['deadline_wall_s']-trace['request_wall_s']-.05)<1e-9
+    assert revoker.transport_origin['mode']=='mujoco_bounded_stop_search'
+    assert process.stdout.readline()=='RECEIVED\n'
+    body=b'SOGR'+bytes((1,2))+revoker.capability+int(5).to_bytes(8,'big')+bytes(16)
+    assert bytes.fromhex(process.stdout.readline())==len(body).to_bytes(4,'big')+body
+
+
+def test_simulation_native_entry_does_not_renew_callers_original_deadline(native_server):
+    path,owner,_=native_server(ack());revoker=client(path,owner,simulation=True)
+    actual=revoker._native_exchange
+    def late_entry(*args):time.sleep(.06);return actual(*args)
+    revoker._native_exchange=late_entry
+    with pytest.raises(TimeoutError):revoker.close_strict()
+    trace=revoker.exchange_trace
+    assert trace['entry_wall_s']>trace['deadline_wall_s']
+    assert trace['phases']=={} and trace['phase']=='path'
+
+
+def test_simulation_close_budget_must_match_declared_policy(native_server):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    path,owner,_=native_server(ack())
+    with pytest.raises(ValueError):NativeRevocationClient(path,capability=secrets.token_bytes(32),
+        native_owner=owner,generation=5,timeout_s=.05)
+    with pytest.raises(ValueError):NativeRevocationClient(path,capability=secrets.token_bytes(32),
+        native_owner=owner,generation=5,timeout_s=.1,
+        simulation_policy=HeadSimulationPolicy.default_document())
 
 
 def test_close_checks_execute_outside_python_syscall_scheduling(native_server,monkeypatch):
@@ -96,7 +136,8 @@ def test_close_checks_execute_outside_python_syscall_scheduling(native_server,mo
 
 
 @pytest.mark.parametrize('damage',['parent_mode','socket_mode','endpoint_symlink','ancestor_symlink','regular_file'])
-def test_compiled_path_checks_refuse_before_connecting(native_server,damage,tmp_path):
+@pytest.mark.parametrize('simulation',[False,True])
+def test_compiled_path_checks_refuse_before_connecting(native_server,damage,tmp_path,simulation):
     path,owner,_=native_server(ack())
     destination=path
     if damage=='parent_mode':path.parent.chmod(0o755)
@@ -107,7 +148,7 @@ def test_compiled_path_checks_refuse_before_connecting(native_server,damage,tmp_
         alias=path.parent.parent/('hs-link-'+uuid.uuid4().hex[:8]);alias.symlink_to(path.parent)
         destination=alias/path.name
     else:destination=path.parent/'regular';destination.write_text('not a socket')
-    revoker=client(destination,owner)
+    revoker=client(destination,owner,simulation=simulation)
     try:
         with pytest.raises(PermissionError):revoker.close_strict()
         assert revoker.exchange_trace['phase']=='path'
@@ -117,8 +158,9 @@ def test_compiled_path_checks_refuse_before_connecting(native_server,damage,tmp_
 
 
 @pytest.mark.parametrize('damage',['capability','generation','peer','budget'])
-def test_mutated_client_scope_cannot_wrap_or_silently_substitute_original_authority(native_server,damage):
-    path,owner,_=native_server(ack());revoker=client(path,owner)
+@pytest.mark.parametrize('simulation',[False,True])
+def test_mutated_client_scope_cannot_wrap_or_silently_substitute_original_authority(native_server,damage,simulation):
+    path,owner,_=native_server(ack());revoker=client(path,owner,simulation=simulation)
     if damage=='capability':revoker.capability+=b'additional bytes'
     elif damage=='generation':revoker.generation+=2**64
     elif damage=='peer':revoker.native_owner['start_ticks']+=1
@@ -171,33 +213,37 @@ def test_original_native_transport_trace_distinguishes_timeout_boundary(native_s
 
 
 @pytest.mark.parametrize('damage',['magic','version','reserved6','reserved7','generation','status'])
-def test_native_close_rejects_every_unvalidated_ack_field(native_server,damage):
+@pytest.mark.parametrize('simulation',[False,True])
+def test_native_close_rejects_every_unvalidated_ack_field(native_server,damage,simulation):
     reply=bytearray(ack())
     position=dict(magic=0,version=4,reserved6=6,reserved7=7,generation=15,status=5)[damage]
     reply[position]^=1
     path,owner,_=native_server(bytes(reply))
-    with pytest.raises(RuntimeError):client(path,owner).close_strict()
+    with pytest.raises(RuntimeError):client(path,owner,simulation=simulation).close_strict()
 
 
 @pytest.mark.parametrize('damage',['pid','start_ticks','uid'])
-def test_foreign_or_reused_native_peer_receives_no_capability(native_server,damage):
+@pytest.mark.parametrize('simulation',[False,True])
+def test_foreign_or_reused_native_peer_receives_no_capability(native_server,damage,simulation):
     path,owner,process=native_server(ack())
     changed=dict(owner)
     changed[damage]=(os.getpid() if damage=='pid' else owner[damage]+1)
     with pytest.raises((PermissionError,RuntimeError,ValueError)):
-        client(path,changed).close_strict()
+        client(path,changed,simulation=simulation).close_strict()
     assert process.stdout.readline()=='EMPTY\n'
 
 
-def test_native_identity_requires_scoped_generation_incarnation_boot(native_server):
+@pytest.mark.parametrize('simulation',[False,True])
+def test_native_identity_requires_scoped_generation_incarnation_boot(native_server,simulation):
     body=b'SOID'+bytes((1,1,3))+int(5).to_bytes(8,'big')+b'\x03inc\x04boot'
     path,owner,_=native_server(len(body).to_bytes(4,'big')+body)
-    identity=client(path,owner).identity()
+    identity=client(path,owner,simulation=simulation).identity()
     assert (identity['generation'],identity['incarnation'],identity['boot'])==(5,'inc','boot')
 
 
 @pytest.mark.parametrize('damage',['role','generation','control_character','truncated','trailing'])
-def test_native_identity_rejects_unbound_or_malformed_reply(native_server,damage):
+@pytest.mark.parametrize('simulation',[False,True])
+def test_native_identity_rejects_unbound_or_malformed_reply(native_server,damage,simulation):
     body=bytearray(b'SOID'+bytes((1,1,3))+int(5).to_bytes(8,'big')+b'\x03inc\x04boot')
     if damage=='role':body[6]=1
     elif damage=='generation':body[14]=6
@@ -205,7 +251,21 @@ def test_native_identity_rejects_unbound_or_malformed_reply(native_server,damage
     elif damage=='truncated':body=body[:-1]
     else:body+=b'x'
     path,owner,_=native_server(len(body).to_bytes(4,'big')+body)
-    with pytest.raises(RuntimeError):client(path,owner).identity()
+    with pytest.raises(RuntimeError):client(path,owner,simulation=simulation).identity()
+
+
+def test_explicit_simulation_transport_cannot_fall_back_to_legacy_library(native_server,monkeypatch):
+    path,owner,_=native_server(ack())
+    actual_load=head_revocation.ctypes.CDLL
+    class LegacyLibrary:
+        def __getattr__(self,name):
+            if 'simulation' in name:raise AttributeError(name)
+            return getattr(self.actual,name)
+    def legacy_only(path):
+        library=LegacyLibrary();library.actual=actual_load(path);return library
+    monkeypatch.setattr(head_revocation.ctypes,'CDLL',legacy_only)
+    with pytest.raises(RuntimeError,match='HEAD_REVOKER_NATIVE_TRANSPORT_REQUIRED'):
+        client(path,owner,simulation=True)
 
 
 def test_revoker_provision_binds_monitor_and_exact_native_owner(native_server):

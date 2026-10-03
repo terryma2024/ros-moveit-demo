@@ -149,10 +149,11 @@ Error validate_reply(const So101HeadRevocationResult & result, uint32_t operatio
 Error exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t uid, int32_t pid, uint64_t ticks, uint64_t request,
-  uint64_t budget, uint32_t operation, So101HeadRevocationResult & result)
+  uint64_t budget, uint64_t maximum_budget, uint32_t operation,
+  So101HeadRevocationResult & result)
 {
   result.entry_ns = now_ns();
-  if (!path || !capability || !request || !budget || budget > 2000000 ||
+  if (!path || !capability || !request || !budget || budget > maximum_budget ||
     request > result.entry_ns || budget > std::numeric_limits<uint64_t>::max() - request ||
     !generation || pid <= 0 || !ticks || (operation != 1 && operation != 2) ||
     std::all_of(capability, capability + 32, [](auto byte) {return byte == 0;}))
@@ -238,7 +239,28 @@ uint32_t so101_head_revocation_exchange(
   Error code = IO;
   try {
     code = exchange(path, capability, generation, native_uid, native_pid,
-      native_start_ticks, request_ns, budget_ns, operation, *result);
+      native_start_ticks, request_ns, budget_ns, 2000000, operation, *result);
+  } catch (...) {code = IO;}
+  result->error_number = code == OK ? 0 : errno;
+  result->ended_ns = now_ns();
+  return code;
+}
+
+uint64_t so101_head_revocation_simulation_max_budget_ns(void) {return 250000000;}
+
+uint32_t so101_head_revocation_simulation_exchange(
+  const char * path, const uint8_t * capability, uint64_t generation,
+  uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
+  uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  So101HeadRevocationResult * result)
+{
+  if (!result) {return CONFIG;}
+  *result = {};
+  Error code = IO;
+  try {
+    code = exchange(path, capability, generation, native_uid, native_pid,
+      native_start_ticks, request_ns, budget_ns,
+      so101_head_revocation_simulation_max_budget_ns(), operation, *result);
   } catch (...) {code = IO;}
   result->error_number = code == OK ? 0 : errno;
   result->ended_ns = now_ns();

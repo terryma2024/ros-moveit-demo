@@ -16,6 +16,7 @@ endif()
 find_package(mujoco_ros2_control_plugins REQUIRED)
 find_package(mujoco_vendor REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(rcutils REQUIRED)
@@ -63,7 +64,7 @@ target_include_directories(so101_broker_owned_trajectory_controller PUBLIC
 target_link_libraries(so101_broker_owned_trajectory_controller PUBLIC
   joint_trajectory_controller::joint_trajectory_controller)
 ament_target_dependencies(so101_broker_owned_trajectory_controller PUBLIC
-  control_msgs controller_interface joint_trajectory_controller pluginlib rclcpp rclcpp_action)
+  control_msgs controller_interface joint_trajectory_controller pluginlib rcl_interfaces rclcpp rclcpp_action)
 pluginlib_export_plugin_description_file(controller_interface so101_trajectory_controllers.xml)
 
 add_library(so101_controller_reservation_protocol STATIC
@@ -249,5 +250,5 @@ install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_dependencies(control_msgs controller_interface geometry_msgs joint_trajectory_controller
   lifecycle_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
-  rclcpp rclcpp_action rcutils realtime_tools rosidl_default_runtime std_msgs trajectory_msgs)
+  rcl_interfaces rclcpp rclcpp_action rcutils realtime_tools rosidl_default_runtime std_msgs trajectory_msgs)
 ament_package()

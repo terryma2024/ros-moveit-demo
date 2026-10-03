@@ -32,6 +32,16 @@ uint32_t so101_head_revocation_exchange(
   uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
   So101HeadRevocationResult * result);
 
+/* Explicit simulation entry only; the legacy entry retains its 2 ms ceiling.
+ * Authentication, close-only opcodes and the original request clock are shared.
+ */
+uint64_t so101_head_revocation_simulation_max_budget_ns(void);
+uint32_t so101_head_revocation_simulation_exchange(
+  const char * path, const uint8_t * capability, uint64_t generation,
+  uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
+  uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  So101HeadRevocationResult * result);
+
 #ifdef __cplusplus
 }
 #endif

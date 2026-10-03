@@ -5,6 +5,7 @@
 #include <system_error>
 
 #include <pluginlib/class_list_macros.hpp>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rclcpp_action/create_server.hpp>
 
 namespace so101_mujoco_support
@@ -235,6 +236,32 @@ void BrokerOwnedTrajectoryController::configure_reservation_scope()
     name == "gripper_controller" ? ControllerReservationRole::GRIPPER :
     ControllerReservationRole::NECK;
   reservation_role_ = role;
+  if (role == ControllerReservationRole::NECK) {
+    // Explicit once-bound Head parameters; ACT and the main reservation
+    // endpoint retain their existing budgets and protocol authority.
+    rcl_interfaces::msg::ParameterDescriptor descriptor;
+    descriptor.read_only = true;
+    const auto node = get_node();
+    if (!node->has_parameter("head_simulation_mode")) {
+      node->declare_parameter("head_simulation_mode", std::string{}, descriptor);
+    }
+    if (!node->has_parameter("head_fault_connection_timeout_ns")) {
+      node->declare_parameter("head_fault_connection_timeout_ns", int64_t(2000000), descriptor);
+    }
+    const auto mode = node->get_parameter("head_simulation_mode").as_string();
+    const auto timeout = node->get_parameter("head_fault_connection_timeout_ns").as_int();
+    const auto * required = std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
+    if (!node->describe_parameter("head_simulation_mode").read_only ||
+      !node->describe_parameter("head_fault_connection_timeout_ns").read_only ||
+      (mode.empty() ? timeout != 2000000 :
+      mode != "mujoco_bounded_stop_search" || !required || std::string(required) != "1" ||
+      timeout <= 0 || timeout > 250000000))
+    {
+      throw std::runtime_error("CONTROLLER_HEAD_SIMULATION_POLICY_INVALID");
+    }
+    head_simulation_mode_ = !mode.empty();
+    head_fault_connection_timeout_ = std::chrono::nanoseconds(timeout);
+  }
   const auto * directory_text = std::getenv("SO101_ACT_CONTROLLER_RESERVATION_DIR");
   const auto * session_text = std::getenv("SO101_SIMULATION_SESSION_ID");
   if (!directory_text && !session_text) {return;}
@@ -350,14 +377,14 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
       try {
         revocation_service_ = std::make_unique<ControllerReservationService>(
           revocation_socket_path_, gate, revoker->capability, revoker->peer,
-          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
+          head_fault_connection_timeout_, ControllerReservationSocket::StopProof{}, reservation_role_,
           ControllerReservationSocket::IngressSnapshot{},
-          ControllerReservationSocket::Authority::REVOKER);
+          ControllerReservationSocket::Authority::REVOKER, head_simulation_mode_);
         primary_fault_service_ = std::make_unique<ControllerReservationService>(
           primary_fault_socket_path_, gate, primary_fault->capability, primary_fault->peer,
-          std::chrono::milliseconds(2), ControllerReservationSocket::StopProof{}, reservation_role_,
+          head_fault_connection_timeout_, ControllerReservationSocket::StopProof{}, reservation_role_,
           ControllerReservationSocket::IngressSnapshot{},
-          ControllerReservationSocket::Authority::PRIMARY_FAULT);
+          ControllerReservationSocket::Authority::PRIMARY_FAULT, head_simulation_mode_);
       } catch (...) {
         gate->fault_revoke();
         throw;

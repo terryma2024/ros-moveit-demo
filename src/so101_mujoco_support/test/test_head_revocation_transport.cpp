@@ -18,10 +18,12 @@ uint64_t current_ns()
 }
 
 uint32_t call(uint64_t request, uint64_t budget, uint32_t operation,
-  So101HeadRevocationResult & result)
+  So101HeadRevocationResult & result, bool simulation = false)
 {
   std::array<uint8_t, 32> capability{};capability[0] = 1;
-  return so101_head_revocation_exchange("/no/actual/socket", capability.data(), 5,
+  const auto transport = simulation ? so101_head_revocation_simulation_exchange :
+    so101_head_revocation_exchange;
+  return transport("/no/actual/socket", capability.data(), 5,
     geteuid(), getpid(), 1, request, budget, operation, &result);
 }
 }  // namespace
@@ -51,6 +53,31 @@ TEST(HeadRevocationTransport, InterfaceCannotEncodeArmOrReserve)
   So101HeadRevocationResult result{};
   for (uint32_t operation : {0U, 3U, 4U}) {
     EXPECT_EQ(call(current_ns(), 2000000, operation, result), 1U);
+    EXPECT_EQ(result.phases_present, 0U);
+    EXPECT_EQ(result.reply_size, 0U);
+  }
+}
+
+TEST(HeadRevocationTransport, ExplicitSimulationBudgetIsFiniteAndIncludesDelayedEntry)
+{
+  EXPECT_EQ(so101_head_revocation_simulation_max_budget_ns(), 250000000U);
+  So101HeadRevocationResult result{};
+  EXPECT_EQ(call(current_ns() - 60000000, 50000000, 2, result, true), 5U);
+  EXPECT_EQ(result.phases_present, 0U);
+  EXPECT_EQ(result.ack_ns, 0U);
+  EXPECT_EQ(call(current_ns(), 250000001, 2, result, true), 1U);
+  EXPECT_EQ(result.phases_present, 0U);
+  EXPECT_EQ(call(current_ns(), 0, 2, result, true), 1U);
+  EXPECT_EQ(call(std::numeric_limits<uint64_t>::max(), 50000000, 2, result, true), 1U);
+  // Within the explicit budget, the unchanged private-path check is reached.
+  EXPECT_EQ(call(current_ns(), 50000000, 2, result, true), 2U);
+}
+
+TEST(HeadRevocationTransport, ExplicitSimulationCannotEncodeArmOrReserve)
+{
+  So101HeadRevocationResult result{};
+  for (uint32_t operation : {0U, 3U, 4U}) {
+    EXPECT_EQ(call(current_ns(), 50000000, operation, result, true), 1U);
     EXPECT_EQ(result.phases_present, 0U);
     EXPECT_EQ(result.reply_size, 0U);
   }

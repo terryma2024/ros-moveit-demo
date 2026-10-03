@@ -40,6 +40,15 @@ public:
     IngressSnapshot ingress_snapshot = {}, Authority authority = Authority::PRIMARY);
   ~ControllerReservationSocket();
 
+  // Explicit Head simulation overload. Legacy millisecond callers retain their
+  // original poll behavior; the overload grants no new protocol authority.
+  ControllerReservationSocket(
+    std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
+    ControllerReservationCapability capability, ExpectedPeer expected_peer,
+    std::chrono::nanoseconds deadline, StopProof stop_proof,
+    ControllerReservationRole role, IngressSnapshot ingress_snapshot,
+    Authority authority, bool precise_deadline);
+
   ControllerReservationSocket(const ControllerReservationSocket &) = delete;
   ControllerReservationSocket & operator=(const ControllerReservationSocket &) = delete;
 
@@ -55,7 +64,8 @@ private:
   std::shared_ptr<ControllerGoalAdmission> gate_;
   ControllerReservationCapability capability_;
   ExpectedPeer expected_peer_;
-  std::chrono::milliseconds deadline_;
+  std::chrono::nanoseconds deadline_;
+  bool precise_deadline_{false};
   StopProof stop_proof_;
   ControllerReservationRole role_;
   IngressSnapshot ingress_snapshot_;
@@ -80,6 +90,16 @@ public:
     ControllerReservationSocket::IngressSnapshot ingress_snapshot = {},
     Authority authority = Authority::PRIMARY);
   ~ControllerReservationService();
+
+  ControllerReservationService(
+    std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
+    ControllerReservationCapability capability,
+    ControllerReservationSocket::ExpectedPeer expected_peer,
+    std::chrono::nanoseconds deadline,
+    ControllerReservationSocket::StopProof stop_proof,
+    ControllerReservationRole role,
+    ControllerReservationSocket::IngressSnapshot ingress_snapshot,
+    Authority authority, bool precise_deadline);
 
   ControllerReservationService(const ControllerReservationService &) = delete;
   ControllerReservationService & operator=(const ControllerReservationService &) = delete;

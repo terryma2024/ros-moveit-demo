@@ -6,6 +6,7 @@ The entrypoint supplies the actual owned native PID/start identity and capabilit
 
 import ctypes
 import hashlib
+import json
 import os
 from pathlib import Path
 import time
@@ -18,7 +19,7 @@ class _NativeResult(ctypes.Structure):
         ('phases_ns',ctypes.c_uint64*6),('reply',ctypes.c_uint8*145)]
 
 
-def _load_transport():
+def _load_transport(simulation_policy=None):
     from ament_index_python.packages import get_package_prefix
     path=Path(get_package_prefix('so101_mujoco_support'))/'lib/libso101_head_revocation_transport.so'
     try:
@@ -29,15 +30,27 @@ def _load_transport():
         abi=library.so101_head_revocation_abi()
         if abi!=1 or library.so101_head_revocation_result_size()!=ctypes.sizeof(_NativeResult):
             raise RuntimeError('native transport ABI mismatch')
-        exchange=library.so101_head_revocation_exchange
+        origin=dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            abi=abi,clock='CLOCK_MONOTONIC')
+        if simulation_policy is None:
+            exchange=library.so101_head_revocation_exchange
+        else:
+            maximum=library.so101_head_revocation_simulation_max_budget_ns
+            maximum.argtypes=[];maximum.restype=ctypes.c_uint64
+            if maximum()!=250000000:
+                raise RuntimeError('native simulation transport ceiling mismatch')
+            exchange=library.so101_head_revocation_simulation_exchange
+            origin.update(mode=simulation_policy.mode,maximum_budget_ns=maximum(),
+                simulation_policy_sha256=hashlib.sha256(json.dumps(
+                    simulation_policy.readback(),sort_keys=True,separators=(',',':'),
+                    allow_nan=False).encode()).hexdigest())
         exchange.argtypes=[ctypes.c_char_p,ctypes.POINTER(ctypes.c_uint8),ctypes.c_uint64,
             ctypes.c_uint32,ctypes.c_int32,ctypes.c_uint64,ctypes.c_uint64,ctypes.c_uint64,
             ctypes.c_uint32,ctypes.POINTER(_NativeResult)]
         exchange.restype=ctypes.c_uint32
         if time.get_clock_info('monotonic').implementation!='clock_gettime(CLOCK_MONOTONIC)':
             raise RuntimeError('native transport clock mismatch')
-        return library,exchange,dict(path=str(path),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-            abi=abi,clock='CLOCK_MONOTONIC')
+        return library,exchange,origin
     except (OSError,AttributeError,RuntimeError) as error:
         raise RuntimeError('HEAD_REVOKER_NATIVE_TRANSPORT_REQUIRED') from error
 
@@ -46,7 +59,14 @@ class NativeRevocationClient:
     _connection_bound_s=.002
 
     def __init__(self, path, *, capability, native_owner, generation,
-                 timeout_s, monotonic=time.monotonic):
+                 timeout_s, monotonic=time.monotonic, simulation_policy=None):
+        if simulation_policy is not None:
+            from ...act.head_simulation_policy import HeadSimulationPolicy
+            simulation_policy=(simulation_policy if isinstance(simulation_policy,HeadSimulationPolicy)
+                else HeadSimulationPolicy.parse(simulation_policy))
+        self._simulation_policy=simulation_policy
+        bound=(self._connection_bound_s if simulation_policy is None
+            else simulation_policy.native_close_timeout_s)
         self.path=Path(path)
         self.capability=capability
         self.native_owner=dict(native_owner)
@@ -55,7 +75,8 @@ class NativeRevocationClient:
         self.monotonic=monotonic
         self._last_exchange=None
         if (type(generation) is not int or not 0<generation<2**64
-                or type(timeout_s) not in (int,float) or not 0<timeout_s<=self._connection_bound_s
+                or type(timeout_s) not in (int,float) or not 0<timeout_s<=bound
+                or (simulation_policy is not None and timeout_s!=bound)
                 or monotonic is not time.monotonic
                 or not isinstance(capability,bytes) or len(capability)!=32 or not any(capability)
                 or set(self.native_owner)!= {'uid','pid','start_ticks'}
@@ -68,8 +89,10 @@ class NativeRevocationClient:
             raise ValueError('HEAD_REVOKER_CONFIG_INVALID')
         # Resolve the exact installed ABI before safety activation, never on a
         # fault path. Only the implementation is cached; authentication is not.
-        self._library,self._native_exchange,self.transport_origin=_load_transport()
-        self._scope=(self.capability,self.generation,dict(self.native_owner),self.path,self.timeout)
+        self._library,self._native_exchange,self.transport_origin=(
+            _load_transport() if simulation_policy is None else _load_transport(simulation_policy))
+        self._scope=(self.capability,self.generation,dict(self.native_owner),self.path,
+            self.timeout,self._simulation_policy)
 
     @property
     def exchange_trace(self):
@@ -79,7 +102,8 @@ class NativeRevocationClient:
     def _exchange(self, *, identity=False):
         # The compiled ABI can construct only close and identity frames, never
         # ARM/reserve. Refuse changed scope before serialization or C coercion.
-        if (self.capability,self.generation,self.native_owner,self.path,self.timeout)!=self._scope:
+        if (self.capability,self.generation,self.native_owner,self.path,
+                self.timeout,self._simulation_policy)!=self._scope:
             raise PermissionError('HEAD_REVOKER_SCOPE_CHANGED')
         capability=(ctypes.c_uint8*32).from_buffer_copy(self.capability)
         output=_NativeResult();path=os.fsencode(self.path);owner=dict(self.native_owner)
