@@ -12,12 +12,15 @@ import time
 
 from so101_demo.act.head_feedback import nanoseconds
 from so101_demo.act.head_monitor import digest
+from so101_demo.act.head_simulation_policy import validate_stopped_observation_request
 
 _SHA=re.compile(r'[0-9a-f]{64}\Z')
 _CLAIM={'epoch','generation','session_id','policy_sha256','sequence',
     'image_source_ns','info_source_ns','joint_source_ns','tf_source_ns','image_frame_id',
     'payload_sha256','image_received_wall_s','info_received_wall_s','deadline_ns'}
 _COMPLETION={'exposure_sha256','sequence','image_source_ns','completion_wall_s','result_sha256'}
+_SIM_CLAIM=_CLAIM|{'schema_version','observation_request','job_started_wall_s','job_deadline_ns'}
+_SIM_COMPLETION=_COMPLETION|{'schema_version','observation_request_sha256'}
 _MEASUREMENT_CLAIM=_CLAIM-{'policy_sha256','sequence','deadline_ns'}
 
 
@@ -45,6 +48,7 @@ class HeadMonitorExposures:
     def __init__(self,runtime):
         self.runtime=runtime;self._lock=threading.Lock()
         self._active=None;self._sequence=0;self._source_floor=0;self._expiry_reported=False
+        self._observation_sequence=0
 
     def summary(self):
         with self._lock:
@@ -54,11 +58,14 @@ class HeadMonitorExposures:
     def poll(self,wall):
         with self._lock:
             active=self._active
-            expired=active is not None and nanoseconds(wall)>=active['deadline_ns']
+            deadline=None if active is None else active['job_deadline_ns' if
+                self.runtime._simulation_policy is not None else 'deadline_ns']
+            expired=active is not None and nanoseconds(wall)>=deadline
             report=expired and not self._expiry_reported
             if report:self._expiry_reported=True
         if expired:
-            self.runtime.fault('HEAD_MONITOR_EXPOSURE_DEADLINE',active['deadline_ns']*1e-9)
+            self.runtime.fault('HEAD_MONITOR_INFERENCE_JOB_DEADLINE' if
+                self.runtime._simulation_policy is not None else 'HEAD_MONITOR_EXPOSURE_DEADLINE',deadline*1e-9)
             if report:
                 try:self.runtime._emit('EXPOSURE_EXPIRED',exposure=active,observed_wall_s=wall)
                 except Exception:self.runtime.fault('HEAD_MONITOR_EXPOSURE_JOURNAL_FAILED',wall)
@@ -218,6 +225,7 @@ class HeadMonitorExposures:
         received but missing, invalid or mismatched original is a refusal.
         The subsequent admission independently rechecks the complete claim.
         """
+        if self.runtime._simulation_policy is not None:return self._simulation_inputs(record)
         runtime=self.runtime;observer=runtime._observer
         try:
             if (type(record) is not dict or set(record)!=_CLAIM
@@ -293,6 +301,7 @@ class HeadMonitorExposures:
             raise PermissionError('HEAD_MONITOR_EXPOSURE_INPUTS_REFUSED') from error
 
     def admit(self,record):
+        if self.runtime._simulation_policy is not None:return self._simulation_admit(record)
         runtime=self.runtime;observer=runtime._observer
         try:
             original,clock,watchdog=self._current()
@@ -377,6 +386,7 @@ class HeadMonitorExposures:
             raise PermissionError('HEAD_MONITOR_EXPOSURE_ADMISSION_REFUSED') from error
 
     def finish(self,record):
+        if self.runtime._simulation_policy is not None:return self._simulation_finish(record)
         runtime=self.runtime;observer=runtime._observer
         try:
             original,clock,watchdog=self._current()
@@ -414,3 +424,222 @@ class HeadMonitorExposures:
             runtime.fault('HEAD_MONITOR_EXPOSURE_COMPLETION_REFUSED',
                 observer.monotonic() if observer is not None else time.monotonic())
             raise PermissionError('HEAD_MONITOR_EXPOSURE_COMPLETION_REFUSED') from error
+
+    def _simulation_stopped_samples(self,request,image,info):
+        observer=self.runtime._observer;inventory=self.runtime.epoch.inventory
+        with observer.port._lock:
+            goals={gid:dict(state) for gid,state in observer.port._goals.items()}
+            samples=tuple(observer.port._head_samples)
+        if set(goals)!=set(inventory):raise PermissionError('HEAD_MONITOR_STOPPED_INVENTORY_MISMATCH')
+        wall_floor=nanoseconds(request['settled_wall_s']);source_floor=request['settled_source_floor_ns']
+        for state in goals.values():
+            response=state.get('result')
+            if state.get('accepted') is False or state.get('error') is not None:
+                raise PermissionError('HEAD_MONITOR_STOPPED_GOAL_FAILED')
+            if response is None:return None
+            if state.get('accepted') is not True or response.status!=4 or response.result.error_code!=0:
+                raise PermissionError('HEAD_MONITOR_STOPPED_GOAL_FAILED')
+            if not _wall(state.get('terminal_wall_s')) or not _integer(state.get('terminal_source_floor_ns')):
+                raise PermissionError('HEAD_MONITOR_STOPPED_TERMINAL_CLOCK_MISSING')
+            wall_floor=max(wall_floor,nanoseconds(state['terminal_wall_s']))
+            source_floor=max(source_floor,state['terminal_source_floor_ns'])
+        quiet=[];previous=None
+        for value in samples:
+            row=dict(value)
+            if (not _integer(row.get('source_ns')) or not _integer(row.get('sequence'))
+                    or not _wall(row.get('wall_s')) or row.get('valid') is not True
+                    or len(row.get('positions',()))!=1 or len(row.get('velocities',()))!=1
+                    or any(type(number) not in (int,float) or not math.isfinite(number)
+                        for number in (*row['positions'],*row['velocities']))):
+                quiet=[];previous=None;continue
+            if row['source_ns']>=image['source_ns']:break
+            if (row['source_ns']<=source_floor or nanoseconds(row['wall_s'])<=wall_floor
+                    or nanoseconds(row['wall_s'])>min(nanoseconds(image['wall_s']),nanoseconds(info['wall_s']))):
+                quiet=[];previous=None;continue
+            if (previous is not None and any(row[key]<=previous[key] for key in ('sequence','source_ns','wall_s'))
+                    or abs(row['velocities'][0])>observer.port.stop_velocity):
+                quiet=[];previous=row;continue
+            quiet.append(row);previous=row
+            if len(quiet)==3:return quiet
+        return None
+
+    def _simulation_originals(self,record):
+        runtime=self.runtime;observer=runtime._observer;policy=runtime._simulation_policy
+        original,clock,watchdog=self._current();now_ns=nanoseconds(original['decision']['wall_after_s'])
+        if (type(record) is not dict or set(record)!=_SIM_CLAIM
+                or type(record['schema_version']) is not int or record['schema_version']!=2
+                or any(not _integer(record[key]) for key in ('generation','sequence','image_source_ns',
+                    'info_source_ns','joint_source_ns','tf_source_ns','deadline_ns','job_deadline_ns'))
+                or record['epoch']!=runtime.epoch.epoch or record['generation']!=runtime.epoch.generation
+                or record['session_id']!=runtime.epoch.session_id or record['policy_sha256']!=runtime.epoch.policy_hash
+                or record['image_frame_id']!=observer.camera_frame or not _sha(record['payload_sha256'])
+                or any(not _wall(record[key]) or nanoseconds(record[key])>now_ns for key in
+                    ('image_received_wall_s','info_received_wall_s','job_started_wall_s'))):
+            raise PermissionError('HEAD_MONITOR_SIMULATION_EXPOSURE_CLAIM_INVALID')
+        request=validate_stopped_observation_request(record['observation_request'],policy=policy,
+            expected_scope=dict(epoch=runtime.epoch.epoch,generation=runtime.epoch.generation,
+                session_id=runtime.epoch.session_id,policy_sha256=runtime.epoch.policy_hash),
+            now_wall_s=original['decision']['wall_after_s'])
+        source=record['image_source_ns'];age=nanoseconds(policy.perception_max_age_s)
+        if (request['motion_epoch']!=len(runtime.epoch.inventory)
+                or source<=request['settled_source_floor_ns']
+                or any(nanoseconds(record[key])<=nanoseconds(request['requested_wall_s'])
+                    for key in ('image_received_wall_s','info_received_wall_s'))
+                or nanoseconds(record['job_started_wall_s'])<max(nanoseconds(record[key])
+                    for key in ('image_received_wall_s','info_received_wall_s'))
+                or record['deadline_ns']!=min(nanoseconds(record[key]) for key in
+                    ('image_received_wall_s','info_received_wall_s'))+age
+                or record['job_deadline_ns']!=min(nanoseconds(record['job_started_wall_s'])
+                    +nanoseconds(policy.perception_job_timeout_s),request['search_deadline_ns'])):
+            raise PermissionError('HEAD_MONITOR_SIMULATION_EXPOSURE_BOUNDARY_CHANGED')
+        with self._lock:
+            if (self._active is not None or record['sequence']!=self._sequence+1
+                    or request['observation_sequence']!=self._observation_sequence+1 or source<=self._source_floor):
+                raise PermissionError('HEAD_MONITOR_SIMULATION_EXPOSURE_REUSED')
+        if now_ns>=record['job_deadline_ns']:raise _Expired(record['job_deadline_ns'])
+        with observer._lock:
+            image=observer._images.get(source)
+            if image is None:image=observer._simulation_images.get(source)
+            if image is None and observer._camera is not None and observer._camera['source_ns']==source:
+                image=observer._camera
+            image=None if image is None else dict(image)
+            info=observer._infos.get(source)
+            if info is None:info=observer._simulation_infos.get(source)
+            info=None if info is None else dict(info)
+            watermarks=(observer._image_source,observer._info_source)
+        with observer.port._lock:
+            causal=next((dict(value) for value in reversed(observer.port._head_samples)
+                if value['source_ns']<=source),None)
+        if (record['info_source_ns']!=source or causal is None or causal.get('valid') is not True
+                or causal['source_ns']!=record['joint_source_ns'] or not _wall(causal['wall_s'])
+                or nanoseconds(causal['wall_s'])>now_ns
+                or not 0<=source-causal['source_ns']<=nanoseconds(observer.camera_skew)
+                or not 0<=source-record['tf_source_ns']<=nanoseconds(observer.camera_skew)):
+            raise PermissionError('HEAD_MONITOR_SIMULATION_ORIGINAL_MISMATCH')
+        deadline=record['deadline_ns']
+        for value in (image,info):
+            if value is None:continue
+            _received_original(value,source=source,frame=record['image_frame_id'],decision_ns=now_ns,
+                payload_sha256=record['payload_sha256'] if value is image else None)
+            deadline=min(deadline,nanoseconds(value['wall_s'])+age)
+        source_age=original['decision']['sim_ns']-source
+        if source_age<0:raise PermissionError('HEAD_MONITOR_SIMULATION_FUTURE_SOURCE')
+        outcome=('EXPIRED' if now_ns>=deadline or source_age>nanoseconds(policy.camera_source_age_s)
+            else 'SHORT_DROP' if any(value is None and watermark>=source
+                for value,watermark in zip((image,info),watermarks)) else None)
+        proof=None if image is None or info is None else self._simulation_stopped_samples(request,image,info)
+        if not self._simulation_quiet(original['sample']):proof=None
+        snapshot=_wire(dict(image=image,info=info,joint=causal,current_joint=original['sample'],
+            decision=original['decision'],clock=clock,watchdog_wall_s=watchdog,settled_samples=proof))
+        return _wire(record),snapshot,deadline,outcome
+
+    def _simulation_refuse(self,operation,error):
+        runtime=self.runtime
+        if isinstance(error,_Expired):runtime.fault('HEAD_MONITOR_INFERENCE_JOB_DEADLINE',error.deadline*1e-9)
+        runtime.fault('HEAD_MONITOR_SIMULATION_'+operation+'_REFUSED',runtime._observer.monotonic())
+        raise PermissionError('HEAD_MONITOR_SIMULATION_'+operation+'_REFUSED') from error
+
+    def _simulation_quiet(self,sample):
+        return (type(sample) is dict and sample.get('valid') is True and len(sample.get('velocities',()))==1
+            and all(type(value) in (int,float) and math.isfinite(value)
+                and abs(value)<=self.runtime._observer.port.stop_velocity for value in sample['velocities']))
+
+    def _simulation_discard(self,claim,snapshot,deadline,outcome,observed,*,admission=False):
+        with self._lock:
+            if self.runtime.revoked or self._active is not None:
+                raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+            self._observation_sequence=claim['observation_request']['observation_sequence']
+        reply=dict(stage='ARMED_READY',inputs_ready=False,motion_authority=False,root_claim=claim,
+            observation_outcome=outcome,observation_discarded=True,observed_wall_s=observed['wall_after_s'],
+            observed_decision=observed,deadline_ns=deadline,job_deadline_ns=claim['job_deadline_ns'],
+            original_snapshot=snapshot)
+        if admission:reply['exposure_admitted']=False
+        self.runtime._emit('SIMULATION_OBSERVATION_DISCARDED',ack=reply)
+        if self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+        return _wire(reply)
+
+    def _simulation_age_outcome(self,claim,deadline,decision):
+        if nanoseconds(decision['wall_after_s'])>=claim['job_deadline_ns']:
+            raise _Expired(claim['job_deadline_ns'])
+        source_age=decision['sim_ns']-claim['image_source_ns']
+        if source_age<0:raise PermissionError('HEAD_MONITOR_SIMULATION_FUTURE_SOURCE')
+        return ('EXPIRED' if nanoseconds(decision['wall_after_s'])>=deadline
+            or source_age>nanoseconds(self.runtime._simulation_policy.camera_source_age_s) else None)
+
+    def _simulation_inputs(self,record):
+        try:
+            claim,snapshot,deadline,outcome=self._simulation_originals(record)
+            current,_,_=self._current();observed=current['decision']
+            outcome=outcome or self._simulation_age_outcome(claim,deadline,observed)
+            if outcome is not None:return self._simulation_discard(claim,snapshot,deadline,outcome,observed)
+            reply=dict(stage='ARMED_READY',inputs_ready=outcome is None and snapshot['settled_samples'] is not None,
+                motion_authority=False,root_claim=claim,observed_wall_s=observed['wall_after_s'],observed_decision=observed,
+                deadline_ns=deadline,job_deadline_ns=claim['job_deadline_ns'],settled_samples=snapshot['settled_samples'])
+            if not self._simulation_quiet(current['sample']):reply['inputs_ready']=False
+            if self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+            return _wire(reply)
+        except Exception as error:self._simulation_refuse('INPUTS',error)
+
+    def _simulation_admit(self,record):
+        try:
+            claim,snapshot,deadline,outcome=self._simulation_originals(record)
+            current,_,_=self._current();observed=current['decision']
+            outcome=outcome or self._simulation_age_outcome(claim,deadline,observed)
+            if outcome is not None:return self._simulation_discard(claim,snapshot,deadline,outcome,observed,admission=True)
+            if snapshot['settled_samples'] is None or not self._simulation_quiet(current['sample']):
+                raise PermissionError('HEAD_MONITOR_SIMULATION_NOT_SETTLED')
+            active=dict(exposure_sha256=digest(dict(root_claim=claim,original_snapshot=snapshot,
+                deadline_ns=deadline,job_deadline_ns=claim['job_deadline_ns'])),sequence=claim['sequence'],
+                image_source_ns=claim['image_source_ns'],deadline_ns=deadline,job_deadline_ns=claim['job_deadline_ns'],
+                ack_wall_s=observed['wall_after_s'],root_claim=claim,original_snapshot=snapshot)
+            current,_,_=self._current();committed=current['decision']
+            outcome=self._simulation_age_outcome(claim,deadline,committed)
+            if not self._simulation_quiet(current['sample']):outcome=outcome or 'SHORT_DROP'
+            if outcome is not None:return self._simulation_discard(claim,snapshot,deadline,outcome,committed,admission=True)
+            active['ack_wall_s']=committed['wall_after_s'];active['admission_decision']=committed
+            with self._lock:
+                if self._active is not None or self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+                self._active=active;self._sequence=claim['sequence'];self._source_floor=claim['image_source_ns']
+                self._observation_sequence=claim['observation_request']['observation_sequence'];self._expiry_reported=False
+            self.poll(self.runtime._observer.monotonic())
+            if self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+            ack=dict(active,stage='ARMED_READY',exposure_admitted=True,motion_authority=False)
+            self.runtime._emit('EXPOSURE_ADMITTED',ack=ack)
+            if self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+            return _wire(ack)
+        except Exception as error:self._simulation_refuse('ADMISSION',error)
+
+    def _simulation_finish(self,record):
+        try:
+            original,clock,watchdog=self._current()
+            with self._lock:active=self._active
+            if (type(record) is not dict or set(record)!=_SIM_COMPLETION or active is None
+                    or type(record['schema_version']) is not int or record['schema_version']!=2
+                    or not _sha(record['result_sha256'])
+                    or any(type(record[key]) is not type(active[key]) or record[key]!=active[key]
+                        for key in ('exposure_sha256','sequence','image_source_ns'))
+                    or record['observation_request_sha256']!=digest(active['root_claim']['observation_request'])
+                    or not _wall(record['completion_wall_s'])
+                    or not nanoseconds(active['ack_wall_s'])<=nanoseconds(record['completion_wall_s'])
+                        <=nanoseconds(original['decision']['wall_after_s'])
+                    or active['root_claim']['observation_request']['motion_epoch']!=len(self.runtime.epoch.inventory)):
+                raise PermissionError('HEAD_MONITOR_SIMULATION_COMPLETION_INVALID')
+            now=self.runtime._observer.monotonic()
+            if nanoseconds(now)>=active['job_deadline_ns']:raise _Expired(active['job_deadline_ns'])
+            with self._lock:
+                if self.runtime.revoked or self._active is not active:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+                discharge=self.runtime._observer.discharge_inference_deadlines([active['job_deadline_ns']],
+                    completion_wall_s=record['completion_wall_s'])
+                self._active=None
+            outcome=('EXPIRED' if nanoseconds(discharge['observed_wall_s'])>=active['deadline_ns']
+                or original['decision']['sim_ns']-active['image_source_ns']>
+                    nanoseconds(self.runtime._simulation_policy.camera_source_age_s) else 'VALID')
+            ack=dict(record,stage='ARMED_READY',exposure_finished=True,motion_authority=False,
+                observation_outcome=outcome,ack_wall_s=discharge['observed_wall_s'],deadline_ns=active['deadline_ns'],
+                job_deadline_ns=active['job_deadline_ns'],deadline_discharge=discharge,
+                original_snapshot=_wire(dict(current_joint=original['sample'],decision=original['decision'],
+                    clock=clock,watchdog_wall_s=watchdog)))
+            self.runtime._emit('EXPOSURE_FINISHED',ack=ack)
+            if self.runtime.revoked:raise PermissionError('HEAD_MONITOR_SIMULATION_REVOKED')
+            return _wire(ack)
+        except Exception as error:self._simulation_refuse('COMPLETION',error)

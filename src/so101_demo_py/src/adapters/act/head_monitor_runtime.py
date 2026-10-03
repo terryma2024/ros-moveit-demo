@@ -462,6 +462,11 @@ class HeadMonitorRuntime:
         if type(record) is not dict or set(record)!={'record','goal_cdr_base64'}:
             raise ValueError('HEAD_MONITOR_REGISTER_INVALID')
         if self.revoked:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
+        if self._simulation_policy is not None:
+            with self._exposures._lock:busy=self._exposures._active is not None
+            if busy:
+                self.fault('HEAD_MONITOR_MOTION_DURING_INFERENCE',self._observer.monotonic())
+                raise PermissionError('HEAD_MONITOR_MOTION_DURING_INFERENCE')
         payload=base64.b64decode(record['goal_cdr_base64'],validate=True)
         budget=self._simulation_policy.heartbeat_rpc_timeout_s if self._simulation_policy is not None else .010
         owned=validate_goal_inventory(record['record'],payload,

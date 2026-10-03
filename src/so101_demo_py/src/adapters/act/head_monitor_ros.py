@@ -68,6 +68,7 @@ class HeadROSMonitor:
         self._completed_inference_deadlines={}
         self._images={};self._infos={};self._camera_watermark=0
         self._measurement_images={}
+        self._simulation_images={};self._simulation_infos={}
         self._image_source=self._info_source=0
         self._outstanding={};self._stop_started=False;self.watchdog_polls=deque(maxlen=20000)
         self._external_inputs=controller_port is not None
@@ -198,6 +199,9 @@ class HeadROSMonitor:
     def _response(self,gid,kind,future):
         try:
             response=future.result()
+            terminal_clocks=(decision_clocks(self.node,self.monotonic)
+                if self._simulation_policy is not None and kind=='result' and response.status in (4,5,6)
+                else None)
             with self.port._lock:
                 record=self.port._goals[gid]
                 if kind=='cancel':record['cancel_ack']=response.return_code==0
@@ -208,7 +212,11 @@ class HeadROSMonitor:
                     if terminal is not None and (response.status!=terminal.status or response!=terminal):
                         raise ValueError('HEAD_MONITOR_TERMINAL_CONTRADICTION')
                     record['accepted']=True
-                    if response.status in (4,5,6):record['result']=response
+                    if response.status in (4,5,6):
+                        record['result']=response
+                        if terminal is None and terminal_clocks is not None:
+                            record['terminal_wall_s']=terminal_clocks['wall_after_s']
+                            record['terminal_source_floor_ns']=terminal_clocks['sim_ns']
                 elif response.status!=0:raise ValueError('HEAD_MONITOR_RESULT_STATUS_INVALID')
             self._event('ACTION_RPC_RESPONSE',goal_uuid=gid,kind=kind,wall_s=self.monotonic(),
                 status=response.status if kind=='result' else None,
@@ -304,6 +312,10 @@ class HeadROSMonitor:
                 self._measurement_images[source]=record
                 while len(self._measurement_images)>32:
                     self._measurement_images.pop(next(iter(self._measurement_images)))
+            if self._simulation_policy is not None:
+                history=self._simulation_images if image else self._simulation_infos
+                history[source]=dict(record)
+                while len(history)>32:history.pop(next(iter(history)))
         self._event('IMAGE_ORIGINAL' if image else 'INFO_ORIGINAL',**record)
         if dropped is not None:
             self._event('DROPPED_EXPOSURE',**dropped,reason='replaced-before-admission')

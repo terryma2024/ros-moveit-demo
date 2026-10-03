@@ -239,6 +239,21 @@ def refresh_simulation_inputs(node,monitor,*,heartbeat=True,executor=True,camera
         inference_deadline_wall_s=None))
 
 
+def test_simulation_real_terminal_response_freezes_own_original_clocks_once():
+    node,monitor,_,_=ready_monitor(simulation=True)
+    gid=inventory(monitor)
+    response=FollowJointTrajectory.Impl.GetResultService.Response(status=4)
+    first=Future();first.set_result(response)
+    try:
+        monitor._response(gid,'result',first)
+        state=monitor.port._goals[gid]
+        assert state['terminal_wall_s']==10. and state['terminal_source_floor_ns']==1_000_000_000
+        node.wall=10.1;node.sim=1.1
+        repeated=Future();repeated.set_result(response);monitor._response(gid,'result',repeated)
+        assert state['terminal_wall_s']==10. and state['terminal_source_floor_ns']==1_000_000_000
+    finally:monitor.close(timeout_s=1.)
+
+
 def test_simulation_supervision_gap_uses_stale_budget_instead_of_fault_reaction():
     node,monitor,_,faults=ready_monitor(simulation=True)
     try:

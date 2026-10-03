@@ -25,6 +25,7 @@ def composition(tmp_path):
             calls.append(record)
             return receiver.decode(sender.encode(protocol.handle(record)))
     class Primary:
+        _simulation_policy=None
         epoch=runtime.epoch;primary=runtime.identity;port=root.port
         observer=root
         failed=False;ready=True

@@ -50,6 +50,208 @@ def test_simulation_exposure_exact_supervision_expiry_preserves_original_fault_t
     finally:observer.close(timeout_s=1.)
 
 
+def stopped_simulation_claim():
+    """Controlled original cache/clock proof, never moving runtime evidence."""
+    from so101_demo.act.head_monitor import digest
+    node,runtime,observer,record=ready(simulation=True)
+    observer.port._head_samples.clear()
+    for sequence,source,wall in ((1,980_000_000,9.98),(2,985_000_000,9.985),(3,990_000_000,9.99)):
+        observer.port._head_samples.append(dict(sequence=sequence,source_ns=source,wall_s=wall,
+            valid=True,positions=[0.],velocities=[0.]))
+    observer.port._head_feedback['sequence']=4;observer.port._head_sequence=4
+    observer.port._head_samples.append(dict(observer.port._head_feedback))
+    request=dict(schema_version=1,epoch='attempt',generation=5,session_id='session',policy_sha256='a'*64,
+        simulation_policy_sha256=digest(runtime._simulation_policy.readback()),motion_epoch=0,
+        observation_sequence=1,settled_source_floor_ns=970_000_000,settled_wall_s=9.97,
+        requested_wall_s=9.98,search_deadline_ns=30_000_000_000)
+    record.update(schema_version=2,observation_request=request,job_started_wall_s=10.,
+        job_deadline_ns=11_000_000_000,deadline_ns=10_150_000_000)
+    return node,runtime,observer,record
+
+
+def simulation_completion(ack,wall):
+    from so101_demo.act.head_monitor import digest
+    return dict(completion(ack,wall),schema_version=2,
+        observation_request_sha256=digest(ack['root_claim']['observation_request']))
+
+
+def test_simulation_cpu_admits_only_after_its_three_original_quiet_samples_without_new_resources():
+    _,runtime,observer,record=stopped_simulation_claim()
+    try:
+        inputs=runtime.exposure_inputs(record)
+        assert inputs['inputs_ready'] and len(inputs['settled_samples'])==3
+        ack=runtime.exposure_admit(record)
+        assert ack['exposure_admitted'] and ack['motion_authority'] is False
+        assert ack['deadline_ns']==10_150_000_000 and ack['job_deadline_ns']==11_000_000_000
+        assert runtime._exposures.summary()['active']['job_deadline_ns']==11_000_000_000
+        assert not runtime.epoch.inventory
+        done=runtime.exposure_finish(simulation_completion(ack,10.))
+        assert done['exposure_finished'] and done['observation_outcome']=='VALID'
+        assert runtime._exposures.summary()['active'] is None and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_image_age_expiry_does_not_release_or_fault_the_original_active_job():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer,record=stopped_simulation_claim()
+    try:
+        ack=runtime.exposure_admit(record)
+        node.wall=10.2;node.sim=1.2;refresh_simulation_inputs(node,observer);runtime._watchdog_wall=10.2
+        runtime._exposures.poll(10.2)
+        assert not runtime.revoked and runtime._exposures.summary()['active'] is not None
+        done=runtime.exposure_finish(simulation_completion(ack,10.2))
+        assert done['observation_outcome']=='EXPIRED' and done['motion_authority'] is False
+        assert done['deadline_ns']==10_150_000_000 and done['job_deadline_ns']==11_000_000_000
+        assert runtime._exposures.summary()['active'] is None and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_job_expiry_faults_at_original_cap_even_when_image_age_is_older():
+    _,runtime,observer,record=stopped_simulation_claim()
+    try:
+        runtime.exposure_admit(record);runtime._exposures.poll(11.2)
+        assert runtime.revoked and runtime._fault['fault_wall_s']==pytest.approx(11.,abs=1e-12)
+        assert runtime._exposures.summary()['active'] is not None
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['too_few','moving','before_floor','receipt_before_settlement','nonadvancing'])
+def test_simulation_cpu_waits_without_admitting_yolo_until_three_valid_originals(damage):
+    _,runtime,observer,record=stopped_simulation_claim()
+    rows=observer.port._head_samples
+    if damage=='too_few':rows.popleft()
+    elif damage=='moving':rows[1]['velocities']=[.1]
+    elif damage=='before_floor':rows[0]['source_ns']=970_000_000
+    elif damage=='receipt_before_settlement':rows[0]['wall_s']=9.97
+    else:rows[1]['source_ns']=rows[0]['source_ns']
+    try:
+        reply=runtime.exposure_inputs(record)
+        assert reply['inputs_ready'] is False and reply['motion_authority'] is False
+        assert runtime._exposures.summary()['active'] is None and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['generation','request_generation','motion_epoch','job_cap','job_future',
+    'request_wall','image_floor','version','payload'])
+def test_simulation_cpu_wrong_identity_original_or_job_deadline_never_becomes_recoverable(damage):
+    _,runtime,observer,record=stopped_simulation_claim()
+    if damage=='generation':record['generation']=6
+    elif damage=='request_generation':record['observation_request']['generation']=True
+    elif damage=='motion_epoch':record['observation_request']['motion_epoch']=1
+    elif damage=='job_cap':record['job_deadline_ns']+=1
+    elif damage=='job_future':record['job_started_wall_s']=10.001
+    elif damage=='request_wall':record['observation_request']['requested_wall_s']=10.
+    elif damage=='image_floor':record['observation_request']['settled_source_floor_ns']=10**9
+    elif damage=='version':record['schema_version']=True
+    else:record['payload_sha256']='b'*64
+    try:
+        with pytest.raises(PermissionError):runtime.exposure_inputs(record)
+        assert runtime.revoked and runtime._exposures.summary()['active'] is None
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_cpu_expired_correct_identity_inputs_discard_without_reviving_original_image():
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer,record=stopped_simulation_claim()
+    try:
+        node.wall=10.2;node.sim=1.2;refresh_simulation_inputs(node,observer);runtime._watchdog_wall=10.2
+        reply=runtime.exposure_inputs(record)
+        assert reply['observation_outcome']=='EXPIRED' and not reply['inputs_ready']
+        assert reply['motion_authority'] is False and runtime._exposures.summary()['active'] is None
+        assert not runtime.revoked
+        with pytest.raises(PermissionError):runtime.exposure_admit(record)
+        assert runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('field',['positions','velocities'])
+def test_simulation_boolean_original_cannot_count_as_a_quiet_settlement_sample(field):
+    _,runtime,observer,record=stopped_simulation_claim()
+    observer.port._head_samples[1][field]=[False]
+    try:
+        reply=runtime.exposure_inputs(record)
+        assert not reply['inputs_ready'] and runtime._exposures.summary()['active'] is None
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_inputs_expiry_after_snapshot_returns_discard_without_readiness(monkeypatch):
+    node,runtime,observer,record=stopped_simulation_claim()
+    snapshot=runtime._exposures._simulation_originals
+    def delayed(*args):
+        result=snapshot(*args);node.wall=10.15;return result
+    monkeypatch.setattr(runtime._exposures,'_simulation_originals',delayed)
+    try:
+        reply=runtime.exposure_inputs(record)
+        assert reply['observation_outcome']=='EXPIRED' and not reply['inputs_ready']
+        assert runtime._exposures.summary()['active'] is None and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_admission_expiry_during_hash_cannot_commit_an_expired_image(monkeypatch):
+    from so101_demo.adapters.act import head_monitor_exposure as module
+    node,runtime,observer,record=stopped_simulation_claim();original=module.digest
+    def delayed(*args):
+        value=original(*args);node.wall=10.15;return value
+    monkeypatch.setattr(module,'digest',delayed)
+    try:
+        reply=runtime.exposure_admit(record)
+        assert reply['exposure_admitted'] is False and reply['observation_outcome']=='EXPIRED'
+        assert runtime._exposures.summary()['active'] is None and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_completed_job_cannot_ack_success_after_concurrent_fault(monkeypatch):
+    _,runtime,observer,record=stopped_simulation_claim();ack=runtime.exposure_admit(record)
+    emit=runtime._emit
+    def concurrent(event,**fields):
+        emit(event,**fields)
+        if event=='EXPOSURE_FINISHED':runtime.fault('controlled concurrent revoke',10.)
+    monkeypatch.setattr(runtime,'_emit',concurrent)
+    try:
+        with pytest.raises(PermissionError):runtime.exposure_finish(simulation_completion(ack,10.))
+        assert runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['payload','generation','motion_epoch'])
+def test_simulation_expired_wrong_identity_is_still_a_fault(damage):
+    from test_act_head_monitor_ros import refresh_simulation_inputs
+    node,runtime,observer,record=stopped_simulation_claim()
+    try:
+        node.wall=10.2;node.sim=1.2;refresh_simulation_inputs(node,observer);runtime._watchdog_wall=10.2
+        if damage=='payload':record['payload_sha256']='b'*64
+        elif damage=='generation':record['generation']=6
+        else:record['observation_request']['motion_epoch']=1
+        with pytest.raises(PermissionError):runtime.exposure_inputs(record)
+        assert runtime.revoked and runtime._exposures.summary()['active'] is None
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_active_inference_lease_refuses_new_goal_inventory_before_any_motion():
+    import base64,time,uuid
+    from test_act_head_monitor_goal_binding import packet
+    _,runtime,observer,record=stopped_simulation_claim();runtime.exposure_admit(record)
+    goal,payload=packet();claim=time.monotonic_ns()
+    goal.update(goal_uuid=str(uuid.uuid4()),generation=5,controller_identity=runtime.epoch.identity,
+        attempt_epoch='attempt',session_id='session',role='neck',operation_sequence=1,
+        claim_monotonic_ns=claim,deadline_ns=claim+400_000_000)
+    try:
+        with pytest.raises(PermissionError):runtime.register(dict(record=goal,
+            goal_cdr_base64=base64.b64encode(payload).decode()))
+        assert runtime.revoked and not runtime.epoch.inventory
+        assert runtime._exposures.summary()['active'] is not None
+    finally:observer.close(timeout_s=1.)
+
+
+def test_simulation_historical_quiet_proof_cannot_admit_while_current_joint_is_moving():
+    _,runtime,observer,record=stopped_simulation_claim()
+    observer.port._head_feedback['velocities']=(.1,)
+    try:
+        reply=runtime.exposure_inputs(record)
+        assert not reply['inputs_ready'] and runtime._exposures.summary()['active'] is None
+    finally:observer.close(timeout_s=1.)
+
+
 def refresh(node,runtime,observer,wall):
     node.wall=wall;node.sim=1.+wall-10.
     observer.port._feedback(sample(node.sim))
