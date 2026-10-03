@@ -42,6 +42,48 @@ def test_configured_cpu_measures_both_real_originals_and_completion_without_a_le
     finally:observer.close(timeout_s=1.)
 
 
+def test_readonly_completion_keeps_received_original_across_new_camera_without_admission(tmp_path):
+    _,runtime,observer,claim,protocol=measurement(tmp_path)
+    image=dict(observer._camera);info=dict(observer._infos[10**9]);observer._camera=None
+    observer._images.clear();observer._image_source=0
+    try:
+        observer._camera_message(image,image=True)
+        ready=protocol.handle(dict(operation='CALIBRATION_FRAME_INPUTS',exposure=claim))
+        assert ready['inputs_ready'] is True
+        observer._camera_message(dict(image,source_ns=1_100_000_000),image=True)
+        # Live admission cache/drop semantics stay latest-only. Read-only
+        # measurement must retain the received5.2-equivalent original through
+        # a CUDA warmup crossing the next source period, without a lease.
+        assert list(observer._images)==[1_100_000_000]
+        done=protocol.handle(dict(operation='CALIBRATION_FRAME_COMPLETION',completion=dict(
+            claim=claim,completion_wall_s=10.,result_sha256='b'*64)))
+        assert done['original_snapshot']['image']==ready['original_snapshot']['image']==image
+        assert done['original_snapshot']['info']==info
+        assert runtime._exposures.summary()['active'] is None and runtime.epoch.sequence==0
+        assert not runtime.epoch.inventory and not runtime.revoked
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['evicted','payload','future','invalid','frame','policy'])
+def test_measurement_history_does_not_replace_missing_original_or_weaken_validation(tmp_path,damage):
+    _,runtime,observer,claim,protocol=measurement(tmp_path)
+    image=dict(observer._camera);observer._camera=None;observer._images.clear();observer._image_source=0
+    try:
+        observer._camera_message(image,image=True)
+        observer._camera_message(dict(image,source_ns=1_100_000_000),image=True)
+        if damage=='evicted':
+            for index in range(2,34):observer._camera_message(dict(image,source_ns=10**9+index*100_000_000),image=True)
+            assert len(observer._measurement_images)==32 and 10**9 not in observer._measurement_images
+        elif damage=='payload':observer._measurement_images[10**9]['payload_sha256']='c'*64
+        elif damage=='future':observer._measurement_images[10**9]['wall_s']=10.001
+        elif damage=='invalid':observer._measurement_images[10**9]['valid']=False
+        elif damage=='frame':observer._measurement_images[10**9]['frame_id']='foreign'
+        else:runtime._policy={'sha256':'a'*64}
+        with pytest.raises(PermissionError):protocol.handle(dict(operation='CALIBRATION_FRAME_INPUTS',exposure=claim))
+        assert runtime._exposures.summary()['active'] is None and not runtime.epoch.inventory
+    finally:observer.close(timeout_s=1.)
+
+
 def test_prepolicy_probe_waits_only_for_an_original_not_physically_received(tmp_path):
     _,runtime,observer,claim,protocol=measurement(tmp_path)
     try:

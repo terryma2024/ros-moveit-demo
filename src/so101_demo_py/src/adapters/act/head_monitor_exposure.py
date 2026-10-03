@@ -117,7 +117,8 @@ class HeadMonitorExposures:
             original_claim=claim;phase='snapshot'
             source=claim['image_source_ns']
             with observer._lock:
-                image=observer._images.get(source)
+                image=observer._measurement_images.get(source)
+                if image is None:image=observer._images.get(source)
                 if image is None and observer._camera is not None and observer._camera['source_ns']==source:
                     image=observer._camera
                 image=None if image is None else dict(image)

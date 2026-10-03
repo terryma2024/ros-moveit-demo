@@ -61,6 +61,7 @@ class HeadROSMonitor:
         self._primary=None;self._executor_wall=None;self._clock=None;self._camera=None
         self._completed_inference_deadlines={}
         self._images={};self._infos={};self._camera_watermark=0
+        self._measurement_images={}
         self._image_source=self._info_source=0
         self._outstanding={};self._stop_started=False;self.watchdog_polls=deque(maxlen=20000)
         self._external_inputs=controller_port is not None
@@ -280,6 +281,13 @@ class HeadROSMonitor:
                 else:self._info_source=source
                 originals[source]=record;invalid=False
                 while len(originals)>32:originals.pop(next(iter(originals)))
+            if image and self._policy is None and not self._active:
+                # Read-only pre-policy completion can cross a warmup source
+                # period. Keep physical metadata only; the admission cache
+                # above remains latest-only and emits its unchanged drop.
+                self._measurement_images[source]=record
+                while len(self._measurement_images)>32:
+                    self._measurement_images.pop(next(iter(self._measurement_images)))
         self._event('IMAGE_ORIGINAL' if image else 'INFO_ORIGINAL',**record)
         if dropped is not None:
             self._event('DROPPED_EXPOSURE',**dropped,reason='replaced-before-admission')
