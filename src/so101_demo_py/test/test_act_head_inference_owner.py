@@ -113,6 +113,65 @@ def test_live_construction_and_inference_keep_same_actual_owner_and_main_respons
         worker.close(timeout_s=1.)
 
 
+def test_quiescence_waits_for_actual_inflight_completion_without_blocking_main():
+    detector=Detector();construction=[];faults=[];lives=[]
+    worker=start(factory(detector,construction),faults)
+    try:
+        worker.configuration(timeout_s=1.);bind(worker,lives);live=lives[0]
+        worker.activate_live();assert live.entered.wait(.5)
+        before=time.monotonic();worker.quiesce_live()
+        assert time.monotonic()-before<.1
+        assert worker.live_quiescence() is None and worker.next_completed_exposure(0) is None
+        live.release.set();deadline=time.monotonic()+.5
+        while worker.live_quiescence() is None and time.monotonic()<deadline:time.sleep(.001)
+        receipt=worker.live_quiescence()
+        assert receipt['inference_owner']['native_id']==construction[0]
+        assert worker.next_completed_exposure(0)['owner']==construction[0]
+        assert receipt['quiesced_wall_s']>=receipt['requested_wall_s']
+        changed=worker.live_quiescence();changed['inference_owner']['native_id']=0
+        assert worker.live_quiescence()==receipt
+        assert live.count==1 and len(construction)==1 and not faults
+        retired=worker.close(timeout_s=1.)
+        assert retired['quiescence']==receipt and retired['retired']
+    finally:
+        for live in lives:live.release.set()
+        worker.close(timeout_s=1.)
+
+
+def test_quiescence_cannot_be_requested_before_live_activation():
+    detector=Detector();construction=[];faults=[]
+    worker=start(factory(detector,construction),faults)
+    try:
+        worker.configuration(timeout_s=1.)
+        with pytest.raises(PermissionError):worker.quiesce_live()
+        assert faults
+    finally:worker.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('requester',['repeat','foreign_thread'])
+def test_quiescence_rejects_reuse_and_another_caller(requester):
+    detector=Detector();construction=[];faults=[];lives=[];errors=[]
+    worker=start(factory(detector,construction),faults)
+    try:
+        worker.configuration(timeout_s=1.);bind(worker,lives)
+        worker.activate_live();assert lives[0].entered.wait(.5)
+        if requester=='repeat':
+            worker.quiesce_live()
+            with pytest.raises(PermissionError,match='QUIESCENCE_REFUSED'):worker.quiesce_live()
+        else:
+            def request():
+                try:worker.quiesce_live()
+                except PermissionError as error:errors.append(error)
+            caller=threading.Thread(target=request);caller.start();caller.join(1.)
+            assert not caller.is_alive() and len(errors)==1
+            assert 'QUIESCENCE_REFUSED' in str(errors[0])
+        assert faults and len(construction)==1 and lives[0].count==1
+        with pytest.raises(PermissionError):worker.infer()
+    finally:
+        for live in lives:live.release.set()
+        worker.close(timeout_s=1.)
+
+
 @pytest.mark.parametrize('operation',['reset','detect','bind_again','activate_again'])
 def test_bound_or_running_worker_cannot_reset_model_or_bind_a_second_live_reader(operation):
     detector=Detector();construction=[];faults=[];lives=[]

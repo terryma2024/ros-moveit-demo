@@ -24,6 +24,7 @@ class HeadInferenceOwner:
         self._stage='STARTING';self._error=None;self._closed=False;self._retired=None
         self._detector=None;self._live=None;self._factory_count=0;self._calibration_calls=0
         self._live_retirement=None;self._owner=None;self._metadata=None;self._operation_error=None
+        self._quiescence=None
         self._thread=threading.Thread(target=self._run,name='head-owned-inference',daemon=False)
         try:self._thread.start()
         except BaseException:
@@ -58,6 +59,14 @@ class HeadInferenceOwner:
             self._ready.set_result(True)
             while not self._retiring.is_set():
                 with self._lock:stage=self._stage
+                if stage=='QUIESCING':
+                    # This owner reaches here only after its current complete
+                    # inference/admission/completion call has returned.
+                    with self._lock:
+                        self._quiescence['quiesced_wall_s']=time.monotonic()
+                        self._quiescence['inference_owner']=deepcopy(self._owner)
+                        self._stage='QUIESCED'
+                    continue
                 if stage=='LIVE':
                     if not self._live.primary.ready:
                         if self._live.primary.failed:break
@@ -166,9 +175,26 @@ class HeadInferenceOwner:
     def infer(self):
         """Main control polling performs no model or queue wait."""
         with self._lock:
-            if self._error is not None or self._stage not in ('BOUND','LIVE'):
+            if self._error is not None or self._stage not in ('BOUND','LIVE','QUIESCING','QUIESCED'):
                 raise PermissionError('HEAD_INFERENCE_LIVE_REFUSED')
         return None
+
+    def quiesce_live(self):
+        refused=False
+        with self._lock:
+            if (threading.get_ident()!=self._entry_caller or self._closed or self._error is not None
+                    or self._stage!='LIVE' or not self._live.primary.ready):refused=True
+            else:
+                self._quiescence=dict(requested_wall_s=time.monotonic())
+                self._stage='QUIESCING'
+        if refused:
+            self._fail('HEAD_INFERENCE_QUIESCENCE_REFUSED')
+            raise PermissionError('HEAD_INFERENCE_QUIESCENCE_REFUSED')
+
+    def live_quiescence(self):
+        self.infer()
+        with self._lock:
+            return deepcopy(self._quiescence) if self._stage=='QUIESCED' else None
 
     @property
     def results(self):
@@ -199,5 +225,6 @@ class HeadInferenceOwner:
             calibration_detect_calls=self._calibration_calls,inference_owner=deepcopy(self._owner),
             live=self._live_retirement,error=self._error,thread_alive=False,
             operation_error=self._operation_error,
+            quiescence=deepcopy(self._quiescence),
             retired_wall_s=time.monotonic())
         return deepcopy(self._retired)

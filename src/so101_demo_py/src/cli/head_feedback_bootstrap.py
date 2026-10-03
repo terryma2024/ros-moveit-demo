@@ -205,6 +205,110 @@ def _run_owned_search_diagnostic(*,driver,dispatcher,result,emit):
             finished_wall_s=time.monotonic())
 
 
+def _declare_live_pipeline_window(primary,measured,*,monotonic=time.monotonic):
+    from so101_demo.act.head_feedback import nanoseconds
+    primary.dispatch_guard()
+    observer=primary.observer
+    with observer._lock:
+        originals=list(observer._images.values())
+        if observer._camera is not None:originals.append(observer._camera)
+        latest=None if not originals else dict(max(originals,key=lambda row:row['source_ns']))
+    distributions=measured['distributions']
+    period=distributions['camera_receipt_gap_s']['p50']
+    processing=(distributions['camera_end_to_end_age_s']['p99']
+        +distributions['joint_receipt_period_s']['p99'])
+    phase=max(period/2,processing)
+    if latest is None or not latest['valid'] or not 0<phase<period:
+        raise PermissionError('HEAD_LIVE_WINDOW_BOUNDARY_INVALID')
+    start=nanoseconds(latest['wall_s'])+nanoseconds(phase)
+    if start<=nanoseconds(monotonic()):
+        raise PermissionError('HEAD_LIVE_WINDOW_BOUNDARY_PAST')
+    return dict(start_ns=start,end_ns=start+20_000_000_000,
+        boundary_original=latest,phase_s=phase,receipt_period_s=period,
+        processing_margin_s=processing,clock='original monotonic receipts; no restamping')
+
+
+def _run_live_pipeline_measurement(*,port,primary,owner,result,emit,
+                                  monotonic=time.monotonic,sleep=time.sleep):
+    """Measure one fixed live window on the existing owners, without SDK motion."""
+    from so101_demo.act.head_feedback import nanoseconds
+    evidence=result['live_pipeline_measurement'];window=evidence['window']
+    start,end=window['start_ns'],window['end_ns']
+    if (primary.port is not port or type(start) is not int or type(end) is not int
+            or end-start!=20_000_000_000 or start<=nanoseconds(monotonic())):
+        raise PermissionError('HEAD_LIVE_WINDOW_DECLARATION_INVALID')
+    frames=[];sequence=0;next_tick=monotonic();quiescing=False
+    drain_end=end+2*math.floor(primary.observer.camera_age*1e9)
+    evidence.update(status='LIVE_PIPELINE_COLLECTING',qualification=False,frames=frames)
+    try:
+        while True:
+            owner.infer();primary.dispatch_guard();current=port.feedback_snapshot()
+            now=monotonic();now_ns=nanoseconds(now)
+            if not primary.ready or primary.failed or result['goal_send_count']!=0:
+                raise PermissionError('HEAD_LIVE_WINDOW_OWNER_OR_MOTION_INVALID')
+            emit('LIVE_PIPELINE_CONTROL_DECISION',decision=current['decision'],
+                original_joint={key:value for key,value in current.items() if key!='decision'},
+                controller_thread_native_id=threading.get_native_id())
+            row=owner.next_completed_exposure(sequence)
+            if row is not None:
+                if row['sequence']!=sequence+1:
+                    raise PermissionError('HEAD_LIVE_WINDOW_EXPOSURE_SEQUENCE_INVALID')
+                sequence=row['sequence']
+                if start<=nanoseconds(row['image_received_wall_s'])<end:
+                    deadline=row['deadline_ns'];admit=row['admission_ack'];finish=row['completion_ack']
+                    if (admit['exposure_admitted'] is not True or finish['exposure_finished'] is not True
+                            or nanoseconds(row['completion_wall_s'])>=deadline
+                            or nanoseconds(now)>=deadline):
+                        raise PermissionError('HEAD_LIVE_WINDOW_EXPOSURE_DEADLINE')
+                    if frames and abs(row['source_ns']-frames[-1]['original']['source_ns']-100_000_000)>1:
+                        raise PermissionError('HEAD_LIVE_WINDOW_SOURCE_CADENCE_INVALID')
+                    frames.append(dict(original=row,control_decision=current['decision'],
+                        observed_wall_s=now))
+                    emit('LIVE_PIPELINE_EXPOSURE_OBSERVED',sequence=sequence,source_ns=row['source_ns'],
+                        original_deadline_ns=deadline,decision=current['decision'])
+                    if len(frames)>200:raise PermissionError('HEAD_LIVE_WINDOW_FRAME_COUNT_INVALID')
+            if now_ns>=end and len(frames)==200 and not quiescing:
+                owner.quiesce_live();quiescing=True
+            quiescence=owner.live_quiescence() if quiescing else None
+            if quiescence is not None:
+                if quiescence['inference_owner']!=result['inference_owner']:
+                    raise PermissionError('HEAD_LIVE_WINDOW_QUIESCENCE_OWNER_INVALID')
+                evidence['quiescence']=quiescence;break
+            if now_ns>=drain_end:
+                raise PermissionError('HEAD_LIVE_WINDOW_INCOMPLETE')
+            next_tick+=.005;delay=next_tick-monotonic()
+            if delay<0:
+                emit('LIVE_PIPELINE_CONTROL_TICK_LATE',scheduled_wall_s=next_tick,
+                    observed_wall_s=monotonic())
+                next_tick=monotonic();delay=0.
+            sleep(delay)
+        ages=[]
+        for frame in frames:
+            row=frame['original'];admit=row['admission_ack']['original_snapshot']
+            finish=row['completion_ack']['original_snapshot']
+            receipts=[row['image_received_wall_s'],row['info_received_wall_s'],
+                admit['image']['wall_s'],admit['info']['wall_s']]
+            decisions=[admit['decision']['wall_after_s'],finish['decision']['wall_after_s'],
+                frame['control_decision']['wall_after_s']]
+            for decision in decisions:
+                for received in receipts:
+                    age=(nanoseconds(decision)-nanoseconds(received))*1e-9
+                    if age<0:raise PermissionError('HEAD_LIVE_WINDOW_RECEIPT_IN_FUTURE')
+                    ages.append(age)
+        ranked=sorted(ages);quantile=ranked[math.ceil(.999*len(ranked))-1];value=quantile+.010
+        if value>.15:raise PermissionError('HEAD_LIVE_WINDOW_PIPELINE_EXCEEDS_FRAME_CONTRACT')
+        evidence.update(status='LIVE_PIPELINE_MEASURED_UNPROMOTED',frame_count=len(frames),
+            sdk_send_count=result['goal_send_count'],frame_age=dict(sample_count=len(ages),
+                original_receipts=['Root Image','Root Info','CPU Image','CPU Info'],
+                consumer_decisions=['CPU admission','CPU completion','Root handoff'],
+                formula='nearest_rank_p99_9(original decision - original receipt) + .010 s; cap .15 s',
+                samples_s=ages,p99_9_s=quantile,max_s=max(ages),margin_s=.010,
+                values=dict(max_age_s=value),promoted=False),finished_wall_s=monotonic())
+        return evidence
+    except Exception:
+        evidence['status']='LIVE_PIPELINE_REFUSED';primary.fault('HEAD_LIVE_WINDOW_REFUSED');raise
+
+
 def _bind_live_exposures(*,capture,port,buffer,detector,primary,monitor,camera_skew_s,emit):
     from so101_demo.adapters.act.head_live_exposure import HeadLiveExposures
     detector.reset()
@@ -348,7 +452,12 @@ def main(argv=None):
         help='build and infer on one owned thread while main advances original5ms control decisions; requires moving exposure diagnostic')
     parser.add_argument('--search-controller-diagnostic',action='store_true',
         help='drive the real HeadSearchController on once-owned completed frames and SDK transport; calibration diagnostic only')
+    parser.add_argument('--live-pipeline-measurement',action='store_true',
+        help='measure a fresh20s200frame CPU-admission/CUDA/completion window on existing owners; SDK sends remain forbidden')
     args=parser.parse_args(argv)
+    if args.live_pipeline_measurement and any((args.native_binding_diagnostic,args.bound_goal_diagnostic,
+            args.moving_exposure_diagnostic,args.owned_inference_diagnostic,args.search_controller_diagnostic)):
+        parser.error('--live-pipeline-measurement is exclusive with motion/native diagnostic flags')
     if args.moving_exposure_diagnostic and not args.bound_goal_diagnostic:
         parser.error('--moving-exposure-diagnostic requires --bound-goal-diagnostic')
     if args.owned_inference_diagnostic and not args.moving_exposure_diagnostic:
@@ -460,7 +569,7 @@ def main(argv=None):
         port.bind_head_original_sink(original_router)
         capture.bind_original_sink(original_router)
         buffer=Buffer();listener=TransformListener(buffer,node)
-        if args.bound_goal_diagnostic:
+        if args.bound_goal_diagnostic or args.live_pipeline_measurement:
             result['primary_goal_dispatch_preparation']=_prepare_bound_goal_dispatch()
             _write(root/'goal-dispatch-preparation.json',result['primary_goal_dispatch_preparation'])
         executor=SingleThreadedExecutor(context=context);executor.add_node(node)
@@ -523,7 +632,7 @@ def main(argv=None):
         capture.check()
         port.bind_head_policy(measured['values'])
         result['status']='STOPPED_BOOTSTRAP_MEASURED'
-        if args.native_binding_diagnostic or args.bound_goal_diagnostic:
+        if args.native_binding_diagnostic or args.bound_goal_diagnostic or args.live_pipeline_measurement:
             primary_writer=HeadOriginalJournal(root/'primary-events.jsonl',fault_callback=original_failure)
             own=_peer(os.getpid())
             provision,fault_cap=_provision(directory/'neck-primary-revoke.provision',authority='primary',
@@ -539,21 +648,21 @@ def main(argv=None):
                 stop_latency_s=values['stop_latency_s'],camera_max_age_s=measured['camera_seed_values']['max_age_s'],
                 camera_frame_id=production['camera']['frame_id'],
                 emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,diagnostic_only=True,**fields)))
-            if args.moving_exposure_diagnostic:
+            if args.moving_exposure_diagnostic or args.live_pipeline_measurement:
                 def bind_live(detector):
                     return _bind_live_exposures(capture=capture,port=port,buffer=buffer,detector=detector,
                         primary=primary,monitor=monitor,camera_skew_s=measured['camera_seed_values']['max_skew_s'],
                         emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
-                if args.owned_inference_diagnostic:
+                if args.owned_inference_diagnostic or args.live_pipeline_measurement:
                     result['live_binding']=inference_owner.bind_live(bind_live,timeout_s=1.)
                     live=inference_owner
                 else:live=bind_live(built['runtime'])
                 result['live_exposure_diagnostic']=dict(diagnostic_only=True,qualification=False,
-                    detector_count=1,inference_thread='owned worker' if args.owned_inference_diagnostic else 'owned main',
+                    detector_count=1,inference_thread='owned worker' if args.owned_inference_diagnostic or args.live_pipeline_measurement else 'owned main',
                     records=live.results)
             primary.start()
             prepared=None;search_driver=None
-            if args.bound_goal_diagnostic:
+            if args.bound_goal_diagnostic or args.live_pipeline_measurement:
                 prepared=_prepare_bound_goal_plan(port=port,production=production,
                     geometry=json.loads(args.geometry_seal.read_text()),result=result)
                 if prepared['native_arm_count']!=0 or prepared['sdk_send_count']!=0:
@@ -590,8 +699,19 @@ def main(argv=None):
                 arm_guard=primary.prearm_guard,fault_callback=primary.fault)
             result['native_identity']=_bind_native_diagnostic(primary,authority,result)
             result['primary_ready']=primary.ready
-            if args.owned_inference_diagnostic:inference_owner.activate_live()
+            if args.live_pipeline_measurement:
+                window=_declare_live_pipeline_window(primary,measured)
+                result['live_pipeline_measurement']=dict(window=window,qualification=False,
+                    guard_policy=reference,guard_values=measured['camera_seed_values'],
+                    sdk_wrapper='existing forbid_send; never restored')
+                _write(root/'live-pipeline-window.json',result['live_pipeline_measurement'])
+            if args.owned_inference_diagnostic or args.live_pipeline_measurement:inference_owner.activate_live()
             elif args.moving_exposure_diagnostic:live.activate()
+            if args.live_pipeline_measurement:
+                _run_live_pipeline_measurement(port=port,primary=primary,owner=inference_owner,
+                    result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
+                result['live_exposure_diagnostic']['records']=live.results
+                _write(root/'live-pipeline-measurement.json',result['live_pipeline_measurement'])
             if args.bound_goal_diagnostic:
                 def counted_send(*positional,**named):
                     primary.dispatch_guard()
@@ -629,6 +749,7 @@ def main(argv=None):
                 raise PermissionError('HEAD_BOOTSTRAP_NATIVE_BOUNDARY_UNPROVEN')
             result['status']='BOUND_GOAL_STOPPED_DIAGNOSTIC' if args.bound_goal_diagnostic else 'NATIVE_BINDING_STOPPED_DIAGNOSTIC'
             if args.search_controller_diagnostic:result['status']='SEARCH_CONTROLLER_STOPPED_DIAGNOSTIC'
+            if args.live_pipeline_measurement:result['status']='LIVE_PIPELINE_STOPPED_MEASUREMENT'
     except Exception as error:
         result['status']='REFUSED'
         if primary is not None:primary.fault('HEAD_BOOTSTRAP_ATTEMPT_FAILED')
@@ -694,7 +815,7 @@ def main(argv=None):
         if monitor is not None:
             try:result['monitor_teardown']=monitor.close()
             except Exception as error:result['monitor_teardown_error']=str(error);result['status']='REFUSED'
-        if result['status'] in ('NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC','SEARCH_CONTROLLER_STOPPED_DIAGNOSTIC'):
+        if result['status'] in ('NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC','SEARCH_CONTROLLER_STOPPED_DIAGNOSTIC','LIVE_PIPELINE_STOPPED_MEASUREMENT'):
             try:result['monitor_closure']=_require_monitor_closure(root,result,
                 stop_velocity_rad_s=values['stop_velocity_rad_s'])
             except Exception as error:_record_refusal(result,error)
@@ -720,4 +841,4 @@ def main(argv=None):
             result['raw_observations']=_write(root/'raw-observations.json',result.pop('raw_observations_pending'))
         result['ended_wall_s']=time.monotonic();_write(root/'result.json',result)
     print(result['status']+' run_root='+str(root),flush=True)
-    return 0 if result['status'] in ('STOPPED_BOOTSTRAP_MEASURED','NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC') else 2
+    return 0 if result['status'] in ('STOPPED_BOOTSTRAP_MEASURED','NATIVE_BINDING_STOPPED_DIAGNOSTIC','BOUND_GOAL_STOPPED_DIAGNOSTIC','LIVE_PIPELINE_STOPPED_MEASUREMENT') else 2
