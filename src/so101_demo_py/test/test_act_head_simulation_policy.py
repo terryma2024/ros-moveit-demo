@@ -131,3 +131,77 @@ def test_simulation_feedback_cannot_silently_rebind_an_existing_consumer():
     with pytest.raises(ValueError): FeedbackPolicy.parse(bound, simulation_policy=changed)
     damaged = sim.feedback_values(); damaged['joint_max_source_age_s'] = .08
     with pytest.raises(ValueError): FeedbackPolicy.parse(damaged, simulation_policy=sim)
+
+
+def observation_request():
+    from so101_demo.act.head_monitor import digest
+    return dict(schema_version=1,epoch='attempt',generation=5,session_id='session',
+        policy_sha256='a'*64,simulation_policy_sha256=digest(document()),motion_epoch=0,
+        observation_sequence=1,settled_source_floor_ns=1_000_000_000,
+        settled_wall_s=10.,requested_wall_s=10.01,search_deadline_ns=40_000_000_000)
+
+
+def request_validation(request,now=10.02):
+    module=importlib.import_module('so101_demo.act.head_simulation_policy')
+    return module.validate_stopped_observation_request(request,policy=policy_type().parse(document()),
+        expected_scope=dict(epoch='attempt',generation=5,session_id='session',policy_sha256='a'*64),
+        now_wall_s=now)
+
+
+def test_stopped_request_keeps_original_settlement_acquisition_and_whole_search_deadline():
+    request=observation_request();bound=request_validation(request)
+    request['requested_wall_s']=99.
+    assert bound['requested_wall_s']==10.01 and bound['settled_source_floor_ns']==1_000_000_000
+    assert bound['search_deadline_ns']==40_000_000_000 and bound['motion_epoch']==0
+
+
+@pytest.mark.parametrize('field,value',[
+    ('schema_version',True),('schema_version',2),('epoch','other'),('generation',True),
+    ('generation',6),('session_id','other'),('policy_sha256','b'*64),
+    ('simulation_policy_sha256','b'*64),('motion_epoch',True),('motion_epoch',-1),
+    ('observation_sequence',0),('observation_sequence',True),('settled_source_floor_ns',0),
+    ('settled_source_floor_ns',True),('settled_wall_s',float('nan')),('settled_wall_s',10.02),
+    ('requested_wall_s',10.03),('requested_wall_s',True),('search_deadline_ns',10_010_000_000),
+    ('search_deadline_ns',40_020_000_001),('extra',1),
+])
+def test_stopped_request_refuses_changed_scope_clock_or_unbounded_future(field,value):
+    request=observation_request();request[field]=value
+    with pytest.raises(ValueError):request_validation(request)
+
+
+def test_stopped_request_expiry_cannot_be_renewed_by_a_later_validation():
+    with pytest.raises(ValueError):request_validation(observation_request(),40.)
+
+
+def budget():
+    module=importlib.import_module('so101_demo.act.head_simulation_policy')
+    return module.BoundedObservationBudget(policy_type().parse(document()),started_wall_s=10.)
+
+
+def test_reobservation_per_stop_and_total_caps_preserve_one_original_search_deadline():
+    observed=budget()
+    assert observed.reobserve(0,'MISS',10.1)
+    assert observed.reobserve(0,'EXPIRED',10.2)
+    assert observed.reobserve(0,'SHORT_DROP',10.3)
+    assert observed.reobserve(0,'MISS',10.4) is False
+    for stop in (1,2,3):
+        for _ in range(3):assert observed.reobserve(stop,'MISS',11.+stop)
+    assert observed.reobserve(4,'MISS',20.) is False
+    assert observed.readback()['reobservations_total']==12
+    assert observed.readback()['per_stop']=={0:3,1:3,2:3,3:3}
+    assert observed.readback()['search_deadline_ns']==40_000_000_000
+
+
+def test_reobservation_expiry_refuses_without_incrementing_or_restarting_search():
+    observed=budget();assert observed.reobserve(0,'MISS',39.999999999)
+    assert observed.reobserve(1,'MISS',40.) is False
+    assert observed.readback()['reobservations_total']==1
+    assert observed.readback()['search_deadline_ns']==40_000_000_000
+
+
+@pytest.mark.parametrize('stop,reason,wall',[(True,'MISS',10.1),(-1,'MISS',10.1),
+    (0,'PEER_DEATH',10.1),(0,'MISS',float('nan')),(0,'MISS',9.)])
+def test_reobservation_never_recovers_identity_fault_or_backward_clock(stop,reason,wall):
+    observed=budget()
+    with pytest.raises(ValueError):observed.reobserve(stop,reason,wall)
+    assert observed.readback()['reobservations_total']==0

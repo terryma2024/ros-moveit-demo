@@ -2,6 +2,9 @@
 
 from dataclasses import asdict, dataclass
 import math
+import re
+
+from .head_feedback import nanoseconds
 
 
 @dataclass(frozen=True)
@@ -92,3 +95,62 @@ class HeadSimulationPolicy:
             for name, value in expected.items()
         ):
             raise ValueError('HEAD_SIMULATION_POLICY_EFFECTIVE_VALUE_MISMATCH')
+
+
+def validate_stopped_observation_request(request, *, policy, expected_scope, now_wall_s):
+    """Freeze a stopped acquisition request; this proves no physical settlement."""
+    from .head_monitor import canonical_bytes, digest
+    scope={'epoch','generation','session_id','policy_sha256'}
+    keys=scope|{'schema_version','simulation_policy_sha256','motion_epoch','observation_sequence',
+        'settled_source_floor_ns','settled_wall_s','requested_wall_s','search_deadline_ns'}
+    if (type(policy) is not HeadSimulationPolicy or type(request) is not dict or set(request)!=keys
+            or type(expected_scope) is not dict or set(expected_scope)!=scope
+            or type(request['schema_version']) is not int or request['schema_version']!=1):
+        raise ValueError('HEAD_STOPPED_OBSERVATION_REQUEST_INVALID')
+    owned=dict(request)
+    for key in ('epoch','session_id'):
+        if type(owned[key]) is not str or re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',owned[key]) is None:
+            raise ValueError('HEAD_STOPPED_OBSERVATION_SCOPE_INVALID')
+    for key in ('policy_sha256','simulation_policy_sha256'):
+        if type(owned[key]) is not str or re.fullmatch(r'[0-9a-f]{64}',owned[key]) is None:
+            raise ValueError('HEAD_STOPPED_OBSERVATION_SCOPE_INVALID')
+    for key in ('generation','observation_sequence','settled_source_floor_ns','search_deadline_ns'):
+        if type(owned[key]) is not int or not 0<owned[key]<2**64:
+            raise ValueError('HEAD_STOPPED_OBSERVATION_SCOPE_INVALID')
+    if (type(owned['motion_epoch']) is not int or not 0<=owned['motion_epoch']<2**64
+            or canonical_bytes({key:owned[key] for key in scope})!=canonical_bytes(expected_scope)
+            or owned['simulation_policy_sha256']!=digest(policy.readback())):
+        raise ValueError('HEAD_STOPPED_OBSERVATION_SCOPE_INVALID')
+    settled=nanoseconds(owned['settled_wall_s']);requested=nanoseconds(owned['requested_wall_s'])
+    now=nanoseconds(now_wall_s);deadline=owned['search_deadline_ns']
+    if not settled<=requested<=now<deadline<=requested+nanoseconds(policy.search_timeout_s):
+        raise ValueError('HEAD_STOPPED_OBSERVATION_CLOCK_INVALID')
+    return owned
+
+
+class BoundedObservationBudget:
+    """Finite recoverable observations share one original monotonic search cap."""
+    def __init__(self,policy,*,started_wall_s):
+        if type(policy) is not HeadSimulationPolicy:
+            raise ValueError('HEAD_REOBSERVATION_POLICY_INVALID')
+        started=nanoseconds(started_wall_s)
+        self.policy=policy;self._started_ns=started;self._last_ns=started
+        self._deadline_ns=started+nanoseconds(policy.search_timeout_s)
+        self._total=0;self._per_stop={}
+
+    def reobserve(self,stop_id,reason,now_wall_s):
+        if (type(stop_id) is not int or not 0<=stop_id<2**64
+                or type(reason) is not str or reason not in ('MISS','EXPIRED','SHORT_DROP')):
+            raise ValueError('HEAD_REOBSERVATION_EVENT_INVALID')
+        now=nanoseconds(now_wall_s)
+        if now<self._last_ns:raise ValueError('HEAD_REOBSERVATION_CLOCK_INVALID')
+        self._last_ns=now
+        count=self._per_stop.get(stop_id,0)
+        if (now>=self._deadline_ns or count>=self.policy.max_reobservations_per_stop
+                or self._total>=self.policy.max_reobservations_total):return False
+        self._total+=1;self._per_stop[stop_id]=count+1
+        return True
+
+    def readback(self):
+        return dict(started_wall_ns=self._started_ns,search_deadline_ns=self._deadline_ns,
+            reobservations_total=self._total,per_stop=dict(self._per_stop))

@@ -69,7 +69,7 @@
 
 ## Task 3: 生产停点搜索、有限重观察和可靠锁定
 
-**Files:** Modify `act/search.py`, `adapters/act/head_owned_search.py`, `head_live_exposure.py`, `head_monitor_exposure.py`, `head_inference_owner.py`, `ros_search.py`, `ros_neck.py`, `head_inventory_dispatch.py`, `act/head_search_binding.py`, `head_search_restarts.py`；对应现有tests。
+**Files:** Modify `act/search.py`, `act/head_simulation_policy.py`, `adapters/act/head_owned_search.py`, `head_live_exposure.py`, `head_monitor_exposure.py`, `head_inference_owner.py`, `ros_search.py`, `ros_neck.py`, `head_inventory_dispatch.py`, `act/head_search_binding.py`, `head_search_restarts.py`；对应现有tests。
 
 **Interfaces:** `BoundedObservationBudget(policy, *, started_wall_s)`；`reobserve(stop_id, reason, now_wall_s) -> bool` 计数且不重置总deadline；entry-owned inference增加 stopped observation请求，request携带generation/motion_epoch/settled source+wall floors，existingowner queue capacity1。生产模式在 terminal+三freshsettled samples成立前不启动 YOLO。
 
