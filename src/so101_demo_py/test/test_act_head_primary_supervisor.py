@@ -567,3 +567,43 @@ def test_fault_ack_tightens_earliest_shared_origin_without_reactivation(tmp_path
         assert sup._fault_notice['ack']['fault']==sup._fault
         assert port._head_policy_binding_failed and sup._native_close is None
     finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('damage',['none','false','extra','future_fault','old_ack','future_ack','peer'])
+def test_negative_heartbeat_preserves_original_cpu_fault_and_reports_without_new_heartbeat(tmp_path,damage):
+    _,port,sup,_,events,_=setup(tmp_path);requests=[];original=time.monotonic()-.001
+    fault=dict(reason='earliest CPU exposure expiry',fault_wall_s=original)
+    def request(record):
+        requests.append(record)
+        if record['operation']=='FAULT':
+            assert sup.failed and not sup.ready and port._head_policy_binding_failed
+            return dict(request='FAULT',stage='REVOKED',epoch='attempt',generation=5,session_id='session',
+                monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False,
+                fault=dict(fault),ack_wall_s=time.monotonic())
+        assert record['operation']=='HEARTBEAT'
+        reply=dict(request='HEARTBEAT',stage='REVOKED',epoch='attempt',generation=5,session_id='session',
+            monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False,
+            heartbeat_rejected=True,fault=dict(fault),ack_wall_s=time.monotonic())
+        if damage=='false':reply['heartbeat_rejected']=False
+        elif damage=='extra':reply['ready']=True
+        elif damage=='future_fault':reply['fault']['fault_wall_s']=time.monotonic()+1.
+        elif damage=='old_ack':reply['ack_wall_s']=original
+        elif damage=='future_ack':reply['ack_wall_s']=time.monotonic()+1.
+        elif damage=='peer':reply['monitor_peer']=dict(sup.monitor.identity,pid=1)
+        return reply
+    sup.monitor.request_runtime=request
+    try:
+        sup._started_wall=time.monotonic();sup.observer.executor_progress();sup._heartbeat()
+        assert sup.failed and not sup.ready and sup.epoch.stage=='REVOKED' and port._head_policy_binding_failed
+        assert sup.epoch.inventory=={} and sup._native_close is None
+        receipt=next(fields for event,fields in events if event=='HEARTBEAT_ROUND_TRIP')
+        if damage=='none':
+            assert [record['operation'] for record in requests]==['HEARTBEAT','FAULT']
+            assert sup._fault==fault and sup._fault_notice['ack']['fault']==fault
+            assert requests[1]['fault']==fault and receipt['error_type']=='MONITOR_REVOKED'
+            assert receipt['rpc_ended_wall_s']<=sup._fault_notice['request_wall_s']
+        else:
+            assert [record['operation'] for record in requests]==['HEARTBEAT']
+            assert sup._fault_notice is None and sup._fault['reason']=='HEAD_PRIMARY_HEARTBEAT_FAILED'
+            assert sup._fault['fault_wall_s']>original and receipt['error_type']=='PermissionError'
+    finally:sup.close();port.close_head_io(timeout_s=1.)

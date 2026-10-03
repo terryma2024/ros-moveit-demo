@@ -12,7 +12,7 @@ from rclpy.clock import Clock, ClockType
 
 from so101_demo.act.head_feedback import nanoseconds
 from so101_demo.act.head_monitor import HeadMonitorEpoch, canonical_bytes
-from .head_monitor_process import MonitorProcess
+from .head_monitor_process import MonitorProcess,_revoked_heartbeat_reply
 from .head_monitor_ros import HeadROSMonitor
 from .head_monitor_runtime import HeadMonitorRuntime
 from .head_original_router import HeadOriginalRouter
@@ -141,7 +141,7 @@ class HeadPrimarySupervisor:
                     self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010); return
                 self._shutdown.wait(.002); continue
             record = None
-            reply = None; error_type = None; rpc_started = time.monotonic()
+            reply = None; error_type = None; rejected = False; rpc_started = time.monotonic()
             def snapshot():
                 nonlocal record
                 if self.failed:raise PermissionError('HEAD_PRIMARY_REVOKED')
@@ -156,10 +156,20 @@ class HeadPrimarySupervisor:
             try:
                 stage = self.epoch.stage; arming = self._arming
                 reply = self.monitor.request_heartbeat(snapshot)
-                allowed = {stage, self.epoch.stage}
-                if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
-                if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
-                self._ack(reply, 'HEARTBEAT', reply['stage'])
+                if reply.get('stage')=='REVOKED' or 'heartbeat_rejected' in reply:
+                    ended=time.monotonic()
+                    self._ack(reply,'HEARTBEAT','REVOKED')
+                    if (not _revoked_heartbeat_reply(reply,ended)
+                            or not nanoseconds(rpc_started)<=nanoseconds(reply['ack_wall_s'])<=nanoseconds(ended)
+                            or nanoseconds(ended)-nanoseconds(rpc_started)>10_000_000):
+                        raise PermissionError('HEAD_PRIMARY_HEARTBEAT_REVOKED_ACK_INVALID')
+                    self.fault(reply['fault']['reason'],reply['fault']['fault_wall_s'])
+                    error_type='MONITOR_REVOKED';rejected=True
+                else:
+                    allowed = {stage, self.epoch.stage}
+                    if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
+                    if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
+                    self._ack(reply, 'HEARTBEAT', reply['stage'])
             except BaseException as error:
                 error_type = type(error).__name__
                 self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED',
@@ -172,6 +182,8 @@ class HeadPrimarySupervisor:
                         error_type=error_type)
                 except BaseException:
                     self.fault('HEAD_PRIMARY_HEARTBEAT_JOURNAL_FAILED', rpc_ended)
+            if rejected:
+                self._notify_cpu_fault();return
             self._fault_event.wait(.002)
 
     def _notify_cpu_fault(self):

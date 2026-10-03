@@ -146,3 +146,26 @@ def test_actual_owned_cpu_fault_receipt_and_retirement_do_not_invent_native_ack(
     records=[json.loads(line) for line in body.splitlines()]
     notice=next(row for row in records if row['event']=='PRIMARY_FAULT_NOTICE')
     assert notice['reported_fault']==ack['fault']
+
+
+def test_late_authenticated_heartbeat_after_fault_keeps_owned_retirement_available(runtime_setup):
+    monitor,configuration,config=runtime_setup
+    configured(monitor,configuration)
+    fault=dict(reason='controlled original exposure expiry',fault_wall_s=time.monotonic())
+    ack=monitor.request_runtime(dict(operation='FAULT',fault=fault))
+    assert ack['stage']=='REVOKED' and ack['fault']==fault
+    wall=time.monotonic()
+    heartbeat=dict(wall_s=wall,executor_wall_s=wall,inference_deadline_wall_s=fault['fault_wall_s'])
+    reply=monitor.request_heartbeat(lambda:heartbeat)
+    assert reply['request']=='HEARTBEAT' and reply['stage']=='REVOKED'
+    assert reply['heartbeat_rejected'] is True and reply['motion_authority'] is False
+    assert reply['fault']==fault and reply['monitor_peer']==monitor.identity
+    assert reply['epoch']==config['epoch'] and reply['generation']==config['generation']
+    assert reply['session_id']==config['session_id'] and reply['purpose']=='calibration'
+    receipt=monitor.close()
+    assert receipt['shutdown_ack'] is True and receipt['exit_code']==0
+    seal=json.loads(Path(configuration['journal_path']+'.seal.json').read_text())
+    assert seal['stage']=='RETIRED' and seal['fault']==fault
+    assert seal['native_close'] is None and seal['native_close_error'] is not None
+    # Stand-in native owner has no listener: an owned reap cannot invent that ACK.
+    assert seal['journal_sha256']==hashlib.sha256(Path(configuration['journal_path']).read_bytes()).hexdigest()

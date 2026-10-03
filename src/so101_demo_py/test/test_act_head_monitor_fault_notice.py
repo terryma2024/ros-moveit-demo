@@ -42,6 +42,49 @@ def test_repeated_authenticated_fault_can_only_tighten_earliest_origin(tmp_path)
     finally:observer.close(timeout_s=1.)
 
 
+@pytest.mark.parametrize('damage',['none','extra','future','boolean','missing'])
+def test_revoked_heartbeat_cannot_renew_originals_or_inference_inventory(tmp_path,damage):
+    _,runtime,observer=prepared();wall=time.monotonic()
+    original=dict(reason='earliest CPU expiry',fault_wall_s=wall-.001)
+    runtime.fault(**dict(reason=original['reason'],wall=original['fault_wall_s']))
+    previous=observer._primary;executor=observer._executor_wall;watchdog=runtime._watchdog_wall
+    record=dict(wall_s=wall,executor_wall_s=wall,inference_deadline_wall_s=wall-.001)
+    if damage=='extra':record['new_lease']=True
+    elif damage=='future':record['wall_s']=wall+1
+    elif damage=='boolean':record['executor_wall_s']=True
+    elif damage=='missing':del record['inference_deadline_wall_s']
+    try:
+        if damage=='none':
+            reply=protocol(tmp_path,runtime).handle(dict(operation='HEARTBEAT',heartbeat=record))
+            assert reply['stage']=='REVOKED' and reply['heartbeat_rejected'] is True
+            assert reply['fault']==original and reply['motion_authority'] is False
+            assert reply['ack_wall_s']>=wall
+        else:
+            with pytest.raises((PermissionError,ValueError)):
+                protocol(tmp_path,runtime).handle(dict(operation='HEARTBEAT',heartbeat=record))
+        assert observer._primary is previous and observer._executor_wall==executor
+        assert runtime._watchdog_wall==watchdog and runtime._fault==original
+        assert runtime.epoch.inventory=={} and runtime.epoch.stage=='REVOKED'
+    finally:observer.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('observer_raises',[False,True])
+def test_concurrent_revocation_during_heartbeat_returns_only_original_negative(tmp_path,observer_raises):
+    _,runtime,observer=prepared();wall=time.monotonic();calls=[]
+    fault=dict(reason='concurrent CPU expiry',fault_wall_s=wall)
+    def concurrent(record):
+        calls.append(record);runtime.fault(fault['reason'],fault['fault_wall_s'])
+        if observer_raises:raise PermissionError('HEAD_MONITOR_ROS_REVOKED')
+    observer.heartbeat=concurrent
+    record=dict(wall_s=wall,executor_wall_s=wall,inference_deadline_wall_s=wall)
+    try:
+        reply=protocol(tmp_path,runtime).handle(dict(operation='HEARTBEAT',heartbeat=record))
+        assert reply['stage']=='REVOKED' and reply['heartbeat_rejected'] is True
+        assert reply['fault']==fault and reply['motion_authority'] is False
+        assert calls==[record] and runtime.revoked and runtime.epoch.inventory=={}
+    finally:observer.close(timeout_s=1.)
+
+
 @pytest.mark.parametrize('operation',['FAULT','HEARTBEAT','DISPATCH'])
 def test_client_accepts_revoked_receipt_only_for_fault_operation(operation):
     monitor=object.__new__(MonitorProcess);monitor._closed=False;monitor._runtime_requested=True

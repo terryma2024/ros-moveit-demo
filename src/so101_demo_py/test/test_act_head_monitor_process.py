@@ -103,6 +103,43 @@ def test_actual_exec_identity_and_no_key_in_argv_environment_logs(config):
     monitor.close()
 
 
+@pytest.mark.parametrize('damage',['none','refused_false','refused_missing','extra','positive_stage',
+    'request','peer','purpose','epoch','generation','session_id','motion_authority','fault_missing',
+    'fault_extra','fault_boolean','fault_future','fault_nan','fault_reason','ack_missing','ack_boolean',
+    'ack_future','ack_negative'])
+def test_only_complete_scoped_negative_heartbeat_keeps_channel_open(damage):
+    wall=time.monotonic();calls=[]
+    reply=dict(request='HEARTBEAT',stage='REVOKED',monitor_peer={'pid':123},purpose='calibration',
+        epoch='attempt',generation=5,session_id='session',motion_authority=False,
+        heartbeat_rejected=True,fault=dict(reason='original expiry',fault_wall_s=wall-.001),ack_wall_s=wall)
+    if damage=='refused_false':reply['heartbeat_rejected']=False
+    elif damage=='refused_missing':del reply['heartbeat_rejected']
+    elif damage=='extra':reply['ready']=True
+    elif damage=='positive_stage':reply['stage']='ARMED_READY'
+    elif damage in ('request','purpose','epoch','generation','session_id'):reply[damage]='foreign'
+    elif damage=='peer':reply['monitor_peer']={'pid':124}
+    elif damage=='motion_authority':reply['motion_authority']=True
+    elif damage=='fault_missing':del reply['fault']
+    elif damage=='fault_extra':reply['fault']['later']=True
+    elif damage=='fault_boolean':reply['fault']['fault_wall_s']=True
+    elif damage=='fault_future':reply['fault']['fault_wall_s']=wall+1
+    elif damage=='fault_nan':reply['fault']['fault_wall_s']=float('nan')
+    elif damage=='fault_reason':reply['fault']['reason']=''
+    elif damage=='ack_missing':del reply['ack_wall_s']
+    elif damage=='ack_boolean':reply['ack_wall_s']=True
+    elif damage=='ack_future':reply['ack_wall_s']=wall+1
+    elif damage=='ack_negative':reply['ack_wall_s']=-1
+    channel=SimpleNamespace(exchange_built=lambda factory:reply,close=lambda:calls.append('closed'),
+        _codec=SimpleNamespace(epoch='attempt',generation=5,session_id='session'))
+    monitor=object.__new__(MonitorProcess);monitor._channel=channel;monitor._identity={'pid':123}
+    monitor._closed=False;monitor._runtime_requested=True;monitor.is_alive=lambda:True
+    if damage=='none':
+        assert monitor.request_heartbeat(lambda:{})==reply and calls==[]
+    else:
+        with pytest.raises(PermissionError):monitor.request_heartbeat(lambda:{})
+        assert calls==['closed']
+
+
 def test_process_presence_refuses_inventory_and_revival(config):
     monitor=start_monitor(**config)
     try:

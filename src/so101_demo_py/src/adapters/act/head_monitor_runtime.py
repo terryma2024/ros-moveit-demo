@@ -411,10 +411,32 @@ class HeadMonitorRuntime:
                     inventory_sha256=record['inventory_sha256'],motion_authority=False)
 
     def heartbeat(self,record):
-        if not self._configured or self.revoked:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
-        self._observer.heartbeat(record)
+        if not self._configured or self._finished:raise PermissionError('HEAD_MONITOR_RUNTIME_REVOKED')
+        def rejected():
+            # A valid original may be in flight when the independent watchdog
+            # revokes. Refuse it on the same channel without renewing progress,
+            # readiness or leases, so owned retirement remains available.
+            now=time.monotonic()
+            if (type(record) is not dict
+                    or set(record)!={'wall_s','executor_wall_s','inference_deadline_wall_s'}
+                    or any(type(record[key]) not in (int,float) or not math.isfinite(record[key])
+                           for key in ('wall_s','executor_wall_s'))
+                    or not 0<=record['executor_wall_s']<=record['wall_s']<=now
+                    or (record['inference_deadline_wall_s'] is not None and
+                        (type(record['inference_deadline_wall_s']) not in (int,float)
+                         or not math.isfinite(record['inference_deadline_wall_s'])))):
+                raise ValueError('HEAD_MONITOR_HEARTBEAT_INVALID')
+            return dict(stage='REVOKED',heartbeat_rejected=True,fault=dict(self._fault),
+                        ack_wall_s=now,motion_authority=False)
+        if self.revoked:return rejected()
+        try:self._observer.heartbeat(record)
+        except PermissionError:
+            if self.revoked:return rejected()
+            raise
+        stage=self.epoch.stage
+        if self.revoked:return rejected()
         now=time.monotonic()
-        return dict(stage=self.epoch.stage,epoch=self.epoch.epoch,watchdog_wall_s=self._watchdog_wall,
+        return dict(stage=stage,epoch=self.epoch.epoch,watchdog_wall_s=self._watchdog_wall,
             executor_wall_s=self._observer._executor_wall,ack_wall_s=now,motion_authority=False)
 
     def exposure_inputs(self,record):return self._exposures.inputs(record)

@@ -29,6 +29,21 @@ def _peer(pid):
     return dict(uid=os.geteuid(), pid=pid, start_ticks=_process_start_ticks(pid))
 
 
+def _revoked_heartbeat_reply(reply,now):
+    """A negative receipt preserves teardown, never heartbeat/readiness authority."""
+    fields={'request','stage','monitor_peer','purpose','epoch','generation','session_id',
+            'motion_authority','heartbeat_rejected','fault','ack_wall_s'}
+    if (type(reply) is not dict or set(reply)!=fields or reply['request']!='HEARTBEAT'
+            or reply['stage']!='REVOKED' or reply['heartbeat_rejected'] is not True
+            or reply['motion_authority'] is not False):return False
+    fault=reply['fault'];ack=reply['ack_wall_s']
+    return (type(fault) is dict and set(fault)=={'reason','fault_wall_s'}
+        and type(fault['reason']) is str and bool(fault['reason'])
+        and type(fault['fault_wall_s']) in (int,float) and math.isfinite(fault['fault_wall_s'])
+        and type(ack) in (int,float) and math.isfinite(ack)
+        and 0<=fault['fault_wall_s']<=ack<=now)
+
+
 def _event(handle, event, **fields):
     handle.write((json.dumps(dict(event=event, **fields), sort_keys=True)+'\n').encode('ascii'))
     handle.flush()
@@ -101,13 +116,16 @@ class MonitorProcess:
 
     def _runtime_reply(self,value,reply):
         codec=self._channel._codec
+        negative=(type(reply) is dict and (reply.get('stage')=='REVOKED'
+                  or 'heartbeat_rejected' in reply) and value['operation']=='HEARTBEAT')
         if (type(reply) is not dict or reply.get('request')!=value['operation']
                 or reply.get('monitor_peer')!=self._identity or reply.get('purpose')!='calibration'
                 or reply.get('epoch')!=codec.epoch or reply.get('generation')!=codec.generation
                 or reply.get('session_id')!=codec.session_id or reply.get('motion_authority') is not False
+                or (negative and not _revoked_heartbeat_reply(reply,time.monotonic()))
                 or (reply.get('stage') not in ('CONFIGURE_PENDING','CONFIGURED','POLICY_READY',
                                              'POLICY_PENDING','ARMED_READY','PRESENT','RETIRE_PENDING','RETIRED')
-                    and not (value['operation']=='FAULT' and reply.get('stage')=='REVOKED'))):
+                    and not (negative or value['operation']=='FAULT' and reply.get('stage')=='REVOKED'))):
             self._channel.close();raise PermissionError('HEAD_MONITOR_RUNTIME_ACK_INVALID')
         if value['operation']=='CONFIGURATION' and reply['stage']=='CONFIGURED':
             self._runtime_receipt=reply
@@ -256,12 +274,12 @@ class MonitorRuntimeProtocol:
             if self._future is None or not self._future.done():
                 raise PermissionError('HEAD_MONITOR_CONFIGURE_REQUIRED')
             runtime=self._future.result()
-            if operation!='FAULT':runtime.configuration()
             fields={'POLICY':'policy','PREARM_INPUTS':'policy','PREARM_READY':'policy','ARMED_READY':'identities','REGISTER':'inventory',
                     'DISPATCH':'binding','HEARTBEAT':'heartbeat','REJECTION':'response','FAULT':'fault',
                     'EXPOSURE_INPUTS':'exposure','EXPOSURE_ADMIT':'exposure','EXPOSURE_FINISH':'completion'}
             if operation not in fields or set(request)!={'operation',fields[operation]}:
                 raise PermissionError('HEAD_MONITOR_RUNTIME_OPERATION_REFUSED')
+            if operation not in ('FAULT','HEARTBEAT'):runtime.configuration()
             value=request[fields[operation]]
             if operation=='POLICY':
                 if self._policy_future is not None:raise PermissionError('HEAD_MONITOR_POLICY_REUSED')
