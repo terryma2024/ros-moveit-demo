@@ -5,6 +5,7 @@ import secrets
 import threading
 import time
 from collections import deque
+from itertools import islice
 
 from control_msgs.action import FollowJointTrajectory
 from sensor_msgs.msg import JointState
@@ -14,6 +15,25 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from so101_demo.act.contracts import finite
 from so101_demo.act.head_feedback import FeedbackPolicy, OrderedStopConfirmation, decision_clocks
 from .head_callback_io import HeadCallbackIO, exception_metadata
+
+
+def _copy_current_original_candidates(latest,history):
+    """Copy at most two raw originals under the caller's existing cache lock."""
+    if latest is None:return ()
+    candidates=[dict(latest)]
+    if latest.get('valid') is True:
+        for original in islice(reversed(history),2):
+            if original is not latest and original!=latest:
+                candidates.append(dict(original));break
+    return tuple(candidates)
+
+
+def _causal_current_original(candidates,sim_ns):
+    """Select only a predecision copy; an invalid latest never falls back."""
+    if not candidates:return None
+    if candidates[0].get('valid') is not True:return candidates[0]
+    return next((row for row in candidates if type(row.get('source_ns')) is int
+                 and 0<row['source_ns']<=sim_ns),None)
 
 
 def seconds_message(value,message):
@@ -132,9 +152,12 @@ class RosControllerPort:
 
     def original_feedback_snapshot(self):
         """Measurement-only originals; this does not establish fresh feedback."""
-        with self._lock:sample=None if self._head_feedback is None else dict(self._head_feedback)
+        with self._lock:
+            candidates=_copy_current_original_candidates(self._head_feedback,self._head_samples)
         decision=decision_clocks(self.node,self.monotonic)
-        return dict(sample=sample,decision=decision)
+        sample=_causal_current_original(candidates,decision['sim_ns'])
+        return dict(sample=sample,decision=decision,
+            current_original_selection=dict(joint_candidate_sources_ns=[row['source_ns'] for row in candidates]))
 
     def _feedback(self,message):
         if self.feedback_policy is not None or self._head_bootstrap:

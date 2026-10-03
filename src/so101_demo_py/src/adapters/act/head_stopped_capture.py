@@ -17,6 +17,7 @@ from so101_demo.act.head_feedback import decision_clocks, nanoseconds
 from so101_demo.act.head_feedback_measurement import evaluate_feedback_window, _quantile
 from .ros_search import RGB_QOS, rotation_matrix
 from .head_clock_binding import bind_head_clock
+from .ros_execution import _copy_current_original_candidates,_causal_current_original
 
 
 def _source(message):
@@ -201,11 +202,16 @@ class StoppedHeadCapture:
     def snapshot(self):
         self.check()
         with self.port._lock:
-            joint=None if self.port._head_feedback is None else dict(self.port._head_feedback)
-            camera=None if self._last_camera is None else dict(self._last_camera)
+            joint_candidates=_copy_current_original_candidates(self.port._head_feedback,self.port._head_samples)
+            camera_candidates=_copy_current_original_candidates(self._last_camera,self.camera_messages)
         clocks=decision_clocks(self.node,self.monotonic)
+        joint=_causal_current_original(joint_candidates,clocks['sim_ns'])
+        camera=_causal_current_original(camera_candidates,clocks['sim_ns'])
         if joint is None or camera is None:raise ValueError('HEAD_STOPPED_INPUT_MISSING')
-        return dict(joint=joint,camera=camera,clocks=clocks)
+        return dict(joint=joint,camera=camera,clocks=clocks,
+            current_original_selection=dict(
+                joint_candidate_sources_ns=[row['source_ns'] for row in joint_candidates],
+                camera_candidate_sources_ns=[row['source_ns'] for row in camera_candidates]))
 
     def take_image(self):
         with self.port._lock:

@@ -178,6 +178,37 @@ def test_feedback_snapshot_copies_original_before_reading_decision_clocks(monkey
     assert snapshot['receipt_age_s'] == .01
 
 
+def test_current_feedback_waits_for_original_clock_without_rewriting_future_raw_joint(monkeypatch):
+    _,_,port,wall,sim,_,_=setup_ports(monkeypatch)
+    port._feedback(sample(1.));previous=dict(port._head_feedback)
+    wall[0]=10.008;sim[0]=1.008;port._feedback(sample(1.01));pending=dict(port._head_feedback)
+    snapshot=port.feedback_snapshot()
+    assert snapshot['source_ns']==previous['source_ns'] and snapshot['sequence']==previous['sequence']
+    assert snapshot['source_age_s']==pytest.approx(.008)
+    assert port._head_feedback==pending and list(port._head_samples)==[previous,pending]
+    assert pending['callback_sim_ns']==1_008_000_000 and pending['source_ns']==1_010_000_000
+    sim[0]=1.01;wall[0]=10.009
+    consumed=port.feedback_snapshot()
+    assert consumed['source_ns']==pending['source_ns'] and consumed['wall_s']==10.008
+    assert consumed['sequence']==pending['sequence'] and consumed['source_age_s']==0.
+
+
+@pytest.mark.parametrize('damage',['no_causal','stale','receipt_future','latest_invalid'])
+def test_causal_current_feedback_cannot_hide_missing_or_bad_originals(monkeypatch,damage):
+    _,_,port,wall,sim,_,_=setup_ports(monkeypatch)
+    port._feedback(sample(1.))
+    wall[0]=10.008;sim[0]=1.008
+    msg=sample(1.01)
+    if damage=='latest_invalid':msg.velocity=[]
+    port._feedback(msg)
+    if damage=='no_causal':sim[0]=.99
+    elif damage=='stale':wall[0]=10.03
+    elif damage=='receipt_future':wall[0]=9.99
+    raw=dict(port._head_feedback)
+    with pytest.raises((ValueError,PermissionError)):port.feedback_snapshot()
+    assert port._head_feedback==raw and len(port._head_samples)==2
+
+
 def test_stale_latest_feedback_keeps_actual_negative_stop_predicate(monkeypatch):
     _, _, port, wall, sim, _, _ = setup_ports(monkeypatch)
     port.begin_stop(dict(epoch='stop-1', generation=5, request_wall_s=10.,

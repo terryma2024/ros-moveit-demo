@@ -63,6 +63,29 @@ def test_camera_and_joint_snapshot_precedes_decision_clock(capture):
     assert all((entry.topic_name if hasattr(entry,'topic_name') else entry[1])!='/joint_states' for entry in capture.subscriptions)
 
 
+def test_stopped_decision_consumes_copied_causal_joint_and_image_keeps_all_future_raw(capture):
+    capture._image(image());first_image=dict(capture.camera_messages[-1])
+    assert capture.take_image()[0]==first_image  # No unrelated capacity-one drop.
+    first_joint=dict(capture.port._head_feedback);capture.port._head_samples.append(first_joint)
+    future_joint=dict(first_joint,source_ns=1_012_000_000,wall_s=10.001)
+    capture.port._head_samples.append(future_joint);capture.port._head_feedback=future_joint
+    capture._image(image(1_100_000_000));pending_image=dict(capture.camera_messages[-1])
+    snapshot=capture.snapshot()
+    assert snapshot['joint']==first_joint and snapshot['camera']==first_image
+    assert snapshot['clocks']['sim_ns']==1_010_000_000
+    assert capture.port._head_feedback==future_joint
+    assert list(capture.port._head_samples)==[first_joint,future_joint]
+    assert list(capture.camera_messages)==[first_image,pending_image]
+    assert snapshot['current_original_selection']['joint_candidate_sources_ns']==[1_012_000_000,1_000_000_000]
+    assert snapshot['current_original_selection']['camera_candidate_sources_ns']==[1_100_000_000,1_000_000_000]
+
+
+def test_stopped_snapshot_cannot_consume_any_candidate_before_actual_clock(capture):
+    capture.port._head_feedback['source_ns']=1_020_000_000
+    capture._image(image(1_100_000_000))
+    with pytest.raises(ValueError):capture.snapshot()
+
+
 def test_original_info_before_warm_boundary_pairs_image_after_boundary(capture):
     capture._info(info());original=dict(capture.info_messages[-1])
     capture.begin_capture();capture._image(image())
