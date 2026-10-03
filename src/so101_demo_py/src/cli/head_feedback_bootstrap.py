@@ -12,6 +12,17 @@ import threading
 import time
 import uuid
 
+def _audit_chunks(value,*,canonical=False):
+    encoder=json.JSONEncoder(sort_keys=True,allow_nan=False,
+        **({'separators':(',',':')} if canonical else {}))
+    since_yield=0
+    for chunk in encoder.iterencode(value):
+        yield chunk
+        since_yield+=len(chunk)
+        if since_yield>=1024:
+            time.sleep(0);since_yield=0
+
+
 def digest(value):
     """Hash the identical canonical audit body without a full encoded copy.
 
@@ -19,12 +30,8 @@ def digest(value):
     and heartbeat. Yield between bounded metadata chunks; never publish a
     progress receipt here or change the original workers' deadlines.
     """
-    result=hashlib.sha256();since_yield=0
-    encoder=json.JSONEncoder(sort_keys=True,separators=(',',':'),allow_nan=False)
-    for chunk in encoder.iterencode(value):
-        encoded=chunk.encode('ascii');result.update(encoded);since_yield+=len(encoded)
-        if since_yield>=16384:
-            time.sleep(0);since_yield=0
+    result=hashlib.sha256()
+    for chunk in _audit_chunks(value,canonical=True):result.update(chunk.encode('ascii'))
     return result.hexdigest()
 
 
@@ -49,7 +56,8 @@ def _owned_runtime_environment(peer):
 
 def _write(path,record):
     with Path(path).open('x',encoding='ascii') as handle:
-        json.dump(record,handle,sort_keys=True,allow_nan=False);handle.write('\n')
+        for chunk in _audit_chunks(record):handle.write(chunk)
+        handle.write('\n')
         handle.flush();os.fsync(handle.fileno())
     return _reference(path)
 

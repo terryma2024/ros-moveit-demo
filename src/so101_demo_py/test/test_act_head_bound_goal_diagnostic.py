@@ -281,3 +281,17 @@ def test_incremental_entry_digest_is_exact_canonical_body_hash(value):
 def test_incremental_entry_digest_refuses_nonfinite_audit_body(value):
     from so101_demo.cli.head_feedback_bootstrap import digest
     with pytest.raises(ValueError):digest(value)
+
+
+def test_cooperative_publication_keeps_exact_original_file_bytes_and_reference(tmp_path):
+    import hashlib
+    import json
+    from so101_demo.cli.head_feedback_bootstrap import _write
+    record={'scope':'original','rows':[{'ordinal':i,'source_ns':i*2000000,
+        'values':[.002,.010,-0.],'label':'é'} for i in range(500)]}
+    expected=(json.dumps(record,sort_keys=True,allow_nan=False)+'\n').encode('ascii')
+    path=tmp_path/'measurement.json'
+    reference=_write(path,record)
+    assert path.read_bytes()==expected
+    assert reference==dict(path=str(path.resolve()),sha256=hashlib.sha256(expected).hexdigest())
+    with pytest.raises(FileExistsError):_write(path,record)
