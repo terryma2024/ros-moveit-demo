@@ -28,28 +28,40 @@ except ModuleNotFoundError:
         def close(self):return {}
 
 
-def setup(tmp_path,native_damage=None,*,prepolicy=False):
+def setup(tmp_path,native_damage=None,*,prepolicy=False,simulation=False,monkeypatch=None):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    from so101_demo.act.head_feedback import FeedbackPolicy
+    from so101_demo.act.head_monitor import digest
+    bound=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document()) if simulation else None
     node=Node();node.create_timer=lambda period,callback,**kw:SimpleNamespace(period=period,callback=callback,**kw)
     node.destroy_timer=lambda timer:True
+    node.get_fully_qualified_name=lambda:'/head_root_unit'
     events=[];requests=[]
+    values=FeedbackPolicy.parse(bound.feedback_values(),simulation_policy=bound) if simulation else policy()
     port=RosControllerPort(node,_NoMotion(),('neck_yaw_joint',),stop_velocity_rad_s=.002,max_age_s=.05,
-        feedback_policy=None if prepolicy else policy(),head_bootstrap=prepolicy)
+        feedback_policy=None if prepolicy else values,head_bootstrap=prepolicy)
     port._feedback(sample())
     monitor=object.__new__(MonitorProcess);monitor._identity=_peer(os.getppid())
+    monitor._pending_heartbeat=None;monitor._heartbeat_trace=None
+    monitor._channel=SimpleNamespace(_simulation_policy=bound)
     monitor.is_alive=lambda:True
     def reply(operation,stage,**kw):
-        return dict(request=operation,stage=stage,epoch='attempt',generation=5,session_id='session',
+        result=dict(request=operation,stage=stage,epoch='attempt',generation=5,session_id='session',
             monitor_peer=monitor.identity,purpose='calibration',motion_authority=False,**kw)
+        if simulation:result.update(simulation_policy=bound.readback(),simulation_policy_sha256=digest(bound.readback()))
+        return result
     def request(value):
-        requests.append(value);return reply(value['operation'],
-            'PRESENT' if port.feedback_policy is None else 'POLICY_READY')
+        requests.append(value)
+        progress={} if not simulation or value['operation']!='HEARTBEAT' else dict(
+            watchdog_wall_s=time.monotonic(),executor_wall_s=time.monotonic(),ack_wall_s=time.monotonic())
+        return reply(value['operation'],'PRESENT' if port.feedback_policy is None else 'POLICY_READY',**progress)
     monitor.request_runtime=request
     monitor.request_heartbeat=lambda factory:monitor.request_runtime(dict(operation='HEARTBEAT',heartbeat=factory()))
     owner=_peer(os.getpid())
     # UNIX endpoint length stays production-valid; no socket is created here.
     endpoint=Path('/tmp')/('hs-primary-test-'+uuid.uuid4().hex[:8])
     revoker=NativeRevocationClient(endpoint/'neck-primary-revoke.sock',capability=secrets.token_bytes(32),
-        native_owner=owner,generation=5,timeout_s=.002)
+        native_owner=owner,generation=5,timeout_s=.05 if simulation else .002,simulation_policy=bound)
     revoker.close_strict=lambda:dict(ack_validated=True,native_owner=owner,generation=5)
     refs={key:dict(path=str(endpoint/(key+'.provision')),socket_path=str(endpoint/(stem+'.sock')),sha256=letter*64)
         for key,stem,letter in [('main','neck','b'),('primary_fault','neck-primary-revoke','c'),('monitor_fault','neck-revoke','d')]}
@@ -60,17 +72,139 @@ def setup(tmp_path,native_damage=None,*,prepolicy=False):
     elif native_damage=='clock':origin['clock']='CLOCK_REALTIME'
     configuration=reply('CONFIGURATION','CONFIGURED',provisions=refs,dependencies={'controlled':True},
         native_transport=origin)
+    if simulation:
+        from so101_demo.adapters.act import head_primary_supervisor as module
+        assert monkeypatch is not None
+        def native_readback(node_name):
+            return dict(remote_node='/neck_controller',reader_node=node_name,
+                values=dict(head_simulation_mode=bound.mode,head_fault_connection_timeout_ns=50_000_000,
+                    read_only=True,dynamic_typing=False),simulation_policy_sha256=digest(bound.readback()),
+                query_wall_s=9.,completed_wall_s=9.01,deadline_wall_s=10.,motion_authority=False)
+        # Controlled guard-only receipt. Real typed service transport and
+        # actual owned CPU queries are covered by native/runtime process tests.
+        monkeypatch.setattr(module,'read_native_policy',lambda *args,**kw:native_readback('/head_root_unit'),raising=False)
+        configuration.update(node_name='controlled_cpu_reader',native_policy_readback=native_readback('/controlled_cpu_reader'))
     ack=reply('POLICY_STATUS','POLICY_READY',policy_sha256='a'*64)
     router=HeadOriginalRouter(port,lambda *args:None)
     try:
         sup=HeadPrimarySupervisor(node=node,port=port,router=router,monitor=monitor,revoker=revoker,
             epoch='attempt',generation=5,session_id='session',policy_reference=None if prepolicy else
                 {'path':str(tmp_path/'policy.json'),'sha256':'a'*64},
-            policy_ack=None if prepolicy else ack,configuration_ack=configuration,stop_latency_s=.07,camera_max_age_s=.05,
-            camera_frame_id='head_camera_frame',emit=lambda event,**kw:events.append((event,kw)))
+            policy_ack=None if prepolicy else ack,configuration_ack=configuration,stop_latency_s=1. if simulation else .07,camera_max_age_s=.15 if simulation else .05,
+            camera_frame_id='head_camera_frame',emit=lambda event,**kw:events.append((event,kw)),
+            **({'simulation_policy':bound} if simulation else {}))
     except BaseException:
         port.close_head_io(timeout_s=1.);raise
     return node,port,sup,requests,events,revoker
+
+
+def test_root_simulation_binds_exact_mode_and_actual_scheduled_period_without_arming(tmp_path,monkeypatch):
+    _,port,sup,requests,_,revoker=setup(tmp_path,prepolicy=True,simulation=True,monkeypatch=monkeypatch)
+    try:
+        assert sup._simulation_policy==sup.epoch._simulation_policy==sup.observer._simulation_policy
+        assert sup._simulation_policy==revoker._simulation_policy==sup.monitor._channel._simulation_policy
+        assert sup._native_policy_readback['values']['head_fault_connection_timeout_ns']==50_000_000
+        sup.start();sup.timer.callback()
+        deadline=time.monotonic()+.1
+        while not requests and time.monotonic()<deadline:time.sleep(.001)
+        assert sup.timer.period==.02 and len(sup.threads)==4 and requests
+        assert not sup.ready and not sup.failed and sup.epoch.stage=='PRESENT' and not port._goals
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def simulation_guarded(node,port,sup,monkeypatch):
+    from so101_demo.adapters.act import head_primary_supervisor as module
+    clock=lambda:node.wall
+    monkeypatch.setattr(module,'time',SimpleNamespace(monotonic=clock))
+    port.monotonic=clock;sup.observer.monotonic=clock
+    guarded(sup,port,monotonic=clock);sup._cpu_progress_wall=node.wall
+    return clock
+
+
+def fresh_root_inputs(node,port,sup):
+    node.sim+=.01;port._feedback(sample(node.sim))
+    for kind in ('CLOCK','IMAGE','INFO'):
+        sup.observer.observe_original(kind,dict(source_ns=round(node.sim*1e9),wall_s=node.wall,
+            valid=True,frame_id='head_camera_frame'))
+    sup.observer.executor_progress()
+    sup.observer.heartbeat(dict(wall_s=node.wall,executor_wall_s=node.wall,inference_deadline_wall_s=None))
+
+
+@pytest.mark.parametrize('gap',[.3,.5])
+def test_root_simulation_current_uses_original_supervision_budget_and_exact_expiry(tmp_path,monkeypatch,gap):
+    node,port,sup,_,_,_=setup(tmp_path,simulation=True,monkeypatch=monkeypatch)
+    try:
+        simulation_guarded(node,port,sup,monkeypatch)
+        node.wall+=gap;fresh_root_inputs(node,port,sup)
+        if gap==.3:
+            assert sup._current()['positions'] and not sup.failed
+            assert sup._watchdog_wall==10. and sup._cpu_progress_wall==10.
+        else:
+            with pytest.raises(PermissionError):sup._current()
+            assert sup.failed and sup._fault['fault_wall_s']==pytest.approx(10.5,abs=1e-12)
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+def test_root_simulation_pending_frame_removes_readiness_without_reviving_or_sending(tmp_path,monkeypatch):
+    node,port,sup,requests,_,_=setup(tmp_path,simulation=True,monkeypatch=monkeypatch)
+    try:
+        simulation_guarded(node,port,sup,monkeypatch)
+        sup._ready=True
+        assert sup.ready
+        sup.monitor._pending_heartbeat={'started_wall_s':10.}
+        assert not sup.ready and not sup.failed and requests==[] and not port._goals
+    finally:sup._ready=False;sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('bad_progress',[True,float('nan'),'unknown',10.1])
+def test_root_initial_missing_progress_cannot_hide_malformed_other_cpu_clock(tmp_path,monkeypatch,bad_progress):
+    from so101_demo.adapters.act import head_primary_supervisor as module
+    node,port,sup,_,_,_=setup(tmp_path,prepolicy=True,simulation=True,monkeypatch=monkeypatch)
+    monkeypatch.setattr(module,'time',SimpleNamespace(monotonic=lambda:node.wall))
+    sup._started_wall=10.
+    try:
+        with pytest.raises(PermissionError):
+            sup._accept_cpu_progress(dict(ack_wall_s=10.,watchdog_wall_s=bad_progress,
+                executor_wall_s=None),10.)
+        assert not sup.ready and sup._cpu_progress_wall is None
+    finally:sup.close();port.close_head_io(timeout_s=1.)
+
+
+@pytest.mark.parametrize('progress',['fresh','stale'])
+def test_root_simulation_completes_only_original_slow_heartbeat_then_checks_cpu_progress(tmp_path,monkeypatch,progress):
+    from so101_demo.act.head_monitor import digest
+    node,port,sup,_,events,_=setup(tmp_path,simulation=True,monkeypatch=monkeypatch)
+    calls=[]
+    try:
+        simulation_guarded(node,port,sup,monkeypatch);sup._ready=True
+        def request(factory):
+            calls.append(('original',factory()))
+            sup.monitor._pending_heartbeat={'started_wall_s':node.wall}
+            node.wall+=.25
+            raise TimeoutError('controlled original RPC budget')
+        def complete(deadline):
+            assert not sup.ready and not sup.failed
+            assert deadline<=10.5 and sup.monitor.heartbeat_pending
+            calls.append(('same_frame',deadline));node.wall+=.05
+            sup.monitor._pending_heartbeat=None;sup._shutdown.set()
+            cpu=10.28 if progress=='fresh' else 9.7
+            return dict(request='HEARTBEAT',stage='POLICY_READY',epoch='attempt',generation=5,
+                session_id='session',monitor_peer=sup.monitor.identity,purpose='calibration',motion_authority=False,
+                simulation_policy=sup._simulation_policy.readback(),simulation_policy_sha256=digest(sup._simulation_policy.readback()),
+                watchdog_wall_s=cpu,executor_wall_s=cpu,ack_wall_s=node.wall)
+        sup.monitor.request_heartbeat=request;sup.monitor.complete_pending_heartbeat=complete
+        node.wall+=.001  # the new sampled heartbeat must advance its original clock
+        sup._heartbeat()
+        assert [row[0] for row in calls]==['original','same_frame'] and not port._goals
+        assert sup.failed is (progress=='stale')
+        if progress=='fresh':
+            assert sup.ready and sup._cpu_progress_wall==10.28
+            assert sup.observer._primary['wall_s']==10.001  # original progress was not restamped
+        else:
+            assert not sup.ready and sup._fault['fault_wall_s']==pytest.approx(10.2,abs=1e-12)
+            assert any(event in ('MONITOR_FAULT_NOTICE','MONITOR_FAULT_NOTICE_UNCONFIRMED') for event,_ in events)
+        assert any(event=='HEARTBEAT_ROUND_TRIP' for event,_ in events)
+    finally:sup._ready=False;sup.close();port.close_head_io(timeout_s=1.)
 
 
 def test_root_resources_bind_before_measured_policy_without_motion_authority(tmp_path):

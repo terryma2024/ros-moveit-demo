@@ -11,6 +11,25 @@ from so101_demo.act.head_monitor import digest
 _NAMES=('head_simulation_mode','head_fault_connection_timeout_ns')
 
 
+def validate_native_policy_receipt(receipt,policy,*,reader_node):
+    fields={'remote_node','reader_node','values','simulation_policy_sha256',
+        'query_wall_s','completed_wall_s','deadline_wall_s','motion_authority'}
+    expected=dict(head_simulation_mode=policy.mode,
+        head_fault_connection_timeout_ns=round(policy.native_close_timeout_s*1e9),
+        read_only=True,dynamic_typing=False)
+    if (type(receipt) is not dict or set(receipt)!=fields or type(reader_node) is not str
+            or not reader_node.startswith('/') or receipt['remote_node']!='/neck_controller'
+            or receipt['reader_node']!=reader_node or receipt['motion_authority'] is not False
+            or receipt['simulation_policy_sha256']!=digest(policy.readback())
+            or type(receipt['values']) is not dict or set(receipt['values'])!=set(expected)
+            or any(type(receipt['values'][key]) is not type(value) or receipt['values'][key]!=value
+                for key,value in expected.items())
+            or any(type(receipt[key]) not in (int,float) or not math.isfinite(receipt[key])
+                for key in ('query_wall_s','completed_wall_s','deadline_wall_s'))
+            or not 0<=receipt['query_wall_s']<=receipt['completed_wall_s']<receipt['deadline_wall_s']):
+        raise PermissionError('HEAD_NATIVE_POLICY_RECEIPT_INVALID')
+
+
 def validate_native_policy_readback(values,descriptors,policy):
     if (not isinstance(policy,HeadSimulationPolicy)
             or type(values) is not GetParameters.Response

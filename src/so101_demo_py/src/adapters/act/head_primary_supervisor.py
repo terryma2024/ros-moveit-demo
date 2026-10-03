@@ -14,32 +14,46 @@ from rclpy.clock import Clock, ClockType
 
 from so101_demo.act.head_feedback import FeedbackPolicy,nanoseconds
 from so101_demo.act.head_monitor import HeadMonitorEpoch, canonical_bytes,digest
+from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
 from .head_monitor_process import MonitorProcess,_revoked_heartbeat_reply
 from .head_monitor_ros import HeadROSMonitor
 from .head_monitor_runtime import HeadMonitorRuntime,_sha_file
 from .head_original_router import HeadOriginalRouter
 from .head_reservation_authority import HeadReservationAuthority
 from .head_revocation import NativeRevocationClient
+from .head_native_policy_readback import read_native_policy,validate_native_policy_receipt
 from .ros_execution import RosControllerPort
 
 
 class HeadPrimarySupervisor:
     def __init__(self, *, node, port, router, monitor, revoker, epoch, generation,
                  session_id, policy_reference, policy_ack, configuration_ack,
-                 stop_latency_s, camera_max_age_s, camera_frame_id, emit):
+                 stop_latency_s, camera_max_age_s, camera_frame_id, emit,simulation_policy=None):
+        self._simulation_policy=(None if simulation_policy is None else
+            simulation_policy if isinstance(simulation_policy,HeadSimulationPolicy)
+            else HeadSimulationPolicy.parse(simulation_policy))
+        native_timeout=.002 if self._simulation_policy is None else self._simulation_policy.native_close_timeout_s
         prepolicy=(isinstance(port,RosControllerPort) and port._head_bootstrap
             and port.feedback_policy is None and policy_reference is None and policy_ack is None)
         if (not isinstance(port, RosControllerPort) or port.node is not node
                 or (port.feedback_policy is None and not prepolicy) or port.names != ('neck_yaw_joint',)
                 or not isinstance(router, HeadOriginalRouter) or router.port is not port
                 or not isinstance(monitor, MonitorProcess) or not monitor.is_alive()
+                or monitor._channel._simulation_policy!=self._simulation_policy
                 or type(revoker) is not NativeRevocationClient
-                or revoker.timeout != .002 or revoker.generation != generation
+                or revoker.timeout != native_timeout or revoker.generation != generation
+                or revoker._simulation_policy!=self._simulation_policy
+                or port.feedback_policy is not None and port.feedback_policy._bound_simulation_policy!=self._simulation_policy
                 or not callable(emit)):
             raise ValueError('HEAD_PRIMARY_CONFIG_INVALID')
+        if self._simulation_policy is not None and (monitor._channel._simulation_policy!=self._simulation_policy
+                or stop_latency_s!=self._simulation_policy.stop_confirmation_timeout_s
+                or camera_max_age_s!=self._simulation_policy.perception_max_age_s):
+            raise ValueError('HEAD_PRIMARY_SIMULATION_BINDING_INVALID')
         self.node = node; self.port = port; self.router = router; self.monitor = monitor
         self.primary = deepcopy(monitor.identity)
-        self.epoch = HeadMonitorEpoch(epoch=epoch, generation=generation, session_id=session_id)
+        self.epoch = HeadMonitorEpoch(epoch=epoch, generation=generation, session_id=session_id,
+            simulation_policy=self._simulation_policy)
         self._policy = deepcopy(policy_reference); self._sink = emit; self._revoker = revoker
         self._fault = None; self._native_close = None; self._native_close_error = None
         self._fault_notice = None; self._fault_notice_error = None
@@ -53,12 +67,24 @@ class HeadPrimarySupervisor:
         self._policy_binding = False
         self._threads = []; self.threads = self._threads; self.timer = None
         self._observer = None; self._started_wall = None
+        self._heartbeat_waiting=False;self._heartbeat_pending_deadline=None;self._cpu_progress_wall=None
+        self._cpu_progress_values=None
+        self._native_policy_readback=None;self._native_policy_readback_sha256=None
         if not prepolicy:
             if type(self._policy) is not dict or set(self._policy) != {'path', 'sha256'}:
                 raise ValueError('HEAD_PRIMARY_POLICY_REFERENCE_INVALID')
             self._ack(policy_ack, 'POLICY_STATUS', 'POLICY_READY',
                       policy_sha256=self._policy['sha256'])
         self._ack(configuration_ack, 'CONFIGURATION', 'CONFIGURED',native_transport=revoker.transport_origin)
+        if self._simulation_policy is not None:
+            name=configuration_ack.get('node_name')
+            if type(name) is not str or not name:raise PermissionError('HEAD_PRIMARY_CPU_NODE_INVALID')
+            validate_native_policy_receipt(configuration_ack.get('native_policy_readback'),
+                self._simulation_policy,reader_node='/'+name)
+            self._native_policy_readback=read_native_policy(node,self._simulation_policy)
+            validate_native_policy_receipt(self._native_policy_readback,self._simulation_policy,
+                reader_node=node.get_fully_qualified_name())
+            self._native_policy_readback_sha256=digest(self._native_policy_readback)
         self._provisions = deepcopy(configuration_ack['provisions'])
         self._dependencies = deepcopy(configuration_ack['dependencies'])
         if (set(self._provisions) != {'main', 'primary_fault', 'monitor_fault'}
@@ -69,7 +95,7 @@ class HeadPrimarySupervisor:
             stop_velocity_rad_s=port.stop_velocity, stop_latency_s=stop_latency_s,
             camera_max_age_s=camera_max_age_s, camera_frame_id=camera_frame_id,
             emit=self._emit, fault_callback=self.fault, controller_port=port,
-            monotonic=port.monotonic)
+            monotonic=port.monotonic,simulation_policy=self._simulation_policy)
         router.bind_primary(self._observer)
 
     def begin_policy_binding(self):
@@ -123,12 +149,79 @@ class HeadPrimarySupervisor:
     def failed(self): return self._fault is not None or self.epoch.stage == 'REVOKED'
 
     @property
-    def ready(self): return self._ready and not self.failed and not self._finished
+    def ready(self):
+        if not self._ready or self.failed or self._finished:return False
+        if self._simulation_policy is None:return True
+        progress=self._cpu_progress_wall
+        return (not self._heartbeat_waiting and not self.monitor.heartbeat_pending
+            and progress is not None and 0<=nanoseconds(time.monotonic())-nanoseconds(progress)
+                <round(self._simulation_policy.supervision_stale_s*1e9))
+
+    @property
+    def _watchdog_period_s(self):
+        return .002 if self._simulation_policy is None else self._simulation_policy.watchdog_period_s
+
+    @property
+    def _supervision_stale_s(self):
+        return .010 if self._simulation_policy is None else self._simulation_policy.supervision_stale_s
+
+    @property
+    def _rpc_receipt_age_ns(self):
+        return 10_000_000 if self._simulation_policy is None else round(self._simulation_policy.heartbeat_rpc_timeout_s*1e9)
+
+    def _accept_cpu_progress(self,reply,rpc_started):
+        if self._simulation_policy is None:return
+        now=time.monotonic();ack=reply.get('ack_wall_s')
+        progress={key:reply.get(key) for key in ('watchdog_wall_s','executor_wall_s')}
+        if (type(ack) not in (int,float) or not math.isfinite(ack)
+                or not nanoseconds(rpc_started)<=nanoseconds(ack)<=nanoseconds(now)):
+            raise PermissionError('HEAD_PRIMARY_CPU_PROGRESS_INVALID')
+        for key,value in progress.items():
+            if value is None:continue
+            if (type(value) not in (int,float) or not math.isfinite(value)
+                    or not 0<=nanoseconds(value)<=nanoseconds(ack)
+                    or self._cpu_progress_values is not None
+                        and nanoseconds(value)<nanoseconds(self._cpu_progress_values[key])):
+                raise PermissionError('HEAD_PRIMARY_CPU_PROGRESS_INVALID')
+        if any(value is None for value in progress.values()):
+            if self._cpu_progress_wall is not None or self.epoch.stage=='ARMED_READY':
+                raise PermissionError('HEAD_PRIMARY_CPU_PROGRESS_LOST')
+            self._heartbeat_waiting=True
+            self._heartbeat_pending_deadline=self._started_wall+self._supervision_stale_s
+            return
+        earliest=min(progress.values());expiry=nanoseconds(earliest)+round(self._supervision_stale_s*1e9)
+        if nanoseconds(now)>=expiry:
+            self.fault('HEAD_PRIMARY_CPU_PROGRESS_STALE',expiry*1e-9)
+            raise PermissionError('HEAD_PRIMARY_CPU_PROGRESS_STALE')
+        self._cpu_progress_values=progress;self._cpu_progress_wall=earliest
+        self._heartbeat_waiting=False;self._heartbeat_pending_deadline=None
+
+    def _await_heartbeat(self):
+        if self._simulation_policy is None:return
+        while self._heartbeat_waiting or self.monitor.heartbeat_pending or self._cpu_progress_wall is None:
+            now=time.monotonic()
+            origin=self._started_wall if self._cpu_progress_wall is None else self._cpu_progress_wall
+            deadline=self._heartbeat_pending_deadline
+            if deadline is None and origin is not None:deadline=origin+self._supervision_stale_s
+            if self.failed or not self.monitor.is_alive() or not self._started or deadline is None:
+                self.fault('HEAD_PRIMARY_SUPERVISION_UNAVAILABLE',now)
+                raise PermissionError('HEAD_PRIMARY_SUPERVISION_UNAVAILABLE')
+            if nanoseconds(now)>=nanoseconds(deadline):
+                self.fault('HEAD_PRIMARY_SUPERVISION_STALE',deadline)
+                raise PermissionError('HEAD_PRIMARY_SUPERVISION_STALE')
+            self._fault_event.wait(min(self._watchdog_period_s,max(0.,deadline-now)))
 
     def _ack(self, reply, operation, stage, **fields):
         expected = dict(request=operation, stage=stage, epoch=self.epoch.epoch,
             generation=self.epoch.generation, session_id=self.epoch.session_id,
             monitor_peer=self.primary, purpose='calibration', motion_authority=False, **fields)
+        if self._simulation_policy is not None:
+            expected.update(simulation_policy=self._simulation_policy.readback(),
+                simulation_policy_sha256=digest(self._simulation_policy.readback()))
+            # Strict parse rejects bool/int and integer/float schema substitutions.
+            from .head_monitor_process import _simulation_ack_matches
+            if not _simulation_ack_matches(reply,self._simulation_policy):
+                raise PermissionError('HEAD_PRIMARY_SIMULATION_ACK_INVALID')
         if type(reply) is not dict or any(key not in reply or
                 canonical_bytes(reply[key]) != canonical_bytes(value) for key, value in expected.items()):
             raise PermissionError('HEAD_PRIMARY_MONITOR_ACK_INVALID')
@@ -171,7 +264,7 @@ class HeadPrimarySupervisor:
             raise PermissionError('HEAD_PRIMARY_START_REUSED')
         self._started = True
         try:
-            self.timer = self.node.create_timer(.002, self.observer.executor_progress,
+            self.timer = self.node.create_timer(self._watchdog_period_s, self.observer.executor_progress,
                 clock=Clock(clock_type=ClockType.STEADY_TIME))
             self._started_wall = time.monotonic()
             for target, name in ((self._watchdog, 'watchdog'), (self._heartbeat, 'heartbeat'),
@@ -187,9 +280,10 @@ class HeadPrimarySupervisor:
                 self._notify_cpu_fault(); return
             now = time.monotonic()
             if self.observer._executor_wall is None:
-                if now-self._started_wall > .010:
-                    self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010); return
-                self._shutdown.wait(.002); continue
+                gap=nanoseconds(now)-nanoseconds(self._started_wall);limit=round(self._supervision_stale_s*1e9)
+                if gap>limit or self._simulation_policy is not None and gap==limit:
+                    self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+self._supervision_stale_s); return
+                self._shutdown.wait(self._watchdog_period_s); continue
             record = None
             reply = None; error_type = None; error_code = None; rejected = False; rpc_started = time.monotonic()
             def snapshot():
@@ -205,13 +299,33 @@ class HeadPrimarySupervisor:
                 return record
             try:
                 stage = self.epoch.stage; arming = self._arming
-                reply = self.monitor.request_heartbeat(snapshot)
+                try:reply = self.monitor.request_heartbeat(snapshot)
+                except TimeoutError:
+                    if self._simulation_policy is None:raise
+                    self._heartbeat_waiting=True
+                    origin=self._started_wall if self._cpu_progress_wall is None else self._cpu_progress_wall
+                    deadline=origin+self._supervision_stale_s
+                    if self._heartbeat_pending_deadline is not None:
+                        deadline=min(deadline,self._heartbeat_pending_deadline)
+                    if self.monitor.heartbeat_pending:
+                        deadline=min(deadline,self.monitor.pending_heartbeat_deadline_wall_s)
+                        self._heartbeat_pending_deadline=deadline
+                        reply=self.monitor.complete_pending_heartbeat(deadline)
+                    else:
+                        self._heartbeat_pending_deadline=deadline
+                        if nanoseconds(time.monotonic())>=nanoseconds(deadline):
+                            self.fault('HEAD_PRIMARY_SUPERVISION_STALE',deadline);raise
+                        # No snapshot or bytes were sent. Never complete or
+                        # borrow another operation; only a later new owned
+                        # heartbeat can restore original CPU progress.
+                        self._fault_event.wait(self._watchdog_period_s)
+                        error_type='UNSENT_RPC_TIMEOUT';continue
                 if reply.get('stage')=='REVOKED' or 'heartbeat_rejected' in reply:
                     ended=time.monotonic()
                     self._ack(reply,'HEARTBEAT','REVOKED')
-                    if (not _revoked_heartbeat_reply(reply,ended)
+                    if (not _revoked_heartbeat_reply(reply,ended,simulation_policy=self._simulation_policy)
                             or not nanoseconds(rpc_started)<=nanoseconds(reply['ack_wall_s'])<=nanoseconds(ended)
-                            or nanoseconds(ended)-nanoseconds(rpc_started)>10_000_000):
+                            or nanoseconds(ended)-nanoseconds(rpc_started)>round(self._supervision_stale_s*1e9)):
                         raise PermissionError('HEAD_PRIMARY_HEARTBEAT_REVOKED_ACK_INVALID')
                     self.fault(reply['fault']['reason'],reply['fault']['fault_wall_s'])
                     error_type='MONITOR_REVOKED';rejected=True
@@ -221,12 +335,15 @@ class HeadPrimarySupervisor:
                     if arming or self._arming: allowed.update(('POLICY_READY', 'ARMED_READY'))
                     if reply.get('stage') not in allowed: raise PermissionError('HEAD_PRIMARY_HEARTBEAT_STAGE_INVALID')
                     self._ack(reply, 'HEARTBEAT', reply['stage'])
+                    self._accept_cpu_progress(reply,rpc_started)
             except BaseException as error:
                 error_type = type(error).__name__
-                self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED',
-                    rpc_started if record is None else record['wall_s'])
+                if not self.failed:
+                    self.fault('HEAD_PRIMARY_HEARTBEAT_FAILED',time.monotonic() if self._simulation_policy is not None
+                        else rpc_started if record is None else record['wall_s'])
                 args=BaseException.args.__get__(error)
                 error_code=args[0] if args and type(args[0]) is str and len(args[0])<=128 else None
+                if self._simulation_policy is not None:self._notify_cpu_fault()
                 return
             finally:
                 rpc_ended = time.monotonic()
@@ -242,7 +359,7 @@ class HeadPrimarySupervisor:
             # The nominal period includes this actual exchange and its audit
             # publication. Never add another full idle period after a slow
             # valid reply; the next exchange still samples new real progress.
-            self._fault_event.wait(max(0.,rpc_started+.002-time.monotonic()))
+            self._fault_event.wait(max(0.,rpc_started+self._watchdog_period_s-time.monotonic()))
 
     def _notify_cpu_fault(self):
         # This worker performs no native close or cancellation. Those workers
@@ -259,7 +376,7 @@ class HeadPrimarySupervisor:
                     or not math.isfinite(fault['fault_wall_s'])
                     or not 0 <= fault['fault_wall_s'] <= original['fault_wall_s']
                     or not nanoseconds(started) <= nanoseconds(reply['ack_wall_s']) <= nanoseconds(ended)
-                    or nanoseconds(ended)-nanoseconds(started) > 10_000_000):
+                    or nanoseconds(ended)-nanoseconds(started) > self._rpc_receipt_age_ns):
                 raise PermissionError('HEAD_PRIMARY_FAULT_NOTICE_ACK_INVALID')
             self.fault(fault['reason'], fault['fault_wall_s'])
             self._fault_notice = dict(ack=reply, request_wall_s=started, reply_wall_s=ended)
@@ -275,21 +392,27 @@ class HeadPrimarySupervisor:
             previous = self._watchdog_wall; executor = self.observer._executor_wall
             heartbeat = self.observer._primary
             now = time.monotonic(); self._watchdog_wall = now
+            limit=round(self._supervision_stale_s*1e9)
+            def expired(wall):
+                gap=nanoseconds(now)-nanoseconds(wall)
+                return gap<0 or gap>limit or self._simulation_policy is not None and gap==limit
+            def crossing(wall):return min(now,(nanoseconds(wall)+limit)*1e-9)
             try:
                 if not self.monitor.is_alive(): self.fault('HEAD_PRIMARY_MONITOR_LOST', now)
-                if previous is not None and now-previous > .010:
-                    self.fault('HEAD_PRIMARY_WATCHDOG_GAP', previous+.010)
-                if now-self._started_wall > .010:
-                    if executor is None: self.fault('HEAD_PRIMARY_EXECUTOR_STALE', self._started_wall+.010)
-                    elif not 0 <= now-executor <= .010:
-                        self.fault('HEAD_PRIMARY_EXECUTOR_STALE', executor+.010)
-                    if heartbeat is None: self.fault('HEAD_PRIMARY_HEARTBEAT_STALE', self._started_wall+.010)
-                    elif not 0 <= now-heartbeat['wall_s'] <= .010:
-                        self.fault('HEAD_PRIMARY_HEARTBEAT_STALE', heartbeat['wall_s']+.010)
+                if previous is not None and expired(previous):
+                    self.fault('HEAD_PRIMARY_WATCHDOG_GAP',crossing(previous))
+                if expired(self._started_wall):
+                    if executor is None:self.fault('HEAD_PRIMARY_EXECUTOR_STALE',crossing(self._started_wall))
+                    elif expired(executor):self.fault('HEAD_PRIMARY_EXECUTOR_STALE',crossing(executor))
+                    if heartbeat is None:self.fault('HEAD_PRIMARY_HEARTBEAT_STALE',crossing(self._started_wall))
+                    elif expired(heartbeat['wall_s']):self.fault('HEAD_PRIMARY_HEARTBEAT_STALE',crossing(heartbeat['wall_s']))
+                    if self._simulation_policy is not None:
+                        if self._cpu_progress_wall is None:self.fault('HEAD_PRIMARY_CPU_PROGRESS_STALE',crossing(self._started_wall))
+                        elif expired(self._cpu_progress_wall):self.fault('HEAD_PRIMARY_CPU_PROGRESS_STALE',crossing(self._cpu_progress_wall))
                 self.observer.poll()
                 self._check_dispatch_observation_deadline()
             except BaseException: self.fault('HEAD_PRIMARY_WATCHDOG_FAILED', now)
-            self._shutdown.wait(.002)
+            self._shutdown.wait(self._watchdog_period_s)
 
     def inference_deadline(self, value):
         if value is not None and (type(value) not in (int, float) or not math.isfinite(value) or value <= 0):
@@ -345,19 +468,30 @@ class HeadPrimarySupervisor:
             raise
 
     def _current(self):
+        self._await_heartbeat()
         tick = self._watchdog_wall; now = time.monotonic()
+        limit=round(self._supervision_stale_s*1e9)
+        gap=None if tick is None else nanoseconds(now)-nanoseconds(tick)
         if (not self._started or self.failed or self._finished or not self.monitor.is_alive()
-                or tick is None or not 0 <= nanoseconds(now)-nanoseconds(tick) <= 10_000_000):
-            crossing = now if tick is None else min(now, tick+.010)
+                or gap is None or gap<0 or gap>limit or self._simulation_policy is not None and gap==limit):
+            crossing = now if tick is None else min(now,(nanoseconds(tick)+limit)*1e-9)
             self.fault('HEAD_PRIMARY_CURRENT_GUARD_REFUSED', crossing)
             raise PermissionError('HEAD_PRIMARY_CURRENT_GUARD_REFUSED')
+        if self._simulation_policy is not None:
+            progress=self._cpu_progress_wall
+            if (self._native_policy_readback_sha256!=digest(self._native_policy_readback)
+                    or progress is None or not 0<=nanoseconds(now)-nanoseconds(progress)<limit):
+                crossing=now if progress is None else min(now,(nanoseconds(progress)+limit)*1e-9)
+                self.fault('HEAD_PRIMARY_CURRENT_GUARD_REFUSED',crossing)
+                raise PermissionError('HEAD_PRIMARY_CURRENT_GUARD_REFUSED')
         self.observer.activate(watchdog=False)
         if self.failed or self.observer.failed:
             raise PermissionError('HEAD_PRIMARY_CURRENT_GUARD_REFUSED')
         return self.port.feedback_snapshot()
 
     def wait_cpu_inputs(self,*,timeout_s):
-        if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<timeout_s<=.2:
+        bound=.2 if self._simulation_policy is None else self._supervision_stale_s
+        if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<timeout_s<=bound:
             raise ValueError('HEAD_PRIMARY_INPUT_WAIT_INVALID')
         deadline=time.monotonic()+timeout_s
         try:
@@ -372,12 +506,12 @@ class HeadPrimarySupervisor:
                 if type(reply.get('inputs_ready')) is not bool:
                     raise PermissionError('HEAD_PRIMARY_INPUT_STATUS_INVALID')
                 if reply['inputs_ready']:
-                    if not 0<=nanoseconds(time.monotonic())-nanoseconds(reply['ack_wall_s'])<=10_000_000:
+                    if not 0<=nanoseconds(time.monotonic())-nanoseconds(reply['ack_wall_s'])<=self._rpc_receipt_age_ns:
                         raise PermissionError('HEAD_PRIMARY_INPUT_STATUS_STALE')
                     self._emit('CPU_INPUTS_READY',ack=reply)
                     return reply
                 if time.monotonic()>=deadline:raise TimeoutError('HEAD_PRIMARY_OWN_CPU_INPUTS_MISSING')
-                self._shutdown.wait(.002)
+                self._shutdown.wait(self._watchdog_period_s)
         except Exception:
             self.fault('HEAD_PRIMARY_OWN_CPU_INPUTS_REFUSED');raise
 
@@ -391,7 +525,7 @@ class HeadPrimarySupervisor:
                 policy=dict(policy_sha256=self.epoch.policy_hash)))
             self._ack(reply, 'PREARM_READY', 'POLICY_READY',
                 policy_sha256=self.epoch.policy_hash, current_inputs_guarded=True)
-            if not 0 <= nanoseconds(time.monotonic())-nanoseconds(reply['ack_wall_s']) <= 10_000_000:
+            if not 0 <= nanoseconds(time.monotonic())-nanoseconds(reply['ack_wall_s']) <= self._rpc_receipt_age_ns:
                 raise PermissionError('HEAD_PRIMARY_PREARM_ACK_STALE')
             self._current()
             return True
@@ -427,6 +561,7 @@ class HeadPrimarySupervisor:
         finally: self._arming = False
 
     def dispatch_guard(self):
+        self._await_heartbeat()
         if not self.ready:
             self.fault('HEAD_PRIMARY_DISPATCH_NOT_READY'); raise PermissionError('HEAD_PRIMARY_DISPATCH_NOT_READY')
         self._check_dispatch_observation_deadline()

@@ -76,6 +76,22 @@ def test_simulation_prearm_cannot_skip_or_replace_bound_native_readback(damage):
     finally:observer.close(timeout_s=1.)
 
 
+def test_cpu_heartbeat_ack_clock_follows_original_copied_progress(monkeypatch):
+    from so101_demo.adapters.act import head_monitor_runtime as module
+    node,runtime,observer=prepared();node.wall=10.001
+    def ack_clock():
+        # Another worker can publish immediately after the clock read but
+        # before the caller resumes. It must not enter an earlier ACK snapshot.
+        runtime._watchdog_wall=10.002;observer._executor_wall=10.002
+        return 10.001
+    monkeypatch.setattr(module,'time',SimpleNamespace(monotonic=ack_clock))
+    try:
+        reply=runtime.heartbeat(dict(wall_s=10.001,executor_wall_s=10.,inference_deadline_wall_s=None))
+        assert reply['watchdog_wall_s']==reply['executor_wall_s']==10.
+        assert reply['ack_wall_s']==10.001
+    finally:observer.close(timeout_s=1.)
+
+
 def prearm(runtime,record):
     # Existing POLICY_READY acknowledges the measured window without current
     # admission checks. This baseline grants no native or SDK authority.
