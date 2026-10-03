@@ -45,13 +45,19 @@ class _ObservationPort(RosControllerPort):
 
 class HeadROSMonitor:
     def __init__(self,node,*,epoch,generation,stop_velocity_rad_s,stop_latency_s,
-                 camera_max_age_s,camera_frame_id,emit,fault_callback,monotonic=time.monotonic,controller_port=None):
+                 camera_max_age_s,camera_frame_id,emit,fault_callback,monotonic=time.monotonic,
+                 controller_port=None,simulation_policy=None):
+        self._simulation_policy=FeedbackPolicy._simulation(simulation_policy)
         if (type(epoch) is not str or not epoch or type(generation) is not int or generation<=0
                 or any(type(value) not in (int,float) or not math.isfinite(value) or value<=0
                        for value in (stop_velocity_rad_s,stop_latency_s,camera_max_age_s))
                 or type(camera_frame_id) is not str or not camera_frame_id
                 or not callable(emit) or not callable(fault_callback) or not callable(monotonic)):
             raise ValueError('HEAD_MONITOR_ROS_CONFIG_INVALID')
+        if (self._simulation_policy is not None and
+                (stop_latency_s!=self._simulation_policy.stop_confirmation_timeout_s
+                 or camera_max_age_s!=self._simulation_policy.perception_max_age_s)):
+            raise ValueError('HEAD_MONITOR_SIMULATION_OBSERVER_BINDING_INVALID')
         self.node=node;self.epoch=epoch;self.generation=generation;self.monotonic=monotonic
         self.stop_latency=stop_latency_s;self.camera_age=camera_max_age_s
         self.camera_skew=None
@@ -80,6 +86,9 @@ class HeadROSMonitor:
                 raise ValueError('HEAD_PRIMARY_SHARED_PORT_INVALID')
             self.port=controller_port;self._lock=controller_port._lock
             self._policy=controller_port.feedback_policy
+            if (self._policy is not None
+                    and self._policy._bound_simulation_policy!=self._simulation_policy):
+                raise ValueError('HEAD_MONITOR_SIMULATION_OBSERVER_BINDING_INVALID')
             controller_port._head_fault_callback=lambda reason:self.fault(reason)
         self.service_names=(_ACTION+'get_result',_ACTION+'cancel_goal')
         self._result_client=node.create_client(FollowJointTrajectory.Impl.GetResultService,
@@ -118,7 +127,13 @@ class HeadROSMonitor:
         if self.failed or self._closed or self._policy is not None:
             self.fault('HEAD_MONITOR_POLICY_REBOUND')
             raise PermissionError('HEAD_MONITOR_ROS_REVOKED')
-        self._policy=FeedbackPolicy.parse(values)
+        try:
+            parsed=FeedbackPolicy.parse(values,simulation_policy=self._simulation_policy)
+            if parsed._bound_simulation_policy!=self._simulation_policy:
+                raise ValueError('HEAD_MONITOR_SIMULATION_OBSERVER_BINDING_INVALID')
+        except (TypeError,ValueError):
+            self.fault('HEAD_MONITOR_POLICY_INVALID');raise
+        self._policy=parsed
         self.port.bind_head_policy(self._policy)
 
     def inventory(self,goal_uuid):
@@ -399,10 +414,12 @@ class HeadROSMonitor:
                 elapsed=nanoseconds(after)-nanoseconds(original)
                 bound_ns=math.floor(bound*1e9)
                 if elapsed<0:violations.append((clocks['wall_before_s'],reason))
-                elif elapsed>bound_ns:
+                elif elapsed>bound_ns or (self._simulation_policy is not None and elapsed==bound_ns):
                     violations.append(((nanoseconds(original)+bound_ns)*1e-9,reason))
+        supervision=(self._policy.watchdog_reaction_limit_s if self._simulation_policy is None
+            else self._simulation_policy.supervision_stale_s)
         if previous_poll is not None:
-            expired('HEAD_MONITOR_WATCHDOG_GAP',previous_poll,self._policy.watchdog_reaction_limit_s)
+            expired('HEAD_MONITOR_WATCHDOG_GAP',previous_poll,supervision)
         try:
             self._policy.check_joint(original['sample'],clocks)
         except (KeyError,TypeError,ValueError) as error:
@@ -412,7 +429,7 @@ class HeadROSMonitor:
             else:violations.append((clocks['wall_before_s'],str(error)))
         try:
             for value in (primary['wall_s'],primary['executor_wall_s'],executor):
-                expired('HEAD_MONITOR_HEARTBEAT_STALE',value,self._policy.watchdog_reaction_limit_s)
+                expired('HEAD_MONITOR_HEARTBEAT_STALE',value,supervision)
             if primary['inference_deadline_wall_s'] is not None and after>=primary['inference_deadline_wall_s']:
                 # Recheck after reading decision clocks: a completed lease may
                 # have committed since this poll copied the original heartbeat.
@@ -429,10 +446,29 @@ class HeadROSMonitor:
                 if source<=self._camera_watermark:continue
                 info=infos[source]
                 if source>sim:continue
-                if (not 0<=after-image['wall_s']<=self.camera_age
+                if (self._simulation_policy is not None
+                        and (nanoseconds(after)<nanoseconds(image['wall_s'])
+                             or nanoseconds(after)<nanoseconds(info['wall_s']))):
+                    raise ValueError('HEAD_MONITOR_CAMERA_CLOCK_INVALID')
+                if self._simulation_policy is None:
+                    stale=(not 0<=after-image['wall_s']<=self.camera_age
                         or not 0<=after-info['wall_s']<=self.camera_age
-                        or not 0<=sim-source<=math.floor(self._policy.camera_max_source_age_s*1e9)):
-                    raise ValueError('HEAD_MONITOR_CAMERA_STALE')
+                        or not 0<=sim-source<=math.floor(self._policy.camera_max_source_age_s*1e9))
+                else:
+                    age_bound=math.floor(self.camera_age*1e9)
+                    stale=(any(not 0<=nanoseconds(after)-nanoseconds(value['wall_s'])<age_bound
+                        for value in (image,info))
+                        or not 0<=sim-source<=math.floor(self._policy.camera_max_source_age_s*1e9))
+                if stale:
+                    if self._simulation_policy is None:raise ValueError('HEAD_MONITOR_CAMERA_STALE')
+                    # Expired correct-identity observations provide no new
+                    # liveness or use authority. Retain their original clocks
+                    # as discards; only a fresh advancing pair replaces camera.
+                    self._event('CAMERA_OBSERVATION_DISCARDED',reason='HEAD_MONITOR_CAMERA_STALE',
+                        image=dict(image),camera_info=dict(info),decision=dict(clocks))
+                    with self._lock:
+                        self._images.pop(source,None);self._infos.pop(source,None)
+                    continue
                 camera=image
                 self._camera_watermark=source
                 with self._lock:
@@ -440,7 +476,8 @@ class HeadROSMonitor:
                     self._images.pop(source,None)
             if camera is None:raise ValueError('HEAD_MONITOR_CAMERA_GAP')
             expired('HEAD_MONITOR_CAMERA_GAP',camera['wall_s'],self._policy.camera_interarrival_deadline_s)
-            if not 0<=sim-camera['source_ns']<=math.floor(self._policy.camera_max_source_age_s*1e9):
+            if (self._simulation_policy is None and
+                    not 0<=sim-camera['source_ns']<=math.floor(self._policy.camera_max_source_age_s*1e9)):
                 raise ValueError('HEAD_MONITOR_CAMERA_SOURCE_STALE')
         except (KeyError,TypeError,ValueError) as error:
             violations.append((clocks['wall_before_s'],str(error)))

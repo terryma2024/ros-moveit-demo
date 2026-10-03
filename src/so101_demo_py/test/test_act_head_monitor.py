@@ -23,6 +23,39 @@ def monitor():
         clock_ns=lambda:10_050_000_000)
 
 
+def test_explicit_simulation_epoch_binds_exact_feedback_without_arming():
+    from dataclasses import asdict
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    simulation=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+    epoch=HeadMonitorEpoch(epoch='attempt-epoch',generation=5,session_id='head-session',
+        clock_ns=lambda:10_050_000_000,simulation_policy=simulation.readback())
+    epoch.bind_policy(simulation.feedback_values(),'a'*64)
+    assert asdict(epoch.policy)==simulation.feedback_values()
+    assert epoch.stage=='POLICY_READY' and epoch.identity is None and epoch.inventory=={}
+    with pytest.raises(PermissionError):epoch.register(inventory())
+    assert epoch.stage=='REVOKED'
+
+
+def test_simulation_epoch_refuses_different_mapping_and_cannot_rebind_after_fault():
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    simulation=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+    epoch=HeadMonitorEpoch(epoch='attempt-epoch',generation=5,session_id='head-session',
+        clock_ns=lambda:10_050_000_000,simulation_policy=simulation)
+    with pytest.raises(ValueError):epoch.bind_policy(policy(),'a'*64)
+    assert epoch.stage=='REVOKED'
+    with pytest.raises(PermissionError):epoch.bind_policy(simulation.feedback_values(),'b'*64)
+
+
+def test_legacy_epoch_cannot_implicitly_adopt_typed_simulation_feedback():
+    from so101_demo.act.head_feedback import FeedbackPolicy
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    simulation=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+    bound=FeedbackPolicy.parse(simulation.feedback_values(),simulation_policy=simulation)
+    epoch=monitor()
+    with pytest.raises(ValueError):epoch.bind_policy(bound,'a'*64)
+    assert epoch.stage=='REVOKED'
+
+
 def ready():
     port=monitor();port.bind_policy(policy(),'a'*64)
     port.armed_ready(IDENTITY,IDENTITY)

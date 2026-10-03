@@ -24,7 +24,8 @@ def digest(value):
 
 
 class HeadMonitorEpoch:
-    def __init__(self, *, epoch, generation, session_id, clock_ns=time.monotonic_ns):
+    def __init__(self, *, epoch, generation, session_id, clock_ns=time.monotonic_ns,
+                 simulation_policy=None):
         identifiers=(epoch,session_id)
         if (any(type(value) is not str or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}',value)
                 for value in identifiers)
@@ -32,6 +33,7 @@ class HeadMonitorEpoch:
                 or not callable(clock_ns)):
             raise ValueError('HEAD_MONITOR_SCOPE_INVALID')
         self._scope=(epoch,generation,session_id)
+        self._simulation_policy=FeedbackPolicy._simulation(simulation_policy)
         self._stage='PRESENT';self._policy_hash=None;self._policy=None;self._identity=None
         self._sequence=0;self._inventory={};self._fault=None
         self._lock=threading.Lock();self.clock_ns=clock_ns
@@ -80,7 +82,10 @@ class HeadMonitorEpoch:
 
     def bind_policy(self, values, policy_hash):
         with self._lock:self._require('PRESENT')
-        try:parsed=FeedbackPolicy.parse(values)
+        try:
+            parsed=FeedbackPolicy.parse(values,simulation_policy=self._simulation_policy)
+            if parsed._bound_simulation_policy!=self._simulation_policy:
+                raise ValueError('HEAD_MONITOR_SIMULATION_BINDING_INVALID')
         except (TypeError,ValueError):
             self.revoke('HEAD_MONITOR_POLICY_INVALID',fault_wall_s=self.clock_ns()*1e-9)
             raise

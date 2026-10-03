@@ -40,13 +40,19 @@ class Node:
         return Client()
 
 
-def observer():
+def observer(simulation=False):
     node=Node();events=[];faults=[]
+    options={}
+    if simulation:
+        from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+        bound=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+        options=dict(simulation_policy=bound.readback())
     monitor=HeadROSMonitor(node,epoch='attempt',generation=5,
-        stop_velocity_rad_s=.002,stop_latency_s=.07,camera_max_age_s=.05,
+        stop_velocity_rad_s=.002,stop_latency_s=1. if simulation else .07,
+        camera_max_age_s=.15 if simulation else .05,
         camera_frame_id='head_camera_optical_frame',emit=lambda *args,**kw:events.append((args,kw)),
-        fault_callback=lambda reason,wall:faults.append((reason,wall)),monotonic=lambda:node.wall)
-    monitor.bind_policy(policy())
+        fault_callback=lambda reason,wall:faults.append((reason,wall)),monotonic=lambda:node.wall,**options)
+    monitor.bind_policy(bound.feedback_values() if simulation else policy())
     return node,monitor,events,faults
 
 
@@ -199,12 +205,12 @@ def test_fault_reporting_never_holds_observation_or_watchdog_locks(boundary):
     finally:monitor.close(timeout_s=1.)
 
 
-def ready_monitor():
+def ready_monitor(simulation=False):
     from builtin_interfaces.msg import Time
     from std_msgs.msg import Header
     from rosgraph_msgs.msg import Clock
     from sensor_msgs.msg import CameraInfo,Image
-    node,monitor,events,faults=observer()
+    node,monitor,events,faults=observer(simulation=simulation)
     monitor.port._feedback(sample())
     monitor._on_clock(Clock(clock=Time(sec=1)))
     header=Header(frame_id='head_camera_optical_frame',stamp=Time(sec=1))
@@ -213,6 +219,166 @@ def ready_monitor():
     monitor.executor_progress();monitor.heartbeat(dict(wall_s=10.,executor_wall_s=10.,inference_deadline_wall_s=None))
     monitor.activate()
     return node,monitor,events,faults
+
+
+def refresh_simulation_inputs(node,monitor,*,heartbeat=True,executor=True,camera=True):
+    from builtin_interfaces.msg import Time
+    from std_msgs.msg import Header
+    from rosgraph_msgs.msg import Clock
+    from sensor_msgs.msg import CameraInfo,Image
+    stamp=Time(sec=int(node.sim),nanosec=round((node.sim-int(node.sim))*1e9))
+    monitor.port._feedback(sample(node.sim));monitor._on_clock(Clock(clock=stamp))
+    if camera:
+        header=Header(frame_id=monitor.camera_frame,stamp=stamp)
+        monitor._on_info(CameraInfo(header=header,width=640,height=480,
+            k=[200.,0.,320.,0.,200.,240.,0.,0.,1.]))
+        monitor._on_image(Image(header=header,width=640,height=480,encoding='rgb8',
+            step=1920,data=bytes(640*480*3)))
+    if executor:monitor.executor_progress()
+    if heartbeat:monitor.heartbeat(dict(wall_s=node.wall,executor_wall_s=node.wall,
+        inference_deadline_wall_s=None))
+
+
+def test_simulation_supervision_gap_uses_stale_budget_instead_of_fault_reaction():
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    try:
+        node.wall=10.3;node.sim=1.3
+        refresh_simulation_inputs(node,monitor,heartbeat=False)
+        monitor.poll()
+        assert not monitor.failed and faults==[]
+        assert monitor._primary['wall_s']==10. and monitor._primary['executor_wall_s']==10.
+    finally:monitor.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('expired',['heartbeat','executor','watchdog'])
+def test_simulation_supervision_exact_boundary_preserves_original_crossing(expired):
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    try:
+        node.wall=10.5;node.sim=1.5
+        refresh_simulation_inputs(node,monitor,heartbeat=expired!='heartbeat',executor=expired!='executor')
+        if expired!='watchdog':monitor.watchdog_polls.append(10.49)
+        monitor.poll()
+        assert monitor.failed and faults[0][1]==pytest.approx(10.5,abs=1e-12)
+        with pytest.raises(PermissionError):monitor.activate()
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_short_camera_gap_keeps_originals_without_faulting_source_age():
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    original=dict(monitor._camera)
+    try:
+        node.wall=10.3;node.sim=1.3
+        refresh_simulation_inputs(node,monitor,camera=False)
+        monitor.poll()
+        assert not monitor.failed and faults==[]
+        assert monitor._camera==original and monitor._camera_watermark==1_000_000_000
+        node.wall=10.31;node.sim=1.31
+        refresh_simulation_inputs(node,monitor)
+        monitor.poll()
+        assert not monitor.failed and monitor._camera['wall_s']==10.31
+        assert monitor._camera_watermark==1_310_000_000
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_sustained_camera_loss_faults_at_exact_original_expiry():
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    try:
+        node.wall=10.5;node.sim=1.5
+        refresh_simulation_inputs(node,monitor,camera=False)
+        monitor.watchdog_polls.append(10.49);monitor.poll()
+        assert monitor.failed and faults[0]==('HEAD_MONITOR_CAMERA_GAP',pytest.approx(10.5,abs=1e-12))
+        assert monitor._camera['wall_s']==10. and monitor._camera_watermark==1_000_000_000
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_expired_pending_pair_is_discarded_without_advancing_liveness():
+    node,monitor,events,faults=ready_monitor(simulation=True)
+    original=dict(monitor._camera)
+    try:
+        node.wall=10.1;node.sim=1.1
+        refresh_simulation_inputs(node,monitor,heartbeat=False,executor=False)
+        node.wall=10.3;node.sim=1.3
+        refresh_simulation_inputs(node,monitor,camera=False)
+        monitor.poll()
+        assert not monitor.failed and faults==[]
+        assert monitor._camera==original and monitor._camera_watermark==1_000_000_000
+        assert 1_100_000_000 not in monitor._images and 1_100_000_000 not in monitor._infos
+        discarded=[fields for args,fields in events if args[0]=='CAMERA_OBSERVATION_DISCARDED']
+        assert len(discarded)==1
+        assert discarded[0]['image']['source_ns']==1_100_000_000
+        assert discarded[0]['image']['wall_s']==discarded[0]['camera_info']['wall_s']==10.1
+        assert discarded[0]['decision']['wall_after_s']==10.3
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_camera_identity_failure_is_immediate_and_irreversible():
+    from builtin_interfaces.msg import Time
+    from std_msgs.msg import Header
+    from sensor_msgs.msg import Image
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    try:
+        node.wall=10.001;node.sim=1.001
+        monitor._on_image(Image(header=Header(frame_id='foreign',stamp=Time(sec=1,nanosec=1000000)),
+            width=640,height=480,encoding='rgb8',step=1920,data=bytes(640*480*3)))
+        assert monitor.failed and faults[0]==('HEAD_MONITOR_CAMERA_INVALID',10.001)
+        assert monitor._camera['wall_s']==10. and monitor._camera_watermark==1_000_000_000
+        with pytest.raises(PermissionError):monitor.activate()
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_future_original_receipt_is_a_fault_instead_of_recoverable_expiry():
+    node,monitor,_,faults=ready_monitor(simulation=True)
+    try:
+        node.wall=10.001;node.sim=1.001
+        refresh_simulation_inputs(node,monitor)
+        # Controlled corruption of a real callback's retained original clock.
+        monitor._images[1_001_000_000]['wall_s']=10.1
+        monitor.poll()
+        assert monitor.failed and faults[0][0]=='HEAD_MONITOR_CAMERA_CLOCK_INVALID'
+        assert monitor._camera_watermark==1_000_000_000 and monitor._camera['wall_s']==10.
+    finally:monitor.close(timeout_s=1.)
+
+
+def test_simulation_exact_perception_deadline_discards_pair_using_original_nanoseconds():
+    node,monitor,events,faults=ready_monitor(simulation=True)
+    original=dict(monitor._camera)
+    try:
+        node.wall=10.05;node.sim=1.05
+        refresh_simulation_inputs(node,monitor,heartbeat=False,executor=False)
+        node.wall=10.2;node.sim=1.2
+        refresh_simulation_inputs(node,monitor,camera=False)
+        monitor.poll()
+        assert not monitor.failed and faults==[]
+        assert monitor._camera==original and monitor._camera_watermark==1_000_000_000
+        discarded=[fields for args,fields in events if args[0]=='CAMERA_OBSERVATION_DISCARDED']
+        assert len(discarded)==1 and discarded[0]['image']['wall_s']==10.05
+        assert discarded[0]['decision']['wall_after_s']==10.2
+    finally:monitor.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('changed',['stop','camera','feedback'])
+def test_simulation_observer_cannot_adopt_inconsistent_effective_values(changed):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    simulation=HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
+    node=Node();monitor=None
+    try:
+        if changed in ('stop','camera'):
+            with pytest.raises(ValueError):HeadROSMonitor(node,epoch='attempt',generation=5,
+                stop_velocity_rad_s=.002,stop_latency_s=.07 if changed=='stop' else 1.,
+                camera_max_age_s=.05 if changed=='camera' else .15,
+                camera_frame_id='head_camera_optical_frame',emit=lambda *args,**kw:None,
+                fault_callback=lambda *args:None,monotonic=lambda:node.wall,simulation_policy=simulation)
+            assert node.subscriptions==[] and node.calls==[]
+        else:
+            monitor=HeadROSMonitor(node,epoch='attempt',generation=5,
+                stop_velocity_rad_s=.002,stop_latency_s=1.,camera_max_age_s=.15,
+                camera_frame_id='head_camera_optical_frame',emit=lambda *args,**kw:None,
+                fault_callback=lambda *args:None,monotonic=lambda:node.wall,simulation_policy=simulation)
+            with pytest.raises(ValueError):monitor.bind_policy(policy())
+            assert monitor.failed and monitor.port.feedback_policy is None
+            with pytest.raises(PermissionError):monitor.bind_policy(simulation.feedback_values())
+    finally:
+        if monitor is not None:monitor.close(timeout_s=1.)
 
 
 def test_backward_camera_original_is_refused_before_source_order_can_be_sorted():
