@@ -19,7 +19,6 @@ import threading
 import time
 
 from so101_demo.act.head_monitor import HeadMonitorEpoch, digest
-from so101_demo.act.head_feedback_measurement import evaluate_feedback_window
 from so101_demo.act.head_feedback import nanoseconds
 from .controller_reservation_provision import (
     _private_parent,_process_start_ticks,write_head_revocation_provision)
@@ -27,6 +26,7 @@ from .head_monitor_goal_binding import validate_goal_inventory,warm_goal_binding
 from .head_monitor_ros import HeadROSMonitor
 from .head_monitor_exposure import HeadMonitorExposures
 from .head_revocation import NativeRevocationClient
+from .head_policy_audit_worker import PolicyAuditWorker
 
 _SHA=re.compile(r'[0-9a-f]{64}\Z')
 _C2A='2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a'
@@ -101,6 +101,8 @@ class HeadMonitorRuntime:
         self._stop_done=threading.Event();self._close_done=threading.Event()
         self._watchdog_wall=None;self._fault=None;self._native_close=None;self._native_close_error=None
         self._policy=None;self._dependencies=None;self._provisions=None;self._revoker=None
+        self._policy_audit_worker=None;self._policy_audit_receipt=None;self._policy_audit_retirement=None
+        self._policy_audit_owner_release=threading.Event()
         self._prearm_guarded=False;self._goal_codec_warmup=None
         self._guard_lock=threading.Lock();self._threads=[]
         self._exposures=HeadMonitorExposures(self)
@@ -142,6 +144,11 @@ class HeadMonitorRuntime:
             except BaseException as error:
                 self.fault('HEAD_MONITOR_CONFIGURE_FAILED',time.monotonic())
                 self._configure_future.set_exception(error)
+            finally:
+                # Linux PDEATHSIG follows the creating thread. Keep this
+                # existing entry owner alive until its exact child is reaped.
+                if self._policy_audit_worker is not None:
+                    self._policy_audit_owner_release.wait()
         self._configure_thread=threading.Thread(target=run,name='head-monitor-configure',daemon=True)
         self._configure_thread.start()
         return dict(stage='CONFIGURE_PENDING',motion_authority=False)
@@ -156,6 +163,7 @@ class HeadMonitorRuntime:
             executor='SingleThreadedExecutor',joint_qos=dict(depth=5,reliability='BEST_EFFORT'),
             camera_qos=dict(depth=32,reliability='RELIABLE'),goal_codec_warmup=self._goal_codec_warmup,
             native_transport=getattr(self._revoker,'transport_origin',None),
+            policy_audit_entry=(None if self._policy_audit_worker is None else self._policy_audit_worker.entry),
             clock_qos=dict(depth=self._node._time_source._clock_sub.qos_profile.depth,
                 reliability=self._node._time_source._clock_sub.qos_profile.reliability.name),
             clock_subscription_count=sum(sub.topic_name=='/clock' for sub in self._node.subscriptions))
@@ -199,6 +207,10 @@ class HeadMonitorRuntime:
             raise PermissionError('HEAD_MONITOR_PROVISION_CAPABILITY_COLLISION')
         self._provisions=dict(main=primary,primary_fault=fault,monitor_fault=monitor)
         self._dependencies=dependencies
+        # Bind once at CPU entry, before ROS/CUDA/stable measurement. This
+        # read-only child cannot publish feedback, progress or motion authority.
+        self._policy_audit_worker=PolicyAuditWorker(context=dict(epoch=self.epoch.epoch,
+            generation=self.epoch.generation,session_id=self.epoch.session_id,dependencies=dependencies))
         # This client cannot arm, reserve or use the primary's exact-peer endpoint.
         self._revoker=NativeRevocationClient(directory/'neck-revoke.sock',capability=capability,
             native_owner=native,generation=self.epoch.generation,timeout_s=.002)
@@ -229,6 +241,7 @@ class HeadMonitorRuntime:
             monitor_peer=self.identity,primary_peer=self.primary,native_owner=native,
             dependencies=dependencies,provisions=self._provisions,observer=observer,
             cpu_only=True,motion_authority=False,goal_codec_warmup=self._goal_codec_warmup,
+            policy_audit_entry=self._policy_audit_worker.entry,
             native_transport=dict(self._revoker.transport_origin))
         self._configured=True
 
@@ -250,13 +263,13 @@ class HeadMonitorRuntime:
         measurement=policy['measurement']
         if type(measurement) is not dict or set(measurement)!={'path','sha256'}:
             raise ValueError('HEAD_MONITOR_POLICY_MEASUREMENT_INVALID')
-        measured=json.loads(_sha_file(measurement['path'],measurement['sha256'],64*1024*1024))
-        if (type(measured) is not dict or set(measured)!={'epoch','generation','session_id','dependencies','window','sha256'}
-                or measured['epoch']!=self.epoch.epoch or measured['generation']!=self.epoch.generation
-                or measured['session_id']!=self.epoch.session_id or measured['dependencies']!=self._dependencies
-                or measured['sha256']!=digest({k:v for k,v in measured.items() if k!='sha256'})):
-            raise PermissionError('HEAD_MONITOR_MEASUREMENT_BINDING_INVALID')
-        independently_computed=evaluate_feedback_window(measured['window'],stop_latency_s=self._observer.stop_latency)
+        worker=self._policy_audit_worker
+        if worker is None or not worker.is_alive():
+            raise PermissionError('HEAD_MONITOR_POLICY_AUDIT_UNBOUND')
+        receipt=worker.audit(measurement,stop_latency_s=self._observer.stop_latency)
+        if self.revoked or not worker.is_alive():
+            raise PermissionError('HEAD_MONITOR_POLICY_AUDIT_REVOKED')
+        independently_computed=receipt['audit']['computed']
         if (independently_computed['values']!=policy['values'] or
                 independently_computed['camera_seed_values']!=policy['camera_seed_values']):
             raise PermissionError('HEAD_MONITOR_POLICY_FORMULA_MISMATCH')
@@ -268,7 +281,9 @@ class HeadMonitorRuntime:
         ack=self.epoch.bind_policy(policy['values'],record['sha256'])
         self._observer.bind_policy(policy['values']);self._observer.camera_age=camera['max_age_s']
         self._observer.camera_skew=camera['max_skew_s']
+        self._policy_audit_receipt=receipt
         self._policy=record
+        self._emit('MEASUREMENT_AUDIT_VERIFIED',receipt=receipt,purpose='calibration',motion_authority=False)
         self._emit('POLICY_READY',ack=ack,policy_reference=record,purpose='calibration',motion_authority=False)
         return dict(ack,stage='POLICY_READY',motion_authority=False)
 
@@ -458,6 +473,8 @@ class HeadMonitorRuntime:
             try:
                 if _peer(self.primary['pid'])!=self.primary:
                     self.fault('HEAD_MONITOR_PRIMARY_LOST',now)
+                if self._policy_audit_worker is None or not self._policy_audit_worker.is_alive():
+                    self.fault('HEAD_MONITOR_POLICY_AUDIT_LOST',now)
                 self._exposures.poll(now)
                 self._observer.poll()
             except BaseException:self.fault('HEAD_MONITOR_WATCHDOG_FAILED',now)
@@ -536,7 +553,8 @@ class HeadMonitorRuntime:
     def close(self):
         """Owned CPU teardown and sealed raw stream, never a robot stop claim."""
         if self._finished:return dict(stage='RETIRED',motion_authority=False)
-        if self._configure_thread is not None and self._configure_thread.is_alive():
+        if (self._configure_thread is not None and self._configure_thread.is_alive()
+                and (self._configure_future is None or not self._configure_future.done())):
             # Setup can still assign owned ROS resources. Stop and join it
             # before retiring those resources or publishing a receipt.
             self._shutdown.set();self._configure_thread.join(.2)
@@ -563,6 +581,18 @@ class HeadMonitorRuntime:
             if self._spinner.is_alive():raise PermissionError('HEAD_MONITOR_SPINNER_RETIRE_UNCONFIRMED')
         if self._node is not None:self._node.destroy_node()
         if self._context is not None and self._context.ok():self._context.shutdown()
+        if self._policy_audit_worker is not None:
+            self._policy_audit_retirement=self._policy_audit_worker.close()
+            self._policy_audit_owner_release.set()
+            if self._configure_thread is not None:
+                self._configure_thread.join(.2)
+                if self._configure_thread.is_alive():
+                    raise PermissionError('HEAD_MONITOR_CONFIGURE_RETIRE_UNCONFIRMED')
+            self._emit('POLICY_AUDIT_OWNED_REAP',receipt=self._policy_audit_retirement,
+                purpose='calibration',motion_authority=False)
+            if (self._policy_audit_retirement.get('shutdown_ack') is not True
+                    or self._policy_audit_retirement.get('exit_code')!=0):
+                raise PermissionError('HEAD_MONITOR_POLICY_AUDIT_RETIRE_UNCONFIRMED')
         if self._journal_handle is not None:
             self._records.put_nowait(None);self._journal_thread.join(.5)
             if self._journal_thread.is_alive():raise PermissionError('HEAD_MONITOR_JOURNAL_RETIRE_UNCONFIRMED')
@@ -571,6 +601,7 @@ class HeadMonitorRuntime:
                 journal_path=str(self._journal_path),journal_sha256=hashlib.sha256(_read(self._journal_path,128*1024*1024)).hexdigest(),
                 records=self._journal_count,journal_error=self._journal_error,fault=self._fault,
                 exposures=self._exposures.summary(),
+                policy_audit_retirement=self._policy_audit_retirement,
                 native_close=self._native_close,native_close_error=self._native_close_error)
             seal=self._journal_path.with_name(self._journal_path.name+'.seal.json')
             with seal.open('x') as handle:json.dump(result,handle,sort_keys=True);handle.write('\n');handle.flush();os.fsync(handle.fileno())

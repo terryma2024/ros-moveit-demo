@@ -67,6 +67,14 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
     assert reply['motion_authority'] is False and reply['purpose']=='calibration'
     assert reply['stage']=='CONFIGURED'
     assert reply['monitor_peer']==monitor.identity
+    entry=reply['policy_audit_entry']
+    assert entry['parent_peer']==monitor.identity and entry['peer']['pid']!=monitor.identity['pid']
+    from so101_demo.act.head_policy_audit import peer
+    time.sleep(.020)  # The entry owner must survive completion of configuration.
+    assert peer(entry['peer']['pid'])==entry['peer']
+    assert entry['motion_authority'] is False and entry['ros_imported'] is False and entry['cuda_imported'] is False
+    assert entry['context']==dict(epoch=config['epoch'],generation=config['generation'],session_id=config['session_id'],dependencies=configuration['dependencies'])
+    for origin in entry['module_origins'].values():assert origin['sha256']==hashlib.sha256(Path(origin['path']).read_bytes()).hexdigest()
     assert reply['executor']=='SingleThreadedExecutor'
     assert reply['joint_qos']==dict(depth=5,reliability='BEST_EFFORT')
     assert reply['camera_qos']==dict(depth=32,reliability='RELIABLE')
@@ -90,6 +98,8 @@ def test_owned_cpu_configure_publishes_only_scoped_presence_without_motion(runti
     assert document['stage']=='RETIRED' and document['motion_authority'] is False
     assert document['journal_sha256']==hashlib.sha256(Path(configuration['journal_path']).read_bytes()).hexdigest()
     assert document['native_close'] is None  # unarmed presence is no fault-close ACK
+    assert document['policy_audit_retirement']['peer']==entry['peer']
+    assert document['policy_audit_retirement']['shutdown_ack'] is True and document['policy_audit_retirement']['exit_code']==0
 
 
 @pytest.mark.parametrize('operation',[
