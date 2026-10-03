@@ -376,3 +376,52 @@ def test_primary_clock_must_catch_original_header_before_claim_not_be_restamped(
         row=c.reader.infer()
         assert row['source_ns']==10**9 and row['image_received_wall_s']==10.
     finally:retire(c)
+
+
+def test_freeze_preserves_failed_originals_without_bulk_encoding(tmp_path,monkeypatch):
+    from so101_demo.adapters.act import head_live_exposure as module
+    c=composition(tmp_path)
+    try:
+        c.originals();c.reader.infer()
+        original_wire=module._wire
+        encoded=[]
+        def refuse_bulk(value):
+            encoded.append(value)
+            raise AssertionError('reactive workers still own their close deadline')
+        monkeypatch.setattr(module,'_wire',refuse_bulk)
+        c.primary._finished=False
+        freeze=c.reader.freeze_retirement()
+        assert freeze['retired'] and freeze['completed_exposures']==1 and not encoded
+        with pytest.raises(PermissionError,match='PRIMARY_RETIRE_UNCONFIRMED'):
+            c.reader.retirement_snapshot()
+        assert not encoded
+        c.primary._finished=True;monkeypatch.setattr(module,'_wire',original_wire)
+        proof=c.reader.retirement_snapshot()
+        assert len(proof['original_attempts'])==1
+        assert proof['original_attempts'][0]['outcome']=='COMPLETED'
+        proof['original_attempts'][0]['outcome']='changed caller copy'
+        assert c.reader.retirement_snapshot()['original_attempts'][0]['outcome']=='COMPLETED'
+        with pytest.raises(PermissionError):c.reader.infer()
+    finally:retire(c)
+
+
+@pytest.mark.parametrize('damage',['not_frozen','busy','foreign_owner'])
+def test_retirement_never_certifies_an_unfinished_or_foreign_inference(tmp_path,damage):
+    import threading
+    c=composition(tmp_path)
+    try:
+        c.primary._finished=True
+        if damage=='not_frozen':
+            with pytest.raises(PermissionError,match='RETIRE_UNCONFIRMED'):c.reader.retirement_snapshot()
+        elif damage=='busy':
+            c.reader._busy=True
+            with pytest.raises(PermissionError,match='RETIRE_UNCONFIRMED'):c.reader.freeze_retirement()
+            assert not c.reader._closed
+        else:
+            errors=[]
+            def foreign():
+                try:c.reader.freeze_retirement()
+                except PermissionError as error:errors.append(error)
+            thread=threading.Thread(target=foreign);thread.start();thread.join(1.)
+            assert not thread.is_alive() and len(errors)==1 and not c.reader._closed
+    finally:retire(c)

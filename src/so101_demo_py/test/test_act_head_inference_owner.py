@@ -77,6 +77,15 @@ class Live:
         self.closed=True
         return dict(retired=True,inference_calls=self.count,completed_exposures=len(self.records),
             sequence=self.count,source_floor_ns=8)
+    def freeze_retirement(self):
+        assert threading.get_native_id()==self.owner
+        self.closed=True
+        return dict(retired=True,inference_calls=self.count,completed_exposures=len(self.records),
+            sequence=self.count,source_floor_ns=8)
+    def retirement_snapshot(self):
+        assert self.closed
+        return dict(retired=True,inference_calls=self.count,completed_exposures=len(self.records),
+            sequence=self.count,source_floor_ns=8)
 
 
 def bind(worker,constructed):
@@ -246,3 +255,82 @@ def test_readiness_and_live_snapshots_cannot_mutate_owned_records():
         snapshot=worker.results;snapshot[0]['value'][0]='caller changed it'
         assert worker.results==[dict(value=['original'])]
     finally:worker.close(timeout_s=1.)
+
+
+def test_actual_owner_exits_without_bulk_readback_then_caller_retains_originals():
+    detector=Detector();construction=[];faults=[];lives=[];snapshots=[];frozen=[]
+    class AuditLive(Live):
+        def close(self):
+            raise RuntimeError('bulk retirement cannot run on the CUDA owner')
+        def freeze_retirement(self):
+            frozen.append(threading.get_native_id())
+            return super().freeze_retirement()
+        def retirement_snapshot(self):
+            assert not worker._thread.is_alive()
+            snapshots.append(threading.get_native_id())
+            return dict(super().retirement_snapshot(),original_attempts=[dict(sequence=68,outcome='REFUSED')])
+    worker=start(factory(detector,construction),faults)
+    try:
+        worker.configuration(timeout_s=1.)
+        def build(d):
+            live=AuditLive(d);lives.append(live);return live
+        worker.bind_live(build,timeout_s=1.)
+        receipt=worker.close(timeout_s=1.)
+        assert receipt['retired'] and not receipt['thread_alive']
+        assert frozen==construction and snapshots==[threading.get_native_id()]
+        assert receipt['live']['original_attempts']==[dict(sequence=68,outcome='REFUSED')]
+        receipt['live']['original_attempts'][0]['outcome']='caller changed it'
+        assert worker.close()['live']['original_attempts'][0]['outcome']=='REFUSED'
+        assert not faults
+    finally:
+        for live in lives:live.release.set()
+        if worker._thread.is_alive():worker.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('primary_failure',[False,True])
+def test_entry_closes_reactive_primary_before_joined_owner_bulk_snapshot(primary_failure):
+    detector=Detector();construction=[];faults=[];lives=[];snapshots=[]
+    class ReactivePrimary:
+        ready=True;failed=False;_finished=False
+        def close(self):
+            self.ready=False;self.failed=True
+            if primary_failure:raise PermissionError('original Stop worker still alive')
+            self._finished=True
+            return dict(stage='RETIRED',motion_authority=False)
+    primary=ReactivePrimary()
+    class GuardedLive(Live):
+        def retirement_snapshot(self):
+            if not primary._finished:raise PermissionError('HEAD_LIVE_PRIMARY_RETIRE_UNCONFIRMED')
+            assert not worker._thread.is_alive()
+            snapshots.append(threading.get_native_id())
+            return super().retirement_snapshot()
+    worker=start(factory(detector,construction),faults)
+    result=dict(status='REFUSED',live_exposure_diagnostic={})
+    try:
+        worker.configuration(timeout_s=1.)
+        def build(d):
+            live=GuardedLive(d);live.primary=primary;lives.append(live);return live
+        worker.bind_live(build,timeout_s=1.)
+        retired=bootstrap._retire_entry_inference(primary=primary,inference_owner=worker,live=worker,result=result)
+        assert retired is (not primary_failure) and not worker._thread.is_alive()
+        if primary_failure:
+            assert result['producer_seals_withheld'] and not snapshots
+            assert 'primary_teardown_error' in result and 'inference_owner_teardown_error' in result
+        else:
+            assert result['inference_owner_teardown']['retired'] and snapshots==[threading.get_native_id()]
+            assert result['live_exposure_diagnostic']['records']==[]
+    finally:
+        primary._finished=True
+        for live in lives:live.release.set()
+        worker.close(timeout_s=1.)
+
+
+def test_changed_frozen_retirement_never_becomes_a_valid_joined_receipt():
+    detector=Detector();construction=[];faults=[]
+    class ChangedLive(Live):
+        def retirement_snapshot(self):return dict(super().retirement_snapshot(),sequence=999)
+    worker=start(factory(detector,construction),faults)
+    worker.configuration(timeout_s=1.)
+    worker.bind_live(lambda d:ChangedLive(d),timeout_s=1.)
+    with pytest.raises(PermissionError,match='RETIRE_CHANGED'):worker.close(timeout_s=1.)
+    assert not worker._thread.is_alive() and worker._retired is None

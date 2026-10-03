@@ -85,7 +85,9 @@ class HeadInferenceOwner:
                 elif operation=='reset':result=self._detector.reset()
                 elif operation=='bind':
                     self._live=payload(self._detector)
-                    if (not callable(self._live.infer) or not callable(self._live.close)
+                    if (not callable(self._live.infer)
+                            or not callable(getattr(self._live,'freeze_retirement',None))
+                            or not callable(getattr(self._live,'retirement_snapshot',None))
                             or not callable(self._live.records_snapshot) or not callable(self._live.activate)):
                         raise ValueError('HEAD_INFERENCE_LIVE_BINDING_INVALID')
                     with self._lock:self._stage='BOUND'
@@ -104,7 +106,7 @@ class HeadInferenceOwner:
         finally:
             with self._lock:self._closed=True
             if self._live is not None:
-                try:self._live_retirement=self._live.close()
+                try:self._live_retirement=self._live.freeze_retirement()
                 except BaseException as error:self._fail('HEAD_INFERENCE_LIVE_RETIRE_FAILED',error)
             while True:
                 try:queued=self._jobs.get_nowait()
@@ -218,12 +220,16 @@ class HeadInferenceOwner:
         if self._thread.is_alive():
             self._fail('HEAD_INFERENCE_RETIRE_UNCONFIRMED')
             raise PermissionError('HEAD_INFERENCE_RETIRE_UNCONFIRMED')
-        if self._live is not None and (self._live_retirement is None
+        if self._live is not None and (type(self._live_retirement) is not dict
                 or self._live_retirement.get('retired') is not True):
             raise PermissionError('HEAD_INFERENCE_LIVE_RETIRE_UNCONFIRMED')
+        live_receipt=None if self._live is None else self._live.retirement_snapshot()
+        if (self._live is not None and (type(live_receipt) is not dict or live_receipt.get('retired') is not True
+                or any(live_receipt.get(key)!=value for key,value in self._live_retirement.items()))):
+            raise PermissionError('HEAD_INFERENCE_LIVE_RETIRE_CHANGED')
         self._retired=dict(retired=True,factory_count=self._factory_count,
             calibration_detect_calls=self._calibration_calls,inference_owner=deepcopy(self._owner),
-            live=self._live_retirement,error=self._error,thread_alive=False,
+            live=live_receipt,error=self._error,thread_alive=False,
             operation_error=self._operation_error,
             quiescence=deepcopy(self._quiescence),
             retired_wall_s=time.monotonic())

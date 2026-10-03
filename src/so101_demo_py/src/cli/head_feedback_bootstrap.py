@@ -56,6 +56,35 @@ def _record_refusal(result,error):
     result['error']=dict(type=type(error).__name__,message=str(error))
 
 
+def _retire_entry_inference(*,primary,inference_owner,live,result):
+    # Keep Root/CPU/ROS/journals alive while the original GPU call retires,
+    # but finish native/Stop/FAULT/HB workers before any growing audit copy.
+    if primary is not None:
+        try:result['primary_teardown']=primary.close()
+        except Exception as error:result['primary_teardown_error']=str(error);result['status']='REFUSED'
+    inference_retired=True
+    if inference_owner is not None:
+        try:
+            result['inference_owner_teardown']=inference_owner.close()
+            if result['inference_owner_teardown']['error'] is not None:result['status']='REFUSED'
+            if live is inference_owner:
+                result['live_exposure_teardown']=result['inference_owner_teardown']['live']
+                result['live_exposure_diagnostic']['records']=live.results
+        except Exception as error:
+            inference_retired=False;result['inference_owner_teardown_error']=str(error)
+            result['producer_seals_withheld']=True;result['status']='REFUSED'
+    if live is not None and live is not inference_owner:
+        try:
+            if primary is not None and getattr(primary,'_finished',False) is not True:
+                raise PermissionError('HEAD_LIVE_PRIMARY_RETIRE_UNCONFIRMED')
+            result['live_exposure_teardown']=live.close()
+            result['live_exposure_diagnostic']['records']=live.records_snapshot()
+        except Exception as error:
+            inference_retired=False;result['live_exposure_teardown_error']=str(error)
+            result['producer_seals_withheld']=True;result['status']='REFUSED'
+    return inference_retired
+
+
 def _require_monitor_closure(root,result,*,stop_velocity_rad_s):
     """Read the owned CPU seal after reap; primary stop cannot stand in for it."""
     from so101_demo.act.head_feedback import FeedbackPolicy,OrderedStopConfirmation,nanoseconds
@@ -720,8 +749,6 @@ def main(argv=None):
             if args.live_pipeline_measurement:
                 _run_live_pipeline_measurement(port=port,primary=primary,owner=inference_owner,
                     result=result,emit=lambda event,**fields:primary_writer('EVENT',dict(event=event,**fields)))
-                result['live_exposure_diagnostic']['records']=live.results
-                _write(root/'live-pipeline-measurement.json',result['live_pipeline_measurement'])
             if args.bound_goal_diagnostic:
                 def counted_send(*positional,**named):
                     primary.dispatch_guard()
@@ -741,7 +768,6 @@ def main(argv=None):
                             monitor=monitor,production=production,geometry=json.loads(args.geometry_seal.read_text()),
                             result=result,emit=emit,live=live,owned_inference=args.owned_inference_diagnostic,
                             prepared=prepared)
-                    if live is not None:result['live_exposure_diagnostic']['records']=live.results
                 finally:client.send_goal_async=forbid_send
             primary.fault('HEAD_BOOTSTRAP_CONTROLLED_OWNED_FAULT',time.monotonic())
             result['primary_teardown']=primary.close()
@@ -766,23 +792,12 @@ def main(argv=None):
         _record_refusal(result,error)
         print('STOPPED_BOOTSTRAP_REFUSED '+str(error),file=sys.stderr,flush=True)
     finally:
-        inference_retired=True
-        if inference_owner is not None:
-            try:
-                result['inference_owner_teardown']=inference_owner.close()
-                if result['inference_owner_teardown']['error'] is not None:result['status']='REFUSED'
-                if live is inference_owner:
-                    result['live_exposure_teardown']=result['inference_owner_teardown']['live']
-                    result['live_exposure_diagnostic']['records']=live.results
-            except Exception as error:
-                inference_retired=False;result['inference_owner_teardown_error']=str(error)
-                result['producer_seals_withheld']=True;result['status']='REFUSED'
-        if live is not None and live is not inference_owner:
-            try:result['live_exposure_teardown']=live.close()
-            except Exception as error:result['live_exposure_teardown_error']=str(error);result['status']='REFUSED'
-        if primary is not None:
-            try:result['primary_teardown']=primary.close()
-            except Exception as error:result['primary_teardown_error']=str(error);result['status']='REFUSED'
+        inference_retired=_retire_entry_inference(primary=primary,inference_owner=inference_owner,
+            live=live,result=result)
+        if (inference_retired and result.get('live_pipeline_measurement',{}).get('status')
+                =='LIVE_PIPELINE_MEASURED_UNPROMOTED'):
+            try:_write(root/'live-pipeline-measurement.json',result['live_pipeline_measurement'])
+            except Exception as error:_record_refusal(result,error)
         if capture is not None:
             with port._lock:
                 raw=dict(joint_messages=list(port._head_samples),camera_messages=list(capture.camera_messages),

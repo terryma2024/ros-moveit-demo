@@ -36,7 +36,7 @@ class HeadLiveExposures:
         # Only the existing inference owner mutates these small original records.
         # Formatting and readback happen at retirement, outside the live path.
         self._original_attempts=[];self._pending_trace=None
-        self._activation_wall=None
+        self._activation_wall=None;self._retirement=None
 
     def _discard_before_activation(self):
         with self._lock:
@@ -277,12 +277,35 @@ class HeadLiveExposures:
             record=next((row for row in self.results if row['sequence']>after_sequence),None)
         return None if record is None else _wire(record)
 
-    def close(self):
+    def freeze_retirement(self):
+        # The CUDA owner exits without encoding the growing attempt/result
+        # history. Reactive native/Stop/FAULT workers still have deadlines.
+        if threading.get_ident()!=self._inference_owner:
+            raise PermissionError('HEAD_LIVE_INFERENCE_RETIRE_OWNER_INVALID')
         with self._lock:
             if self._busy:raise PermissionError('HEAD_LIVE_INFERENCE_RETIRE_UNCONFIRMED')
+            if self._retirement is not None:return dict(self._retirement)
             self._closed=True;pending=self._pending;self._pending=None
+            self._retirement=dict(retired=True,inference_calls=self._inference_calls,
+                completed_exposures=len(self.results),sequence=self._sequence,source_floor_ns=self._source_floor,
+                inference_thread='owned caller; no child workers')
         if pending is not None:self.emit('LIVE_EXPOSURE_UNADMITTED_AT_RETIRE',original=pending[0])
-        return dict(retired=True,inference_calls=self._inference_calls,
-            completed_exposures=len(self.results),sequence=self._sequence,source_floor_ns=self._source_floor,
-            original_attempts=_wire(self._original_attempts),
-            inference_thread='owned caller; no child workers')
+        return dict(self._retirement)
+
+    def _retirement_record(self):
+        with self._lock:
+            if self._busy or not self._closed or self._retirement is None:
+                raise PermissionError('HEAD_LIVE_INFERENCE_RETIRE_UNCONFIRMED')
+            receipt=dict(self._retirement)
+        return dict(receipt,original_attempts=_wire(self._original_attempts))
+
+    def retirement_snapshot(self):
+        if getattr(self.primary,'_finished',False) is not True:
+            raise PermissionError('HEAD_LIVE_PRIMARY_RETIRE_UNCONFIRMED')
+        return self._retirement_record()
+
+    def close(self):
+        # Direct callers own this complete synchronous lifecycle. The entry's
+        # HeadInferenceOwner uses freeze, joins, then guarded readback instead.
+        self.freeze_retirement()
+        return self._retirement_record()
