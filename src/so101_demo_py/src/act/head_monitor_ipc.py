@@ -238,7 +238,12 @@ class HeadMonitorCodec:
 class HeadMonitorChannel:
     """Exact live connected peer, one deadline, no retries or error suppression."""
 
-    def __init__(self, connection, *, codec, peer, timeout_s):
+    def __init__(self, connection, *, codec, peer, timeout_s, simulation_policy=None):
+        from .head_simulation_policy import HeadSimulationPolicy
+        self._simulation_policy = (None if simulation_policy is None else
+            simulation_policy if isinstance(simulation_policy, HeadSimulationPolicy) else
+            HeadSimulationPolicy.parse(simulation_policy))
+        limit = .010 if self._simulation_policy is None else self._simulation_policy.heartbeat_rpc_timeout_s
         if (not isinstance(connection, socket.socket) or connection.family != socket.AF_UNIX
                 or connection.type != socket.SOCK_STREAM or not isinstance(codec, HeadMonitorCodec)
                 or type(peer) is not dict or set(peer) != {'uid', 'pid', 'start_ticks'}
@@ -246,12 +251,14 @@ class HeadMonitorChannel:
                 or not 0 <= peer['uid'] < 2**32 or not 0 < peer['pid'] < 2**31
                 or not 0 < peer['start_ticks'] < 2**64
                 or type(timeout_s) not in (int, float) or not math.isfinite(timeout_s)
-                or not 0 < timeout_s <= .010):
+                or not 0 < timeout_s <= limit
+                or (self._simulation_policy is not None and timeout_s != limit)):
             raise ValueError('HEAD_MONITOR_CHANNEL_CONFIG_INVALID')
         self._connection, self._codec = connection, codec
         self._peer = dict(peer)
         self._timeout = timeout_s
         self._io_lock = threading.Lock()
+        self._pending = None
         try:
             self._verify_peer()
         except (OSError, RuntimeError, PermissionError):
@@ -289,8 +296,11 @@ class HeadMonitorChannel:
 
     def _read(self, deadline):
         self._verify_peer()
-        def read(size):
-            result = bytearray()
+        if self._pending is None:
+            self._pending = dict(started_wall_s=self._operation_started_wall_s, prefix=bytearray(),
+                body=bytearray(), size=None, decoded=None)
+        pending = self._pending
+        def read(result, size):
             while len(result) < size:
                 self._connection.settimeout(self._remaining(deadline))
                 part = self._connection.recv(size-len(result))
@@ -298,12 +308,17 @@ class HeadMonitorChannel:
                     raise ConnectionError('HEAD_MONITOR_CHANNEL_INCOMPLETE')
                 result.extend(part)
             return bytes(result)
-        size = int.from_bytes(read(4), 'big')
+        if pending['size'] is None:
+            pending['size'] = int.from_bytes(read(pending['prefix'], 4), 'big')
+        size = pending['size']
         if not 0 < size <= _MAX_BODY:
             raise PermissionError('HEAD_MONITOR_CHANNEL_LENGTH_INVALID')
-        value = self._codec.decode(read(size), deadline=deadline)
+        if pending['decoded'] is None:
+            pending['decoded'] = self._codec.decode(read(pending['body'], size), deadline=deadline)
+        value = pending['decoded']
         self._verify_peer()
         self._remaining(deadline)
+        self._pending = None
         return value
 
     def _operation(self, operation, *, trace=None):
@@ -317,18 +332,49 @@ class HeadMonitorChannel:
             if not acquired:
                 raise TimeoutError('HEAD_MONITOR_CHANNEL_BUSY')
             if trace is not None:trace['slot_owned_wall_s']=time.monotonic()
+            if self._pending is not None:
+                raise PermissionError('HEAD_MONITOR_CHANNEL_PENDING_FRAME')
+            self._operation_started_wall_s = started
             return operation(deadline)
         except BaseException as error:
             if trace is not None:
                 args=BaseException.args.__get__(error)
                 trace['error_type']=type(error).__name__
                 trace['error_code']=args[0] if args and type(args[0]) is str and len(args[0])<=128 else None
-            if isinstance(error,(OSError,RuntimeError,ValueError,PermissionError)):self._fail()
+            recoverable = (self._simulation_policy is not None and isinstance(error, TimeoutError)
+                and ((acquired and self._pending is not None) or not acquired))
+            if not recoverable and isinstance(error,(OSError,RuntimeError,ValueError,PermissionError)):
+                self._fail()
             raise
         finally:
             if acquired:
                 self._io_lock.release()
             if trace is not None:trace['ended_wall_s']=time.monotonic()
+
+    def complete_pending(self, deadline_wall_s):
+        """Finish only the original frame; this receipt alone grants no authority."""
+        acquired = False
+        try:
+            self._codec._require()
+            if self._simulation_policy is None or self._pending is None:
+                raise PermissionError('HEAD_MONITOR_CHANNEL_NO_PENDING_FRAME')
+            pending = self._pending
+            cap = pending['started_wall_s'] + self._simulation_policy.supervision_stale_s
+            if (type(deadline_wall_s) not in (int, float) or not math.isfinite(deadline_wall_s)
+                    or deadline_wall_s > cap):
+                raise ValueError('HEAD_MONITOR_CHANNEL_RECOVERY_DEADLINE_INVALID')
+            acquired = self._io_lock.acquire(timeout=self._remaining(deadline_wall_s))
+            if not acquired:
+                raise TimeoutError('HEAD_MONITOR_CHANNEL_BUSY')
+            if self._pending is not pending:
+                raise PermissionError('HEAD_MONITOR_CHANNEL_PENDING_FRAME_CHANGED')
+            return self._read(deadline_wall_s)
+        except BaseException:
+            self._fail()
+            raise
+        finally:
+            if acquired:
+                self._io_lock.release()
 
     def send(self, payload):
         return self._operation(lambda deadline: self._write(payload, deadline))

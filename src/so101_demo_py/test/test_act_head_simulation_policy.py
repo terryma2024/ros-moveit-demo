@@ -104,3 +104,30 @@ def test_explicit_custom_budget_survives_readback_and_cannot_mutate_after_parse(
     doc['search_timeout_s'] = 120.
     assert parsed.readback() == expected
     parsed.validate_search_values(dict(max_age_s=.15, search_timeout_s=40., stop_latency_s=1.5))
+
+
+def test_simulation_feedback_requires_explicit_matching_policy_binding():
+    from so101_demo.act.head_feedback import FeedbackPolicy
+    sim = policy_type().parse(document())
+    values = sim.feedback_values()
+    with pytest.raises(ValueError): FeedbackPolicy.parse(values)
+    bound = FeedbackPolicy.parse(values, simulation_policy=sim)
+    # Source and wall clocks remain independent after accepting the new schedule.
+    with pytest.raises(ValueError, match='SOURCE_STALE'):
+        bound.check_joint(dict(valid=True, wall_s=10., source_ns=1_000_000_000),
+            dict(wall_after_s=10.01, sim_ns=1_100_000_000))
+    with pytest.raises(ValueError, match='RECEIPT_STALE'):
+        bound.check_joint(dict(valid=True, wall_s=10., source_ns=1_000_000_000),
+            dict(wall_after_s=10.3, sim_ns=1_010_000_000))
+    assert bound.check_joint(dict(valid=True, wall_s=10., source_ns=1_000_000_000),
+        dict(wall_after_s=10.02, sim_ns=1_010_000_000)) == dict(receipt_age_s=.02, source_age_s=.01)
+
+
+def test_simulation_feedback_cannot_silently_rebind_an_existing_consumer():
+    from so101_demo.act.head_feedback import FeedbackPolicy
+    sim = policy_type().parse(document())
+    bound = FeedbackPolicy.parse(sim.feedback_values(), simulation_policy=sim)
+    changed = document(); changed['feedback_receipt_timeout_s'] = .3
+    with pytest.raises(ValueError): FeedbackPolicy.parse(bound, simulation_policy=changed)
+    damaged = sim.feedback_values(); damaged['joint_max_source_age_s'] = .08
+    with pytest.raises(ValueError): FeedbackPolicy.parse(damaged, simulation_policy=sim)

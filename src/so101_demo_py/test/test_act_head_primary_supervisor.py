@@ -619,6 +619,7 @@ def test_heartbeat_copies_executor_progress_after_shared_channel_slot(tmp_path,m
             return True
         def release(self):pass
     channel=object.__new__(ipc.HeadMonitorChannel)
+    channel._pending=None;channel._simulation_policy=None
     channel._timeout=.010;channel._io_lock=OccupiedSlot()
     channel._codec=ipc.HeadMonitorCodec(secret=secrets.token_bytes(32),epoch='attempt',
         generation=5,session_id='session',role='primary')

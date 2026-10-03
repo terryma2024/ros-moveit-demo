@@ -4,7 +4,7 @@ These value objects carry explicit policy inputs. Loading a calibration policy o
 an approved bundle is the entrypoint's responsibility; no defaults grant motion.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, InitVar, field
 import math
 
 
@@ -24,22 +24,39 @@ class FeedbackPolicy:
     watchdog_period_s: float
     watchdog_reaction_limit_s: float
     revoker_connection_deadline_s: float
+    simulation_policy: InitVar[object] = field(default=None, kw_only=True)
 
-    def __post_init__(self):
+    def __post_init__(self, simulation_policy):
         if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0
                for value in asdict(self).values()):
             raise ValueError('HEAD_FEEDBACK_POLICY_INVALID')
-        if (self.watchdog_period_s != .002 or self.watchdog_reaction_limit_s != .010
-                or self.revoker_connection_deadline_s != .002):
-            raise ValueError('HEAD_FEEDBACK_POLICY_SCHEDULING_INVALID')
+        bound = self._simulation(simulation_policy)
+        if bound is None:
+            if (self.watchdog_period_s != .002 or self.watchdog_reaction_limit_s != .010
+                    or self.revoker_connection_deadline_s != .002):
+                raise ValueError('HEAD_FEEDBACK_POLICY_SCHEDULING_INVALID')
+        elif asdict(self) != bound.feedback_values():
+            raise ValueError('HEAD_FEEDBACK_SIMULATION_BINDING_INVALID')
+        object.__setattr__(self, '_bound_simulation_policy', bound)
+
+    @staticmethod
+    def _simulation(document):
+        if document is None:
+            return None
+        from .head_simulation_policy import HeadSimulationPolicy
+        return document if isinstance(document, HeadSimulationPolicy) else HeadSimulationPolicy.parse(document)
 
     @classmethod
-    def parse(cls, values):
+    def parse(cls, values, *, simulation_policy=None):
         if isinstance(values, cls):
+            if (simulation_policy is not None
+                    and values._bound_simulation_policy != cls._simulation(simulation_policy)):
+                raise ValueError('HEAD_FEEDBACK_SIMULATION_REBIND_REFUSED')
             return values
-        if not isinstance(values, dict) or set(values) != set(cls.__dataclass_fields__):
+        names = set(cls.__dataclass_fields__) - {'simulation_policy'}
+        if not isinstance(values, dict) or set(values) != names:
             raise ValueError('HEAD_FEEDBACK_POLICY_INVALID')
-        return cls(**values)
+        return cls(**values, simulation_policy=simulation_policy)
 
     def check_joint(self, sample, decision):
         if sample is None or sample.get('valid') is not True:

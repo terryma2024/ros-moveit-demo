@@ -99,7 +99,7 @@ def test_scope_has_no_public_replacement():
 
 
 SERVER=r'''
-import socket,sys,os
+import socket,sys,os,time
 path,mode=sys.argv[1:3]
 with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
     server.bind(path);os.chmod(path,0o600);server.listen(1)
@@ -116,7 +116,13 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
                 if not more:break
                 body+=more
             if mode=='timeout':sys.stdin.buffer.readline()
+            elif mode=='fragment':
+                connection.sendall(len(response).to_bytes(4,'big')+response[:32])
+                print('FRAGMENT',flush=True)
+                sys.stdin.buffer.readline()
+                connection.sendall(response[32:])
             else:
+                if mode=='slow':time.sleep(.04)
                 length=len(response)+(1 if mode=='partial' else 0)
                 if mode=='oversize':length=70001
                 connection.sendall(length.to_bytes(4,'big')+response)
@@ -155,6 +161,111 @@ def test_real_connected_peer_authenticates_reply(server):
     channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.010)
     assert channel.exchange({'operation':'PRESENCE'})=={'ack':'PRESENT'}
     assert child.stdout.readline()==b'PREFIX 4\n'
+
+
+def simulation_document():
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    doc=HeadSimulationPolicy.default_document()
+    doc['heartbeat_rpc_timeout_s']=.03
+    return doc
+
+
+@pytest.mark.parametrize('server',['slow'],indirect=True)
+def test_explicit_simulation_channel_accepts_authenticated_reply_after_old_10ms(server):
+    connection,peer,child=server
+    doc=simulation_document();doc['heartbeat_rpc_timeout_s']=.1
+    channel=HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.1,
+        simulation_policy=doc)
+    started=time.monotonic()
+    assert channel.exchange({'operation':'PRESENCE'})=={'ack':'PRESENT'}
+    assert time.monotonic()-started>=.04
+    channel.close()
+
+
+@pytest.mark.parametrize('server',['fragment'],indirect=True)
+def test_expired_rpc_can_only_finish_same_authenticated_partial_frame(server):
+    connection,peer,child=server
+    wire=codec('primary')
+    channel=HeadMonitorChannel(connection,codec=wire,peer=peer,timeout_s=.03,
+        simulation_policy=simulation_document())
+    with pytest.raises(TimeoutError): channel.exchange({'operation':'PRESENCE'})
+    assert child.stdout.readline()==b'PREFIX 4\n'
+    assert child.stdout.readline()==b'FRAGMENT\n'
+    assert not wire.failed
+    child.stdin.write(b'\n');child.stdin.flush()
+    assert channel.complete_pending(time.monotonic()+.1)=={'ack':'PRESENT'}
+    assert wire.sequence==1  # no re-encode/retry/new operation
+    with pytest.raises(PermissionError): channel.complete_pending(time.monotonic()+.1)
+    channel.close()
+
+
+@pytest.mark.parametrize('server',['fragment'],indirect=True)
+def test_partial_frame_does_not_allow_another_operation_or_new_sequence(server):
+    connection,peer,child=server
+    wire=codec('primary')
+    channel=HeadMonitorChannel(connection,codec=wire,peer=peer,timeout_s=.03,
+        simulation_policy=simulation_document())
+    with pytest.raises(TimeoutError): channel.exchange({'operation':'PRESENCE'})
+    with pytest.raises(PermissionError): channel.exchange({'operation':'REGISTER'})
+    assert wire.sequence==1
+    assert wire.failed
+
+
+@pytest.mark.parametrize('server',['fragment'],indirect=True)
+def test_pending_rpc_cannot_extend_original_supervision_deadline(server):
+    connection,peer,child=server
+    wire=codec('primary');started=time.monotonic()
+    channel=HeadMonitorChannel(connection,codec=wire,peer=peer,timeout_s=.03,
+        simulation_policy=simulation_document())
+    with pytest.raises(TimeoutError): channel.exchange({'operation':'PRESENCE'})
+    with pytest.raises((ValueError,PermissionError)):
+        channel.complete_pending(started+.7)
+    assert wire.failed
+
+
+@pytest.mark.parametrize('server',['fragment'],indirect=True)
+def test_pending_deadline_starts_before_write_not_at_partial_reply(monkeypatch,server):
+    connection,peer,child=server
+    doc=simulation_document();doc['heartbeat_rpc_timeout_s']=.1
+    wire=codec('primary')
+    channel=HeadMonitorChannel(connection,codec=wire,peer=peer,timeout_s=.1,simulation_policy=doc)
+    write=channel._write
+    def slow_write(payload,deadline):
+        time.sleep(.04)
+        return write(payload,deadline)
+    monkeypatch.setattr(channel,'_write',slow_write)
+    started=time.monotonic()
+    with pytest.raises(TimeoutError):channel.exchange({'operation':'PRESENCE'})
+    child.stdin.write(b'\n');child.stdin.flush()
+    with pytest.raises(ValueError):channel.complete_pending(started+.52)
+    assert wire.failed
+
+
+@pytest.mark.parametrize('server',['tamper','oversize','partial'],indirect=True)
+def test_simulation_policy_does_not_recover_authentication_or_real_eof_fault(server):
+    connection,peer,child=server
+    wire=codec('primary')
+    channel=HeadMonitorChannel(connection,codec=wire,peer=peer,timeout_s=.03,
+        simulation_policy=simulation_document())
+    if child.args[-1]=='partial':
+        # The fixture keeps the malformed incomplete peer live until owner ends it.
+        with pytest.raises(TimeoutError):channel.exchange({'operation':'PRESENCE'})
+        child.stdin.write(b'\n');child.stdin.flush();child.wait(timeout=2.)
+        with pytest.raises((OSError,PermissionError)):
+            channel.complete_pending(time.monotonic()+.1)
+    else:
+        with pytest.raises(PermissionError):channel.exchange({'operation':'PRESENCE'})
+    assert wire.failed
+    with pytest.raises(PermissionError):channel.complete_pending(time.monotonic()+.1)
+
+
+def test_simulation_channel_does_not_inherit_an_unbound_timeout(server):
+    connection,peer,_=server
+    with pytest.raises(ValueError):
+        HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.03)
+    with pytest.raises(ValueError):
+        HeadMonitorChannel(connection,codec=codec('primary'),peer=peer,timeout_s=.01,
+            simulation_policy=simulation_document())
 
 
 @pytest.mark.parametrize('server',['valid','timeout','tamper'],indirect=True)
@@ -205,7 +316,7 @@ def test_built_request_includes_slot_wait_and_sampling_in_original_deadline(monk
             clock[0]=10.010 if damage=='wait_expired' else 10.006
             events.append('slot');return True
         def release(self):events.append('release')
-    channel=object.__new__(HeadMonitorChannel)
+    channel=object.__new__(HeadMonitorChannel);channel._pending=None;channel._simulation_policy=None
     channel._timeout=.010;channel._io_lock=Occupied();channel._codec=codec('primary')
     channel._connection=SimpleNamespace(close=lambda:events.append('closed'))
     def peer():
@@ -246,7 +357,7 @@ def test_original_heartbeat_phase_trace_survives_same_deadline_refusal(monkeypat
             if boundary=='slot':clock[0]=10.010;return False
             clock[0]=10.001;return True
         def release(self):calls.append('release')
-    channel=object.__new__(HeadMonitorChannel);channel._timeout=.010;channel._io_lock=Slot()
+    channel=object.__new__(HeadMonitorChannel);channel._pending=None;channel._simulation_policy=None;channel._timeout=.010;channel._io_lock=Slot()
     channel._codec=codec('primary');channel._connection=SimpleNamespace(close=lambda:calls.append('closed'))
     def peer():
         calls.append('peer')
