@@ -161,6 +161,70 @@ def test_actual_exec_identity_and_no_key_in_argv_environment_logs(config):
     monitor.close()
 
 
+def test_actual_exec_binds_explicit_simulation_policy_before_any_motion(config):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    from so101_demo.act.head_monitor import digest
+    original=HeadSimulationPolicy.default_document()
+    monitor=start_monitor(**config,simulation_policy=original)
+    try:
+        receipt=monitor.receipt
+        assert receipt['simulation_policy']==original
+        assert receipt['simulation_policy_sha256']==digest(original)
+        assert receipt['stage']=='EXEC_ONLY' and receipt['motion_authority'] is False
+        assert receipt['cpu_only'] is True and monitor.is_alive()
+        original['supervision_stale_s']=2.
+        heartbeat=monitor.request({'operation':'HEARTBEAT'})
+        assert heartbeat['simulation_policy']['supervision_stale_s']==.5
+        assert heartbeat['simulation_policy_sha256']==receipt['simulation_policy_sha256']
+        assert heartbeat['stage']=='EXEC_ONLY' and heartbeat['motion_authority'] is False
+    finally:reaped=monitor.close()
+    assert reaped['shutdown_ack'] is True and reaped['exit_code']==0
+    assert not monitor.is_alive()
+
+
+@pytest.mark.parametrize('change',[dict(supervision_stale_s=True),dict(mode='hardware'),dict(extra=1)])
+def test_invalid_simulation_bootstrap_refuses_before_spawning_peer(config,change):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    doc=dict(HeadSimulationPolicy.default_document(),**change)
+    with pytest.raises(ValueError):start_monitor(**config,simulation_policy=doc)
+    assert not config['log_path'].exists()
+
+
+@pytest.mark.parametrize('field,value', [('schema_version',True),
+    ('stop_confirmation_timeout_s',True),('max_reobservations_total',12.0)])
+def test_actual_exec_reply_cannot_replace_exact_policy_with_equal_python_value(config,monkeypatch,field,value):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    monitor=start_monitor(**config,simulation_policy=HeadSimulationPolicy.default_document())
+    exchange=monitor._channel.exchange
+    def tamper_after_actual_authenticated_reply(request):
+        reply=exchange(request)
+        reply['simulation_policy'][field]=value
+        return reply
+    monkeypatch.setattr(monitor._channel,'exchange',tamper_after_actual_authenticated_reply)
+    try:
+        with pytest.raises(PermissionError):monitor.request({'operation':'HEARTBEAT'})
+        assert monitor._channel._codec.failed
+    finally:monitor.close()
+    assert not monitor.is_alive()
+
+
+@pytest.mark.parametrize('damage',['missing','different','boolean_version'])
+def test_actual_simulation_exec_refuses_configuration_that_drops_entry_binding(config,damage):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    original=HeadSimulationPolicy.default_document()
+    monitor=start_monitor(**config,simulation_policy=original)
+    body={} if damage=='missing' else {'simulation_policy':dict(original)}
+    if damage=='different':body['simulation_policy']['search_timeout_s']=40.
+    if damage=='boolean_version':body['simulation_policy']['schema_version']=True
+    try:
+        with pytest.raises((PermissionError,OSError)):
+            monitor.request_runtime({'operation':'CONFIGURE','configuration':body})
+    finally:result=monitor.close()
+    assert result['shutdown_ack'] is False
+    assert result['exit_code']==2
+    assert not monitor.is_alive()
+
+
 @pytest.mark.parametrize('damage',['none','refused_false','refused_missing','extra','positive_stage',
     'request','peer','purpose','epoch','generation','session_id','motion_authority','fault_missing',
     'fault_extra','fault_boolean','fault_future','fault_nan','fault_reason','ack_missing','ack_boolean',

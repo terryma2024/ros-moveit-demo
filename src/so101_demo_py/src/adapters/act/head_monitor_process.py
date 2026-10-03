@@ -7,6 +7,7 @@ bind the independently reviewed native/ROS monitor before using that authority.
 
 import argparse
 from collections import deque
+from copy import deepcopy
 from concurrent.futures import Future
 import gc
 import json
@@ -24,11 +25,23 @@ import threading
 import time
 
 from so101_demo.act.head_monitor_ipc import HeadMonitorChannel, HeadMonitorCodec
+from so101_demo.act.head_monitor import digest
+from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
 from .controller_reservation_provision import _private_parent, _process_start_ticks, _publish_private_provision
 
 
 def _peer(pid):
     return dict(uid=os.geteuid(), pid=pid, start_ticks=_process_start_ticks(pid))
+
+
+def _simulation_ack_matches(reply, expected):
+    try:
+        actual=HeadSimulationPolicy.parse(reply['simulation_policy'])
+        fingerprint=digest(expected.readback())
+        return (digest(actual.readback())==fingerprint
+            and reply['simulation_policy_sha256']==fingerprint)
+    except (KeyError,TypeError,ValueError):
+        return False
 
 
 class MonitorExecutionTrace:
@@ -118,7 +131,7 @@ class MonitorProcess:
     def identity(self): return dict(self._identity)
 
     @property
-    def receipt(self): return dict(self._receipt, monitor_peer=dict(self._receipt['monitor_peer']))
+    def receipt(self): return deepcopy(self._receipt)
 
     @property
     def heartbeat_trace(self):
@@ -142,6 +155,10 @@ class MonitorProcess:
                 or reply.get('monitor_peer') != self._identity):
             self._channel.close()
             raise PermissionError('HEAD_MONITOR_EXEC_ACK_INVALID')
+        simulation = self._channel._simulation_policy
+        if simulation is not None and not _simulation_ack_matches(reply, simulation):
+            self._channel.close()
+            raise PermissionError('HEAD_MONITOR_EXEC_SIMULATION_ACK_INVALID')
         return reply
 
     def request_runtime(self,value,*,trace=None):
@@ -276,6 +293,13 @@ class MonitorRuntimeProtocol:
             if set(request)!={'operation','configuration'} or self._future is not None:
                 raise PermissionError('HEAD_MONITOR_CONFIGURE_REUSED')
             configuration=json.loads(json.dumps(request['configuration'],allow_nan=False))
+            if 'simulation_policy' in self.config:
+                try:
+                    actual=HeadSimulationPolicy.parse(configuration['simulation_policy'])
+                    if digest(actual.readback())!=digest(self.config['simulation_policy']):
+                        raise ValueError('HEAD_MONITOR_SIMULATION_CONFIGURATION_CHANGED')
+                except (KeyError,TypeError,ValueError):
+                    raise PermissionError('HEAD_MONITOR_SIMULATION_CONFIGURATION_BINDING_INVALID') from None
             self._future=Future()
             def configure():
                 try:
@@ -405,8 +429,11 @@ def _retire(process, pid_fd, identity, handle, *, shutdown_ack):
 
 
 def start_monitor(*, python_executable, ipc_directory, log_path, epoch, generation,
-                  session_id, startup_timeout_s, environment=None):
+                  session_id, startup_timeout_s, environment=None, simulation_policy=None):
     """Start exactly one exec child; fail closed and reap it if presence fails."""
+    simulation = (None if simulation_policy is None else
+        simulation_policy if isinstance(simulation_policy, HeadSimulationPolicy) else
+        HeadSimulationPolicy.parse(simulation_policy))
     executable = Path(python_executable)
     if not executable.is_absolute() or not executable.is_file() or not os.access(executable, os.X_OK):
         raise FileNotFoundError('HEAD_MONITOR_EXEC_EXECUTABLE_INVALID')
@@ -424,6 +451,7 @@ def start_monitor(*, python_executable, ipc_directory, log_path, epoch, generati
     primary = _peer(os.getpid())
     config = dict(secret=secret.hex(), epoch=epoch, generation=generation,
                   session_id=session_id, primary=primary)
+    if simulation is not None:config['simulation_policy']=simulation.readback()
     body = json.dumps(config, sort_keys=True).encode('ascii')
     if len(body)+4 > 4096:
         raise ValueError('HEAD_MONITOR_EXEC_BOOTSTRAP_TOO_LARGE')
@@ -471,16 +499,23 @@ def start_monitor(*, python_executable, ipc_directory, log_path, epoch, generati
         connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.settimeout(remaining_startup())
         connection.connect(str(path))
+        timeout = (min(.010, remaining_startup()) if simulation is None else
+            simulation.heartbeat_rpc_timeout_s)
+        if simulation is not None and remaining_startup() < timeout:
+            raise TimeoutError('HEAD_MONITOR_EXEC_STARTUP_DEADLINE')
         channel = HeadMonitorChannel(connection, codec=codec, peer=identity,
-                                     timeout_s=min(.010, remaining_startup()))
+                                     timeout_s=timeout, simulation_policy=simulation)
         reply = channel.exchange({'operation':'PRESENCE'})
         remaining_startup()
         fields = {'request','stage','motion_authority','monitor_peer','cpu_only','module_path'}
+        if simulation is not None:fields.update(('simulation_policy','simulation_policy_sha256'))
         if (type(reply) is not dict or set(reply) != fields or reply['request'] != 'PRESENCE'
                 or reply['stage'] != 'EXEC_ONLY' or reply['motion_authority'] is not False
                 or reply['monitor_peer'] != identity or reply['cpu_only'] is not True
                 or type(reply['module_path']) is not str or not reply['module_path']):
             raise PermissionError('HEAD_MONITOR_EXEC_PRESENCE_INVALID')
+        if simulation is not None and not _simulation_ack_matches(reply, simulation):
+            raise PermissionError('HEAD_MONITOR_EXEC_SIMULATION_PRESENCE_INVALID')
         _event(log_handle, 'EXEC_ONLY', receipt=reply, elapsed_s=time.monotonic()-started)
         remaining_startup()
         return MonitorProcess(process, pid_fd, identity, channel, reply, log_handle)
@@ -516,11 +551,14 @@ def _bootstrap(fd):
     if os.read(fd,1):raise PermissionError('HEAD_MONITOR_EXEC_PIPE_TRAILING_BYTES')
     os.close(fd)
     config=json.loads(body)
+    required={'secret','epoch','generation','session_id','primary'}
     if (type(config) is not dict
-            or set(config)!={'secret','epoch','generation','session_id','primary'}
+            or set(config) not in (required,required|{'simulation_policy'})
             or type(config['secret']) is not str or len(config['secret'])!=64
             or config['primary']!=_peer(os.getppid())):
         raise PermissionError('HEAD_MONITOR_EXEC_BOOTSTRAP_INVALID')
+    if 'simulation_policy' in config:
+        HeadSimulationPolicy.parse(config['simulation_policy'])
     return config
 
 
@@ -541,6 +579,9 @@ def main():
         if not cpu_only or os.environ.get('CUDA_VISIBLE_DEVICES')!='':
             raise PermissionError('HEAD_MONITOR_EXEC_CPU_ONLY_REQUIRED')
         identity=_peer(os.getpid());primary=config['primary']
+        simulation=(HeadSimulationPolicy.parse(config['simulation_policy'])
+            if 'simulation_policy' in config else None)
+        period=.002 if simulation is None else simulation.watchdog_period_s
         execution_trace=MonitorExecutionTrace()
         runtime_protocol=MonitorRuntimeProtocol(config,Path(args.socket).parent)
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as server:
@@ -551,14 +592,16 @@ def main():
             while True:
                 if _peer(primary['pid'])!=primary:
                     raise PermissionError('HEAD_MONITOR_EXEC_PRIMARY_LOST')
-                if select.select([server],[],[],.002)[0]:break
+                if select.select([server],[],[],period)[0]:break
             with server.accept()[0] as connection:
-                channel=HeadMonitorChannel(connection,codec=codec,peer=primary,timeout_s=.010)
+                channel=HeadMonitorChannel(connection,codec=codec,peer=primary,
+                    timeout_s=.010 if simulation is None else simulation.heartbeat_rpc_timeout_s,
+                    simulation_policy=simulation)
                 presented=False
                 while True:
                     if _peer(primary['pid'])!=primary:
                         raise PermissionError('HEAD_MONITOR_EXEC_PRIMARY_LOST')
-                    if not select.select([connection],[],[],.002)[0]:continue
+                    if not select.select([connection],[],[],period)[0]:continue
                     execution_trace.mark('receive_started')
                     request=channel.receive()
                     if type(request) is not dict or type(request.get('operation')) is not str:
@@ -598,6 +641,9 @@ def main():
                     else:raise PermissionError('HEAD_MONITOR_EXEC_OPERATION_REFUSED')
                     reply=dict(request=operation,stage='EXEC_ONLY',motion_authority=False,
                         monitor_peer=identity,cpu_only=cpu_only,module_path=str(Path(__file__).resolve()))
+                    if simulation is not None:
+                        reply.update(simulation_policy=simulation.readback(),
+                            simulation_policy_sha256=digest(simulation.readback()))
                     channel.send(reply)
                     execution_trace.mark('reply_sent',operation)
                     if operation=='SHUTDOWN':
