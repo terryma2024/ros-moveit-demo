@@ -11,8 +11,6 @@ from .head_feedback import nanoseconds
 class HeadSimulationPolicy:
     schema_version: int
     mode: str
-    heartbeat_rpc_timeout_s: float
-    supervision_stale_s: float
     watchdog_period_s: float
     fault_reaction_limit_s: float
     native_close_timeout_s: float
@@ -28,11 +26,10 @@ class HeadSimulationPolicy:
     max_reobservations_total: int
 
     def __post_init__(self):
-        if (type(self.schema_version) is not int or self.schema_version != 1
-                or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search'):
+        if (type(self.schema_version) is not int or self.schema_version != 2
+                or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search_file_v1'):
             raise ValueError('HEAD_SIMULATION_POLICY_SCOPE_INVALID')
-        ceilings = dict(heartbeat_rpc_timeout_s=1., supervision_stale_s=2.,
-            watchdog_period_s=.1, fault_reaction_limit_s=.5, native_close_timeout_s=.25,
+        ceilings = dict(watchdog_period_s=.1, fault_reaction_limit_s=.5, native_close_timeout_s=.25,
             stop_confirmation_timeout_s=3., perception_max_age_s=.15,
             perception_job_timeout_s=3., camera_loss_timeout_s=2.,
             feedback_receipt_timeout_s=1., joint_source_age_s=.1,
@@ -46,11 +43,12 @@ class HeadSimulationPolicy:
             if type(value) is not int or not 0 < value <= ceiling:
                 raise ValueError('HEAD_SIMULATION_POLICY_REOBSERVATION_INVALID')
         if not (
-            self.watchdog_period_s < self.heartbeat_rpc_timeout_s < self.supervision_stale_s
+            self.watchdog_period_s < self.fault_reaction_limit_s
             and self.fault_reaction_limit_s + self.native_close_timeout_s < self.stop_confirmation_timeout_s
-            and self.feedback_receipt_timeout_s <= self.supervision_stale_s
-            and self.camera_loss_timeout_s <= self.supervision_stale_s
+            and self.feedback_receipt_timeout_s <= self.stop_confirmation_timeout_s
+            and self.camera_loss_timeout_s <= self.stop_confirmation_timeout_s
             and self.perception_max_age_s <= self.perception_job_timeout_s
+            and self.perception_job_timeout_s <= self.stop_confirmation_timeout_s
             and self.stop_confirmation_timeout_s < self.search_timeout_s
             and self.max_reobservations_per_stop <= self.max_reobservations_total
         ):
@@ -65,8 +63,8 @@ class HeadSimulationPolicy:
     @staticmethod
     def default_document():
         """An explicit candidate for calibration, never an approved fallback."""
-        return dict(schema_version=1, mode='mujoco_bounded_stop_search',
-            heartbeat_rpc_timeout_s=.25, supervision_stale_s=.5, watchdog_period_s=.02,
+        return dict(schema_version=2, mode='mujoco_bounded_stop_search_file_v1',
+            watchdog_period_s=.02,
             fault_reaction_limit_s=.25, native_close_timeout_s=.05,
             stop_confirmation_timeout_s=1., perception_max_age_s=.15,
             perception_job_timeout_s=1., camera_loss_timeout_s=.5,
@@ -85,6 +83,7 @@ class HeadSimulationPolicy:
             clock_interarrival_deadline_s=self.feedback_receipt_timeout_s,
             watchdog_period_s=self.watchdog_period_s,
             watchdog_reaction_limit_s=self.fault_reaction_limit_s,
+            # Shared feedback ABI name: in file policy this is the local native-close budget.
             revoker_connection_deadline_s=self.native_close_timeout_s)
 
     def validate_search_values(self, values):

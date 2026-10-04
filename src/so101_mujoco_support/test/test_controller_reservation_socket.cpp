@@ -75,8 +75,9 @@ public:
       close(to_child[1]);
       close(from_child[0]);
       close(from_child[1]);
-      const auto script = std::filesystem::path(__FILE__).parent_path() /
-        "controller_reservation_client.py";
+      const auto * configured_script = std::getenv("SO101_CONTROLLER_RESERVATION_CLIENT");
+      const auto script = configured_script ? std::filesystem::path(configured_script) :
+        std::filesystem::path(__FILE__).parent_path() / "controller_reservation_client.py";
       if (second_path.empty()) {
         execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
           static_cast<char *>(nullptr));
@@ -407,6 +408,25 @@ TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
   EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, DeadPrimaryFaultPeerPermanentlyRevokesOwnerLease)
+{
+  const auto path = socket_path("dead-primary-fault-peer.sock");
+  const auto key = capability();
+  ClientProcess primary(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, key, primary.peer(),
+    std::chrono::milliseconds(50), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::PRIMARY_FAULT);
+
+  ASSERT_EQ(kill(primary.pid(), SIGTERM), 0);
+  int child_status = 0;
+  ASSERT_EQ(waitpid(primary.pid(), &child_status, 0), primary.pid());
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(gate->generation(), 0u);
+  EXPECT_FALSE(gate->arm(6));
 }
 
 TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)

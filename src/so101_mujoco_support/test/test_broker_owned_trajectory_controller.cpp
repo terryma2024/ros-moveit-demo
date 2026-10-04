@@ -1,12 +1,21 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <control_msgs/msg/speed_scaling_factor.hpp>
+#include <action_msgs/msg/goal_status.hpp>
+#include <rcl_interfaces/srv/describe_parameters.hpp>
+#include <rcl_interfaces/srv/get_parameters.hpp>
+#include <rcl_interfaces/srv/set_parameters.hpp>
 #include <hardware_interface/handle.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
 #include <hardware_interface/loaned_state_interface.hpp>
+#include <limits>
 #include <pluginlib/class_loader.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sstream>
@@ -26,11 +35,14 @@
 #include "so101_mujoco_support/broker_owned_trajectory_controller.hpp"
 #include "so101_mujoco_support/controller_goal_admission.hpp"
 #include "so101_mujoco_support/controller_stop_witness.hpp"
+#include "so101_mujoco_support/sha256.hpp"
 
 namespace
 {
 using Action = control_msgs::action::FollowJointTrajectory;
 using SendGoal = Action::Impl::SendGoalService;
+using GetResult = Action::Impl::GetResultService;
+using CancelGoal = Action::Impl::CancelGoalService;
 using Admission = so101_mujoco_support::ControllerGoalAdmission;
 
 class InspectableController : public so101_mujoco_support::BrokerOwnedTrajectoryController
@@ -49,6 +61,11 @@ public:
   }
   bool topic_subscriber_exists() const {return static_cast<bool>(joint_command_subscriber_);}
   bool action_server_exists() const {return static_cast<bool>(action_server_);}
+  void publish_trajectory_for_test(
+    const std::shared_ptr<trajectory_msgs::msg::JointTrajectory> & trajectory)
+  {
+    stage_head_trajectory_for_testing(trajectory);
+  }
   bool reserve_goal(const Admission::GoalUUID & id, const Action::Goal & goal, uint64_t generation)
   {
     const auto gate = legacy_gate();
@@ -74,6 +91,9 @@ public:
       state_desired_.positions.size(), state_error_.positions.size()};
   }
   void set_pending_goal_for_test(bool value) {rt_has_pending_goal_.store(value);}
+  std::shared_ptr<Admission> active_gate_for_test() {return active_gate_copy();}
+  double scaling_factor_for_test() const {return scaling_factor_.load(std::memory_order_acquire);}
+  bool holding_for_test() const {return rt_is_holding_.load(std::memory_order_acquire);}
 };
 
 Action::Goal stationary_goal()
@@ -85,6 +105,64 @@ Action::Goal stationary_goal()
   point.time_from_start.sec = 1;
   goal.trajectory.points = {point};
   return goal;
+}
+
+Action::Goal safe_head_goal(int64_t header_ns, double position = 0.1)
+{
+  Action::Goal goal;
+  goal.trajectory.joint_names = {"neck_yaw_joint"};
+  goal.trajectory.header.stamp.sec = static_cast<int32_t>(
+    header_ns / 1000000000LL);
+  goal.trajectory.header.stamp.nanosec = static_cast<uint32_t>(
+    header_ns % 1000000000LL);
+  trajectory_msgs::msg::JointTrajectoryPoint first;
+  first.positions = {position};
+  first.velocities = {0.0};
+  first.accelerations = {0.0};
+  first.time_from_start.sec = 0;
+  first.time_from_start.nanosec = 400000000;
+  trajectory_msgs::msg::JointTrajectoryPoint last;
+  last.positions = {position};
+  last.velocities = {0.0};
+  last.accelerations = {0.0};
+  last.time_from_start.sec = 1;
+  last.time_from_start.nanosec = 400000000;
+  goal.trajectory.points = {first, last};
+  return goal;
+}
+
+bool reserve_bound_head_goal(
+  const std::shared_ptr<Admission> & gate, const Admission::GoalUUID & uuid,
+  const Action::Goal & goal)
+{
+  if (!gate) {return false;}
+  const auto identity = gate->service_identity();
+  const auto generation = gate->generation();
+  if (!identity || generation == 0) {return false;}
+  rclcpp::SerializedMessage serialized;
+  rclcpp::Serialization<Action::Goal>().serialize_message(&goal, &serialized);
+  const auto & raw = serialized.get_rcl_serialized_message();
+  so101_mujoco_support::BoundControllerReservationRequest request;
+  request.generation = generation;
+  for (size_t index = 0; index < request.permit_uuid.size(); ++index) {
+    request.permit_uuid[index] = static_cast<uint8_t>(uuid[index] ^ 0xa1);
+  }
+  request.permit_uuid[6] = static_cast<uint8_t>((request.permit_uuid[6] & 0x0f) | 0x40);
+  request.permit_uuid[8] = static_cast<uint8_t>((request.permit_uuid[8] & 0x3f) | 0x80);
+  request.role = so101_mujoco_support::ControllerReservationRole::NECK;
+  request.uuid = uuid;
+  request.goal_cdr.assign(raw.buffer, raw.buffer + raw.buffer_length);
+  request.target_digest = so101_mujoco_support::sha256::digest(request.goal_cdr);
+  request.claim_monotonic_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  request.deadline_ns = request.claim_monotonic_ns + 400000000LL;
+  request.session_id = "session-17";
+  request.broker_incarnation = "test-broker";
+  request.controller_incarnation = identity->incarnation;
+  request.controller_boot_incarnation = identity->boot;
+  request.goal = goal;
+  return gate->reserve_bound(request) ==
+         so101_mujoco_support::BoundReserveStatus::ACCEPTED;
 }
 
 std::string five_joint_urdf()
@@ -456,27 +534,6 @@ private:
   int output_{-1};
 };
 
-class ScopedHeadMonitorRequirement
-{
-public:
-  ScopedHeadMonitorRequirement()
-  {
-    const auto * previous = std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
-    if (previous) {previous_ = previous;}
-    setenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED", "1", 1);
-  }
-  ~ScopedHeadMonitorRequirement()
-  {
-    if (previous_) {
-      setenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED", previous_->c_str(), 1);
-    } else {
-      unsetenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED");
-    }
-  }
-
-private:
-  std::optional<std::string> previous_;
-};
 }
 
 TEST(BrokerOwnedTrajectoryController, ControllerBeforeBrokerStartsClosedRegistrationService)
@@ -497,6 +554,7 @@ TEST(BrokerOwnedTrajectoryController, ControllerBeforeBrokerStartsClosedRegistra
   ASSERT_EQ(controller.init("arm_controller", "", 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.get_node()->get_subscriptions_info_by_topic("/arm_controller/speed_scaling_input").empty());
   EXPECT_FALSE(std::filesystem::exists(socket));
   write_self_provision(directory / "arm.provision", 1);
   rclcpp::executors::SingleThreadedExecutor executor;
@@ -536,6 +594,7 @@ TEST(BrokerOwnedTrajectoryController, BrokerBeforeControllerStartsClosedRoleServ
   ASSERT_EQ(controller.init("gripper_controller", "", 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.get_node()->get_subscriptions_info_by_topic("/gripper_controller/speed_scaling_input").empty());
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(controller.get_node()->get_node_base_interface());
   const auto deadline = std::chrono::steady_clock::now() + 2s;
@@ -570,6 +629,30 @@ TEST(BrokerOwnedTrajectoryController, ConfigureHasNoTopicCommandIngress)
   EXPECT_FALSE(controller.topic_subscriber_exists());
   EXPECT_EQ(controller.get_node()->count_subscribers("/arm_controller/joint_trajectory"), 0U);
   EXPECT_TRUE(controller.action_server_exists());
+  const auto node = controller.get_node();
+  EXPECT_TRUE(node->get_parameter("speed_scaling_input_enabled").as_bool());
+  EXPECT_TRUE(node->describe_parameter("speed_scaling_input_enabled").read_only);
+  EXPECT_FALSE(node->get_subscriptions_info_by_topic(
+      "/arm_controller/speed_scaling_input").empty());
+  auto probe = rclcpp::Node::make_shared("act_speed_scaling_switch_probe");
+  auto publisher = probe->create_publisher<control_msgs::msg::SpeedScalingFactor>(
+    "/arm_controller/speed_scaling_input", rclcpp::SystemDefaultsQoS().transient_local());
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+  executor.add_node(probe);
+  control_msgs::msg::SpeedScalingFactor scaling;
+  scaling.factor = 0.5;
+  publisher->publish(scaling);
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+  while (controller.scaling_factor_for_test() != 0.5 &&
+    std::chrono::steady_clock::now() < deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_DOUBLE_EQ(controller.scaling_factor_for_test(), 0.5);
+  executor.remove_node(probe->get_node_base_interface());
+  executor.remove_node(node->get_node_base_interface());
   rclcpp::shutdown();
 }
 
@@ -884,22 +967,12 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   rclcpp::shutdown();
 }
 
-static void exercise_neck_native_scope(
-  bool monitor_required, bool primary_fault_trigger = false, bool simulation = false,
-  int64_t native_timeout_ns = 50000000)
+static void exercise_neck_native_scope()
 {
   const auto directory = private_socket_directory();
-  if (!monitor_required) {write_self_provision(directory / "neck.provision", 3);}
+  write_self_provision(directory / "neck.provision", 3);
   const ScopedReservationEnvironment scope(directory, "session-17");
   const auto socket = directory / "neck.sock";
-  std::unique_ptr<ScopedNativeMonitor> monitor;
-  std::unique_ptr<ScopedNativeMonitor> primary;
-  std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
-  if (monitor_required) {
-    requirement = std::make_unique<ScopedHeadMonitorRequirement>();
-    monitor = std::make_unique<ScopedNativeMonitor>(directory, false, simulation ? 20 : 0);
-    primary = std::make_unique<ScopedNativeMonitor>(directory, true, simulation ? 20 : 0);
-  }
   rclcpp::init(0, nullptr);
   struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
   InspectableController controller;
@@ -909,26 +982,15 @@ static void exercise_neck_native_scope(
     rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
     rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
   };
-  if (simulation) {
-    parameters.emplace_back("head_simulation_mode", "mujoco_bounded_stop_search");
-    parameters.emplace_back("head_fault_connection_timeout_ns", native_timeout_ns);
-  }
   options.parameter_overrides(parameters);
   ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  if (simulation) {
-    ASSERT_TRUE(controller.get_node()->has_parameter("head_simulation_mode"));
-    ASSERT_TRUE(controller.get_node()->has_parameter("head_fault_connection_timeout_ns"));
-    EXPECT_EQ(controller.get_node()->get_parameter("head_simulation_mode").as_string(),
-      "mujoco_bounded_stop_search");
-    EXPECT_EQ(controller.get_node()->get_parameter("head_fault_connection_timeout_ns").as_int(),
-      native_timeout_ns);
-    EXPECT_TRUE(controller.get_node()->describe_parameter("head_simulation_mode").read_only);
-    EXPECT_TRUE(controller.get_node()->describe_parameter("head_fault_connection_timeout_ns").read_only);
-    EXPECT_FALSE(controller.get_node()->set_parameters_atomically({
-        rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(250000000))}).successful);
-  }
+  EXPECT_TRUE(controller.get_node()->describe_parameter("head_simulation_mode").read_only);
+  EXPECT_TRUE(controller.get_node()->describe_parameter("head_fault_connection_timeout_ns").read_only);
+  EXPECT_EQ(controller.get_node()->get_parameter("head_simulation_mode").as_string(), "");
+  EXPECT_EQ(controller.get_node()->get_parameter("head_fault_connection_timeout_ns").as_int(),
+    2000000);
   rclcpp::executors::SingleThreadedExecutor executor;
   executor.add_node(controller.get_node()->get_node_base_interface());
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
@@ -937,14 +999,7 @@ static void exercise_neck_native_scope(
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   ASSERT_TRUE(std::filesystem::exists(socket));
-  if (monitor_required) {
-    ASSERT_TRUE(std::filesystem::exists(directory / "neck-revoke.sock"));
-    ASSERT_TRUE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
-    EXPECT_EQ(primary->main_generation(), 0u);
-    EXPECT_EQ(primary->armed_generation(), 0u);
-    EXPECT_EQ(monitor->armed_generation(), 0u);
-  }
-  EXPECT_EQ(primary ? primary->arm() : send_generation_request(socket, 3), 1u);
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
   hardware_interface::InterfaceInfo position;
   position.name = "position";
   position.initial_value = "0";
@@ -974,65 +1029,26 @@ static void exercise_neck_native_scope(
     std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
   ASSERT_TRUE(stopped.has_value());
   EXPECT_EQ(stopped->sample_count, 51u);
-  EXPECT_EQ(primary ? primary->arm() : send_generation_request(socket, 3), 0u);
-  if (monitor) {
-    ASSERT_EQ(primary->main_generation(), 5u);
-    ASSERT_EQ(primary->armed_generation(), 5u);
-    ASSERT_EQ(monitor->armed_generation(), 5u);
-    ASSERT_EQ(primary_fault_trigger ? primary->revoke() : monitor->revoke(), 0u);
-    EXPECT_EQ(primary->main_generation(), 0u);
-    EXPECT_EQ(primary->armed_generation(), 0u);
-    EXPECT_EQ(monitor->armed_generation(), 0u);
-    EXPECT_EQ(primary->revoke(), 0u);
-    EXPECT_EQ(monitor->revoke(), 0u);
-    EXPECT_EQ(primary->arm(true), 1u);
-  } else {
-    EXPECT_EQ(send_generation_request(socket, 3), 1u);
-  }
+  EXPECT_EQ(send_generation_request(socket, 3), 0u);
+  EXPECT_EQ(send_generation_request(socket, 3), 1u);
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(std::filesystem::exists(socket));
-  if (monitor_required) {
-    EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));
-    EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
-  }
   controller.release_interfaces();
   rclcpp::shutdown();
 }
 
 TEST(BrokerOwnedTrajectoryController, NeckNativeUpdatesArmOnlyItsPrivateRoleService)
 {
-  exercise_neck_native_scope(false);
+  exercise_neck_native_scope();
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2ProvisionStartsThreeIndependentNativeRoleServices)
-{
-  exercise_neck_native_scope(true);
-}
-
-TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultUsesItsOwnIdentityAndLatchesTheSharedGate)
-{
-  exercise_neck_native_scope(true, true);
-}
-
-TEST(BrokerOwnedTrajectoryController, ExplicitSimulationBudgetReachesBothNativeFaultServices)
-{
-  exercise_neck_native_scope(true, false, true);
-}
-
-TEST(BrokerOwnedTrajectoryController, ExplicitSimulationPrimaryFaultRetainsSharedIrrevocableLatch)
-{
-  exercise_neck_native_scope(true, true, true, 50000001);
-}
-
-static void exercise_head_policy_rejection(
-  rclcpp::Parameter mode, rclcpp::Parameter timeout, bool head_required = true,
-  bool predeclared_mutable = false)
+TEST(BrokerOwnedTrajectoryController, HeadFileModeConfiguresMainAndLocalPrimaryWithoutMonitor)
 {
   const auto directory = private_socket_directory();
   const ScopedReservationEnvironment scope(directory, "session-17");
-  std::unique_ptr<ScopedHeadMonitorRequirement> requirement;
-  if (head_required) {requirement = std::make_unique<ScopedHeadMonitorRequirement>();}
+  ASSERT_EQ(std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED"), nullptr);
+  ScopedNativeMonitor primary(directory, true);
   rclcpp::init(0, nullptr);
   struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
   InspectableController controller;
@@ -1041,13 +1057,1042 @@ static void exercise_head_policy_rejection(
     rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
     rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
     rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
-    mode, timeout,
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
   });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  const auto node = controller.get_node();
+  EXPECT_TRUE(node->get_subscriptions_info_by_topic("/neck_controller/speed_scaling_input").empty());
+  EXPECT_TRUE(node->describe_parameter("head_simulation_mode").read_only);
+  EXPECT_TRUE(node->describe_parameter("head_fault_connection_timeout_ns").read_only);
+  EXPECT_TRUE(node->describe_parameter("head_measured_prefix_guard").read_only);
+  EXPECT_TRUE(node->describe_parameter("speed_scaling_input_enabled").read_only);
+  EXPECT_FALSE(node->get_parameter("speed_scaling_input_enabled").as_bool());
+  auto speed_probe = rclcpp::Node::make_shared("speed_scaling_switch_probe");
+  auto speed_publisher = speed_probe->create_publisher<control_msgs::msg::SpeedScalingFactor>(
+    "/neck_controller/speed_scaling_input", rclcpp::SystemDefaultsQoS().transient_local());
+  rclcpp::executors::SingleThreadedExecutor speed_executor;
+  speed_executor.add_node(speed_probe);
+  for (const double factor : {2.0, std::numeric_limits<double>::quiet_NaN(), 0.0}) {
+    control_msgs::msg::SpeedScalingFactor message;
+    message.factor = factor;
+    speed_publisher->publish(message);
+    speed_executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    speed_executor.spin_some();
+    EXPECT_TRUE(node->get_subscriptions_info_by_topic(
+        "/neck_controller/speed_scaling_input").empty());
+  }
+  speed_executor.remove_node(speed_probe->get_node_base_interface());
+  speed_probe.reset();
+  EXPECT_EQ(node->get_parameter("head_simulation_mode").as_string(),
+    "mujoco_bounded_stop_search_file_v1");
+  EXPECT_EQ(node->get_parameter("head_fault_connection_timeout_ns").as_int(), 50000000);
+  EXPECT_EQ(node->get_parameter("head_measured_prefix_guard").as_string(),
+    "quintic_measured_prefix_v1");
+  std::ifstream main_file(directory / "neck.provision", std::ios::binary);
+  std::ifstream primary_file(directory / "neck-primary-revoke.provision", std::ios::binary);
+  const std::vector<uint8_t> main_bytes((std::istreambuf_iterator<char>(main_file)),
+    std::istreambuf_iterator<char>());
+  const std::vector<uint8_t> primary_bytes((std::istreambuf_iterator<char>(primary_file)),
+    std::istreambuf_iterator<char>());
+  ASSERT_EQ(main_bytes.size(), 66u);
+  ASSERT_GT(primary_bytes.size(), 72u);
+  EXPECT_EQ(primary_bytes[5], 4u);
+  EXPECT_EQ(std::vector<uint8_t>(main_bytes.begin() + 8, main_bytes.begin() + 24),
+    std::vector<uint8_t>(primary_bytes.begin() + 8, primary_bytes.begin() + 24));
+  EXPECT_NE(std::vector<uint8_t>(main_bytes.begin() + 24, main_bytes.begin() + 56),
+    std::vector<uint8_t>(primary_bytes.begin() + 24, primary_bytes.begin() + 56));
+  EXPECT_NE(std::all_of(primary_bytes.begin() + 24, primary_bytes.begin() + 56,
+      [](uint8_t value) {return value == 0;}), true);
+  EXPECT_EQ(primary_bytes[60], static_cast<uint8_t>((getpid() >> 24) & 0xff));
+  EXPECT_EQ(primary_bytes[61], static_cast<uint8_t>((getpid() >> 16) & 0xff));
+  EXPECT_EQ(primary_bytes[62], static_cast<uint8_t>((getpid() >> 8) & 0xff));
+  EXPECT_EQ(primary_bytes[63], static_cast<uint8_t>(getpid() & 0xff));
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node->get_node_base_interface());
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (!std::filesystem::exists(directory / "neck.sock") &&
+    std::chrono::steady_clock::now() < deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  EXPECT_TRUE(std::filesystem::exists(directory / "neck.sock"));
+  EXPECT_TRUE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-revoke.sock"));
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(node->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  EXPECT_EQ(primary.arm(), 0u);  // main authority accepts only its bound actor
+  ASSERT_TRUE(state_position->set_value(0.102));
+  ASSERT_TRUE(state_velocity->set_value(0.04136050464213824));
+  auto late = std::make_shared<trajectory_msgs::msg::JointTrajectory>();
+  late->joint_names = {"neck_yaw_joint"};
+  late->header.stamp = rclcpp::Time(static_cast<int64_t>(2000000000), RCL_ROS_TIME);
+  trajectory_msgs::msg::JointTrajectoryPoint first;
+  first.positions = {0.1};
+  first.velocities = {0.0};
+  first.accelerations = {0.0};
+  first.time_from_start.sec = 0;
+  first.time_from_start.nanosec = 400000000;
+  trajectory_msgs::msg::JointTrajectoryPoint last;
+  last.positions = {0.2};
+  last.velocities = {0.0};
+  last.accelerations = {0.0};
+  last.time_from_start.sec = 5;
+  late->points = {first, last};
+  controller.publish_trajectory_for_test(late);
+  const auto command_before = command->get_optional();
+  ASSERT_TRUE(command_before.has_value());
+  ASSERT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2399900000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const auto command_after = command->get_optional();
+  ASSERT_TRUE(command_after.has_value());
+  std::cerr << "HEAD_FIRST_SAMPLE_BASELINE command_before=" << command_before.value()
+            << " measured_q=0.102 measured_v=0.04136050464213824 remaining_ns=100000"
+            << " command_after=" << command_after.value() << std::endl;
+  EXPECT_NEAR(command_after.value(), 0.102, 1e-12);
+  EXPECT_EQ(primary.revoke(), 0u);
+  EXPECT_EQ(primary.arm(true), 1u);  // sticky close prevents main re-arm
+  ASSERT_EQ(node->deactivate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  executor.remove_node(node->get_node_base_interface());
+  controller.release_interfaces();
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadAcceptedActionAbortCancelAndNormalResultUseActualServices)
+{
+  using namespace std::chrono_literals;
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  auto client_node = rclcpp::Node::make_shared("head_action_lifecycle_test");
+  auto send_client = client_node->create_client<SendGoal>(
+    "/neck_controller/follow_joint_trajectory/_action/send_goal");
+  auto result_client = client_node->create_client<GetResult>(
+    "/neck_controller/follow_joint_trajectory/_action/get_result");
+  auto cancel_client = client_node->create_client<CancelGoal>(
+    "/neck_controller/follow_joint_trajectory/_action/cancel_goal");
+  auto get_client = client_node->create_client<rcl_interfaces::srv::GetParameters>(
+    "/neck_controller/get_parameters");
+  auto describe_client = client_node->create_client<rcl_interfaces::srv::DescribeParameters>(
+    "/neck_controller/describe_parameters");
+  auto set_client = client_node->create_client<rcl_interfaces::srv::SetParameters>(
+    "/neck_controller/set_parameters");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  executor.add_node(client_node);
+  const auto provision_deadline = std::chrono::steady_clock::now() + 2s;
+  while ((!std::filesystem::exists(directory / "neck.sock") ||
+    !std::filesystem::exists(directory / "neck-primary-revoke.sock")) &&
+    std::chrono::steady_clock::now() < provision_deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(10ms);
+  }
+  ASSERT_TRUE(std::filesystem::exists(directory / "neck.sock"));
+  ASSERT_TRUE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  ASSERT_TRUE(send_client->wait_for_service(2s));
+  ASSERT_TRUE(result_client->wait_for_service(2s));
+  ASSERT_TRUE(cancel_client->wait_for_service(2s));
+  ASSERT_TRUE(get_client->wait_for_service(2s));
+  ASSERT_TRUE(describe_client->wait_for_service(2s));
+  ASSERT_TRUE(set_client->wait_for_service(2s));
+
+  auto get_request = std::make_shared<rcl_interfaces::srv::GetParameters::Request>();
+  get_request->names = {"head_simulation_mode", "head_fault_connection_timeout_ns",
+    "head_measured_prefix_guard", "speed_scaling_input_enabled"};
+  auto get_future = get_client->async_send_request(get_request);
+  ASSERT_EQ(executor.spin_until_future_complete(get_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto get_response = get_future.get();
+  ASSERT_EQ(get_response->values.size(), 4u);
+  EXPECT_EQ(get_response->values[0].type,
+    rcl_interfaces::msg::ParameterType::PARAMETER_STRING);
+  EXPECT_EQ(get_response->values[0].string_value, "mujoco_bounded_stop_search_file_v1");
+  EXPECT_EQ(get_response->values[1].type,
+    rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER);
+  EXPECT_EQ(get_response->values[1].integer_value, 50000000);
+  EXPECT_EQ(get_response->values[2].type,
+    rcl_interfaces::msg::ParameterType::PARAMETER_STRING);
+  EXPECT_EQ(get_response->values[2].string_value, "quintic_measured_prefix_v1");
+  EXPECT_EQ(get_response->values[3].type,
+    rcl_interfaces::msg::ParameterType::PARAMETER_BOOL);
+  EXPECT_FALSE(get_response->values[3].bool_value);
+  auto describe_request =
+    std::make_shared<rcl_interfaces::srv::DescribeParameters::Request>();
+  describe_request->names = get_request->names;
+  auto describe_future = describe_client->async_send_request(describe_request);
+  ASSERT_EQ(executor.spin_until_future_complete(describe_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto describe_response = describe_future.get();
+  ASSERT_EQ(describe_response->descriptors.size(), 4u);
+  for (size_t index = 0; index < get_request->names.size(); ++index) {
+    EXPECT_EQ(describe_response->descriptors[index].name, get_request->names[index]);
+    EXPECT_TRUE(describe_response->descriptors[index].read_only);
+    EXPECT_FALSE(describe_response->descriptors[index].dynamic_typing);
+    const auto expected_type = index == 0 || index == 2 ?
+      rcl_interfaces::msg::ParameterType::PARAMETER_STRING :
+      index == 1 ? rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER :
+      rcl_interfaces::msg::ParameterType::PARAMETER_BOOL;
+    EXPECT_EQ(describe_response->descriptors[index].type, expected_type);
+  }
+  auto set_request = std::make_shared<rcl_interfaces::srv::SetParameters::Request>();
+  set_request->parameters.push_back(
+    rclcpp::Parameter("speed_scaling_input_enabled", true).to_parameter_msg());
+  auto set_future = set_client->async_send_request(set_request);
+  ASSERT_EQ(executor.spin_until_future_complete(set_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto set_response = set_future.get();
+  ASSERT_EQ(set_response->results.size(), 1u);
+  EXPECT_FALSE(set_response->results[0].successful);
+
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0.1";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  const auto time_origin = controller.get_node()->get_clock()->now();
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(time_origin + rclcpp::Duration::from_nanoseconds(index * 2000000),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  const auto gate = controller.active_gate_for_test();
+  ASSERT_NE(gate, nullptr);
+  ASSERT_TRUE(gate->arm(1));
+
+  const auto send_actual_goal = [&](const Admission::GoalUUID & uuid,
+      const Action::Goal & goal) -> bool {
+      if (!reserve_bound_head_goal(gate, uuid, goal)) {return false;}
+      auto request = std::make_shared<SendGoal::Request>();
+      request->goal_id.uuid = uuid;
+      request->goal = goal;
+      auto future = send_client->async_send_request(request);
+      if (executor.spin_until_future_complete(future, 2s) != rclcpp::FutureReturnCode::SUCCESS) {
+        return false;
+      }
+      return future.get()->accepted;
+    };
+  const auto actual_result = [&](const Admission::GoalUUID & uuid)
+    -> std::shared_ptr<GetResult::Response> {
+      auto request = std::make_shared<GetResult::Request>();
+      request->goal_id.uuid = uuid;
+      auto future = result_client->async_send_request(request);
+      if (executor.spin_until_future_complete(future, 3s) !=
+        rclcpp::FutureReturnCode::SUCCESS)
+      {
+        return {};
+      }
+      return future.get();
+    };
+  const auto uuid_text = [](const Admission::GoalUUID & uuid) {
+      std::ostringstream text;
+      for (const auto byte : uuid) {text << std::hex << static_cast<int>(byte);}
+      return text.str();
+    };
+  const auto wait_for_component_clock = [&](int64_t last_update_ns) {
+      const auto deadline = std::chrono::steady_clock::now() + 5s;
+      while (controller.get_node()->get_clock()->now().nanoseconds() <= last_update_ns &&
+        std::chrono::steady_clock::now() < deadline)
+      {
+        executor.spin_some();
+        std::this_thread::sleep_for(2ms);
+      }
+      const auto value = controller.get_node()->get_clock()->now();
+      EXPECT_GT(value.nanoseconds(), last_update_ns);
+      std::cerr << "HEAD_COMPONENT_CLOCK_WAIT last_update_ns=" << last_update_ns
+                << " next_header_ns=" << value.nanoseconds() << std::endl;
+      return value;
+    };
+
+  const auto abort_header = wait_for_component_clock(
+    time_origin.nanoseconds() + 51 * 2000000LL);
+  const auto abort_goal = safe_head_goal(abort_header.nanoseconds());
+  Admission::GoalUUID abort_uuid{};
+  abort_uuid.fill(0x11);
+  ASSERT_TRUE(send_actual_goal(abort_uuid, abort_goal));
+  ASSERT_TRUE(state_position->set_value(std::numeric_limits<double>::quiet_NaN()));
+  EXPECT_EQ(controller.update(abort_header + rclcpp::Duration::from_nanoseconds(2000000),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::ERROR);
+  ASSERT_TRUE(state_position->set_value(0.1));
+  ASSERT_EQ(controller.update(abort_header + rclcpp::Duration::from_nanoseconds(4000000),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const int64_t abort_last_update_ns = abort_header.nanoseconds() + 4000000LL;
+  const auto abort_response = actual_result(abort_uuid);
+  ASSERT_NE(abort_response, nullptr);
+  EXPECT_EQ(static_cast<int>(abort_response->status),
+    action_msgs::msg::GoalStatus::STATUS_ABORTED);
+  EXPECT_EQ(abort_response->result.error_code,
+    Action::Result::INVALID_GOAL);
+  EXPECT_EQ(abort_response->result.error_string,
+    "Head measured-prefix guard refused the first command");
+  std::cerr << "HEAD_ACTION_TERMINAL uuid=" << uuid_text(abort_uuid)
+            << " status=" << static_cast<int>(abort_response->status)
+            << " error_code=" << abort_response->result.error_code
+            << " error_string=" << abort_response->result.error_string << std::endl;
+
+  ASSERT_TRUE(gate->arm(2));
+  const auto cancel_header = wait_for_component_clock(abort_last_update_ns);
+  const auto cancel_goal = safe_head_goal(cancel_header.nanoseconds());
+  Admission::GoalUUID cancel_uuid{};
+  cancel_uuid.fill(0x22);
+  ASSERT_TRUE(send_actual_goal(cancel_uuid, cancel_goal));
+  Admission::GoalUUID overlapping_pending_uuid{};
+  overlapping_pending_uuid.fill(0x26);
+  ASSERT_TRUE(reserve_bound_head_goal(gate, overlapping_pending_uuid, cancel_goal));
+  auto overlapping_pending_request = std::make_shared<SendGoal::Request>();
+  overlapping_pending_request->goal_id.uuid = overlapping_pending_uuid;
+  overlapping_pending_request->goal = cancel_goal;
+  auto overlapping_pending_future = send_client->async_send_request(overlapping_pending_request);
+  ASSERT_EQ(executor.spin_until_future_complete(overlapping_pending_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  EXPECT_FALSE(overlapping_pending_future.get()->accepted);
+  EXPECT_TRUE(gate->cancel_bound(overlapping_pending_uuid));
+  std::cerr << "HEAD_ACTION_OVERLAP pending_uuid=" << uuid_text(overlapping_pending_uuid)
+            << " accepted=0" << std::endl;
+  auto cancel_request = std::make_shared<CancelGoal::Request>();
+  cancel_request->goal_info.goal_id.uuid = cancel_uuid;
+  auto cancel_future = cancel_client->async_send_request(cancel_request);
+  ASSERT_EQ(executor.spin_until_future_complete(cancel_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto cancel_response = cancel_future.get();
+  ASSERT_EQ(cancel_response->goals_canceling.size(), 1u);
+  EXPECT_EQ(cancel_response->goals_canceling[0].goal_id.uuid, cancel_uuid);
+  ASSERT_EQ(controller.update(cancel_header + rclcpp::Duration::from_nanoseconds(2000000),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const int64_t cancel_last_update_ns = cancel_header.nanoseconds() + 2000000LL;
+  const auto canceled_response = actual_result(cancel_uuid);
+  ASSERT_NE(canceled_response, nullptr);
+  EXPECT_EQ(static_cast<int>(canceled_response->status),
+    action_msgs::msg::GoalStatus::STATUS_CANCELED);
+  EXPECT_EQ(canceled_response->result.error_code, 0);
+  std::cerr << "HEAD_ACTION_TERMINAL uuid=" << uuid_text(cancel_uuid)
+            << " status=" << static_cast<int>(canceled_response->status)
+            << " error_code=" << canceled_response->result.error_code << std::endl;
+
+  ASSERT_TRUE(gate->arm(3));
+  const auto active_cancel_header = wait_for_component_clock(cancel_last_update_ns);
+  auto active_cancel_goal = safe_head_goal(active_cancel_header.nanoseconds());
+  active_cancel_goal.trajectory.points[1].positions[0] = 0.101;
+  Admission::GoalUUID active_cancel_uuid{};
+  active_cancel_uuid.fill(0x33);
+  ASSERT_TRUE(send_actual_goal(active_cancel_uuid, active_cancel_goal));
+  ASSERT_EQ(controller.update(active_cancel_header + rclcpp::Duration::from_nanoseconds(2000000),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  Admission::GoalUUID overlapping_active_uuid{};
+  overlapping_active_uuid.fill(0x36);
+  ASSERT_TRUE(reserve_bound_head_goal(gate, overlapping_active_uuid, active_cancel_goal));
+  auto overlapping_active_request = std::make_shared<SendGoal::Request>();
+  overlapping_active_request->goal_id.uuid = overlapping_active_uuid;
+  overlapping_active_request->goal = active_cancel_goal;
+  auto overlapping_active_future = send_client->async_send_request(overlapping_active_request);
+  ASSERT_EQ(executor.spin_until_future_complete(overlapping_active_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  EXPECT_FALSE(overlapping_active_future.get()->accepted);
+  EXPECT_TRUE(gate->cancel_bound(overlapping_active_uuid));
+  std::cerr << "HEAD_ACTION_OVERLAP active_uuid=" << uuid_text(overlapping_active_uuid)
+            << " accepted=0" << std::endl;
+  auto active_cancel_request = std::make_shared<CancelGoal::Request>();
+  active_cancel_request->goal_info.goal_id.uuid = active_cancel_uuid;
+  auto active_cancel_future = cancel_client->async_send_request(active_cancel_request);
+  ASSERT_EQ(executor.spin_until_future_complete(active_cancel_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto active_cancel_response = active_cancel_future.get();
+  ASSERT_EQ(active_cancel_response->goals_canceling.size(), 1u);
+  EXPECT_EQ(active_cancel_response->goals_canceling[0].goal_id.uuid, active_cancel_uuid);
+  ASSERT_EQ(controller.update(active_cancel_header + rclcpp::Duration::from_nanoseconds(4000000),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const int64_t active_cancel_last_update_ns = active_cancel_header.nanoseconds() + 4000000LL;
+  const auto active_canceled_result = actual_result(active_cancel_uuid);
+  ASSERT_NE(active_canceled_result, nullptr);
+  EXPECT_EQ(static_cast<int>(active_canceled_result->status),
+    action_msgs::msg::GoalStatus::STATUS_CANCELED);
+  EXPECT_EQ(active_canceled_result->result.error_code, 0);
+  std::cerr << "HEAD_ACTION_TERMINAL_ACTIVE_CANCEL uuid=" << uuid_text(active_cancel_uuid)
+            << " status=" << static_cast<int>(active_canceled_result->status)
+            << " error_code=" << active_canceled_result->result.error_code << std::endl;
+
+  ASSERT_TRUE(gate->arm(4));
+  const auto success_header = wait_for_component_clock(active_cancel_last_update_ns);
+  auto success_goal = safe_head_goal(success_header.nanoseconds());
+  success_goal.trajectory.points[1].positions[0] = 0.101;
+  Admission::GoalUUID success_uuid{};
+  success_uuid.fill(0x44);
+  ASSERT_TRUE(send_actual_goal(success_uuid, success_goal));
+  for (int64_t index = 1; index <= 751; ++index) {
+    ASSERT_EQ(controller.update(success_header + rclcpp::Duration::from_nanoseconds(
+        (index + 1) * 2000000), rclcpp::Duration::from_seconds(0.002)),
+      controller_interface::return_type::OK);
+    if (index % 10 == 0) {executor.spin_some();}
+  }
+  const auto success_response = actual_result(success_uuid);
+  ASSERT_NE(success_response, nullptr);
+  EXPECT_EQ(static_cast<int>(success_response->status),
+    action_msgs::msg::GoalStatus::STATUS_SUCCEEDED);
+  EXPECT_EQ(success_response->result.error_code, 0);
+  const auto successful_command = command->get_optional();
+  ASSERT_TRUE(successful_command.has_value());
+  EXPECT_NEAR(successful_command.value(), 0.101, 1e-6);
+  std::cerr << "HEAD_ACTION_TERMINAL_MOVING uuid=" << uuid_text(success_uuid)
+            << " status=" << static_cast<int>(success_response->status)
+            << " error_code=" << success_response->result.error_code
+            << " command=" << successful_command.value() << std::endl;
+
+  ASSERT_TRUE(gate->arm(5));
+  const auto lifecycle_header = wait_for_component_clock(
+    success_header.nanoseconds() + 752 * 2000000LL);
+  const auto lifecycle_goal = safe_head_goal(lifecycle_header.nanoseconds());
+  Admission::GoalUUID lifecycle_uuid{};
+  lifecycle_uuid.fill(0x55);
+  ASSERT_TRUE(send_actual_goal(lifecycle_uuid, lifecycle_goal));
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  const auto lifecycle_result = actual_result(lifecycle_uuid);
+  ASSERT_NE(lifecycle_result, nullptr);
+  EXPECT_EQ(static_cast<int>(lifecycle_result->status),
+    action_msgs::msg::GoalStatus::STATUS_ABORTED);
+  EXPECT_EQ(lifecycle_result->result.error_code, Action::Result::INVALID_GOAL);
+  EXPECT_EQ(lifecycle_result->result.error_string, "Head goal retired during lifecycle transition");
+  std::cerr << "HEAD_ACTION_TERMINAL_LIFECYCLE uuid=" << uuid_text(lifecycle_uuid)
+            << " status=" << static_cast<int>(lifecycle_result->status)
+            << " error_code=" << lifecycle_result->result.error_code
+            << " error_string=" << lifecycle_result->result.error_string << std::endl;
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  executor.remove_node(client_node->get_node_base_interface());
+  executor.remove_node(controller.get_node()->get_node_base_interface());
+  controller.release_interfaces();
+}
+
+static void exercise_primary_close_owned_action(bool first_sample_before_close)
+{
+  using namespace std::chrono_literals;
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  auto client_node = rclcpp::Node::make_shared("head_primary_close_component_test");
+  auto send_client = client_node->create_client<SendGoal>(
+    "/neck_controller/follow_joint_trajectory/_action/send_goal");
+  auto result_client = client_node->create_client<GetResult>(
+    "/neck_controller/follow_joint_trajectory/_action/get_result");
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(controller.get_node()->get_node_base_interface());
+  executor.add_node(client_node);
+  const auto provision_deadline = std::chrono::steady_clock::now() + 2s;
+  while ((!std::filesystem::exists(directory / "neck.sock") ||
+    !std::filesystem::exists(directory / "neck-primary-revoke.sock")) &&
+    std::chrono::steady_clock::now() < provision_deadline)
+  {
+    executor.spin_some();
+    std::this_thread::sleep_for(10ms);
+  }
+  ASSERT_TRUE(std::filesystem::exists(directory / "neck.sock"));
+  ASSERT_TRUE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  ASSERT_TRUE(send_client->wait_for_service(2s));
+  ASSERT_TRUE(result_client->wait_for_service(2s));
+
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0.1";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  const auto gate = controller.active_gate_for_test();
+  ASSERT_NE(gate, nullptr);
+  ASSERT_TRUE(gate->arm(5));
+  EXPECT_EQ(gate->generation(), 5u);
+  EXPECT_EQ(primary.armed_generation(), 5u);
+  EXPECT_EQ(primary.main_generation(), 5u);
+  const auto header = controller.get_node()->get_clock()->now();
+  auto goal = safe_head_goal(header.nanoseconds());
+  goal.trajectory.points[1].positions[0] = 0.101;
+  Admission::GoalUUID uuid{};
+  uuid.fill(first_sample_before_close ? 0x72 : 0x71);
+  const auto close_uuid_text = [&uuid]() {
+      std::ostringstream text;
+      for (const auto byte : uuid) {
+        text << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(byte);
+      }
+      return text.str();
+    };
+  std::cerr << "HEAD_PRIMARY_CLOSE_FIXTURE uuid=" << close_uuid_text()
+            << " armed_generation=" << gate->generation()
+            << " primary_identity_generation=" << static_cast<unsigned>(primary.armed_generation())
+            << " main_identity_generation=" << static_cast<unsigned>(primary.main_generation())
+            << " close_generation=5 first_sample=" << first_sample_before_close << std::endl;
+  ASSERT_TRUE(reserve_bound_head_goal(gate, uuid, goal));
+  auto send_request = std::make_shared<SendGoal::Request>();
+  send_request->goal_id.uuid = uuid;
+  send_request->goal = goal;
+  auto send_future = send_client->async_send_request(send_request);
+  ASSERT_EQ(executor.spin_until_future_complete(send_future, 2s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  ASSERT_TRUE(send_future.get()->accepted);
+  if (first_sample_before_close) {
+    ASSERT_EQ(controller.update(header + rclcpp::Duration::from_nanoseconds(2000000),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  const uint8_t close_ack = primary.revoke();
+  std::cerr << "HEAD_PRIMARY_CLOSE_REQUEST uuid=" << close_uuid_text()
+            << " requested_generation=5 ack=" << static_cast<unsigned>(close_ack)
+            << " first_sample=" << first_sample_before_close << std::endl;
+  EXPECT_EQ(close_ack, 0u);
+  const int64_t update_offset = first_sample_before_close ? 4000000LL : 2000000LL;
+  ASSERT_EQ(controller.update(header + rclcpp::Duration::from_nanoseconds(update_offset),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const auto held_command = command->get_optional();
+  ASSERT_TRUE(held_command.has_value());
+  EXPECT_NEAR(held_command.value(), 0.1, 1e-12);
+  const uint8_t socket_rearm = primary.arm(true);
+  std::cerr << "HEAD_PRIMARY_CLOSE_SOCKET_REARM uuid=" << close_uuid_text()
+            << " attempted_generation=6 result=" << static_cast<unsigned>(socket_rearm)
+            << std::endl;
+  EXPECT_EQ(socket_rearm, 1u);
+
+  auto result_request = std::make_shared<GetResult::Request>();
+  result_request->goal_id.uuid = uuid;
+  auto result_future = result_client->async_send_request(result_request);
+  ASSERT_EQ(executor.spin_until_future_complete(result_future, 3s),
+    rclcpp::FutureReturnCode::SUCCESS);
+  const auto result = result_future.get();
+  ASSERT_NE(result, nullptr);
+  EXPECT_EQ(static_cast<int>(result->status), action_msgs::msg::GoalStatus::STATUS_ABORTED);
+  EXPECT_EQ(result->result.error_code, Action::Result::INVALID_GOAL);
+  EXPECT_EQ(result->result.error_string, "Head measured-prefix guard refused the first command");
+  const bool direct_rearm = gate->arm(6);
+  std::cerr << "HEAD_PRIMARY_CLOSE_STICKY uuid=" << close_uuid_text()
+            << " attempted_generation=6 direct_gate_rearm=" << direct_rearm << std::endl;
+  EXPECT_FALSE(direct_rearm);
+  std::cerr << "HEAD_ACTION_PRIMARY_CLOSE first_sample=" << first_sample_before_close
+            << " status=" << static_cast<int>(result->status)
+            << " error_code=" << result->result.error_code
+            << " held_command=" << held_command.value() << std::endl;
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck.sock"));
+  EXPECT_FALSE(std::filesystem::exists(directory / "neck-primary-revoke.sock"));
+  executor.remove_node(client_node->get_node_base_interface());
+  executor.remove_node(controller.get_node()->get_node_base_interface());
+  controller.release_interfaces();
+}
+
+TEST(BrokerOwnedTrajectoryController, HeadPrimaryClosePublishesActualPendingAndActiveGoalResults)
+{
+  exercise_primary_close_owned_action(false);
+  exercise_primary_close_owned_action(true);
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeLoanedUpdateCoversMeasuredPrefixEdgesAndRefusals)
+{
+  struct PrefixCase
+  {
+    const char * name;
+    int64_t remaining_ns;
+    int64_t first_point_ns;
+    double measured_position;
+    double measured_velocity;
+    double first_position;
+    double last_position;
+    const char * damage;
+    bool expected_holding;
+  };
+  const double velocity_limit = 0.04136050464213824;
+  const std::vector<PrefixCase> cases{
+    {"nominal_T404ms", 404000000, 400000000, 0.1, 0.0, 0.1, 0.101, "", false},
+    {"positive_residual_velocity_T404ms", 404000000, 400000000, 0.1,
+      velocity_limit, 0.1, 0.101, "", false},
+    {"negative_residual_velocity_T404ms", 404000000, 400000000, 0.1,
+      -velocity_limit, 0.1, 0.101, "", false},
+    {"positive_velocity_and_positive_2mm_mismatch", 2014000000, 2000000000,
+      0.1, velocity_limit, std::nextafter(0.102, 0.0), 0.103, "", false},
+    {"negative_velocity_and_negative_2mm_mismatch", 2014000000, 2000000000,
+      0.1, -velocity_limit, std::nextafter(0.098, 1.0), 0.097, "", false},
+    {"positive_2mm_mismatch_inside_binary", 404000000, 400000000, 0.1, 0.0,
+      std::nextafter(0.102, 0.0), 0.103, "", false},
+    {"negative_2mm_mismatch_inside_binary", 404000000, 400000000, 0.1, 0.0,
+      std::nextafter(0.098, 1.0), 0.097, "", false},
+    {"unsafe_100us_remaining", 100000, 400000000, 0.1, velocity_limit,
+      0.101, 0.102, "", true},
+    {"at_exact_first_point", 0, 400000000, 0.1, 0.0, 0.101, 0.102, "", true},
+    {"late_first_point_2ms", -2000000, 400000000, 0.1, 0.0, 0.101, 0.102, "", true},
+    {"position_mismatch_one_ulp_above_limit", 404000000, 400000000, 0.1, 0.0,
+      std::nextafter(0.102, std::numeric_limits<double>::infinity()), 0.103, "", true},
+    {"negative_position_mismatch_one_ulp_above_limit", 404000000, 400000000, 0.1, 0.0,
+      std::nextafter(0.098, -std::numeric_limits<double>::infinity()), 0.097, "", true},
+    {"remaining_time_one_ns_above_upper_bound", 414000001, 400000000, 0.1, 0.0,
+      0.1, 0.101, "", true},
+    {"measured_velocity_above_limit", 2014000000, 2000000000, 0.1,
+      std::nextafter(velocity_limit, std::numeric_limits<double>::infinity()),
+      0.1, 0.101, "", true},
+    {"nonzero_first_derivative", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "first_velocity", true},
+    {"nonzero_first_acceleration", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "first_acceleration", true},
+    {"nonzero_last_velocity", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "last_velocity", true},
+    {"nonzero_last_acceleration", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "last_acceleration", true},
+    {"missing_velocity_shape", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "missing_velocity", true},
+    {"missing_acceleration_shape", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "missing_acceleration", true},
+    {"missing_position_shape", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "missing_position", true},
+    {"missing_last_position_shape", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "missing_last_position", true},
+    {"planned_nan_position", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "planned_nan_position", true},
+    {"planned_nan_velocity", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "planned_nan_velocity", true},
+    {"planned_nan_acceleration", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "planned_nan_acceleration", true},
+    {"invalid_header_nanosec", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "invalid_header_nanosec", true},
+    {"zero_header", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "zero_header", true},
+    {"main_velocity_bound", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.4, "", true},
+    {"main_acceleration_bound", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.2, "", true},
+    {"main_position_geometry", 404000000, 400000000, 0.1, 0.0,
+      0.1, 7.0, "", true},
+    {"main_time_limit", 404000000, 400000000, 0.1, 0.0,
+      0.1, 0.101, "long_main_time", true},
+  };
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment reservation_scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0.1";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  const auto origin = controller.get_node()->get_clock()->now();
+  for (size_t index = 0; index < cases.size(); ++index) {
+    const auto & test_case = cases[index];
+    const auto update_time = origin + rclcpp::Duration::from_nanoseconds(
+      static_cast<int64_t>(index + 1) * 4000000);
+    ASSERT_TRUE(state_position->set_value(test_case.measured_position));
+    ASSERT_TRUE(state_velocity->set_value(test_case.measured_velocity));
+    const auto header_ns = update_time.nanoseconds() + test_case.remaining_ns -
+      test_case.first_point_ns;
+    auto goal = safe_head_goal(header_ns, test_case.first_position);
+    auto & trajectory = goal.trajectory;
+    trajectory.points[0].time_from_start.sec = static_cast<int32_t>(
+      test_case.first_point_ns / 1000000000LL);
+    trajectory.points[0].time_from_start.nanosec = static_cast<uint32_t>(
+      test_case.first_point_ns % 1000000000LL);
+    trajectory.points[1].time_from_start.sec = static_cast<int32_t>(
+      (test_case.first_point_ns + 1000000000LL) / 1000000000LL);
+    trajectory.points[1].time_from_start.nanosec = static_cast<uint32_t>(
+      (test_case.first_point_ns + 1000000000LL) % 1000000000LL);
+    trajectory.points[1].positions[0] = test_case.last_position;
+    if (std::string(test_case.damage) == "first_velocity") {
+      trajectory.points[0].velocities[0] = 0.01;
+    } else if (std::string(test_case.damage) == "first_acceleration") {
+      trajectory.points[0].accelerations[0] = 0.01;
+    } else if (std::string(test_case.damage) == "last_velocity") {
+      trajectory.points[1].velocities[0] = 0.01;
+    } else if (std::string(test_case.damage) == "last_acceleration") {
+      trajectory.points[1].accelerations[0] = 0.01;
+    } else if (std::string(test_case.damage) == "missing_velocity") {
+      trajectory.points[0].velocities.clear();
+    } else if (std::string(test_case.damage) == "missing_acceleration") {
+      trajectory.points[0].accelerations.clear();
+    } else if (std::string(test_case.damage) == "missing_position") {
+      trajectory.points[0].positions.clear();
+    } else if (std::string(test_case.damage) == "missing_last_position") {
+      trajectory.points[1].positions.clear();
+    } else if (std::string(test_case.damage) == "planned_nan_position") {
+      trajectory.points[0].positions[0] = std::numeric_limits<double>::quiet_NaN();
+    } else if (std::string(test_case.damage) == "planned_nan_velocity") {
+      trajectory.points[0].velocities[0] = std::numeric_limits<double>::quiet_NaN();
+    } else if (std::string(test_case.damage) == "planned_nan_acceleration") {
+      trajectory.points[0].accelerations[0] = std::numeric_limits<double>::quiet_NaN();
+    } else if (std::string(test_case.damage) == "zero_header") {
+      trajectory.header.stamp.sec = 0;
+      trajectory.header.stamp.nanosec = 0;
+    } else if (std::string(test_case.damage) == "invalid_header_nanosec") {
+      trajectory.header.stamp.nanosec = 1000000000U;
+    } else if (std::string(test_case.damage) == "long_main_time") {
+      trajectory.points[1].time_from_start.sec = std::numeric_limits<int32_t>::max();
+      trajectory.points[1].time_from_start.nanosec = 0;
+    }
+    const auto previous = command->get_optional();
+    ASSERT_TRUE(previous.has_value());
+    controller.publish_trajectory_for_test(
+      std::make_shared<trajectory_msgs::msg::JointTrajectory>(trajectory));
+    const auto result = controller.update(update_time, rclcpp::Duration::from_seconds(0.002));
+    ASSERT_EQ(result, controller_interface::return_type::OK) << test_case.name;
+    EXPECT_EQ(controller.holding_for_test(), test_case.expected_holding) << test_case.name;
+    const auto after = command->get_optional();
+    ASSERT_TRUE(after.has_value()) << test_case.name;
+    if (test_case.expected_holding) {
+      EXPECT_NEAR(after.value(), test_case.measured_position, 1e-12) << test_case.name;
+    } else {
+      const double remaining = static_cast<double>(test_case.remaining_ns) / 1e9;
+      const double normalized_time = 0.002 / remaining;
+      const double initial_tangent = test_case.measured_velocity * remaining;
+      const double displacement = test_case.first_position - test_case.measured_position;
+      const double c3 = 10.0 * displacement - 6.0 * initial_tangent;
+      const double c4 = -15.0 * displacement + 8.0 * initial_tangent;
+      const double c5 = 6.0 * displacement - 3.0 * initial_tangent;
+      const double expected_sample = test_case.measured_position +
+        initial_tangent * normalized_time + c3 * std::pow(normalized_time, 3) +
+        c4 * std::pow(normalized_time, 4) + c5 * std::pow(normalized_time, 5);
+      EXPECT_NEAR(after.value(), expected_sample, 1e-12) << test_case.name;
+      if (std::string(test_case.name).find("mismatch") != std::string::npos) {
+        EXPECT_NE(expected_sample, test_case.measured_position) << test_case.name;
+        EXPECT_NE(after.value(), previous.value()) << test_case.name;
+      }
+      std::cerr << "HEAD_PREFIX_ANALYTIC name=" << test_case.name
+                << " remaining_ns=" << test_case.remaining_ns
+                << " sample_offset_ns=2000000 expected=" << expected_sample << std::endl;
+    }
+    std::cerr << std::setprecision(17) << "HEAD_PREFIX_CASE name=" << test_case.name
+              << " holding=" << controller.holding_for_test()
+              << " measured_q=" << test_case.measured_position
+              << " measured_v=" << test_case.measured_velocity
+              << " first_q=" << test_case.first_position
+              << " mismatch=" << std::abs(test_case.first_position - test_case.measured_position)
+              << " command=" << after.value() << std::endl;
+    if (test_case.expected_holding) {
+      const auto retry_time = update_time + rclcpp::Duration::from_nanoseconds(2000000);
+      EXPECT_EQ(controller.update(retry_time, rclcpp::Duration::from_seconds(0.002)),
+        controller_interface::return_type::OK) << test_case.name;
+      EXPECT_TRUE(controller.holding_for_test()) << test_case.name;
+      const auto retry_command = command->get_optional();
+      ASSERT_TRUE(retry_command.has_value()) << test_case.name;
+      EXPECT_NEAR(retry_command.value(), test_case.measured_position, 1e-12) << test_case.name;
+      EXPECT_TRUE(std::isfinite(retry_command.value())) << test_case.name;
+    }
+  }
+  ASSERT_EQ(controller.get_node()->deactivate().id(),
+    lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  controller.release_interfaces();
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeNaNMeasuredPositionCannotInstallCandidateLater)
+{
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  ASSERT_TRUE(state_position->set_value(std::numeric_limits<double>::quiet_NaN()));
+  auto candidate = std::make_shared<trajectory_msgs::msg::JointTrajectory>();
+  candidate->joint_names = {"neck_yaw_joint"};
+  candidate->header.stamp = rclcpp::Time(static_cast<int64_t>(2000000000), RCL_ROS_TIME);
+  trajectory_msgs::msg::JointTrajectoryPoint first;
+  first.positions = {0.1};
+  first.velocities = {0.0};
+  first.accelerations = {0.0};
+  first.time_from_start.nanosec = 400000000;
+  trajectory_msgs::msg::JointTrajectoryPoint last;
+  last.positions = {0.2};
+  last.velocities = {0.0};
+  last.accelerations = {0.0};
+  last.time_from_start.sec = 5;
+  candidate->points = {first, last};
+  controller.publish_trajectory_for_test(candidate);
+  const auto command_before = command->get_optional();
+  ASSERT_TRUE(command_before.has_value());
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2399900000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::ERROR);
+  const auto command_after_nan = command->get_optional();
+  ASSERT_TRUE(command_after_nan.has_value());
+  EXPECT_TRUE(std::isfinite(command_after_nan.value()));
+  EXPECT_EQ(command_after_nan.value(), command_before.value());
+  ASSERT_TRUE(state_position->set_value(0.102));
+  ASSERT_TRUE(state_velocity->set_value(0.0));
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2401900000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  const auto later_command = command->get_optional();
+  ASSERT_TRUE(later_command.has_value());
+  EXPECT_NEAR(later_command.value(), 0.102, 1e-12);
+  ASSERT_TRUE(state_velocity->set_value(std::numeric_limits<double>::quiet_NaN()));
+  auto velocity_candidate = std::make_shared<trajectory_msgs::msg::JointTrajectory>(*candidate);
+  velocity_candidate->header.stamp = rclcpp::Time(static_cast<int64_t>(2403900000), RCL_ROS_TIME);
+  controller.publish_trajectory_for_test(velocity_candidate);
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2405900000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::ERROR);
+  EXPECT_NEAR(command->get_optional().value(), 0.102, 1e-12);
+  ASSERT_TRUE(state_position->set_value(0.103));
+  ASSERT_TRUE(state_velocity->set_value(0.0));
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2407900000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  EXPECT_NEAR(command->get_optional().value(), 0.103, 1e-12);
+  ASSERT_EQ(controller.get_node()->deactivate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  controller.release_interfaces();
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeActiveNaNStateRecoveryReplacesInstalledTrajectoryWithHold)
+{
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  hardware_interface::InterfaceInfo position;
+  position.name = "position";
+  position.initial_value = "0.1";
+  hardware_interface::InterfaceInfo velocity;
+  velocity.name = "velocity";
+  velocity.initial_value = "0";
+  auto command = std::make_shared<hardware_interface::CommandInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_position = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", position));
+  auto state_velocity = std::make_shared<hardware_interface::StateInterface>(
+    hardware_interface::InterfaceDescription("neck_yaw_joint", velocity));
+  std::vector<hardware_interface::LoanedCommandInterface> commands;
+  std::vector<hardware_interface::LoanedStateInterface> states;
+  commands.emplace_back(command, []() {});
+  states.emplace_back(state_position);
+  states.emplace_back(state_velocity);
+  controller.assign_interfaces(std::move(commands), std::move(states));
+  ASSERT_EQ(controller.get_node()->activate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE);
+  for (int64_t index = 1; index <= 51; ++index) {
+    ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  auto active = std::make_shared<trajectory_msgs::msg::JointTrajectory>();
+  active->joint_names = {"neck_yaw_joint"};
+  active->header.stamp = rclcpp::Time(static_cast<int64_t>(2000000000), RCL_ROS_TIME);
+  trajectory_msgs::msg::JointTrajectoryPoint first;
+  first.positions = {0.1};
+  first.velocities = {0.0};
+  first.accelerations = {0.0};
+  first.time_from_start.nanosec = 404000000;
+  trajectory_msgs::msg::JointTrajectoryPoint last;
+  last.positions = {0.2};
+  last.velocities = {0.0};
+  last.accelerations = {0.0};
+  last.time_from_start.sec = 5;
+  active->points = {first, last};
+  controller.publish_trajectory_for_test(active);
+  ASSERT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2000000000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  for (int64_t index = 1; index <= 302; ++index) {
+    ASSERT_EQ(controller.update(
+        rclcpp::Time(static_cast<int64_t>(2000000000 + index * 2000000), RCL_ROS_TIME),
+        rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  }
+  const auto command_before_nan = command->get_optional();
+  ASSERT_TRUE(command_before_nan.has_value());
+  EXPECT_GT(std::abs(command_before_nan.value() - 0.1), 1e-6);
+  ASSERT_TRUE(state_position->set_value(std::numeric_limits<double>::quiet_NaN()));
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2606000000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::ERROR);
+  EXPECT_EQ(command->get_optional().value(), command_before_nan.value());
+  ASSERT_TRUE(state_position->set_value(0.15));
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2608000000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  ASSERT_TRUE(command->get_optional().has_value());
+  EXPECT_NEAR(command->get_optional().value(), 0.15, 1e-12);
+  EXPECT_EQ(controller.update(rclcpp::Time(static_cast<int64_t>(2610000000), RCL_ROS_TIME),
+      rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
+  EXPECT_NEAR(command->get_optional().value(), 0.15, 1e-12);
+  ASSERT_EQ(controller.get_node()->deactivate().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  controller.release_interfaces();
+}
+
+static void exercise_head_policy_rejection(
+  rclcpp::Parameter mode, rclcpp::Parameter timeout, bool predeclared_mutable = false,
+  rclcpp::Parameter speed_switch = rclcpp::Parameter("speed_scaling_input_enabled", false),
+  bool predeclared_mutable_switch = false,
+  std::optional<rclcpp::Parameter> extra_parameter = std::nullopt)
+{
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  rclcpp::init(0, nullptr);
+  struct ShutdownGuard {~ShutdownGuard() {rclcpp::shutdown();}} shutdown_guard;
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  std::vector<rclcpp::Parameter> overrides{
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    mode, timeout,
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    speed_switch,
+  };
+  if (extra_parameter) {overrides.push_back(*extra_parameter);}
+  options.parameter_overrides(overrides);
   ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   if (predeclared_mutable) {
     controller.get_node()->declare_parameter("head_simulation_mode", std::string{});
     controller.get_node()->declare_parameter("head_fault_connection_timeout_ns", int64_t(2000000));
+  }
+  if (predeclared_mutable_switch) {
+    controller.get_node()->declare_parameter("speed_scaling_input_enabled", false);
   }
   EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(controller.action_server_exists());
@@ -1056,19 +2101,21 @@ static void exercise_head_policy_rejection(
   }
 }
 
-TEST(BrokerOwnedTrajectoryController, ExplicitSimulationInvalidBudgetOrModeCannotPublishServices)
+TEST(BrokerOwnedTrajectoryController, FileModeRejectsNonCandidateBudgetAndLegacyMode)
 {
-  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search");
-  for (const int64_t timeout : {int64_t(0), int64_t(-1), int64_t(250000001)}) {
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1");
+  for (const int64_t timeout : {int64_t(0), int64_t(-1), int64_t(50000001), int64_t(250000001)}) {
     exercise_head_policy_rejection(mode, rclcpp::Parameter("head_fault_connection_timeout_ns", timeout));
   }
   exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", "other"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
+  exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search"),
     rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
   exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", ""),
     rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
 }
 
-TEST(BrokerOwnedTrajectoryController, ExplicitSimulationWrongTypesCannotPublishServices)
+TEST(BrokerOwnedTrajectoryController, FileModeWrongParameterTypesCannotPublishServices)
 {
   exercise_head_policy_rejection(rclcpp::Parameter("head_simulation_mode", true),
     rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)));
@@ -1076,54 +2123,54 @@ TEST(BrokerOwnedTrajectoryController, ExplicitSimulationWrongTypesCannotPublishS
       rclcpp::Parameter("head_fault_connection_timeout_ns", 50000000.)})
   {
     exercise_head_policy_rejection(
-      rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search"), timeout);
+      rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"), timeout);
   }
 }
 
-TEST(BrokerOwnedTrajectoryController, ExplicitSimulationRequiresHeadV2AndImmutableBinding)
+TEST(BrokerOwnedTrajectoryController, FileModeRejectsMutableReadonlyDescriptors)
 {
-  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search");
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1");
   const auto timeout = rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000));
-  exercise_head_policy_rejection(mode, timeout, false);
-  exercise_head_policy_rejection(mode, timeout, true, true);
+  exercise_head_policy_rejection(mode, timeout, true);
 }
 
-static void exercise_head_missing_provision(
-  bool monitor_present, const std::string & primary_damage = {})
+TEST(BrokerOwnedTrajectoryController, FileModeRequiresDisabledReadonlyBaseSpeedScalingSwitch)
 {
-  const auto directory = private_socket_directory();
-  write_self_provision(directory / "neck.provision", 3);
-  const ScopedReservationEnvironment scope(directory, "session-17");
-  const ScopedHeadMonitorRequirement requirement;
-  std::unique_ptr<ScopedNativeMonitor> monitor;
-  if (monitor_present) {monitor = std::make_unique<ScopedNativeMonitor>(directory);}
-  std::unique_ptr<ScopedNativeMonitor> primary;
-  std::unique_ptr<ScopedNativeMonitor> other_primary;
-  if (!primary_damage.empty()) {
-    primary = std::make_unique<ScopedNativeMonitor>(directory, true);
-    const auto path = directory / "neck-primary-revoke.provision";
-    std::ifstream input(path, std::ios::binary);
-    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)),
-      std::istreambuf_iterator<char>());
-    if (primary_damage == "peer") {
-      const auto other = private_socket_directory();
-      other_primary = std::make_unique<ScopedNativeMonitor>(other, true);
-      std::ifstream other_file(other / "neck-primary-revoke.provision", std::ios::binary);
-      const std::vector<uint8_t> other_bytes((std::istreambuf_iterator<char>(other_file)),
-        std::istreambuf_iterator<char>());
-      std::copy(other_bytes.begin() + 8, other_bytes.begin() + 24, bytes.begin() + 8);
-    } else {
-      std::fill(bytes.begin() + 24, bytes.begin() + 56,
-        primary_damage == "main_capability" ? 0xa5 : 0x5a);
-    }
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
-    output.close();
-    // Standalone provision decoding is valid: rejection must come from the
-    // configured controller's cross-endpoint binding checks.
-    EXPECT_NO_THROW(so101_mujoco_support::read_controller_primary_fault_provision(
-        path, "session-17", directory / "neck-primary-revoke.sock"));
-  }
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1");
+  const auto timeout = rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", true));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", std::string("false")));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", false), true);
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeRejectsUnsupportedBaseScalingConfiguration)
+{
+  const auto mode = rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1");
+  const auto timeout = rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", false), false,
+    rclcpp::Parameter("speed_scaling.state_interface", "speed_scaling"));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", false), false,
+    rclcpp::Parameter("speed_scaling.command_interface", "speed_scaling"));
+  exercise_head_policy_rejection(mode, timeout, false,
+    rclcpp::Parameter("speed_scaling_input_enabled", false), false,
+    rclcpp::Parameter("speed_scaling.initial_scaling_factor", 0.5));
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeMissingReservationScopeCannotConfigure)
+{
+  const auto * previous_directory = std::getenv("SO101_ACT_CONTROLLER_RESERVATION_DIR");
+  const auto * previous_session = std::getenv("SO101_SIMULATION_SESSION_ID");
+  const std::optional<std::string> directory_value = previous_directory ?
+    std::optional<std::string>(previous_directory) : std::nullopt;
+  const std::optional<std::string> session_value = previous_session ?
+    std::optional<std::string>(previous_session) : std::nullopt;
+  unsetenv("SO101_ACT_CONTROLLER_RESERVATION_DIR");
+  unsetenv("SO101_SIMULATION_SESSION_ID");
   rclcpp::init(0, nullptr);
   InspectableController controller;
   rclcpp::NodeOptions options;
@@ -1131,6 +2178,102 @@ static void exercise_head_missing_provision(
     rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
     rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
     rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.action_server_exists());
+  if (directory_value) {setenv("SO101_ACT_CONTROLLER_RESERVATION_DIR", directory_value->c_str(), 1);}
+  if (session_value) {setenv("SO101_SIMULATION_SESSION_ID", session_value->c_str(), 1);}
+  rclcpp::shutdown();
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeRejectsUnsupportedUpdateRate)
+{
+  const auto directory = private_socket_directory();
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  ScopedNativeMonitor primary(directory, true);
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
+  });
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 499, "", options),
+    controller_interface::return_type::OK);
+  EXPECT_NE(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
+  EXPECT_FALSE(controller.action_server_exists());
+  rclcpp::shutdown();
+}
+
+static void exercise_head_local_provision_refusal(const std::string & damage)
+{
+  const auto directory = private_socket_directory();
+  ASSERT_EQ(std::getenv("SO101_HEAD_SEARCH_V2_MONITOR_REQUIRED"), nullptr);
+  ScopedNativeMonitor primary(directory, true);
+  const auto main_path = directory / "neck.provision";
+  const auto primary_path = directory / "neck-primary-revoke.provision";
+  if (damage == "missing_main") {
+    std::filesystem::remove(main_path);
+  } else if (damage == "missing_primary") {
+    std::filesystem::remove(primary_path);
+  } else if (damage != "valid") {
+    std::ifstream input(primary_path, std::ios::binary);
+    std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(input)),
+      std::istreambuf_iterator<char>());
+    if (damage == "actor_pid") {
+      for (size_t index = 0; index < 4; ++index) {
+        bytes[12 + index] = static_cast<uint8_t>(getpid() >> ((3 - index) * 8));
+      }
+    } else if (damage == "actor_ticks") {
+      for (size_t index = 0; index < 8; ++index) {
+        bytes[16 + index] = static_cast<uint8_t>((self_start_ticks() + 1) >> ((7 - index) * 8));
+      }
+    } else if (damage == "actor_uid") {
+      bytes[11] = static_cast<uint8_t>(bytes[11] ^ 1);
+    } else if (damage == "main_capability") {
+      std::ifstream main_input(main_path, std::ios::binary);
+      std::vector<uint8_t> main_bytes((std::istreambuf_iterator<char>(main_input)),
+        std::istreambuf_iterator<char>());
+      std::copy(main_bytes.begin() + 24, main_bytes.begin() + 56, bytes.begin() + 24);
+    } else if (damage == "zero_capability") {
+      std::fill(bytes.begin() + 24, bytes.begin() + 56, 0);
+    } else if (damage == "wrong_role") {
+      bytes[5] = 3;
+    } else if (damage == "truncated") {
+      bytes.resize(20);
+    } else if (damage == "wrong_type") {
+      const auto valid_path = directory / "primary.valid";
+      std::filesystem::rename(primary_path, valid_path);
+      std::filesystem::create_symlink(valid_path, primary_path);
+    }
+    if (damage != "wrong_type") {
+      std::ofstream output(primary_path, std::ios::binary | std::ios::trunc);
+      output.write(reinterpret_cast<const char *>(bytes.data()), bytes.size());
+    }
+  }
+  const ScopedReservationEnvironment scope(directory, "session-17");
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"}),
+    rclcpp::Parameter("head_simulation_mode", "mujoco_bounded_stop_search_file_v1"),
+    rclcpp::Parameter("head_fault_connection_timeout_ns", int64_t(50000000)),
+    rclcpp::Parameter("head_measured_prefix_guard", "quintic_measured_prefix_v1"),
+    rclcpp::Parameter("speed_scaling_input_enabled", false),
   });
   ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
     controller_interface::return_type::OK);
@@ -1149,27 +2292,21 @@ static void exercise_head_missing_provision(
   rclcpp::shutdown();
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2MissingMonitorProvisionCannotOpenPrimaryEndpoint)
+TEST(BrokerOwnedTrajectoryController, FileModeMissingMainProvisionCannotOpenServices)
 {
-  exercise_head_missing_provision(false);
+  exercise_head_local_provision_refusal("missing_main");
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2MissingPrimaryFaultProvisionCannotOpenPrimaryEndpoint)
+TEST(BrokerOwnedTrajectoryController, FileModeMissingPrimaryProvisionCannotOpenMainEndpoint)
 {
-  exercise_head_missing_provision(true);
+  exercise_head_local_provision_refusal("missing_primary");
 }
 
-TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultForeignActorCannotPublishEndpoints)
+TEST(BrokerOwnedTrajectoryController, FileModePrimaryProvisionRejectsWrongActorCapabilityTypeOrRole)
 {
-  exercise_head_missing_provision(true, "peer");
-}
-
-TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultMainCapabilityCollisionCannotPublishEndpoints)
-{
-  exercise_head_missing_provision(true, "main_capability");
-}
-
-TEST(BrokerOwnedTrajectoryController, HeadV2PrimaryFaultMonitorCapabilityCollisionCannotPublishEndpoints)
-{
-  exercise_head_missing_provision(true, "monitor_capability");
+  for (const auto * damage : {"actor_pid", "actor_ticks", "actor_uid", "main_capability",
+      "zero_capability", "wrong_role", "truncated", "wrong_type"})
+  {
+    exercise_head_local_provision_refusal(damage);
+  }
 }

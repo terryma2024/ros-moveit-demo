@@ -70,10 +70,13 @@ protected:
     active_goal_admission_ = std::move(gate);
   }
 
+  // Controlled test seam: stage the same immutable Head candidate consumed by update().
+  void stage_head_trajectory_for_testing(
+    std::shared_ptr<trajectory_msgs::msg::JointTrajectory> trajectory);
+
   // Atomically detach the service and the active gate, then release the mutex.
   void detach_reservation_lifecycle(
     std::unique_ptr<ControllerReservationService> * service,
-    std::unique_ptr<ControllerReservationService> * revoker,
     std::unique_ptr<ControllerReservationService> * primary_fault,
     std::shared_ptr<ControllerGoalAdmission> * gate)
   {
@@ -83,7 +86,6 @@ protected:
       reservation_timer_.reset();
     }
     *service = std::move(reservation_service_);
-    *revoker = std::move(revocation_service_);
     *primary_fault = std::move(primary_fault_service_);
     *gate = std::move(active_goal_admission_);
   }
@@ -101,21 +103,48 @@ protected:
   std::optional<ControllerIngressWitness::Snapshot> controller_ingress_snapshot();
 
 private:
+  enum class HeadTerminalRequest : uint8_t {NONE, ABORT, CANCEL};
+  struct HeadCandidate
+  {
+    std::shared_ptr<trajectory_msgs::msg::JointTrajectory> trajectory;
+    RealtimeGoalHandlePtr goal;
+    joint_trajectory_controller::SegmentTolerances tolerances;
+    control_msgs::action::FollowJointTrajectory::Result::SharedPtr result;
+    std::atomic<bool> consumed{false};
+    std::atomic<bool> cancel_requested{false};
+    std::atomic<HeadTerminalRequest> terminal{HeadTerminalRequest::NONE};
+    std::atomic<bool> retired{false};
+    std::mutex status_mutex;
+    rclcpp::TimerBase::SharedPtr status_timer;
+  };
+
   void configure_reservation_scope();
+  void configure_head_parameters();
   void start_reservation_monitor();
   void poll_reservation_provision();
+  bool validate_head_goal_shape(
+    const trajectory_msgs::msg::JointTrajectory & trajectory) const;
+  bool validate_head_prefix(
+    const trajectory_msgs::msg::JointTrajectory & trajectory,
+    const trajectory_msgs::msg::JointTrajectoryPoint & measured,
+    int64_t update_time_ns) const;
+  bool hold_head_at_current_position() noexcept;
+  void fail_head_candidate_without_hold(const std::shared_ptr<HeadCandidate> & candidate) noexcept;
+  void accept_head_goal(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> & goal_handle);
+  rclcpp_action::CancelResponse cancel_head_goal(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> & goal_handle);
+  void monitor_head_goal(const std::shared_ptr<HeadCandidate> & candidate);
+  void retire_head_goal_for_lifecycle();
 
   mutable std::mutex reservation_mutex_;
   std::unique_ptr<ControllerReservationService> reservation_service_;
-  std::unique_ptr<ControllerReservationService> revocation_service_;
   std::unique_ptr<ControllerReservationService> primary_fault_service_;
   ControllerGoalAdmission::RevocationLatch revocation_latch_{
     std::make_shared<std::atomic<bool>>(false)};
   rclcpp::TimerBase::SharedPtr reservation_timer_;
   std::filesystem::path reservation_provision_path_;
   std::filesystem::path reservation_socket_path_;
-  std::filesystem::path revocation_provision_path_;
-  std::filesystem::path revocation_socket_path_;
   std::filesystem::path primary_fault_provision_path_;
   std::filesystem::path primary_fault_socket_path_;
   std::string reservation_session_;
@@ -123,6 +152,15 @@ private:
   std::chrono::steady_clock::time_point reservation_deadline_;
   std::chrono::nanoseconds head_fault_connection_timeout_{2000000};
   bool head_simulation_mode_{false};
+  bool head_measured_prefix_guard_enabled_{false};
+  std::atomic<bool> head_motion_faulted_{false};
+  realtime_tools::RealtimeBuffer<std::shared_ptr<HeadCandidate>> head_candidate_buffer_;
+  mutable std::mutex head_goal_mutex_;
+  std::shared_ptr<HeadCandidate> head_owned_candidate_;
+  std::shared_ptr<trajectory_msgs::msg::JointTrajectory> head_hold_position_msg_;
+  std::atomic<bool> head_goal_reserved_{false};
+  std::atomic<bool> head_active_goal_{false};
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr head_parameter_callback_;
   ControllerStopWitness arm_stop_witness_{5};
   ControllerStopWitness gripper_stop_witness_{1};
   ControllerStopWitness neck_stop_witness_{1};

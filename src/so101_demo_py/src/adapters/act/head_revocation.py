@@ -1,7 +1,7 @@
-"""Bounded close-only transport for the independently exec'd Head monitor.
+"""Bounded close-only transport for the local Head primary-fault channel.
 
-No ROS action, arm, reservation, inference, or fallback close authority lives here.
-The entrypoint supplies the actual owned native PID/start identity and capability.
+It carries no ROS action, ARM, reservation, inference, or fallback close authority.
+The owning primary process supplies the native PID/start identity and capability.
 """
 
 import ctypes

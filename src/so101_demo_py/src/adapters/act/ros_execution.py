@@ -239,13 +239,13 @@ class RosControllerPort:
         """Own an unknown UUID before native reservation, without sending it.
 
         This local inventory grants no native or CPU authority. The dispatcher
-        separately freezes scope and requires the authenticated monitor ACK.
+        separately freezes scope and requires local state admission.
         """
         import json
         import re
         import uuid
-        from so101_demo.act.head_monitor import canonical_bytes
-        from .head_monitor_goal_binding import validate_goal_inventory
+        from so101_demo.act.head_evidence_identity import canonical_bytes
+        from .head_goal_binding import validate_goal_inventory
         try:
             if (self.feedback_policy is None or self.names!=('neck_yaw_joint',)
                     or self._head_policy_binding_failed or self._head_fault_callback is None):
@@ -285,7 +285,7 @@ class RosControllerPort:
                 if (self._head_policy_binding_failed or gid in self._goals or len(self._goals)>=128
                         or sequence!=self._head_inventory_sequence+1
                         or (self._head_inventory_scope is not None and self._head_inventory_scope!=scope)
-                        or not claim<=time.monotonic_ns()<=deadline):
+                        or not claim<=time.monotonic_ns()<deadline):
                     raise PermissionError('HEAD_PRIMARY_INVENTORY_REFUSED')
                 self._goals[gid]=pending
                 self._head_inventory_scope=scope;self._head_inventory_sequence=sequence
@@ -332,7 +332,7 @@ class RosControllerPort:
             record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
                 cancel_ack=False,error=None,goal=message_to_ordereddict(message),
                 prepared_cdr_sha256=hashlib.sha256(expected_cdr).hexdigest())
-            from so101_demo.act.head_monitor import canonical_bytes
+            from so101_demo.act.head_evidence_identity import canonical_bytes
             typed=canonical_bytes(record['goal'])
             with self._lock:
                 if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
@@ -355,7 +355,7 @@ class RosControllerPort:
             self.feedback_snapshot()
             if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
             claim=record.get('primary_claim_window_ns')
-            if claim is not None and not claim[0]<=time.monotonic_ns()<=claim[1]:
+            if claim is not None and not claim[0]<=time.monotonic_ns()<claim[1]:
                 raise PermissionError('HEAD_PREPARED_CLAIM_EXPIRED')
             record['sdk_dispatch_wall_s']=self.monotonic()
             response=self.client.send_goal_async(message,goal_uuid=owned_uuid)

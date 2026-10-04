@@ -13,14 +13,7 @@ import time
 import uuid
 
 from .head_feedback import FeedbackPolicy
-
-
-def canonical_bytes(value):
-    return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode('ascii')
-
-
-def digest(value):
-    return hashlib.sha256(canonical_bytes(value)).hexdigest()
+from .head_evidence_identity import canonical_bytes, digest
 
 
 class HeadMonitorEpoch:

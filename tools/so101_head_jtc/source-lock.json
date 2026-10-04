@@ -1,0 +1,431 @@
+{
+  "archive": {
+    "bytes": 5270390,
+    "sha256": "a01262fe28ef0c3fb8e3f22877154a17dd201fe710f3e7692642d148b2b375b3",
+    "url": "https://codeload.github.com/ros-controls/ros2_controllers/tar.gz/31015e0aa7ce9d0853a88d5fc2fe50f0e583ba5c"
+  },
+  "commit": "31015e0aa7ce9d0853a88d5fc2fe50f0e583ba5c",
+  "original_package_files": [
+    {
+      "bytes": 44146,
+      "path": "CHANGELOG.rst",
+      "sha256": "73d1b48f628aed1eba8c21bab205a8071d0850df35d992064b42223175f84469"
+    },
+    {
+      "bytes": 4208,
+      "path": "CMakeLists.txt",
+      "sha256": "0785675a36d0235cc6aa6cd6a9f2d58f3dd4a5b02a013cc68204ca04d15e208f"
+    },
+    {
+      "bytes": 221,
+      "path": "README.md",
+      "sha256": "caf6b79f99105200a5264818a3a800f4c1008ce038f893f4747d991635b2c197"
+    },
+    {
+      "bytes": 577595,
+      "path": "doc/decelerate_hold_position.png",
+      "sha256": "4e72a7c3be325996f2d01e2ef6beddd4ad427a9c102fdea798022b0823f3c93b"
+    },
+    {
+      "bytes": 3646,
+      "path": "doc/decelerate_on_cancel.rst",
+      "sha256": "d6bdac9de588df91de25955e1e7eeb4a43137651f97d5c936a2fab74ac28fa07"
+    },
+    {
+      "bytes": 556752,
+      "path": "doc/decelerate_to_stop.png",
+      "sha256": "874e6dcdfa60e8914050665e5b439f04d1b330bdc966cb7dacec31109779544e"
+    },
+    {
+      "bytes": 73149,
+      "path": "doc/new_trajectory.png",
+      "sha256": "48bfb6c6b21791b55afd926bf02ccdee71671fc182dccfabbf8b2ff7915ccd27"
+    },
+    {
+      "bytes": 942,
+      "path": "doc/parameters.rst",
+      "sha256": "8fc8780ab9e557d04f93323097ec0d3b7681a4b16ffb8ebb480a37b536673a37"
+    },
+    {
+      "bytes": 1881,
+      "path": "doc/parameters_context.yaml",
+      "sha256": "def243a57bcfc3ec0c09aa9cc4765251ec80c8ce4e34c8cc0d3cfe96cb4bf05d"
+    },
+    {
+      "bytes": 5684,
+      "path": "doc/speed_scaling.rst",
+      "sha256": "446c6aaef65afd1ab866c2e2ba16afc6e8c51627a80a1e5b3563f6e6c952d39e"
+    },
+    {
+      "bytes": 34639,
+      "path": "doc/spline_acceleration.png",
+      "sha256": "d1290595a9ba07ef0bb1d1c749478b6549d9d15cc384236715aef2389b934052"
+    },
+    {
+      "bytes": 28511,
+      "path": "doc/spline_position.png",
+      "sha256": "a76bb1e7f450e3d53149e032524dd1fa435440a74fc2e12b33c651d46b0208e5"
+    },
+    {
+      "bytes": 37882,
+      "path": "doc/spline_position_velocity.png",
+      "sha256": "35e38012e7104ac6189fee1a052626267f57c3939beaf26ce62be322a9eb9e2a"
+    },
+    {
+      "bytes": 39812,
+      "path": "doc/spline_position_velocity_acceleration.png",
+      "sha256": "058fd2d545632cb95db24aaf70a5754feb99dabec12792ca8504eee40c458673"
+    },
+    {
+      "bytes": 39086,
+      "path": "doc/spline_position_velocity_acceleration_initialpoint.png",
+      "sha256": "81cb916eb81aeebd39c9fcee644f9e663ffbb8a6bf590a396942301b0344dfed"
+    },
+    {
+      "bytes": 36267,
+      "path": "doc/spline_position_velocity_acceleration_initialpoint_notime.png",
+      "sha256": "9979b95d15599a18173c20d455ad1c7619850bf17bf816ee6740ae1927dbd551"
+    },
+    {
+      "bytes": 32183,
+      "path": "doc/spline_velocity.png",
+      "sha256": "29d7b23cccee6efb8b607e03dfcd3adcf96bbb2b2e17082e949d152d60c3d166"
+    },
+    {
+      "bytes": 41712,
+      "path": "doc/spline_wrong_points.png",
+      "sha256": "37891cc6a974138cc916df20439839b26d9aabecebba066a718d9626fb383540"
+    },
+    {
+      "bytes": 104299,
+      "path": "doc/traj_with_speed_scaling.png",
+      "sha256": "7c4ac7996ae86ec94c31b816d76437fb1194cc745b6847de63b01df46123a64c"
+    },
+    {
+      "bytes": 107365,
+      "path": "doc/traj_without_speed_scaling.png",
+      "sha256": "4795575b1c0f85d55ea2f81ac043ec7163c49b8a6aead11e52564970c07fd517"
+    },
+    {
+      "bytes": 5932,
+      "path": "doc/trajectory.rst",
+      "sha256": "5ade59e3f0addeccd8e759d401701d2b36a32bea0fd7ed3ba3a9690bf8bf5406"
+    },
+    {
+      "bytes": 10317,
+      "path": "doc/userdoc.rst",
+      "sha256": "4985ce65f13f6586e4475f95240621f09dfee9f9c5189560c3b5e2b33774e707"
+    },
+    {
+      "bytes": 2148,
+      "path": "include/joint_trajectory_controller/interpolation_methods.hpp",
+      "sha256": "d2447bbf4c2fa1ca2c9d15b5e11ebd3ce48e567a9d34788ec1eb7884d816f964"
+    },
+    {
+      "bytes": 15113,
+      "path": "include/joint_trajectory_controller/joint_trajectory_controller.hpp",
+      "sha256": "e2a0705e654cdcf042f5609170a222f9e24fb9c9fe8f88f8bc74308dbcf89329"
+    },
+    {
+      "bytes": 13211,
+      "path": "include/joint_trajectory_controller/tolerances.hpp",
+      "sha256": "f0236911f37a18d26dea06e4ee16eaf9a0f010f70d9d48f4c2d944e09e0b40f8"
+    },
+    {
+      "bytes": 9003,
+      "path": "include/joint_trajectory_controller/trajectory.hpp",
+      "sha256": "dea80245b8c831d47932e2b4e78be938f23d0c54bab1c8fc86f39859d8defe50"
+    },
+    {
+      "bytes": 3488,
+      "path": "include/joint_trajectory_controller/validate_jtc_parameters.hpp",
+      "sha256": "b8ac479f73e3c4da2e354eaed6432b15027524ae72357f3949bcb0b2c258cab4"
+    },
+    {
+      "bytes": 382,
+      "path": "joint_trajectory_plugin.xml",
+      "sha256": "29a73d5a5644ea46223a2ff14567f2ce70c3b173e51a1831317319184311e895"
+    },
+    {
+      "bytes": 1707,
+      "path": "package.xml",
+      "sha256": "eecf6674e4c371ab6f1d6c163ac2830f8f8cb3c5f9da222fcb43ba9e1f9e0945"
+    },
+    {
+      "bytes": 76664,
+      "path": "src/joint_trajectory_controller.cpp",
+      "sha256": "4b86a07c5607d4882d3f13a8d7c3b3c0b4fad6e691faeff75597201dccdd985c"
+    },
+    {
+      "bytes": 9030,
+      "path": "src/joint_trajectory_controller_parameters.yaml",
+      "sha256": "364e9f556db1ad7fb42a40ddafef6da5ad5af0fb793f56b236529cacfe0c0d8e"
+    },
+    {
+      "bytes": 15537,
+      "path": "src/trajectory.cpp",
+      "sha256": "35856d3b5f4e610e1bbda15fbd31b20db9008e80ba8aab9243c34abdb0d98e29"
+    },
+    {
+      "bytes": 7993,
+      "path": "test/test_assets.hpp",
+      "sha256": "2c31d7abffac4863d6bc7784c69fd5ac852e82659d09846165f79279d02e9394"
+    },
+    {
+      "bytes": 178,
+      "path": "test/test_joint_trajectory_controller_params.yaml",
+      "sha256": "61ec0fea0d71ab216aa2850fbb605af3fb0eca452abf6d8d8835fe691c0c2bd6"
+    },
+    {
+      "bytes": 1774,
+      "path": "test/test_load_joint_trajectory_controller.cpp",
+      "sha256": "2934884b2127d62ffeb08fd1d2e1b6476e83b77cfde71f88e1e69ff2102f0b37"
+    },
+    {
+      "bytes": 17616,
+      "path": "test/test_tolerances.cpp",
+      "sha256": "420deb8e5271539d63dc76e8a2587ba367085feab31dbf4ace1b3fd0d4eb812e"
+    },
+    {
+      "bytes": 41395,
+      "path": "test/test_trajectory.cpp",
+      "sha256": "580eb4b2d1e62e85a1cf90d4417a37e74025826698d26195084742674c805829"
+    },
+    {
+      "bytes": 50748,
+      "path": "test/test_trajectory_actions.cpp",
+      "sha256": "6de576bf237d5c7358fb1b3fe4a90f43a19ae2fbe3ef00f801a665d108ba0040"
+    },
+    {
+      "bytes": 131210,
+      "path": "test/test_trajectory_controller.cpp",
+      "sha256": "b2dbd3d84fc77992e5394da45f62f2a538a145be43e9739aa5b885ce54bc9ebe"
+    },
+    {
+      "bytes": 34023,
+      "path": "test/test_trajectory_controller_utils.hpp",
+      "sha256": "b53fd4f3fc19ca6e78c63e8b1bed42f0e71895e0dde4e9f71d8e64012f6dc0d1"
+    }
+  ],
+  "patch": {
+    "path": "tools/so101_head_jtc/disable-speed-scaling-input-4.40.1.patch",
+    "sha256": "e38fde49aefb80ebd8667a2185f1279b24d48ce626299546e163a86db3d4d2b7"
+  },
+  "patch_contract": {
+    "abi": "No header, generated parameter schema, class layout, or exported target changes.",
+    "default": true,
+    "false_mode": "No speed_scaling_input subscription; scaling factor and command are 1.0; nonempty hardware scaling interfaces or nonunit initial scaling factor fail configure.",
+    "files_changed": [
+      "src/joint_trajectory_controller.cpp"
+    ],
+    "parameter": "speed_scaling_input_enabled",
+    "read_only": true,
+    "true_mode": "Preserve upstream 4.40.1 subscription and scaling initialization.",
+    "type": "bool"
+  },
+  "patched_package_files": [
+    {
+      "bytes": 44146,
+      "path": "CHANGELOG.rst",
+      "sha256": "73d1b48f628aed1eba8c21bab205a8071d0850df35d992064b42223175f84469"
+    },
+    {
+      "bytes": 4208,
+      "path": "CMakeLists.txt",
+      "sha256": "0785675a36d0235cc6aa6cd6a9f2d58f3dd4a5b02a013cc68204ca04d15e208f"
+    },
+    {
+      "bytes": 221,
+      "path": "README.md",
+      "sha256": "caf6b79f99105200a5264818a3a800f4c1008ce038f893f4747d991635b2c197"
+    },
+    {
+      "bytes": 577595,
+      "path": "doc/decelerate_hold_position.png",
+      "sha256": "4e72a7c3be325996f2d01e2ef6beddd4ad427a9c102fdea798022b0823f3c93b"
+    },
+    {
+      "bytes": 3646,
+      "path": "doc/decelerate_on_cancel.rst",
+      "sha256": "d6bdac9de588df91de25955e1e7eeb4a43137651f97d5c936a2fab74ac28fa07"
+    },
+    {
+      "bytes": 556752,
+      "path": "doc/decelerate_to_stop.png",
+      "sha256": "874e6dcdfa60e8914050665e5b439f04d1b330bdc966cb7dacec31109779544e"
+    },
+    {
+      "bytes": 73149,
+      "path": "doc/new_trajectory.png",
+      "sha256": "48bfb6c6b21791b55afd926bf02ccdee71671fc182dccfabbf8b2ff7915ccd27"
+    },
+    {
+      "bytes": 942,
+      "path": "doc/parameters.rst",
+      "sha256": "8fc8780ab9e557d04f93323097ec0d3b7681a4b16ffb8ebb480a37b536673a37"
+    },
+    {
+      "bytes": 1881,
+      "path": "doc/parameters_context.yaml",
+      "sha256": "def243a57bcfc3ec0c09aa9cc4765251ec80c8ce4e34c8cc0d3cfe96cb4bf05d"
+    },
+    {
+      "bytes": 5684,
+      "path": "doc/speed_scaling.rst",
+      "sha256": "446c6aaef65afd1ab866c2e2ba16afc6e8c51627a80a1e5b3563f6e6c952d39e"
+    },
+    {
+      "bytes": 34639,
+      "path": "doc/spline_acceleration.png",
+      "sha256": "d1290595a9ba07ef0bb1d1c749478b6549d9d15cc384236715aef2389b934052"
+    },
+    {
+      "bytes": 28511,
+      "path": "doc/spline_position.png",
+      "sha256": "a76bb1e7f450e3d53149e032524dd1fa435440a74fc2e12b33c651d46b0208e5"
+    },
+    {
+      "bytes": 37882,
+      "path": "doc/spline_position_velocity.png",
+      "sha256": "35e38012e7104ac6189fee1a052626267f57c3939beaf26ce62be322a9eb9e2a"
+    },
+    {
+      "bytes": 39812,
+      "path": "doc/spline_position_velocity_acceleration.png",
+      "sha256": "058fd2d545632cb95db24aaf70a5754feb99dabec12792ca8504eee40c458673"
+    },
+    {
+      "bytes": 39086,
+      "path": "doc/spline_position_velocity_acceleration_initialpoint.png",
+      "sha256": "81cb916eb81aeebd39c9fcee644f9e663ffbb8a6bf590a396942301b0344dfed"
+    },
+    {
+      "bytes": 36267,
+      "path": "doc/spline_position_velocity_acceleration_initialpoint_notime.png",
+      "sha256": "9979b95d15599a18173c20d455ad1c7619850bf17bf816ee6740ae1927dbd551"
+    },
+    {
+      "bytes": 32183,
+      "path": "doc/spline_velocity.png",
+      "sha256": "29d7b23cccee6efb8b607e03dfcd3adcf96bbb2b2e17082e949d152d60c3d166"
+    },
+    {
+      "bytes": 41712,
+      "path": "doc/spline_wrong_points.png",
+      "sha256": "37891cc6a974138cc916df20439839b26d9aabecebba066a718d9626fb383540"
+    },
+    {
+      "bytes": 104299,
+      "path": "doc/traj_with_speed_scaling.png",
+      "sha256": "7c4ac7996ae86ec94c31b816d76437fb1194cc745b6847de63b01df46123a64c"
+    },
+    {
+      "bytes": 107365,
+      "path": "doc/traj_without_speed_scaling.png",
+      "sha256": "4795575b1c0f85d55ea2f81ac043ec7163c49b8a6aead11e52564970c07fd517"
+    },
+    {
+      "bytes": 5932,
+      "path": "doc/trajectory.rst",
+      "sha256": "5ade59e3f0addeccd8e759d401701d2b36a32bea0fd7ed3ba3a9690bf8bf5406"
+    },
+    {
+      "bytes": 10317,
+      "path": "doc/userdoc.rst",
+      "sha256": "4985ce65f13f6586e4475f95240621f09dfee9f9c5189560c3b5e2b33774e707"
+    },
+    {
+      "bytes": 2148,
+      "path": "include/joint_trajectory_controller/interpolation_methods.hpp",
+      "sha256": "d2447bbf4c2fa1ca2c9d15b5e11ebd3ce48e567a9d34788ec1eb7884d816f964"
+    },
+    {
+      "bytes": 15113,
+      "path": "include/joint_trajectory_controller/joint_trajectory_controller.hpp",
+      "sha256": "e2a0705e654cdcf042f5609170a222f9e24fb9c9fe8f88f8bc74308dbcf89329"
+    },
+    {
+      "bytes": 13211,
+      "path": "include/joint_trajectory_controller/tolerances.hpp",
+      "sha256": "f0236911f37a18d26dea06e4ee16eaf9a0f010f70d9d48f4c2d944e09e0b40f8"
+    },
+    {
+      "bytes": 9003,
+      "path": "include/joint_trajectory_controller/trajectory.hpp",
+      "sha256": "dea80245b8c831d47932e2b4e78be938f23d0c54bab1c8fc86f39859d8defe50"
+    },
+    {
+      "bytes": 3488,
+      "path": "include/joint_trajectory_controller/validate_jtc_parameters.hpp",
+      "sha256": "b8ac479f73e3c4da2e354eaed6432b15027524ae72357f3949bcb0b2c258cab4"
+    },
+    {
+      "bytes": 382,
+      "path": "joint_trajectory_plugin.xml",
+      "sha256": "29a73d5a5644ea46223a2ff14567f2ce70c3b173e51a1831317319184311e895"
+    },
+    {
+      "bytes": 1707,
+      "path": "package.xml",
+      "sha256": "eecf6674e4c371ab6f1d6c163ac2830f8f8cb3c5f9da222fcb43ba9e1f9e0945"
+    },
+    {
+      "bytes": 78261,
+      "path": "src/joint_trajectory_controller.cpp",
+      "sha256": "63dc05231fe77afc216d12896e659af6d44f2a5ddcb8070bffa57cbd886400c9"
+    },
+    {
+      "bytes": 9030,
+      "path": "src/joint_trajectory_controller_parameters.yaml",
+      "sha256": "364e9f556db1ad7fb42a40ddafef6da5ad5af0fb793f56b236529cacfe0c0d8e"
+    },
+    {
+      "bytes": 15537,
+      "path": "src/trajectory.cpp",
+      "sha256": "35856d3b5f4e610e1bbda15fbd31b20db9008e80ba8aab9243c34abdb0d98e29"
+    },
+    {
+      "bytes": 7993,
+      "path": "test/test_assets.hpp",
+      "sha256": "2c31d7abffac4863d6bc7784c69fd5ac852e82659d09846165f79279d02e9394"
+    },
+    {
+      "bytes": 178,
+      "path": "test/test_joint_trajectory_controller_params.yaml",
+      "sha256": "61ec0fea0d71ab216aa2850fbb605af3fb0eca452abf6d8d8835fe691c0c2bd6"
+    },
+    {
+      "bytes": 1774,
+      "path": "test/test_load_joint_trajectory_controller.cpp",
+      "sha256": "2934884b2127d62ffeb08fd1d2e1b6476e83b77cfde71f88e1e69ff2102f0b37"
+    },
+    {
+      "bytes": 17616,
+      "path": "test/test_tolerances.cpp",
+      "sha256": "420deb8e5271539d63dc76e8a2587ba367085feab31dbf4ace1b3fd0d4eb812e"
+    },
+    {
+      "bytes": 41395,
+      "path": "test/test_trajectory.cpp",
+      "sha256": "580eb4b2d1e62e85a1cf90d4417a37e74025826698d26195084742674c805829"
+    },
+    {
+      "bytes": 50748,
+      "path": "test/test_trajectory_actions.cpp",
+      "sha256": "6de576bf237d5c7358fb1b3fe4a90f43a19ae2fbe3ef00f801a665d108ba0040"
+    },
+    {
+      "bytes": 131210,
+      "path": "test/test_trajectory_controller.cpp",
+      "sha256": "b2dbd3d84fc77992e5394da45f62f2a538a145be43e9739aa5b885ce54bc9ebe"
+    },
+    {
+      "bytes": 34023,
+      "path": "test/test_trajectory_controller_utils.hpp",
+      "sha256": "b53fd4f3fc19ca6e78c63e8b1bed42f0e71895e0dde4e9f71d8e64012f6dc0d1"
+    }
+  ],
+  "schema": "so101_head_jtc_source_lock_v1",
+  "tag": "4.40.1",
+  "upstream": "https://github.com/ros-controls/ros2_controllers.git"
+}

@@ -15,7 +15,8 @@ class RosNeckSearchPort:
     def __init__(self,node,*,session_id,attempt_id,goal_duration_s,submit_lead_s,stop_timeout_s,
                  stop_velocity_rad_s,max_age_s,command_guard,monotonic=time.monotonic,
                  progress=lambda:time.sleep(.001),broker=None,ticket_port=None,
-                 controller_port=None,feedback_policy=None):
+                 controller_port=None,feedback_policy=None,head_trajectory_guard=None,
+                 head_stop_handoff=None):
         identifier(session_id);identifier(attempt_id)
         self.node,self.identity=node,(session_id,attempt_id)
         self.feedback_policy=None if feedback_policy is None else FeedbackPolicy.parse(feedback_policy)
@@ -26,9 +27,22 @@ class RosNeckSearchPort:
             raise ValueError('NECK_CONFIG_INVALID')
         if (broker is None)!=(ticket_port is None) or (ticket_port is not None and not callable(ticket_port)):
             raise ValueError('NECK_BROKER_CONFIG_INVALID')
+        if head_stop_handoff is not None and not callable(head_stop_handoff):
+            raise ValueError('NECK_HEAD_STOP_HANDOFF_INVALID')
         self.monotonic,self.progress,self.guard=monotonic,progress,command_guard
         self.broker=broker
         self._lock=threading.RLock();self._position=None;self._received=None;self._goals=[]
+        self._stopped=False;self._head_dispatching=False;self._head_trajectory_guard=None
+        self._head_stop_handoff=head_stop_handoff
+        self._head_stop_occurrence_ns=None;self._head_stop_deadline_ns=None
+        self._head_stop_handoff_started=False;self._head_cancel_requested=set()
+        self._head_stop_handoff_error=None
+        if head_trajectory_guard is not None:
+            from .head_trajectory_guard import HeadTrajectoryGuard
+            if (type(head_trajectory_guard) is not HeadTrajectoryGuard or broker is not None
+                    or controller_port is None or self.feedback_policy is None):
+                raise ValueError('NECK_HEAD_TRAJECTORY_BINDING_INVALID')
+            self._head_trajectory_guard=head_trajectory_guard
         if controller_port is not None:
             if broker is not None or self.feedback_policy is None:
                 raise ValueError('NECK_INJECTED_PORT_SCOPE_INVALID')
@@ -72,6 +86,9 @@ class RosNeckSearchPort:
 
     def command_neck(self,target,*,session_id,attempt_id,observation_time_s):
         target=finite(target);observation_time_s=finite(observation_time_s,nonnegative=True)
+        if self._head_trajectory_guard is not None:
+            return self._command_prepared_head(target, session_id=session_id,
+                attempt_id=attempt_id, observation_time_s=observation_time_s)
         if self.feedback_policy is not None:
             underlying=getattr(self.port,'port',self.port)
             snapshot=underlying.feedback_snapshot()
@@ -96,7 +113,82 @@ class RosNeckSearchPort:
             gid=self.port.send(goal);self._goals.append(gid)
             return gid
 
+    def _command_prepared_head(self,target,*,session_id,attempt_id,observation_time_s):
+        if (session_id,attempt_id)!=self.identity:
+            raise PermissionError('NECK_SCOPE_INVALID')
+        sim=self.node.get_clock().now().nanoseconds*1e-9
+        if observation_time_s>sim:raise ValueError('NECK_OBSERVATION_FUTURE')
+        with self._lock:
+            if self._stopped:raise PermissionError('NECK_STOPPED')
+            if self._head_dispatching:raise PermissionError('NECK_HEAD_DISPATCH_BUSY')
+        # Snapshot, quintic construction, canonicalization and private MuJoCo
+        # replay happen without holding the neck stop/cache lock.
+        prepared=self._head_trajectory_guard.prepare(target)
+        if not self.client.server_is_ready():
+            raise RuntimeError('NECK_ACTION_SERVER_UNAVAILABLE')
+        with self._lock:
+            if self._stopped:raise PermissionError('NECK_STOPPED')
+            if self._head_dispatching:raise PermissionError('NECK_HEAD_DISPATCH_BUSY')
+            self._head_dispatching=True
+        try:
+            gid=self.port.send_prepared_head(prepared)
+            with self._lock:
+                # If stop raced the native/SDK boundary, retain the UUID so
+                # stop_and_confirm can cancel and reconcile it before return.
+                self._goals.append(gid)
+            return gid
+        finally:
+            with self._lock:
+                self._head_dispatching=False
+
     def stop_and_confirm(self):
+        if self._head_trajectory_guard is not None:
+            with self._lock:
+                if self._head_stop_occurrence_ns is None:
+                    self._head_stop_occurrence_ns=round(self.monotonic()*1e9)
+                    self._head_stop_deadline_ns=(self._head_stop_occurrence_ns
+                        + round(self.stop_timeout*1e9))
+                self._stopped=True
+                occurred_ns=self._head_stop_occurrence_ns
+                deadline_ns=self._head_stop_deadline_ns
+                start_handoff=not self._head_stop_handoff_started
+                if start_handoff:self._head_stop_handoff_started=True
+                handoff=self._head_stop_handoff
+                handoff_error=self._head_stop_handoff_error
+            self._head_trajectory_guard.stop()
+            stop_admission=getattr(self.port,'stop_admission',None)
+            if callable(stop_admission):stop_admission()
+            if not callable(handoff):
+                raise RuntimeError('SEARCH_STOP_HANDOFF_UNBOUND')
+            if start_handoff:
+                # This is only a local close initiation. Its return value is
+                # diagnostic; raw terminal and quiet feedback still decide stop.
+                # The injected callback must be bounded/nonblocking. If it
+                # fails, retain that failure and still initiate every cancel.
+                try:
+                    handoff(occurred_ns,deadline_ns)
+                except Exception as error:
+                    handoff_error=type(error).__name__
+                    with self._lock:self._head_stop_handoff_error=handoff_error
+            cancelled=set()
+            while True:
+                with self._lock:
+                    dispatching=self._head_dispatching
+                    goals=tuple(self._goals)
+                inventory=getattr(self.port,'inventory',{})
+                if type(inventory) is dict:
+                    goals=tuple(dict.fromkeys((*goals,*inventory.keys())))
+                for gid in goals:
+                    if gid in cancelled:continue
+                    cancelled.add(gid)
+                    try:self.port.cancel(gid)
+                    except Exception:pass
+                if handoff_error is None and not dispatching and self.port.stopped():return True
+                if round(self.monotonic()*1e9)>=deadline_ns:
+                    if handoff_error is not None:
+                        raise RuntimeError('SEARCH_STOP_HANDOFF_FAILED')
+                    raise RuntimeError('SEARCH_STOP_UNCONFIRMED')
+                self.progress()
         with self._lock:
             for gid in self._goals:self.port.cancel(gid)
         deadline=self.monotonic()+self.stop_timeout

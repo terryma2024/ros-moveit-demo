@@ -186,6 +186,24 @@ def _provision_scope(tmp_path):
     return root, directory, environment
 
 
+def _private_short_ipc_base(*, configured):
+    if configured:
+        value = os.environ.get("SO101_IPC_SOCKET_BASE")
+        if not value:
+            raise RuntimeError("TEST_IPC_BASE_MISSING")
+        base = Path(value)
+    else:
+        base = Path("/tmp") / f"so101-debug-controller-provision-{uuid.uuid4().hex[:8]}"
+        base.mkdir(mode=0o700)
+    if not base.is_absolute() or base != Path(os.path.normpath(base)):
+        raise RuntimeError("TEST_IPC_BASE_INVALID")
+    identity = base.lstat()
+    if (not stat.S_ISDIR(identity.st_mode) or identity.st_uid != os.geteuid()
+            or stat.S_IMODE(identity.st_mode) != 0o700):
+        raise RuntimeError("TEST_IPC_BASE_NOT_PRIVATE")
+    return base
+
+
 def test_broker_provisions_three_roles_and_removes_only_its_files(tmp_path):
     from so101_demo.adapters.act.controller_reservation_provision import (
         ControllerReservationProvisions,
@@ -277,8 +295,9 @@ def test_neck_provision_collision_rolls_back_other_new_roles(tmp_path):
 
 
 @pytest.mark.parametrize("start_fails", (False, True))
+@pytest.mark.parametrize("ipc_base_present", (False, True), ids=("base-absent", "base-present"))
 def test_standalone_broker_publishes_before_service_and_cleans_on_exit(
-        tmp_path, monkeypatch, start_fails):
+        tmp_path, monkeypatch, start_fails, ipc_base_present):
     import rclpy
     from rclpy import executors
     from so101_demo.adapters.act import domain_authority, ros_broker
@@ -287,9 +306,31 @@ def test_standalone_broker_publishes_before_service_and_cleans_on_exit(
     root, directory, environment = _provision_scope(tmp_path)
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    short_root = Path(os.environ["TMPDIR"]).parents[2] / f"broker-{uuid.uuid4().hex[:6]}"
+    if ipc_base_present:
+        configured_value = os.environ.get("SO101_IPC_SOCKET_BASE")
+        if configured_value:
+            configured_base = Path(configured_value)
+        else:
+            configured_base = _private_short_ipc_base(configured=False)
+            monkeypatch.setenv("SO101_IPC_SOCKET_BASE", str(configured_base))
+    else:
+        configured_base = None
+        monkeypatch.delenv("SO101_IPC_SOCKET_BASE", raising=False)
+    short_base = _private_short_ipc_base(configured=ipc_base_present)
+    if ipc_base_present:
+        assert short_base == configured_base
+        assert os.environ["SO101_IPC_SOCKET_BASE"] == str(configured_base)
+    else:
+        assert "SO101_IPC_SOCKET_BASE" not in os.environ
+        assert short_base.name.startswith("so101-debug-controller-provision-")
+    short_root = short_base / f"broker-{uuid.uuid4().hex[:6]}"
     short_root.mkdir(mode=0o700)
+    short_root_info = short_root.lstat()
+    assert stat.S_ISDIR(short_root_info.st_mode)
+    assert short_root_info.st_uid == os.geteuid()
+    assert stat.S_IMODE(short_root_info.st_mode) == 0o700
     socket_path = short_root / "broker.sock"
+    assert len(os.fsencode(socket_path)) <= 107
     seen = []
 
     class Authority:
