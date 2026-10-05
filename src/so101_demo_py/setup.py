@@ -39,6 +39,12 @@ package_name = "so101_demo_py"
 python_package = "so101_demo"
 package_root = Path(__file__).resolve().parent
 subpackages = find_packages(where="src")
+ik_requirements = [
+    line.strip()
+    for line in (package_root / "config/ik/requirements.lock").read_text(
+        encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
 
 
 def installed_resources() -> list[tuple[str, list[str]]]:
@@ -84,7 +90,7 @@ setup(
     ]
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
-    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
+    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"] + ik_requirements,
     zip_safe=False,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",

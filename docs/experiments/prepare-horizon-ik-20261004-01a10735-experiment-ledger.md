@@ -8,7 +8,7 @@ worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence loop50/publish.json
+current_commit: see evidence dependency-lock-01/publish.json
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -44,7 +44,7 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-018
+latest_checkpoint: CP-019
 next_experiment: NONE
 retained: all evidence in registered root
 archived: NONE
@@ -1754,4 +1754,89 @@ deleted:NONE
 deletion_candidates:registered scratch and private build/prototype/duplicate staging entries in loop50/review/retention.json; authorization required
 open_hypotheses:NONE
 next_command:NONE; final remote hash and native goal status are recorded in immutable delivery metadata
+```
+
+
+## EXP-033 — explicit native IK dependency pins
+
+```yaml
+experiment_id:EXP-033
+status:RUNNING
+prior_experiment:EXP-032
+user_authorization:explicit request to enforce library versions in startup scripts or dependency-management configuration
+last_trustworthy_checkpoint:CP-018
+hypothesis:NumPy constraints currently only in native dispatch checks, not main package install metadata; dependency resolver can admit an unvalidated version
+prediction:installer metadata selects exactly1.26.4 forLinux and2.4.6 forDarwin, rejecting mismatched patch/minor/prerelease versions; same installed IK lock is shipped
+single_variable:dependency declaration only; native/Python numerical source and generatedC unchanged
+lifecycle:FULL_RESTART
+source_commit:94d6a6b28066ebe2e789e301bfb5792ddfe2d1bf plus scoped config/setup/test/ledger diff
+install_overlay:private dependency-lock-01/mac-build/install
+runtime_executable:/opt/ros/jazzy/.venv/bin/python CPython3.11; current NumPy2.4.6 unchanged
+ros_domain_id:N/A
+gz_partition:N/A
+preconditions:clean isolated task worktree; base doctorPASS; existing task tmux preserved; no stack/agents/dependency installation
+success_criteria:platform marker/lock/install metadata contract RED ->GREEN; fresh normal private install; complete ordinary so101_demo_py/test xdist8 gate
+invalid_criteria:shared environment/source/overlay changes or wrong provenance
+evidence:sole root dependency-lock-01
+next_experiment:NONE; inline review and persistent authorized current-branch publication
+```
+
+
+## EXP-033 directed and installed checkpoint
+
+```yaml
+red:3 intended assertion failures, missing NumPy install metadata and missing shipped lock
+runner_invalid:pytest-rerunfailures loopback bind denied before testcase; retained runner-bind-denied.*; authorized host execution corrected it
+implementation:config/ik/requirements.lock withLinux numpy==1.26.4 andDarwin numpy==2.4.6; setup.py reads this single lock into install_requires; installed_resources ships lock
+metadata_contract:11directed tests passed; platform marker selects one pin and rejects differing patch/minor/prerelease; installed metadata independently verified for both platform selections
+normal_build:private colcon build exit0; native kernel source unchanged; no shared dependency installation
+installed_runtime:fixed Mac Python3.11.15 NumPy2.4.6; native direct NumPy kernel active; immediate-success IK smoke passed
+full_package_gate:RUNNING, same complete ordinary test scope xdist8
+GUI_physics_controller:N/A; dependency-only headless scope
+```
+
+
+## EXP-033 final result
+
+```yaml
+experiment_id:EXP-033
+status:VALID
+runtime_executable:/opt/ros/jazzy/.venv/bin/python;CPython3.11.15 NumPy2.4.6
+source_commit:94d6a6b28 plus3setup/lock/test changes; shipped commit in dependency-lock-01/publish.json
+install_overlay:registered root dependency-lock-01/mac-build/install
+ros_domain_id:N/A
+gz_partition:N/A
+red:3expected assertions failed after host runner correction; initial sandbox preconfiguration failure retained INVALID
+changes:exact Linux NumPy1.26.4 /Darwin2.4.6 platform requirements lock; setup.py single-source install_requires; lock shipped through existing installed_resources
+directed:11passed; actual marker selection and rejection of wrong patch/minor/prerelease versions
+normal_build:exit0; actual installed distribution requirements and installed lock SHA exact
+runtime:fixed Mac NumPy2.4.6 unchanged; private installed native kernel active; immediate-success IK smoke pass
+full_package:3961total3931passed30skipped0errors/failures;xdist8;32.97s;colcon test-result exit0
+full_scope:complete ordinary src/so101_demo_py/test;benchmark_test not collected
+provenance:all8 worker/tempfile proofs; logical CPUs10; fixed runtime; newly built task private install and full new source clone
+numeric_equivalence_scope:all5previous final numerical source/test hashes unchanged; no new latency or Linux native-runtime measurement
+Linux_version_contract:verified using actual packaging marker evaluation and installed Requires-Dist; no dependency install or remote runtime change
+evidence:dependency-lock-01/{red.*,green.*,mac-build,installed-metadata.json,tests-final,verification.json,retention.json}
+GUI_physics_controller:N/A; dependency configuration only; no stack launched
+review:inline self review; no agents/dst; no unresolved findings
+retained:entire phase and all prior registered-root evidence
+archived:NONE
+deleted:NONE
+deletion_candidates:task private clone/build/install and registered Mac test scratch; retention.json; no authorization to delete
+next_experiment:NONE
+```
+
+## CP-019 — dependency constraints verified
+
+```yaml
+checkpoint_id:CP-019
+last_valid_experiment:EXP-033
+current_hypothesis:NONE
+current_commit:registered root dependency-lock-01/publish.json
+confirmed_conclusions:NumPy exact platform pins consumed by setup and shipped with package; fresh installed metadata verified; full ordinary xdist8 gate passed; numerical code unchanged
+working_tree_status:setup.py,new IK requirements lock,new dependency regression test and task ledger only
+owned_processes:NONE; private build and tests exited
+preserved_processes:existing so101-ik-cpu-20261004 tmux and all old checkouts/shared runtime
+open_risks:NONE for dependency-declaration scope
+next_command:authorized current-branch commit/push; record remote equality in delivery metadata
 ```
