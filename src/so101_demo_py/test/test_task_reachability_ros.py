@@ -11,6 +11,45 @@ from so101_demo.ros.task_reachability import (
 )
 
 
+def test_prepare_horizon_reuses_real_requests_only_within_one_call(monkeypatch) -> None:
+    from collections import Counter
+    from pathlib import Path
+
+    from so101_demo.control.moveit.underactuated_ik import UnderactuatedPoseIk
+    from so101_demo.core.dynamic_pick import CupPoseSample, resolve_motion_targets
+    from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
+
+    package = Path(__file__).parents[1]
+    template = load_dynamic_pick_template(
+        package / "config/policies/dynamic_cup_pick/v1/mujoco.yaml", expected_backend="mujoco"
+    )
+    ik = UnderactuatedPoseIk.from_urdf(
+        package / "assets/mujoco/so101.urdf", template.arm_joint_names, "world", "so101_tcp"
+    )
+    targets = resolve_motion_targets(
+        CupPoseSample("world", 1, 0.0, Pose7((0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0))), template
+    )
+    requests = Counter()
+    real_solve = ik.solve
+
+    def counted(target, seed, **kwargs):
+        requests[(target, seed, tuple(kwargs.items()))] += 1
+        return real_solve(target, seed, **kwargs)
+
+    monkeypatch.setattr(ik, "solve", counted)
+    planner = RosMoveGroupReachabilityPlanner(object(), template, action_client=object(), ik=ik)
+    planner.prepare_horizon(targets, _start())
+    first = planner._prepared_receipts
+    steps = planner._prepared_steps.copy()
+    assert sum(map(len, steps.values())) == 14
+    assert max(requests.values()) == 1
+    assert len(first) > sum(requests.values())
+    planner.prepare_horizon(targets, _start())
+    assert planner._prepared_receipts == first
+    assert planner._prepared_steps == steps
+    assert set(requests.values()) == {2}
+
+
 def _template() -> DynamicPickTemplate:
     return DynamicPickTemplate(
         "dynamic_cup_pick",

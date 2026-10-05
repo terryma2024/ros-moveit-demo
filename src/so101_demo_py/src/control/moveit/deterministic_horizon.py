@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import math
+import struct
 from dataclasses import asdict, dataclass
 from typing import Protocol, Sequence
 
 from ...core.domain import State
 from ...ports.evidence import PoseEvidence
+from .underactuated_ik import UnderactuatedIkError, UnderactuatedPoseIk
 
 
 class PoseIk(Protocol):
@@ -23,6 +25,67 @@ class PoseIk(Protocol):
     def forward(self, positions: Sequence[float]) -> PoseEvidence: ...
 
     def orientation_error_rad(self, actual: PoseEvidence, target: PoseEvidence) -> float: ...
+
+
+class HorizonIkCache:
+    """Reuse exact deterministic computations for one horizon, never branch scores."""
+
+    def __init__(self, ik: UnderactuatedPoseIk) -> None:
+        self._ik = ik
+        self._solutions: dict[tuple[bytes, ...], tuple[float, ...]] = {}
+        self._rejections: dict[tuple[bytes, ...], tuple[object, ...]] = {}
+        self._poses: dict[bytes, PoseEvidence] = {}
+
+    @staticmethod
+    def _key(values: Sequence[float]) -> bytes:
+        # Preserve every input bit, including signed zero; never round a target or seed.
+        return struct.pack(f"!{len(values)}d", *values)
+
+    def solve(
+        self,
+        target: PoseEvidence,
+        seed: tuple[float, ...],
+        *,
+        position_tolerance_m: float,
+        orientation_tolerance_rad: float,
+    ) -> tuple[float, ...]:
+        key = (
+            self._key(target.position_m),
+            self._key(target.orientation_xyzw),
+            self._key(seed),
+            self._key((position_tolerance_m, orientation_tolerance_rad)),
+        )
+        if key in self._solutions:
+            return self._solutions[key]
+        if key in self._rejections:
+            raise UnderactuatedIkError(*self._rejections[key])
+        try:
+            solution = self._ik.solve(
+                target,
+                seed,
+                position_tolerance_m=position_tolerance_m,
+                orientation_tolerance_rad=orientation_tolerance_rad,
+            )
+        except UnderactuatedIkError as error:
+            # Store deterministic error arguments, not exceptions with retained tracebacks.
+            if type(error) is UnderactuatedIkError:
+                self._rejections[key] = error.args
+            raise
+        self._solutions[key] = solution
+        return solution
+
+    def forward(self, positions: Sequence[float]) -> PoseEvidence:
+        key = self._key(positions)
+        if key not in self._poses:
+            self._poses[key] = self._ik.forward(positions)
+        return self._poses[key]
+
+    @property
+    def joint_limits(self) -> tuple[tuple[float, float], ...]:
+        return self._ik.joint_limits
+
+    def orientation_error_rad(self, actual: PoseEvidence, target: PoseEvidence) -> float:
+        return self._ik.orientation_error_rad(actual, target)
 
 
 @dataclass(frozen=True, slots=True)

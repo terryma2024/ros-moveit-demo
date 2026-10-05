@@ -174,3 +174,94 @@ def test_cartesian_corridor_uses_actual_trajectory_samples_and_rejects_detour() 
     assert rejected.accepted is False
     assert rejected.failure_code == "CARTESIAN_CORRIDOR_DEVIATION"
     assert rejected.maximum_deviation_m == pytest.approx(0.02)
+
+
+def _real_cache(monkeypatch):
+    from so101_demo.control.moveit import deterministic_horizon
+
+    cache_type = getattr(deterministic_horizon, "HorizonIkCache", None)
+    assert cache_type is not None, "horizon-local exact cache is not implemented"
+    ik = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    calls = {"solve": 0, "forward": 0}
+    for name in calls:
+        original = getattr(ik, name)
+
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] += 1
+            return _original(*args, **kwargs)
+
+        monkeypatch.setattr(ik, name, counted)
+    return ik, cache_type(ik), calls
+
+
+def test_horizon_cache_reuses_real_exact_requests_but_separates_all_inputs(monkeypatch) -> None:
+    import math
+
+    ik, cache, calls = _real_cache(monkeypatch)
+    seed = (0.0,) * 5
+    target = ik.forward(seed)
+    kwargs = {"position_tolerance_m": 0.002, "orientation_tolerance_rad": 0.10}
+    first = cache.solve(target, seed, **kwargs)
+    assert cache.solve(target, seed, **kwargs) == first
+    assert calls["solve"] == 1
+    cache.solve(target, seed, **{**kwargs, "position_tolerance_m": 0.003})
+    cache.solve(target, seed, **{**kwargs, "orientation_tolerance_rad": 0.11})
+    cache.solve(target, (-0.0, *seed[1:]), **kwargs)
+    cache.solve(target, (math.nextafter(0.0, 1.0), *seed[1:]), **kwargs)
+    moved = PoseEvidence((math.nextafter(target.position_m[0], 1.0), *target.position_m[1:]), target.orientation_xyzw)
+    cache.solve(moved, seed, **kwargs)
+    flipped = PoseEvidence(target.position_m, tuple(-x for x in target.orientation_xyzw))
+    cache.solve(flipped, seed, **kwargs)
+    assert calls["solve"] == 7
+
+
+def test_horizon_cache_forward_is_exact_and_local(monkeypatch) -> None:
+    ik, cache, calls = _real_cache(monkeypatch)
+    seed = (0.0,) * 5
+    first = cache.forward(seed)
+    assert cache.forward(seed) == first
+    assert calls["forward"] == 1
+    cache.forward((-0.0, *seed[1:]))
+    assert calls["forward"] == 2
+    assert type(cache)(ik).forward(seed) == first
+    assert calls["forward"] == 3
+    assert cache.joint_limits == ik.joint_limits
+    assert cache.orientation_error_rad(first, first) == ik.orientation_error_rad(first, first)
+
+
+def test_horizon_cache_preserves_real_ik_rejection_without_retaining_tracebacks(monkeypatch) -> None:
+    from so101_demo.control.moveit.underactuated_ik import UnderactuatedIkError
+
+    _ik, cache, calls = _real_cache(monkeypatch)
+    target = PoseEvidence((1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0))
+    errors = []
+    for _ in range(2):
+        with pytest.raises(UnderactuatedIkError) as caught:
+            cache.solve(target, (0.0,) * 5, position_tolerance_m=0.002, orientation_tolerance_rad=0.10)
+        errors.append(caught.value)
+    assert errors[0].args == errors[1].args
+    assert errors[0] is not errors[1]
+    assert str(errors[1]).startswith("DYNAMIC_IK_RESIDUAL_EXCEEDED:")
+    assert calls["solve"] == 1
+
+
+def test_horizon_cache_does_not_cache_unexpected_solver_exceptions(monkeypatch) -> None:
+    ik, cache, _calls = _real_cache(monkeypatch)
+    seed = (0.0,) * 5
+    target = ik.forward(seed)
+    real_solve = ik.solve
+    calls = 0
+
+    def transient(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("transient dependency failure")
+        return real_solve(*args, **kwargs)
+
+    monkeypatch.setattr(ik, "solve", transient)
+    kwargs = {"position_tolerance_m": 0.002, "orientation_tolerance_rad": 0.10}
+    with pytest.raises(RuntimeError, match="transient dependency failure"):
+        cache.solve(target, seed, **kwargs)
+    assert cache.solve(target, seed, **kwargs) == seed
+    assert calls == 2

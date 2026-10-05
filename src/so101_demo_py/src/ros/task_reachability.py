@@ -10,6 +10,7 @@ from typing import Any, Callable
 from ..application.task_reachability import SegmentPlanReceipt
 from ..control.moveit.deterministic_horizon import (
     MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
+    HorizonIkCache,
     HorizonStep,
     HorizonWaypoint,
     cartesian_candidate_score,
@@ -162,11 +163,13 @@ class RosMoveGroupReachabilityPlanner:
     def prepare_horizon(self, targets: ResolvedMotionTargets, start: JointStateEvidence) -> None:
         """Prove the full pick prefix before the first plan-only request."""
 
+        # Opt in only the project solver; injected/stateful implementations keep their semantics.
+        ik = HorizonIkCache(self._ik) if type(self._ik) is UnderactuatedPoseIk else self._ik
         above = targets.for_state(State.MOVE_ABOVE_OBJECT)
         descend = targets.for_state(State.DESCEND)
         waypoints = list(
             interpolated_move_above_waypoints(
-                self._ik,
+                ik,
                 self._arm_positions(start),
                 above,
             )
@@ -186,7 +189,7 @@ class RosMoveGroupReachabilityPlanner:
             )
         )
         result = solve_horizon(
-            self._ik,
+            ik,
             tuple(waypoints),
             self._arm_positions(start),
             position_tolerance_m=self._template.position_tolerance_m,
