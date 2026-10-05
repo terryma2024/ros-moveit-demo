@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: ai-station before/after fixed-fixture comparison on one isolated physical P core
+goal: another >=50% reduction against current native kernel on the same isolated ai-station P core, exact outputs
 success_contract: unchanged search, scoring, gates and receipts; equivalence and package gates
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence ai-station/publish.json
+current_commit: see evidence loop50/publish.json
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -24,7 +24,7 @@ confirmed_conclusions:
 disproven_routes:
   - EXP-014 handwritten sequential 4x4 product has float drift; original NumPy @ retained
 open_hypotheses:
-  - NONE; Mac acceptance and isolated ai-station comparison achieved
+  - NONE; full native loop installed gates and isolated ai-station >=50% goal achieved
 final_confirmed_conclusions:
   - aggregate ratio 0.2727275234730253 <= 0.30
   - exact fixture outputs and complete xdist8 ordinary package gate passed
@@ -38,11 +38,17 @@ ai_station_confirmed_conclusions:
   - EXP-023 cumulative original ratio0.13214663949466043, reduction86.78533605053396%
   - EXP-023 all Linux complete outputs exact; CPU14 only, isolated physical P core7 with SMT15 reserved idle, no migrations
   - CPU masks/governor and existing remote checkouts/submodules unchanged after measurement; complete evidence copy hashes verified
-latest_checkpoint: CP-015
-next_experiment: NONE
+full_loop_confirmed_conclusions:
+  - EXP-031 median525.59152825 ->207.5054745ms; ratio0.394803689456157, reduction60.51963105438429%; absolute target259.632309ms achieved
+  - full horizon18566 update matrices/rhs/raw steps exact; all24 full documents exact and120 timed calls validated
+  - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
+  - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
+  - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
+latest_checkpoint: CP-017
+next_experiment: NONE; current-branch publication
 retained: all evidence in registered root
 archived: NONE
-deletion_candidates: registered scratch listed in review/final-retention.json, native50/review/retention.json and ai-station/retention.json; none deleted
+deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
 ```
 
 ## Scope and authorization
@@ -53,7 +59,7 @@ Mac optimization, ai-station access was outside scope. The current user request
 authorizes SSH benchmark execution and temporary P-core isolation on ai-station.
 Stack launch, merge, evidence deletion and shared dependency changes remain outside scope.
 The user explicitly authorized commit and push to the current Gitee task branch;
-that authorization applies to this completed second optimization round.
+that authorization applies to this continuing task and the completed full-loop optimization round.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
 Optimization implementation requires explicit approval (AGENTS.md Task model selection
 and brainstorming HARD-GATE); user explicitly approved the presented plan before any optimization code.
@@ -1380,4 +1386,352 @@ archived: NONE
 deleted: NONE
 deletion_candidates: exact paths in ai-station/retention.json; no deletion authorization
 next_command: finalize evidence index and scoped ledger publication using existing commit/push authorization
+```
+
+## CP-016 — user approved full native loop optimization
+
+```yaml
+checkpoint_id: CP-016
+last_valid_experiment: EXP-023
+authorization: user says ok。设定目标，继续执行 after complete Cython loop/workspace/path-FK proposal
+native_goal_status: active; no token budget
+current_commit: 505e06ad1e211bb488828a33a8cb9b75953cc87e
+working_tree_status: initially clean isolated task worktree
+execution: current mac-mini Codex gpt-6.1-sol/xhigh; inline; no dst/agents
+contract: exact outputs and solver traces; finite differences retained; one compute/BLAS thread; target <=259.632309 ms and <=0.50 contemporaneous control ratio
+confirmed_conclusions: EXP-023 trustworthy Linux baseline519.264618ms; original fixtures/harness retained
+disproven_routes: EXP-014 handwritten 4x4 product drifts; do not retry or replace NumPy backend without new differentiating evidence
+owned_processes: NONE at preflight
+preserved_processes: remote claude tmux, all prior checkouts, shared environments
+next_command: EXP-024 isolated current native baseline and separate Linux profile
+```
+
+## EXP-024 — current native Linux baseline and separate profile
+
+```yaml
+experiment_id: EXP-024
+status: PLANNED
+prior_experiment: EXP-023
+hypothesis: remaining Python solve/control, gate object creation and NumPy dispatch/allocation dominate reducible Linux cost
+prediction: new single-P-core profile distinguishes actual Linux stage cost from Mac profile
+single_variable: instrumentation in separate process; product/source unchanged
+lifecycle: FULL_RESTART
+preconditions: verified ai-station, P14/P15 topology, existing private install, no simulation or conflicting task
+success_criteria: baseline full documents exact to EXP-023; current latency quantified; independent profile; before/after CPU isolation proofs and complete restoration
+failure_criteria: valid profile shows limited reducible Python cost; retain evidence
+invalid_criteria: stale source/native artifact, altered frozen harness/fixtures, affinity/thread/partition failure
+provenance:
+  source_commit: 2966203300af093b7aa7235daf02261c91814a73
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-p14-01/install/optimized/so101_demo_py
+  runtime_executable: /usr/bin/python3, Python3.12.3 NumPy1.26.4
+  ros_domain_id: N/A; no ROS nodes
+  gz_partition: N/A; no simulation
+commands: loop50/isolate-and-run-v2.py, unchanged timer harness --mode measure; separate --mode profile
+observed: PENDING
+conclusion: PENDING
+evidence: registered root loop50/baseline-profile-01
+decision: PENDING
+next_experiment: EXP-025 native full loop RED/GREEN and differential
+```
+
+## EXP-024 result
+
+```yaml
+status: VALID
+exit_codes: baseline0, profile0, controller0
+median_ms: 534.924531
+full_output_gate: exact to EXP-023 optimized all four complete Linux documents
+profile: loop50/baseline-profile-01/profile-r0/profile.txt; 5.13M calls,3.430s; inclusive times overlap, not formal timing
+observed: solve2.624s; pose construction0.864s across solve/FK; path checks0.667s; generator/native perturbation0.511s
+restoration: complete cpuset masks restored; one thread CPU14 both processes
+conclusion: native outer loop and deferred unused gate quaternions are supported candidates; profile alone does not guarantee50%
+next_experiment: EXP-025
+```
+
+## EXP-025 — compiled outer solve loop
+
+```yaml
+status: RUNNING
+prior_experiment: EXP-024
+single_variable: complete Cython iteration and short-circuited unused quaternion gate
+lifecycle: FULL_RESTART
+source_commit: 505e06ad plus scoped kernel/wrapper/test diff
+install_overlay: task-private loop50/dev-v1/runtime
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A
+gz_partition: N/A
+red: loop50/loop-red.log, expected missing native solve capability, exit1
+criteria: exact complete update traces and full horizon docs; no change to 200 finite differences, solve or clip
+next_experiment: workspace reuse
+```
+
+## EXP-025 Mac result / EXP-026 workspace
+
+```yaml
+experiment_id: EXP-025
+status: VALID
+loop_green: 20 passed;64cases6043 lossless updates/outcomes exact
+mac_exploratory_median_ms: 242.00062475; full documents exact
+linux_measurement: separate v1 normal install and profile pending
+next_experiment: EXP-026
+```
+
+```yaml
+experiment_id: EXP-026
+status: RUNNING
+prior_experiment: EXP-025
+single_variable: invocation-local reusable motion/residual/Jacobian/damping buffers
+lifecycle: FULL_RESTART
+source_commit: 505e06ad plus scoped diff
+install_overlay: loop50/dev-v2/runtime
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A
+gz_partition: N/A
+red: workspace-red.log exit1,3800 explicit arrays in failed200-update solve
+invalid_preparation: first copy command wrong cwd, no compiler invoked; corrected with explicit workspace cwd
+criteria: bounded explicit workspace construction; exact update traces/full outputs; isolated per-call ownership
+next_experiment: path FK specialization
+```
+
+## EXP-026 result / EXP-027 path FK
+
+```yaml
+experiment_id: EXP-026
+status: VALID
+workspace_green:21passed;64cases6043updates exact; explicit allocations bounded<=20
+mac_exploratory_median_ms:213.5720835; full documents exact
+next_experiment:EXP-027
+```
+
+```yaml
+experiment_id: EXP-027
+status: RUNNING
+prior_experiment: EXP-026
+single_variable: exact path sample position batch without unused quaternion/Pose objects
+lifecycle: FULL_RESTART
+source_commit:505e06ad plus scoped diff
+install_overlay:loop50/dev-v3/runtime
+runtime_executable:/opt/ros/jazzy/.venv/bin/python
+ros_domain_id:N/A
+gz_partition:N/A
+red:path-red.log exit1, missing position batch in two collected tests
+criteria: true endpoints and9interpolated points retained; same exact keys/local lifetime; identical metrics and complete documents
+next_experiment: native remaining dispatch profile
+```
+
+## EXP-027 result / EXP-028 direct NumPy dispatch
+
+```yaml
+experiment_id: EXP-027
+status: VALID
+path_green:38passed after correct fixed ROS overlay; first invocation missing moveit_msgs classified environment failure
+invalid_measurement:path-measure started before directed test exit confirmed; excluded
+mac_exploratory_median_ms:190.068302 from path-measure-clean; full outputs exact
+next_experiment:EXP-028
+```
+
+```yaml
+experiment_id: EXP-028
+status: RUNNING
+prior_experiment: EXP-027
+single_variable: NumPy own resolved matrix product loop called directly into per-call slots; same multiplication algorithm/order
+lifecycle: FULL_RESTART
+source_commit:505e06ad plus scoped diff
+install_overlay:loop50/dev-v4/runtime
+runtime_executable:/opt/ros/jazzy/.venv/bin/python
+ros_domain_id:N/A
+gz_partition:N/A
+probe:3000 bit-identical matrix cases independently on NumPy2.4.6 Mac and1.26.4 Linux; own versioned NumPy capsule, no handwritten product
+red:product-red.log exit1, missing product capability
+compatibility: explicit supported minor versions1.26/2.4; unsupported/capsule mismatch/custom origins fall back to NumPy; GIL held; capsule retains all pointers; FPE arithmetic replayed through normal NumPy policy; alias protected
+criteria: exact all solver traces/full outputs; bounded workspace; no warnings/errors/ownership regression
+next_experiment: normal installed Mac/Linux validation and formal P-core A/B
+```
+
+## EXP-028 primitive review / EXP-029 compatibility
+
+```yaml
+experiment_id: EXP-028
+status: VALID
+primitive_green:23tests;64cases6043updates/outcomes exact; complete fixture outputs exact
+mac_exploratory_median_ms:105.8751455
+first_primitive_failure: test incorrectly assumed BLAS overflow must raise; same-platform NumPy reference does not raise on Mac; corrected to compare reference error/result policy
+next_experiment:EXP-029
+```
+
+```yaml
+experiment_id: EXP-029
+status: RUNNING
+prior_experiment: EXP-028
+single_variable: eager-validation compatibility fallback for nonrigid/custom FK
+lifecycle: FULL_RESTART
+source_commit:505e06ad plus scoped diff
+install_overlay:loop50/dev-v5/runtime; numeric binary unchanged fromv4
+runtime_executable:/opt/ros/jazzy/.venv/bin/python
+ros_domain_id:N/A
+gz_partition:N/A
+red:compatibility-red.log, nonrigid custom chain original error args differed when quaternion gate was deferred
+correction: full loop/position specialization only for rigid standard transforms and unmodified instance hooks; other layouts retain original validation/forward cache path
+criteria: original exception args/fallback/customization maintained; exact frozen outputs/traces
+next_experiment:EXP-030 normal installed gates and formal Linux comparison
+```
+
+## EXP-029 result / EXP-030 installed gates
+
+```yaml
+experiment_id:EXP-029
+status:VALID
+gate:41passed; nonrigid original exception restored; unknown NumPy ABI uses exact fallback
+numeric_binary:unchanged from EXP-028
+next_experiment:EXP-030
+```
+
+```yaml
+experiment_id:EXP-030
+status:PLANNED
+prior_experiment:EXP-029
+single_variable:prototype -> normal private colcon source/install
+lifecycle:FULL_RESTART
+source_commit:505e06ad plus source-hashes-v5.json
+install_overlay:loop50/mac-build/install, remote install-v5
+runtime_executable:fixed Mac ROS Python, Linux/usr/bin/python3
+ros_domain_id:N/A
+gz_partition:N/A
+preconditions:generated C fixed; no Cython in runtime; full isolated source closure and independent fork metadata
+criteria:native origins correct; directed+complete ordinary xdist8 package gates; exact64case traces; own supported ABI active
+next_experiment:EXP-031 formal isolated Linux B/O comparison
+```
+
+## EXP-030 v5 result / final shape guard
+
+```yaml
+status:RUNNING
+mac_v5_package:3927passed30skipped;3957tests0failures/errors,xdist8,32.91s
+linux_v5_exploratory:521.7389945 ->206.10252825ms; exact full outputs; original NumPy1.26.4 own product kernel active; cpuset restored
+shape_red:shape-red.log, four-element malformed target got different dimension error; corrected native buffer shape guard before unchecked residual
+final_source:source-hashes-final.json; native input shape and released ABI/layout validation only; ordinary valid compute arithmetic unchanged
+final_gates: fresh normal builds, same directed/full ordinary scope, frozen64cases, separate formal B/O
+linux_dependencies:system benchmark Python has pytest/ROS, lacks xdist/mujoco; no shared environment changes; ordinary module package gate runs on fixed Mac runtime; Linux directed numeric/ROS and full solver/horizon differential below
+next_experiment:EXP-031
+```
+
+## EXP-031 — final installed isolated P-core A/B
+
+```yaml
+experiment_id:EXP-031
+status:PLANNED
+prior_experiment:EXP-030
+single_variable:296620330 baseline vs frozen source-hashes-final.json native loop
+lifecycle:FULL_RESTART
+source_commit:296620330 vs505e06ad+final scoped hashes
+install_overlay:remote retained baseline install/optimized vs install-v6
+runtime_executable:/usr/bin/python3 Python3.12.3 NumPy1.26.4
+ros_domain_id:N/A
+gz_partition:N/A
+protocol:loop50/protocol-final.json frozen before measured run
+order:B0,O0,O1,B1,B2,O2;3fresh processes per variant;1warmup+5samples per fixture/process
+preconditions:builds,tests,differential/profile exited; P14/P15 isolated physical core; one thread/BLAS1
+criteria:15samples/fixture/variant; median ratio<=.50 and optimized<=259.632309ms; exact full outputs; native/source/resource provenance; allaffinity14, sibling15idle, zero migrations, full restoration
+invalid_criteria:source/input/runtime/thread/provenance drift or competing task
+command:isolate-and-run-final.py
+evidence:loop50/formal-final
+next_experiment:final inline review and retention/publication
+```
+
+
+## EXP-030 final installed result
+
+```yaml
+experiment_id:EXP-030
+status:VALID
+final_sources:loop50/source-hashes-final.json; v6
+normal_builds:Mac private colcon and Linux private colcon both exit0
+mac_gate:3958total;3928passed30skipped0failures/errors;xdist8;32.77s
+mac_gate_evidence:loop50/tests-final/{results/so101_demo_py/pytest.xml,worker-proofs.json,preflight.json,gate.exit,test-result.exit}
+linux_directed:42passed0skipped0errors/failures;2.32s
+linux_scope_limit:full Linux ordinary gate not run; system benchmark Python lacks xdist/mujoco; shared dependencies unchanged; complete ordinary package gate on fixed Mac ROS runtime
+solver_differential:64frozen cases6043updates per platform; full outcomes and all lossless lhs/rhs/rawstep bytes exact against same-platform baseline
+generated_C:private Cython3.3.0 reproduction byte-identical
+next_experiment:EXP-031
+```
+
+## EXP-031 final result
+
+```yaml
+experiment_id:EXP-031
+status:VALID
+lifecycle:FULL_RESTART
+source_commit:2966203300af093b7aa7235daf02261c91814a73 vs505e06ad+source-hashes-final.json
+install_overlay:retained remote install/optimized vs private install-v6
+runtime_executable:/usr/bin/python3 Python3.12.3 NumPy1.26.4
+ros_domain_id:N/A
+gz_partition:N/A
+command:isolate-and-run-final.py; all6processes exit0
+statistic:median of15 equal-weight four-fixture mean samples per variant; p95linear
+baseline_median_p95_ms:525.59152825 /535.5663462
+optimized_median_p95_ms:207.5054745 /209.743708575
+ratio:0.394803689456157
+reduction_percent:60.51963105438429
+absolute_target_ms:259.632309
+result:GOAL_ACHIEVED
+CV:baseline.0136692905 optimized.0096946984
+per_round_medians_ms:baseline[535.429951,525.59152825,518.844133];optimized[204.76225475,209.37816875,207.5054745]
+outputs:24saved full documents byte-identical;120timedcalls checked against full warmup outputs
+CPU:physical Pcore7;isolated cpuset14-15; one task affinity14 and actualCPU14; sibling15user/nice/system ticks0; migrations0
+restoration:all cpuset masks exactly restored; powersave governor unchanged
+protocol_metadata_note:inherited variants label baseline/profile; frozen explicit order and6command/provenance records specify baseline/optimized; no profile enters statistics
+scope:real prepare_horizon entry-return, no ROS waits/GUI/physics/live qualification
+comparison_note:prior campaign519.264618ms remains historical evidence; contemporaneous525.59152825ms control used for formal ratio
+artifacts:loop50/{protocol-final.json,formal-final,summary.json,result.md}
+next_experiment:EXP-032 final inline review/counters/retention
+```
+
+| Frozen fixture | Baseline median / p95 ms | Full-loop median / p95 ms |
+|---|---:|---:|
+| p18_home | 1028.455 / 1050.101 | 401.316 / 409.711 |
+| canonical_home | 321.793 / 331.773 | 142.530 / 146.434 |
+| outer_boundary | 508.102 / 516.774 | 193.666 / 196.723 |
+| unreachable | 245.273 / 249.390 | 91.166 / 92.020 |
+| Equal-weight suite | 525.592 / 535.566 | 207.505 / 209.744 |
+
+## EXP-032 full workload update trace and final inline review
+
+```yaml
+experiment_id:EXP-032
+status:VALID
+prior_experiment:EXP-031
+single_variable:separate instrumentation, excluded from acceptance latency
+lifecycle:FULL_RESTART
+source_install_runtime:unchanged final v6 and retained296620330 installations, Linux Python3.12.3 NumPy1.26.4
+ros_domain_id:N/A
+gz_partition:N/A
+command:counters-final.py baseline /optimized; both exit0
+workload_counts_exact:1361requests781bottomsolves79failed18566updates19268iterations580cachehits1242pathmetrics11178ninepoints
+lossless_result:all18566 normal-equation matrices/right-hand sides/raw steps byte-identical; complete warmup documents unchanged
+implementation:whole Cython iteration loop, invocation-local reusable arrays, deferred unused quaternion construction, own resolved NumPy product loop, exact position batching/cache
+unchanged:finite differences epsilon1e-5/damping1e-5/200iterations/stepcap.20;14waypoints/beam3/seeds/order/scoring/gates/9samples
+compatibility:experimental NumPy capsule explicitly limited to released1.26.x/2.4.x; tested1.26.4Linux/2.4.6Mac; other versions/layouts/custom hooks retain NumPy/original paths; same speedup not promised elsewhere
+review:GIL and capsule lifetime retained; disjoint workspaces and public alias guard; floating error policy replays exceptional products through NumPy; malformed-target and nonrigid-chain original errors covered
+transfer:10564files151symlinks523928172bytes exact; all staging retained in registered root loop50/remote-staging
+runner_corrections:read-only audit corrected sources-v6 to actual source-v6; macOS tar consumed7AppleDouble metadata files, restored exact originals with direct copy and verified all inventory hashes; no product or formal measurement changed
+preservation:old remote repos/status/submodule hashes and claude tmux byte-identical; all owned cpuset groups absent
+retention:all root retained; archivedNONE; deletedNONE; deletion candidates in loop50/review/retention.json
+next_experiment:NONE; authorized current Gitee branch publication
+```
+
+## CP-017 — full-loop goal achieved, publication ready
+
+```yaml
+checkpoint_id:CP-017
+last_valid_experiment:EXP-032
+current_hypothesis:NONE
+working_tree_status:only4product files,1numeric test file,task plan and experiment ledger
+native_goal_status:active until evidence/publication finished; no token budget
+confirmed_conclusions:formal60.52% reduction; absolute207.505ms<=259.632309ms; exact outputs/updates; installed gates and complete transfer passed
+owned_processes:NONE; remote controller/instrumentation/tests/build/transfer exited
+preserved_processes:all prior tmux/worktrees/checkouts and shared environments
+retained:sole registered evidence root including loop50
+archived:NONE
+deletion_candidates:private builds/prototypes/duplicate remote staging and registered test scratch; no authorization to delete
+next_command:scoped commit and standard git push origin current codex branch; verify remote hash then mark goal complete
 ```

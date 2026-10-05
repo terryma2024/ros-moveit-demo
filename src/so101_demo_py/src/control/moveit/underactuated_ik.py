@@ -163,6 +163,19 @@ class UnderactuatedPoseIk:
             raise UnderactuatedIkError("DYNAMIC_IK_JOINT_LIMIT_MARGIN_INVALID")
         self._identity3 = np.eye(3)
         self._identity4 = np.eye(4)
+        # Deferring unused quaternion gates is valid for rigid FK transforms.
+        # Arbitrary custom matrices keep the original eager validation path.
+        self._rigid_chain = all(
+            type(joint.origin) is np.ndarray
+            and joint.origin.dtype == np.float64
+            and joint.origin.shape == (4, 4)
+            and np.all(np.isfinite(joint.origin))
+            and np.array_equal(joint.origin[3], self._identity4[3])
+            and np.all(np.abs(joint.origin[:3, :3]) <= 1.0 + 1e-12)
+            and np.allclose(joint.origin[:3, :3].T @ joint.origin[:3, :3],
+                            self._identity3, rtol=0.0, atol=1e-12)
+            for joint in chain
+        )
         self._axis_terms: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         # Prefix reuse assumes one independently named coordinate per moving joint.
         # Other layouts and subclasses retain the original overridable FK path.
@@ -255,6 +268,20 @@ class UnderactuatedPoseIk:
 
     def forward(self, positions: tuple[float, ...] | np.ndarray) -> PoseEvidence:
         return self._pose_from_matrix(self._matrix(positions))
+
+    def forward_positions(self, vectors) -> tuple[tuple[float, float, float], ...]:
+        """Compute exact sample positions, preserving custom forward implementations."""
+        if not len(vectors):
+            return ()
+        if self._can_batch_forward:
+            return self._numeric.forward_positions(np.asarray(vectors, dtype=float),
+                                                   self._pose_from_matrix)
+        return tuple(self.forward(positions).position_m for positions in vectors)
+
+    @property
+    def _can_batch_forward(self) -> bool:
+        return self._numeric is not None and self._rigid_chain and not any(
+            name in self.__dict__ for name in ("_matrix", "_pose_from_matrix", "forward"))
 
     def _motion(self, name: str, angle: float) -> np.ndarray:
         cross, square = self._axis_terms[name]
@@ -355,6 +382,34 @@ class UnderactuatedPoseIk:
         native_residual = self._numeric is not None and target_position.dtype == np.float64
         if native_residual:
             residual_from_matrix = self._numeric.residual
+        native_loop = (
+            native_residual
+            and self._rigid_chain
+            and positions.ndim == 1
+            and np.all(np.isfinite(positions))
+            and isinstance(position_tolerance_m, (int, float))
+            and isinstance(orientation_tolerance_rad, (int, float))
+            and not any(name in self.__dict__ for name in (
+                "_matrix", "_matrix_with_prefixes", "_perturbed_matrices",
+                "_residual_from_matrix", "_pose_from_matrix", "forward",
+                "orientation_error_rad",
+            ))
+        )
+        if native_loop:
+            success, positions = self._numeric.solve(
+                positions, target_position, target_rotation, target,
+                self._solve_lower, self._solve_upper,
+                position_tolerance_m, orientation_tolerance_rad,
+                self._pose_from_matrix, self.orientation_error_rad,
+            )
+            if success:
+                return tuple(float(item) for item in positions)
+            actual = self.forward(positions)
+            raise UnderactuatedIkError(
+                "DYNAMIC_IK_RESIDUAL_EXCEEDED: "
+                f"position_m={math.dist(actual.position_m, target.position_m):.6f} "
+                f"orientation_rad={self.orientation_error_rad(actual, target):.6f}"
+            )
         for _ in range(200):
             matrix, prefixes, motions = self._matrix_with_prefixes(positions)
             residual = residual_from_matrix(matrix, target_position, target_rotation)

@@ -181,3 +181,222 @@ def test_solver_subclass_keeps_its_custom_forward_model():
     seed = (0.0,) * 5
     target = solver.forward(seed)
     assert solver.solve(target, seed) == seed
+
+
+def test_native_solve_preserves_complete_update_trace(monkeypatch):
+    """The native loop must keep every update, branch and failure outcome exact."""
+    from so101_demo.ports.evidence import PoseEvidence
+
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    kernel = solver._numeric
+    assert hasattr(kernel, "solve"), "native solve loop is missing"
+    rng = np.random.default_rng(1055)
+    limits = np.asarray(solver.joint_limits)
+    cases = [(solver.forward(np.zeros(5)), (0.0,) * 5, {})]
+    cases.append((PoseEvidence((1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0)),
+                  (0.0,) * 5, {}))
+    for _ in range(8):
+        target = solver.forward(rng.uniform(limits[:, 0], limits[:, 1]))
+        cases.append((target, tuple(rng.uniform(limits[:, 0], limits[:, 1])), {}))
+    actual = solver.forward(np.zeros(5))
+    shifted = PoseEvidence((actual.position_m[0] + 0.004, *actual.position_m[1:]),
+                           actual.orientation_xyzw)
+    import math
+
+    distance = math.dist(actual.position_m, shifted.position_m)
+    for tolerance in (np.nextafter(distance, 0.0), distance, np.nextafter(distance, 1.0)):
+        cases.append((shifted, (0.0,) * 5, {"position_tolerance_m": float(tolerance)}))
+    original_solve = np.linalg.solve
+
+    def run(target, seed, kwargs, numeric):
+        solver._numeric = numeric
+        trace = []
+
+        def recorded(lhs, rhs):
+            step = original_solve(lhs, rhs)
+            trace.append((lhs.tobytes(), rhs.tobytes(), step.tobytes()))
+            return step
+
+        monkeypatch.setattr(np.linalg, "solve", recorded)
+        try:
+            outcome = tuple(float(value).hex() for value in solver.solve(target, seed, **kwargs))
+        except Exception as error:
+            outcome = (type(error).__name__, error.args)
+        return outcome, trace
+
+    for target, seed, kwargs in cases:
+        expected = run(target, seed, kwargs, None)
+        actual = run(target, seed, kwargs, kernel)
+        assert actual == expected
+
+
+def test_native_failed_solve_uses_bounded_explicit_workspaces(monkeypatch):
+    """A 200-update failure must not rebuild motion/residual/Jacobian arrays."""
+    from so101_demo.control.moveit.underactuated_ik import UnderactuatedIkError
+    from so101_demo.ports.evidence import PoseEvidence
+
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    allocations = 0
+    original_empty, original_eye = np.empty, np.eye
+
+    def counted_empty(*args, **kwargs):
+        nonlocal allocations
+        allocations += 1
+        return original_empty(*args, **kwargs)
+
+    def counted_eye(*args, **kwargs):
+        nonlocal allocations
+        allocations += 1
+        return original_eye(*args, **kwargs)
+
+    monkeypatch.setattr(np, "empty", counted_empty)
+    monkeypatch.setattr(np, "eye", counted_eye)
+    with pytest.raises(UnderactuatedIkError, match="DYNAMIC_IK_RESIDUAL_EXCEEDED"):
+        solver.solve(PoseEvidence((1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0)), (0.0,) * 5)
+    assert allocations <= 20, f"iteration arrays were rebuilt {allocations} times"
+
+
+def test_native_position_batch_matches_forward_without_quaternion_work(monkeypatch):
+    """Path samples need exact positions, without unused quaternion normalization."""
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    assert hasattr(solver, "forward_positions"), "position-only batch FK is missing"
+    rng = np.random.default_rng(1056)
+    limits = np.asarray(solver.joint_limits)
+    vectors = [np.zeros(5), -np.zeros(5), limits[:, 0], limits[:, 1]]
+    vectors.extend(rng.uniform(limits[:, 0], limits[:, 1], (80, 5)))
+    expected = tuple(solver.forward(q).position_m for q in vectors)
+    original_norm = np.linalg.norm
+    normalizations = 0
+
+    def recorded(*args, **kwargs):
+        nonlocal normalizations
+        normalizations += 1
+        return original_norm(*args, **kwargs)
+
+    monkeypatch.setattr(np.linalg, "norm", recorded)
+    actual = solver.forward_positions(vectors)
+    assert np.asarray(actual).tobytes() == np.asarray(expected).tobytes()
+    assert normalizations == 0
+
+
+def test_batched_path_metrics_preserve_true_end_and_all_nine_samples():
+    from so101_demo.control.moveit.deterministic_horizon import (
+        HorizonIkCache, _kinematic_segment_metrics,
+    )
+
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    assert hasattr(solver, "forward_positions"), "position-only batch FK is missing"
+    rng = np.random.default_rng(1057)
+    limits = np.asarray(solver.joint_limits)
+    pairs = [(tuple(np.zeros(5)), tuple(-np.zeros(5)))]
+    pairs.extend((tuple(a), tuple(b)) for a, b in rng.uniform(
+        limits[:, 0], limits[:, 1], (40, 2, 5)))
+    for start, end in pairs:
+        expected = _kinematic_segment_metrics(solver, start, end)
+        actual = _kinematic_segment_metrics(HorizonIkCache(solver), start, end)
+        assert tuple(value.hex() for value in actual) == tuple(value.hex() for value in expected)
+
+
+def test_direct_numpy_product_preserves_layout_bits_and_error_policy():
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    kernel = solver._numeric
+    assert hasattr(kernel, "matmul_into"), "direct NumPy product is missing"
+    rng = np.random.default_rng(1060)
+    for rows, inner, columns in ((4, 4, 4), (3, 3, 3), (5, 6, 5)):
+        for index in range(100):
+            a = rng.uniform(-1, 1, (rows, inner))
+            b = rng.uniform(-1, 1, (inner, columns))
+            if index % 2:
+                a = np.asfortranarray(a)
+            if index % 3:
+                b = np.asfortranarray(b)
+            out = np.empty((rows, columns))
+            kernel.matmul_into(a, b, out)
+            assert out.tobytes() == (a @ b).tobytes()
+    a = np.eye(4)
+    b = rng.uniform(-1, 1, (4, 4))
+    expected = a @ b
+    kernel.matmul_into(a, b, a)
+    assert a.tobytes() == expected.tobytes()
+    for size in (1, 4):
+        a = np.full((size, size), 1e308)
+        out = np.empty_like(a)
+        with np.errstate(over="raise", invalid="raise"):
+            try:
+                expected = a @ a
+            except FloatingPointError as error:
+                with pytest.raises(FloatingPointError) as actual:
+                    kernel.matmul_into(a, a, out)
+                assert actual.value.args == error.args
+            else:
+                # BLAS implementations differ in whether they expose FPE flags;
+                # preserve the behavior of the same-platform NumPy reference.
+                kernel.matmul_into(a, a, out)
+                assert out.tobytes() == expected.tobytes()
+    b = rng.uniform(-1, 1, (4, 4))
+    with np.errstate(all="ignore"):
+        a = np.full((4, 4), np.nan)
+        out = np.empty((4, 4))
+        kernel.matmul_into(a, b, out)
+        assert out.tobytes() == (a @ b).tobytes()
+
+
+def test_unknown_numpy_capsule_version_keeps_exact_dispatch_fallback(monkeypatch):
+    accelerated = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if accelerated._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    seed = (0.0,) * 5
+    target = accelerated.forward((0.1, 0.2, 0.1, 0.3, 0.1))
+    expected = accelerated.solve(target, seed)
+    monkeypatch.setattr(np, "__version__", "99.0.0")
+    fallback = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    assert not fallback._numeric.direct_matmul
+    assert tuple(value.hex() for value in fallback.solve(target, seed)) == tuple(
+        value.hex() for value in expected)
+
+
+def test_nonrigid_custom_chain_keeps_original_pose_validation_error():
+    from so101_demo.control.moveit.underactuated_ik import _Joint
+    from so101_demo.ports.evidence import PoseEvidence
+
+    origin = np.eye(4)
+    origin[1, 2] = 1e200
+    solver = UnderactuatedPoseIk((_Joint("1", "revolute", origin, (0.0, 0.0, 1.0), -1, 1),),
+                                ("1",))
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    kernel = solver._numeric
+    target = PoseEvidence((1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0))
+    outcomes = []
+    with np.errstate(all="ignore"):
+        for numeric in (None, kernel):
+            solver._numeric = numeric
+            try:
+                solver.solve(target, (0.0,))
+            except Exception as error:
+                outcomes.append((type(error).__name__, error.args))
+            else:
+                outcomes.append("unexpected success")
+    assert outcomes[1] == outcomes[0]
+
+
+def test_native_loop_preserves_malformed_target_shape_guard():
+    from types import SimpleNamespace
+
+    solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
+    if solver._numeric is None:
+        pytest.skip("optional native extension has not been built")
+    target = SimpleNamespace(position_m=(0.0, 0.0, 0.0, 0.0),
+                             orientation_xyzw=(0.0, 0.0, 0.0, 1.0))
+    with pytest.raises(ValueError, match="^invalid IK residual shape$"):
+        solver.solve(target, (0.0,) * 5)

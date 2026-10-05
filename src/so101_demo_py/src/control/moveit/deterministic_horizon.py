@@ -35,6 +35,7 @@ class HorizonIkCache:
         self._solutions: dict[tuple[bytes, ...], tuple[float, ...]] = {}
         self._rejections: dict[tuple[bytes, ...], tuple[object, ...]] = {}
         self._poses: dict[bytes, PoseEvidence] = {}
+        self._positions: dict[bytes, tuple[float, float, float]] = {}
 
     @staticmethod
     def _key(values: Sequence[float]) -> bytes:
@@ -79,6 +80,22 @@ class HorizonIkCache:
         if key not in self._poses:
             self._poses[key] = self._ik.forward(positions)
         return self._poses[key]
+
+    def forward_positions(self, vectors) -> tuple[tuple[float, float, float], ...]:
+        """Reuse only exact positions, within the same per-horizon cache lifetime."""
+        missing = {}
+        keys = []
+        for positions in vectors:
+            key = self._key(positions)
+            keys.append(key)
+            if key in self._poses:
+                self._positions[key] = self._poses[key].position_m
+            elif key not in self._positions:
+                missing.setdefault(key, positions)
+        if missing:
+            values = self._ik.forward_positions(tuple(missing.values()))
+            self._positions.update(zip(missing, values, strict=True))
+        return tuple(self._positions[key] for key in keys)
 
     @property
     def joint_limits(self) -> tuple[tuple[float, float], ...]:
@@ -324,6 +341,24 @@ def _joint_margin(ik: PoseIk, joints: tuple[float, ...]) -> float:
 def _kinematic_segment_metrics(
     ik: PoseIk, start_joints: tuple[float, ...], end_joints: tuple[float, ...]
 ) -> tuple[float, float]:
+    if (type(ik) is HorizonIkCache and type(ik._ik) is UnderactuatedPoseIk
+            and ik._ik._can_batch_forward):
+        vectors = [start_joints, end_joints]
+        for index in range(9):
+            fraction = index / 8.0
+            vectors.append(tuple(
+                start + fraction * (end - start)
+                for start, end in zip(start_joints, end_joints, strict=True)
+            ))
+        # The true endpoint and fraction1 interpolation are both retained: their
+        # input bits can differ, so neither can substitute for the other.
+        start, end, *points = ik.forward_positions(vectors)
+        maximum_deviation = 0.0
+        minimum_clearance = math.inf
+        for point in points:
+            maximum_deviation = max(maximum_deviation, _point_to_segment_distance(point, start, end))
+            minimum_clearance = min(minimum_clearance, point[2])
+        return maximum_deviation, minimum_clearance
     start_pose = ik.forward(start_joints)
     end_pose = ik.forward(end_joints)
     maximum_deviation = 0.0
