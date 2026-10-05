@@ -2,13 +2,16 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: fixed-fixture prepare_horizon compute median latency <= 0.30 frozen baseline
+goal: second-round fixed-fixture prepare_horizon compute median latency <= 0.50 e1030ccf baseline
 success_contract: unchanged search, scoring, gates and receipts; equivalence and package gates
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
+current_commit: see evidence native50/review/publish.json
+second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
+second_delivery_commit: see evidence native50/review/publish.json
 evidence_root: /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735
 host: Terry-Mac-mini.local
 model: gpt-6.1-sol
@@ -18,24 +21,32 @@ confirmed_conclusions:
   - native CLI worktree was isolated and clean at detached f0677823 before branch switch
   - task branch starts at imported frozen source baseline; old checkouts untouched
   - host-access doctor --base exit 0; sandbox denial was not host absence
-disproven_routes: []
-open_hypotheses: []
+disproven_routes:
+  - EXP-014 handwritten sequential 4x4 product has float drift; original NumPy @ retained
+open_hypotheses:
+  - NONE; second-round acceptance achieved
 final_confirmed_conclusions:
   - aggregate ratio 0.2727275234730253 <= 0.30
   - exact fixture outputs and complete xdist8 ordinary package gate passed
   - scoped product/test diff unchanged from formal measurement
-latest_checkpoint: CP-010
+second_round_confirmed_conclusions:
+  - EXP-020 installed aggregate ratio 0.48161196881098667 <=0.50, exact outputs and 64-case lossless trace equivalence
+  - EXP-020 full ordinary xdist8 gate 3920 passed, 30 skipped, 0 errors/failures
+  - EXP-021 workload unchanged, shared prefixes and compiled scalar loops reduce repeated work
+latest_checkpoint: CP-013
 next_experiment: NONE
 retained: all evidence in registered root
 archived: NONE
-deletion_candidates: registered scratch listed in review/final-retention.json; none deleted
+deletion_candidates: registered scratch listed in review/final-retention.json and native50/review/retention.json; none deleted
 ```
 
 ## Scope and authorization
 
 Mac/source baseline only; no equivalence claim about ai-station dirty sources.
 CPU-only, inline self review, no implementation agent or dst. No ai-station access,
-stack launch, push, merge, evidence deletion, or shared dependency changes authorized.
+stack launch, merge, evidence deletion, or shared dependency changes authorized.
+The user explicitly authorized commit and push to the current Gitee task branch;
+that authorization applies to this completed second optimization round.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
 Optimization implementation requires explicit approval (AGENTS.md Task model selection
 and brainstorming HARD-GATE); user explicitly approved the presented plan before any optimization code.
@@ -824,4 +835,391 @@ retained: existing evidence root and scratch classification preserved
 archived: NONE
 deleted: NONE
 next_command: stage only eight task files, commit, push current codex branch and verify remote SHA
+```
+
+## CP-011 — second optimization goal authorized
+
+```yaml
+checkpoint_id: CP-011
+approval: 用户明确要求“以此为goal，进行优化”，批准前述 FK 前缀复用及编译 CPU 内核方案
+native_goal_status: active
+baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
+execution: mac-mini/Terry-Mac-mini.local, current Codex gpt-6.1-sol/xhigh inline; no dst or agents
+worktree: existing task-owned isolated codex/prepare-horizon-ik-20261004-01a10735; initially clean
+protocol: native50/protocol-v2.json, original frozen harness reused unchanged
+objective: same four fixture equal-weight aggregate median optimized/baseline <=0.50; exact full outputs; single compute worker and BLAS/OMP all1
+plan: docs/superpowers/plans/2026-10-05-prepare-horizon-ik-native.md
+scope: IK numeric kernel and required build integration plus differential tests only
+retained: original evidence unchanged; new native50 phase uses same registered evidence_root
+archived: NONE
+deleted: NONE
+next_experiment: EXP-012 e1030ccf fixed-runtime baseline
+```
+
+## EXP-012 — second baseline
+
+```yaml
+experiment_id: EXP-012
+status: PLANNED
+single_variable: frozen e1030ccf source
+lifecycle: FULL_RESTART
+command: frozen baseline/characterize.py --source native50/baseline/source/src/so101_demo_py --mode measure --samples 5 --out native50/baseline/round0
+success_criteria: identical complete output documents to original characterization, runtime/fixture/harness hashes preserved
+invalid_criteria: source/runtime/input drift, profiling instrumentation, changed thread budget
+next_experiment: prefix reuse RED and GREEN
+```
+
+## EXP-012 result / EXP-013 prefix reuse
+
+```yaml
+experiment_id: EXP-012
+status: VALID
+exit_code: 0
+result: new baseline round0 full outputs exact to original characterization; p18 1109.828 ms, canonical 241.081 ms, boundary 595.720 ms, unreachable 303.249 ms
+model_proof: read-only process argv verifies current codex -m gpt-6.1-sol -c model_reasoning_effort=xhigh --enable goals
+next_experiment: EXP-013
+```
+
+```yaml
+experiment_id: EXP-013
+status: RUNNING
+single_variable: shared FK prefixes and unchanged joint rotations in five finite differences
+lifecycle: FULL_RESTART
+red: native50/prefix-red-actual.log; intended assertion missing shared finite-difference FK
+invalid_runner: native50/prefix-red.log, import failed before test ran; not RED
+change: underactuated_ik.py prefix helpers plus solve adaptation; tests count actual 200 five-column updates instead of recomputed FK calls
+numeric_gate: 84 vectors including signed zero and limits, six matrices per vector bit-identical, motion sin calls 30 -> 10
+unit_gate: native50/prefix-green.log, 10 passed
+timing: native50/prefix-measure, exploratory 3 samples/fixture, excluded from final acceptance
+next_experiment: compiled kernel numeric primitive probe
+```
+
+## EXP-013 result / EXP-014 compiled primitive probe
+
+```yaml
+experiment_id: EXP-013
+status: VALID
+output_gate: all four complete output documents exact to e1030ccf baseline
+exploratory_median_ms: 389.2193335
+scope: prefix-only; 3 samples per fixture, not final acceptance
+retained_source: native50/prefix-source
+next_experiment: EXP-014
+```
+
+```yaml
+experiment_id: EXP-014
+status: PLANNED
+single_variable: Cython float64 motion/residual primitives with original NumPy matrix multiplication retained
+lifecycle: FULL_RESTART
+build_tool: Cython 3.3.0 in native50/build-deps only; fixed runtime interpreter unchanged
+probe: native50/probe, exploratory code retained, not product or final benchmark
+hypothesis: eliminating tiny elementwise array allocations reduces remaining compute latency without changing bits
+numeric_gate: probe original primitives vs native, actual URDF matrices plus finite random and boundary inputs
+invalid_runner: first build exec could not enter nonexistent cwd; no compiler invoked
+next_experiment: native primitive tests before product integration
+```
+
+## EXP-014 result / EXP-015 native integration
+
+```yaml
+experiment_id: EXP-014
+status: VALID
+motion_gate: 10020 exact float64 matrices
+residual_gate: 2004 exact residuals
+rejected_variant: handwritten sequential 4x4 product differs in 1884/2004 probes; never enters product
+selected_primitive: original NumPy @ retained for every matrix product
+next_experiment: EXP-015
+```
+
+```yaml
+experiment_id: EXP-015
+status: RUNNING
+single_variable: Cython NumericKernel for shared FK and residual, unchanged NumPy products and solve
+lifecycle: FULL_RESTART
+red: native50/native-red.log intended missing compiled backend integration
+first_build_invalid: wrong relative Cython source path; native-build.log missing generated C; corrected with fail-closed required extension and set -e
+first_unit_failure: strided joint-limit input rejected by contiguous memoryview; native-green.log retained
+correction: readonly strided input memoryview accepted; original references and buffers retained
+packaging: checked-in generated Cython 3.3.0 C source, normal setuptools extension; runtime/build requires no installed Cython
+exploratory_median_ms: 283.42734375, native-measure v1; full fixture outputs exact
+next_experiment: native Jacobian assembly, independent RED -> GREEN
+```
+
+## EXP-015 result / EXP-016 Jacobian assembly
+
+```yaml
+experiment_id: EXP-015
+status: VALID
+corrected_numeric_gate: native-green-v2.log, 11 passed, no skips
+full_output_gate: exact four real fixture outputs
+next_experiment: EXP-016
+```
+
+```yaml
+experiment_id: EXP-016
+status: VALID
+prior_experiment: EXP-015
+single_variable: Cython Jacobian column assembly, original five perturbations and arithmetic retained
+lifecycle: FULL_RESTART
+red: jacobian-red.log, intended assertion missing native Jacobian
+numeric_gate: jacobian-green.log 12 passed; numeric-expanded.log 16 passed, no skips
+expanded_gate: arbitrary dense joint axes, reversed joint order, readonly strided limits, signed zero, small-angle/pi residual branches, invalid shape guards
+exploratory_median_ms: 268.73497925, 3 samples/fixture; excluded from formal acceptance
+full_output_gate: exact four real fixture documents to e1030ccf and original characterization
+decision: KEEP for fresh installed verification
+next_experiment: EXP-017
+```
+
+## CP-012 / EXP-017 — private build and installed gates
+
+```yaml
+checkpoint_id: CP-012
+last_valid_experiment: EXP-016
+native_goal_status: active
+confirmed_conclusions: FK prefix reuse and Cython FK/residual/Jacobian preserve exact tested results; exploratory aggregate ~269 ms
+current_worktree: task codex branch at e1030ccf; eight scoped product/test/task-document paths dirty
+owned_processes: all exploratory compilers and timing processes completed
+preserved_processes: existing tmux sessions untouched; no simulation launched
+next_command: build private package from e1030ccf standalone clone plus scoped current files
+```
+
+```yaml
+experiment_id: EXP-017
+status: PLANNED
+prior_experiment: EXP-016
+hypothesis: normal package build loads the same compiled kernel without Cython in shared runtime
+single_variable: source prototype -> task-private normal colcon install
+lifecycle: FULL_RESTART
+source_commit: e1030ccf plus six scoped product/test files
+install_overlay: native50/build/install
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A, no ROS nodes created
+gz_partition: N/A, no simulation
+success_criteria: native extension present and loaded from task install, exact source hashes, targeted and full ordinary xdist8 gate
+invalid_criteria: shared venv mutation, stale installed binary, source drift or different interpreter
+next_experiment: EXP-018 expanded solver trace equivalence and formal A/B
+```
+
+## EXP-017 result / EXP-018 solver trace differential
+
+```yaml
+experiment_id: EXP-017
+status: VALID
+build_exit: 0
+build: native50/build/build.log and build.exit; normal colcon build, generated C, no Cython in runtime
+install: native50/build/install/so101_demo_py
+provenance: native50/tests/preflight.json; compiled extension and Python kernel load from task prefix; source hash exact
+unit_gate: native50/tests/targeted.xml and targeted.log
+package_gate: native50/tests/results/so101_demo_py/pytest.xml, xdist8, 3947 tests, 0 failures, 0 errors, 3916 passed, 31 skipped
+scratch: native50/tests/scratch-identity.json; all eight worker tempfile proofs retained
+next_experiment: EXP-018
+```
+
+```yaml
+experiment_id: EXP-018
+status: PLANNED
+prior_experiment: EXP-017
+hypothesis: full solve iterations preserve exact normal equation inputs/steps and outcomes beyond four acceptance fixtures
+single_variable: frozen e1030ccf solver vs newly installed native solver
+lifecycle: FULL_RESTART
+source_commit: e1030ccf vs scoped installed implementation, native50/source-hashes.json
+install_overlay: native50/build/install/so101_demo_py
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A
+gz_partition: N/A
+input: native50/solver-diff/inputs.json generated once from frozen baseline; random targets/seeds, joint limits, signed zero, exact/nextafter position and orientation gates, integer target, invalid and nonfinite seeds
+success_criteria: exact per-case output and all linear solve lhs/rhs/step byte hashes and lossless npz arrays
+profiling: independent instrumented process, excluded from formal timing
+next_experiment: EXP-019 installed formal interleaved A/B
+```
+
+## EXP-018 result / EXP-017 metadata follow-up
+
+```yaml
+experiment_id: EXP-018
+status: VALID
+cases: 64
+updates: 6043
+outcome_gate: exact solutions in float.hex and exact exception type/args
+trace_gate: all normal-equation lhs/rhs and raw solve steps bit-identical, lossless per-case arrays also byte-identical
+inputs_sha256: c8e6946670fab0dc0b4b3d39d457deffdb91e81dbba97ceb2ae3a906eefecac0
+evidence: native50/solver-diff/comparison.json, baseline/optimized .json/.npz/.meta.json
+next_experiment: EXP-019
+```
+
+```yaml
+experiment_id: EXP-017-M1
+status: PLANNED
+prior_experiment: EXP-017
+single_variable: restore imported fork release main metadata in task-owned new submodule clone only
+reason: initial gate gained one skip because clone of detached fork copied origin/main but no local main ref
+ref: refs/remotes/origin/main = 738e304551b4ea6db020b466086a13db71b65607, same exact local main in retained original build fork
+head_preserved: 5a590b22770b270b71ba6a1c3443d4e67edc7f4b
+source_and_install_changes: NONE
+full_gate: repeat complete xdist8 gate in native50/tests-final; earlier native50/tests and its scratch retained
+next_experiment: EXP-019 formal A/B
+```
+
+## EXP-019 — formal installed A/B
+
+```yaml
+experiment_id: EXP-019
+status: PLANNED
+prior_experiment: EXP-018
+hypothesis: new installed kernel reduces frozen-suite compute median by at least 50% against e1030ccf
+single_variable: baseline archive vs task-private installed compiled kernel
+lifecycle: FULL_RESTART
+source_commit: e1030ccf vs native50/source-hashes.json
+install_overlay: native50/build/install/so101_demo_py via installed-harness links
+runtime_executable: /opt/ros/jazzy/.venv/bin/python, unchanged NumPy 2.4.6/Accelerate
+ros_domain_id: N/A
+gz_partition: N/A
+command: native50/final/run-ab.py, invokes unchanged original harness
+protocol: native50/protocol-v2.json, SHA256 ed2f3e8ca0776be7dea8d2e277e1fc56c5f9f5ae7043d5d2b303c03efc98f810
+order: B0,O0,O1,B1,B2,O2; 3 fresh processes per variant, 1 warmup and 5 measured calls per fixture per process
+budget: one compute worker; VECLIB/OMP/OPENBLAS/MKL all1; tests/profiling/compiler processes must have exited
+success_criteria: 15 samples/fixture/variant, aggregate median ratio <=0.50; all full outputs exact, all original source/input/runtime hashes preserved
+invalid_criteria: changed source or input, profiling overlap, source rather than installed optimized artifact, changed thread budget
+next_experiment: separate final profiling and inline review
+```
+
+## EXP-017-M1 result / EXP-019 result
+
+```yaml
+experiment_id: EXP-017-M1
+status: VALID
+source_changes: NONE
+package_gate: native50/tests-final, 3917 passed, 30 skipped, 3947 executed, no errors/failures, xdist8, 33.17 s
+skip_gate: same 30 skip identities as original accepted package gate; restored source-clone ref metadata only
+next_experiment: EXP-019
+```
+
+```yaml
+experiment_id: EXP-019
+status: VALID
+median_ms: baseline 576.89173975, optimized 277.768021
+primary_ratio: 0.48149072323409003
+reduction_pct: 51.850927676590996
+full_output_gate: exact all four outputs in all six processes and every measured call
+source_version: retained v3 kernel, native50/source-hashes-v3.json, original native50/build/source/install and final/ batch retained
+decision: accepted performance result for v3; final delivery requires compatibility follow-up discovered in inline review
+next_experiment: EXP-020
+```
+
+## EXP-020 — compatibility review correction and final source
+
+```yaml
+experiment_id: EXP-020
+status: RUNNING
+prior_experiment: EXP-019
+discovery: inline review reproduced nonunique coordinate/chain layout and subclass FK regressions in accelerated path
+red: native50/nonunique-red.log, two actual finite-difference failures; native50/subclass-red.log, custom FK model not honored
+single_variable: accelerated prefix path restricted to exact built-in solver with unique independently named moving coordinates; all other layouts/subclasses use original per-coordinate FK
+lifecycle: FULL_RESTART
+source_commit: e1030ccf plus current scope in native50/source-hashes.json
+install_overlay: native50/build-v4/install
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A
+gz_partition: N/A
+scope: compatibility fallback only; Cython kernel unchanged; ordinary built-in native hot path unchanged
+preservation: prior build/source/install, tests, source-hashes-v3 and formal samples retained; new standalone source clone has independent copied .git metadata
+success_criteria: new regression tests pass, fresh normal build/native provenance, complete ordinary xdist8, 64 solver trace outcomes identical; fresh full interleaved A/B ratio <=0.50
+next_experiment: EXP-021 separate profiling and final review
+```
+
+## EXP-020 environment correction
+
+```yaml
+initial_v4_targeted_gate: 52 passed, no skips/failures; duplicate layouts and subclass behavior pass
+initial_v4_full_gate: native50/tests-v4, 3919 passed, 30 skipped, 1 failure in source asset symlink closure
+classification: INVALID runner/source-clone preparation; copytree without symlinks=True expanded tracked source links
+source_fix: recreate original symlinks from retained original clone; expanded copies moved to native50/build-v4/dereferenced-link-copies, none deleted
+receipt: native50/build-v4/source-link-restoration.json
+product_source_and_installed_bytes: unchanged; six source-hashes and compiled artifact identical
+new_full_gate: native50/tests-v4-final, full ordinary xdist8; do not hide source assertion or reduce scope
+formal_timing: final-v4 uses installed artifact; all compiler/test/instrumentation processes exited before timing; source-link restoration performed only after final-v4 timing completed
+next_experiment: complete fresh full gate, then profile and review
+```
+
+## EXP-021 — final separate profile and workload counters
+
+```yaml
+experiment_id: EXP-021
+status: PLANNED
+prior_experiment: EXP-020
+single_variable: separate instrumentation only, no source changes
+lifecycle: FULL_RESTART
+source_commit: e1030ccf plus native50/source-hashes.json
+install_overlay: native50/build-v4/install/so101_demo_py
+runtime_executable: /opt/ros/jazzy/.venv/bin/python
+ros_domain_id: N/A
+gz_partition: N/A
+preconditions: formal A/B and complete package tests exited
+command: unchanged original harness --mode profile; native50/counters.py on baseline and final installed-harness-v4; cold-import.py 3 interleaved pairs
+success_criteria: exact complete outputs, 1361 requests/781 bottom solves/580 hits, original iterations and 200 failed iterations, unchanged receipt/path-sample work; retained profile and startup costs
+operation_counts: derived rotation/product counts from measured FK/prefix calls and explicit unchanged loops, labeled derived rather than hardware instruction counters
+timing_rule: all instrumented stage times overlap and do not enter primary median
+next_experiment: inline review, retention inventory and goal completion
+```
+
+## EXP-020 / EXP-021 final results
+
+```yaml
+experiment_id: EXP-020
+status: VALID
+final_build: native50/build-v4, normal colcon, source Cython dependency absent in fixed runtime
+source_fingerprints: native50/source-hashes.json and final-v4/source-hashes-used.json, unchanged through formal measurement and tests
+targeted_gate: native50/tests-v4/targeted.xml, 52 passed
+ordinary_package_gate: native50/tests-v4-final/results/so101_demo_py/pytest.xml, 3920 passed, 30 skipped, 3950 tests, 0 errors/failures, xdist8, 32.89 s
+worker_proofs: native50/tests-v4-final/worker-proofs.json, all eight fixed-runtime workers use registered short scratch
+formal_summary: native50/final-v4/summary.json
+aggregate_median_ms: 581.14852075 -> 279.88808325
+aggregate_p95_ms: 585.26275205 -> 285.5386499
+primary_ratio: 0.48161196881098667
+reduction_pct: 51.83880311890133
+output_equivalence: exact all four full output docs across six fresh processes and every warmup/measured call
+solver_trace: 64 cases / 6043 updates, exact solution/error outcomes and all lossless linear-system inputs/raw steps
+decision: KEEP, goal acceptance achieved
+next_experiment: EXP-021
+```
+
+```yaml
+experiment_id: EXP-021
+status: VALID
+profile: native50/final-v4/profile/prepare.prof, 5.50M calls in 1.840 s; instrumented only
+counter_comparison: native50/final-v4/counter-comparison.json
+requests: 1361 -> 1361
+bottom_solves: 781 -> 781
+solve_cache_hits: 580 -> 580
+iterations: 19268 -> 19268
+failed_bottom_solves: 79 -> 79, all 200 iterations preserved
+logical_fk_outputs: 121669 -> 121669
+residuals: 112098 -> 112098
+path_metrics: 1242 -> 1242
+path_sample_points: 11178 -> 11178
+moving_rotation_constructions_derived: 608345 -> 237025
+matrix_products_derived: 1460028 -> 903048
+native_jacobian_batches: 18566
+startup: fresh-process kernel import including NumPy, median 27.891 ms baseline / 28.393 ms optimized; no runtime JIT
+invalid_runner: first counters command omitted --mode measure; frozen fixture overwrite guard stopped execution, no fixture changed; corrected command/log retained
+generated_source_proof: native50/review/generated-source-proof.json, byte-identical regeneration with isolated Cython 3.3.0
+stage_timing_note: inclusive instrumentation times overlap and do not enter formal latency acceptance
+next_experiment: NONE
+```
+
+## CP-013 — goal achieved, publication authorized
+
+```yaml
+checkpoint_id: CP-013
+last_valid_experiment: EXP-021
+native_goal_status: active, all compute/differential/build/test gates achieved, completing evidence and publication
+execution: mac-mini gpt-6.1-sol/xhigh, inline self review; no agents/dst/GPU/ai-station/simulation
+scope: four product/build files, two test files, two task documents
+publication_authorization: earlier user instructions "commit & push" and "push到 Gitee 当前branch" persist; current task codex branch only, standard Git, no PR/merge/force
+source_changes_after_validation: NONE; only task docs/evidence updated
+retained: entire registered evidence root, including all exploratory/invalid/failed attempts, source copies and lossless traces
+archived: NONE
+deleted: NONE
+deletion_candidates: task-owned build/temp and package scratch; receipt to native50/review/retention.json
+next_command: final review/artifact verification, scoped commit/push current branch, native goal complete
 ```

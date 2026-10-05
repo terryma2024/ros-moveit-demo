@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import Extension, find_packages, setup
 from setuptools.command.install import install as _install
 
 
@@ -62,6 +62,15 @@ setup(
     packages=[python_package]
     + [f"{python_package}.{subpackage}" for subpackage in subpackages],
     package_dir={python_package: "src"},
+    ext_modules=[Extension(
+        f"{python_package}.control.moveit._ik_numeric",
+        ["src/control/moveit/_ik_numeric.c"],
+        extra_compile_args=[
+            "-O3", "-fno-fast-math", "-ffp-contract=off",
+            "-fno-builtin-sin", "-fno-builtin-cos",
+        ],
+    )],
+    package_data={f"{python_package}.control.moveit": ["_ik_numeric.pyx"]},
     data_files=[
         (
             "share/ament_index/resource_index/packages",
@@ -76,7 +85,7 @@ setup(
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
     install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
-    zip_safe=True,
+    zip_safe=False,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",

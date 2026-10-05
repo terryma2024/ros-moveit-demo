@@ -76,35 +76,38 @@ def test_solve_reuses_gate_fk(monkeypatch) -> None:
     seed = (0.0,) * 5
     target = solver.forward(seed)
     calls = 0
-    real_matrix = solver._matrix
+    real_matrix = solver._matrix_with_prefixes
 
     def counted(*args):
         nonlocal calls
         calls += 1
         return real_matrix(*args)
 
-    monkeypatch.setattr(solver, "_matrix", counted)
+    monkeypatch.setattr(solver, "_matrix_with_prefixes", counted)
     assert solver.solve(target, seed) == seed
     assert calls == 1
 
 
 def test_failed_solve_preserves_all_finite_difference_iterations(monkeypatch) -> None:
+    import numpy as np
     from so101_demo.control.moveit.underactuated_ik import UnderactuatedIkError
 
     solver = UnderactuatedPoseIk.from_urdf(URDF, JOINTS, "world", "so101_tcp")
     calls = 0
-    real_matrix = solver._matrix
+    real_solve = np.linalg.solve
 
     def counted(*args):
         nonlocal calls
         calls += 1
-        return real_matrix(*args)
+        assert args[0].shape == (5, 5)
+        assert args[1].shape == (5,)
+        return real_solve(*args)
 
-    monkeypatch.setattr(solver, "_matrix", counted)
+    monkeypatch.setattr(np.linalg, "solve", counted)
     with pytest.raises(UnderactuatedIkError, match="DYNAMIC_IK_RESIDUAL_EXCEEDED"):
         solver.solve(PoseEvidence((1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 1.0)), (0.0,) * 5)
-    # 200 original iterations: one base FK plus five finite differences, then final failure FK.
-    assert calls == 1201
+    # Every failed iteration still computes the full five-column update.
+    assert calls == 200
 
 
 def test_precomputed_fk_matches_uncached_urdf_chain_for_finite_inputs() -> None:

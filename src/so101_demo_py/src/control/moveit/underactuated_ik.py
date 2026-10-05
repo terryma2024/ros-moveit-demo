@@ -11,6 +11,13 @@ import numpy as np
 
 from ...ports.evidence import PoseEvidence
 
+try:
+    from ._ik_numeric import NumericKernel
+except ModuleNotFoundError as error:
+    if error.name != __package__ + "._ik_numeric":
+        raise
+    NumericKernel = None
+
 
 class UnderactuatedIkError(RuntimeError):
     pass
@@ -157,6 +164,17 @@ class UnderactuatedPoseIk:
         self._identity3 = np.eye(3)
         self._identity4 = np.eye(4)
         self._axis_terms: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+        # Prefix reuse assumes one independently named coordinate per moving joint.
+        # Other layouts and subclasses retain the original overridable FK path.
+        self._shared_fk = (
+            type(self) is UnderactuatedPoseIk
+            and len(set(joint_names)) == len(joint_names)
+            and sum(joint.kind != "fixed" for joint in chain) == len(joint_names)
+        )
+        self._joint_tails = {
+            joint.name: chain[index + 1:]
+            for index, joint in enumerate(chain) if joint.kind != "fixed"
+        }
         for joint in chain:
             if joint.kind != "fixed":
                 vector = np.asarray(joint.axis, dtype=float)
@@ -164,6 +182,13 @@ class UnderactuatedPoseIk:
                 x, y, z = vector
                 cross = np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
                 self._axis_terms[joint.name] = (cross, cross @ cross)
+        indices = {name: index for index, name in enumerate(joint_names)}
+        self._numeric = None if NumericKernel is None or not self._shared_fk else NumericKernel(
+            tuple(joint.origin for joint in chain),
+            tuple(-1 if joint.kind == "fixed" else indices[joint.name] for joint in chain),
+            tuple(self._axis_terms[name][0] for name in joint_names),
+            tuple(self._axis_terms[name][1] for name in joint_names),
+        )
 
     @classmethod
     def from_urdf(
@@ -231,6 +256,51 @@ class UnderactuatedPoseIk:
     def forward(self, positions: tuple[float, ...] | np.ndarray) -> PoseEvidence:
         return self._pose_from_matrix(self._matrix(positions))
 
+    def _motion(self, name: str, angle: float) -> np.ndarray:
+        cross, square = self._axis_terms[name]
+        motion = self._identity4.copy()
+        motion[:3, :3] = (
+            self._identity3 + math.sin(angle) * cross + (1.0 - math.cos(angle)) * square
+        )
+        return motion
+
+    def _matrix_with_prefixes(self, positions: np.ndarray):
+        """Retain exact left-to-right prefixes for the five independent perturbations."""
+        if self._numeric is not None:
+            return self._numeric.matrix_with_prefixes(positions)
+        if not self._shared_fk:
+            return self._matrix(positions), None, None
+        values = dict(zip(self._joint_names, positions, strict=True))
+        result = self._identity4.copy()
+        prefixes = {}
+        motions = {}
+        for joint in self._chain:
+            result = result @ joint.origin
+            if joint.kind != "fixed":
+                prefixes[joint.name] = result
+                motion = self._motion(joint.name, values[joint.name])
+                motions[joint.name] = motion
+                result = result @ motion
+        return result, prefixes, motions
+
+    def _perturbed_matrices(self, positions, epsilon, prefixes, motions):
+        if self._numeric is not None:
+            yield from self._numeric.perturbed_matrices(positions, epsilon, prefixes, motions)
+            return
+        if prefixes is None:
+            for index in range(len(positions)):
+                candidate = positions.copy()
+                candidate[index] += epsilon
+                yield self._matrix(candidate)
+            return
+        for name, angle in zip(self._joint_names, positions, strict=True):
+            result = prefixes[name] @ self._motion(name, angle + epsilon)
+            for joint in self._joint_tails[name]:
+                result = result @ joint.origin
+                if joint.kind != "fixed":
+                    result = result @ motions[joint.name]
+            yield result
+
     @staticmethod
     def _pose_from_matrix(matrix: np.ndarray) -> PoseEvidence:
         return PoseEvidence(
@@ -281,23 +351,31 @@ class UnderactuatedPoseIk:
         epsilon = 1e-5
         target_position = np.asarray(target.position_m)
         target_rotation = _quaternion_matrix(target.orientation_xyzw)
+        residual_from_matrix = self._residual_from_matrix
+        native_residual = self._numeric is not None and target_position.dtype == np.float64
+        if native_residual:
+            residual_from_matrix = self._numeric.residual
         for _ in range(200):
-            matrix = self._matrix(positions)
-            residual = self._residual_from_matrix(matrix, target_position, target_rotation)
+            matrix, prefixes, motions = self._matrix_with_prefixes(positions)
+            residual = residual_from_matrix(matrix, target_position, target_rotation)
             actual = self._pose_from_matrix(matrix)
             if (
                 math.dist(actual.position_m, target.position_m) <= position_tolerance_m
                 and self.orientation_error_rad(actual, target) <= orientation_tolerance_rad
             ):
                 return tuple(float(item) for item in positions)
-            jacobian = np.empty((6, len(positions)))
-            for index in range(len(positions)):
-                candidate = positions.copy()
-                candidate[index] += epsilon
-                candidate_residual = self._residual_from_matrix(
-                    self._matrix(candidate), target_position, target_rotation
+            candidate_matrices = self._perturbed_matrices(positions, epsilon, prefixes, motions)
+            if native_residual:
+                jacobian = self._numeric.jacobian(
+                    list(candidate_matrices), target_position, target_rotation, residual, epsilon
                 )
-                jacobian[:, index] = (candidate_residual - residual) / epsilon
+            else:
+                jacobian = np.empty((6, len(positions)))
+                for index, candidate_matrix in enumerate(candidate_matrices):
+                    candidate_residual = residual_from_matrix(
+                        candidate_matrix, target_position, target_rotation
+                    )
+                    jacobian[:, index] = (candidate_residual - residual) / epsilon
             damping = 1e-5
             step = -np.linalg.solve(
                 jacobian.T @ jacobian + damping * np.eye(len(positions)),
