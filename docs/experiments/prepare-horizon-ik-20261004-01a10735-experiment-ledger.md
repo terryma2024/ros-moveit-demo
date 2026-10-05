@@ -44,8 +44,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-017
-next_experiment: NONE; current-branch publication
+latest_checkpoint: CP-018
+next_experiment: NONE
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -1734,4 +1734,24 @@ retained:sole registered evidence root including loop50
 archived:NONE
 deletion_candidates:private builds/prototypes/duplicate remote staging and registered test scratch; no authorization to delete
 next_command:scoped commit and standard git push origin current codex branch; verify remote hash then mark goal complete
+```
+
+
+## CP-018 — current Gitee branch published
+
+```yaml
+checkpoint_id:CP-018
+last_valid_experiment:EXP-032
+product_commit:204ff2e0857bbf538747a976b73b48650ff04069
+publication:normal git push origin codex/prepare-horizon-ik-20261004-01a10735 exit0; git ls-remote matches product commit
+final_commit_metadata:registered root loop50/publish.json (includes documentation closeout commit)
+source_after_validation:all5final scoped source/test hashes unchanged; documentation closeout only
+native_goal_final_status:registered root loop50/goal-final.json
+owned_processes:NONE
+retained:all prior runs and loop50 in sole registered root
+archived:NONE
+deleted:NONE
+deletion_candidates:registered scratch and private build/prototype/duplicate staging entries in loop50/review/retention.json; authorization required
+open_hypotheses:NONE
+next_command:NONE; final remote hash and native goal status are recorded in immutable delivery metadata
 ```

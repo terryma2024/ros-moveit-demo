@@ -72,9 +72,9 @@ assert hasattr(solver._numeric, "solve"), "native solve loop is missing"
 - [x] Formal isolated ai-station B/O run using original unchanged timer, balanced order, 15 samples per fixture/variant. Verify outputs, single-thread affinity, sibling idle, zero migrations and restoration.
 - [x] Ratio0.3948036895 <=0.50 and median207.5054745ms <=259.632309ms; no further optimization required for this goal.
 - [x] Inline review compatibility, source/install provenance, generated C reproduction, scoped diff and retention inventory.
-- [ ] Publish current Gitee branch under persistent user authorization after required gates pass.
+- [x] Publish current Gitee branch under persistent user authorization after required gates pass.
 - [x] Update ledger/checkpoint and report retained/archived/deletion candidates.
-- [ ] Mark native goal complete after publication; all measured objective gates achieved.
+- [x] Complete goal delivery after publication; measured, correctness, installed and retention gates achieved. Final native goal status is recorded in loop50/goal-final.json.
 
 ## Final result and execution notes
 
