@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: second-round fixed-fixture prepare_horizon compute median latency <= 0.50 e1030ccf baseline
+goal: ai-station before/after fixed-fixture comparison on one isolated physical P core
 success_contract: unchanged search, scoring, gates and receipts; equivalence and package gates
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence native50/review/publish.json
+current_commit: see evidence ai-station/publish.json
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -24,7 +24,7 @@ confirmed_conclusions:
 disproven_routes:
   - EXP-014 handwritten sequential 4x4 product has float drift; original NumPy @ retained
 open_hypotheses:
-  - NONE; second-round acceptance achieved
+  - NONE; Mac acceptance and isolated ai-station comparison achieved
 final_confirmed_conclusions:
   - aggregate ratio 0.2727275234730253 <= 0.30
   - exact fixture outputs and complete xdist8 ordinary package gate passed
@@ -33,18 +33,25 @@ second_round_confirmed_conclusions:
   - EXP-020 installed aggregate ratio 0.48161196881098667 <=0.50, exact outputs and 64-case lossless trace equivalence
   - EXP-020 full ordinary xdist8 gate 3920 passed, 30 skipped, 0 errors/failures
   - EXP-021 workload unchanged, shared prefixes and compiled scalar loops reduce repeated work
-latest_checkpoint: CP-013
+ai_station_confirmed_conclusions:
+  - EXP-023 native ratio0.46745505113034813, median1110.83325925 ->519.264618ms, reduction53.25449488696519%
+  - EXP-023 cumulative original ratio0.13214663949466043, reduction86.78533605053396%
+  - EXP-023 all Linux complete outputs exact; CPU14 only, isolated physical P core7 with SMT15 reserved idle, no migrations
+  - CPU masks/governor and existing remote checkouts/submodules unchanged after measurement; complete evidence copy hashes verified
+latest_checkpoint: CP-015
 next_experiment: NONE
 retained: all evidence in registered root
 archived: NONE
-deletion_candidates: registered scratch listed in review/final-retention.json and native50/review/retention.json; none deleted
+deletion_candidates: registered scratch listed in review/final-retention.json, native50/review/retention.json and ai-station/retention.json; none deleted
 ```
 
 ## Scope and authorization
 
 Mac/source baseline only; no equivalence claim about ai-station dirty sources.
-CPU-only, inline self review, no implementation agent or dst. No ai-station access,
-stack launch, merge, evidence deletion, or shared dependency changes authorized.
+CPU-only, inline self review, no implementation agent or dst. During the initial
+Mac optimization, ai-station access was outside scope. The current user request
+authorizes SSH benchmark execution and temporary P-core isolation on ai-station.
+Stack launch, merge, evidence deletion and shared dependency changes remain outside scope.
 The user explicitly authorized commit and push to the current Gitee task branch;
 that authorization applies to this completed second optimization round.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
@@ -1222,4 +1229,155 @@ archived: NONE
 deleted: NONE
 deletion_candidates: task-owned build/temp and package scratch; receipt to native50/review/retention.json
 next_command: final review/artifact verification, scoped commit/push current branch, native goal complete
+```
+
+## CP-014 — ai-station comparison authorized
+
+```yaml
+checkpoint_id: CP-014
+last_valid_experiment: EXP-021
+native_goal_status: complete; published 2966203300af093b7aa7235daf02261c91814a73
+authorization: user requests before/after benchmark on ai-station using one isolated P core
+execution: current mac-mini Codex orchestrates SSH batch commands; no delegated agent
+current_commit: 2966203300af093b7aa7235daf02261c91814a73
+working_tree_status: task ledger only modified for this benchmark
+owned_processes: NONE before benchmark staging
+preserved_processes: existing remote claude tmux; all remote checkouts and shared environments
+confirmed_conclusions: EXP-020/021 Mac compute gates remain valid; do not infer Linux latency
+disproven_routes: handwritten matrix product has float drift; excluded
+open_risks: Linux output equivalence, native artifact provenance and temporary CPU partition validity
+next_command: freeze EXP-022 protocol, stage exact commit archives and build isolated Linux artifacts
+```
+
+## EXP-022 — isolated ai-station P-core before/after comparison
+
+```yaml
+experiment_id: EXP-022
+status: PLANNED
+prior_experiment: EXP-020
+hypothesis: exact prefix/native optimization reduces full prepare_horizon compute latency on Linux Intel P core
+prediction: same-platform complete outputs match; new measurement distinguishes platform-specific performance from Mac results
+single_variable: frozen source version; original 7a62d8e8, second-round baseline e1030ccf, optimized 296620330
+lifecycle: FULL_RESTART
+preconditions:
+  - ai-station i9-13900HX verified; CPU14/15 are SMT siblings on physical P core7
+  - task-owned cgroup v2 isolated partition reserves 14-15, benchmark affinity is exactly 14, sibling15 unused
+  - all other cgroups exclude 14-15; partition state read before/after every process
+  - exact /usr/bin/python3 3.12.3 and system NumPy 1.26.4 shared by all variants; BLAS/OMP threads1
+  - fresh private normal installs built from archived exact commits; no existing checkout or shared install changes
+success_criteria: all nine fresh processes exit0; complete output equality within and between Linux variants; valid CPU isolation and native provenance; report median/p95 and raw samples without assuming Linux50% result
+failure_criteria: valid measured latency improvement below desired magnitude, or behavior mismatch
+invalid_criteria: wrong source/module, CPU partition invalid, affinity drift, extra compute threads, missing raw evidence
+provenance:
+  source_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0 / e1030ccf474f02105fdb62db19568255b1fce289 / 2966203300af093b7aa7235daf02261c91814a73
+  install_overlay: task-owned remote NVMe execution staging; exact paths in ai-station/protocol.json
+  runtime_executable: /usr/bin/python3
+  ros_domain_id: N/A; pure compute, no nodes launched
+  gz_partition: N/A; no simulation
+commands: exact staging/build/controller commands retained under evidence ai-station
+observed: read-only preflight confirms boot CPU isolation absent, root cpuset controller enabled, noninteractive sudo available
+inferred: cgroup isolated partition can reserve both SMT threads without reboot or modifying existing service configuration
+conclusion: PENDING
+evidence: existing sole root ai-station/ phase; remote directory is transient execution staging, canonical artifacts copied back with hashes
+decision: PENDING
+next_experiment: NONE
+```
+
+## EXP-022 invalid startup / EXP-023 correction
+
+```yaml
+experiment_id: EXP-022
+status: INVALID
+first_bad_boundary: enter-exec.py sched_setaffinity before moving into task cgroup; Errno22 because outside partition already excludes14-15
+timed_samples: 0; NumPy and original timer had not started
+isolation_gate: cgroup isolated state and outside masks were correct
+restoration: before/after cpuset state identical; restored true
+evidence: ai-station/attempt-01, full failed controls/protocol/logs
+decision: REPEAT using new experiment id
+next_experiment: EXP-023
+```
+
+```yaml
+experiment_id: EXP-023
+status: PLANNED
+prior_experiment: EXP-022
+single_variable: startup order only; enter owned CPU partition then bind14
+lifecycle: FULL_RESTART
+product_source_and_installs: exact same frozen commits and newly built private Linux artifacts; no rebuild needed
+source_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0 / e1030ccf474f02105fdb62db19568255b1fce289 / 2966203300af093b7aa7235daf02261c91814a73
+install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-p14-01/install/<variant>/so101_demo_py
+runtime_executable: /usr/bin/python3
+ros_domain_id: N/A
+gz_partition: N/A
+protocol: ai-station/protocol-v2.json, original harness/fixtures, same nine-process balanced order, results-02 and new cgroup p14-02
+criteria: identical to EXP-022; previous invalid attempt excluded; before/after restoration required
+commands: task-owned tmux so101-prepare-ik-p14-02 launches run-controller-02.sh
+observed: PENDING
+conclusion: PENDING
+decision: PENDING
+next_experiment: NONE
+```
+
+## EXP-023 running gate
+
+```yaml
+experiment_id: EXP-023
+status: RUNNING
+preflight: task partition isolated, root/user/system/init effective CPUs0-13,16-31; benchmark PID2210363 affinity14 verified
+first_original_process: actual frozen timer running, no extra compute process
+build: all three normal colcon private installs exit0, optimized native CPython3.12 extension built using generated C
+source_provenance: exact Git archives, unchanged original harness SHA e437b9d0 and frozen fixture SHA
+observed_boundary: original-r0 sample3; not a final latency result
+next_command: wait for all nine independent processes, verify complete outputs/provenance/isolation restoration, stream raw artifacts to sole root
+```
+
+## EXP-023 final isolated P-core results
+
+```yaml
+experiment_id: EXP-023
+status: VALID
+source_commit: original7a62d8e88f4b04fa5f20359649013a16bae909b0 / baselinee1030ccf474f02105fdb62db19568255b1fce289 / optimized2966203300af093b7aa7235daf02261c91814a73
+install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-p14-01/install/<variant>/so101_demo_py
+runtime_executable: /usr/bin/python3, CPython3.12.3, NumPy1.26.4
+ros_domain_id: N/A; no nodes created
+gz_partition: N/A; no simulation
+commands: ai-station/results-02/commands.json, nine fresh processes exit0; controller exit0; analyst exit0
+cpu_contract: i9-13900HX physical P core7; cgroup isolated14-15; all benchmark threads affinity14; SMT15 user/nice/system ticks0 in all9 harness intervals
+proof: nine before/after valid partitions, one computational thread, actualCPU14, se.nr_migrations delta0
+formal_samples: 15 per fixture per variant, 180 timed calls total,36 warmups, balanced independent-process order
+aggregate_median_ms: original3929.4576085 / baseline1110.83325925 / optimized519.264618
+aggregate_p95_ms: original3943.484190875 / baseline1117.6667442 / optimized522.6159465999999
+native_vs_baseline: ratio0.46745505113034813, reduction53.25449488696519%, speedup2.139243115636275
+optimized_vs_original: ratio0.13214663949466043, reduction86.78533605053396%, speedup7.567350965745946
+aggregate_cv: original0.0024774234329242896 / baseline0.0030572519310814337 / optimized0.004833966472832207
+equivalence: all36 saved full output docs exact across Linux variants/processes; all180 timed calls equal own warmup by original harness assertion
+source_gate: all archived source files and symlinks exact; installed299/299/300 Python-source files exact; optimized native artifact loaded
+preserved_checkouts: remote heads57ab6f6c and0fbef114 unchanged, git status and submodules unchanged; shared environments untouched
+cleanup: owned cgroup removed; root/user/system/init masks fully restored0-31; governor unchanged powersave; task tmux naturally exited, old claude preserved
+retention: complete remote staging copied to sole root ai-station/remote-staging;10447 regular files611683632 bytes and150 links checked exactly; invalid EXP-022 retained
+scope: pure real prepare_horizon compute; no full Linux package regression, perception benchmark, live/ROS/physics/GUI acceptance claim
+local_analyzer_ordering: first attempt before scp finished failed on missing restore record; waited copy exit0 and recomputed successfully; no benchmark rerun or sample change
+evidence: ai-station/summary.json, result.md, protocol-v2.json, post-audit.json, transfer-proof.json and raw results-02
+decision: KEEP; same-P-core Linux comparison complete
+next_experiment: NONE
+```
+
+## CP-015 — ai-station benchmark complete
+
+```yaml
+checkpoint_id: CP-015
+last_valid_experiment: EXP-023
+current_hypothesis: NONE
+working_tree_status: only this task ledger modified; product/test source bytes identical to published296620330
+owned_processes: NONE; all benchmark children exited and temporary task tmux ended
+preserved_processes: original remote claude tmux and existing user work; no stack started
+confirmed_conclusions: native optimization achieves53.25% median reduction on same isolated Intel P core; cumulative86.79%; all complete Linux outputs exact
+disproven_routes: pre-partition affinity startup invalid, corrected once and excluded; handwritten matrix arithmetic still excluded
+open_risks: NONE for requested pure-compute benchmark; live/platform package acceptance outside scope
+evidence_root: existing /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735 only; ai-station NVMe directory is execution staging, fully copied back
+retained: all prior and current valid/invalid batches, source/install copies and raw evidence
+archived: NONE
+deleted: NONE
+deletion_candidates: exact paths in ai-station/retention.json; no deletion authorization
+next_command: finalize evidence index and scoped ledger publication using existing commit/push authorization
 ```
