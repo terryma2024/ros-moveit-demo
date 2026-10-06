@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: another >=50% reduction against current native kernel on the same isolated ai-station P core, exact outputs
-success_contract: unchanged search, scoring, gates and receipts; equivalence and package gates
+goal: research frozen QuIK/IKPy against current solver on the same isolated ai-station P core; previous native latency goals achieved
+success_contract: shared geometry/input/gates; measured latency and numerical/task outcomes; complete evidence retention
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence dependency-lock-01/publish.json
+current_commit: see evidence solver-compare-01/publish.json; numerical source remains bb9a9c5a
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -44,7 +44,7 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-019
+latest_checkpoint: CP-020
 next_experiment: NONE
 retained: all evidence in registered root
 archived: NONE
@@ -60,6 +60,10 @@ authorizes SSH benchmark execution and temporary P-core isolation on ai-station.
 Stack launch, merge, evidence deletion and shared dependency changes remain outside scope.
 The user explicitly authorized commit and push to the current Gitee task branch;
 that authorization applies to this continuing task and the completed full-loop optimization round.
+The latest request authorizes isolated research adapters and comparative experiments for
+QuIK and IKPy. It does not authorize replacing the production solver. The research results
+use common acceptance gates and task outcomes, rather than the previous optimization's
+bitwise equivalence contract.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
 Optimization implementation requires explicit approval (AGENTS.md Task model selection
 and brainstorming HARD-GATE); user explicitly approved the presented plan before any optimization code.
@@ -1839,4 +1843,152 @@ owned_processes:NONE; private build and tests exited
 preserved_processes:existing so101-ik-cpu-20261004 tmux and all old checkouts/shared runtime
 open_risks:NONE for dependency-declaration scope
 next_command:authorized current-branch commit/push; record remote equality in delivery metadata
+```
+
+## EXP-034 — QuIK and IKPy isolated comparison setup
+
+```yaml
+experiment_id: EXP-034
+status: PLANNED
+prior_experiment: EXP-033
+user_authorization: research QuIK and IKPy and compare experimentally with the current solver; previous same isolated ai-station P-core requirement and current Gitee branch publication apply
+scope: research prototypes only; no production numerical implementation or dependency changes; no robot or ROS stack execution
+source_commit: bb9a9c5a045410d62d25bd76380ae5401cdee76c
+QuIK_commit: a9ebd1f21dfd3c9f0869140dfb0a4ae5a538cccc
+IKPy_commit: e76c285c06121b2c7c71fc7541a1a9e571b03873
+hypothesis: analytic fixed-size C++ QuIK can reduce solve cost; IKPy offers bounded URDF optimization but its residual and convergence policy differ
+single_variable: solver backend through experimental adapter; shared robot, request data and independent acceptance gates
+lifecycle: FULL_RESTART
+evidence: sole registered root solver-compare-01; remote task-owned staging copied back with integrity inventory
+preconditions: existing installed current native kernel; Python3.12.3 NumPy1.26.4; no shared installs or checkout changes; old processes preserved
+geometry_gate: retained DH conversion and reduced URDF reproduce canonical FK on home, bounds and 2000 frozen random joint vectors before timing
+primary_measurement: identical frozen 64 requests, independent position/orientation/control-margin gates; invalid input cases identified separately
+secondary_measurement: same four frozen prepare_horizon fixtures; retain complete receipts and solver-dependent path/acceptance differences
+CPU_protocol: CPU14 on physical P core7, SMT15 reserved idle, one computational thread, fresh balanced-order processes, cpuset restored in finally
+success_criteria: valid geometry and isolation, raw quality and latency for every backend; failures retained and not converted to accepted solutions
+invalid_criteria: geometry mismatch, wrong loaded source, extra computational threads, migration, shared environment changes or un-restored isolation
+equivalence_claim: foreign algorithms are not expected to be bitwise equivalent; assess common numerical gates and task outcome
+next_experiment: EXP-035 pilot, then frozen formal protocol
+```
+
+## EXP-034 result and EXP-035 pilot
+
+```yaml
+experiment_id: EXP-034
+status: VALID
+model_gate: 2003 frozen vectors including home/control bounds; max_abs QuIK4.3298697960381105e-15 /IKPy1.1102230246251565e-15 <1e-12
+setup_invalid_runs: early copy provenance check; missing iostream in upstream non-self-contained header; two DH common-normal precision failures; all retained, no numerical timing
+corrections: shim include iostream; SVD rank tolerance1e-12 for axes parallel to1e-15; analytic cross-product direction for almost intersecting axes; no robot parameters or gate changed
+foreign_geometry: same retained canonical URDF; exact original chain reduced forIKPy; audited five-row standardDH forQuIK
+dependencies: existing Linux Python3.12.3 NumPy1.26.4 SciPy1.11.4 SymPy1.12 Eigen3 GCC13.3; no installs; IKPy4.1.0 from frozen source; noJAX
+QuIK_options: constructor code differs from README; retain actual defaults and separately explicit recommended damped configuration
+analytics_control: IKPy import HTTP disabled, its daemon joined before process proof/timing; numerical modules unmodified
+next_experiment: EXP-035
+---
+experiment_id: EXP-035
+status: PLANNED
+single_variable: solver backend, five labeled variants; all input data and shared gates unchanged
+lifecycle: FULL_RESTART
+variants: current,quik-default,quik(damped),ikpy,ikpy-weighted
+protocol: solver-compare-01/protocol-pilot-01.json
+CPU: isolated physicalPcore7, CPU14, SMT15 idle; group owned bytask and restored finally
+samples: one64request warmup+one timed repetition; four horizon warmups+one timed repetition
+purpose: adapter contract, deterministic output and runtime sizing; excluded from formal statistics
+success_criteria: all geometry/source/isolation/gate proofs; rejected candidates preserved; process exits0
+invalid_criteria: adapter/runner defect, migration, extra thread or un-restored cpuset
+next_experiment: EXP-036 frozen balanced formal comparison
+```
+
+## EXP-035 pilot result / EXP-036 formal protocol
+
+```yaml
+experiment_id: EXP-035
+status: VALID
+proof: five child processes exited0; CPU14 only; migrations0; SMT15 user/nice/system tick deltas0; original cpuset restored
+finite_request_success: current34/60; QuIK_actual_defaults37/60; QuIK_damped36/60; IKPy38/60; IKPy_weighted42/60
+task_outcome: current and IKPy_weighted complete both p18_home and canonical_home; other variants complete canonical_home only; all reject outer_boundary/unreachable
+interpretation: QuIK early rejection cannot count as same-workload horizon acceleration; IKPy weight adaptation restores the lost supported task but is slower
+evidence: solver-compare-01/pilot-summary.json,pilot-validation.json; complete raw pilot copied back after formal
+next_experiment: EXP-036
+---
+experiment_id: EXP-036
+status: PLANNED
+single_variable: same five solver backends; parameters unchanged from pilot
+lifecycle: FULL_RESTART
+protocol: solver-compare-01/protocol-formal-01.json
+order: five rotating offsets0,2,4,1,3; every variant occupies each of five process positions once
+samples: five fresh processes per variant; one warmup+three timed observations per frozen request and fixture per process
+same_core: isolated CPU14, physicalPcore7, reserved idleSMT15; one computational thread and BLAS/OMP1
+statistics: 15observations per request/fixture, pooled median and linearp95; equal-weight fourfixture suite; failed/successful request latency separated
+quality: same independent finite/control-margin/position/orientation gates; full receipts and selected steps retained; no foreign bitwise equivalence claim
+invalid_criteria: model/source/output drift, extra threads, migrations, SMT activity or un-restored cpuset
+publication: experimental report and ledger only; no production solver replacement
+next_experiment: NONE after complete evidence verification and inline review
+```
+
+## EXP-036 result / EXP-037 first-divergence diagnostic
+
+```yaml
+experiment_id: EXP-036
+status: VALID
+execution: all25freshprocesses exited0; all timed outputs equal own warmups and across five processes
+geometry: 2003FK vectors <1e-12, unchanged fromEXP-034
+isolation: all25before/after proofs one thread CPU14 only, migrationdelta0, SMT15user/nice/system tickdelta0; all cpuset state restored
+canonical_baseline: every current full output document byte-identical to prior EXP-031 Linux formal documents
+fixed64: four input-validation cases reported separately; each of60finite requests15timed observations per variant,900times per variant
+fixed_median_ms: current1.2460615; QuIKdefault0.1477905; QuIKdamped0.1491135; IKPy6.583842; IKPyweighted5.672289
+finite_success: 34/60,37/60,36/60,38/60,42/60 respectively; deliberate adversarial/extrema/far-seed suite, not field reliability
+p18_horizon: current396.029877ms/14steps; bothQuIKvariants andIKPystock fail to complete; IKPyweighted1554.263709ms/14steps
+canonical_horizon_ms: current139.621868; QuIKdefault203.351664; QuIKdamped102.041179; IKPy1130.266684; IKPyweighted1098.609465; all14steps
+quality: foreign solutions/residuals/branches differ; all shared independent gates preserved; no illegal output accepted; early rejection not a valid same-workload speedup
+remote_state: oldtwo checkouts/submodules andclaude tmux unchanged; governor powersave unchanged; task groups removed
+transfer: 647files120925839bytes0symlinks copied and SHA/size checked; later untimed diagnostic recorded separately
+additional_required_gate: explicit perception benchmark_test via colcon xdist8,585total553passed32failed0skip; all32 CONFIG_SHA256_MISMATCH
+gate_root_cause: actual YAML5c8b0046 versus embedded511e0e64; both source and installed files exactly equal original7a62d8e8 frozen baseline; unrelated pre-existing inconsistency, no product edits
+next_experiment: EXP-037
+---
+experiment_id: EXP-037
+status: PLANNED
+purpose: explain lost p18 task at first waypoint using frozen target and all14same seeds
+single_variable: same solver backend; parameters unchanged; no timing claim and no retuning
+lifecycle: FULL_RESTART
+inputs: EXP-036 current-r0 firstMOVE_ABOVE_OBJECT waypoint and QuIKdamped first-segment14seed receipts
+CPU: same isolatedCPU14 physicalPcore7/SMT15 idle; private diagnostic group restored finally
+success_criteria: independent bounds/position/orientation rejection classification with fullrawcandidate retained
+evidence: solver-compare-01/protocol-diagnostic-01.json and complete remote diagnostic copy
+next_experiment: NONE
+```
+
+## EXP-037 result and CP-020 — solver comparison complete
+
+```yaml
+experiment_id: EXP-037
+status: VALID
+first_waypoint_same14seeds: current14accepted; QuIKdefault13; QuIKdamped0; IKPystock0; IKPyweighted14
+first_rejection: QuIKdamped position4.625mm/orientation0.00156rad; IKPystock position4.873mm/orientation0.000822rad; all14inlimit candidates fail2mmpositiongate
+weighted_result: position0.274mm/orientation0.01446rad,14/14accepted; unchanged2mm/0.10rad gates
+default_QuIK: 13first-target accepted andonebounds rejection; full p18fails later; no claim oneparameter repairs allcases
+diagnostic_isolation: oneCPU14thread, migrationdelta0, SMT15tickdelta0; controllerexit0 andcpusetfullyrestored
+numeric_source: unchanged; no QuIK/IKPy production adoption
+final_remote_inventory: 660files121152175bytes0symlinks; complete canonical copy SHA/size verified; earlier formal647file inventory also retained
+topology_clarification: CPU14/SMT15 are P-core ordinal7(eighthPcore); actual Linuxcore_id28, hardware.json; historical Pcore7 label denotes ordinal
+report: docs/experiments/prepare-horizon-ik-quik-ikpy-comparison-20261006.md
+evidence: solver-compare-01/analysis.json,comparison.png,comparison.svg,remote-staging,package-benchmark-gate,retention.json
+review: inline self review; no agents/dst; no unresolved IK evidence/protocol findings
+unresolved_repository_gate: 32pre-existing perception configSHA failures reproduced from unchanged original frozenbaseline; no all-tests-pass claim
+retained: all registered-root pilot/formal/diagnostic/invalid evidence, including existing phases
+archived: NONE
+deleted: NONE
+deletion_candidates: task remote staging, duplicate clones/builds and test/cache scratch; no deletion authorization
+next_experiment: NONE
+---
+checkpoint_id: CP-020
+last_valid_experiment: EXP-037
+current_commit: numericalbb9a9c5a; report/ledger delivery commit in solver-compare-01/publish.json
+confirmed_conclusions: QuIK~0.15ms IK but loses p18; weightedIKPy retains two supported fixtures but3.86x four-fixture suite latency; foreign outputs not bitwise equivalent
+recommendation: keep current production solver; future analytic derivative/bounded native solve work requires separate reviewed plan and outcome/equivalence contract
+working_tree: task ledger andnew comparison audit report only
+owned_processes: NONE; all private benchmark/test/controller processes exited
+preserved_processes: oldcheckouts/submodules,existingclaude tmux; no stack launched; cpusetrestored
+next_command: authorized current Gitee branch commit/push; verify remote HEAD equality
 ```
