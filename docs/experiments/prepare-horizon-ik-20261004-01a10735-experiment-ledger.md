@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: research frozen QuIK/IKPy against current solver on the same isolated ai-station P core; previous native latency goals achieved
-success_contract: shared geometry/input/gates; measured latency and numerical/task outcomes; complete evidence retention
+goal: find a QuIK adaptation that retains latency advantage and existing position/orientation/control-limit/task gates; IKPy excluded by user; native goals previously achieved
+success_contract: approved weight-only QuIK experiment; independent canonical pose/control gates and same isolated CPU14 comparison; complete supported horizons/current-success retention required for adoption, failures retained
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence solver-compare-01/publish.json; numerical source remains bb9a9c5a
+current_commit: see evidence quik-position-01/weighted-01/publish.json; numerical source remains bb9a9c5a
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -24,7 +24,8 @@ confirmed_conclusions:
 disproven_routes:
   - EXP-014 handwritten sequential 4x4 product has float drift; original NumPy @ retained
 open_hypotheses:
-  - NONE; full native loop installed gates and isolated ai-station >=50% goal achieved
+  - weighting first target is confirmed inEXP-039/042; completep18 failure remains, native iteration control next hypothesis
+  - five-joint rank-safe linear algebra and separate pose-tolerance stopping may improve reliability; each variable must be isolated
 final_confirmed_conclusions:
   - aggregate ratio 0.2727275234730253 <= 0.30
   - exact fixture outputs and complete xdist8 ordinary package gate passed
@@ -44,8 +45,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-020
-next_experiment: NONE
+latest_checkpoint: CP-022
+next_experiment: NONE; weight-only trial complete, native bounded iteration and broader QuIK adoption remain unqualified
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -1991,4 +1992,333 @@ working_tree: task ledger andnew comparison audit report only
 owned_processes: NONE; all private benchmark/test/controller processes exited
 preserved_processes: oldcheckouts/submodules,existingclaude tmux; no stack launched; cpusetrestored
 next_command: authorized current Gitee branch commit/push; verify remote HEAD equality
+```
+
+## EXP-038 — QuIK-only phase, unchanged baseline
+
+```yaml
+experiment_id: EXP-038
+status: PLANNED
+prior_experiment: EXP-036 and EXP-037
+hypothesis: the unchanged QuIK/current binary and frozen fixtures remain reproducible in the current ai-station environment after IKPy is excluded from candidacy
+prediction: complete fixed/horizon output documents match EXP-036; latency and isolation are freshly measured, so implementation approval can review a concrete baseline
+single_variable: NONE; exact same current/QuIK configurations; fresh balanced three-backend baseline excluding IKPy
+lifecycle: FULL_RESTART
+preconditions: CP-020 restored; Mac task worktree clean before ledger edit and isolated on codex/ branch; old main/worktrees untouched; no remote stack; existing claude tmux preserved; CPU14 sibling15 verified; no existing isolated cpuset
+success_criteria: original output documents identical; all child commands exit0; one CPU14 thread; zero measured migrations and sibling15 user/nice/system ticks; cgroup fully restored
+failure_criteria: effective solver gates and supported task outcomes may remain poor; expected QuIK failures are retained, not invalidated or counted as speedup
+invalid_criteria: binary/input/provenance mismatch, output drift, extra computational threads, migration, sibling activity or un-restored isolation
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; numerical bb9a9c5a
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-loop50-01/install-v6/so101_demo_py
+  runtime_executable: /usr/bin/python3 on ai-station; exact frozen libquik_compare.so copied to task-owned staging
+  ros_domain_id: N/A, pure computation; no ROS stack
+  gz_partition: N/A, pure computation; no simulator
+commands: original run_compare.py and isolate_and_run.py under protocol-baseline-01.json; exit codes PENDING
+sampling: 3 fresh processes per current/quik-default/quik(damped), each order position once; warmup separate; 3 timed observations per request/fixture,9 per input
+evidence: sole registered root quik-position-01; temporary remote execution staging copied back and hash-verified
+observed: original QuIK SO SHA b4272715f4d01c62ba00dfc24df5621c4ded261c5420e8c964cd64bfb51a2e2f exists; Python3.12.3, CPU14/SMT15, no prior cpuset isolation
+inferred: weight must apply to both error and Jacobian/Halley matrix; 6x6 undamped covariance has rank<=5 and no SPD guarantee
+conclusion: PENDING
+scope: no optimized solver code, no production dependency replacement, no implementation plan execution before approval
+retention: retain all; archive/delete none
+next_experiment: reviewed QuIK adaptation protocol, not yet authorized for implementation
+```
+
+```yaml
+experiment_id: EXP-038
+status: RUNNING
+provenance_verified: all7 harness/input/shim hashes and protocol44680818c85a... match local freeze; original QuIK SO b4272715f4d0... unchanged; no output directory existed before run
+command: ssh -T -o BatchMode=yes ai-station 'sudo -n /usr/bin/python3 /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-quik-position-01/isolate_and_run.py'
+exit_code: PENDING
+```
+
+## EXP-038 result and CP-021 — baseline complete, QuIK adaptation review ready
+
+```yaml
+experiment_id: EXP-038
+status: VALID
+commands: all9 unchanged child processes exit0; isolation controller exit0
+provenance: original QuIK binary and7 harness/input/shim hashes exact; every fixed-output/full-horizon/outcome document byte-identical EXP-036
+isolation: all9 before/after proofs one thread on CPU14, zero measured migrations, zero SMT15 user/nice/system ticks; cpuset fully restored
+preserved: both existing remote checkout HEAD/status/submodule snapshots, claude tmux, powersave governor unchanged
+baseline_IK_median_ms: current1.353919; QuIKdefault0.156998; QuIKdamped0.167873
+baseline_IK_p95_ms: current7.9336798; QuIKdefault0.1967096; QuIKdamped0.2923462
+baseline_supported_horizon_median_ms: currentp18=422.064161/currentcanonical=149.569951; QuIKdampedp18 rejected/QuIKdampedcanonical=120.536319
+quality: current34/60; QuIKdefault37/60 andQuIKdamped36/60 retain only27/34 current successes; p18 lost by both QuIK configs; no valid complete-workload speedup claim
+baseline_samples: nine observations per request/fixture, excluded from future optimization formal acceptance
+first_loss_classification: dampedQuIK finite current-success losses7; six candidates violate bounds, one orientation_gate_below fails position; positive_inf_seed extra contract case also lost
+new_design: weighted native QuIK/Halley; separate staged matrix/metric weighting, damped5x5 solve, per-request pose/control exit,0.2rad step cap, bound-aware iteration; independent canonical FK gates unchanged
+measurement_protocol: final current/originalQuIK/adaptedQuIK six fresh processes each, all6 order permutations,3 measured repetitions per input; quality gating precedes timing and no formal retuning
+native_code: scoped C++ shim/header adaptation in task-owned experimental copies; production source unchanged
+approval_status: PENDING; current user authorized investigation/baseline; AGENTS and initial handoff require concrete-plan confirmation before new implementation
+scope: pure headless computation; ROS_DOMAIN_ID/GZ_PARTITION N/A, no simulator/robot/GUI output
+package_tests: NOT_RUN; no production or benchmark code changed, original research harness byte-identical; prior unrelated32 perception configSHA failures remain retained and unresolved
+evidence: quik-position-01/baseline-analysis.json,review-protocol.json,inline-review.json,remote-staging
+transfer: 127files6455036bytes0symlinks plusinventory copied to sole registered root; every recorded SHA/size verified
+retained: complete baseline/protocol/review records and prior phases
+archived: NONE
+deleted: NONE
+deletion_candidates: remote temporary staging/duplicate original binary only; no deletion authorization
+next_experiment: QuIK adaptation stageA after user approval, not yet started
+---
+checkpoint_id: CP-021
+last_valid_experiment: EXP-038
+current_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f
+confirmed_conclusions: unchanged QuIK speed opportunity reproducible, position and bound failures persist; IKPy excluded by user
+current_hypothesis: weighted native QuIK plus controlled joint updates may retain current successes and reduce successful full-horizon latency
+working_tree_status: task experiment ledger only; original product and benchmark source unchanged
+owned_processes: NONE; controller/children/copyback complete
+preserved_processes: remote existingclaude tmux andoldcheckout state; no stack launched
+open_risks: adapted convergence/limits/supported-horizon latency unmeasured; native implementation not approved yet
+next_command: user review of quik-position-01/review-protocol.json; implementation after explicit approval
+```
+
+## EXP-039 — weighted QuIK first-target RED/GREEN
+
+```yaml
+experiment_id: EXP-039
+status: PLANNED
+prior_experiment: EXP-037,EXP-038
+user_authorization: explicit approval to try QuIK weighting and pass the position gate; inline Codex as originally instructed; IKPy excluded
+scope: stageA only, residual/matrix/progress weighting0.08; no5x5/early-exit/step-cap/bound-policy tuning in this experiment
+hypothesis: weighting the rotational residual and corresponding linear-system rows restores the first p18 target's2mm position gate without changing pose/control thresholds
+prediction: original dampedQuIK fails14/14 frozen seeds for position; weighted variant passes those position gates; raworientation andlimits independently checked
+single_variable: W=diag(1,1,1,0.08,0.08,0.08) metric consistently applied to linear solves and error-progress norm
+lifecycle: FULL_RESTART
+preconditions: CP-021 baseline exact, task worktree has ledger edits only; originalbinary preserved; fresh private weighted-01 source/binary copies; no robot or stack; CPU14/SMT15 available
+success_criteria: explicit real-code RED testexit1 on original position assertion, then GREEN testexit0 on all14 originalseeds with canonical position/orientation/control gates; geometry2003-vector gate unchanged
+failure_criteria: valid weighted outputs still fail original pose orcontrol gates; no threshold widening orpost-solve clipping rescue
+invalid_criteria: wrongbinary/model/import; errors before intendedassertion; migration/extra thread/SMT activity; un-restored cpuset
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; current numericalbb9a9c5a
+  QuIK_commit: a9ebd1f21dfd3c9f0869140dfb0a4ae5a538cccc, original frozen copy preserved
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-loop50-01/install-v6/so101_demo_py
+  runtime_executable: /usr/bin/python3; originallibquik_compare.so and separately builtlibquik_weighted.so
+  ros_domain_id: N/A, purecompute
+  gz_partition: N/A, purecompute
+commands: isolate_position_gate.py/test_first_position_gate.py; PENDING
+observed: original first-target failure reproduced inEXP-037; fresh RED required before weightedcore implementation
+inferred: weights must affect RHS, matrix and progressnorm; raw geometric Jacobian/Hessian remain unchanged
+conclusion: PENDING
+evidence: sole root quik-position-01/weighted-01; original14seed fixture andallcandidate details retained
+next_experiment: EXP-040 fixed/fullhorizon weightedpilot, then frozen formal A/B if outcome validates the speedcomparison
+```
+
+```yaml
+experiment_id: EXP-039
+status: RUNNING
+RED: fresh actualtestexit1,14expectedposition subtestfailures,0errors; all14positions4.624558754..4.624562105mm; orientation andlimits alreadypass; CPU restored
+implementation: only weighted progressnorm andbothmatrix/RHS rows in copied IKSolver.hpp; raw J/hessianProduct unchanged; same200iterations/lambda_squared1e-10/clamps/gradient budgets; originalheader andbinary preserved
+next_command: compile separate weighted SO, same14seed GREEN, no5x5/stop/step/bounds-policy modifications
+```
+
+## EXP-039 result / EXP-040 weighted quality pilot
+
+```yaml
+experiment_id: EXP-039
+status: VALID
+RED: testexit1,14position failures0errors on original dampedQuIK,4.624558754..4.624562105mm
+GREEN: same actualtestexit0,14/14accepted; position0.274384178..0.274384354mm,orientation0.014458829855..0.014458830378rad; allcontrolbounds pass
+geometry: originalandweighted both2003vectors max_abs4.3298697960381105e-15 <1e-12; unchanged URDF73ab5bdd2645...
+weighted_build: GCC13.3 sameflagsO3/ffp-contract=off,no fastmath; exit0; SO74523747023cf4cef7de881a028ac79c6ac7ae964c35bce2a879a02c21fa9a37
+isolation: bothRED/GREEN oneCPU14thread, zero measured migrations/SMT15ticks; cpuset restored
+conclusion: weighting is sufficient to recover the first p18 target's position gate across all14 original seeds; complete horizon and broader success retention not yet established
+next_experiment: EXP-040
+---
+experiment_id: EXP-040
+status: PLANNED
+prior_experiment: EXP-039
+hypothesis: weight-only QuIK also recovers supported completehorizons without requiring step/limit/stop policy changes
+prediction: p18 first divergence removed; all64fixed request and4full horizon outputs classify remaining failures before any formal speedup claim
+single_variable: weighted metric only, originaldamped versusweighted; current native retained asreference
+lifecycle: FULL_RESTART
+preconditions: originalandnewSO/source proven; geometryand14seed testpass; unchangedsearch/limits/tolerance overrides; no external stack
+success_criteria: allcommands exit0, deterministictimed/warmup output; quality independently checked; both supported14step horizons checked; everycurrent-success loss identified
+failure_criteria: valid retained limit/pose/task rejection, report rather than widen thresholds orclip finalsolution
+invalid_criteria: source/output drift, isolation violation, un-restored cpuset
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; numericalbb9a9c5a
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-loop50-01/install-v6/so101_demo_py
+  runtime_executable: /usr/bin/python3 plusseparatefrozen andweightedSO
+  ros_domain_id: N/A
+  gz_partition: N/A
+commands: isolate_and_run.py withprotocol-pilot-01.json,threefreshprocesses,1warmup+1measurement perinput; PENDING
+observed: firsttarget GREEN14/14
+inferred: nativecompiled weightchange addslittlework but remaining far-seed branch/limits maystillfail
+conclusion: PENDING
+evidence: sole root quik-position-01/weighted-01/pilot-01
+next_experiment: frozen formal weight-onlycomparison after inspecting pilot; nocurrentfallback andno furtherkernelretuning
+```
+
+## EXP-040 result / EXP-041 bounded weight grid
+
+```yaml
+experiment_id: EXP-040
+status: VALID
+execution: threefreshprocesses exit0, deterministic outputs; isolationcontroller restoredcpuset
+fixed_quality: weight0.08 accepts37/60; retains30/34 current successes, loses4 for bounds; improves from originaldamped27/34
+horizon: weight0.08 p18 passesMOVE_ABOVE waypoints1..5 butrejectsall15seed calls atwaypoint6; canonical14steps complete; outer/unreachable rejected
+remaining_boundary: current waypoint6 selectedwristq=1.65606 atcontroluppermargin0.002rad; currentposition0.979591mm/ori0.029289rad; weightedq wrist outsidebounds andposition4.97..8.38mm in first/lastdiagnosticrows
+diagnostic_limit: additionalwaypoint6 replay untimed/unpinned, explicitlynot latency or isolation evidence; retained separately
+conclusion: positionweighting fixesfirsttarget but0.08alone doesnot restorefullp18; no successfulp18 accelerationclaim
+next_experiment: EXP-041, two additionalweights frozenbeforemeasurement; allotherQuIK settings unchanged
+---
+experiment_id: EXP-041
+status: PLANNED
+prior_experiment: EXP-040
+hypothesis: smallerorientationweight may find afeasible position/pose compromise atbound-limitedwaypoint6 without changingbound orstep/stopping policy
+prediction: weight0.04 or0.02 mayreduceout-of-limit compromise; fullhorizon andalloriginalgates determine success
+single_variable: orientationresidualweight,0.04 and0.02;0.02 equalsdefaultposition/orientation tolerance ratio0.002/0.10
+lifecycle: FULL_RESTART
+preconditions: same frozeninputs/current/originalbinary, existingweight0.08 sourceandSO kept; template/controlbounds unchanged
+success_criteria: complete14step p18/canonical, acceptedsolutions independent canonicalgates; current-success retention separatelyreported
+failure_criteria: remaininglimit/pose/horizon rejection withcompletecandidates retained; no fallback/rescue
+invalid_criteria: source/determinism/isolation defects
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; numericalbb9a9c5a
+  install_overlay: existing privatev6 currentinstall
+  runtime_executable: /usr/bin/python3, separatelybuilt004/002weightedSOs
+  ros_domain_id: N/A
+  gz_partition: N/A
+commands: build_weight_grid.py thenisolate_and_run.py withprotocol-weight-grid-01.json; PENDING
+observed:0.08 lossboundary providednewdiscriminatingevidence
+inferred: bound-limited unconstrained solution maystill requirebound-awareiterations; thisexperimenttestsonlyweighting
+bounded_loop: three totalweights0.08/0.04/0.02, zero additionalretunes; no stagesB/C/D/E execution
+conclusion: PENDING
+evidence: quik-position-01/weighted-01/weight-grid-01
+next_experiment: finalize weight-onlyfindings andspeedcomparison, preservingremaininglimits
+```
+
+## EXP-041 result / EXP-042 formal characterization
+
+```yaml
+experiment_id: EXP-041
+status: VALID
+execution: bothfreshprocesses exit0, warmup/timed outputs deterministic; cpuset restored
+weight0.04: accepts40/60,retains30/34 current finite successes; fourlosses allbounds
+weight0.02: accepts40/60,retains29/34 current finite successes; fivelosses allbounds
+full_horizon: bothweights passfirstfiveMOVE_ABOVEwaypoints andfailwaypoint6; canonical14stepscomplete; outer/unreachable rejected
+conclusion: bounded weight-onlysearch exhausted; weight0.08 fixesfirsttarget but allthreeweights retainbound-relatedfullp18failure; stopretuning andreport scope truthfully
+next_experiment: EXP-042 characterization only; no broadenedsolverimplementation
+---
+experiment_id: EXP-042
+status: PLANNED
+prior_experiment: EXP-039,EXP-040,EXP-041
+hypothesis: weightednative QuIK retains low solve cost and canonical fullhorizon latency, whilepartialquality canbe separated fromspeed
+prediction: sameweightconfig outputsduring15independentobservations; allweightedp18failures remain failures andnotcounted assuccessfulspeedup
+single_variable: weightedmetricbackend; allthreepilotweights frozen, noformalretuning
+lifecycle: FULL_RESTART
+preconditions: weightsearchclosed; originalbinary unchanged; independentgeometryandRED/GREEN verified; frozen64requests/4fixtures andallgates
+success_criteria: quality/latency characterization evidencecomplete; everytime outputownwarmup andfreshprocesses equal; actualbinary/source pathproven; sameCPU14one thread, zero measuredmigrations/SMTactivity, fullyrestoredcpuset
+failure_criteria: fullp18 andall34success retentionstillfail; thosearevalidcandidatequalificationfailures, notinvalidruns
+invalid_criteria: geometry/source/output/isolation/restoredefect
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; numericalbb9a9c5a
+  install_overlay: existingprivatev6 currentinstall
+  runtime_executable: /usr/bin/python3, frozenoriginalandthreeweightedSOvariants
+  ros_domain_id: N/A
+  gz_partition: N/A
+commands: isolate_and_run.py withfrozenprotocol-formal-01.json;25freshprocesses,5eachvariantx3reps; PENDING
+statistics:15perinput; median/linear-p95; shared-success ratios separately; canonicalcompletehorizon latencyvalid, incompletep18timecannotcountasspeedup
+package_gate: firstMaccolconattempt INVALID beforetestexecution, pytest_rerunfailures bind127.0.0.1 sandboxPermissionError; host-access retry unchangedscope planned, new scratch/results retained
+observed: actualpilotquality above; noreadyproductionreplacement
+inferred: remaining bound-aware solve work distinctfromresidualweighting, wouldrequire next reviewedexperiment
+conclusion: PENDING
+evidence: quik-position-01/weighted-01/formal-01 andpackage gateevidence
+next_experiment: NONE; stageA report afterverification, nofurtherkernelchanges
+```
+
+```yaml
+experiment_id: EXP-042
+status: RUNNING
+frozen_protocol: formal-01 fivevariant rotatingorders0,2,4,1,3; loadedweightedsource/binary hashes captured
+formal_execution:25freshchildren all exit0; controllerexit0, cpusetrestored; completecopyback/proofanalysis PENDING
+final_gate: all4QuIKlibraries2003FKvectorchecks pass; all3weightedvariants14/14 firsttargetgatepass onisolatedCPU14
+firsttarget_position_mm: original4.624559..4.624562; weight0.08=0.274384178..0.274384354;0.04=0.071450761..0.071450799;0.02=0.018050491..0.018050503
+package_gate: hostaccessretry ranactualsuite andhasfailures; counts/rootcause readback PENDING; originalsandboxrun retainedasINVALID
+```
+
+## EXP-043 — remaining waypoint6 boundary, all frozen weights
+
+```yaml
+experiment_id: EXP-043
+status: PLANNED
+prior_experiment: EXP-042
+hypothesis: unchanged weightedvariants' fullp18failure is associated with nativeunconstrained joint updates at a bound-limited target, ratherthan geometry conversion
+prediction: replay actual15failedseeds pervariant fromformal receipts, classify position/orientation/control rejection; currentselectedsolution shows a feasible tolerated pose at wrist upperbound
+single_variable: NONE; diagnostic readback ofsameweights andactualseedbank, untimed
+lifecycle: FULL_RESTART
+preconditions: formalall25 exited0; cpusetrestored; no retuning, no otherkernel modifications
+success_criteria: fullrawcandidates andindependentgate classifications preserved; isolatedCPU14one thread, zero migrations/SMTticks, cpusetrestored
+failure_criteria: expectedvalid pose/limitfailure retained, no rescue
+invalid_criteria: wrongtarget/seed/source, isolation orrestore defects
+provenance:
+  source_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f; numericalbb9a9c5a
+  install_overlay: existingprivatev6currentinstall
+  runtime_executable: /usr/bin/python3 andthethreefrozenweightedSOs
+  ros_domain_id: N/A
+  gz_partition: N/A
+commands: isolate_remaining_diagnostic.py,protocol-remaining-boundary-01.json; PENDING
+observed: allthreepilot/fullmeasurements stop atsamewaypoint6
+inferred: box-constrained iterationmaybenextrequiredmethod, outsidecurrentweight-onlyscope
+conclusion: PENDING
+evidence: quik-position-01/weighted-01/remaining-boundary-01
+next_experiment: NONE; closeauthorizedweight-onlytrial andpublishfindings
+```
+
+## EXP-042 / EXP-043 results and CP-022 — weight-only trial complete
+
+```yaml
+experiment_id: EXP-042
+status: VALID
+execution: 25freshprocesses,5perbackendx3repetitions, allchild/controllerexit0; allcompleteoutputs matchownwarmup andacross5processes
+original_reference: everycurrent/originalQuIK fixed/fullhorizon/outcomedocument byte-identical EXP-036
+isolation: all25proofsone threadCPU14, zeromeasuredmigrations, zeroSMT15user/nice/systemticks; cgroupremoved andoriginalcpusetrestored
+provenance: actualweightedSO andheaderloadedhashes verified; originalQuIK clone/binary andcurrentprivateinstall unchanged
+formal_IK_median_ms: current1.246972,originalQuIK0.148230,w0.08=0.149282,w0.04=0.151538,w0.02=0.150207
+formal_IK_p95_ms: 6.596753,0.252307,0.256537,0.257960,0.254707
+finite_success_retention: current34/60; original36/60_retains27/34;w0.08_37/60_retains30/34;w0.04_40/60_retains30/34;w0.02_40/60_retains29/34
+shared_success_median_per_request_ratio: original0.243425646,w0.08=0.240035891,w0.04=0.242929216,w0.02=0.232350633; commonallbackendmask25requests also retained
+canonical14step_horizon_median_ms: current138.892683,original101.312427,w0.08=102.504456,w0.04=103.308447,w0.02=103.073463
+canonical_p95_ms: current141.9171205,original107.4764385,w0.08=107.4857852,w0.04=109.4356701,w0.02=109.2724792
+p18_quality: current14steps; everyQuIKvariant stillincomplete; allweightedvariants failMOVE_ABOVEwaypoint6; failedreturntimes notsuccessfulspeedup
+selected_steps: everyrecordedselectedstep position<=2mm/ori<=0.10rad/controlmargin>=0.002rad, independentcanonicalFK
+geometry: all4QuIKlibraries2003vectors<1e-12; max4.3298697960381105e-15
+firsttarget: original0/14accepted at4.625mm; w0.08=14/14 at0.274384mm;w0.04=14/14 at0.071451mm;w0.02=14/14 at0.018050mm, raworientationpassesall
+input_contracts: w0.08 recoverspositive_inf_seed aftersamecanonicalclip; w0.04/w0.02stillreject; foreignNaNexception/failurelabels differ, noAPI-equivalenceclaim
+repository_gate: MacfixedPython/colcon/xdist8 benchmark_test 585total553pass32fail0errors0skip;29directCONFIG_SHA mismatch and3secondarydry-runexitfailures, source/confighashes exactoriginal7a62d8e8 frozenbaseline andprivateinstall
+invalid_gate: initialsandboxattempt failedbeforecollection duepytest_rerunfailures localhostsocketbind denied; retainedseparately; hostretryactualsuiteexecuted
+ordinary_package_gate: NOT_RUN becauseproduction source unchanged; no alltests-passclaim
+conclusion: weighting fixesfirsttarget andretainslowQuIK latency, butneithercompletep18 norallcurrent34successes; notqualifiedforproductionreplacement
+next_experiment: EXP-043
+---
+experiment_id: EXP-043
+status: VALID
+execution: diagnosticchild/controllerexit0, oneCPU14thread,0migrations/SMTticks,cpusetrestored
+actual_seed_replay: 15actualwaypoint6failedseeds perweight,allpositionreject; boundsreject8/11/10 forweights0.08/0.04/0.02; noorientationreject
+position_min_mm: 2.544801360/2.515257955/2.631136914; failedrawcandidates includinglargeovershoots retained
+current_feasible_pose: wristq1.65606 atuppercontrolboundary; position0.979591266mm,orientation0.02928937984rad; thisdoesnotproveexact6Dreachability,butprovescurrenttoleratedposeexists
+classification: OBSERVED remainingpositionandsomeboundsfailures; INFERRED unconstrainediteration/stepbehavior important; notconfirmedlimitsaloneexplainallfailures
+scope: no furtherweightretunes, no5x5/step/bound/stopping implementation; originalsolverunchanged
+final_remote_inventory: 455files17274957bytes0symlinks plusinventory; completecanonicalcopy everySHA/sizeverified
+preserved_state: botholdremotecheckouts/submodules,existingclaude tmux,governor unchanged; all7trial/test/formalgroups restored
+report: docs/experiments/prepare-horizon-ik-quik-weighted-20261006.md
+evidence: quik-position-01/weighted-01/analysis.json,weighted-core.patch,remote-staging,package-gates,inline-review-final.json
+retained: alltrial/invalid/formal/diagnostic/build/testevidence
+archived: NONE
+deleted: NONE
+deletion_candidates: taskremote staging,duplicateSOs/sources,packagegate scratch; noauthorization
+next_experiment: NONE; nativebounded-step/tolerance/linear-algebra adaptation needsnextscope review
+---
+checkpoint_id: CP-022
+last_valid_experiment: EXP-043
+current_commit: 867a33e5ab7dc79033ecfe58c162deef0cd77b9f beforedocsdelivery
+confirmed_conclusions: weight-onlyfirstpositiongaterecovered withnearoriginalsolve latency; fullp18 stillfails6thwaypoint andcurrent-successretention incomplete
+current_hypothesis: nativeboundedjointupdates/stepcontrol/tasktoleranceexit may recoverremainingcases whilepreservingCPU speed
+working_tree_status: taskledger andnewweightedexperimentreportonly; productionnumericalsource untouched
+owned_processes: NONE; compile/test/formal/gates/transfer complete
+preserved_processes: existingremoteclaude tmux; oldworktrees andCPUstate unchanged
+open_risks: fullQuIKadoptionnotqualified;29/30-of34retention, remainingposition/boundfailures, foreignexceptiondifferences; preexisting32perceptionconfigSHAfailures
+next_command: verifydocsandretention, authorizedcurrentGiteebranch publication; anysolverstep/boundchange requiresnextapprovedscope
 ```
