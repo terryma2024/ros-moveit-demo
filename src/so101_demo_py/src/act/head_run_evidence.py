@@ -272,6 +272,11 @@ class HeadRunEvidence:
                 os.close(descriptor)
             initial_fsync_ms += _fsync_directory(root)
             return cls(root, limits, fault_callback=fault_callback,
+                       event_identity=dict(
+                           run=manifest_value.get('run'),
+                           source_sha256=(manifest_value.get('source_manifest') or {}).get('sha256'),
+                           config_sha256=(manifest_value.get('refs') or {}).get('development_config',{}).get('sha256'),
+                           model_sha256=(manifest_value.get('refs') or {}).get('weights',{}).get('sha256')),
                        initial_fsync_ms=initial_fsync_ms,
                        manifest_digest={"size": len(encoded_manifest),
                                         "sha256": hashlib.sha256(encoded_manifest).hexdigest()})
@@ -281,11 +286,13 @@ class HeadRunEvidence:
             raise
 
     def __init__(self, root: Path, limits: Mapping[str, Any], *, fault_callback=None,
+                 event_identity=None,
                  initial_fsync_ms: float = 0.0,
                  manifest_digest: Mapping[str, Any] | None = None):
         if fault_callback is not None and not callable(fault_callback):
             raise TypeError("fault_callback must be callable")
         self.root = root
+        self._event_identity = json.loads(json.dumps(event_identity or {}))
         self._limits = dict(limits)
         self._fault_callback = fault_callback
         self._lock = threading.Lock()
@@ -399,7 +406,11 @@ class HeadRunEvidence:
                 if not isinstance(ref, dict) or ref != self._known_artifacts.get(ref.get("path")):
                     raise ValueError("artifact_refs must be returned by add_artifact for this run")
             sequence = self._sequence + 1
-            event = {"sequence": sequence, "kind": kind, "record": record,
+            event = {**self._event_identity, "schema_version": 1,
+                     "record_schema_version": record.get('schema_version') if isinstance(record,dict) else None,
+                     "owner": {"pid": os.getpid(), "thread_name": threading.current_thread().name,
+                               "thread_native_id": threading.get_native_id()},
+                     "sequence": sequence, "kind": kind, "record": record,
                      "source_stamp_ns": source_stamp_ns,
                      "observed_mono_ns": observed_mono_ns,
                      "occurrence_mono_ns": occurrence_mono_ns,

@@ -1698,71 +1698,8 @@ def probe_owners(
     return observation
 
 
-class RestartStack(MujocoRosTransport):
-    """The production ACT composition: MuJoCo, the camera plugin, TF and the four controllers.
-
-    ``so101_demo.act.head_search_transport_measurement.MujocoRosTransport`` is the frozen, measured
-    producer of exactly this transport (HS-308: EGL, headless, the camera plugin publishing ``/head_camera``
-    on the simulator's own clock). This subclass uses that composition with the settings a restart needs:
-
-    * the remaining three controller spawners of the ACT profile (the base starts
-      ``joint_state_broadcaster`` only), so the stack under test is the production composition; and
-    * the reservation scope in the environment of **every** child. The admission-wrapped controllers read
-      ``SO101_ACT_CONTROLLER_RESERVATION_DIR`` and ``SO101_SIMULATION_SESSION_ID`` from the environment of
-      the process that hosts them - ``ros2_control_node`` - so a scope that reached only the spawner
-      clients would leave every neck goal rejected for ever.
-    * the Head TF publisher follows the original 100 Hz JointState cadence, so
-      exact Header transforms do not wait for the publisher's 20 Hz default.
-    """
-
-    def __init__(
-        self,
-        *,
-        controller_config_path,
-        environment,
-        **kwargs,
-    ) -> None:
-        super().__init__(controller_config_path=controller_config_path, **kwargs)
-        self.controller_config_path = Path(controller_config_path)
-        self.environment = dict(environment)
-
-    def _spawn(self, argv, name: str):
-        argv=list(argv)
-        if name=='robot_state_publisher':argv.extend(('-p','publish_frequency:=100.0'))
-        self.workspace.mkdir(parents=True, exist_ok=True)
-        handle = open(self.log_path, "ab")  # noqa: SIM115 - one handle per child, closed on stop
-        self.handles.append(handle)
-        if self.logger is not None:
-            self.logger(f"starting {name}: {' '.join(argv)}")
-        return subprocess.Popen(  # noqa: S603 - the argv is built from installed package prefixes
-            list(argv),
-            stdout=handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-            env=self.environment,
-        )
-
-    def start(self) -> None:
-        from so101_demo.act.head_search_transport_measurement import _package_executable
-
-        self.workspace.mkdir(parents=True, exist_ok=True)
-        if self.log_path is None:
-            self.log_path = self.workspace / STACK_LOG
-        super().start()
-        for controller in CONTROLLERS:
-            if controller == "joint_state_broadcaster":
-                continue
-            self.processes.append(self._spawn(
-                [
-                    _package_executable("controller_manager", "spawner"),
-                    controller,
-                    "--controller-manager-timeout",
-                    str(self.startup_timeout_s),
-                    "--param-file",
-                    str(self.controller_config_path),
-                ],
-                f"spawner {controller}",
-            ))
+# Historical qualification callers retain the same production transport.
+from .head_execution_stack import RestartStack
 
 
 # --- one anchor's real flight -------------------------------------------------------------------------
@@ -1940,6 +1877,9 @@ def measure_and_search(
     only injected seam is ``detector_factory``, which exists so the code path can be exercised without a
     GPU; the run of record leaves it None and loads the approved weights on CUDA.
     """
+
+    raise _refuse('HEAD_LEGACY_EXECUTION_REMOVED',
+                  'legacy search execution is disabled; use run --execution-inputs')
 
     import threading
     from collections import deque
@@ -2713,6 +2653,9 @@ def run_anchor_restart(
     nothing is claimed before it is measured; and the post-teardown probe must be empty before this
     function returns, because the caller starts the next anchor's stack the moment it does.
     """
+
+    raise _refuse('HEAD_LEGACY_EXECUTION_REMOVED',
+                  'qualification restart execution requires the migrated composition')
 
     def log(message: str) -> None:
         line = f"[{_utc_now()}] restart-{anchor}: {message}\n"

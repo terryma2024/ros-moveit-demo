@@ -28,6 +28,7 @@ def test_owned_head_tf_publisher_launch_uses_joint_cadence_without_changing_othe
     stack=object.__new__(module.RestartStack)
     stack.workspace=tmp_path;stack.log_path=tmp_path/'child.log';stack.handles=[];stack.logger=None
     stack.environment={'HEAD_TEST_SCOPE':'original'}
+    stack._spawners={}
     script='import json,sys,os;print(json.dumps(dict(argv=sys.argv[1:],scope=os.environ["HEAD_TEST_SCOPE"])),flush=True)'
     argv=[sys.executable,'-c',script,'--ros-args']
     child=stack._spawn(argv,name)

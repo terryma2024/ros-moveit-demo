@@ -1,4 +1,6 @@
 """Search owns only the neck controller and requires scoped fresh measured feedback."""
+from test_act_head_paused_admission import paused_head, command
+from test_act_head_trajectory_guard import guard
 from types import SimpleNamespace
 from concurrent.futures import Future
 import time
@@ -92,47 +94,47 @@ def test_neck_command_refuses_undiscovered_action_server(monkeypatch):
     assert calls==[('endpoint','/neck_controller/follow_joint_trajectory')]
 
 
-def test_file_head_stop_returns_while_quintic_guard_is_still_preparing():
+def test_file_head_stop_starts_while_quintic_guard_is_still_preparing(paused_head):
     import threading
-    from so101_demo.act.head_feedback import FeedbackPolicy
-    from so101_demo.adapters.act.head_trajectory_guard import HeadTrajectoryGuard
-
-    preparing=threading.Event();release=threading.Event();stopped=threading.Event();sent=[]
-    class Client:
-        def server_is_ready(self):return True
-    class InventoryPort:
-        client=Client();feedback_policy=FeedbackPolicy.parse(policy())
-        def send_prepared_head(self,prepared):sent.append(prepared);return 'goal'
-        def cancel(self,gid):raise AssertionError('no SDK command was sent')
-        def stopped(self):return True
-    guard=object.__new__(HeadTrajectoryGuard)
-    def prepare(target):
-        preparing.set();release.wait(timeout=1.)
-        return ('prepared',target)
-    guard.prepare=prepare
-    guard.stop=lambda:stopped.set()
-    node=SimpleNamespace(create_subscription=lambda *args:None,
-        get_clock=lambda:SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=1_000_000_000)))
-    port=RosNeckSearchPort(node,session_id='s',attempt_id='a',goal_duration_s=.5,
-        submit_lead_s=.004,stop_timeout_s=.1,stop_velocity_rad_s=.002,max_age_s=.15,
-        command_guard=lambda *args:True,monotonic=lambda:10.,controller_port=InventoryPort(),
-        feedback_policy=policy(),head_trajectory_guard=guard)
-    handoffs=[]
-    port._head_stop_handoff=lambda occurred_ns,deadline_ns:handoffs.append(
-        (occurred_ns,deadline_ns))
-    errors=[]
-    command=threading.Thread(target=lambda: _capture_error(errors,
-        lambda:port.command_neck(.3,session_id='s',attempt_id='a',observation_time_s=1.)))
-    command.start();assert preparing.wait(timeout=.5)
-    # Stop closes guard admission and returns while the heavy guard remains blocked.
-    assert port.stop_and_confirm() is True
-    assert stopped.is_set() and not release.is_set() and not sent
-    assert len(handoffs)==1
-    assert handoffs[0][1]-handoffs[0][0]==100_000_000
-    release.set();command.join(timeout=.5)
-    assert not command.is_alive() and len(errors)==1
-    assert isinstance(errors[0],PermissionError) and str(errors[0])=='NECK_STOPPED'
-    assert not sent
+    import time
+    from test_act_head_local_observer import wait_for
+    case = paused_head
+    preparing, release = threading.Event(), threading.Event()
+    errors, stop_errors = [], []
+    original = case.guard._check_collision_pose
+    def replay(qpos, position):
+        preparing.set()
+        if not release.wait(timeout=2.):
+            raise TimeoutError('test collision replay release timed out')
+        return original(qpos, position)
+    case.guard._check_collision_pose = replay
+    command_thread = threading.Thread(target=lambda: _capture_error(errors,
+        lambda: command(case)))
+    command_thread.start()
+    stop_thread = None
+    try:
+        assert preparing.wait(timeout=.5)
+        stop_thread = threading.Thread(target=lambda:_capture_error(stop_errors,
+                                                                   case.neck.stop_and_confirm))
+        stop_thread.start()
+        assert wait_for(lambda:case.row.revoker.closed > 0, timeout_s=.04)
+        assert wait_for(lambda:case.row.port._stop_epoch is not None, timeout_s=.04)
+        assert not release.is_set()
+        deadline = case.row.runtime.stop_receipt()['stop_deadline_wall_s']
+        release.set()
+        command_thread.join(timeout=1.)
+        stop_thread.join(timeout=1.5)
+        assert not command_thread.is_alive() and not stop_thread.is_alive()
+        assert errors and isinstance(errors[0], PermissionError)
+        assert stop_errors and isinstance(stop_errors[0], RuntimeError)
+        assert case.row.runtime.stop_receipt()['stop_deadline_wall_s'] == deadline
+        assert case.row.runtime.stop_receipt()['physical_stop_confirmed'] is False
+        assert not case.state['paused']
+        assert not any(event[0] == 'SDK_SEND' for event in case.events)
+    finally:
+        release.set()
+        command_thread.join(timeout=1.)
+        if stop_thread is not None: stop_thread.join(timeout=1.5)
 
 
 def test_head_stop_handoff_failure_still_cancels_unknown_uuid_and_keeps_original_deadline():

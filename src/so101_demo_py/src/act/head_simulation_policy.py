@@ -98,7 +98,7 @@ class HeadSimulationPolicy:
 
 def validate_stopped_observation_request(request, *, policy, expected_scope, now_wall_s):
     """Freeze a stopped acquisition request; this proves no physical settlement."""
-    from .head_monitor import canonical_bytes, digest
+    from .head_evidence_identity import canonical_bytes, digest
     scope={'epoch','generation','session_id','policy_sha256'}
     keys=scope|{'schema_version','simulation_policy_sha256','motion_epoch','observation_sequence',
         'settled_source_floor_ns','settled_wall_s','requested_wall_s','search_deadline_ns'}

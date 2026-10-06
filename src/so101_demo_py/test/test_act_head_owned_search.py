@@ -6,7 +6,7 @@ import threading
 import pytest
 
 from test_act_search import config, BOX
-from so101_demo.cli.head_feedback_bootstrap import _bound_goal_settlement
+from so101_demo.act.head_feedback import bound_goal_settlement as _bound_goal_settlement
 
 
 def exposure(sequence=1, *, q=0., detections=None):

@@ -217,7 +217,8 @@ def test_admitted_child_provisions_bound_sources_and_dispatcher_before_task8(tmp
     monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
     monkeypatch.setenv("SO101_ACT_GENERATION", "1")
     monkeypatch.setenv("SO101_SIMULATION_SESSION_ID", "session-1")
-    reservation_root = Path(os.environ["TMPDIR"]).parents[2] / f"p{uuid.uuid4().hex[:8]}"
+    # The worker already has a private root; keep the leaf short enough for AF_UNIX.
+    reservation_root = Path(os.environ["SO101_IPC_SOCKET_BASE"]) / f"p{uuid.uuid4().hex[:4]}"
     reservation_root.mkdir(mode=0o700)
     reservation_dir = controller_reservation_directory(reservation_root, "session-1")
     monkeypatch.setenv("SO101_ACT_RESERVATION_ROOT", str(reservation_root))

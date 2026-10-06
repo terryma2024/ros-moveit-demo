@@ -249,8 +249,10 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
     port.cancel = cancel
     child_owner = SimpleNamespace(stop_owned=stop_owned)
     stack.stop = stop
-    async def released(*_args, **_kwargs):
-        return None
+    releases = []
+
+    def released(context, *, cleanup_confirmed):
+        releases.append((context, cleanup_confirmed))
 
     workload = SimpleNamespace(finish=released, stop=released, release=released)
     owner = PickPlaceCaseOwner(workload, child_owner, stack_factory=lambda *a: stack,
@@ -266,6 +268,7 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
 
     asyncio.run(owner.finish(attempt_id="attempt-1"))
 
+    assert len(releases) == 1 and releases[0][1] is True
     assert owner._child_retired is True and owner._stack_retired is True and owner._final_clear is True
     assert (child_root / "cleanup-receipt.json").is_file() and (stack_root / "cleanup-receipt.json").is_file()
     # the open window was invalid-sealed with the retirement reason, before the child was retired

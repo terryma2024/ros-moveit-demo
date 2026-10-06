@@ -47,6 +47,8 @@ class HeadInventoryDispatcher:
         self._sequence = 0
         self._send_lock = threading.Lock()
         self._dispatch_traces = []
+        if not local_state.controller_bound:
+            raise PermissionError('HEAD_LOCAL_CONTROLLER_UNBOUND')
         self._scope = canonical_bytes(local_state.scope)
         self._check_scope()
         guard.bind_dispatcher(self, local_state)
@@ -80,7 +82,8 @@ class HeadInventoryDispatcher:
 
     def _check_scope(self):
         scope = self.local_state.scope
-        if (self._failed or canonical_bytes(scope) != self._scope
+        if (self._failed or self.local_state.faulted
+                or scope['controller_identity'] is None or canonical_bytes(scope) != self._scope
                 or self.port._head_policy_binding_failed
                 or self.authority.generation != scope['generation']
                 or self.authority.session_id != scope['session_id']

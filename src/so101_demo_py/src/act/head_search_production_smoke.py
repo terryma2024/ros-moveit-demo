@@ -1200,22 +1200,25 @@ def write_head_search_production_smoke(
 
 
 def run_smoke_flight(**kwargs) -> dict:
-    """The real flight: ``head_search_restarts.run_anchor_restart``, unchanged and un-duplicated.
+    """Run development through the formal entry; legacy execution requires migration."""
 
-    Everything the restart phase proves - the pre-start ownership probe, the one production composition,
-    the graph gate, the cup placed through the simulator's own service, the detector on CUDA, the
-    production closed loop, the held stop proof and the post-teardown probe - is proven here by the same
-    function, so the smoke and the restart cannot drift into two different definitions of "the stack".
-    The only translation is the run root's own node name and the declared anchor list.
-    """
+    if 'execution_inputs' in kwargs:
+        if set(kwargs) != {'execution_inputs'}:
+            raise _refuse('SMOKE_EXECUTION_INPUTS_MIXED',
+                          'development inputs cannot be mixed with qualification anchor arguments')
+        from so101_demo.act.head_execution_inputs import HeadExecutionInputs
+        from so101_demo.cli.head_execution_run import main
 
-    from so101_demo.act.head_search_restarts import run_anchor_restart
+        inputs = HeadExecutionInputs.parse(kwargs['execution_inputs'])
+        code = main(['--execution-inputs', str(inputs.document_path)])
+        return dict(operation=inputs.document['operation'],
+                    execution_scope=inputs.execution_scope,
+                    qualification_status='NOT_QUALIFIED',
+                    business_return_code=code, run_root=str(inputs.run_root),
+                    execution_inputs_sha256=inputs.document_sha256)
 
-    kwargs.pop("root", None)
-    # `declared` is this anchor's own declaration; `anchors` is the declared list the restart module
-    # reads, and the smoke declares exactly the one anchor it flies
-    kwargs["anchors"] = [kwargs["declared"]]
-    return run_anchor_restart(**kwargs)
+    raise _refuse('HEAD_LEGACY_EXECUTION_REMOVED',
+                  'use run --execution-inputs; legacy qualification execution is not migrated')
 
 
 def read_runtime_of_record(final_run, production_config=None) -> dict:

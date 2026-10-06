@@ -51,7 +51,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
             f"command-{index}", Domain.VALIDATION, "task8_full",
             {"evidence_root": str(tmp_path), "manifest_path": str(manifest_path),
              "manifest_sha256": expected_hash, "children": [child]},
-            f"runtime-{index}", 1, time.monotonic_ns() + 60_000_000_000)
+            ("other-runtime" if index == runtime_drift_at else "runtime-r0"), 1, time.monotonic_ns() + 60_000_000_000)
         return spec, SimpleNamespace(case_id=case["case_id"])
 
     async def execute(spec, case_id, owner, journal_path):
@@ -95,7 +95,7 @@ def test_duplicate_session_or_domain_refuses_before_second_case(tmp_path):
     with pytest.raises(ValueError, match="TASK8_CASE_RESOURCE_REUSED"):
         asyncio.run(run_full_restart_campaign(manifest, root, make_case,
                                               execute_case=execute))
-    assert calls == ["prefix-01"]
+    assert calls == []
     assert not (root / "campaign-result.json").exists()
 
 
@@ -112,6 +112,15 @@ def test_failed_retirement_stops_series_and_keeps_prior_case(tmp_path):
 def test_existing_case_journal_refuses_without_starting_that_case(tmp_path):
     manifest, root, make_case, execute, calls = _setup(tmp_path, existing_at="prefix-01")
     with pytest.raises(ValueError, match="TASK8_CASE_JOURNAL_INVALID"):
+        asyncio.run(run_full_restart_campaign(manifest, root, make_case,
+                                              execute_case=execute))
+    assert calls == []
+    assert not (root / "campaign-result.json").exists()
+
+
+def test_service_runtime_drift_refuses_before_any_case_starts(tmp_path):
+    manifest, root, make_case, execute, calls = _setup(tmp_path, runtime_drift_at=2)
+    with pytest.raises(ValueError, match="PICK_PLACE_CASE_RUNTIME_DRIFT"):
         asyncio.run(run_full_restart_campaign(manifest, root, make_case,
                                               execute_case=execute))
     assert calls == []

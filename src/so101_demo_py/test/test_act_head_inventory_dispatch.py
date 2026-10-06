@@ -13,6 +13,8 @@ import pytest
 
 from test_act_head_search_restarts import RestartRefused, socket_root, reservation_authority
 from test_act_head_feedback_freshness import setup_ports, sample
+from test_act_head_paused_admission import paused_head, command
+from test_act_head_trajectory_guard import guard
 from so101_demo.act.head_local_state import HeadLocalState
 from so101_demo.act.head_evidence_identity import canonical_bytes
 from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
@@ -810,79 +812,88 @@ def _bound_neck_port(config, sender, *, timeout=.08, handoff=None):
     return neck
 
 
-@pytest.mark.parametrize('boundary', ['reserve', 'sdk'])
-def test_stop_handoff_and_unknown_uuid_cancel_start_before_blocked_dispatch_release(
-        composed, monkeypatch, boundary):
-    import threading
+def test_file_head_command_refuses_without_owned_pause_binding(composed):
     config, events, owned, faults, servers, calls = composed
     sender = HeadInventoryDispatcher(**config)
-    handoff_records = []
+    neck = _bound_neck_port(config, sender)
+    with pytest.raises(PermissionError, match='NECK_HEAD_PAUSED_ADMISSION_UNBOUND'):
+        neck.command_neck(.3, session_id='s', attempt_id='a', observation_time_s=1.)
+    assert 'SDK_SEND' not in events
+    assert not owned and not sender.inventory
+
+
+@pytest.mark.parametrize('boundary', ['reserve', 'sdk'])
+def test_stop_handoff_and_unknown_uuid_cancel_start_before_blocked_dispatch_release(
+        paused_head, monkeypatch, boundary):
+    case = paused_head
+    sender, neck = case.dispatcher, case.neck
+    entered, release, cancel = threading.Event(), threading.Event(), threading.Event()
     handoff_started = threading.Event()
+    handoff_records, stop_results, command_errors = [], [], []
+    actual_handoff = neck._head_stop_handoff
     def handoff(occurred_ns, deadline_ns):
         handoff_records.append((occurred_ns, deadline_ns))
         handoff_started.set()
-    neck = _bound_neck_port(config, sender, handoff=handoff)
-    entered = threading.Event()
-    release = threading.Event()
-    cancel = threading.Event()
-    stop_results = []
-    command_errors = []
-    actual_cancel = config['port'].cancel
+        return actual_handoff(occurred_ns, deadline_ns)
+    neck._head_stop_handoff = handoff
+    actual_cancel = case.row.port.cancel
     def cancel_goal(gid):
         cancel.set()
         return actual_cancel(gid)
-    monkeypatch.setattr(config['port'], 'cancel', cancel_goal)
+    monkeypatch.setattr(case.row.port, 'cancel', cancel_goal)
 
     if boundary == 'reserve':
-        reserve = config['authority'].reserve
-        def blocked_reserve(role, *, goal, goal_uuid, before_reserve=None):
+        reserve = case.row.authority.reserve
+        def blocked_reserve(role, *, goal, goal_uuid, before_reserve):
             def bind_then_block(binding):
-                result = before_reserve(binding) if before_reserve is not None else True
+                result = before_reserve(binding)
                 entered.set()
                 if not release.wait(timeout=2.):
                     raise TimeoutError('test reserve release timed out')
                 return result
             return reserve(role, goal=goal, goal_uuid=goal_uuid,
                            before_reserve=bind_then_block)
-        monkeypatch.setattr(config['authority'], 'reserve', blocked_reserve)
+        monkeypatch.setattr(case.row.authority, 'reserve', blocked_reserve)
     else:
-        send = config['port'].client.send_goal_async
+        send = case.row.action_client.send_goal_async
         def blocked_send(*args, **kwargs):
             entered.set()
             if not release.wait(timeout=2.):
                 raise TimeoutError('test SDK release timed out')
             return send(*args, **kwargs)
-        monkeypatch.setattr(config['port'].client, 'send_goal_async', blocked_send)
+        monkeypatch.setattr(case.row.action_client, 'send_goal_async', blocked_send)
 
-    command = threading.Thread(target=lambda: _capture_error(command_errors,
-        lambda: neck.command_neck(.05, session_id='s', attempt_id='a',
-                                  observation_time_s=1.)))
-    command.start()
+    command_thread = threading.Thread(target=lambda: _capture_error(command_errors,
+        lambda: command(case)))
+    command_thread.start()
+    stop_thread = None
     try:
         assert entered.wait(timeout=1.)
-        stop = threading.Thread(target=lambda: _capture_error(stop_results,
-                                                               neck.stop_and_confirm))
-        stop.start()
+        stop_thread = threading.Thread(target=lambda: _capture_error(stop_results,
+                                                                    neck.stop_and_confirm))
+        stop_thread.start()
         saw_handoff = handoff_started.wait(timeout=.04)
         saw_cancel = cancel.wait(timeout=.04)
         inventory_before_release = sender.inventory
+        original_deadline = case.row.runtime.stop_receipt()['stop_deadline_wall_s']
         release.set()
-        stop.join(timeout=1.)
-        command.join(timeout=1.)
-        assert not stop.is_alive() and not command.is_alive()
+        stop_thread.join(timeout=1.5)
+        command_thread.join(timeout=1.)
+        assert not stop_thread.is_alive() and not command_thread.is_alive()
         assert saw_handoff and saw_cancel
         assert len(handoff_records) == 1
         assert handoff_records[0][1] > handoff_records[0][0]
-        assert inventory_before_release
         assert len(inventory_before_release) == 1
         assert stop_results and isinstance(stop_results[0], RuntimeError)
-        assert faults == []
-        assert 'SDK_SEND' not in events if boundary == 'reserve' else True
+        assert case.row.runtime.stop_receipt()['stop_deadline_wall_s'] == original_deadline
+        assert case.row.runtime.stop_receipt()['physical_stop_confirmed'] is False
+        assert case.state['paused'] is False
+        if boundary == 'reserve':
+            assert not any(event[0] == 'SDK_SEND' for event in case.events)
     finally:
         release.set()
-        command.join(timeout=1.)
-        for server in servers.values():
-            server.stop()
+        command_thread.join(timeout=1.)
+        if stop_thread is not None: stop_thread.join(timeout=1.5)
 
 
 def _capture_error(errors, callback):

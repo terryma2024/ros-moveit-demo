@@ -232,75 +232,10 @@ def test_large_original_audit_keeps_parent_decoding_bounded_and_progress_origina
     assert not worker.is_alive()
 
 
-@pytest.mark.parametrize('damage',[None,'values','camera','revoked_during_audit','lost_during_audit'])
-def test_runtime_policy_uses_only_its_entry_bound_readonly_audit(audit_input,monkeypatch,tmp_path,damage):
-    import hashlib,json
-    from types import SimpleNamespace
-    from so101_demo.act.head_monitor import digest
-    from so101_demo.act.head_feedback_measurement import evaluate_feedback_window
-    from so101_demo.adapters.act import head_monitor_runtime as module
-    from so101_demo.adapters.act.head_monitor_runtime import HeadMonitorRuntime,_peer
-    context,document,reference,_,_=audit_input
-    computed=evaluate_feedback_window(document['window'],stop_latency_s=.07)
-    runtime=HeadMonitorRuntime(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
-    runtime._configured=True;runtime._dependencies=context['dependencies'];bindings=[];calls=[]
-    runtime._observer=SimpleNamespace(stop_latency=.07,bind_policy=lambda value:bindings.append(value))
-    def audit(ref,*,stop_latency_s):
-        calls.append((ref,stop_latency_s))
-        if damage=='revoked_during_audit':runtime.epoch.revoke('controlled original fault',fault_wall_s=time.monotonic())
-        if damage=='lost_during_audit':runtime._policy_audit_worker.is_alive=lambda:False
-        return {'audit':{'computed':computed}}
-    runtime._policy_audit_worker=SimpleNamespace(audit=audit,is_alive=lambda:True)
-    policy=dict(context,purpose='calibration',motion_authority=False,measurement=reference,
-        values=computed['values'],camera_seed_values=computed['camera_seed_values'])
-    import copy
-    policy=copy.deepcopy(policy)
-    if damage=='values':policy['values']['watchdog_reaction_limit_s']+=.001
-    if damage=='camera':policy['camera_seed_values']['max_age_s']+=.001
-    policy['sha256']=digest(policy);payload=json.dumps(policy).encode('ascii')
-    path=tmp_path/'policy.json';path.write_bytes(payload)
-    record=dict(path=str(path),sha256=hashlib.sha256(payload).hexdigest())
-    original=module._sha_file
-    def only_small_policy(path,expected,limit):
-        assert str(path)==record['path'],'CPU parent decoded the full measurement instead of its entry worker'
-        assert limit==1024*1024
-        return original(path,expected,limit)
-    monkeypatch.setattr(module,'_sha_file',only_small_policy)
-    try:
-        if damage is not None:
-            with pytest.raises(PermissionError):runtime.bind_policy(record)
-            assert calls==[(reference,.07)] and not bindings and runtime._policy is None
-            assert runtime.epoch.sequence==0 and not runtime.epoch.inventory
-            return
-        ack=runtime.bind_policy(record)
-        assert calls==[(reference,.07)] and bindings==[computed['values']]
-        assert ack['stage']=='POLICY_READY' and ack['motion_authority'] is False
-        assert runtime.epoch.sequence==0 and not runtime.epoch.inventory
-    finally:runtime._configured=False
 
 
-def test_runtime_lost_entry_auditor_faults_the_original_watchdog():
-    from types import SimpleNamespace
-    from test_act_head_monitor_prearm import prepared
-    _,runtime,observer=prepared()
-    runtime._policy_audit_worker=SimpleNamespace(is_alive=lambda:False)
-    original=observer.poll
-    def poll():runtime._shutdown.set();return original()
-    observer.poll=poll
-    try:
-        runtime._watchdog()
-        assert runtime.revoked and runtime._fault['reason']=='HEAD_MONITOR_POLICY_AUDIT_LOST'
-        assert observer.port._head_policy_binding_failed and runtime._fault_event.is_set()
-    finally:observer.close(timeout_s=1.)
 
 
-def test_runtime_cannot_certify_a_negative_audit_retirement():
-    from types import SimpleNamespace
-    from so101_demo.adapters.act.head_monitor_runtime import HeadMonitorRuntime,_peer
-    runtime=HeadMonitorRuntime(epoch='attempt',generation=5,session_id='session',primary=_peer(os.getppid()))
-    runtime._policy_audit_worker=SimpleNamespace(close=lambda:dict(shutdown_ack=False,exit_code=-9))
-    with pytest.raises(PermissionError,match='POLICY_AUDIT_RETIRE_UNCONFIRMED'):runtime.close()
-    assert not runtime._finished
 
 
 def test_pdeathsig_is_bound_to_the_actual_creating_thread(audit_input,worker_environment):

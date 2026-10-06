@@ -18,9 +18,10 @@ import math
 from pathlib import Path
 from types import MappingProxyType
 
+from .task8_measurement_schema import load_contract_v2
+
 FORBIDDEN_INPUT_LABELS = frozenset({"qualified", "target_in_view", "contact_ok", "stop_confirmed"})
 _SHA256 = hashlib.sha256
-_CONTRACT = Path(__file__).resolve().parents[2] / "config/act/task8-calibration-measurement-contract-v2.json"
 #: field -> pure implementation; filled per field together with that field's boundary and violation cases
 _FORMULAS: dict[str, object] = {}
 
@@ -30,8 +31,7 @@ class FieldResultSet(dict):
 
 
 def _load_contract(path: Path | None = None) -> dict:
-    target = Path(path) if path is not None else _CONTRACT
-    return json.loads(target.read_bytes())
+    return load_contract_v2(path)
 
 
 def _formula_ids() -> MappingProxyType:

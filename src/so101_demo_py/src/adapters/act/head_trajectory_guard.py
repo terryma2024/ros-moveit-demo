@@ -268,6 +268,8 @@ class HeadTrajectoryGuard:
         self._dispatcher = None
         self._local_state = None
         self._stopped = False
+        self._admission_scene = None
+        self._admission_required = False
 
     def bind_dispatcher(self, dispatcher, local_state) -> None:
         """Bind once to the actual Head inventory owner; arbitrary callables refuse."""
@@ -284,6 +286,15 @@ class HeadTrajectoryGuard:
             if self._dispatcher is not None or self._stopped:
                 raise PermissionError("HEAD_TRAJECTORY_GUARD_ALREADY_BOUND")
             self._dispatcher, self._local_state = dispatcher, local_state
+        from .head_local_runtime import HeadLocalRuntime
+        self._admission_required = type(getattr(dispatcher._own, '__self__', None)) is HeadLocalRuntime
+
+    def _require_admission(self, *, check_scene=False):
+        if self._admission_scene is None:
+            if self._admission_required:
+                raise PermissionError('HEAD_ADMISSION_LEASE_REQUIRED')
+            return None
+        return self._admission_scene._require_lease(self, check_scene=check_scene)
 
     def stop(self) -> None:
         """Revoke future admissions without taking ROS, cache or MuJoCo locks."""
@@ -293,6 +304,8 @@ class HeadTrajectoryGuard:
     def _scope_bytes(self) -> bytes:
         if self._local_state is None:
             raise PermissionError("HEAD_TRAJECTORY_GUARD_UNBOUND")
+        if not self._local_state.controller_bound:
+            raise PermissionError('HEAD_LOCAL_CONTROLLER_UNBOUND')
         # HeadLocalState seals this canonical document at construction. Read
         # those owner-held bytes directly so claim-boundary revalidation does
         # not decode/re-encode JSON merely to compare the same scope.
@@ -302,6 +315,7 @@ class HeadTrajectoryGuard:
         return scope
 
     def _capture(self) -> tuple[_Snapshot, dict, dict]:
+        self._require_admission(check_scene=True)
         if self._stopped or self._dispatcher is None:
             raise PermissionError("HEAD_TRAJECTORY_GUARD_REVOKED")
         scope = self._scope_bytes()
@@ -404,20 +418,31 @@ class HeadTrajectoryGuard:
 
     def _check_collision_pose(self, qpos, neck_position: float) -> None:
         """Replay one full observed qpos in the private, margin-inflated model."""
+        self._require_admission()
         self._require_collision_policy()
         if len(qpos) != self._model.nq or not all(math.isfinite(float(value)) for value in qpos):
             raise PermissionError("HEAD_TRAJECTORY_FULL_STATE_INVALID")
         self._data.qpos[:] = qpos
         self._data.qpos[self._neck_qpos] = _finite(neck_position, "COLLISION_POSITION")
         mujoco.mj_fwdPosition(self._model, self._data)
-        for contact in self._data.contact:
-            a, b = int(contact.geom1), int(contact.geom2)
-            if not (0 <= a < self._model.ngeom and 0 <= b < self._model.ngeom):
+        # Native views avoid constructing one Python contact wrapper per row.
+        # Keep unknown geometry and protected contacts in their original order
+        # so the first refusal remains the same as the scalar traversal.
+        geometry = self._data.contact.geom
+        invalid = np.any((geometry < 0) | (geometry >= self._model.ngeom), axis=1)
+        selected = invalid.copy()
+        valid = ~invalid
+        protected = np.zeros(self._model.ngeom, dtype=np.bool_)
+        protected[list(self._bound_protected)] = True
+        selected[valid] = (protected[geometry[valid, 0]] |
+                           protected[geometry[valid, 1]])
+        distances = self._data.contact.dist
+        for index in np.flatnonzero(selected):
+            if invalid[index]:
                 raise PermissionError("HEAD_TRAJECTORY_CONTACT_GEOMETRY_UNKNOWN")
-            if a not in self._bound_protected and b not in self._bound_protected:
-                continue
+            a, b = (int(value) for value in geometry[index])
             pair = tuple(sorted((self._bound_geom_names[a], self._bound_geom_names[b])))
-            distance = float(contact.dist)
+            distance = float(distances[index])
             if (not math.isfinite(distance) or distance <= _CLEARANCE_M
                     and pair not in self._bound_allowed_pairs):
                 raise PermissionError("HEAD_TRAJECTORY_PROTECTED_CONTACT")
@@ -430,8 +455,7 @@ class HeadTrajectoryGuard:
                 or (self.checker.step_s, self.checker.clearance_m,
                     self.checker.max_samples, int(self.checker.neck_qpos))
                     != self._bound_checker_limits
-                or tuple(float(value) for value in self._model.geom_margin)
-                    != self._bound_geom_margins):
+                or not np.array_equal(self._model.geom_margin, self._bound_geom_margins)):
             raise PermissionError("HEAD_TRAJECTORY_COLLISION_POLICY_MUTATED")
 
     @staticmethod
@@ -492,6 +516,7 @@ class HeadTrajectoryGuard:
 
     def prepare(self, target_rad: float) -> PreparedHeadTrajectory:
         """Prepare one sealed rich two-point neck goal from fresh measured state."""
+        admission = self._require_admission(check_scene=True)
         target = _finite(target_rad, "TARGET")
         if not self.safe_interval[0] <= target <= self.safe_interval[1]:
             raise PermissionError("HEAD_TRAJECTORY_TARGET_OUTSIDE_GEOMETRY")
@@ -595,7 +620,7 @@ class HeadTrajectoryGuard:
             if len(self._issued) >= 128:
                 self._issued.pop(next(iter(self._issued)))
             self._issued[nonce] = (prepared, prepared.original_cdr, proof_bytes,
-                                   _freeze_json(proof), goal, typed_bytes, before)
+                                   _freeze_json(proof), goal, typed_bytes, before, admission)
         return prepared
 
     @staticmethod
@@ -609,6 +634,7 @@ class HeadTrajectoryGuard:
                 <= deadline_ns)
 
     def _validate_seal(self, prepared: PreparedHeadTrajectory):
+        admission = self._require_admission(check_scene=True)
         if type(prepared) is not PreparedHeadTrajectory or prepared._owner is not self._owner:
             raise PermissionError("HEAD_TRAJECTORY_PREPARED_OWNER_INVALID")
         with self._lock:
@@ -618,6 +644,8 @@ class HeadTrajectoryGuard:
             raise PermissionError("HEAD_TRAJECTORY_PREPARED_REVOKED")
         if prepared.original_cdr != item[1] or prepared.proof_bytes != item[2]:
             raise PermissionError("HEAD_TRAJECTORY_PREPARED_MUTATED")
+        if item[7] is not admission:
+            raise PermissionError('HEAD_ADMISSION_PREPARED_LEASE_INVALID')
         return item[3], item[4], item[6]
 
     def revalidate(self, prepared: PreparedHeadTrajectory) -> dict:
@@ -650,6 +678,7 @@ class HeadTrajectoryGuard:
         if self._stopped or self._dispatcher is None:
             return False
         try:
+            self._require_admission(check_scene=True)
             self._dispatcher._check_scope()
             return True
         except Exception:

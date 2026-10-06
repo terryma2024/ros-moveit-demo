@@ -175,6 +175,20 @@ class PickPlaceCaseOwner:
     async def finish(self, *, attempt_id: str) -> None:
         if not self._ready or self.context is None:
             raise MutationError("TASK8_CASE_NOT_READY")
+        await self._retire(attempt_id=attempt_id)
+
+    async def retire_failed_start(self, *, attempt_id: str) -> None:
+        if self._ready or self.context is None or self.worker is None or self.stack is None:
+            raise MutationError("TASK8_CASE_NOT_READY")
+        if not self._stack_retired:
+            owner_key = self.stack.owner
+            if (not isinstance(owner_key, OwnerKey)
+                    or self.stack_owner_key is not None and self.stack_owner_key != owner_key):
+                raise MutationError("PICK_PLACE_CASE_STACK_OWNER_INVALID")
+            self.stack_owner_key = owner_key
+        await self._retire(attempt_id=attempt_id)
+
+    async def _retire(self, *, attempt_id: str) -> None:
         if not isinstance(attempt_id, str) or not attempt_id:
             raise MutationError("TASK8_CASE_ATTEMPT_INVALID")
         if not self._stop_confirmed:
@@ -187,13 +201,6 @@ class PickPlaceCaseOwner:
             if not isinstance(response, dict) or response.get("stopped_confirmed") is not True:
                 raise MutationError("TASK8_CASE_STOP_NOT_CONFIRMED")
             self._stop_confirmed = True
-        if not self._stack_retired:
-            await self.stack.stop()
-            _retirement_receipt(Path(self.stack.launch.evidence_root),
-                                self.stack_owner_key, stack=True,
-                                session_id=self.child_launch.mujoco_session_id,
-                                ros_domain_id=self.child_launch.ros_domain_id)
-            self._stack_retired = True
         if not self._child_retired:
             # an open live-evidence window must not outlive the child that owns the port recording into it
             window = getattr(self.worker, "live_evidence_window", None)
@@ -203,6 +210,13 @@ class PickPlaceCaseOwner:
             _retirement_receipt(Path(self.child_launch.socket_root),
                                 self.child_owner_key, stack=False)
             self._child_retired = True
+        if not self._stack_retired:
+            await self.stack.stop()
+            _retirement_receipt(Path(self.stack.launch.evidence_root),
+                                self.stack_owner_key, stack=True,
+                                session_id=self.child_launch.mujoco_session_id,
+                                ros_domain_id=self.child_launch.ros_domain_id)
+            self._stack_retired = True
         if not self._final_clear:
             proof = self.final_clear_probe(self.child_launch.ros_domain_id)
             try:

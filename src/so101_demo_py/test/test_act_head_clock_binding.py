@@ -51,7 +51,7 @@ def test_inactive_timesource_cannot_invent_a_clock_subscription(node):
         bind_head_clock(node,lambda *args,**kw:None,monotonic=lambda:1.)
     assert not [s for s in node.subscriptions if s.topic_name=='/clock']
 
-@pytest.mark.parametrize('component',['stopped','monitor'])
+@pytest.mark.parametrize('component',['stopped','local'])
 def test_component_reuses_timesource_callback_with_one_clock_subscription(node,component):
     import threading
     from collections import deque
@@ -61,18 +61,32 @@ def test_component_reuses_timesource_callback_with_one_clock_subscription(node,c
         observer=StoppedHeadCapture(node,port,frame_id='head_camera_frame',monotonic=lambda:20.)
         read=lambda:observer.clock_messages[-1]
     else:
-        from so101_demo.adapters.act.head_monitor_ros import HeadROSMonitor
-        observer=HeadROSMonitor(node,epoch='controlled',generation=5,stop_velocity_rad_s=.002,
-            stop_latency_s=.07,camera_max_age_s=.05,camera_frame_id='head_camera_frame',
-            emit=lambda *args,**kw:None,fault_callback=lambda *args:None,monotonic=lambda:20.)
-        read=lambda:observer._clock
+        from rclpy.action import ActionClient
+        from control_msgs.action import FollowJointTrajectory
+        from so101_demo.adapters.act.ros_execution import RosControllerPort
+        from so101_demo.adapters.act.head_local_observer import HeadLocalObserver
+        from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture
+        from so101_demo.act.head_feedback import FeedbackPolicy
+        from test_act_head_local_observer import simulation_policy, local_state
+        policy = simulation_policy()
+        client = ActionClient(node, FollowJointTrajectory,
+                              '/neck_controller/follow_joint_trajectory')
+        port = RosControllerPort(node, client, ('neck_yaw_joint',), max_age_s=.05,
+            stop_velocity_rad_s=.002, monotonic=lambda:20.,
+            feedback_policy=FeedbackPolicy.parse(policy.feedback_values(), simulation_policy=policy))
+        observer = HeadLocalObserver(node, port, local_state(policy), policy=policy,
+            camera_frame='head_camera_frame', monotonic=lambda:20., bind_port_sink=False)
+        capture = StoppedHeadCapture(node, port, frame_id='head_camera_frame', monotonic=lambda:20.)
+        capture.bind_original_sink(observer.observe_original)
+        read = lambda:observer._clock
     try:
         assert len([s for s in node.subscriptions if s.topic_name=='/clock'])==1
         msg=Clock();msg.clock.sec=5;node._time_source._clock_sub.callback(msg)
         assert read()['source_ns']==node.get_clock().now().nanoseconds==5_000_000_000
         assert read()['wall_s']==20.
     finally:
-        if component=='monitor':observer.close(timeout_s=1.)
+        if component=='local':
+            observer.close();port.close_head_io(timeout_s=1.)
 
 
 def test_binding_after_executor_attachment_is_refused(node):

@@ -74,13 +74,20 @@ def validate_observation(value):
 def validate_action_prefix(value):
     names = {"session_id", "attempt_id", "sequence", "observation_time_s",
              "target_times_s", "positions"}
-    if not isinstance(value, dict) or set(value) not in (names, names | {"first_target_delay_s"}):
+    optional = {"first_target_delay_s", "target_interval_s"}
+    if (not isinstance(value, dict) or not names.issubset(value)
+            or not set(value).issubset(names | optional)):
         raise ContractError("FIELDS_INVALID")
     delay = 0.
     if "first_target_delay_s" in value:
         delay = finite(value["first_target_delay_s"], nonnegative=True)
         if delay != .1:
             raise ContractError("PREFIX_FIRST_TARGET_DELAY_INVALID")
+    interval = .1
+    if "target_interval_s" in value:
+        interval = finite(value["target_interval_s"], nonnegative=True)
+        if interval not in (.002, .1):
+            raise ContractError("PREFIX_TIME_GRID_INVALID")
     identifier(value["session_id"])
     identifier(value["attempt_id"])
     integer(value["sequence"])
@@ -91,7 +98,7 @@ def validate_action_prefix(value):
         raise ContractError("PREFIX_INVALID")
     times = tuple(finite(t, nonnegative=True) for t in times)
     for i, t in enumerate(times):
-        if not math.isclose(t, origin + delay + .1 * (i + 1), rel_tol=0., abs_tol=1e-6):
+        if not math.isclose(t, origin + delay + interval * (i + 1), rel_tol=0., abs_tol=1e-6):
             raise ContractError("PREFIX_TIME_GRID_INVALID")
     return dict(value, target_times_s=times,
                 positions=tuple(validate_action(row) for row in positions))

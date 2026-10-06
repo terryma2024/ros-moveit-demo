@@ -53,7 +53,6 @@ def _resource_identity(spec, manifest_path: Path, journal_root: Path,
         "controller_name": child.controller_name,
         "socket_root": child.socket_root,
         "command_id": spec.command_id,
-        "runtime_id": spec.runtime_id,
     }
     if (type(spec.command_id) is not str or not spec.command_id
             or type(spec.runtime_id) is not str or not spec.runtime_id
@@ -98,10 +97,11 @@ async def run_full_restart_campaign(
     cases = (*manifest["prefix_cases"], *manifest["full_cases"])
     seen = {name: set() for name in (
         "campaign_id", "session_id", "ros_domain_id", "namespace",
-        "controller_name", "socket_root", "command_id", "runtime_id",
+        "controller_name", "socket_root", "command_id",
     )}
     owners = []  # Keep objects alive while checking that no owner is reused.
-    journals = {}
+    prepared = []
+    service_runtime_id = None
     for case in cases:
         case_id = case["case_id"]
         journal_path = journal_root / f"{case_id}.json"

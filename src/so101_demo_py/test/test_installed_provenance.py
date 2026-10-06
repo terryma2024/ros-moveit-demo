@@ -129,12 +129,14 @@ def test_pytest_collection_is_nonzero() -> None:
     environment = dict(os.environ)
     environment.pop("PYTEST_ADDOPTS", None)
     completed = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", str(test_root)],
-        check=True,
+        [sys.executable, "-m", "pytest", "-p", "no:launch_testing",
+         "-p", "no:launch_ros", "--collect-only", "-q", str(test_root)],
+        check=False,
         capture_output=True,
         text=True,
         env=environment,
     )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
     terminal = completed.stdout.strip().splitlines()[-1]
     assert terminal.endswith("tests collected in 0.00s") or "tests collected" in terminal
     assert not terminal.startswith("no tests collected")

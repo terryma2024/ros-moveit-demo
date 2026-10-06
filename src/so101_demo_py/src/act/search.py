@@ -6,7 +6,7 @@ from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
 from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
 from .head_feedback import FeedbackPolicy, nanoseconds
-from .head_monitor import canonical_bytes
+from .head_evidence_identity import canonical_bytes
 from .head_simulation_policy import HeadSimulationPolicy
 
 

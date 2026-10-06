@@ -68,6 +68,25 @@ def test_continuous_global_sequence_preserves_kind_record_and_independent_clocks
     assert receipt["event_count"] == 2
 
 
+def test_every_event_retains_frozen_identity_and_actual_producer_thread(tmp_path):
+    manifest = dict(file_protocol_version=1, run=dict(run_id='r', session_id='s', epoch='a'),
+        source_manifest=dict(sha256='1' * 64), refs=dict(
+            development_config=dict(sha256='2' * 64), weights=dict(sha256='3' * 64)))
+    writer = HeadRunEvidence.create(tmp_path / 'identified', manifest)
+    writer.append('RAW_ACTION', {'schema_version': 7}, source_stamp_ns=None,
+                  observed_mono_ns=20, occurrence_mono_ns=10)
+    finish_ok(writer)
+    event = rows(tmp_path / 'identified/events.jsonl')[0]
+    assert event['schema_version'] == 1 and event['record_schema_version'] == 7
+    assert event['run'] == {'run_id': 'r', 'session_id': 's', 'epoch': 'a'}
+    assert event['source_sha256'] == '1' * 64
+    assert event['config_sha256'] == '2' * 64 and event['model_sha256'] == '3' * 64
+    assert event['owner']['pid'] == os.getpid()
+    assert event['owner']['thread_native_id'] == threading.get_native_id()
+    assert event['owner']['thread_name'] == threading.current_thread().name
+    assert event['occurrence_mono_ns'] == 10 and event['observed_mono_ns'] == 20
+
+
 def test_concurrent_producers_receive_one_continuous_global_sequence(tmp_path):
     writer, root = create(tmp_path)
     assigned = []

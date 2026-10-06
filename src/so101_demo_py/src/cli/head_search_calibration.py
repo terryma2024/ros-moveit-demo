@@ -2457,8 +2457,10 @@ def _run_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration run",
-        description="Run the eight fixed calibration phases once, into a brand-new run root",
+        description="Run a frozen Head execution input or the eight calibration phases into a new run root",
     )
+    parser.add_argument('--execution-inputs', type=Path,
+                        help='absolute frozen input for one stage-one development execution; excludes calibration phase flags')
     parser.add_argument("--run-root", type=Path)
     parser.add_argument("--evidence-root", type=Path)
     parser.add_argument("--seal", type=Path, help="declared digests of the six sealed inputs")
@@ -2493,7 +2495,28 @@ def _run_parser() -> argparse.ArgumentParser:
 
 
 def _run(arguments: list[str]) -> int:
-    """Validate the declared inputs, then hand the phases to the orchestration library."""
+    """Validate the declared inputs, then hand the phases to the orchestration library.
+
+    The formal stage-one file-protocol entry is the same `run` command with
+    `--execution-inputs`: it is mutually exclusive with the legacy eight-phase
+    flags, and a mixed invocation is refused before anything reads a path.
+    """
+
+    if any(argument == "--execution-inputs" or argument.startswith("--execution-inputs=")
+           for argument in arguments):
+        formal_flags = {'--execution-inputs', '--print-readback', '--help'}
+        legacy = [argument for argument in arguments
+                  if argument.startswith("--") and argument.split('=',1)[0] not in formal_flags]
+        if legacy:
+            print(
+                f"{HEAD_SEARCH_RUN_INPUTS_INCOMPLETE}: --execution-inputs is the formal stage-one "
+                f"entry and cannot be combined with the legacy phase flags {' '.join(sorted(legacy))}",
+                file=sys.stderr,
+            )
+            return 2
+        from .head_execution_run import main as execution_main
+
+        return execution_main(arguments)
 
     parsed = _run_parser().parse_args(arguments)
     missing = [flag for name, flag in RUN_REQUIRED_FLAGS if getattr(parsed, name) is None]
@@ -3590,8 +3613,9 @@ def _measure_qualification_readback(
 def main(argv: list[str] | None = None) -> int:
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments[:1] == ['measure-feedback-bootstrap']:
-        from .head_feedback_bootstrap import main as bootstrap
-        return bootstrap(arguments[1:])
+        print('HEAD_ONLINE_BOOTSTRAP_REMOVED: use run --execution-inputs with '
+              'fresh stage-one development inputs', file=sys.stderr)
+        return 2
     # Step 1's gate is stack-free and runs before any run root is claimed: it must not be routed through
     # the qualifier's four-subcommand parser, which owns the runners that do start things
     if arguments[:1] == ["check-ownership"]:

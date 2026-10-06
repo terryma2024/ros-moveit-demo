@@ -134,3 +134,30 @@ class OrderedStopConfirmation:
     def within_deadline(self, decision):
         elapsed = nanoseconds(decision['wall_after_s']) - nanoseconds(self.epoch['fault_wall_s'])
         return 0 <= elapsed <= math.floor(self.epoch['stop_latency_s'] * 1e9)
+
+
+def bound_goal_settlement(samples,state,*,target_rad,position_tolerance_rad,
+        velocity_tolerance_rad_s,source_floor_ns,dispatch_wall_s,terminal_wall_s):
+    """Terminal success plus three advancing, original post-terminal samples."""
+    response=state.get('result')
+    if (state.get('accepted') is not True or getattr(response,'status',None)!=4
+            or getattr(getattr(response,'result',None),'error_code',None)!=0):return None
+    quiet=[];previous=None
+    for original in samples:
+        row=dict(original)
+        if (any(type(row[key]) is not int or row[key]<=0 for key in ('sequence','source_ns'))
+                or any(type(value) not in (int,float) or not math.isfinite(value)
+                    for value in (row['wall_s'],row['positions'][0],row['velocities'][0]))):return None
+        if (row.get('valid') is not True or row['source_ns']<=source_floor_ns
+                or row['wall_s']<=max(dispatch_wall_s,terminal_wall_s)):
+            quiet=[];previous=None;continue
+        if previous is not None and any(row[key]<=previous[key]
+                for key in ('sequence','source_ns','wall_s')):return None
+        previous=row
+        if (abs(row['positions'][0]-target_rad)>position_tolerance_rad
+                or abs(row['velocities'][0])>velocity_tolerance_rad_s):
+            quiet=[];continue
+        quiet.append(row)
+        if len(quiet)==3:return quiet
+    return None
+

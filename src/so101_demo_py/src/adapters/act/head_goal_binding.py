@@ -34,3 +34,27 @@ def validate_goal_inventory(record, payload, *, deadline=None):
         return result
     except (KeyError, TypeError, RuntimeError, ValueError, OverflowError) as error:
         raise ValueError('HEAD_GOAL_BINDING_REFUSED') from error
+
+
+def warm_goal_binding():
+    """Prime complete ROS Goal codecs while motion admission remains closed.
+
+    The dummy value is never inventoried, reserved or sent. Every actual goal
+    still traverses the complete digest/typed validation after registration.
+    """
+    import time
+    from rclpy.serialization import serialize_message
+    from trajectory_msgs.msg import JointTrajectoryPoint
+    started=time.monotonic()
+    message=FollowJointTrajectory.Goal()
+    message.trajectory.joint_names=['neck_yaw_joint']
+    for nanoseconds in (0,100_000_000):
+        point=JointTrajectoryPoint(positions=[0.])
+        point.time_from_start.nanosec=nanoseconds
+        message.trajectory.points.append(point)
+    payload=serialize_message(message)
+    record=dict(typed_goal=json.loads(canonical_bytes(message_to_ordereddict(message))),
+                payload_sha256=hashlib.sha256(payload).hexdigest())
+    validate_goal_inventory(record,payload)
+    return dict(native_arm_count=0,sdk_send_count=0,payload_bytes=len(payload),
+        payload_sha256=record['payload_sha256'],elapsed_s=time.monotonic()-started)

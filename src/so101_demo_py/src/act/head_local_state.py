@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import re
 import threading
 import time
@@ -17,6 +18,16 @@ _RECORD_FIELDS = {
 }
 _MAX_INVENTORY = 128
 _CLAIM_WINDOW_NS = 400_000_000
+
+
+def _valid_controller_identity(identity, generation):
+    return (type(identity) is dict
+            and set(identity) == {'generation', 'incarnation', 'boot'}
+            and type(identity['generation']) is int
+            and identity['generation'] == generation
+            and all(type(identity[key]) is str
+                    and re.fullmatch(r'[\x20-\x7e]{1,64}', identity[key]) is not None
+                    for key in ('incarnation', 'boot')))
 
 
 class HeadLocalState:
@@ -40,17 +51,13 @@ class HeadLocalState:
                 or type(scope['generation']) is not int or not 0 < scope['generation'] < 2**64
                 or type(scope['policy_sha256']) is not str
                 or re.fullmatch(r'[0-9a-f]{64}', scope['policy_sha256']) is None
-                or type(scope['controller_identity']) is not dict
-                or set(scope['controller_identity']) != {'generation', 'incarnation', 'boot'}
-                or type(scope['controller_identity']['generation']) is not int
-                or scope['controller_identity']['generation'] != scope['generation']
-                or any(type(scope['controller_identity'][key]) is not str
-                       or re.fullmatch(r'[\x20-\x7e]{1,64}', scope['controller_identity'][key]) is None
-                       for key in ('incarnation', 'boot'))
+                or (scope['controller_identity'] is not None
+                    and not _valid_controller_identity(scope['controller_identity'], scope['generation']))
                 or type(search_deadline_ns) is not int or not 0 < search_deadline_ns < 2**63
                 or not callable(clock_ns)):
             raise ValueError('HEAD_LOCAL_SCOPE_INVALID')
         self._scope_json = canonical_bytes(scope)
+        self._controller_bound = scope['controller_identity'] is not None
         self._scope_key = hashlib.sha256(self._scope_json).hexdigest()
         with self._scope_lock:
             if self._scope_key in self._live_scopes:
@@ -65,6 +72,7 @@ class HeadLocalState:
         self._fault = None
         self._fault_body = None
         self._fault_token = None
+        self._search_state = None
         self._lock = threading.Lock()
 
     @property
@@ -73,7 +81,48 @@ class HeadLocalState:
 
     @property
     def scope(self):
-        return json.loads(self._scope_json)
+        with self._lock:
+            body = self._scope_json
+        return json.loads(body)
+
+    @property
+    def controller_bound(self):
+        with self._lock:
+            return self._controller_bound
+
+    def bind_controller_identity(self, main, primary):
+        """Bind matching authenticated channel readbacks once under the fault lock.
+
+        The runtime authenticates both peers before calling this boundary. The
+        run, policy and search deadline remain fixed while identity is UNBOUND.
+        """
+        scope = self.scope
+        if (not _valid_controller_identity(main, scope['generation'])
+                or not _valid_controller_identity(primary, scope['generation'])
+                or canonical_bytes(main) != canonical_bytes(primary)):
+            self._faulted_validation('HEAD_LOCAL_CONTROLLER_IDENTITY_INVALID')
+        updated = dict(scope, controller_identity=json.loads(canonical_bytes(main)))
+        body = canonical_bytes(updated)
+        key = hashlib.sha256(body).hexdigest()
+        reason = None
+        with self._lock:
+            if self._fault is not None:
+                raise PermissionError('HEAD_LOCAL_STATE_FAULTED')
+            if json.loads(self._scope_json)['controller_identity'] is not None:
+                reason = 'HEAD_LOCAL_CONTROLLER_ALREADY_BOUND'
+            else:
+                with self._scope_lock:
+                    if key in self._live_scopes:
+                        reason = 'HEAD_LOCAL_SCOPE_REUSED'
+                    else:
+                        self._live_scopes.add(key)
+                        self._scope_json = body
+                        self._controller_bound = True
+            if reason is not None:
+                self._latch_fault_locked(reason)
+        if reason is not None:
+            raise PermissionError(reason)
+        return json.loads(body)['controller_identity']
 
     @property
     def faulted(self):
@@ -176,6 +225,10 @@ class HeadLocalState:
     def register_prepared(self, record, typed_goal_bytes):
         from so101_demo.adapters.act.head_goal_binding import validate_goal_inventory
 
+        with self._lock:
+            self._require_live()
+            if json.loads(self._scope_json)['controller_identity'] is None:
+                raise PermissionError('HEAD_LOCAL_CONTROLLER_UNBOUND')
         try:
             owned = validate_goal_inventory(record, typed_goal_bytes)
             scope = self.scope
@@ -240,6 +293,49 @@ class HeadLocalState:
                     pass
             raise PermissionError(reason)
         return json.loads(body)
+
+    @property
+    def search_state(self):
+        """Authoritative search target/lock, or None before the first commit."""
+        with self._lock:
+            state = self._search_state
+        return None if state is None else json.loads(canonical_bytes(state))
+
+    def commit_search_state(self, *, motion_epoch, target_rad, lock_count, sequence,
+                            source_ns, decision_wall_s, reason):
+        """Atomically commit the authoritative search target/lock with the fault state.
+
+        The commit shares this short state lock with every fault latch, so no
+        fault can interleave between a caller's freshness check and this
+        mutation. A faulted state refuses without changing anything.
+        """
+        if (type(motion_epoch) is not int or not 0 <= motion_epoch < 2 ** 63
+                or type(target_rad) not in (int, float) or not math.isfinite(target_rad)
+                or type(lock_count) is not int or not 0 <= lock_count <= 3
+                or type(sequence) is not int or not 0 <= sequence < 2 ** 63
+                or (source_ns is not None and (type(source_ns) is not int or source_ns <= 0))
+                or (decision_wall_s is not None and (type(decision_wall_s) not in (int, float)
+                    or not math.isfinite(decision_wall_s) or decision_wall_s < 0))
+                or type(reason) is not str or not reason):
+            raise ValueError('HEAD_LOCAL_SEARCH_STATE_INVALID')
+        with self._lock:
+            self._require_live()
+            previous = self._search_state
+            if previous is not None:
+                if motion_epoch > previous['motion_epoch'] + 1:
+                    raise PermissionError('HEAD_LOCAL_SEARCH_STATE_REGRESSED')
+                if motion_epoch == previous['motion_epoch']:
+                    if (sequence < previous['sequence'] or lock_count < previous['lock_count']
+                            or (target_rad != previous['target_rad']
+                                and sequence <= previous['sequence'])):
+                        raise PermissionError('HEAD_LOCAL_SEARCH_STATE_REGRESSED')
+                elif sequence < previous['sequence'] or lock_count != 0:
+                    raise PermissionError('HEAD_LOCAL_SEARCH_STATE_REGRESSED')
+            state = dict(motion_epoch=motion_epoch, target_rad=float(target_rad),
+                         lock_count=lock_count, sequence=sequence, source_ns=source_ns,
+                         decision_wall_s=decision_wall_s, reason=reason)
+            self._search_state = state
+        return json.loads(canonical_bytes(state))
 
     def _record(self, goal_uuid):
         if type(goal_uuid) is not str:

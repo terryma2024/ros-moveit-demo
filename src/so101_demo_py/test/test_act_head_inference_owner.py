@@ -4,11 +4,12 @@ import time
 
 import pytest
 
-from so101_demo.cli import head_feedback_bootstrap as bootstrap
+from so101_demo.adapters.act.head_inference_owner import HeadInferenceOwner
+from so101_demo.act.head_execution_documents import retire_run_resources
 
 
 def start(factory,faults,simulation_policy=None):
-    return bootstrap._start_owned_detector(factory=factory,
+    return HeadInferenceOwner(factory=factory,
         fault_callback=lambda reason:faults.append(reason),
         **({'simulation_policy':simulation_policy} if simulation_policy is not None else {}))
 
@@ -36,6 +37,7 @@ def test_factory_calibration_and_reset_run_on_one_eager_owned_thread():
     try:
         built=worker.configuration(timeout_s=1.)
         assert built['runtime'] is worker and built['runtime_device']=='cuda'
+        assert worker.runtime_device == built['runtime_device']
         receipt=built['inference_owner'];assert receipt['daemon'] is False
         assert construction==[receipt['native_id']] and receipt['native_id']!=threading.get_native_id()
         worker.reset();assert worker.detect(b'pixels',source_stamp_ns=7)==['real return from controlled detector boundary']
@@ -123,7 +125,7 @@ def stopped_worker():
 
 
 def stopped_request(live,*,sequence=1,motion_epoch=0):
-    from so101_demo.act.head_monitor import digest
+    from so101_demo.act.head_evidence_identity import digest
     now=time.monotonic()
     return dict(schema_version=1,epoch='attempt',generation=5,session_id='session',policy_sha256='a'*64,
         simulation_policy_sha256=digest(live._simulation_policy.readback()),motion_epoch=motion_epoch,
@@ -443,30 +445,6 @@ def test_actual_owner_exits_without_bulk_readback_then_caller_retains_originals(
         if worker._thread.is_alive():worker.close(timeout_s=1.)
 
 
-def test_root_execution_trace_detaches_after_primary_and_model_retirement():
-    import gc
-    from so101_demo.adapters.act.head_monitor_process import MonitorExecutionTrace
-    before=(gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))
-    trace=MonitorExecutionTrace()
-    class Primary:
-        def close(self):
-            assert trace._result is None
-            trace.mark('primary_closed')
-            return dict(stage='RETIRED',motion_authority=False)
-    class Owner:
-        def close(self):
-            assert trace._result is None
-            trace.mark('model_retired')
-            return dict(error=None,retired=True)
-    result=dict(status='REFUSED')
-    try:
-        assert bootstrap._retire_entry_inference(primary=Primary(),inference_owner=Owner(),
-            live=None,result=result,execution_trace=trace)
-    finally:trace.finish()
-    retained=result['root_execution_trace']
-    assert [r[1] for r in retained['server_phases']]==['primary_closed','model_retired']
-    assert retained['qualification'] is False and retained['motion_authority'] is False
-    assert (gc.isenabled(),gc.get_threshold(),tuple(gc.callbacks))==before
 
 
 @pytest.mark.parametrize('primary_failure',[False,True])
@@ -474,7 +452,8 @@ def test_entry_closes_reactive_primary_before_joined_owner_bulk_snapshot(primary
     detector=Detector();construction=[];faults=[];lives=[];snapshots=[]
     class ReactivePrimary:
         ready=True;failed=False;_finished=False
-        def close(self):
+        def close(self, *, timeout_s):
+            assert timeout_s == 1.
             self.ready=False;self.failed=True
             if primary_failure:raise PermissionError('original Stop worker still alive')
             self._finished=True
@@ -487,20 +466,22 @@ def test_entry_closes_reactive_primary_before_joined_owner_bulk_snapshot(primary
             snapshots.append(threading.get_native_id())
             return super().retirement_snapshot()
     worker=start(factory(detector,construction),faults)
-    result=dict(status='REFUSED',live_exposure_diagnostic={})
+    outcomes = {}
     try:
         worker.configuration(timeout_s=1.)
         def build(d):
             live=GuardedLive(d);live.primary=primary;lives.append(live);return live
         worker.bind_live(build,timeout_s=1.)
-        retired=bootstrap._retire_entry_inference(primary=primary,inference_owner=worker,live=worker,result=result)
-        assert retired is (not primary_failure) and not worker._thread.is_alive()
+        report=retire_run_resources(primary, worker._live, worker, outcomes=outcomes)
+        assert bool(any(report.values())) is primary_failure
+        assert not worker._thread.is_alive()
         if primary_failure:
-            assert result['producer_seals_withheld'] and not snapshots
-            assert 'primary_teardown_error' in result and 'inference_owner_teardown_error' in result
+            assert not snapshots
+            assert report['runtime'] == 'PermissionError'
+            assert report['owner'] == 'PermissionError'
         else:
-            assert result['inference_owner_teardown']['retired'] and snapshots==[threading.get_native_id()]
-            assert result['live_exposure_diagnostic']['records']==[]
+            assert outcomes['owner']['retired'] and snapshots==[threading.get_native_id(), threading.get_native_id()]
+            assert worker.results == []
     finally:
         primary._finished=True
         for live in lives:live.release.set()

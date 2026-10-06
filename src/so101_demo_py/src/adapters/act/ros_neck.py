@@ -1,5 +1,6 @@
 """Scoped neck search port with optional shared-broker dispatch."""
 
+import hashlib
 import threading
 import time
 from control_msgs.action import FollowJointTrajectory
@@ -68,6 +69,36 @@ class RosNeckSearchPort:
         self.subscription=None if self.feedback_policy is not None else node.create_subscription(
             JointState,'/joint_states',self._joint,qos_profile_sensor_data)
 
+    def bind_prepared_head(self, dispatcher, *, guard, stop_handoff):
+        """Bind the authenticated local dispatcher once, preserving the owned client."""
+        from .head_inventory_dispatch import HeadInventoryDispatcher
+        from .head_trajectory_guard import HeadTrajectoryGuard
+        if (type(dispatcher) is not HeadInventoryDispatcher
+                or type(guard) is not HeadTrajectoryGuard or not callable(stop_handoff)):
+            raise ValueError('NECK_HEAD_TRAJECTORY_BINDING_INVALID')
+        from .head_execution_reset import OwnedHeadScene
+        if (type(guard._admission_scene) is not OwnedHeadScene
+                or guard._admission_scene._admission_binding is None
+                or guard._admission_scene._admission_binding[1] is not guard):
+            raise PermissionError('NECK_HEAD_PAUSED_ADMISSION_UNBOUND')
+        underlying = getattr(self.port, 'port', self.port)
+        dispatcher._check_scope()
+        if (self.broker is not None or self.feedback_policy is None
+                or dispatcher.port is not underlying or guard.feedback_port is not underlying
+                or guard._dispatcher is not dispatcher or guard._local_state is not dispatcher.local_state
+                or self.client is not underlying.client
+                or self.identity != (dispatcher.session_id, dispatcher.epoch)
+                or underlying.feedback_policy != self.feedback_policy):
+            raise PermissionError('NECK_HEAD_TRAJECTORY_SCOPE_INVALID')
+        with self._lock:
+            if self._head_trajectory_guard is not None:
+                raise PermissionError('NECK_HEAD_TRAJECTORY_ALREADY_BOUND')
+            if self._stopped or self._head_dispatching or self._goals:
+                raise PermissionError('NECK_HEAD_TRAJECTORY_RETIRED_OR_USED')
+            self.port = dispatcher
+            self._head_stop_handoff = stop_handoff
+            self._head_trajectory_guard = guard
+
     def _joint(self,message):
         if self.feedback_policy is not None:
             # Direct input compatibility; Head v2 registers only the port's own
@@ -118,24 +149,41 @@ class RosNeckSearchPort:
             raise PermissionError('NECK_SCOPE_INVALID')
         sim=self.node.get_clock().now().nanoseconds*1e-9
         if observation_time_s>sim:raise ValueError('NECK_OBSERVATION_FUTURE')
-        with self._lock:
-            if self._stopped:raise PermissionError('NECK_STOPPED')
-            if self._head_dispatching:raise PermissionError('NECK_HEAD_DISPATCH_BUSY')
-        # Snapshot, quintic construction, canonicalization and private MuJoCo
-        # replay happen without holding the neck stop/cache lock.
-        prepared=self._head_trajectory_guard.prepare(target)
-        if not self.client.server_is_ready():
-            raise RuntimeError('NECK_ACTION_SERVER_UNAVAILABLE')
+        from .head_execution_reset import OwnedHeadScene
+        scene = getattr(self._head_trajectory_guard, '_admission_scene', None)
+        if type(scene) is not OwnedHeadScene:
+            raise PermissionError('NECK_HEAD_PAUSED_ADMISSION_UNBOUND')
         with self._lock:
             if self._stopped:raise PermissionError('NECK_STOPPED')
             if self._head_dispatching:raise PermissionError('NECK_HEAD_DISPATCH_BUSY')
             self._head_dispatching=True
         try:
-            gid=self.port.send_prepared_head(prepared)
-            with self._lock:
-                # If stop raced the native/SDK boundary, retain the UUID so
-                # stop_and_confirm can cancel and reconcile it before return.
-                self._goals.append(gid)
+            # No stop/cache lock spans services, collision replay or SDK I/O.
+            with scene.paused_admission(self._head_trajectory_guard):
+                prepared=self._head_trajectory_guard.prepare(target)
+                if not self.client.server_is_ready():
+                    raise RuntimeError('NECK_ACTION_SERVER_UNAVAILABLE')
+                with self._lock:
+                    if self._stopped:raise PermissionError('NECK_STOPPED')
+                previous_traces = len(self.port.dispatch_traces)
+                try:
+                    gid=self.port.send_prepared_head(prepared)
+                    with self._lock:
+                        # Retain the actual UUID before evidence or resume can fail.
+                        self._goals.append(gid)
+                finally:
+                    traces = self.port.dispatch_traces
+                    entered = len(traces) == previous_traces + 1
+                    trace = dict(traces[-1]) if entered else dict(goal_uuid=None, phases=[])
+                    payload = trace.pop('original_cdr', None)
+                    if payload is None:
+                        payload = prepared.original_cdr
+                    proof = prepared.proof
+                    trace.update(dispatch_entered=entered, original_cdr_hex=payload.hex(),
+                        original_cdr_sha256=hashlib.sha256(payload).hexdigest(), prepared_proof=proof)
+                    # Exact bytes, typed inventory and original phase times
+                    # survive process exit in the same bounded main writer.
+                    scene.emit('HEAD_PREPARED_DISPATCH_TRACE', trace)
             return gid
         finally:
             with self._lock:

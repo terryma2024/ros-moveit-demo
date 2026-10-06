@@ -4,6 +4,7 @@
       mujoco_camera_plugin:
         type: mujoco_ros2_control_plugins/CameraPlugin
         camera_publish_rate: 10.0
+        use_egl: true
         task_camera:
           policy: streaming
           frame_name: task_camera_frame

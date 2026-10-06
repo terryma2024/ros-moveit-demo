@@ -17,7 +17,7 @@ from so101_demo.adapters.act.physics import model_sha256
 
 _SCENE_SHA = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
 _MOTION_SHA = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
-_PLUGIN_SHA = "6a030c48fe4829803bd4e2ed980adbe53217ef39b271c274286081830eaf7aac"
+_PLUGIN_SHA = "e24343b57fd54d767baaaa5992a12d01fa208b93f68105834be89b1d1b6fdc88"
 _MODEL_SHA = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
 _ROWS = {
     "no_contact": 5, "bilateral_touch": 45, "over_compression": 50,

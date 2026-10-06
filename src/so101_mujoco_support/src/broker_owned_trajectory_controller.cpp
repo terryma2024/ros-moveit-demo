@@ -518,7 +518,14 @@ void BrokerOwnedTrajectoryController::monitor_head_goal(
     const auto request = candidate->terminal.exchange(
       HeadTerminalRequest::NONE, std::memory_order_acq_rel);
     if (request == HeadTerminalRequest::ABORT) {
-      candidate->goal->setAborted(candidate->result);
+      // The realtime wrapper only publishes aborts from EXECUTING. Native
+      // close can overlap an accepted cancel, which has already moved the
+      // same handle to CANCELING. Finish that abort here, outside the RT loop.
+      if (candidate->goal->gh_->is_canceling()) {
+        candidate->goal->gh_->abort(candidate->result);
+      } else {
+        candidate->goal->setAborted(candidate->result);
+      }
     } else if (request == HeadTerminalRequest::CANCEL) {
       auto canceled = std::make_shared<FollowJTrajAction::Result>();
       candidate->goal->setCanceled(canceled);
@@ -555,7 +562,11 @@ void BrokerOwnedTrajectoryController::retire_head_goal_for_lifecycle()
       auto aborted = std::make_shared<FollowJTrajAction::Result>();
       aborted->error_code = FollowJTrajAction::Result::INVALID_GOAL;
       aborted->error_string = "Head goal retired during lifecycle transition";
-      candidate->goal->setAborted(aborted);
+      if (candidate->goal->gh_->is_canceling()) {
+        candidate->goal->gh_->abort(aborted);
+      } else {
+        candidate->goal->setAborted(aborted);
+      }
       candidate->goal->runNonRealtime();
     }
     candidate->status_timer.reset();
@@ -630,6 +641,14 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
       });
     configure_reservation_scope();
     if (head_simulation_mode_) {
+      // Head checks complete unwrapped quintics before executing them. The
+      // continuous physical neck must retain those coordinates in the JTC
+      // measured prefix and error calculation; angular lifting changes them.
+      if (params_.joints == std::vector<std::string>{"neck_yaw_joint"} &&
+        joints_angle_wraparound_.size() == 1)
+      {
+        joints_angle_wraparound_[0] = false;
+      }
       if (get_update_rate() != 500 || !head_measured_prefix_guard_enabled_ ||
         params_.joints != std::vector<std::string>{"neck_yaw_joint"} ||
         !params_.command_joints.empty() ||
