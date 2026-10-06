@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: find a QuIK adaptation that retains latency advantage and existing position/orientation/control-limit/task gates; IKPy excluded by user; native goals previously achieved
-success_contract: approved weight-only QuIK experiment; independent canonical pose/control gates and same isolated CPU14 comparison; complete supported horizons/current-success retention required for adoption, failures retained
+goal: compare currentnative andfrozen weightedQuIK0.08 onall20 taskpoints; broaderQuIK adaptation remainsopen, IKPyexcluded, nativegoals achieved
+success_contract: all20 frozenpoints comparedon sameisolatedCPU14 withindependentcanonical gates;18timedobservations perpoint/backend, outcomes andshared-success latency; nofailure-as-speedup orphysicalgrasp claim
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence quik-position-01/weighted-01/publish.json; numerical source remains bb9a9c5a
+current_commit: see evidence quik-position-01/points20-01/publish.json; numerical source remains bb9a9c5a
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -45,8 +45,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-022
-next_experiment: NONE; weight-only trial complete, native bounded iteration and broader QuIK adoption remain unqualified
+latest_checkpoint: CP-023
+next_experiment: NONE;20pointcomparison complete; P18/P19 losses remain, productionadoption unqualified
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -2321,4 +2321,135 @@ owned_processes: NONE; compile/test/formal/gates/transfer complete
 preserved_processes: existingremoteclaude tmux; oldworktrees andCPUstate unchanged
 open_risks: fullQuIKadoptionnotqualified;29/30-of34retention, remainingposition/boundfailures, foreignexceptiondifferences; preexisting32perceptionconfigSHAfailures
 next_command: verifydocsandretention, authorizedcurrentGiteebranch publication; anysolverstep/boundchange requiresnextapprovedscope
+```
+
+## EXP-044 — Frozen twenty-point current / weighted QuIK comparison
+
+```yaml
+experiment_id: EXP-044
+status: VALID
+prior_experiment: EXP-042 / EXP-043
+hypothesis: the frozen20point catalog reveals whether weightedQuIK0.08 retains the current solver's supported IKprefixes beyond p18 andcanonical
+prediction: perpoint complete14waypoint outcomes identify additional losses or gains; successfulsharedpoints permit valid latency comparison
+single_variable: solver backend current native versus frozenweightedQuIK0.08; sharedinputcatalog expandedfrom4to20, numerical parameters andsearch unchanged
+lifecycle: FULL_RESTART; six fresh processes perbackend, no ROS or simulator
+preconditions:
+  - CP-022 restored; weighted firsttarget fixed, p18 failswaypoint6; no productionadoption
+  - Mac hostname Terry-Mac-mini.local, inlinegpt-6.1-sol/xhigh; sameclean taskworktree atd766b7bf3 beforeledger edit
+  - unchanged source bb9a9c5a andinstalled Linux numericSO hash196ce025; weightedSO74523747, headerdc63f92e
+  - authoritative20point YAML sha256c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5; exact originalfrozen7a62d8e8 catalog
+  - P18 is sample_14_far_right andmatchespreviousp18; samehomearmq0/gripper0.465038 foreverypoint
+  - remote oldcheckouts/submodules andexistingclaude tmuxpreserved; no ROS/simulator processes, noexistingCPUisolation
+success_criteria:
+  - all20points measuredforbothbackends with18timedobservations each, warmups separate
+  - allselectedsteps passindependentcanonicalFK position2mm/orientation0.10rad/controlmargin0.002rad gates
+  - deterministic outputs acrosswarmup/repeats/freshprocesses; P01/P18 matchpreviouscanonical/p18 outputdocs
+  - sameisolatedCPU14 Pcore, idleSMT15, onecomputationalthread, cpusetfinallyrestored
+  - report perpoint median/p95, firstfailedstate/waypoint, completepath counts, sharedsuccess speed andfailedexit times separately
+failure_criteria: backend inability toproduce full14step path is a validqualityfailure, retainedwithoutretuning; no fullphysicalgrasp claim
+invalid_criteria: provenance drift, inputcoverage mismatch, selectedpose outsidegates, outputdrift, CPUmigration/SMTsibling userspaceactivity, unrestoredcpuset
+provenance:
+  source_commit: bb9a9c5a045410d62d25bd76380ae5401cdee76c numerical; d766b7bf3dc3f4740216ca2d0f4c06edafc45454 catalog andtasksource
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-loop50-01/install-v6
+  runtime_executable: /usr/bin/python3 withtask-owned points20-01/run_compare.py throughenter-exec-v2.py
+  ros_domain_id: N/A; pureIKcompute, ForbiddenBoundary rejectsROS calls
+  gz_partition: N/A; no simulator launched
+commands:
+  - command: /opt/ros/jazzy/.venv/bin/python evidence/quik-position-01/points20-01/prepare_points20.py
+    exit_code: 0
+  - command: ssh -T ai-station sudo -n /usr/bin/python3 /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-quik-position-01/points20-01/isolate_and_run.py
+    exit_code: 0
+observed:
+  - OBSERVED remote preflightpassed;32logicalCPUs, PCPU14/core_id28/SMT15, powersaveunchanged; version3.12.3/NumPy1.26.4
+  - OBSERVED firstpreflightassumed_numeric.py butactualmoduleiscompiledSO; failedbeforeanybenchmark; correctedfrompriorruntimeprovenance, failedrecordretained
+inferred: NONE
+conclusion: VALID complete20pointmeasurement; current20/20 andQuIK0.08 18/20, common18medianratio0.735628
+evidence:
+  - /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/quik-position-01/points20-01
+decision: KEEP; productionunchanged
+next_experiment: EXP-045 explicitrepositorybenchmarkgate; noalgorithmadjustment
+```
+
+## EXP-045 — Required benchmark package gate for the twenty-point report
+
+```yaml
+experiment_id: EXP-045
+status: VALID
+prior_experiment: EXP-042
+hypothesis: unchanged package source retains the previously documented32 baselineconfigSHAfailures withnoaddedfailures
+prediction: completebenchmark_test collection remains585,553pass32fail0errors/skips; failuresmatchpriorgateIDs
+single_variable: freshtest invocation anduniqueMacscratch fornew20pointbenchmarkreport; packagecode unchanged
+lifecycle: FULL_RESTART
+preconditions:
+  - MacfixedROS Python andcolcon executables verified; hostdoctor--base exit0
+  - task-private dependency-lock-01/mac-build/install overlay retained; no shareddependency edits
+success_criteria: completescope andxdist8 recorded; exactfailureID comparisonwithpriorgate; no alltests-passclaimifknownfailuresremain
+failure_criteria: anynewfailure orfailureidentitychange requiresclassification
+invalid_criteria: collection/environmentfailure, wrongPython/prefix orworker count, scratch reused
+provenance:
+  source_commit: bb9a9c5a numerical source unchanged; taskHEAD d766b7bf3 beforeledger edits
+  install_overlay: /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/dependency-lock-01/mac-build/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python andcolcon
+  ros_domain_id: N/A; packagebenchmarktests, noROSstack
+  gz_partition: N/A; no simulator
+commands:
+  - command: zsh evidence/quik-position-01/points20-01/run-package-benchmark-gate.zsh
+    exit_code: 1; colcontest0/test-result1
+observed: 585tests553pass32fail0errors0skip; exactpreviousfailureIDs, xdist8andfixedruntimeprovenance confirmed
+inferred: NONE
+conclusion: knownbaseline32configSHA failures reproduced; no new failingtestID, packagegate remainsFAIL
+evidence:
+  - /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/quik-position-01/points20-01/package-benchmark-gate-host-01
+decision: KEEP allgateand scratch evidence
+next_experiment: NONE
+```
+
+## Twenty-point final readback
+
+```yaml
+experiment_id: EXP-044
+execution_exit: 0; all12child exitcodes0, controllerCOMPLETE_CPU_ISOLATION_RESTORED
+observed:
+  - OBSERVED current20/20 complete14step IKprefixes; QuIKweighted0.08 18/20
+  - OBSERVED P18andP19 QuIKreject15candidates eachatMOVE_ABOVE_OBJECT waypoint6; no complete selectedpath
+  - OBSERVED all720timedoutputs matchwarmups; outputdocs exactacross6processes perbackend
+  - OBSERVED P01/P18 outputdocs byteequal EXP-042 canonical/p18 foreachbackend
+  - OBSERVED allselectedstep recordedcanonical pose/control gatespass; no numericalsource/parameter changes
+  - OBSERVED all12proofs CPU14,onecomputationalthread,0measuredmigrations and0SMT15user/nice/systemticks
+  - OBSERVED cpuset/governor restored, oldremotecheckouts/submodules andclaude tmuxunchanged; runtimefiles unchanged
+  - OBSERVED completecopy355files62227284bytes0symlinks plusinventory, everySHA/size verified
+shared_success_points: P01-P17 andP20,18points324timedsamples perbackend
+shared_success_pooled_median_ms: current151.9137485,QuIK111.7519645
+shared_success_pooled_p95_ms: current168.4321718,QuIK132.67112585
+shared_success_median_ratio: 0.7356277203573842; reduction26.43722796426158percent
+shared_equalpoint_mean_medians_ms: current151.71390538888886,QuIK111.66427280555553;ratio0.7360187091573844
+selected_errors: currentmaxpos1.420810mm/maxori0.086101rad/minmargin0.002rad; QuIK18successesmaxpos1.434305mm/maxori0.085715rad/minmargin0.055014rad; different successsets
+classification: OBSERVED QuIK0.08 loses two farcatalogpoints; P19 component-gate rootcause notindependently replayed inthismeasurement
+conclusion: userrequested20pointcomparison complete;26.4percent warmIKprefix reductiononcommon18points, supportedcoverage20to18 preventsproductionadoption
+decision: KEEP researchresults; productionunchanged, no furtherretuning
+---
+experiment_id: EXP-045
+execution_exit: shell1, colcontest0, colcontest-result1
+observed: fixedMacROSPython/colcon/xdist8 585tests553pass32fail0errors0skip; failureIDs exactpreviousgate
+classification: VALID completegateexecution, FAIL packagegate;29CONFIG_SHA256_MISMATCH and3secondarydry-runexit failures pre-exist
+conclusion: no new failingtestID; noalltests-passclaim, no unrelatedconfigfix
+decision: KEEP allgateevidence andscratch
+---
+checkpoint_id: CP-023
+last_valid_experiment: EXP-045
+measurement_reference: EXP-044
+current_commit: d766b7bf3dc3f4740216ca2d0f4c06edafc45454 beforedocsdelivery; finalSHA inpoints20-01/publish.json
+current_hypothesis: QuIK iterationcontrol may recoverP18/P19; outsidecompletedmeasurement scope
+working_tree_status: taskledger andnew20pointreportonly; productioncode unchanged
+owned_processes: NONE; formalcontroller,packagegate andtransfer complete
+preserved_processes: existingremoteclaude tmux; oldcheckouts andCPUstate unchanged
+confirmed_conclusions: current20/20,QuIK0.08 18/20; sharedsuccessratio0.735628; allruntime/quality/determinism/source/transferproofs valid
+open_risks: P18/P19 fullprefixloss; noROS/MoveIt/controller/physics/livegrasp qualification; existing32benchmarkconfig failures
+report: docs/experiments/prepare-horizon-ik-quik-points20-20261006.md
+evidence: quik-position-01/points20-01; same registeredMacroot
+retained: allpoint/protocol/raw/figure/source/binary/packagegate evidence andpriorruns
+archived: NONE
+deleted: NONE
+deletion_candidates: taskremote staging,duplicates,packagegate scratch; no deletionauthorization
+next_command: inline review, authorizedcurrentGiteecommit/push andremoteSHA readback
 ```
