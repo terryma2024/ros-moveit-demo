@@ -1,0 +1,25 @@
+{
+  "upstream_url": "https://github.com/steffanlloyd/quik",
+  "upstream_commit": "a9ebd1f21dfd3c9f0869140dfb0a4ae5a538cccc",
+  "license": "AGPL-3.0-only",
+  "eigen_version": "3.4.0",
+  "orientation_weight": 0.08,
+  "build_flags": [
+    "-O3",
+    "-DNDEBUG",
+    "-fno-fast-math",
+    "-ffp-contract=off",
+    "-std=c++17"
+  ],
+  "files": {
+    "third_party/quik/LICENSE": "d8a6cc31abc16b6748c7a21f21611f5a1ec33f67d22ca23d7da1c19b95496bee",
+    "third_party/quik/NOTICE": "2bd85fa30ad4349f4dd7ece80f59412c928a6694e98654d1ee7b47a6be372000",
+    "third_party/quik/include/quik/IKSolver.hpp": "dc63f92ec9642b44202448c384f7c1a1f7d64124ecd4d37686406f56e5d5656c",
+    "third_party/quik/include/quik/Robot.hpp": "8e098ec5f2a7326ec4ffa2bfde88f27f7159d2c776669063d15e0bc870ea8346",
+    "third_party/quik/include/quik/geometry.hpp": "e16716414e4dd126449f1b7c57a0c7b2b5aa880cea67cea93277be2466c64557",
+    "third_party/quik/include/quik/utilities.hpp": "4a8f3154ab6581a504a83b5e1dc6c3bf5a29e90d07f0b6af31e1b954bcca8408",
+    "third_party/quik/src/geometry.cpp": "2daf9581664f85b7beb0a7e0663974eca3e285a871b9d4ef4f5230b3bbd24406",
+    "third_party/quik/upstream-package.xml": "aa029d4e10e997c8b0e9a60bc5febb09af88387e12859814b6f47361f59e2147"
+  },
+  "license_text_source": "https://github.com/spdx/license-list-data/blob/v3.27.0/text/AGPL-3.0-only.txt"
+}

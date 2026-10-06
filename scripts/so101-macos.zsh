@@ -36,6 +36,7 @@ Usage:
   scripts/so101-macos.zsh run PACKAGE EXECUTABLE [ARG...]
 
 No environment variable is required. ROS_DOMAIN_ID is optional (0-232; default 0).
+SO101_IK_BACKEND is optional (native|quik; default native).
 EOF
 }
 
@@ -60,6 +61,7 @@ clean_reexec() {
     ROS_HOME="${runtime_root}/ros-home" \
     ROS_LOG_DIR="${runtime_root}/ros-logs" \
     ROS_DOMAIN_ID="${domain_id}" \
+    SO101_IK_BACKEND="${SO101_IK_BACKEND-native}" \
     /bin/zsh -f "${script_path}" "${internal_command}" "$@"
 }
 

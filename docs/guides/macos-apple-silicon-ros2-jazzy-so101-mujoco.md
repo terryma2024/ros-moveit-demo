@@ -124,13 +124,17 @@ overlay，并用下面的显式调用链跨过 macOS SIP 边界：
 `PATH`、`VIRTUAL_ENV`、`PYTHONNOUSERSITE`、`TMPDIR`、`TMP`、`TEMP`、`ROS_HOME`、
 `ROS_LOG_DIR` 和动态库路径。
 
-唯一允许由调用者传入的可选变量是：
+调用者可以选择 ROS domain 和 IK 后端：
 
 ```zsh
 ROS_DOMAIN_ID=225 scripts/so101-macos.zsh doctor --json
+SO101_IK_BACKEND=quik scripts/so101-macos.zsh doctor --json
 ```
 
-`ROS_DOMAIN_ID` 必须是 0 到 232 的整数，默认值为 0。`PYTHONPATH`、`PYTHONHOME`、
+`ROS_DOMAIN_ID` 必须是 0 到 232 的整数，默认值为 0。`SO101_IK_BACKEND` 可选 `native`
+或 `quik`，默认 `native`；QuIK 需要先编译可选模块。动态 CLI 的 `--ik-backend` 优先于
+环境选择，构建方法和接口见 [IK backend selection](so101-ik-backend-selection.md)。
+`doctor` 检查固定运行环境，求解器加载由实际调用入口检查。`PYTHONPATH`、`PYTHONHOME`、
 `AMENT_PREFIX_PATH`、`CMAKE_PREFIX_PATH`、`COLCON_PREFIX_PATH` 和所有继承的 `DYLD_*`
 都会被丢弃，避免不同终端或 IDE 污染启动结果。
 

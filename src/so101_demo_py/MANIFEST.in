@@ -1,0 +1,3 @@
+recursive-include third_party/quik *.hpp *.cpp LICENSE NOTICE *.xml
+include config/ik/requirements.lock config/ik/quik.lock.json
+include src/control/moveit/_quik_native.cpp

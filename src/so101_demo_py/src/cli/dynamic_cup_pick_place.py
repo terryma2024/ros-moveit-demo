@@ -10,6 +10,7 @@ from pathlib import Path
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dynamic_cup_pick_place")
     parser.add_argument("--backend", default="gazebo")
+    parser.add_argument("--ik-backend", choices=("native", "quik"))
     parser.add_argument("--mode", choices=("plan_only", "execute"), default="plan_only")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--plan-only-state")

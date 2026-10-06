@@ -196,7 +196,7 @@ def run_dynamic_plan_only(options) -> int:
             rclpy.shutdown()
 
 
-def _dynamic_execute_runtime():
+def _dynamic_execute_runtime(ik_backend: str | None = None):
     """Load ROS adapters lazily and expose a narrow orchestration test seam."""
 
     import rclpy
@@ -218,7 +218,7 @@ def _dynamic_execute_runtime():
             label="Perceived cup",
             cup_position_world_m=tuple(sample.pose_world.values[:3]),
         )
-        planner = RosMoveGroupReachabilityPlanner(node, template)
+        planner = RosMoveGroupReachabilityPlanner(node, template, ik_backend=ik_backend)
         reader = RosJointStateReader(node, template.arm_joint_names)
         try:
             start = reader.read(template.planning_timeout_s)
@@ -251,11 +251,14 @@ def _dynamic_execute_runtime():
     )
 
 
-def _write_reachability_evidence(path: Path, session_id: str, report: Any) -> None:
+def _write_reachability_evidence(
+    path: Path, session_id: str, report: Any, *, ik_backend: str = "native"
+) -> None:
     from ..cli.task_reachability import result_document
 
     document = result_document((report,))
     document["session_id"] = session_id
+    document["ik_backend"] = ik_backend
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
@@ -361,7 +364,16 @@ def run_dynamic_execute(
     )
     from ..application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
-    runtime = _dynamic_execute_runtime() if _runtime is None else _runtime
+    from ..control.moveit.pose_ik import resolve_ik_backend
+
+    try:
+        ik_backend = resolve_ik_backend(getattr(options, "ik_backend", None))
+    except ValueError as error:
+        emit_failure("IK_BACKEND_UNSUPPORTED")
+        print(status_line("ERROR", failure="IK_BACKEND_UNSUPPORTED", message=error),
+              file=status_stream)
+        return 1
+    runtime = _dynamic_execute_runtime(ik_backend) if _runtime is None else _runtime
     setup_token = (
         profiler.start_span("runtime.setup", {"backend": "mujoco"})
         if profiler is not None
@@ -527,6 +539,7 @@ def run_dynamic_execute(
             reachability_file,
             options.session_id,
             reachability,
+            ik_backend=ik_backend,
         )
         if reachability.status.value == "UNREACHABLE":
             raise RuntimeError("DYNAMIC_TARGET_UNREACHABLE")
@@ -545,6 +558,7 @@ def run_dynamic_execute(
             workflow_id=getattr(options, "workflow_id", None),
             request_id=getattr(options, "request_id", None),
             parallel_lease_identity=parallel_lease_identity,
+            ik_backend=ik_backend,
         )
         actions = profile_actions(
             runtime.build_actions(execution, targets),

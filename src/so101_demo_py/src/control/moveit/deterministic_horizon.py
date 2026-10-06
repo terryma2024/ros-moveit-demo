@@ -18,11 +18,18 @@ class PoseIk(Protocol):
         target: PoseEvidence,
         seed: tuple[float, ...],
         *,
-        position_tolerance_m: float,
-        orientation_tolerance_rad: float,
+        position_tolerance_m: float = 0.002,
+        orientation_tolerance_rad: float = 0.10,
     ) -> tuple[float, ...]: ...
 
     def forward(self, positions: Sequence[float]) -> PoseEvidence: ...
+
+    def forward_positions(
+        self, vectors: Sequence[Sequence[float]]
+    ) -> tuple[tuple[float, float, float], ...]: ...
+
+    @property
+    def joint_limits(self) -> tuple[tuple[float, float], ...]: ...
 
     def orientation_error_rad(self, actual: PoseEvidence, target: PoseEvidence) -> float: ...
 
@@ -30,7 +37,7 @@ class PoseIk(Protocol):
 class HorizonIkCache:
     """Reuse exact deterministic computations for one horizon, never branch scores."""
 
-    def __init__(self, ik: UnderactuatedPoseIk) -> None:
+    def __init__(self, ik: PoseIk) -> None:
         self._ik = ik
         self._solutions: dict[tuple[bytes, ...], tuple[float, ...]] = {}
         self._rejections: dict[tuple[bytes, ...], tuple[object, ...]] = {}

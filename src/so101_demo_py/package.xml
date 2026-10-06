@@ -5,6 +5,7 @@
   <description>Unified SO-101 MuJoCo and Gazebo pick-place demonstration.</description>
   <maintainer email="maintainer@example.com">SO-101 maintainers</maintainer>
   <license>Apache-2.0</license>
+  <license file="third_party/quik/LICENSE">AGPL-3.0-only</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 

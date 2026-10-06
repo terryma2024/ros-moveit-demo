@@ -19,7 +19,6 @@ from ..control.moveit.deterministic_horizon import (
     validate_cartesian_corridor,
 )
 from ..control.moveit.planning import JointPlanRequest, make_get_motion_plan_request
-from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
 from ..control.planning_scene.cup import make_cup_collision_object
 from ..core.domain import State
 from ..core.dynamic_pick import DynamicPickTemplate, ResolvedMotionTargets
@@ -94,6 +93,7 @@ class RosMoveGroupReachabilityPlanner:
         *,
         action_client: Any | None = None,
         ik: Any | None = None,
+        ik_backend: str | None = None,
         progress: Callable[[], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -105,11 +105,14 @@ class RosMoveGroupReachabilityPlanner:
             from ament_index_python.packages import get_package_share_directory
 
             urdf = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/so101.urdf"
-            ik = UnderactuatedPoseIk.from_urdf(
+            from ..control.moveit.pose_ik import create_pose_ik
+
+            ik = create_pose_ik(
                 urdf,
                 template.arm_joint_names,
                 template.planning_frame,
                 template.tcp_link,
+                backend=ik_backend,
             )
         self._ik = ik
         self._prepared_steps: dict[State, tuple[HorizonStep, ...]] = {}
@@ -120,6 +123,12 @@ class RosMoveGroupReachabilityPlanner:
 
             action_client = ActionClient(node, MoveGroup, "/move_action")
         self._plan_client = action_client
+
+    @property
+    def ik_provenance(self) -> dict[str, object]:
+        from ..control.moveit.pose_ik import describe_pose_ik
+
+        return describe_pose_ik(self._ik)
 
     def _spin_once(self) -> None:
         import rclpy
@@ -164,7 +173,9 @@ class RosMoveGroupReachabilityPlanner:
         """Prove the full pick prefix before the first plan-only request."""
 
         # Opt in only the project solver; injected/stateful implementations keep their semantics.
-        ik = HorizonIkCache(self._ik) if type(self._ik) is UnderactuatedPoseIk else self._ik
+        from ..control.moveit.pose_ik import cacheable_pose_ik
+
+        ik = HorizonIkCache(self._ik) if cacheable_pose_ik(self._ik) else self._ik
         above = targets.for_state(State.MOVE_ABOVE_OBJECT)
         descend = targets.for_state(State.DESCEND)
         waypoints = list(

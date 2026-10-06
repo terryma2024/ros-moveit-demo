@@ -24,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--session-id", required=True)
     parser.add_argument("--evidence-file", type=Path, required=True)
     parser.add_argument("--point-id")
+    parser.add_argument("--ik-backend", choices=("native", "quik"))
     parser.add_argument("--joint-state-timeout-s", type=float, default=5.0)
     return parser
 
@@ -102,7 +103,7 @@ def main(arguments: list[str] | None = None) -> int:
             "so101_task_reachability",
             parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
-        planner = RosMoveGroupReachabilityPlanner(node, template)
+        planner = RosMoveGroupReachabilityPlanner(node, template, ik_backend=options.ik_backend)
         reader = RosJointStateReader(node, (*template.arm_joint_names, "6"))
         observed_start = reader.read(options.joint_state_timeout_s)
         start = (
@@ -116,6 +117,7 @@ def main(arguments: list[str] | None = None) -> int:
         )
         document = result_document(reports)
         document["session_id"] = options.session_id
+        document["ik_solver"] = planner.ik_provenance
     except Exception as error:
         document = {
             "status": "FAILED",

@@ -58,7 +58,7 @@ scripts/so101-macos.zsh run \
   so101_demo_py motion_stack_ready --timeout-s 90
 ```
 
-外部必需环境变量是 0 个。唯一接受的可选变量是 `ROS_DOMAIN_ID`，范围 0 到 232，默认 0，例如 `ROS_DOMAIN_ID=225 scripts/so101-macos.zsh doctor --json`。不要把裸 `ros2 launch`、direnv 或手工拼接的 `DYLD_LIBRARY_PATH` 当作生产启动前提。
+外部必需环境变量是 0 个。可选变量 `ROS_DOMAIN_ID` 的范围是 0 到 232，默认 0，例如 `ROS_DOMAIN_ID=225 scripts/so101-macos.zsh doctor --json`。`SO101_IK_BACKEND` 可选 `native` 或 `quik`，默认 `native`；固定启动脚本会将它传给子进程。QuIK 需要安装可选原生模块，动态 CLI 的 `--ik-backend` 优先于环境选择。不要把裸 `ros2 launch`、direnv 或手工拼接的 `DYLD_LIBRARY_PATH` 当作生产启动前提。
 
 ## Python package test
 

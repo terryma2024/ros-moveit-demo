@@ -28,7 +28,7 @@ from ..control.moveit.deterministic_horizon import (
     validate_cartesian_corridor,
 )
 from ..control.moveit.planning import JointPlanRequest, MoveItPlanningClient
-from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
+from ..control.moveit.pose_ik import create_pose_ik, describe_pose_ik
 from ..control.planning_scene.acm import set_collision_allowed
 from ..control.planning_scene.cup import make_cup_collision_object
 from ..control.trajectory.executor import (
@@ -105,6 +105,7 @@ class RosDynamicMujocoExecution:
         workflow_id: str | None = None,
         request_id: str | None = None,
         parallel_lease_identity: dict[str, object] | None = None,
+        ik_backend: str | None = None,
     ) -> None:
         from control_msgs.action import FollowJointTrajectory
         from moveit_msgs.action import ExecuteTrajectory
@@ -125,11 +126,12 @@ class RosDynamicMujocoExecution:
         self._session_id = session_id
         self._expected_reset_epoch = expected_reset_epoch
         self._evidence_file = evidence_file
-        self._ik = UnderactuatedPoseIk.from_urdf(
+        self._ik = create_pose_ik(
             urdf_path,
             template.arm_joint_names,
             template.planning_frame,
             template.tcp_link,
+            backend=ik_backend,
         )
         self._positions: dict[str, float] = {}
         self._joint_state_generation = 0
@@ -178,6 +180,7 @@ class RosDynamicMujocoExecution:
             "expected_reset_epoch": expected_reset_epoch,
             "policy_path": str(policy_path),
             "policy_sha256": policy_sha256,
+            "ik_solver": describe_pose_ik(self._ik),
             "input_cup_pose_world": list(targets.input_pose.pose_world.values),
             "input_frame_id": targets.input_pose.frame_id,
             "input_source_stamp_ns": targets.input_pose.source_stamp_ns,

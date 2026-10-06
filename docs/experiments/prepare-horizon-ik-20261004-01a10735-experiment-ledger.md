@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: compare currentnative andfrozen weightedQuIK0.08 onall20 taskpoints; broaderQuIK adaptation remainsopen, IKPyexcluded, nativegoals achieved
-success_contract: all20 frozenpoints comparedon sameisolatedCPU14 withindependentcanonical gates;18timedobservations perpoint/backend, outcomes andshared-success latency; nofailure-as-speedup orphysicalgrasp claim
+goal: retain current native and weightedQuIK0.08 behind one compatible IK interface with an explicit backend switch; native remains default; short design explicitly approved
+success_contract: consistent solver API and backend routing; native outputs unchanged; packaged QuIK retains its measured outcomes and canonical gates; twenty-point installed comparison on isolatedCPU14; no implicit fallback or physicalgrasp claim
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: see evidence quik-position-01/points20-01/publish.json; numerical source remains bb9a9c5a
+current_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1 plus verified approved dual-backend integration; delivery SHA in dual-backend-01/publish.json
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -45,8 +45,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-023
-next_experiment: NONE;20pointcomparison complete; P18/P19 losses remain, productionadoption unqualified
+latest_checkpoint: CP-025
+next_experiment: NONE; compatible backend integration and installed twenty-point verification complete
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -61,8 +61,11 @@ authorizes SSH benchmark execution and temporary P-core isolation on ai-station.
 Stack launch, merge, evidence deletion and shared dependency changes remain outside scope.
 The user explicitly authorized commit and push to the current Gitee task branch;
 that authorization applies to this continuing task and the completed full-loop optimization round.
-The latest request authorizes isolated research adapters and comparative experiments for
-QuIK and IKPy. It does not authorize replacing the production solver. The research results
+The previous comparison request authorized isolated research adapters and comparative experiments for
+QuIK and IKPy. The latest request authorizes retaining both current native and QuIK with a
+compatible interface and explicit switch. The user explicitly confirmed the short implementation
+design with "确认" before implementation. Read-only discovery and frozen baseline readback are complete. Native remains
+the proposed default, and QuIK is an explicit optional backend. The research results
 use common acceptance gates and task outcomes, rather than the previous optimization's
 bitwise equivalence contract.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
@@ -2452,4 +2455,186 @@ archived: NONE
 deleted: NONE
 deletion_candidates: taskremote staging,duplicates,packagegate scratch; no deletionauthorization
 next_command: inline review, authorizedcurrentGiteecommit/push andremoteSHA readback
+```
+
+## CP-024 — Compatible backend switch design discovery
+
+```yaml
+checkpoint_id: CP-024
+last_valid_experiment: EXP-045
+measurement_reference: EXP-044
+current_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1
+current_hypothesis: a factory and optional packaged weightedQuIK adapter can retain both implementations without changing caller contracts or default native outputs
+working_tree_status: task ledger only; product code unchanged; clean before discovery
+owned_processes: NONE; no tests, runtime or benchmark started in this phase
+preserved_processes: all existing host and remote processes/checkouts; no remote commands in this phase
+confirmed_conclusions:
+  - OBSERVED current native20/20 and weightedQuIK0.08 18/20 from completed EXP-044; baseline report publication hashes verified
+  - OBSERVED sixteen source/adapter/protocol/publication files fingerprinted; task worktree is isolated, on the existing codex branch
+  - OBSERVED reachability and dynamic execution construct native IK independently; both need the same resolved backend
+  - OBSERVED existing PoseIk protocol and QuIK research adapter provide the flow to extend; native exact-type cache guards must retain their semantics
+  - OBSERVED QuIK experimental bad-input and rejection errors need compatibility adaptation; no solver retuning is proposed
+open_risks: QuIK P18/P19 full-prefix failures remain; optional binary/dependency packaging and same-backend child routing require verification after approval
+scope: read-only discovery and audit evidence only; no product implementation
+evidence:
+  - /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/dual-backend-01/preflight.json
+  - /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/dual-backend-01/protocol.json
+retained: all prior runs and both new discovery records under the same registered root
+archived: NONE
+deleted: NONE
+deletion_candidates: no new candidates; prior classifications unchanged
+next_command: present short reviewed design and obtain explicit confirmation required by AGENTS.md and brainstorming HARD-GATE
+```
+
+## EXP-046 — Approved dual backend contract and installed regression
+
+```yaml
+experiment_id: EXP-046
+status: VALID
+prior_experiment: EXP-044
+hypothesis: a shared selection factory and packaged QuIK adapter can expose both solvers while preserving native default outputs and independent geometry gates
+prediction: contract tests RED before implementation, GREEN afterward; full ordinary installed xdist8 gate has no added failures; QuIK optional build installs both implementations
+single_variable: backend selection and integration, no numerical solver retuning
+lifecycle: FULL_RESTART
+preconditions: approved short design; source freeze ed7998674; single registered evidence root and existing task worktree
+success_criteria: compatible APIs and errors, explicit override precedence, same backend in preflight/execution, installed QuIK integration tests execute without skips
+failure_criteria: changed native outputs, backend mixing, silent fallback, invalid accepted QuIK poses, new package test failures
+invalid_criteria: wrong interpreter, stale module, missing dependency closure or collection error
+provenance:
+  source_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1 plus scoped approved worktree diff
+  install_overlay: task-private dual-backend-01/mac-build/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python
+  ros_domain_id: N/A; headless tests only
+  gz_partition: N/A; no simulator
+commands:
+  - command: fixedROSPython pytest contract, launcher andworker-selection regressions
+    exit_code: validRED1; finaldirected0,138passed21skipped
+  - command: task-private colcon build with SO101_BUILD_QUIK=1 andEigen3.4.0 onMac andLinux
+    exit_code: 0 onbothplatforms; installedmodules verified
+  - command: full ordinary colcon test/test-result,tests-complete-final,xdist8
+    exit_code: 0/0;3953passed30skipped0failures/errors,3983total,33.49s
+  - command: independent SO101_BUILD_QUIK=0 build withabsentEigen;native-only smoke
+    exit_code: 0; defaultnativeworks, explicitQuikmoduleunavailable, nofallback
+observed:
+  - OBSERVED defaultfactory returns exactexistingnative class; explicitselection overridesenvironment withoutmutating it
+  - OBSERVED QuIK canonicalFK/tuple/error/concurrent-context regressions executed withcompiledmodule required
+  - OBSERVED dynamicpreflight closure andexecution receiveone resolvedbackend; CLI,Maccleanexec andworkerallocator propagate selection
+  - OBSERVED vendoredweightedheader SHA256/pinnedupstream/Eigen compileassert/buildflags/license retained; no native solver or iteration/search-policy retuning
+  - OBSERVED initialplugin socketdenial didnotrun intendedassertions; initialworkerwrongtemp boundaryinvalid; validRED retained separately
+  - OBSERVED first broad directedmissing-module failure fixed withimportlib import; final138passed21skipped
+  - OBSERVED firstfullordinary22failures classifiedINVALID_SOURCE_SNAPSHOT_CLOSURE; restored actualindependentGit/submodule refs and44trackedsymlinks, not productcompensation
+  - OBSERVED finalcompleteordinary gate preserves original30skipidentities; allQuIK integrationtests executed
+inferred: NONE
+conclusion: compatible selectable backends installed andverified; defaultnative andoptionalbuild behavior preserved; no livephysics qualification
+evidence: dual-backend-01/approval.json,contract-red-valid.*,launcher-red.*,worker-route-red-valid.*,directed.*,mac-build,tests-complete-final,native-only-smoke.json,snapshot-closure-correction.json
+decision: KEEP implementation andallvalid/invalid evidence
+next_experiment: EXP-047 installed twenty-point isolated-P-core comparison
+```
+
+## EXP-047 — Installed selectable backends on the frozen twenty points
+
+```yaml
+experiment_id: EXP-047
+status: VALID
+prior_experiment: EXP-044
+hypothesis: installation and explicit backend selection preserve each solver's frozen numerical outcomes and QuIK speed advantage
+prediction: native20/20, QuIK18/20 with same P18/P19 failures; shared-success latency retains advantage
+single_variable: installed shared-factory backend integration, no solver parameter tuning
+lifecycle: FULL_RESTART
+preconditions: compiled installed native and QuIK modules verified; exact catalog/URDF/targets/starts; isolatedCPU14 with sibling15 idle and one compute thread
+success_criteria: 12 fresh processes x20points x3measurements; six process outputs identical perbackend; frozen native documents exact; QuIK documents exact after only COMPARISON_GATE_REJECTED to DYNAMIC_IK_RESIDUAL_EXCEEDED normalization; canonical gates pass; cpusets restored and old checkouts preserved
+failure_criteria: numerical/result drift beyond specified error-code mapping, accepted gate violation, lost additional points, failed QuIK speed advantage
+invalid_criteria: migration, sibling activity, incorrect imported artifact, source/input drift or incomplete controller/transfer
+provenance:
+  source_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1 plus approved scoped diff; source.tar.gz hash retained
+  install_overlay: /data/tmp/so101-prepare-horizon-ik-20261004-01a10735-dual-backend-01/install
+  runtime_executable: /usr/bin/python3; 3.12.3 andNumPy1.26.4
+  ros_domain_id: N/A; pure compute, no ROS graph
+  gz_partition: N/A; no simulator
+commands:
+  - command: frozencontroller withinstalledfactory harness,12freshprocesses,CPU14andSMT15idle
+    exit_code: controller0, all12children0; COMPLETE_CPU_ISOLATION_RESTORED
+  - command: verifyremote archive/members;analyze_points20.py
+    exit_code: 0; 3576regularfiles49symlinks315369742regularbytes; archiveSHA fb602833e09ed82217231ca998542693324357ace604f2d69f43f178d7329705
+  - command: untimedactualinstalled auditafterCPUrestoration
+    exit_code: 0;2003FKvectors,532selectedsteps,64fixedrequests perbackend
+observed:
+  - OBSERVED native20/20,QuIK18/20; P18/P19 still15rejects atMOVE_ABOVE_OBJECT waypoint6, no additionalpointloss
+  - OBSERVED all20completeoutputdocs exact perbackend versusEXP-044 after onlyapprovedQuIKfailure-code mapping; all6processoutputs identical perbackend
+  - OBSERVED all12processes actualinstalled source/nativeSHA/CPU14/onecompute thread; measuredmigration0 andSMT15user/nice/systemtickdelta0
+  - OBSERVED samecatalog SHA c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5 andURDF73ab5bdd26451778c094a837817c65748b1e8bacd48672e313c941d8ca85f0b2
+  - OBSERVED common18points324samples perbackend pooledmedian147.2256495ms/native,103.0917045ms/QuIK;ratio0.7002292389275552,reduction29.977076percent
+  - OBSERVED pooledp95/native156.05632605ms,QuIK112.7675843ms; failedexits excludedfromspeedup
+  - OBSERVED installedQuIKFK maxmatrixdelta4.3298697960381105e-15<1e-12; canonicalselectedpose/controlmetricrecalculation exactlymatches all532steps
+  - OBSERVED installed64request return/reject andq exactversusEXP-042 forbothbackends; acceptedgates exact; allnativeerrorclass/messages exact
+  - OBSERVED oldcheckouts/submodules/tmux/governors preserved; allisolationrestored; specialfiles notdereferenced duringcopy
+  - OBSERVED inheritedprotocol source-label metadata corrected onlyinanalysis-provenance.json; actualsourcebaseed7998674 + archivee00d51115bf4d2b0c675c7f5b89ad3f08796f8e0808448767c6e9588f6650492, installedfiles individuallyverified
+  - OBSERVED setupreference reuseisasymmetric andoutsidetimedboundary; nocross-backendcold-startclaim
+inferred: NONE
+conclusion: installedintegration preserves perbackend numericalbehavior andweightedQuIK warm-speedadvantage; P18/P19 limitation remains; onlycomputeprefix qualification
+evidence: dual-backend-01/points20-01/{protocol.json,analysis-provenance.json,analysis.json,installed-audit-verified.json,copy-verification.json,remote-staging}
+decision: KEEP selectableQuIK alongside defaultnative; no solverretuning orsilentfallback
+next_experiment: NONE
+```
+
+
+## EXP-048 — Separate benchmark package gate after backend integration
+
+```yaml
+experiment_id: EXP-048
+status: VALID
+prior_experiment: EXP-045
+hypothesis: the backend integration does notaddfailures to the independently failing perception benchmark package gate
+prediction: full585test scope has553pass32knownfailures withsameIDs
+single_variable: approvedbackend integration; benchmark config andsource unchanged
+lifecycle: FULL_RESTART
+preconditions: verifiedtask-privateMac overlay/fixedPython; no stacklaunched; uniqueNVMe scratch
+success_criteria: completebenchmark_test scope/xdist8/JUnit; compareallfailureIDs againstEXP-045
+failure_criteria: newfailureidentity or countchange requiresclassification
+invalid_criteria: wrongPython/prefix/worker count orcollectionfailure
+provenance:
+  source_commit: ed7998674 plusapprovedintegration; finalSHA inpublish.json
+  install_overlay: dual-backend-01/mac-build/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python andcolcon
+  ros_domain_id: N/A; noROSstack
+  gz_partition: N/A; nosimulator
+commands:
+  - command: run-package-benchmark-gate.zsh; complete benchmark_test -n8
+    exit_code: shell1,colcontest0,test-result1
+observed: 585tests553pass32fail0error/skip; exactEXP-045failureIDs,29CONFIG_SHA256_MISMATCH and3secondarydry-runfailures
+inferred: NONE
+conclusion: requiredexecution valid; packagebenchmarkgate remainsFAIL withnoaddedfailureidentity; noalltests-passclaim
+scoping: thisexplicitgate isseparate fromthepassed3983ordinary testcollection
+scratch: /opt/data/tmp/ik.bench.uEReFO; retained/deletioncandidate, no deletionauthorization
+evidence: dual-backend-01/package-benchmark-gate-host-01/{preflight.json,results,classification.json,gate.log,test-result.log,scratch.txt}
+decision: KEEP alltest/scratch evidence; no unrelatedconfigfix
+next_experiment: NONE
+```
+
+## CP-025 — Selectable backends verified and ready for publication
+
+```yaml
+checkpoint_id: CP-025
+last_valid_experiment: EXP-048
+measurement_reference: EXP-047
+current_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1 beforedelivery; publishedSHA in dual-backend-01/publish.json
+current_hypothesis: NONE withinapprovedintegration scope
+working_tree_status: scopedapprovedproduct/build/pins/contracts/guides/report/ledger changes; native numericalsource unchanged
+owned_processes: NONE; allformalcontrollers/builds/tests/audits/transfers finished
+preserved_processes: priorMac tmux andremoteclaude tmux preserved; noROS/simulatorstack launched
+confirmed_conclusions:
+  - OBSERVED native/defaultandweightedQuIK0.08 retainedbehindsharedposeIK API andCLI/environment switches
+  - OBSERVED installedtwenty-point numericaloutputs unchangedperbackend; common18medianratio0.700229,reduction29.98percent
+  - OBSERVED bothplatform builds valid; finalordinaryxdist8 gate3953pass30skip0fail/errors; native-onlybuild validwithoutEigen
+  - OBSERVED explicitbenchmarkgate585/553/32knownfailures, exactpreviousIDs; separateexistinglimitation
+  - OBSERVED pinnedQuIKsource/Eigen/buildflags/license andactualartifact provenance recorded
+open_risks: QuIK P18/P19 fullprefixloss; no physicalgrasp/ROS/MoveIt/controllerlivequalification; existing32benchmarkconfiguration failures
+report: docs/experiments/prepare-horizon-ik-dual-backend-20261007.md
+guide: docs/guides/so101-ik-backend-selection.md
+evidence: dual-backend-01 under theunchangedregisteredMac root
+retained: allcurrent andprior valid/invalidruns,privatebuilds,source/nativeartifacts,protocols/raw/JUnit/audits
+archived: NONE
+deleted: NONE
+deletion_candidates: task-privateMacscratch,remoteexecutionstaging,duplicatebuild/source/transferarchives; see dual-backend-01/final-retention.json; noauthorizationtodelete
+next_command: finalinline review, authorizedcurrentGiteecommit/push, exactremoteSHA readback
 ```

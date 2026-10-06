@@ -1,0 +1,13 @@
+QuIK optional CPU solver component
+Upstream: https://github.com/steffanlloyd/quik
+Frozen commit: a9ebd1f21dfd3c9f0869140dfb0a4ae5a538cccc
+Author: Steffan Lloyd; Copyright (c) 2024, as retained in source files.
+Declared upstream license: AGPL-3.0-only (upstream-package.xml).
+
+Local modification: IKSolver.hpp applies W=diag(1,1,1,0.08,0.08,0.08) to
+the solve matrices/right-hand sides and progress norm. Geometric Jacobian
+and Hessian remain unchanged. The native bridge uses the previously measured
+200-iteration damped QuIK parameters. See config/ik/quik.lock.json for hashes.
+
+The project-owned default native solver remains available. This optional
+component retains its AGPL license and is listed separately in package.xml.
