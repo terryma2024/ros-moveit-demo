@@ -8,7 +8,7 @@ worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: f6ba3231c; approved QuIK package extraction implemented and tested; final artifact transport/review/publication pending
+current_commit: see quik-ros-package-01/publish.json; implementation e470b9baca68a74849a14b9632a9ce209cb5d445 published and verified
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -2790,7 +2790,7 @@ next_command: obtainexplicitconfirmationof quik-ros-package-01/design-and-plan.m
 
 ```yaml
 experiment_id: EXP-051
-status: RUNNING
+status: VALID
 prior_experiment: EXP-050
 hypothesis: extracting the frozen QuIK kernel into one independent ament_cmake package preserves all perbackend outputs and the inprocess hotloop while making demo a declared consumer
 prediction: newpackage independent C++/Python consumers pass, demo build order/importprefix is correct, exact64requests/20completehorizons/2003FK and <=1.05median/p95 ratios pass
@@ -2806,12 +2806,12 @@ provenance:
   runtime_executable: Mac /opt/ros/jazzy/.venv/bin/python; Linux exactfrozen ROS interpreter forcomparison; managedPythononly standalonefreshsetup
   ros_domain_id: N/A; headlesslibrary/CPU gates, nostack
   gz_partition: N/A; nosimulator
-commands: pending RED thenimplementation/build/ordinarypytest/CTest/setup/comparison
-observed: OBSERVED explicituserok recordedbefore productcode
+commands: valid7RED; independentbuild/consumer0; two-platformROSbuilds0; Macordinaryxdist8/CPP/PythonCTest0; formalMac/bareUbuntufirst/repeat0; exact64/20/2003capture0; all24isolatedbenchmarkprocesses0; losslessarchiveverify0; productcommit/push/readback0
+observed: OBSERVED userok beforecode; alleightvendor andCABIbody exact; C++/Pythonconsumers anddeclareddependencies PASS; Mac3967pass30skip; eachplatformQuIK2CPP5PythonPASS; allsameplatform43docs exact; coldsetupandfaultgatesPASS; native/QuIKmedian+p95ratios<=1.05; CPUandoldhoststatepreserved; Linuxarchive40201entrieslossless; e470b9bacGiteeexactreadback/cleantree
 inferred: no algorithmchange required; standalonewheel andROS useone CMakecoretarget
-conclusion: PENDING
-evidence: quik-ros-package-01/{approval.json,protocol.json,design-and-plan.md,baseline-verification.json}
-decision: implement approvedplan withinline selfreview
+conclusion: qualified independent ROS2so101_quik0.1.0, consumedbydemo, preservesfrozenperbackend behavior/latency; no additionalQuIKscenario orphysicalgrasp qualification
+evidence: quik-ros-package-01/{approval.json,protocol.json,design-and-plan.md,baseline-verification.json,acceptance.json,benchmark-acceptance.json,transfer-verification-final.json,retention-final.json,product-publish.json,publish.json}
+decision: KEEP reviewedandverified packageextraction; publishedauthorizedGiteebranch
 next_experiment: NONE unless invalidrun requires a distinctreplacement ID
 ```
 
@@ -2855,13 +2855,15 @@ next_experiment: EXP-053 explicit sourcecwd/basepaths andfreshscratch, no produc
 
 ```yaml
 experiment_id: EXP-053
-status: RUNNING
+status: VALID
 prior_experiment: EXP-052
 hypothesis: explicit tasksourcecwd andso101_quik basepath resolve CTest discovery withoutproductchanges
 single_variable: runnerdiscovery boundary
 success_criteria: actualnewpackage CTest2CPP/5Python,xdist8/interpreter/scratch/resultproof; completeLinux43doc exactcomparison; thenapproved24processisolatedPcorebenchmark
 invalid_criteria: wrongsource/runtime/scope, incompletecollection, wrongCPU/isolation, incompleteevidence
 retention: allpriorattempts retained; no deletion
+observed: OBSERVED corrected source/basepath gate2CPP5PythonPASSxdist8; completeLinux43docs exact; all24isolatedCPU14benchmarkprocessesPASS; idleSMT15ticks0/hotmigrations0 andexactcpusetrestore; canonicalarchive verifiedlosslesslyonMac
+conclusion: runner-onlydiscoverycorrection confirmed; invalidEXP052 excluded
 ```
 
 ## CP-030 — Two-platform package/numerical/setup gates and isolated latency pass
@@ -2887,4 +2889,30 @@ archived: NONE
 deleted: NONE
 deletion_candidates: ownedsetup/source/build/wheels/cache/scratch/container andremoteexecutionstaging/archives; no authorizationtodelete
 next_command: verifyLinuxarchiveMacstreamSHA/payload, finalretention/acceptance/ledger,commitpush Gitee currentbranch andreadback
+```
+
+## CP-031 — QuIK ROS2 package complete and published
+
+```yaml
+checkpoint_id: CP-031
+last_valid_experiment: EXP-051/053
+status: COMPLETE
+implementation_commit: e470b9baca68a74849a14b9632a9ce209cb5d445
+current_delivery_commit: seequik-ros-package-01/publish.json afterfinalledgercommit/readback
+branch: codex/prepare-horizon-ik-20261004-01a10735
+remote: originGitee,normalfastforward; implementationexactSHAreadbackPASS/cleantree
+confirmed_conclusions:
+  - independentso101_quik0.1.0 CPPtargetandPythonstdlibloader; demoROS/Pythonversioneddependency; oneCMakekernel
+  - canonicalnative/defaultinterface/robotmodel/weights/solver/vendor frozen; Mac/Linuxsameplatform64requests20fullhorizons2003FKexact
+  - Mac3997ordinarytests3967pass30skip,xdist8; independentQuIKbothplatform2CPP5PythonPASS/xdist8
+  - officialfreshMacandbareUbuntu24.04first/repeatsetupPASS; completepins/590sourceinputs/dependencyartifacts/faultrejections/restorationPASS
+  - CPU14physicalPcore/idleSMT15,24freshprocess3AB3BA; native medianratio0.997861702,p95ratio1.001586098; QuIKmedianratio1.004497902,p95ratio1.004264869; <=1.05PASS
+  - allbenchoutputs exact,allhotmigrations0/SMTactive0; CPUstateandoriginalprocesses/checkouts/tmuxpreserved
+  - LinuxlosslessarchiveSHA44135abbf149855941659a71db6649c8c9506945e31cd4814eca8907c9fbd699;40201entries/1913183493rawbytes; invalidattemptsretained
+remaining_limitations: weightedQuIK18/20,P18P19 unchanged; headlesspackage/CPUqualification,noROSsim/physicalgraspclaim
+retained: allpriorregisteredrootruns plusquik-ros-package-01 andlinux-evidence-verified.tar.gz,selectedverifiedmetadata,audits; retention-final.json
+archived: NONE
+deleted: NONE
+deletion_candidates: onlyclassifiedownedbuild/setup/cache/source/wheel/scratch/stoppedcontainer/remoteoperationalstaging/transferduplicates; noauthorizationtodelete
+next_command: finaldocscheckpointcommit/push/readback; taskcomplete whenpublish.json confirmsremoteSHA/cleantree
 ```

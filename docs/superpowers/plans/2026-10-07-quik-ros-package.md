@@ -114,7 +114,7 @@ Evidence scripts live under `quik-ros-package-01`; they do not become product ru
 - [x] Establish before/after Linux behavior with the same fixed runtime and inputs, then run all 24 predeclared isolated-P-core comparison processes. Validate all documents and the <=1.05 median/p95 contract, and restore CPU/governor/cgroup state.
 - [x] Transfer all remote records without dereferencing special files, verify archive paths/hashes/sizes/symlinks and retain invalid attempts.
 - [x] Finish inline implementation review and write acceptance, provenance, retention and ledger checkpoint.
-- [ ] Commit and push the authorized current Gitee branch with standard Git, then verify remote SHA and clean local worktree.
+- [x] Commit and push the authorized current Gitee branch with standard Git, then verify remote SHA and clean local worktree.
 
 ROS build boundary:
 
