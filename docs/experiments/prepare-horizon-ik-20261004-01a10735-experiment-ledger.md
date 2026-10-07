@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: formal QuIK setup entry with automatic dependency preparation and verified fresh-machine installation; native/QuIK algorithms and backend selection remain unchanged
-success_contract: reproducible isolated dependency setup, pinned source/runtime/build inputs, actual installed native/QuIK smoke, freshUbuntu24.04 container andMacempty-prefix validation, idempotent rerun, completeordinaryxdist8 package gate; designconfirmation beforeimplementation
+goal: extract the frozen weighted QuIK CPU backend into one independent ROS2 package consumed by so101_demo_py; baseline/protocol and concrete design before implementation approval
+success_contract: one independent ROS2 QuIK package with explicit demo dependency, same-platform exact64requests/20horizon/2003FK, preserved in-process latency, standalone/ROS two-platform install, full ordinary xdist/CTest gates; explicit design/plan confirmation before implementation
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: c62695cc663dd3e2bf9ee381616d27345d343b8e plus approvedformalsetup changes; numericalsources andsolverpins unchanged
+current_commit: 38e333507127a8073061811a7b08a02e41cbe7d1; only audit ledger modified; product unchanged, package design approval pending
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -45,8 +45,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-027
-next_experiment: NONE; formalsetup accepted; authorizedcurrentGiteepublication follows; exactSHA in quik-setup-01/publish.json
+latest_checkpoint: CP-028
+next_experiment: EXP-051 RUNNING; user approved complete package plan with ok; inline execution
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -2731,4 +2731,86 @@ archived: NONE
 deleted: NONE
 deletion_candidates: privateinstall/cache/source/build/testscratch, stoppedownedcontainers01/02/03, remoteexecutionstaging/transferarchives, invalidMacextraction/duplicatearchives; retention.json; noauthorizationtodelete
 next_command: finalinline review thenauthorizedcommit/push currentGiteebranch andexactremoteSHA/cleanstatus readback
+```
+
+## EXP-050 — QuIK ROS2 package baseline and design protocol
+
+```yaml
+experiment_id: EXP-050
+status: VALID
+prior_experiment: EXP-049
+hypothesis: the published frozen installed backends can provide same-source reproducible per-backend numerical references before changing package ownership
+prediction: all20 complete horizon documents and64 fixed solve outcomes repeat exactly on Mac; installed numerical sources and parameters match HEAD; independent package is currently absent
+single_variable: NONE; read-only baseline, audit harness only
+lifecycle: FULL_RESTART
+preconditions: clean isolated task worktree HEAD38e333507, retained officialsetup private overlay, fixed ROS Python; existing processes untouched
+success_criteria: exact installed/source provenance and repeated complete outputs for both backends; reviewable dependency/build/setup/numerical/latency protocol before asking design approval
+failure_criteria: output repeat drift or wrong installed source prevents using baseline
+invalid_criteria: stale overlay, missing runtime closure, imports from wrong prefix, missing inputs, absent source-hash proof
+provenance:
+  source_commit: 38e333507127a8073061811a7b08a02e41cbe7d1
+  install_overlay: /opt/data/work/so101-evidence/prepare-horizon-ik/20261004-01a10735/quik-setup-01/mac-ros-delivery/install
+  runtime_executable: /opt/ros/jazzy/.venv/bin/python
+  ros_domain_id: N/A; headless CPU baseline, no node creation
+  gz_partition: N/A; no simulator launch
+commands: git/source/installed hash checks0; capture_baseline.py0 (6.135s); host/tmux/proc probes0; ROS node-list0 andcolcon list0; remote readonly SSH0
+observed: OBSERVED isolatedclean HEAD38e333507; actual installed numeric source exact versus HEAD andbinaryhashes matchEXP049 gate; all20completeoutputs and64requests repeatedexactperbackend; native20/20,QuIK18/20 P18/P19 unchanged;2003QuIKFKmatrices frozen; oldcheckouts/tmux/CPUstate preserved; colcon8packages/noindependentQuIK
+inferred: package extraction should keep the existing in-process call and SO101-specific URDF/canonical gates in demo to avoid circular dependency
+conclusion: valid perbackend installed baseline and reviewed package/build/setup/numerical/latency proposal ready; no product implementation started
+evidence: quik-ros-package-01/{baseline-source.json,baseline-verification.json,baseline-mac,protocol.json,design-and-plan.md,inline-design-review.json,host-before.json,remote-before.json,ros-graph-package-baseline.json,retention.json}
+decision: KEEP baseline andreviewableplan; awaiting explicit design/plan confirmation before product code
+next_experiment: EXP-051 after approval; extraction implementation and acceptance
+```
+
+## CP-028 — Independent QuIK ROS2 package baseline and reviewable plan ready
+
+```yaml
+checkpoint_id: CP-028
+last_valid_experiment: EXP-050
+current_commit: 38e333507127a8073061811a7b08a02e41cbe7d1
+current_hypothesis: packageownership andbuildboundary canbeextractedwithoutchanging perbackendnumericalbehavior orinprocess latency
+working_tree_status: only docs/experiments/prepare-horizon-ik-20261004-01a10735-experiment-ledger.md modified; no productcode orpackage scaffold
+owned_processes: NONE; all probes andbaseline capture finished
+preserved_processes: existingMac tmuxso101-ik-cpu-20261004 andPIDs1541/1542/27535/85808; remoteclaude tmux; oldcheckouts/submodules andcpusets/governor unchanged
+confirmed_conclusions:
+  - currentMac installedsource/binary matchespublished baseline;64requests and20completeoutputs repeat exactly perbackend
+  - native20/20 andweightedQuIK18/20 P18/P19 unchanged;2003FKvectors/matrices frozen
+  - recommendedonepackage so101_quik withament_cmake CPPtarget plusstdlib Pythonloader; demo retainsURDF/canonical gates andnative default
+  - reviewedprotocol covers independentconsumers, freshcolcondependencyclosure, officialsetup, fullordinaryxdist/CTest, isolatedPcore14/idleSMT15 beforeafterlatency
+disproven_routes: no newalgorithmexperiment; priorconclusions unchanged
+open_risks: completeplan approval pending; optionalCPP/Python preference pending (recommendedboth assumed); newCMakepin andpackagepaths require actualtwo-platform buildverification; priorQuIKP18/P19 limitation remains
+retained: allpriorregisteredroot contents andquik-ros-package-01 baseline/protocol/plan/host/readback/audit evidence
+archived: NONE
+deleted: NONE
+deletion_candidates: no newbuild/testscratch; priorclassifications unchanged
+next_command: obtainexplicitconfirmationof quik-ros-package-01/design-and-plan.md, then recordapproval andcontractRED before any package implementation
+```
+
+## EXP-051 — Independent QuIK ROS2 package implementation
+
+```yaml
+experiment_id: EXP-051
+status: RUNNING
+prior_experiment: EXP-050
+hypothesis: extracting the frozen QuIK kernel into one independent ament_cmake package preserves all perbackend outputs and the inprocess hotloop while making demo a declared consumer
+prediction: newpackage independent C++/Python consumers pass, demo build order/importprefix is correct, exact64requests/20completehorizons/2003FK and <=1.05median/p95 ratios pass
+single_variable: package ownership/build/install anddependency/loading boundary; solver sources/parameters androbot model frozen
+lifecycle: FULL_RESTART
+preconditions: EXP050 installedbaseline valid; userexplicitok confirms entiredesign/plan; owned worktree/prefixes; original sole evidence root
+success_criteria: independentpackage consumers, two-platformprivateROSbuilds/officialfreshsetup, fullordinaryxdist8/CTest, exact sameplatformoutputs andisolatedCPU14/idleSMT15 latency, finalinline review andauthorizedGiteepublication
+failure_criteria: numericaldrift, newfailedpoints, adapterfallback, timingratio>1.05 in validbatch, source/license/pin loss orsharedstate mutation
+invalid_criteria: wrongprefix/interpreter/flags, missingdependencyclosure, incompletecollection orCPUisolation/transfer pollution
+provenance:
+  source_commit: 38e333507127a8073061811a7b08a02e41cbe7d1 plusapprovedscoped changes
+  install_overlay: taskowned quik-ros-package-01 children; exactprefixes inbuild/test manifests
+  runtime_executable: Mac /opt/ros/jazzy/.venv/bin/python; Linux exactfrozen ROS interpreter forcomparison; managedPythononly standalonefreshsetup
+  ros_domain_id: N/A; headlesslibrary/CPU gates, nostack
+  gz_partition: N/A; nosimulator
+commands: pending RED thenimplementation/build/ordinarypytest/CTest/setup/comparison
+observed: OBSERVED explicituserok recordedbefore productcode
+inferred: no algorithmchange required; standalonewheel andROS useone CMakecoretarget
+conclusion: PENDING
+evidence: quik-ros-package-01/{approval.json,protocol.json,design-and-plan.md,baseline-verification.json}
+decision: implement approvedplan withinline selfreview
+next_experiment: NONE unless invalidrun requires a distinctreplacement ID
 ```
