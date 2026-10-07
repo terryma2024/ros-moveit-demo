@@ -8,7 +8,7 @@ worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: 38e333507127a8073061811a7b08a02e41cbe7d1; only audit ledger modified; product unchanged, package design approval pending
+current_commit: f6ba3231c; approved QuIK package extraction implemented and tested; final artifact transport/review/publication pending
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -2813,4 +2813,78 @@ conclusion: PENDING
 evidence: quik-ros-package-01/{approval.json,protocol.json,design-and-plan.md,baseline-verification.json}
 decision: implement approvedplan withinline selfreview
 next_experiment: NONE unless invalidrun requires a distinctreplacement ID
+```
+
+## CP-029 — Independent package and Mac installed numerical comparison pass
+
+```yaml
+checkpoint_id: CP-029
+last_valid_experiment: EXP-050
+active_experiment: EXP-051 RUNNING
+current_commit: f6ba3231c (approved design documentation commit)
+working_tree_status: scoped package extraction/setup/tests in progress; old demo vendor/C++ wrapper migrated
+owned_processes: Mac full demo xdist8 and newpackage CTest; exact sessions in tool/evidence records
+confirmed_conclusions:
+  - RED valid7 actualassertionfailures; earlier socket-denied sandbox attempt INVALID and retained
+  - eightvendorSHA andnumericalCABIbody exact; independent5Python tests PASS; installedC++ nonzero solve PASS
+  - newMac ROS two-packagecolconbuild PASS independencyorder; actualnewlibrary belongsso101_quik andglobal/Pythoncopies byteidentical
+  - Mac64requests perbackend,20completehorizons perbackend and2003QuIKFK exact againstEXP050;43docs byteidentical
+  - officialfreshMac managedPythonsetup PASS first/repeat; twowheels anddependencycheck PASS
+open_risks: fullordinarypytest/CTest pending; freshbareUbuntusetup, LinuxprivateROSnumericalcapture andisolatedPcorelatency pending; docs/finalsourceclosure/integritycases/review/publication pending
+retained: allpriorruns plusquik-ros-package-01 independentbuild/cppconsumer/red/source/ros/afterMac/macsetup evidence
+archived: NONE
+deleted: NONE
+deletion_candidates: privatebuild/setupcache/source/wheels/testscratch; no deletion authorized
+next_command: readfullMacgate/CTest exits; complete docs/setup integrity; stage new-owned bareUbuntu andfreshLinuxbeforeafter overlays
+```
+
+## EXP-052 — Linux package gate with inherited SSH cwd
+
+```yaml
+experiment_id: EXP-052
+status: INVALID
+prior_experiment: EXP-051
+single_variable: NONE; gate runner environment
+observed: OBSERVED beforeafter ROS builds0 anduntimed captures/C++consumer complete; colcon test inheritedhomecwd, ignoredunknown so101_quik,0packages/0tests; test-result2 absentresultdirectory
+conclusion: invaliddiscoverycannotcount as packagepass; no productfailure inferred
+retained: quik-ros-package-01/linux-package-gate-invalid-01.json andalloriginalLinux logs/scratch
+next_experiment: EXP-053 explicit sourcecwd/basepaths andfreshscratch, no productchanges
+```
+
+## EXP-053 — Corrected Linux package discovery and fixed-runtime comparison
+
+```yaml
+experiment_id: EXP-053
+status: RUNNING
+prior_experiment: EXP-052
+hypothesis: explicit tasksourcecwd andso101_quik basepath resolve CTest discovery withoutproductchanges
+single_variable: runnerdiscovery boundary
+success_criteria: actualnewpackage CTest2CPP/5Python,xdist8/interpreter/scratch/resultproof; completeLinux43doc exactcomparison; thenapproved24processisolatedPcorebenchmark
+invalid_criteria: wrongsource/runtime/scope, incompletecollection, wrongCPU/isolation, incompleteevidence
+retention: allpriorattempts retained; no deletion
+```
+
+## CP-030 — Two-platform package/numerical/setup gates and isolated latency pass
+
+```yaml
+checkpoint_id: CP-030
+active_experiment: EXP-051/053 pendingfinalartifacttransport andpublication
+current_commit: f6ba3231c documentationbaseline; scopedproductchanges uncommitted
+confirmed_conclusions:
+  - finalMac fullordinarytest scope3997:3967passed30skipped,xdist8,33.12s; originalgate35.14s retained
+  - newpackage registeredCTest2CPP/5PythonPASS onMac andLinux; Pythonxdist8each,workerprefix/temp proofs
+  - sameplatform Mac/Linux43complete numericaldocs exact:64requests eachbackend,20horizons eachbackend,2003QuIKFK; native20/20 QuIK18/20 P18P19 unchanged
+  - formalcoldMac first/repeat finalhelperPASS; freshbareUbuntu24.04 first/repeatPASS; actualSHA/library/versionrejections andrestoredreadbackPASS
+  - isolatedphysicalPcoreCPU14/idleSMT15,24freshprocesses,3AB/3BA perbackend; alloutputs exact,all24singlethread/nohotmigrations/SMTactive0
+  - native360successsamples/version median145.681051->145.3695415ms ratio0.997861702,p95374.9876929->375.58246ms ratio1.001586098
+  - QuIK324common-successsamples/version median102.2960195->102.756137ms ratio1.004497902,p95112.2862485->112.7651346ms ratio1.004264869; <=1.05contractPASS
+  - Linuxcpuset exactrestored,CPU14governor powersave,oldcheckouts/submodules/tmux unchanged,ownedbarecontainer stoppedretained
+  - originalMac PIDs1541/1542/27535/85808 preserved; numerical/model/gate/vendor sourcesfrozen; installedloaderexact andCPP/Pythonlibcopies identical
+  - sourcehelperfinal590inputs exactcurrentworktree,8343installedartifacts inclcompleteCMake/dependencytrees
+invalid_attempts: Linuxcolcon cwd discoveryEXP052 retainedandcorrectedEXP053; firstarchive tar directorymtimefailure retainedinsidecanonicalarchive
+retained: allpriorandcurrent evidence; verifiedLinuxcanonicalarchive40201entries39024files1177symlinks1913183493rawbytes, transporttoMac pending
+archived: NONE
+deleted: NONE
+deletion_candidates: ownedsetup/source/build/wheels/cache/scratch/container andremoteexecutionstaging/archives; no authorizationtodelete
+next_command: verifyLinuxarchiveMacstreamSHA/payload, finalretention/acceptance/ledger,commitpush Gitee currentbranch andreadback
 ```

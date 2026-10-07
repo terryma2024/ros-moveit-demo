@@ -1,6 +1,4 @@
 import os
-import hashlib
-import json
 import sys
 from pathlib import Path
 
@@ -48,9 +46,6 @@ ik_requirements = [
     if line.strip() and not line.lstrip().startswith("#")
 ]
 
-build_quik = os.environ.get("SO101_BUILD_QUIK", "0")
-if build_quik not in ("0", "1"):
-    raise ValueError("SO101_BUILD_QUIK must be 0 or 1")
 extensions = [Extension(
     f"{python_package}.control.moveit._ik_numeric",
     ["src/control/moveit/_ik_numeric.c"],
@@ -59,22 +54,6 @@ extensions = [Extension(
         "-fno-builtin-sin", "-fno-builtin-cos",
     ],
 )]
-if build_quik == "1":
-    quik_lock = json.loads((package_root / "config/ik/quik.lock.json").read_text())
-    for relative, expected in quik_lock["files"].items():
-        if hashlib.sha256((package_root / relative).read_bytes()).hexdigest() != expected:
-            raise ValueError(f"QUIK_SOURCE_SHA256_MISMATCH: {relative}")
-    eigen = Path(os.environ.get("SO101_EIGEN_INCLUDE_DIR", "/usr/include/eigen3"))
-    if not (eigen / "Eigen/Core").is_file():
-        raise ValueError("QUIK_BUILD_REQUIRES_EIGEN_3_4_0: set SO101_EIGEN_INCLUDE_DIR")
-    extensions.append(Extension(
-        f"{python_package}.control.moveit._quik_native",
-        ["src/control/moveit/_quik_native.cpp", "third_party/quik/src/geometry.cpp"],
-        include_dirs=[str(eigen), str(package_root / "third_party/quik/include")],
-        depends=list(quik_lock["files"]),
-        extra_compile_args=quik_lock["build_flags"],
-        language="c++",
-    ))
 
 
 def installed_resources() -> list[tuple[str, list[str]]]:
@@ -106,10 +85,6 @@ setup(
             [f"resource/{package_name}"],
         ),
         (f"share/{package_name}", ["package.xml"]),
-        (f"share/{package_name}/third_party/quik", [
-            "third_party/quik/LICENSE", "third_party/quik/NOTICE",
-            "third_party/quik/upstream-package.xml",
-        ]),
         (
             f"lib/{package_name}",
             ["../../scripts/run_so101_adaptive_batch.zsh"],
@@ -117,12 +92,12 @@ setup(
     ]
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
-    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"] + ik_requirements,
+    install_requires=["so101-quik==0.1.0", "PyYAML==6.0.2", "setuptools", "typing_extensions"] + ik_requirements,
     zip_safe=False,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
-    license="Apache-2.0 AND AGPL-3.0-only" if build_quik == "1" else "Apache-2.0",
+    license="Apache-2.0",
     extras_require={
         "test": [
             "pytest",

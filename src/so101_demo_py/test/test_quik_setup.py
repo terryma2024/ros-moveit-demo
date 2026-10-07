@@ -157,3 +157,25 @@ def test_rerun_rejects_missing_or_modified_installed_artifact(tmp_path):
     binary.unlink()
     with pytest.raises(ValueError, match="INSTALLED_ARTIFACT_MISSING"):
         helper().verify_artifacts(artifacts)
+
+
+def test_setup_fingerprint_tracks_independent_quik_build_inputs(tmp_path):
+    repo = tmp_path / "repo"
+    for package, files in {
+        "so101_demo_py": ("setup.py", "setup.cfg", "MANIFEST.in", "package.xml", "src/__init__.py"),
+        "so101_quik": ("setup.py", "pyproject.toml", "MANIFEST.in", "package.xml",
+                       "CMakeLists.txt", "src/quik_c_api.cpp", "so101_quik/__init__.py"),
+    }.items():
+        for name in files:
+            path = repo / "src" / package / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("original build input")
+    for name in ("run_so101_adaptive_batch.zsh", "setup-so101-quik.sh",
+                 "so101_quik_setup.py", "so101-quik-bootstrap.lock.env"):
+        path = repo / "scripts" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("bootstrap input")
+    first = helper().source_inputs(repo)
+    (repo / "src/so101_quik/src/quik_c_api.cpp").write_text("changed core input")
+    second = helper().source_inputs(repo)
+    assert first != second, "rerun would reuse a stale independent QuIK kernel"

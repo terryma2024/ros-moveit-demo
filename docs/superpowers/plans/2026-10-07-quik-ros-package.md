@@ -31,14 +31,14 @@ Files: create `src/so101_quik/{CMakeLists.txt,package.xml,setup.py,pyproject.tom
 
 Consumes: the existing four C ABI functions, their 5-joint arrays, weighted solver header and existing lock. Produces: a Python loader with typed symbols, independent shared library, installed C++ target and standalone wheel built from the same CMake target.
 
-- [ ] Add a failing behavior test that imports the new installed package inside the test body, loads the library, creates a planar 5-joint chain and verifies literal FK results. Missing package is an assertion failure after collection, not an environment RED.
-- [ ] Save the directed fixed-interpreter RED command, exit and JUnit under this phase.
-- [ ] Move frozen files, verify every vendor SHA against the prior lock, and split only the CPython module shell from the existing C++ wrapper.
-- [ ] Implement source-hash verification and exact Eigen lookup in CMake. Export the target and headers. Install an identical core copy as Python data; use a fixed `@rpath` identity on macOS so install does not alter its bytes.
-- [ ] Add the standard-library loader, deterministic package-relative path and explicit ImportError for absent or unloadable artifacts.
-- [ ] Build a task-private CMake/Eigen tool prefix, compile/install only the new package, and rerun the behavior test GREEN.
-- [ ] Verify a nonzero pose solve and distinct context geometry. Run Python with `-S` and only the new installed package on its path to prove that neither demo nor NumPy is needed.
-- [ ] Compile and run an installed-target C++ consumer using the same hand-checked FK/solve inputs. Register the C++ behavior test in CTest.
+- [x] Add a failing behavior test that imports the new installed package inside the test body, loads the library, creates a planar 5-joint chain and verifies literal FK results. Missing package is an assertion failure after collection, not an environment RED.
+- [x] Save the directed fixed-interpreter RED command, exit and JUnit under this phase.
+- [x] Move frozen files, verify every vendor SHA against the prior lock, and split only the CPython module shell from the existing C++ wrapper.
+- [x] Implement source-hash verification and exact Eigen lookup in CMake. Export the target and headers. Install an identical core copy as Python data; use a fixed `@rpath` identity on macOS so install does not alter its bytes.
+- [x] Add the standard-library loader, deterministic package-relative path and explicit ImportError for absent or unloadable artifacts.
+- [x] Build a task-private CMake/Eigen tool prefix, compile/install only the new package, and rerun the behavior test GREEN.
+- [x] Verify a nonzero pose solve and distinct context geometry. Run Python with `-S` and only the new installed package on its path to prove that neither demo nor NumPy is needed.
+- [x] Compile and run an installed-target C++ consumer using the same hand-checked FK/solve inputs. Register the C++ behavior test in CTest.
 
 Behavior fixture (independent literal oracle):
 
@@ -66,12 +66,12 @@ Files: modify `src/so101_demo_py/{package.xml,setup.py,src/control/moveit/quik_i
 
 Consumes: `so101_quik.load_native_library()`. Produces: the unchanged public pose IK interface with an actual external package/library path.
 
-- [ ] Change the missing-backend test to mask `so101_quik` and run it against the existing installed baseline. It must fail because the old adapter still succeeds through its embedded extension.
-- [ ] Add the package dependency and pinned Python distribution requirement; remove QuIK compilation and vendor installation from demo setup.
-- [ ] Change only the constructor's loading/type-binding boundary to `self._library, self._artifact = load_native_library()`. Keep context creation, finalizer, lock, geometry, solve, normalization and canonical gates as they are.
-- [ ] Catch explicit loading errors under `QUIK_BACKEND_UNAVAILABLE`; retain all numerical failure behavior and no-fallback semantics.
-- [ ] Build both packages into a new private ROS overlay and verify dependency order, package prefix, module path, library path and identical library copies.
-- [ ] Run the backend directed tests and installed Mac behavior capture against EXP-050. Reject any numerical drift before continuing.
+- [x] Change the missing-backend test to mask `so101_quik` and run it against the existing installed baseline. It must fail because the old adapter still succeeds through its embedded extension.
+- [x] Add the package dependency and pinned Python distribution requirement; remove QuIK compilation and vendor installation from demo setup.
+- [x] Change only the constructor's loading/type-binding boundary to `self._library, self._artifact = load_native_library()`. Keep context creation, finalizer, lock, geometry, solve, normalization and canonical gates as they are.
+- [x] Catch explicit loading errors under `QUIK_BACKEND_UNAVAILABLE`; retain all numerical failure behavior and no-fallback semantics.
+- [x] Build both packages into a new private ROS overlay and verify dependency order, package prefix, module path, library path and identical library copies.
+- [x] Run the backend directed tests and installed Mac behavior capture against EXP-050. Reject any numerical drift before continuing.
 
 RED assertion:
 
@@ -87,12 +87,12 @@ Files: modify `scripts/{setup-so101-quik.sh,so101_quik_setup.py,so101-quik-boots
 
 Consumes: the new package's standalone CMake target/wheel and the existing pinned bootstrap. Produces: first/repeat setup, complete two-package source fingerprints and installed-artifact verification, with Eigen3_DIR for ROS builds.
 
-- [ ] Add a failing setup fingerprint test: create a complete tiny two-package source tree, fingerprint it, change the new package's C++ source, and require the fingerprint to change. The old helper ignores this package and must fail.
-- [ ] Add pinned CMake to the private dependencies, install private Eigen CMake metadata, and copy the new package without writing into the caller's checkout.
-- [ ] Build/install the QuIK wheel first and the demo wheel second, run dependency checks and verify both actual installed solvers. Fingerprint both packages, all relevant bootstrap inputs, new C++ artifacts and private dependency trees.
-- [ ] Write build-env.sh with Eigen3_DIR and retain the setup's prefix/transport/archive/integrity contracts.
-- [ ] Run directed setup regressions, then actual first/repeat setup in a new Mac prefix and a new bare Ubuntu 24.04 container. Verify failed SHA/version/library cases and successful restored readback.
-- [ ] Update usage commands to build both packages in dependency order and document C++/Python consumers and retained backend limitations.
+- [x] Add a failing setup fingerprint test: create a complete tiny two-package source tree, fingerprint it, change the new package's C++ source, and require the fingerprint to change. The old helper ignores this package and must fail.
+- [x] Add pinned CMake to the private dependencies, install private Eigen CMake metadata, and copy the new package without writing into the caller's checkout.
+- [x] Build/install the QuIK wheel first and the demo wheel second, run dependency checks and verify both actual installed solvers. Fingerprint both packages, all relevant bootstrap inputs, new C++ artifacts and private dependency trees.
+- [x] Write build-env.sh with Eigen3_DIR and retain the setup's prefix/transport/archive/integrity contracts.
+- [x] Run directed setup regressions, then actual first/repeat setup in a new Mac prefix and a new bare Ubuntu 24.04 container. Verify failed SHA/version/library cases and successful restored readback.
+- [x] Update usage commands to build both packages in dependency order and document C++/Python consumers and retained backend limitations.
 
 Fingerprint regression:
 
@@ -107,13 +107,13 @@ assert first != second
 
 Evidence scripts live under `quik-ros-package-01`; they do not become product runtime dependencies.
 
-- [ ] Confirm every imported artifact belongs to the declared private overlay, and that frozen numerical/vendor/input hashes still match.
-- [ ] Compare complete Mac 64-request, 20-point and 2003-FK outputs exactly. Recompute accepted canonical geometric gates.
-- [ ] Run the entire demo ordinary test directory and the new package's Python test directory separately with xdist8 on this Mac, fresh short NVMe scratch, exact fixed ROS Python, JUnit and worker proofs. Run new-package CTest and `colcon test-result`.
-- [ ] Build before/after ROS overlays on ai-station without changing old checkouts or source. Verify installed C++ and Python consumers.
-- [ ] Establish before/after Linux behavior with the same fixed runtime and inputs, then run all 24 predeclared isolated-P-core comparison processes. Validate all documents and the <=1.05 median/p95 contract, and restore CPU/governor/cgroup state.
-- [ ] Transfer all remote records without dereferencing special files, verify archive paths/hashes/sizes/symlinks and retain invalid attempts.
-- [ ] Finish inline implementation review and write acceptance, provenance, retention and ledger checkpoint.
+- [x] Confirm every imported artifact belongs to the declared private overlay, and that frozen numerical/vendor/input hashes still match.
+- [x] Compare complete Mac 64-request, 20-point and 2003-FK outputs exactly. Recompute accepted canonical geometric gates.
+- [x] Run the entire demo ordinary test directory and the new package's Python test directory separately with xdist8 on this Mac, fresh short NVMe scratch, exact fixed ROS Python, JUnit and worker proofs. Run new-package CTest and `colcon test-result`.
+- [x] Build before/after ROS overlays on ai-station without changing old checkouts or source. Verify installed C++ and Python consumers.
+- [x] Establish before/after Linux behavior with the same fixed runtime and inputs, then run all 24 predeclared isolated-P-core comparison processes. Validate all documents and the <=1.05 median/p95 contract, and restore CPU/governor/cgroup state.
+- [x] Transfer all remote records without dereferencing special files, verify archive paths/hashes/sizes/symlinks and retain invalid attempts.
+- [x] Finish inline implementation review and write acceptance, provenance, retention and ledger checkpoint.
 - [ ] Commit and push the authorized current Gitee branch with standard Git, then verify remote SHA and clean local worktree.
 
 ROS build boundary:

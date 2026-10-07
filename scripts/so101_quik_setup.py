@@ -57,17 +57,24 @@ def write_json(path: Path, value) -> None:
 
 
 def source_inputs(repo: Path) -> dict[str, str]:
-    package = repo / "src/so101_demo_py"
-    inputs = [package / name for name in ("setup.py", "setup.cfg", "package.xml")]
-    for name in ("src", "config", "assets", "launch", "resource", "third_party"):
-        inputs.extend(path for path in (package / name).rglob("*")
-                      if path.is_file() and "__pycache__" not in path.parts)
+    inputs = []
+    for package_name, metadata, directories in (
+        ("so101_demo_py", ("setup.py", "setup.cfg", "MANIFEST.in", "package.xml"),
+         ("src", "config", "assets", "launch", "resource")),
+        ("so101_quik", ("setup.py", "pyproject.toml", "MANIFEST.in", "package.xml", "CMakeLists.txt"),
+         ("src", "config", "cmake", "include", "so101_quik", "third_party", "test")),
+    ):
+        package = repo / "src" / package_name
+        inputs.extend(package / name for name in metadata)
+        for name in directories:
+            inputs.extend(path for path in (package / name).rglob("*")
+                          if path.is_file() and "__pycache__" not in path.parts)
+        for link in package.rglob("*"):
+            if link.is_symlink() and not link.is_file():
+                raise ValueError(f"SOURCE_RESOURCE_MISSING: {link}; clone with --recurse-submodules")
     inputs.extend(repo / "scripts" / name for name in (
         "run_so101_adaptive_batch.zsh", "setup-so101-quik.sh",
         "so101_quik_setup.py", "so101-quik-bootstrap.lock.env"))
-    for link in package.rglob("*"):
-        if link.is_symlink() and not link.is_file():
-            raise ValueError(f"SOURCE_RESOURCE_MISSING: {link}; clone with --recurse-submodules")
     return {str(path.relative_to(repo)): digest(path) for path in sorted(inputs)}
 
 
@@ -90,12 +97,17 @@ def smoke(prefix: Path, expected_versions: dict[str, str]) -> dict:
 
     urdf = prefix / "env/share/so101_demo_py/assets/mujoco/so101.urdf"
     kernels = {}
-    for name in ("_ik_numeric", "_quik_native"):
+    for name in ("_ik_numeric",):
         module = importlib.import_module("so101_demo.control.moveit." + name)
         path = Path(module.__file__).resolve()
         if not path.is_relative_to(prefix / "env"):
             raise ValueError(f"INSTALLED_PREFIX_MISMATCH: {path}")
         kernels[str(path)] = digest(path)
+    from so101_quik import load_native_library
+    _, quik_path = load_native_library()
+    if not quik_path.is_relative_to(prefix / "env"):
+        raise ValueError(f"INSTALLED_PREFIX_MISMATCH: {quik_path}")
+    kernels[str(quik_path)] = digest(quik_path)
     reference = create_pose_ik(urdf, ("1", "2", "3", "4", "5"), "world", "so101_tcp", backend="native")
     if reference._numeric is None:
         raise ValueError("NATIVE_KERNEL_NOT_ACTIVE")
@@ -154,6 +166,8 @@ def main() -> None:
     expected = {"numpy": numpy_version,
                 "setuptools": os.environ["QUIK_SETUP_SETUPTOOLS"],
                 "wheel": os.environ["QUIK_SETUP_WHEEL"],
+                "cmake": os.environ["QUIK_SETUP_CMAKE"],
+                "so101-quik": "0.1.0",
                 "typing_extensions": os.environ["QUIK_SETUP_TYPING_EXTENSIONS"],
                 "PyYAML": os.environ["QUIK_SETUP_PYYAML"]}
     manifest = prefix / "manifest.json"
@@ -170,7 +184,8 @@ def main() -> None:
 
     uv = str(prefix / "bin/uv")
     constraints = prefix / "requirements.lock"
-    constraints.write_text("".join(f"{name}=={version}\n" for name, version in expected.items()))
+    constraints.write_text("".join(f"{name}=={version}\n" for name, version in expected.items()
+                                  if name != "so101-quik"))
     run([uv, "pip", "install", "--python", sys.executable, "--default-index", args.index,
          "--no-deps", "-r", str(constraints)], prefix / "logs/python-dependencies.log")
     eigen_archive = prefix / "downloads/eigen-3.4.0.tar.gz"
@@ -184,45 +199,57 @@ def main() -> None:
     verify_sha256(eigen_archive, os.environ["QUIK_SETUP_EIGEN_SHA256"])
     extract_archive(eigen_archive, prefix / "dependencies")
     eigen = prefix / "dependencies/eigen-3.4.0"
+    env = dict(os.environ, PATH=str(prefix / "env/bin") + os.pathsep + os.environ["PATH"])
+    cmake = str(prefix / "env/bin/cmake")
+    eigen_install = prefix / "dependencies/eigen-install"
+    run([cmake, "-S", str(eigen), "-B", str(prefix / "build/eigen"),
+         "-DBUILD_TESTING=OFF", "-DEIGEN_BUILD_DOC=OFF", f"-DCMAKE_INSTALL_PREFIX={eigen_install}"],
+        prefix / "logs/eigen-configure.log", env=env)
+    run([cmake, "--install", str(prefix / "build/eigen")],
+        prefix / "logs/eigen-install.log", env=env)
+    env["Eigen3_DIR"] = str(eigen_install / "share/eigen3/cmake")
     source = prefix / "source"
-    package = source / "src/so101_demo_py"
-    package.mkdir(parents=True, exist_ok=True)
-    for name in ("setup.py", "setup.cfg", "package.xml"):
-        shutil.copy2(repo / "src/so101_demo_py" / name, package / name)
-    for name in ("src", "config", "assets", "launch", "resource", "third_party"):
-        shutil.copytree(repo / "src/so101_demo_py" / name, package / name,
-                        dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+    for relative in inputs:
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(repo / relative, path)
     (source / "scripts").mkdir(exist_ok=True)
-    shutil.copy2(repo / "scripts/run_so101_adaptive_batch.zsh", source / "scripts")
-    env = dict(os.environ, SO101_BUILD_QUIK="1", SO101_EIGEN_INCLUDE_DIR=str(eigen))
     wheels = prefix / "wheels"
     wheels.mkdir(exist_ok=True)
-    run([sys.executable, "setup.py", "bdist_wheel", "--dist-dir", str(wheels)],
-        prefix / "logs/build.log", cwd=package, env=env)
-    wheel_files = list(wheels.glob("*.whl"))
-    if len(wheel_files) != 1:
-        raise ValueError("AMBIGUOUS_PACKAGE_WHEEL")
-    run([uv, "pip", "install", "--python", sys.executable, "--no-deps", str(wheel_files[0])],
-        prefix / "logs/package-install.log")
+    wheel_files = []
+    for package_name in ("so101_quik", "so101_demo_py"):
+        destination = wheels / package_name
+        destination.mkdir()
+        run([sys.executable, "setup.py", "bdist_wheel", "--dist-dir", str(destination)],
+            prefix / "logs" / (package_name + "-build.log"), cwd=source / "src" / package_name, env=env)
+        candidates = list(destination.glob("*.whl"))
+        if len(candidates) != 1:
+            raise ValueError("AMBIGUOUS_PACKAGE_WHEEL: " + package_name)
+        wheel_files.extend(candidates)
+        run([uv, "pip", "install", "--python", sys.executable, "--no-deps", str(candidates[0])],
+            prefix / "logs" / (package_name + "-install.log"))
     run([uv, "pip", "check", "--python", sys.executable], prefix / "logs/dependency-check.log")
     verified = smoke(prefix, expected)
     # For an existing ROS workspace, build against its Python and use these headers.
     (prefix / "build-env.sh").write_text(
         "# Source before the normal ROS colcon build.\n"
-        "export SO101_BUILD_QUIK=1\n"
-        f"export SO101_EIGEN_INCLUDE_DIR={shlex.quote(str(eigen))}\n")
+        f"export Eigen3_DIR={shlex.quote(env['Eigen3_DIR'])}\n"
+        f"export PATH={shlex.quote(str(prefix / 'env/bin'))}:\"$PATH\"\n")
     (prefix / "activate.sh").write_text(
         "# Standalone CPU IK environment; does not source a ROS installation.\n"
         f". {shlex.quote(str(prefix / 'env/bin/activate'))}\n"
         f". {shlex.quote(str(prefix / 'build-env.sh'))}\n")
     artifacts = dict(verified["artifacts"])
     import so101_demo
-    for tree in (Path(so101_demo.__file__).parent, prefix / "env/share/so101_demo_py", eigen):
+    import so101_quik
+    for tree in (Path(so101_demo.__file__).parent, Path(so101_quik.__file__).parent,
+                 prefix / "env/share/so101_demo_py", prefix / "env/share/so101_quik", eigen, eigen_install,
+                 Path(so101_demo.__file__).parent.parent):
         artifacts.update({str(path): digest(path) for path in tree.rglob("*")
                           if path.is_file() and "__pycache__" not in path.parts})
     for path in (Path(args.base_python).resolve(), prefix / "bin/uv", eigen_archive,
                  eigen / "Eigen/Core", eigen / "Eigen/src/Core/util/Macros.h",
-                 constraints, prefix / "activate.sh", prefix / "build-env.sh", wheel_files[0]):
+                 constraints, prefix / "activate.sh", prefix / "build-env.sh", Path(cmake), *wheel_files):
         artifacts[str(path)] = digest(path)
     try:
         commit = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"],

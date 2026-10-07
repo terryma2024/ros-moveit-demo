@@ -82,7 +82,7 @@ mkdir -p "$prefix/bin" "$prefix/downloads" "$prefix/cache" "$prefix/python" "$pr
 # Committed, repository-owned version constants; no remote installer is executed.
 . "$repo/scripts/so101-quik-bootstrap.lock.env"
 export QUIK_SETUP_EIGEN_URL QUIK_SETUP_EIGEN_SHA256 QUIK_SETUP_SETUPTOOLS
-export QUIK_SETUP_WHEEL QUIK_SETUP_TYPING_EXTENSIONS QUIK_SETUP_PYYAML
+export QUIK_SETUP_WHEEL QUIK_SETUP_CMAKE QUIK_SETUP_TYPING_EXTENSIONS QUIK_SETUP_PYYAML
 export UV_CACHE_DIR="$prefix/cache" UV_PYTHON_INSTALL_DIR="$prefix/python"
 export UV_PYTHON_BIN_DIR="$prefix/bin" UV_NO_CONFIG=1 PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1

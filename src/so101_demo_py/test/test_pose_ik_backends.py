@@ -61,10 +61,10 @@ def test_cli_accepts_explicit_backend_and_rejects_unknown_backend(module):
 
 
 def _quik_or_skip():
-    if importlib.util.find_spec("so101_demo.control.moveit._quik_native") is None:
+    if importlib.util.find_spec("so101_quik") is None:
         if os.environ.get("SO101_REQUIRE_QUIK_TESTS") == "1":
-            pytest.fail("QuIK integration gate requires the compiled module")
-        pytest.skip("optional QuIK module not installed")
+            pytest.fail("QuIK integration gate requires the installed so101_quik package")
+        pytest.skip("so101_quik package not installed")
     return _solver("quik")
 
 
@@ -105,7 +105,7 @@ def test_invalid_seed_shape_uses_shared_error(backend):
 def test_missing_quik_binary_is_explicit_and_never_switches_to_native(monkeypatch):
     import sys
 
-    monkeypatch.setitem(sys.modules, "so101_demo.control.moveit._quik_native", None)
+    monkeypatch.setitem(sys.modules, "so101_quik", None)
     with pytest.raises(UnderactuatedIkError, match="^QUIK_BACKEND_UNAVAILABLE:"):
         _solver("quik")
 

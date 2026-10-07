@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
-import importlib
 import math
 import threading
 import weakref
@@ -84,26 +83,14 @@ class QuikPoseIk:
 
     def __init__(self, reference: UnderactuatedPoseIk) -> None:
         try:
-            _quik_native = importlib.import_module(f"{__package__}._quik_native")
-        except ImportError as error:
+            from so101_quik import load_native_library
+
+            self._library, self._artifact = load_native_library()
+        except (ImportError, OSError) as error:
             raise UnderactuatedIkError(
-                "QUIK_BACKEND_UNAVAILABLE: rebuild with SO101_BUILD_QUIK=1 and Eigen 3.4.0"
+                "QUIK_BACKEND_UNAVAILABLE: build and source the so101_quik package"
             ) from error
         self._reference = reference
-        self._artifact = Path(_quik_native.__file__)
-        self._library = ctypes.CDLL(str(self._artifact))
-        pointer = ctypes.POINTER(ctypes.c_double)
-        self._library.quik_create.argtypes = [pointer, pointer, pointer, ctypes.c_int]
-        self._library.quik_create.restype = ctypes.c_void_p
-        self._library.quik_destroy.argtypes = [ctypes.c_void_p]
-        self._library.quik_destroy.restype = None
-        self._library.quik_fk.argtypes = [ctypes.c_void_p, pointer, pointer]
-        self._library.quik_fk.restype = ctypes.c_int
-        self._library.quik_solve.argtypes = [
-            ctypes.c_void_p, pointer, pointer, pointer, pointer,
-            ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
-        ]
-        self._library.quik_solve.restype = ctypes.c_int
         geometry = derive_dh(reference)
         dh, base, tool = (np.ascontiguousarray(geometry[key], dtype=float)
                           for key in ("DH", "Tbase", "Ttool"))

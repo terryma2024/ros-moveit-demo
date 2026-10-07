@@ -1,6 +1,6 @@
 // C ABI around frozen QuIK <5> with the recorded weighted solver header.
-// Optional component: AGPL-3.0-only; see third_party/quik/LICENSE.
-#include <Python.h>
+// AGPL-3.0-only; see third_party/quik/LICENSE.
+#include "so101_quik/c_api.h"
 #include <iostream>
 #include "quik/Robot.hpp"
 #include "quik/IKSolver.hpp"
@@ -50,9 +50,3 @@ int quik_solve(void* p,const double* target,const double* seed,double* out,
     } catch (...) { return -1; }
 }
 }
-
-static PyModuleDef module = {
-    PyModuleDef_HEAD_INIT, "_quik_native",
-    "Frozen weighted QuIK C ABI; called by the project pose IK adapter.", -1, nullptr
-};
-PyMODINIT_FUNC PyInit__quik_native() { return PyModule_Create(&module); }
