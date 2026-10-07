@@ -2,13 +2,13 @@
 
 ```yaml
 task_id: prepare-horizon-ik-20261004-01a10735
-goal: retain current native and weightedQuIK0.08 behind one compatible IK interface with an explicit backend switch; native remains default; short design explicitly approved
-success_contract: consistent solver API and backend routing; native outputs unchanged; packaged QuIK retains its measured outcomes and canonical gates; twenty-point installed comparison on isolatedCPU14; no implicit fallback or physicalgrasp claim
+goal: formal QuIK setup entry with automatic dependency preparation and verified fresh-machine installation; native/QuIK algorithms and backend selection remain unchanged
+success_contract: reproducible isolated dependency setup, pinned source/runtime/build inputs, actual installed native/QuIK smoke, freshUbuntu24.04 container andMacempty-prefix validation, idempotent rerun, completeordinaryxdist8 package gate; designconfirmation beforeimplementation
 worktree: /Users/matianyi/.codex/worktrees/0a4f/moveit-demo
 branch: codex/prepare-horizon-ik-20261004-01a10735
 base_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
 benchmark_commit: 7a62d8e88f4b04fa5f20359649013a16bae909b0
-current_commit: ed7998674d44b5ee8e37594ea94b839de5242fe1 plus verified approved dual-backend integration; delivery SHA in dual-backend-01/publish.json
+current_commit: c62695cc663dd3e2bf9ee381616d27345d343b8e plus approvedformalsetup changes; numericalsources andsolverpins unchanged
 second_baseline_commit: e1030ccf474f02105fdb62db19568255b1fce289
 delivery_commit: see evidence review/publish.json
 second_delivery_commit: see evidence native50/review/publish.json
@@ -45,8 +45,8 @@ full_loop_confirmed_conclusions:
   - independent64case6043update traces exact on each of Mac/Linux; no cross-platform float equivalence claim
   - final normal Mac xdist8 ordinary gate3928passed30skipped; Linux directed42passed
   - complete remote transfer10564files151symlinks523928172bytes verified; old repos/submodules/tmux preserved; cpuset/governor restored
-latest_checkpoint: CP-025
-next_experiment: NONE; compatible backend integration and installed twenty-point verification complete
+latest_checkpoint: CP-027
+next_experiment: NONE; formalsetup accepted; authorizedcurrentGiteepublication follows; exactSHA in quik-setup-01/publish.json
 retained: all evidence in registered root
 archived: NONE
 deletion_candidates: registered scratch/private builds/duplicates listed in review/final-retention.json, native50/review/retention.json, ai-station/retention.json and loop50/review/retention.json; none deleted
@@ -68,6 +68,10 @@ design with "确认" before implementation. Read-only discovery and frozen basel
 the proposed default, and QuIK is an explicit optional backend. The research results
 use common acceptance gates and task outcomes, rather than the previous optimization's
 bitwise equivalence contract.
+The subsequent formal setup request and explicit "ok" approve automatic dependency preparation
+in owned prefixes on Ubuntu 24.04 x86_64 and Apple Silicon macOS. The reviewed protocol and
+approval receipt are under `quik-setup-01/`; system package installation is exercised only inside
+task-owned fresh Ubuntu containers. Shared host dependencies and checkouts remain unchanged.
 Baseline harness and read-only investigation explicitly authorized before plan approval.
 Optimization implementation requires explicit approval (AGENTS.md Task model selection
 and brainstorming HARD-GATE); user explicitly approved the presented plan before any optimization code.
@@ -2637,4 +2641,94 @@ archived: NONE
 deleted: NONE
 deletion_candidates: task-privateMacscratch,remoteexecutionstaging,duplicatebuild/source/transferarchives; see dual-backend-01/final-retention.json; noauthorizationtodelete
 next_command: finalinline review, authorizedcurrentGiteecommit/push, exactremoteSHA readback
+```
+
+
+## EXP-049 — Formal QuIK environment setup and fresh dependency validation
+
+```yaml
+experiment_id: EXP-049
+status: VALID
+prior_experiment: EXP-046
+hypothesis: a reusable setup wrapper aroundtheexisting pinnedbuild can bootstrapQuIKdependencies andverifyboth installedbackends in anownedprefix withoutmutating sharedROS/source environments
+prediction: initiallymissingformalentry contractfailsRED; implementationpreparesPython/Eigen3.4.0/runtimebuildpins, compilesbothkernels, verifiesindependentpose/controlgates andpassesrepeatsetup
+single_variable: formaldependency provisioning/install orchestration; nativeandweightedQuIK numericalsources andparameters unchanged
+lifecycle: FULL_RESTART
+preconditions:
+  - baselinec62695cc6 cleanisolatedtaskworktree andexistinguniqueMac evidence rootverified
+  - approvedplatformmatrix Ubuntu24.04x86_64 andAppleSiliconmacOSarm64
+  - explicitnewsetup-design confirmation ok recordedbeforeimplementation inapproval.json
+success_criteria:
+  - dedicated bareUbuntu24.04 container hasno Python/compiler/Eigen beforeinvocation; setup installsdependencies/builds/verifies bothbackends
+  - Macfreshownedprefix andcaches; privateEigen andPythonpackages automaticallyprepared; declaredexistingAppleXcode foundation, successfulfirst/repeat verification
+  - wrongdownloadSHA/versions/missingmodule/unmanagedprefix fail explicitly
+  - installedsource/artifact/versionmanifest andactivation/build environment retained
+  - samecomplete ordinarytestscope/xdistmin8/fixedMacROSPython/privateoverlay/JUnit, noaddedfailure
+failure_criteria: hiddenexisting dependencyreuse, compile/import/provenance mismatch, illegal acceptedpose, newpackagefailure orsharedcheckout/runtime mutations
+invalid_criteria: wronginterpreter/prefix/platform, staleenvironment, missingcollection/dependencyclosure, incompleteDocker/transferproofs
+provenance:
+  source_commit: c62695cc663dd3e2bf9ee381616d27345d343b8e
+  install_overlay: proposedtask-privatequik-setup-01 children; no shareddeployment
+  runtime_executable: proposedmanagedcompatibleCPython forstandalonebootstrap; fixed/opt/ros/jazzy/.venv/bin/python forMacpackagegate
+  ros_domain_id: N/A; headlesssetup/CPUsmoke, no stack
+  gz_partition: N/A; no simulator
+commands: officialsetupfirst/repeat andexplicitPython modes; privatecolconbuild; fixedMacROSPython completeordinarypytest-n8; finalUbuntucontroller; actualfourfaultinjections; symlink-safearchivecontentverification
+observed:
+  - OBSERVED trackedsetup.py requires existingPython/buildtools/Eigen; no formalQuIKsetup entry
+  - OBSERVED MacAppleclang21/Xcode andfixedCPython3.11.15/NumPy2.4.6/setuptools79.0.1 available, notfreshmachineproof
+  - OBSERVED ai-station Docker29.1.3 accessible withnorunningcontainers; existingcheckouts/submodules andclaude tmux preserved
+  - OBSERVED finalMacdelivery empty-prefix/cache first/repeat andexplicitfixedROS Python mode passed; privateEigen3.4.0 andpinnedPythondependencies prepared automatically
+  - OBSERVED finalofficialUbuntu24.04.5 barecontainer03 lackedPython/gcc/g++/curl/Eigen; setupaptprovisionedtools, downloadedmanagedCPython3.12.13 andpins, builtbothkernels andpassedfirst/repeat solves
+  - OBSERVED bothbackends solve2nonzerojoint-generatedtargets fromzeroseed throughcanonical2mm/0.10rad/0.002radmargin gates; installedpaths andartifactSHA recorded
+  - OBSERVED final13contractregressions pass; initial11missingentry/helper failures plusnestedprefix andtransportfailure RED evidence retained
+  - OBSERVED actualUVwrongSHA, QuIKbinarymodification, missingkernel anddependencyversionmismatch allfail explicitly; originalbytes restored, successfulrepeatverified
+  - OBSERVED finalcompleteordinarygate3996tests/3966pass/30skip/0fail/errors,xdist8 on10logicalCPUs,32.88s; fixedROS Python/privateoverlay/provenance/freshNVMe scratch/JUnit/eightworkerproofs recorded
+  - OBSERVED finalarchiveSHA andall21542regularfile hashes/sizes plus2118symlinktargets agree;1201211950uncompressedbytes; noFIFOs/sockets dereferenced
+  - OBSERVED remoteoldcheckouts/submodules cleanandunchanged, oldMacservices/tmux andremoteclaude tmux preserved; ownedcontainers01/02/03 stoppedandretained
+inferred: freshUbuntuauto-dependency readiness established; Macempty-prefix cannotproveabsentAppletoolchaininstallation; existingOSinstaller confirmation stillrequired whenmissing
+invalid_attempts: initialMacuvarchive/version/SDKassumptions corrected; pre-deliveryUbuntuGitHubtransport56/137 retained; initialarchive-rootmtime warning andMaccase/AppleDouble extraction mismatch retained; finalclean-exitarchive verifieddirectly withcase-sensitivearchivepaths
+conclusion: formalisolatedsetup accepted; numericalsolver sources/pins unchanged; no newlatency/fullphysicalclaim; no benchmark_test scope triggered
+evidence: quik-setup-01/{approval.json,protocol.json,mac-delivery,mac-delivery-explicit,mac-ros-delivery,tests-delivery,ubuntu-verified-metadata,ubuntu-evidence-verified.tar.gz,transfer-verification-final.json,fault-injection-delivery,acceptance.json,implementation-inline-review-final.json,retention.json}
+decision: keepallvalid/invalid evidence, publishapprovedsetup tocurrentGiteetaskbranch
+next_experiment: NONE
+```
+
+## CP-026 — Formal setup baseline and reviewable protocol ready
+
+```yaml
+checkpoint_id: CP-026
+last_valid_experiment: EXP-048
+current_hypothesis: formalsetup canreplace task-specificprepareddependencies withpinned automaticprovisioning in anownedprefix
+working_tree_status: taskledger only; productcode unchanged; cleanbeforebaseline
+owned_processes: NONE; allreadonlyprobes finished
+preserved_processes: Macso101-ik-cpu-20261004 tmux, remoteclaude tmux, allmatchedexistingPID/checkouts/submodules preserved; nostack/container/dependency started orchanged
+confirmed_conclusions: no trackedQuIKsetup; bothplatformbuild foundationsknown; UbuntuDockerfreshvalidationpossible; Macnew-empty-prefixvalidationpossible
+open_risks: platformmatrix optionalanswerpending; Appletoolchaininstallation requiresOSauthority/confirmation; priorQuIKP18/P19 and32perceptionbenchmarkfailurelimitations unchanged
+next_command: obtainexplicitconfirmationofnewreviewedsetup design; thencontractRED beforeimplementation
+retained: allpriorruns plusquik-setup-01 baseline/protocol/selfreview underunchangedregisteredMacroot
+archived: NONE
+deleted: NONE
+deletion_candidates: no newexecution artifacts; priorclassifications unchanged
+```
+
+## CP-027 — Formal dependency setup accepted
+
+```yaml
+checkpoint_id: CP-027
+last_valid_experiment: EXP-049
+current_commit: c62695cc663dd3e2bf9ee381616d27345d343b8e beforepublication; exactdeliverySHA inquik-setup-01/publish.json
+working_tree_status: approvedsetupwrapper/bootstraplock/helper/regressions/Englishguide/ledger only; numericalruntime sources unchanged
+confirmed_conclusions:
+  - officialentry scripts/setup-so101-quik.sh automaticallypreparesownedPython/Eigen/build/runtime dependencies andbothkernels
+  - Ubuntu24.04 barecontainerfirst/repeat andMacempty-prefixfirst/repeat/explicitROS Python passed
+  - sharedROS/hostglobaldependencies andoldcheckouts preserved; installedCPUartifact/gates recorded
+  - all13regressions andfouractualintegrityfaultpaths valid; finalordinaryxdist8gate3966pass30skip0failure/errors
+  - losslessLinuxarchivepayload verifiedbyallpaths/SHA/sizes/symlinktargets; Maccase-insensitivepartialextraction isINVALID evidence only
+owned_processes: NONE; controllers/builds/tests/transfers completed; threeownedcontainers stopped
+open_risks: MacAppletoolchainOSinstaller completion notexercised; priorQuIKP18/P19 limitations remain; no ROS/physicslivequalification ornewbenchmarkclaim
+retained: allpriorruns plusquik-setup-01 valid/invalidruns/logs/manifests/source/builds/JUnit/rawarchives/faultbackups
+archived: NONE
+deleted: NONE
+deletion_candidates: privateinstall/cache/source/build/testscratch, stoppedownedcontainers01/02/03, remoteexecutionstaging/transferarchives, invalidMacextraction/duplicatearchives; retention.json; noauthorizationtodelete
+next_command: finalinline review thenauthorizedcommit/push currentGiteebranch andexactremoteSHA/cleanstatus readback
 ```

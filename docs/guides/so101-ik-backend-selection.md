@@ -23,7 +23,74 @@ The backend is chosen when the solver is created. A missing QuIK module raises
 `QUIK_BACKEND_UNAVAILABLE`; it does not switch to native. Unknown names raise
 `IK_BACKEND_UNSUPPORTED`.
 
-## Build the optional QuIK module
+## Set up both CPU backends on a new machine
+
+Clone the repository with `--recurse-submodules`, then run:
+
+```bash
+bash scripts/setup-so101-quik.sh --prefix "$HOME/.local/share/so101-quik"
+source "$HOME/.local/share/so101-quik/activate.sh"
+```
+
+The setup supports Ubuntu 24.04 on x86_64 and macOS on Apple Silicon. It downloads
+its pinned `uv`, CPython and Eigen dependencies, installs the pinned Python
+packages, and compiles both kernels. Ubuntu prepares missing compiler, curl and
+certificate packages through `apt-get`; this step requires root or `sudo`.
+Mac uses the installed Apple toolchain and its active SDK. If that toolchain is
+missing, the script opens Apple's installer and stops. Complete the OS installation
+and rerun the command.
+
+The prefix must be empty or owned by this setup. A source checkout, symbolic-link
+prefix or nonempty unrelated directory is rejected. Downloads, Python, headers,
+source copies, wheels and logs stay under the prefix. Builds leave the checkout
+untouched. The standalone environment provides CPU IK; use the project's existing
+ROS and simulator installers to prepare a complete robot application.
+
+`scripts/so101-quik-bootstrap.lock.env` pins `uv` 0.12.23, managed CPython 3.11.15
+on Mac and 3.12.13 on Linux, Eigen 3.4.0, setuptools 79.0.1, wheel 0.45.1,
+typing_extensions 4.15.0 and PyYAML 6.0.2. The existing
+`config/ik/requirements.lock` supplies NumPy 2.4.6 on Mac and 1.26.4 on Linux.
+The `uv` and Eigen archives have committed SHA256 checks. Python downloads use
+the pinned `uv` release's managed-Python metadata. The Python package index
+defaults to the TUNA mirror; `--index URL` selects another index. Mirror proxy
+exclusions apply only to the setup process.
+The `uv` download tries Astral's official release host first, with GitHub as a
+fallback. Both use the same pinned checksum. Archive transfers have connection,
+total-time and stalled-transfer limits; an unavailable download stops setup.
+
+Installation finishes by importing both installed kernels and solving two pose
+targets from the zero joint seed. Canonical FK checks the original 2 mm position,
+0.10 rad orientation and 0.002 rad joint-margin gates. `manifest.json` records
+source hashes, versions, compiler, installed artifact hashes and solve results.
+Rerunning the same command checks those artifacts and repeats the solves. Changed
+sources or pins require a fresh prefix; corrupted artifacts fail explicitly.
+
+## Build into an existing ROS workspace
+
+To use an existing ROS Python, pass its executable explicitly. Dependencies are
+installed into a private virtual environment derived from that interpreter:
+
+```zsh
+bash scripts/setup-so101-quik.sh \
+  --prefix "$HOME/.local/share/so101-quik-ros" \
+  --python /opt/ros/jazzy/.venv/bin/python
+```
+
+For the ROS package build, source the normal ROS underlays and use their Python
+and `colcon`. Source the generated header/build settings before building:
+
+```zsh
+source "$HOME/.local/share/so101-quik-ros/build-env.sh"
+colcon build --packages-select so101_demo_py
+source install/local_setup.zsh
+```
+
+This setup does not install into a shared ROS runtime. Keep its existing Python
+dependencies consistent with `config/ik/requirements.lock` and the project
+dependency configuration. The standalone `activate.sh` and the ROS workspace's
+`local_setup.zsh` serve their respective environments.
+
+## Manual build
 
 A normal build includes the existing native kernel. To install both kernels, use
 Eigen **3.4.0** and enable the QuIK extension:
