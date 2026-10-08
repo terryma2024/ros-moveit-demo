@@ -76,10 +76,9 @@ public:
   {
     return legacy_gate()->admit(id, goal, generation);
   }
-  std::optional<so101_mujoco_support::ControllerStopWitness::Proof> stopped_state(
-    int64_t now_monotonic_ns)
+  std::optional<so101_mujoco_support::ControllerStopWitness::Proof> stopped_state()
   {
-    return controller_stop_proof(now_monotonic_ns);
+    return controller_stop_proof();
   }
   std::optional<so101_mujoco_support::ControllerIngressWitness::Snapshot> native_ingress()
   {
@@ -817,7 +816,7 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
   ASSERT_EQ(controller.init("arm_controller", five_joint_urdf(), 500, "", options),
     controller_interface::return_type::OK);
   ASSERT_EQ(controller.configure().id(), lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_FALSE(controller.stopped_state(0).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
 
   std::vector<hardware_interface::CommandInterface::SharedPtr> command_backing;
   std::vector<hardware_interface::StateInterface::SharedPtr> state_backing;
@@ -856,14 +855,10 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
     ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
         rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
   }
-  auto now = std::chrono::steady_clock::now().time_since_epoch();
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   ASSERT_EQ(controller.update(rclcpp::Time(int64_t{51} *2000000, RCL_ROS_TIME),
       rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
-  now = std::chrono::steady_clock::now().time_since_epoch();
-  const auto proof = controller.stopped_state(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  const auto proof = controller.stopped_state();
   ASSERT_TRUE(proof.has_value());
   EXPECT_EQ(proof->last_sim_time_ns, 102000000);
   auto client_node = std::make_shared<rclcpp::Node>("stopped_window_goal_client");
@@ -880,28 +875,21 @@ TEST(BrokerOwnedTrajectoryController, NativeUpdatesProvideFreshStoppedStateOnlyW
   ASSERT_EQ(executor.spin_until_future_complete(response, std::chrono::seconds(2)),
     rclcpp::FutureReturnCode::SUCCESS);
   EXPECT_FALSE(response.get()->accepted);
-  now = std::chrono::steady_clock::now().time_since_epoch();
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   executor.remove_node(client_node);
   executor.remove_node(controller.get_node()->get_node_base_interface());
   for (int64_t index = 52; index <= 102; ++index) {
     ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
         rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
   }
-  now = std::chrono::steady_clock::now().time_since_epoch();
-  ASSERT_TRUE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  ASSERT_TRUE(controller.stopped_state().has_value());
   controller.set_pending_goal_for_test(true);
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   controller.set_pending_goal_for_test(false);
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   controller.release_interfaces();
   rclcpp::shutdown();
 }
@@ -958,9 +946,7 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
     ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
         rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
   }
-  const auto now = std::chrono::steady_clock::now().time_since_epoch();
-  const auto stopped = controller.stopped_state(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  const auto stopped = controller.stopped_state();
   ASSERT_TRUE(stopped.has_value());
   EXPECT_EQ(stopped->sample_count, 51u);
   EXPECT_EQ(stopped->last_sim_time_ns, 102000000);
@@ -970,8 +956,7 @@ TEST(BrokerOwnedTrajectoryController, GripperNativeUpdatesUseOneJointStoppedScop
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   EXPECT_FALSE(std::filesystem::exists(socket));
-  EXPECT_FALSE(controller.stopped_state(
-      std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()).has_value());
+  EXPECT_FALSE(controller.stopped_state().has_value());
   controller.release_interfaces();
   executor.remove_node(controller.get_node()->get_node_base_interface());
   rclcpp::shutdown();
@@ -1034,9 +1019,7 @@ static void exercise_neck_native_scope()
     ASSERT_EQ(controller.update(rclcpp::Time(index * 2000000, RCL_ROS_TIME),
         rclcpp::Duration::from_seconds(0.002)), controller_interface::return_type::OK);
   }
-  const auto now = std::chrono::steady_clock::now().time_since_epoch();
-  const auto stopped = controller.stopped_state(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
+  const auto stopped = controller.stopped_state();
   ASSERT_TRUE(stopped.has_value());
   EXPECT_EQ(stopped->sample_count, 51u);
   EXPECT_EQ(send_generation_request(socket, 3), 0u);

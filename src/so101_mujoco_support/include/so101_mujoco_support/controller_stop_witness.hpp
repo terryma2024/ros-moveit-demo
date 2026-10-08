@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -95,9 +96,33 @@ public:
     count_ = std::min(count_ + 1, samples_.size());
   }
 
+  std::optional<Proof> proof() const
+  {
+    return proof_with_clock([]() {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    });
+  }
+
+  // Read the evaluation time only after fixing the observation window. A
+  // caller-sampled time can precede feedback received while waiting for this lock.
+  template<typename Clock>
+  std::optional<Proof> proof_with_clock(Clock && clock) const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return proof_locked(clock());
+  }
+
+  // Fixed-time evaluation for deterministic observation-window tests.
   std::optional<Proof> proof(int64_t now_monotonic_ns) const
   {
     std::lock_guard<std::mutex> lock(mutex_);
+    return proof_locked(now_monotonic_ns);
+  }
+
+private:
+  std::optional<Proof> proof_locked(int64_t now_monotonic_ns) const
+  {
     if (lost_.load(std::memory_order_acquire) || count_ < required_samples ||
       now_monotonic_ns < 0)
     {
@@ -126,7 +151,6 @@ public:
       last.reference_positions};
   }
 
-private:
   bool valid_sample(const Observation & sample) const
   {
     if (sample.sequence == 0 || sample.sim_time_ns <= 0 ||

@@ -236,8 +236,7 @@ controller_interface::return_type BrokerOwnedTrajectoryController::update(
   return result;
 }
 
-std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::controller_stop_proof(
-  int64_t now_monotonic_ns)
+std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::controller_stop_proof()
 {
   if (!witness_active_.load(std::memory_order_acquire)) {return std::nullopt;}
   const auto joints = monitored_joints_.load(std::memory_order_acquire);
@@ -262,7 +261,7 @@ std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::con
     witness->invalidate_nonblocking();
     return std::nullopt;
   }
-  const auto stopped = witness->proof(now_monotonic_ns);
+  const auto stopped = witness->proof();
   if (!witness_active_.load(std::memory_order_acquire) || goal_is_active()) {
     witness->invalidate_nonblocking();
     return std::nullopt;
@@ -960,9 +959,7 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
     auto reservation_service = std::make_unique<ControllerReservationService>(
       reservation_socket_path_, gate, provision.capability, provision.peer,
       std::chrono::milliseconds(50), [this]() {
-        const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::steady_clock::now().time_since_epoch()).count();
-        return controller_stop_proof(now).has_value();
+        return controller_stop_proof().has_value();
       }, reservation_role_, [this]() {return controller_ingress_snapshot();});
     primary_fault_service_ = std::move(primary_fault_service);
     reservation_service_ = std::move(reservation_service);

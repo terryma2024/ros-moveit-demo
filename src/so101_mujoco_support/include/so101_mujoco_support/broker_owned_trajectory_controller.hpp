@@ -98,8 +98,7 @@ protected:
           std::chrono::steady_clock::now().time_since_epoch()).count();
       }, 250000000, 1048576, 2048, identity, revocation_latch_);
   }
-  std::optional<ControllerStopWitness::Proof> controller_stop_proof(
-    int64_t now_monotonic_ns);
+  std::optional<ControllerStopWitness::Proof> controller_stop_proof();
   std::optional<ControllerIngressWitness::Snapshot> controller_ingress_snapshot();
 
 private:

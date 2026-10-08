@@ -7,7 +7,7 @@ success_contract: Approved plan followed by installed MuJoCo/CUDA full loop and 
 worktree: /data/work/ws_moveit/.worktrees/so101-head-file-protocol-1003
 branch: codex/so101-head-file-protocol-1003
 base_commit: cf7766a9b6e59c2ff3721ef42afb4757f44fc409
-current_commit: 0c241923824686324e334aeac5fd0f3a35f3c553
+current_commit: fcee299deb6953e683f81176052edd97b003b2df
 evidence_root: /data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m
 low_rate_root: /tmp/so101-debug-head-file-protocol-1003
 implementation_approval: GRANTED_2026_10_04
@@ -22,8 +22,8 @@ disproven_routes:
   - Removing monitor ACK without restoring local checks cannot satisfy the contract
 open_hypotheses:
   - F018 current automated tests repaired and Astra accepted; normal014 admission TimeoutError cause/repeatability OPEN, inherited APPROACH and historical gaps OPEN, stage-one completeness unsupported
-latest_checkpoint: CP-HFP-775
-next_experiment: NONE_SOURCE_TEST_SCOPE_COMPLETE_PUBLICATION_IN_PROGRESS
+latest_checkpoint: CP-HFP-907
+next_experiment: NONE_SCOPED_REPAIR_PUBLICATION_PENDING
 executor_state: CODEX_SOLE_WRITER_DST_ABSENT_NOT_RESUMED
 old_goal_status: PAUSED_INCOMPLETE
 handoff_dispatch_id: head-codex-takeover-20261005-1716
@@ -5410,3 +5410,17 @@ design_decision_review_override: GPT-6.1 Sol High on explicit user/coordinator d
 - Two logical publication commits: reviewed production/tests/config first, this persistent experiment ledger second. Header current_commit/publication_source_commit identify actual source commit above; the documentation commit's own ID and final remote HEAD are recorded in the external publication receipt to avoid self-referencing commit hashes. Remote origin branch readback before publication exactly536ee1f53e40f97020190fcd7d3bdda4d7f8d87d, no divergence then. Push result remains PENDING at this committed checkpoint, external final-push-receipt.json will hold exact argv/rc/source+documentation commits/remote-SHA comparison and final status.
 - Generated52head-model-*best.pt fixture directories and OUTGOING-STATUS-dst.md/RESUME-item9.md retained local/untracked and not staged. No generated weights, high-frequency evidence or outdated dst resume instruction is published. Whole source diff has one inherited head_feedback.py blank EOF cosmetic warning; tested bytes preserved unchanged, no blanket whitespace-clean claim. Normal repository Git LFS and existing post-commit metadata hooks read and retained, no hook bypass/global config mutation. Initial staging inspections stopped at hooks/rename-aware name mismatch; exact --no-renames path set and all blobs verified before commit, no source/test impact.
 - Unique publication audit commit-push-20261006-001 remains inside same registered E/R. Retained all prior test/runtime/review evidence; archivedNONE/deletedNONE;34scratchcandidates retained unchanged. Qualification NOT_QUALIFIED, overall stage-one/fullpickplace unproven, normal014timeoutcause/repeatability/historical/APPROACH gaps OPEN. Only publication is underway; no new test/build/runtime planned.
+
+### CP-HFP-907 — Scoped commit and publication PLANNED, 2026-10-09
+
+- User instruction `commit & push` authorizes the tested clock false-refusal repair publication to origin/current branch. Source parent fcee299deb6953e683f81176052edd97b003b2df; current worktree and branch unchanged. Registered evidence root unchanged; publication evidence retained under head-file-protocol-1003/head-search-40-20261006-001/stop-proof-clock-fix-20261008-001/commit-push-20261009-001.
+- Scope: five native repair/test files only, staged from the retained pre-change-relative fix.patch; inherited Head velocity/acceleration changes, native ARM diagnostic changes, prior Python/scenario changes and earlier uncommitted ledger checkpoints preserved outside this commit. New commit ledger entry records this limited scope explicitly.
+- PLANNED: fresh build and full native package gate on the exact staged native tree, then verify staged diff and standard non-force origin branch push with remote SHA readback. ROS_DOMAIN_ID=205; GZ_PARTITION=NONE; no new simulator, perception or benchmark campaign. Exact runtime/package prefix is publication-evidence/install/so101_mujoco_support; NVMe scratch publication-evidence/scratch/native-commit001/tmp must be new, with TMPDIR/TMP/TEMP and exact Python tempfile proof before tests.
+- CP-HFP-904 through 906 local repair acceptance remains retained in the working ledger and registered durable acceptance-summary.json; its installed runtime includes inherited changes, so this publication gate independently verifies the narrower commit tree. Original historical 900039 UNKNOWN, 900017 occlusion failure and full40 NOT_QUALIFIED remain unchanged.
+- Retained: existing evidence and publication source/logs. Archived: NONE. No deletion authorized or performed; fresh scratch/build tree becomes a deletion candidate after verified readback.
+
+- VALID publication gate: exact staged native tree (59 source files) rebuilt successfully, build rc0/21.629139051s; complete native colcon test rc0/17.212613407s; test-result rc0: 188 aggregate tests, 0 errors, 0 failures, 0 skipped. This gate excludes three inherited faster-profile tests with their velocity/acceleration changes; the earlier accepted working-tree gate was 191 aggregate tests. ROS205 preflight/postflight empty; TMPDIR/TMP/TEMP resolved to registered NVMe scratch using both exact perception Python and system Python. Source/index SHA readback and inherited-file hashes verified.
+- Repair behavior: ControllerStopWitness reads steady_clock after locking the observation window; controller reservation ARM uses this no-argument proof. Existing future/stale/unsafe-window predicates and active/holding checks retained. Four regression tests were added; earlier deterministic RED was 7/8 and GREEN 8/8.
+- Retained acceptance references: stop-proof-clock-fix-20261008-001/acceptance-summary.json, final-readback-receipt.json, native-package-gate/ and hs40-900039/; Python035 plus fixed working native original900039 fresh attempt TARGET_LOCKED/OS0/yaw0.016100802084deg. The retained delay-counterfactual/ uses a throwaway native copy with 3ms pre-proof delay: TARGET_LOCKED/OS0/yaw0.023646051134deg. Native library identity, Stop/close ACK, child exit/absence, sealed evidence and fresh RGB reviewed in CP906 local acceptance. These runtime results describe that frozen working-tree composition; the new 188-test gate describes the narrower staged commit.
+- Inline staged-patch review found no additional changes needed. Inherited source files preserved byte-for-byte; working ledger keeps all prior uncommitted checkpoints. Only this scoped publication checkpoint is added to the committed ledger. Actual commit and remote SHA will be retained in commit-push-20261009-001/final-push-receipt.json after successful non-force push; no publication success is asserted prematurely.
+- Retained: all prior runs plus this gate. Archived: NONE. Deletion candidates: prior scratch trees plus this publication scratch/build and ended private IPC; no deletion performed.
