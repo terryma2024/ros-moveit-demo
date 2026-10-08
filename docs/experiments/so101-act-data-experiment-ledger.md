@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3477
+latest_checkpoint: CP-3478
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3478 — user: "做'仍然待办'的事" — open items dispatched (no push)
+
+- Items: (1) the Teacher DYNAMIC_CUP_FORCE_EXCEEDED safety stop at place (392e7925) — frequency and cause; (2) perception risks for formal collection: left-anchor start–end margin 3.2 mm, ring-overlap pose errors vs the MoveIt 2 mm tolerance, ≈0.47 mm circle-fit bias vs calibration r10b; (3) test hygiene: 62 pre-existing benchmark failures, the load-sensitive test_rec12b_capturing flake, 1 px mask sensitivity in the perception gate, ruff with the pinned version. The submodule push is not done (no push).
+- Plan: two read-only investigations in parallel (Teacher force stop; perception risks) + one source writer (hygiene). Fixes that touch the Teacher or the perception rules follow from the investigations as decisions (CP-3394); genuine Teacher safety protections are not relaxed.
 
 ## CP-3477 — items 2–5 complete on freeze Jqw0P7hW (d8858f3d4): L1, L2a/L2b VALID + independent readback PASS (1 recompute), S1–S4 Teacher PASS, L3–L7 INVALID + readback PASS; three steps 241–249 s (8.2–8.4%); one Teacher safety stop
 
