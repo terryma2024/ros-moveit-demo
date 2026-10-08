@@ -2457,3 +2457,66 @@ def test_c4_a_frozen_snapshot_policy_with_the_same_bytes_is_the_trusted_policy(t
 def test_c4_a_policy_with_other_bytes_is_still_refused(tmp_path, monkeypatch):
     receipt = _frozen_policy_receipt(tmp_path, monkeypatch, frozen_bytes=b"other\n")
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+# ---- S2 6b6efca6: RUNNING_EVIDENCE_UNAVAILABLE named only its code; the failure now says what the observer saw -------------------
+
+def _ports_with_observer(monkeypatch, observer_class, *, timeout_s=0.05):
+    import rclpy
+
+    from so101_demo.backends.mujoco import observer as observer_module
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    monkeypatch.setattr(observer_module, "MujocoWorldObserver", observer_class)
+    monkeypatch.setattr(rclpy, "spin_once", lambda node, timeout_sec=0.0: None)
+    ports = ParallelRosRuntimePorts(SimpleNamespace(session_id="session-1"), catalog={})
+    ports.RUNNING_EVIDENCE_TIMEOUT_S = timeout_s
+    ports._rgbd[7_000_000_000] = (SimpleNamespace(_node=object()), None, None, "task_camera_frame")
+    return ports
+
+
+class _SilentObserver:
+    publisher_count, callback_count, rejected_count, last_rejection = 1, 0, 0, ""
+
+    def __init__(self, node, session_id, **keywords):
+        pass
+
+    def snapshot(self):
+        from so101_demo.backends.mujoco.observer import EvidenceStale
+
+        raise EvidenceStale("no atomic evidence has been accepted")
+
+    def latest_summary(self):
+        return None
+
+
+def test_running_evidence_that_never_arrives_names_what_the_observer_saw(monkeypatch):
+    ports = _ports_with_observer(monkeypatch, _SilentObserver)
+    with pytest.raises(RuntimeError) as caught:
+        ports._running_evidence(7.0)
+    message = str(caught.value)
+    assert message.startswith("RUNNING_EVIDENCE_UNAVAILABLE: ")
+    seen = json.loads(message.split(": ", 1)[1])
+    assert seen == {"callbacks": 0, "last_rejection": "", "latest": None, "minimum_simulation_time_s": 7.0, "publishers": 1, "rejected": 0}
+
+
+def test_running_evidence_that_stays_paused_says_so(monkeypatch):
+    class Paused(_SilentObserver):
+        def snapshot(self):
+            return SimpleNamespace(simulation_session_id="session-1", paused=True, simulation_time_s=7.4)
+
+        def latest_summary(self):
+            return {"paused": True, "simulation_time_s": 7.4, "age_s": 0.0}
+
+    ports = _ports_with_observer(monkeypatch, Paused)
+    with pytest.raises(RuntimeError, match="RUNNING_EVIDENCE_UNAVAILABLE") as caught:
+        ports._running_evidence(7.0)
+    assert json.loads(str(caught.value).split(": ", 1)[1])["latest"]["paused"] is True
+
+
+def test_running_evidence_returns_the_first_unpaused_message_past_the_image_stamp(monkeypatch):
+    class Running(_SilentObserver):
+        def snapshot(self):
+            return SimpleNamespace(simulation_session_id="session-1", paused=False, simulation_time_s=7.5)
+
+    assert _ports_with_observer(monkeypatch, Running)._running_evidence(7.0).simulation_time_s == 7.5

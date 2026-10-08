@@ -403,3 +403,139 @@ def test_the_run_command_writes_the_commit_proof_only(tmp_path, monkeypatch):
     assert code == 3 and (root / "commit-proof.json").is_file()
     assert not (root / act_first_episode.READBACK_RECEIPT).exists() and not list(root.glob("check-export*"))
     assert not list(root.glob("qc*.json")) and not list(root.glob("verify-commit*"))
+
+
+# ---- CP-3394 / P3: a committed INVALID result that never produced a QC report ---------------------------------------------------
+
+def invalid_without_qc(tmp_path, monkeypatch, *, episode=False, report=False):
+    """The committed result of an INVALID attempt with no sealed episode: the commit proof binds no QC report (act_data_qc NOT_RUN)."""
+    import shutil
+
+    from so101_demo.act import result_store
+
+    run, context, calls = committed_run(tmp_path, monkeypatch)
+    verified = dict(result_store.verify_coordinator_commit(context["coordinator_root"], location=context["location"],
+                                                           scope=context["scope"], inputs_manifest=context["inputs_manifest"]))
+
+    def proof(*arguments, **keywords):
+        value = dict(verified)
+        value.update(act_data_status="INVALID", act_data_qc="NOT_RUN", qc_report_sha256=None, episode_seal_sha256=None,
+                     audit_manifest_sha256=None)
+        return value
+
+    monkeypatch.setattr(result_store, "verify_coordinator_commit", proof)
+    del calls[:]                                   # the fixture's own verification is not the readback's
+    if not report:
+        (context["location"] / "qc-report.json").unlink()
+    if not episode:
+        shutil.rmtree(context["episode"])
+    return run, context, calls
+
+
+def readback(run, out):
+    from so101_demo.cli import act_first_episode
+
+    rc = act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    return rc, json.loads((out / "readback-receipt.json").read_bytes())
+
+
+def unresolvable(monkeypatch):
+    """What the real resolver and export say for a result with no sealed episode (the L2 live root): the entry does not resolve."""
+    from so101_demo.act import bundle
+
+    def refuse(*arguments, **keywords):
+        raise ValueError("EPISODE_COLLECTION_IDENTITY_INVALID")
+
+    monkeypatch.setattr(bundle, "resolve_committed_episodes", refuse)
+    monkeypatch.setattr(bundle, "export_dataset", refuse)
+
+
+def test_a_committed_invalid_without_a_qc_report_reads_back_clean_with_no_recomputation(tmp_path, monkeypatch):
+    run, context, calls = invalid_without_qc(tmp_path, monkeypatch)
+    unresolvable(monkeypatch)
+    rc, receipt = readback(run, tmp_path / "readback")
+    assert rc == 0 and receipt["status"] == "PASS" and receipt["failures"] == []
+    assert calls == [] and receipt["qc_recomputations"] == 0 and receipt["qc_applicability"] == "NOT_APPLICABLE"
+    qc = receipt["stages"]["qc"]
+    assert qc["status"] == "NOT_APPLICABLE" and qc["rc"] == 0 and qc["output"] is None and qc["reason"].startswith("COMMITTED_INVALID_WITHOUT_QC")
+    assert receipt["stages"]["verify-commit"]["status"] == "PASS", "the journal, the index and the result are still verified"
+    export = receipt["stages"]["check-export"]
+    assert export["status"] == "NOT_APPLICABLE" and export["rc"] == 0 and "no dataset entry resolves" in export["reason"]
+    assert receipt["journal_terminal_sha256"]
+
+
+def test_the_commit_is_still_verified_for_an_invalid_result_and_a_missing_commit_still_fails(tmp_path, monkeypatch):
+    from test_act_result_qc_v2 import copied_commit_fixture
+
+    run, context, calls = committed_run(tmp_path, monkeypatch, "missing_commit")
+    rc, receipt = readback(run, tmp_path / "readback")
+    assert receipt["stages"]["verify-commit"]["rc"] != 0 and receipt["status"] == "FAIL" and rc != 0
+    assert copied_commit_fixture
+
+
+def test_a_resolvable_entry_of_an_invalid_result_must_be_refused(tmp_path, monkeypatch):
+    from so101_demo.act import bundle
+
+    run, context, calls = invalid_without_qc(tmp_path, monkeypatch, episode=True)
+    rc, receipt = readback(run, tmp_path / "refused")
+    assert receipt["stages"]["check-export"]["status"] == "PASS" and receipt["status"] == "PASS" and rc == 0
+    monkeypatch.setattr(bundle, "resolve_committed_episodes", lambda **kw: ["eligible"])
+    monkeypatch.setattr(bundle, "export_dataset", lambda *a, **k: (_ for _ in ()).throw(ValueError("EPISODE_COLLECTION_IDENTITY_INVALID")))
+    rc, receipt = readback(run, tmp_path / "eligible")
+    assert receipt["stages"]["check-export"]["rc"] == 3 and receipt["status"] == "FAIL" and rc != 0
+
+
+def test_qc_not_applicable_is_refused_when_the_result_holds_a_qc_report(tmp_path, monkeypatch):
+    run, context, calls = invalid_without_qc(tmp_path, monkeypatch, report=True)
+    rc, receipt = readback(run, tmp_path / "readback")
+    assert receipt["stages"]["qc"]["status"] == "FAIL" and rc != 0 and receipt["status"] == "FAIL", "a result that holds a report is not N/A"
+    assert receipt["qc_applicability"] == "APPLICABLE" or receipt["stages"]["qc"]["rc"] == 4
+
+
+def test_the_receipt_allows_zero_recomputations_only_where_the_qc_stage_does_not_apply(tmp_path, monkeypatch):
+    from so101_demo.cli import act_first_episode
+
+    run, context, calls = committed_run(tmp_path, monkeypatch)
+    inner = episode_qc._recompute_native_qc
+    monkeypatch.setattr(episode_qc, "_recompute_for_readback", lambda session, root, **kw: inner(root, **kw))   # a QC that is not counted
+    rc, receipt = readback(run, tmp_path / "applicable-zero")
+    assert receipt["qc_recomputations"] == 0 and receipt["qc_applicability"] == "APPLICABLE"
+    assert any(item.startswith("READBACK_RECOMPUTE_COUNT") for item in receipt["failures"]) and receipt["status"] == "FAIL"
+    assert act_first_episode.READBACK_RECEIPT
+
+
+def test_the_wrapper_accepts_the_invalid_receipt_and_still_requires_one_recompute_for_a_valid_run(tmp_path, monkeypatch):
+    from so101_demo.cli.act_first_episode import judge_readback_receipt
+
+    run, context, calls = invalid_without_qc(tmp_path, monkeypatch)
+    unresolvable(monkeypatch)
+    rc, invalid = readback(run, tmp_path / "invalid")
+    pid, live = os.getpid(), str(run.parent)
+    assert judge_readback_receipt(invalid, pid=pid, live_root=live, expect="INVALID") == []
+    assert "qc not applicable for a VALID run" in judge_readback_receipt(invalid, pid=pid, live_root=live, expect="VALID")
+    assert judge_readback_receipt(invalid, pid=pid + 1, live_root=live, expect="INVALID")
+    wrong = copy.deepcopy(invalid)
+    wrong["qc_recomputations"] = 1
+    assert "qc_recomputations 1" in judge_readback_receipt(wrong, pid=pid, live_root=live, expect="INVALID")
+    wrong = copy.deepcopy(invalid)
+    wrong["stages"]["qc"]["status"] = "PASS"
+    assert "qc stage" in judge_readback_receipt(wrong, pid=pid, live_root=live, expect="INVALID")
+    wrong = copy.deepcopy(invalid)
+    wrong["stages"]["verify-commit"]["rc"] = 3
+    assert "verify-commit" in judge_readback_receipt(wrong, pid=pid, live_root=live, expect="INVALID")
+
+
+def test_the_wrapper_judges_an_applicable_receipt_as_before(tmp_path, monkeypatch):
+    from so101_demo.cli.act_first_episode import judge_readback_receipt
+
+    run, context, calls = committed_run(tmp_path, monkeypatch)
+    rc, receipt = readback(run, tmp_path / "valid")
+    pid, live = os.getpid(), str(run.parent)
+    for expect in ("VALID", "INVALID"):
+        assert judge_readback_receipt(receipt, pid=pid, live_root=live, expect=expect) == []
+    broken = copy.deepcopy(receipt)
+    broken["qc_recomputations"] = 2
+    assert "qc_recomputations 2" in judge_readback_receipt(broken, pid=pid, live_root=live, expect="VALID")
+    broken = copy.deepcopy(receipt)
+    broken["qc_report_sha256"]["agree"] = False
+    assert "qc digests" in judge_readback_receipt(broken, pid=pid, live_root=live, expect="VALID")

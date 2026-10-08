@@ -182,7 +182,7 @@ class OfflineRosSources:
         self.host = RecorderDataSide(
             node=node, session_id=session_id, reset_epoch=reset_epoch, episode=episode, binding=self.binding,
             world_observer=self.world, execution_root=self._execution_root(), progress=lambda: self.pump(engine),
-            normal_stop_proof=lambda: {}, invalid_latched=lambda: bool(engine.invalid),
+            normal_stop_proof=lambda: {}, invalid_latched=lambda: bool(getattr(engine, "replay_failed", engine.invalid)),
             drain_collection=lambda: self.collect(engine),   # the final boundary drains the original camera tail
             native_source_wait_s=self._chunk_wait_s)
         # the alignment verification runs on the caller's thread

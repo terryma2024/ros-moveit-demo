@@ -76,7 +76,7 @@ Where the rule runs, and what the QC check is. A sealed episode holds the retain
 1. The decision on the L2 bag (accept the three as edge losses with a recorded argument, or keep it INVALID and re-record). Not mine to take.
 2. "Placeable" is a count, not an assignment: where a topic's own gap is larger than the share of the total that belongs to it, the gate still passes. It can never pass a shortfall; it can pass an excess.
 3. The leading and trailing messages of each stream are not judged (no gap is visible there).
-4. When the gate fails before the replay (a preset reason), the engine still tries a FAILED seal, which fails on the L2 data with `AUDIT_WINDOW_INVALID`: the retained record is unsealed. Unchanged behaviour for every preset reason; noted because L2 now takes this path.
+4. When the gate fails before the replay (a preset reason), the engine still tries a FAILED seal, which fails on the L2 data with `AUDIT_WINDOW_INVALID`: the retained record is unsealed. Unchanged behaviour for every preset reason; noted because L2 now takes this path. **Fixed by CP-3394** (`2026-10-09-first-live-findings-seal-readback-evidence`, P1(b)): scan-level reasons no longer stop the replay from delivering the Teacher events, so the record is sealed `FAILED` without the second reason.
 
 ## Rollback
 

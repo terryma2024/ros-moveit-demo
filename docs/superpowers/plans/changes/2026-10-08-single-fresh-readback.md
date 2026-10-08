@@ -85,3 +85,7 @@ The first item of the review: measure the outer-session-only option before addin
 1. One recomputation per readback process, shared by the stages: accepted, with the changes above.
 2. The run writes the commit proof only; the independent readback is a separate process the wrapper starts.
 3. The key is a forced full-content fingerprint, not a stat key.
+
+## Update (CP-3394, `2026-10-09-first-live-findings-seal-readback-evidence`): committed INVALID results without a QC report
+
+The readback now covers a committed result that never produced a QC report (no sealed episode): the QC stage is `NOT_APPLICABLE` with zero recomputations (allowed only then, and required to be zero), `check-export` is `NOT_APPLICABLE` when no dataset entry resolves and refuses one that does, the receipt is PASS and the readback rc 0; a VALID run still needs exactly one recomputation. `judge_readback_receipt` is the single judge the live wrapper (r11) uses.

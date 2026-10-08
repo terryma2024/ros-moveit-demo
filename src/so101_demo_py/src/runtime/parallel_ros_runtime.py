@@ -1938,6 +1938,8 @@ class ParallelRosRuntimePorts:
                 if callable(close):
                     close()
 
+    RUNNING_EVIDENCE_TIMEOUT_S = 5.0
+
     def _running_evidence(self, minimum_simulation_time_s):
         call = self.dependencies.get("running_evidence")
         if call is not None:
@@ -1952,7 +1954,7 @@ class ParallelRosRuntimePorts:
         observer = MujocoWorldObserver(
             node, self.resources.session_id, max_age_s=1.0
         )
-        deadline = time.monotonic() + 5.0
+        deadline = time.monotonic() + self.RUNNING_EVIDENCE_TIMEOUT_S
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.01)
             try:
@@ -1965,7 +1967,15 @@ class ParallelRosRuntimePorts:
                 and evidence.simulation_time_s >= minimum_simulation_time_s
             ):
                 return evidence
-        raise RuntimeError("RUNNING_EVIDENCE_UNAVAILABLE")
+        # The failure names what the observer saw, so the next occurrence says whether the world was paused, behind the image
+        # stamp, silent, or being rejected (the first one, S2 6b6efca6, left only the bare code).
+        try:
+            seen = {"minimum_simulation_time_s": minimum_simulation_time_s, "publishers": observer.publisher_count,
+                    "callbacks": observer.callback_count, "rejected": observer.rejected_count,
+                    "last_rejection": observer.last_rejection[:120], "latest": observer.latest_summary()}
+        except Exception as error:   # noqa: BLE001  (an observation can never replace the failure it explains)
+            seen = {"observation_failed": type(error).__name__}
+        raise RuntimeError("RUNNING_EVIDENCE_UNAVAILABLE: " + json.dumps(seen, sort_keys=True, default=str))
 
     def cancel_motion(self, lease):
         call = self.dependencies.get("cancel_motion")

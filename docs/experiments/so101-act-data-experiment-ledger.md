@@ -69,11 +69,30 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3473
+latest_checkpoint: CP-3475
 next_experiment: A cleanup step 2 → B performance (≤10%) → C loss gate → D perception re-baseline/unpin → freeze + L1–L7.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3475 — P1(b) AUDIT_WINDOW_INVALID fixed; P3 readback for INVALID implemented; P2 diagnostics; P1(a) decided: judge per-topic losses by log-line time
+
+- P1(a) finding: all 7 per-topic loss lines on L2 e6be258c fall within 18 ms, 3.29 s after recording start, 2.84 s before the window, each within 0–4 ms of that topic's first recorded message. The 5 fault bags show the same start-of-stream pattern (5–7 high-rate topics × 1 loss, 0.3–3.3 s after start, no gap); the 3 unplaced old-L2 losses fit it too. The grids/sequences are complete (detection not missing a gap); the mechanism (message_lost with no delivered-sequence gap) is inferred, not reproduced. The arm/neck matches were coincidental real gaps elsewhere, so the count rule can't separate start events from in-stream loss.
+- Decision (CP-3394, recommended): parse the per-event time of each loss log line (≥ the loss time). A line before the window start → recorded (provably outside). A line at/after the window start on a used topic → INVALID OFFLINE_TOPIC_LOSS unless the topic's rule places the matching gap outside the window. Unused topics are recorded. The aggregate must still equal the per-topic sum. Without this, every collection-on run fails.
+- P1(b) fixed: a scan-level loss was latched before replay and the engine then dropped all Teacher events (the capture never saw the first command → AUDIT_WINDOW_INVALID). The engine now tracks replay failures separately from scan reasons. Present on old L2 45315499 since phase C; that bag now seals a FAILED episode without the spurious reason; the other 7 golden inputs unchanged.
+- P2: S2 RUNNING_EVIDENCE_UNAVAILABLE — the pose was accepted (R6/unpin/query upstream are fine); the 5 s wait for unpaused evidence accepted nothing while the world ran at ≈500 msg/s. 1 occurrence in 174 roots; cause not proven. The failure now carries observer diagnostics (callbacks, rejections, publishers, latest message); no retry added (it would hide the rate). Frequency to be observed in the next live round.
+- P3 implemented as decided (CP-3474): readback runs verify-commit first; an INVALID proof with act_data_qc NOT_RUN and no bound report → QC NOT_APPLICABLE, 0 recomputes (allowed only then); a resolvable export entry must be refused, else NOT_APPLICABLE; receipt PASS rc 0; judge_readback_receipt is the single judge; wrapper run-qualified-live-20261010-r11.zsh. Offline readback on e6be258c + the five fault roots: rc 0, PASS.
+- Tests: test/ 7,565 pass / 186 skip / rc 0; scratch install 228 pass. Change doc 2026-10-09-first-live-findings-seal-readback-evidence.md. Backup p5f-base.tar.gz (5fd269…). Committed as a checkpoint.
+
+## CP-3474 — final freeze HRyCtQlG (4cb5268ac): gates PASS; L1/S1 PASS; L2 INVALID (C5 per-topic gate + AUDIT_WINDOW_INVALID); S2 admit_pose failure; readback fails on INVALID runs
+
+- Cycle p5-claude-1008f rc 0 (freeze nonhead-installed-freeze.HRyCtQlG; demo/support/teleop rc 0; second demo rc 0). Runner: tmp/final-e.zsh with live-r7 / run-qualified-live-20261009-r10.
+- L1 off (017b1886): rc 0, Teacher PASS, 129 s. S1 off (5a540485): rc 0, Teacher PASS, 126 s — first live runs with the corrected detector + R6 (no pin).
+- L2 on (e6be258c; inputs aGEjUzBa): rc 3. Teacher PASS; data INVALID: OFFLINE_TOPIC_LOSS reported=1 detected=0 on /clock, gripper controller_state, /joint_states, evidence, scene_state (looks like one stall over 5 subscriptions, no gap in any grid/sequence) + RECORDER_SEAL_FAILED: AUDIT_WINDOW_INVALID (new). Processing 129 s (scan 13.6, replay 114.5).
+- S2 off (6b6efca6): rc 4 at 53 s, admit_pose RUNNING_EVIDENCE_UNAVAILABLE, TERMINAL_ACK_FAILED (before Teacher motion).
+- L3–L7 faults: live rc 3 as designed (Teacher PASS, data INVALID) but the r10 independent readback failed on every collection-on INVALID run (readback rc 4: STAGE_FAILED, qc_recomputations 0, qc digests, check-export): B3 did not define readback for a committed INVALID result without a sealed episode.
+- Decision (CP-3394) for P3: readback of a committed INVALID result → verify-commit runs; QC stage NOT_APPLICABLE with a reason (0 recomputes allowed only then); check-export refuses a resolvable entry, else NOT_APPLICABLE; receipt PASS, rc 0; VALID still requires exactly 1 recompute.
+- Dispatched: P1(a) the source of reported-but-undetected losses + a policy recommendation; P1(b) AUDIT_WINDOW_INVALID; P2 RUNNING_EVIDENCE_UNAVAILABLE; P3 readback for INVALID.
 
 ## CP-3473 — C5 (per-topic recorder losses) and D (perception R6 + unpin, ACT-scene benchmark gate) done; committed; final freeze + L1–L7 started
 

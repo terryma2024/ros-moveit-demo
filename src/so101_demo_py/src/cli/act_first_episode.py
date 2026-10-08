@@ -192,13 +192,23 @@ def _check_export(arguments) -> int:
         calls={'resolver':lambda:resolve_committed_episodes(manifest=dict(episodes=[entry]),campaign_index=index),
             'direct_export':lambda:export_dataset((entry,),dataset,source_manifest_sha256=scope['inputs_sha256'],
                 campaign_index_sha256=hashlib.sha256(index.read_bytes()).hexdigest())}
+        # A committed INVALID result that never produced a QC report has no episode a dataset entry could resolve to (CP-3394): when
+        # the entry does resolve it must be refused; when it does not resolve there is nothing to refuse and the check does not apply.
+        no_qc=_committed_invalid_without_qc(commit)
         for name,call in calls.items():
             try:call()
-            except ValueError as error:
-                if str(error)!='DIAGNOSTIC_EPISODE_NOT_TRAINABLE':raise
-                checks[name]=str(error)
+            except (OSError,ValueError,TypeError,KeyError) as error:
+                if str(error)=='DIAGNOSTIC_EPISODE_NOT_TRAINABLE':
+                    checks[name]=str(error);continue
+                if not no_qc:raise
+                checks[name]='UNRESOLVABLE: '+str(error)[:200]
             else:raise ValueError('DIAGNOSTIC_EXPORT_UNEXPECTEDLY_ELIGIBLE')
         if dataset.exists() or dataset.is_symlink():raise ValueError('DIAGNOSTIC_EXPORT_DATASET_PRODUCED')
+        if no_qc and not any(value=='DIAGNOSTIC_EPISODE_NOT_TRAINABLE' for value in checks.values()):
+            arguments.not_applicable_reason='COMMITTED_INVALID_WITHOUT_QC: no dataset entry resolves ('+'; '.join(
+                f'{name}: {value}' for name,value in sorted(checks.items()))+')'
+            print(json.dumps(dict(status='NOT_APPLICABLE',reason=arguments.not_applicable_reason),sort_keys=True))
+            return 0
         proof=dict(kind='ACT_DIAGNOSTIC_EXPORT_REJECTION',schema_version=1,status='PASS',checks=checks,
             identity=commit['identity'],result_status=commit['result_status'],collection_mode=scope['mode'],
             qc_report_sha256=commit['qc_report_sha256'],scope_sha256=commit['scope_sha256'],
@@ -210,6 +220,12 @@ def _check_export(arguments) -> int:
         return 3
     print(json.dumps(dict(status=proof['status'],output=arguments.output,sha256=digest),sort_keys=True))
     return 0
+
+
+def _committed_invalid_without_qc(proof) -> bool:
+    """The verified commit proof says the data is INVALID and no QC report was ever bound: there is nothing to recompute."""
+    return (type(proof) is dict and proof.get('act_data_status')=='INVALID' and proof.get('act_data_qc')=='NOT_RUN'
+            and proof.get('qc_report_sha256') is None)
 
 
 _STAGES = {'qc': '_qc', 'verify-commit': '_verify_commit', 'check-export': '_check_export'}
@@ -258,23 +274,46 @@ def _readback(arguments, session) -> int:
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(f'act_first_episode: {error}', file=sys.stderr)
         return 4
-    stages = {}
-    for name, function in (('qc', _qc), ('verify-commit', _verify_commit), ('check-export', _check_export)):
+    done = {}
+
+    def run_stage(name, function):
         target = out / f'{name}.json'
-        if name == 'check-export' and mode != 'preselected_target_diagnostic':
-            stages[name] = dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None,
-                reason='DIAGNOSTIC_EXPORT_CHECK_MODE_REQUIRED: the export refusal check applies to diagnostic runs only')
-            continue
+        namespace = types.SimpleNamespace(command=name, run=arguments.run, episode=None, scope=None, inputs=None,
+                                          output=str(target), not_applicable_reason=None)
         try:
             _guard_inputs(session, f'before {name}')
-            rc = function(types.SimpleNamespace(command=name, run=arguments.run, episode=None, scope=None, inputs=None,
-                                                output=str(target)))
+            rc = function(namespace)
             _guard_inputs(session, f'after {name}')
         except ValueError as error:
             print(f'act_first_episode: {error}', file=sys.stderr)
-            rc = 4
-        stages[name] = dict(status='PASS' if rc == 0 else 'FAIL', rc=rc, output=target.name if target.is_file() else None,
-                            sha256=hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None, reason=None)
+            rc, namespace.not_applicable_reason = 4, None
+        if rc == 0 and namespace.not_applicable_reason and not target.is_file():
+            return dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None, reason=namespace.not_applicable_reason)
+        return dict(status='PASS' if rc == 0 else 'FAIL', rc=rc, output=target.name if target.is_file() else None,
+                    sha256=hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None, reason=None)
+
+    # The commit proof comes first: it says whether the data was ever graded. A committed INVALID result without a QC report has no
+    # recomputation to make (CP-3394); every other result is recomputed exactly once, as before.
+    done['verify-commit'] = run_stage('verify-commit', _verify_commit)
+    proof = {}
+    if done['verify-commit']['output']:
+        proof = json.loads((out / done['verify-commit']['output']).read_bytes())
+    if done['verify-commit']['rc'] == 0 and _committed_invalid_without_qc(proof):
+        if (Path(context['location']) / 'qc-report.json').is_file():
+            done['qc'] = dict(status='FAIL', rc=4, output=None, sha256=None,
+                              reason='READBACK_QC_REPORT_UNEXPECTED: the commit proof binds none but the result holds one')
+        else:
+            done['qc'] = dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None,
+                              reason='COMMITTED_INVALID_WITHOUT_QC: the commit proof binds no QC report (act_data_qc NOT_RUN, '
+                                     'act_data_status INVALID), so there is nothing to recompute')
+    else:
+        done['qc'] = run_stage('qc', _qc)
+    if mode != 'preselected_target_diagnostic':
+        done['check-export'] = dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None,
+            reason='DIAGNOSTIC_EXPORT_CHECK_MODE_REQUIRED: the export refusal check applies to diagnostic runs only')
+    else:
+        done['check-export'] = run_stage('check-export', _check_export)
+    stages = {name: done[name] for name in ('qc', 'verify-commit', 'check-export')}
     receipt = _receipt(arguments, session, context, stages, mode)
     try:
         write_readback_receipt(receipt, out / READBACK_RECEIPT)
@@ -311,6 +350,7 @@ def _receipt(arguments, session, context, stages, mode) -> dict:
     out = Path(arguments.output_dir)
     recomputations = session.computations.get('recompute_native_qc', 0)
     stored_path = Path(context['location']) / 'qc-report.json'
+    applicable = stages['qc']['status'] != 'NOT_APPLICABLE'
     recomputed = stages['qc']['sha256']
     stored = hashlib.sha256(stored_path.read_bytes()).hexdigest() if stored_path.is_file() else None
     proof = {}
@@ -321,17 +361,65 @@ def _receipt(arguments, session, context, stages, mode) -> dict:
     # a QC FAIL (rc 3) is a verdict about the data, recorded as `qc_verdict`; the receipt fails only for a stage that did not complete
     if stages['qc']['rc'] not in (0, 3) or stages['verify-commit']['rc'] != 0 or stages['check-export']['rc'] != 0:
         failures.append('STAGE_FAILED')
-    if recomputations != 1 and stages['qc']['rc'] in (0, 3) and stages['verify-commit']['rc'] == 0:
-        failures.append(f'READBACK_RECOMPUTE_COUNT: {recomputations}')
-    if stages['qc']['output'] and stages['verify-commit']['output'] and not (recomputed == stored == bound):
-        failures.append('READBACK_QC_DIGESTS_DISAGREE')
+    if applicable:
+        if recomputations != 1 and stages['qc']['rc'] in (0, 3) and stages['verify-commit']['rc'] == 0:
+            failures.append(f'READBACK_RECOMPUTE_COUNT: {recomputations}')
+        if stages['qc']['output'] and stages['verify-commit']['output'] and not (recomputed == stored == bound):
+            failures.append('READBACK_QC_DIGESTS_DISAGREE')
+    else:
+        # no recomputation is allowed only where the QC stage does not apply, and then none may have been made
+        if recomputations != 0:
+            failures.append(f'READBACK_RECOMPUTE_COUNT: {recomputations}')
+        if not _committed_invalid_without_qc(proof) or stored is not None or bound is not None:
+            failures.append('READBACK_QC_NOT_APPLICABLE_UNSUPPORTED')
     return dict(kind='ACT_READBACK_RECEIPT', schema_version=1, status='FAIL' if failures else 'PASS', failures=failures,
                 run=str(arguments.run), collection_mode=mode, pid=os.getpid(), code_digest=qc_memo.code_digest(),
                 input_fingerprint=session.input_fingerprint, journal_terminal_sha256=proof.get('journal_terminal_sha256'),
+                qc_applicability='APPLICABLE' if applicable else 'NOT_APPLICABLE',
                 qc_report_sha256=dict(recomputed=recomputed, stored=stored, commit_proof=bound,
                                       agree=bool(recomputed and recomputed == stored == bound)),
                 qc_verdict=None if not stages['qc']['output'] else json.loads((out / stages['qc']['output']).read_bytes())['status'],
                 qc_recomputations=recomputations, qc_reuse_hits=session.qc_hits, stages=stages)
+
+
+def judge_readback_receipt(receipt, *, pid, live_root, expect) -> list:
+    """The problems with an independent readback receipt, as the live wrapper judges it (empty when it is acceptable).
+
+    `expect` is the data outcome the wrapper observed: "VALID" (the run exited 0) needs one QC recomputation whose three digests
+    agree; "INVALID" (the Teacher passed, the data did not) accepts the same, or a receipt whose QC stage is NOT_APPLICABLE with no
+    recomputation (a committed result that never produced a QC report). The commit proof is verified in both."""
+    problems = []
+    if type(receipt) is not dict:
+        return ['receipt']
+    if receipt.get('kind') != 'ACT_READBACK_RECEIPT' or receipt.get('schema_version') != 1:
+        problems.append('kind')
+    if receipt.get('pid') != pid:
+        problems.append(f"pid {receipt.get('pid')} is not the readback process {pid}")
+    if receipt.get('run') != live_root:
+        problems.append('run')
+    if receipt.get('status') != 'PASS' or receipt.get('failures'):
+        problems.append(f"status {receipt.get('status')} {receipt.get('failures')}")
+    stages = receipt.get('stages') or {}
+    if receipt.get('qc_applicability') == 'NOT_APPLICABLE':
+        if expect != 'INVALID':
+            problems.append('qc not applicable for a VALID run')
+        if receipt.get('qc_recomputations') != 0:
+            problems.append(f"qc_recomputations {receipt.get('qc_recomputations')}")
+        if stages.get('qc', {}).get('status') != 'NOT_APPLICABLE' or not stages.get('qc', {}).get('reason'):
+            problems.append('qc stage')
+    else:
+        if receipt.get('qc_recomputations') != 1:
+            problems.append(f"qc_recomputations {receipt.get('qc_recomputations')}")
+        digests = receipt.get('qc_report_sha256') or {}
+        if not (digests.get('agree') is True and digests.get('recomputed') == digests.get('stored') == digests.get('commit_proof')):
+            problems.append('qc digests')
+    if stages.get('verify-commit', {}).get('rc') != 0:
+        problems.append('verify-commit')
+    if stages.get('check-export', {}).get('status') not in ('PASS', 'NOT_APPLICABLE'):
+        problems.append('check-export')
+    if len(receipt.get('input_fingerprint') or '') != 64 or len(receipt.get('code_digest') or '') != 64:
+        problems.append('fingerprint')
+    return problems
 
 
 def _verified_run_completion(run_root):

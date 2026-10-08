@@ -348,3 +348,18 @@ def test_the_memo_fingerprint_covers_the_gate_document(tmp_path):
     write_document(root, lost_in_window=0, reasons=[], window={"changed": 1})
     assert qc_memo.fingerprint(episode_root=root / "episode", scope=scope, inputs_manifest=inputs) != one
     assert "topic_loss" in qc_memo.CODE_MODULES
+
+
+def test_a_scan_level_loss_leaves_a_sealed_failed_record_not_a_second_seal_failure(tmp_path):
+    """P1(b): a reason the scan latches before the replay (here an unattributed transport loss) used to stop the engine from
+    retaining the Teacher events, so the capture saw rows but never the first command and the window it claimed (`complete`, no first
+    command) could not be sealed: RECORDER_SEAL_FAILED: AUDIT_WINDOW_INVALID, and the retained record stayed unsealed."""
+    from test_p2_offline_processor import run
+
+    bag = build_bag(tmp_path / "raw", transport_lost=3)
+    report, out = run(tmp_path, bag)
+    assert report["verdict"] == "INVALID"
+    assert "OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 3 of 3" in report["reasons"], report["reasons"]
+    assert not any(r.startswith("RECORDER_SEAL_FAILED") for r in report["reasons"]), report["reasons"]
+    seal = json.loads((Path(out) / "episode" / "seal.json").read_bytes())
+    assert seal["status"] == "FAILED" and seal["reason"].startswith("RECORDER_DATA_INVALID: OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED"), seal

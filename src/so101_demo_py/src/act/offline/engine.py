@@ -85,6 +85,10 @@ class OfflineEngine:
         self.clock, self.sleep = clock, sleep
         self.monitor = EventStreamMonitor(identity)
         self.invalid: list[dict] = []
+        #: True once the replay itself latched a reason. A reason the scan latched before the replay (a loss in the raw bag) does not
+        #: stop the Teacher events and the tail from reaching the capture: the window it claims has to be consistent to be sealed.
+        self.replay_failed = False
+        self._presetting = False
         self._invalid_total = 0
         self._lock = threading.Lock()
         self._inbox = collections.deque()
@@ -135,6 +139,8 @@ class OfflineEngine:
 
         text = (str(reason) or "RECORDER_DATA_INVALID")[:_REASON_CHARS]
         with self._lock:
+            if not self._presetting:
+                self.replay_failed = True
             self._invalid_total += 1
             if len(self.invalid) < _MAX_REASONS and not (self.invalid and self.invalid[-1]["reason"] == text):
                 entry = {"reason": text, "monotonic_ns": time.monotonic_ns()}
@@ -236,7 +242,7 @@ class OfflineEngine:
         try:
             # Scene operations always reach source alignment: the rows after them need their associations, and a missing one would only
             # add a second, misleading reason (L2 81fa2857). Everything else is retained only while the data is valid.
-            if not self.invalid or event["type"] == "scene_operation":
+            if not self.replay_failed or event["type"] == "scene_operation":
                 self.sources.on_teacher_event(self, event)
         except Exception as error:
             self.latch("RECORDER_EVENT_RETENTION_FAILED: " + self._reason(error))
@@ -306,8 +312,10 @@ class OfflineEngine:
             self.sources.prepare(self)
         except Exception as error:
             self.latch("RECORDER_SOURCE_CONSTRUCTION_FAILED: " + self._reason(error))
+        self._presetting = True
         for reason in preset_reasons:
             self.latch(reason)
+        self._presetting = False
         step_s = max(self.policy["poll_s"], MIN_STEP_S)
         while True:
             try:
@@ -341,7 +349,7 @@ class OfflineEngine:
                            ready_means="LISTENING only, not capture started", start_gate=gate)
             if self.terminal is None:
                 self.latch(self._stop_reason or "RECORDER_NO_TERMINAL_EVENT")
-            elif self.ready and not self.invalid:
+            elif self.ready and not self.replay_failed:
                 self._tail()
             self._check_sources()
             # The seal and the readback of what was just sealed verify the same unchanged files through the same verifiers: inside one
@@ -367,7 +375,7 @@ class OfflineEngine:
         message is in the record before the references are checked and the episode is sealed.
         """
         deadline = self.clock() + self.policy["finish_budget_s"]
-        while not self.invalid:
+        while not self.replay_failed:
             try:
                 self.sources.pump(self)
                 self.sources.collect(self)
@@ -415,7 +423,7 @@ class OfflineEngine:
         if not self.ready:
             self._close_episode()
             return
-        if not self.invalid:
+        if not self.replay_failed:
             try:
                 # The adapter's retained samples are ordered dicts; the QC check wants plain dicts, as JSON gives it.
                 steps = [dict(sample) for sample in self.sources.physics_steps(self)]
@@ -470,7 +478,7 @@ class OfflineEngine:
             audit_manifest, scope = episode_audit_pair(root)
             verify_episode_seal(root / "seal.json", audit_manifest=audit_manifest, scope=scope)
             manifest = verify_audit_manifest(audit_manifest)
-            if self.invalid:
+            if self.replay_failed:
                 return
             events = read_verified_rows(root / "audit", "events.jsonl")
             check = self._reference_check(window=manifest["window"], steps=_raw_physics_samples(events),

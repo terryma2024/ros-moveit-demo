@@ -255,6 +255,16 @@ class MujocoWorldObserver:
             return {"gaps": list(self._gap_log), "rejections": list(self._rejection_log),
                     "callbacks": self._callback_count, "retained": len(self._history)}
 
+    def latest_summary(self) -> dict | None:
+        """Observation only: what the newest accepted message said and how old it is (None before the first one)."""
+        with self._lock:
+            evidence, received_at_s = self._latest, self._received_at_s
+        if evidence is None or received_at_s is None:
+            return None
+        return {"paused": evidence.paused, "simulation_time_s": evidence.simulation_time_s,
+                "publisher_sequence": evidence.publisher_sequence, "simulation_step": evidence.simulation_step,
+                "reset_epoch": evidence.reset_epoch, "age_s": round(self._monotonic() - received_at_s, 3)}
+
     def snapshot(self) -> SimulationEvidence:
         return self.snapshot_with_receipt().evidence
 
