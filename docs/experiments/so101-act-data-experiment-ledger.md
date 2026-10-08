@@ -69,11 +69,24 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3476
-next_experiment: A cleanup step 2 → B performance (≤10%) → C loss gate → D perception re-baseline/unpin → freeze + L1–L7.
+latest_checkpoint: CP-3477
+next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3477 — items 2–5 complete on freeze Jqw0P7hW (d8858f3d4): L1, L2a/L2b VALID + independent readback PASS (1 recompute), S1–S4 Teacher PASS, L3–L7 INVALID + readback PASS; three steps 241–249 s (8.2–8.4%); one Teacher safety stop
+
+- Round 2 first attempt: all 12 cases rc 81 at prestart — a leftover writer waiter (zsh until-loop over reproc outputs, pid 2567009) matched the prestart process check; killed; the writer now must time-bound waits. Freeze Jqw0P7hW (cycle p6-claude-1009a; all gates + second demo gate rc 0) stayed valid; the cases re-ran with fresh inputs (runner tmp/final-e3.zsh, live-r8 / r11).
+- L1 off: rc 0, Teacher PASS, 134 s.
+- L2a on (0365d4ca; inputs Litc1x7D): rc 0, VALID, QC PASS; readback receipt PASS, qc_recomputations 1, digests agree. Processing 184.7 s (scan 14.1, replay 143.9, QC 25.8) + in-run commit proof 25 s + readback 31 s = 241 s (8.2% of 2,951 s). Whole live 337 s (was 1,088 s).
+- L2b on (f2bede7c; inputs Mj6d4joK): rc 0, VALID, QC PASS; readback PASS, 1 recompute. 191.8 + 27 + 30 = 249 s (8.4%). Whole live 346 s.
+- S1–S4 off (Teacher spot-checks, corrected detector + R6, no pin): all rc 0, Teacher PASS, 130–132 s. RUNNING_EVIDENCE_UNAVAILABLE did not recur (1 in 174+ roots so far).
+- Faults (expect Teacher PASS, data INVALID, rc 3, readback PASS with QC NOT_APPLICABLE): recorder_absent, recorder_late, source_gap and output_write_failure all as expected.
+  queue_overflow first run (392e7925): rc 1 — the Teacher itself stopped for safety: DYNAMIC_CUP_FORCE_EXCEEDED in DESCEND_TO_PLACE (STOPPED_SAFETY, task UNCONFIRMED; cup moving ≈0.11 m/s, max normal force 0.57 N at the terminal sample). Not data-side: the queue_overflow fault drops chunks only from a sandbox bag copy after the Teacher (act/offline/orchestration.py FAULT_DROP_COUNT), so it cannot touch the live Teacher. Recorded as a Teacher reliability finding (1 of 13 Teacher runs in this round). Re-run queue_overflow_r2 (inputs IUkapSZr): rc 3 + readback PASS as expected.
+- User items status: 1 commit ✅; 2 performance ≤10% ✅ (8.2–8.4% live); 3 perception re-baseline + unpin ✅; 4 per-topic loss attribution gate ✅ (topic_loss_v2); 5 cleanup step 2 ✅.
+- Open: Teacher DYNAMIC_CUP_FORCE_EXCEEDED at place (investigate frequency/cause before formal collection); perception risks from CP-3467 (left-anchor start–end margin 3.2 mm, ring-overlap pose errors vs MoveIt 2 mm, circle-fit bias vs calibration r10b); 62 pre-existing benchmark failures; the load-sensitive test_rec12b_capturing flake; 1 px mask-sensitivity not in the gate; ruff not run (pinned version missing); the submodule commit 16ca7bc59 is local only (push with the parent). Nothing pushed.
+- Evidence: retained — freeze Jqw0P7hW and its live roots (L1, L2a 0365d4ca, L2b f2bede7c, S1–S4, the faults, queue_overflow 392e7925 + r2); golden-20261008; perception-rebaseline-20261008; writer-artifacts phaseb/phasec/phased. Superseded — freezes HRyCtQlG (round 1), YzTQLEvk, fgNI7yJj, feAWPg9k and their lives; the 12 rc-81 plan roots. Deletion candidates (none deleted) — $R/scratch/{p2-*, p2c-inst-*, d-inst-*, golden-work, live-reproc, phaseb, p3*/p4*/p5* scratch}, golden-20261008/*/run3 and prof/phases runs, p5-base-first-partial.tar.gz, /tmp/p4baked, /tmp/c5-exp, /tmp/so101-debug-cp3394-c5.
 
 ## CP-3476 — topic_loss_v2 (log-time rule) + final-boundary chunk-wait fix; e6be258c re-processes VALID/QC PASS offline; committed; re-freeze + live round 2 started
 
