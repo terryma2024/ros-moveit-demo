@@ -199,7 +199,8 @@ def _check_export(arguments) -> int:
             try:call()
             except (OSError,ValueError,TypeError,KeyError) as error:
                 if str(error)=='DIAGNOSTIC_EPISODE_NOT_TRAINABLE':
-                    checks[name]=str(error);continue
+                    checks[name]=str(error)
+                    continue
                 if not no_qc:raise
                 checks[name]='UNRESOLVABLE: '+str(error)[:200]
             else:raise ValueError('DIAGNOSTIC_EXPORT_UNEXPECTEDLY_ELIGIBLE')

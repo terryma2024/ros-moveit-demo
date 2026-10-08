@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 
 import numpy as np
-
+from scipy.ndimage import binary_dilation, binary_erosion
 from so101_demo.adapters.perception import detector_factory
 from so101_demo.application.object_pose import LocalizationError
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
@@ -21,7 +21,7 @@ from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest, ModelOutcome
 from so101_demo.runtime import parallel_perception_runtime as runtime
 from so101_demo.runtime.parallel_perception_runtime import normalize_batch
-from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer, _candidates_from_response
 
 STAMP_NS = 1_000_000_000
 FRAME_ID = "task_camera_frame"
@@ -34,6 +34,27 @@ def request():
         reset_epoch="reset-2", image_timestamp_s=1.0,
         input_relative_path="worker-01/attempts/task_start/attempt-1/working/perception/input/rgb.npy",
         input_sha256="ab" * 32, deadline_s=5.0, attempt_id="attempt-1")
+
+
+def with_mask(candidate, mask):
+    return type(candidate)(candidate.instance_id, candidate.class_id, candidate.confidence, candidate.bbox_xyxy, mask,
+                           candidate.source_stamp_ns, candidate.source_frame_id, candidate.image_width, candidate.image_height,
+                           candidate.segmentation_quality)
+
+
+def mask_sensitivity(localizer, response, localized, camera, depth_message, tf):
+    """The pose change (mm, xy) when the selected mask grows or shrinks by one pixel, localized by the same production localizer."""
+    survivor = next(c for c in _candidates_from_response(response) if c.instance_id == localized.instance_id)
+    base = np.asarray(localized.center_world_xyz, dtype=float)[:2]
+    changes = {}
+    for name, mask in (("dilate1", binary_dilation(survivor.mask, iterations=1)), ("erode1", binary_erosion(survivor.mask, iterations=1))):
+        try:
+            moved = localizer.localizer.localize(with_mask(survivor, mask), camera, depth_message, lambda target, frame_id, stamp_ns: tf)
+            changes[name] = float(np.linalg.norm(np.asarray(moved.center_world_xyz, dtype=float)[:2] - base) * 1000.0)
+        except LocalizationError as error:
+            changes[name] = None
+            changes[name + "_error"] = str(error)[:120]
+    return changes
 
 
 def main() -> int:
@@ -67,7 +88,8 @@ def main() -> int:
                                                lookup_exact=lambda target, frame_id, stamp_ns: tf)
                 center = np.asarray(localized.center_world_xyz, dtype=float)
                 record.update(outcome="ONE", center=center.tolist(),
-                              xy_error_m=float(np.linalg.norm(center[:2] - np.asarray(case["gt"][:2], dtype=float))))
+                              xy_error_m=float(np.linalg.norm(center[:2] - np.asarray(case["gt"][:2], dtype=float))),
+                              sensitivity_mm=mask_sensitivity(localizer, response, localized, camera, depth_message, tf))
             except RuntimeError as error:
                 record.update(outcome="AMBIGUOUS", detail=str(error)[:200])
             except LocalizationError as error:

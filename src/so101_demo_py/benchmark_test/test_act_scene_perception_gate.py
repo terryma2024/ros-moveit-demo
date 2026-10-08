@@ -29,7 +29,7 @@ os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 mujoco = pytest.importorskip("mujoco")
 yaml = pytest.importorskip("yaml")
 
-import so101_demo
+import so101_demo  # noqa: E402  (the EGL environment above must be set before MuJoCo is imported)
 
 PACKAGE = Path(so101_demo.__file__).resolve().parent
 
@@ -54,7 +54,12 @@ RUNNER = Path(__file__).with_name("act_scene_runner.py")
 SEED, RANDOM_CASES, RING_CASES = 20261008, 300, 40
 RANDOM_X, RANDOM_Y, CUP_Z = (-0.15, 0.15), (-0.42, -0.20), 0.165
 RING_REACH_M = 0.12
+#: the dense ring stratum (perception-risks findings, R-b): 12 distances from the ring centre x 12 azimuths
+DENSE_RING_DISTANCES_M = (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.10, 0.12)
+DENSE_RING_AZIMUTHS = 12
+GATE_DENSE_RING_P95_MM = 1.0
 GATE_EXACTLY_ONE, GATE_P95_M, WRONG_OBJECT_M = 0.99, 0.0015, 0.02
+GATE_SENSITIVITY_P95_MM = 1.0       # a 1 px dilation or erosion of the selected mask may move the pose by this much (anchors, random)
 WIDTH, HEIGHT = 640, 480
 
 
@@ -113,6 +118,11 @@ def _cases(model, data):
     for index in range(RING_CASES):
         angle, reach = rng.uniform(0, 2 * np.pi), RING_REACH_M * np.sqrt(rng.uniform())
         cases.append((f"ring{index:02d}", "ring", [float(ring[0] + reach * np.cos(angle)), float(ring[1] + reach * np.sin(angle)), CUP_Z]))
+    for distance in DENSE_RING_DISTANCES_M:
+        for index in range(DENSE_RING_AZIMUTHS):
+            angle = index * 2.0 * np.pi / DENSE_RING_AZIMUTHS + np.pi / DENSE_RING_AZIMUTHS
+            cases.append((f"dense_d{round(distance * 1000):03d}_a{index:02d}", "dense_ring",
+                          [float(ring[0] + distance * np.cos(angle)), float(ring[1] + distance * np.sin(angle)), CUP_Z]))
     return cases
 
 
@@ -161,8 +171,20 @@ def summarize(results):
     strata = {}
     for stratum in sorted({r["stratum"] for r in results}):
         members = [r for r in results if r["stratum"] == stratum]
-        strata[stratum] = {"cases": len(members), "exactly_one": sum(1 for r in members if r["outcome"] == "ONE")}
-    return {"cases": len(results), "exactly_one": len(ones), "exactly_one_rate": len(ones) / len(results) if results else 0.0,
+        errors = np.array([r["xy_error_m"] for r in members if r["outcome"] == "ONE" and r["xy_error_m"] <= WRONG_OBJECT_M])
+        strata[stratum] = {"cases": len(members), "exactly_one": sum(1 for r in members if r["outcome"] == "ONE"),
+                           "xy_error_mm": {"mean": float(errors.mean() * 1000) if errors.size else None,
+                                           "p95": float(np.percentile(errors, 95) * 1000) if errors.size else None,
+                                           "max": float(errors.max() * 1000) if errors.size else None}}
+    sensitivity = {}
+    for stratum in sorted({r["stratum"] for r in results}):
+        moves = [r["sensitivity_mm"] for r in ones if r["stratum"] == stratum and r.get("sensitivity_mm")]
+        values = [v for m in moves for k, v in m.items() if k in ("dilate1", "erode1") and v is not None]
+        failed = sum(1 for m in moves for k in ("dilate1", "erode1") if m.get(k) is None)
+        sensitivity[stratum] = {"variants": len(values), "unlocalizable": failed,
+                                "p95_mm": float(np.percentile(values, 95)) if values else None,
+                                "max_mm": float(max(values)) if values else None}
+    return {"cases": len(results), "exactly_one": len(ones), "mask_sensitivity": sensitivity, "exactly_one_rate": len(ones) / len(results) if results else 0.0,
             "wrong_object": len(wrong), "outcomes": {o: sum(1 for r in results if r["outcome"] == o)
                                                       for o in sorted({r["outcome"] for r in results})},
             "xy_error_mm": {"mean": float(errors.mean() * 1000) if errors.size else None,
@@ -182,6 +204,7 @@ def test_the_production_detector_and_localizer_find_exactly_one_cup_on_the_rende
     spec = _render(cases)
     assert [c["stratum"] for c in spec["cases"]].count("anchor") == 3
     assert [c["stratum"] for c in spec["cases"]].count("random") == RANDOM_CASES >= 300
+    assert [c["stratum"] for c in spec["cases"]].count("dense_ring") == len(DENSE_RING_DISTANCES_M) * DENSE_RING_AZIMUTHS
     document = _run_container(cases, tmp_path / "out")
     summary = summarize(document["results"])
     summary["weights_sha256"], summary["image"] = document["weights_sha256"], IMAGE
@@ -192,6 +215,15 @@ def test_the_production_detector_and_localizer_find_exactly_one_cup_on_the_rende
     assert summary["exactly_one_rate"] >= GATE_EXACTLY_ONE, summary
     assert summary["xy_error_mm"]["p95"] < GATE_P95_M * 1000, summary
     assert summary["strata"]["anchor"]["exactly_one"] == 3, summary
+    dense = summary["strata"]["dense_ring"]
+    assert dense["cases"] == len(DENSE_RING_DISTANCES_M) * DENSE_RING_AZIMUTHS, dense
+    # the p95 is over the cases that gave one cup; a case that did not (dense_d030_a07: the cup and a 0.34 fragment both pass R6, a
+    # known case inside the excluded 0.065 m disc around the ring) is counted in `exactly_one` and the overall 99% gate, not here
+    assert dense["xy_error_mm"]["p95"] <= GATE_DENSE_RING_P95_MM, dense
+    # one pixel of mask: gated on the anchors and the random positions, reported (not gated) for the ring stratum
+    for stratum in ("anchor", "random"):
+        moved = summary["mask_sensitivity"][stratum]
+        assert moved["p95_mm"] <= GATE_SENSITIVITY_P95_MM, (stratum, moved)   # variants the localizer rejects are counted, not gated
 
 
 # ---- the arithmetic of the gate, without Docker --------------------------------------------------------------------------------
@@ -206,10 +238,22 @@ def test_the_summary_counts_exactly_one_wrong_object_and_the_error_percentile():
     summary = summarize(rows)
     assert summary["cases"] == 22 and summary["exactly_one"] == 20 and summary["wrong_object"] == 1
     assert summary["outcomes"] == {"AMBIGUOUS": 1, "ONE": 20, "REJECTED": 1}
-    assert summary["strata"]["ring"] == {"cases": 3, "exactly_one": 2}
-    assert summary["strata"]["random"] == {"cases": 18, "exactly_one": 18}
+    assert (summary["strata"]["ring"]["cases"], summary["strata"]["ring"]["exactly_one"]) == (3, 2)
+    assert (summary["strata"]["random"]["cases"], summary["strata"]["random"]["exactly_one"]) == (18, 18)
+    assert summary["strata"]["random"]["xy_error_mm"]["p95"] == pytest.approx(0.5)
     assert summary["xy_error_mm"]["max"] == pytest.approx(2.1)
     assert summary["raw_candidate_counts"] == {"2": 22}
+
+
+def test_the_mask_sensitivity_summary_gates_anchor_and_random_but_only_reports_the_ring():
+    def row(stratum, dilate, erode):
+        return dict(_row(stratum, "ONE", 0.0005), sensitivity_mm={"dilate1": dilate, "erode1": erode})
+
+    rows = [row("anchor", 0.05, 0.04), row("random", 0.3, 0.2), row("random", 0.9, None), row("ring", 8.0, 6.0)]
+    moved = summarize(rows)["mask_sensitivity"]
+    assert moved["anchor"] == {"variants": 2, "unlocalizable": 0, "p95_mm": pytest.approx(0.0495), "max_mm": 0.05}
+    assert moved["random"]["unlocalizable"] == 1 and moved["random"]["variants"] == 3 and moved["random"]["max_mm"] == 0.9
+    assert moved["ring"]["max_mm"] == 8.0, "reported for the ring stratum, which the gate does not read"
 
 
 def test_the_camera_chain_matches_the_scene_camera():

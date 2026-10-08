@@ -9,6 +9,7 @@ first evidence of the epoch on the evidence producer's clock. Nothing here chang
 """
 import copy
 import random
+import threading
 import time
 
 import pytest
@@ -149,6 +150,7 @@ class TeacherAfterCapturing(RealTimeSources):
         super().__init__(box, script, **kwargs)
         self.started_wall = None
         self.held = []
+        self.held_lock = threading.Lock()
         self.delivered_after_start = []
 
     def try_start(self, engine):
@@ -158,7 +160,7 @@ class TeacherAfterCapturing(RealTimeSources):
         return started
 
     def deliver_rest(self, engine, item):
-        held = self.held
+        sources = self
 
         class Held:
             """The engine as the sources see it, with the Teacher's events held back."""
@@ -166,15 +168,17 @@ class TeacherAfterCapturing(RealTimeSources):
                 return getattr(engine, name)
 
             def on_event_text(self, text):
-                held.append(text)
+                with sources.held_lock:                 # the feeder thread appends while the engine's thread takes the batch
+                    sources.held.append(text)
         super().deliver_rest(Held(), item)
 
     def pump(self, engine):
-        if self.held and self.started_wall is not None and time.monotonic() - self.started_wall >= self.DELAY_S:
-            for text in self.held:
+        if self.started_wall is not None and time.monotonic() - self.started_wall >= self.DELAY_S:
+            with self.held_lock:                        # take the whole batch atomically: an event appended between iterating the
+                batch, self.held = self.held, []        # list and replacing it was lost, which the engine reads as a sequence gap
+            for text in batch:
                 self.delivered_after_start.append(time.monotonic() - self.started_wall)
                 engine.on_event_text(text)
-            self.held = []
         super().pump(engine)
 
 

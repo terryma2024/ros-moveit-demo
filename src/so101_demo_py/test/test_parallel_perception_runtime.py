@@ -1219,7 +1219,10 @@ def test_each_model_is_asked_for_the_class_its_own_prompt_profile_declares(tmp_p
 
     from so101_demo.cli.parallel_perception_broker import smoke_models
     from so101_demo.core.detection import DetectionFrame
-    from so101_demo.parallel_batch.contracts import ModelOutcome, NormalizedInferenceResponseIdentity
+    from so101_demo.parallel_batch.contracts import (
+        ModelOutcome,
+        NormalizedInferenceResponseIdentity,
+    )
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 
     f = fixture_runtime(tmp_path, monkeypatch)

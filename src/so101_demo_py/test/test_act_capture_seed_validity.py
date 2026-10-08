@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 from sensor_msgs.msg import Image
 from so101_demo.act.episode_assembly import PointEpisode
+from so101_demo.act.offline.sources import OfflineRosSources
 from so101_demo.act.synchronizer import RgbObservationSynchronizer
 from so101_demo.adapters.act.ros_observation import RosObservationAdapter
-from so101_demo.act.offline.sources import OfflineRosSources
 from test_act_continuous_capture import build
 
 FLOOR = 2.075

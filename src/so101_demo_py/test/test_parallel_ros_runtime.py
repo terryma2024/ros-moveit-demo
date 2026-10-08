@@ -2463,7 +2463,6 @@ def test_c4_a_policy_with_other_bytes_is_still_refused(tmp_path, monkeypatch):
 
 def _ports_with_observer(monkeypatch, observer_class, *, timeout_s=0.05):
     import rclpy
-
     from so101_demo.backends.mujoco import observer as observer_module
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 

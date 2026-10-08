@@ -94,7 +94,7 @@ def _partial_cylinder() -> np.ndarray:
     center_xy = np.array([0.02, -0.28])
     radius = 0.04
     xy = center_xy + radius * np.column_stack((np.cos(angles), np.sin(angles)))
-    return np.column_stack((xy, np.linspace(0.13, 0.21, len(xy))))
+    return np.column_stack((xy, np.linspace(0.14, 0.21, len(xy))))      # above the localizer's fit clip (CUP_FIT_MINIMUM_Z_M)
 
 
 def test_build_mask_point_cloud_back_projects_only_valid_selected_depth() -> None:
@@ -304,3 +304,56 @@ def test_localizer_rejects_wrong_radius_or_out_of_workspace_geometry() -> None:
                 lambda *_args: _identity_transform(),
             )
         assert expected in caught.value.detail
+
+
+# ---- CP-3394 Q1: the landing ring and the table never enter the circle fit ------------------------------------------------------
+
+def _ring_points(center_xy, count=60):
+    """A flat arc on the table at z 0.1201, the red landing ring's height (radius 0.052), partly overlapping the cup's mask."""
+    angles = np.linspace(0.0, 2.0 * np.pi, count, endpoint=False)
+    xy = np.asarray(center_xy) + 0.052 * np.column_stack((np.cos(angles), np.sin(angles)))
+    return np.column_stack((xy, np.full(count, 0.1201)))
+
+
+def _localizer_for(points, **keywords):
+    return RgbdLocalizer(
+        minimum_cup_points=50, cluster_eps_m=0.02, cluster_min_points=5, table_top_z=0.12, cup_height=0.09,
+        expected_radius_m=0.04, radius_tolerance_m=0.01, workspace_min_xyz=(-0.2, -0.5, 0.1),
+        workspace_max_xyz=(0.2, -0.1, 0.3), point_cloud_builder=lambda *_a, **_k: points,
+        outlier_cleaner=lambda cloud, *_a, **_k: cloud, **keywords)
+
+
+def _localize(localizer):
+    return localizer.localize(_candidate(np.ones((2, 3), dtype=bool)), _camera_info(), _depth_message(np.ones((2, 3))),
+                              lambda *_args: _identity_transform())
+
+
+def test_the_clip_is_a_named_constant_between_the_ring_and_the_cup_wall():
+    from so101_demo.application.object_pose import CUP_FIT_MINIMUM_Z_M
+
+    assert 0.1201 < CUP_FIT_MINIMUM_Z_M < 0.14 and CUP_FIT_MINIMUM_Z_M == 0.135
+
+
+def test_points_of_the_landing_ring_do_not_pull_the_circle_fit():
+    cup = _partial_cylinder()
+    ring = _ring_points((0.02, -0.28))
+    polluted = np.vstack((cup, ring))
+    clipped = _localize(_localizer_for(polluted))
+    np.testing.assert_allclose(clipped.center_world_xyz[:2], (0.02, -0.28), atol=1e-6)
+    assert clipped.valid_depth_point_count == len(cup) and float(clipped.points_world[:, 2].min()) >= 0.135
+    # without the clip the same cloud is no cup at all (or a displaced one): the clip is what the fit relies on
+    try:
+        displaced = _localize(_localizer_for(polluted, fit_minimum_z_m=0.0)).center_world_xyz[:2]
+    except LocalizationError:
+        return                                                     # refused outright
+    assert np.linalg.norm(np.asarray(displaced) - (0.02, -0.28)) > 0.001
+
+
+def test_a_candidate_that_is_only_ring_or_table_leaves_too_few_points_and_is_rejected():
+    with pytest.raises(LocalizationError, match="GEOMETRY_REJECTED.*remain after the clip"):
+        _localize(_localizer_for(_ring_points((0.02, -0.28))))
+
+
+def test_the_clip_threshold_is_a_checked_parameter():
+    with pytest.raises(ValueError, match="fit_minimum_z_m"):
+        RgbdLocalizer(fit_minimum_z_m=float("nan"))

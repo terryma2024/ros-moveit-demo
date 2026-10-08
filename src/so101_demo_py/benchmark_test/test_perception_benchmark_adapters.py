@@ -1258,7 +1258,8 @@ def test_pinned_transformers_sam2_boolean_masks_are_consumed_losslessly(
 ) -> None:
     """Pin the real 4.56.2 processor dtype/shape and the matching fake contract."""
 
-    import torch
+    # This test is about the real torch/transformers processor; without torch in the interpreter that runs the gate it cannot run.
+    torch = pytest.importorskip("torch", reason="needs torch (the real Sam2 processor); the test venv does not install it")
     import transformers
     from transformers import Sam2Processor
     from transformers.models.sam2.image_processing_sam2_fast import (
@@ -1482,6 +1483,14 @@ def test_configured_production_builder_requires_a_real_detect_method(
 
     import so101_demo.perception_benchmark.adapters.base as base_module
 
+    # The builder hands the detector a device synchronizer made from the `torch` module; what this test pins is the DetectorPort check,
+    # so the module is the suite's stand-in (the same `_TorchApi` the other adapter tests use) and torch need not be installed.
+    real_import = base_module.importlib.import_module
+    monkeypatch.setattr(
+        base_module,
+        "importlib",
+        SimpleNamespace(import_module=lambda name: _TorchApi() if name == "torch" else real_import(name)),
+    )
     monkeypatch.setattr(
         base_module,
         "build_detector",

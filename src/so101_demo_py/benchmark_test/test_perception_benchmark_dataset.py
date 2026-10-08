@@ -46,6 +46,29 @@ SCENARIOS = (
 _POLYGON = ((0.25, 0.25), (0.75, 0.25), (0.5, 0.75))
 
 
+_INSTALLED_PILLOW = dataset_module.PIL.__version__
+_PINNED_PILLOW = dataset_module._RASTERIZER["version"]
+
+
+@pytest.fixture(autouse=True)
+def _skip_what_needs_the_pinned_rasterizer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The truth masks are rasterized with a Pillow whose output is part of the dataset contract (`_RASTERIZER`, pinned in the
+    perception lock files). With any other Pillow installed the rasterizer refuses (RASTERIZER_VERSION_MISMATCH) by design, so a test
+    that reaches it cannot run: it is skipped, with the reason, instead of failing on the environment. Everything that does not
+    rasterize still runs, a test that patches the version to exercise the refusal still sees the real check, and with the pinned
+    Pillow nothing is skipped (install it with `uv pip install pillow==<pin>` into the interpreter that runs the gate)."""
+    if _INSTALLED_PILLOW == _PINNED_PILLOW:
+        return
+    real = dataset_module._require_rasterizer_version
+
+    def checked() -> None:
+        if dataset_module.PIL.__version__ == _INSTALLED_PILLOW:
+            pytest.skip(f"needs Pillow {_PINNED_PILLOW} (the dataset rasterizer pin); {_INSTALLED_PILLOW} is installed")
+        real()
+
+    monkeypatch.setattr(dataset_module, "_require_rasterizer_version", checked)
+
+
 def _png_bytes(index: int, *, width: int = 640, height: int = 480) -> bytes:
     image = Image.new(
         "RGB",

@@ -221,8 +221,8 @@ def test_a_frozen_set_without_the_teacher_policies_is_refused_by_the_teacher_loa
 
 
 def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
-    from so101_demo.act.offline.policy import RecorderConfigRefused
     from so101_demo.act.frozen_runtime_inputs import load_recorder_frozen_policy
+    from so101_demo.act.offline.policy import RecorderConfigRefused
     manifest_path = freeze(tmp_path)
     policy = load_recorder_frozen_policy(manifest_path)
     bound = json.loads(manifest_path.read_bytes())["episode_recorder_v1"]

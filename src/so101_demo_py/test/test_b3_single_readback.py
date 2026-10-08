@@ -13,7 +13,6 @@ import types
 from pathlib import Path
 
 import pytest
-
 from so101_demo.act import episode_qc, qc_memo, qc_session
 from so101_demo.act.qc_session import qc_session as session_scope
 
@@ -350,7 +349,7 @@ def test_a_receipt_with_two_recomputations_fails_its_own_stage_check(tmp_path, m
     monkeypatch.setattr(episode_qc, "_recompute_for_readback",
                         lambda session, root, **kw: (session.note("recompute_native_qc"), inner(root, **kw))[1])   # no reuse
     out = tmp_path / "readback"
-    rc = act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     receipt = json.loads((out / "readback-receipt.json").read_bytes())
     assert receipt["status"] == "FAIL" and any(item.startswith("READBACK_RECOMPUTE_COUNT") for item in receipt["failures"])
 

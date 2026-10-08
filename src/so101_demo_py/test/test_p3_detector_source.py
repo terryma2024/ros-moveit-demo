@@ -13,11 +13,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from so101_demo.cli import parallel_perception_broker as broker_cli
-
 from test_p3_role_provenance import PACKAGE, _container_kwargs
-from test_parallel_batch_cli import local_start_guard  # noqa: F401  (autouse: the offline start-guard seam)
+from test_parallel_batch_cli import (
+    local_start_guard,  # noqa: F401  (autouse: the offline start-guard seam)
+)
 
 
 def test_the_detector_pin_machinery_is_gone():
@@ -52,9 +52,10 @@ def test_the_freezes_detector_hands_the_frame_to_ultralytics_as_bgr():
 
 
 def test_the_composition_records_the_freezes_detector_in_a_qualified_run_and_nothing_outside_one(tmp_path, monkeypatch):
-    from test_parallel_batch_cli import argv as cli_argv, verified
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot, runtime_ipc_base
+    from test_parallel_batch_cli import argv as cli_argv
+    from test_parallel_batch_cli import verified
 
     class Probe:
         def snapshot(self):

@@ -9,9 +9,15 @@ import copy
 import math
 
 import pytest
-
 from so101_demo.act import qc_session
-from so101_demo.act.qc_session import Identity, cached_lines, file_signature, qc_session as session_scope, session_memo, tree_signature
+from so101_demo.act.qc_session import (
+    Identity,
+    cached_lines,
+    file_signature,
+    session_memo,
+    tree_signature,
+)
+from so101_demo.act.qc_session import qc_session as session_scope
 
 
 def counting(tmp_path):

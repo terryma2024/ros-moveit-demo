@@ -34,8 +34,14 @@ from pathlib import Path
 
 from ...act.collection_reference import build_collection_reference
 from ...act.nonfinite import json_safe
-from ...act.recorder_scene import (AssociationJob, SceneAssociationError, SceneAssociations, SceneOperationTracker, build_association,
-                                   select_source)
+from ...act.recorder_scene import (
+    AssociationJob,
+    SceneAssociationError,
+    SceneAssociations,
+    SceneOperationTracker,
+    build_association,
+    select_source,
+)
 from ...act.scene_operation import SceneOperationError
 from ...act.synchronizer import source_age_ok_ns
 from ...ros.recorder_data_side import RecorderDataSide
@@ -386,9 +392,10 @@ class OfflineRosSources:
         before, after = found["before"], found["after"]
         if before is None or after is None:
             return None
+        from moveit_msgs.srv import GetPlanningScene
+
         from ...act.scene_association import canonical, decode_ros
         from ...control.planning_scene.task_scene import normalized_scene_geometry
-        from moveit_msgs.srv import GetPlanningScene
 
         geometry = [canonical(normalized_scene_geometry(decode_ros(GetPlanningScene.Response, call["response"]).scene))
                     for call in (before, after)]
@@ -410,9 +417,10 @@ class OfflineRosSources:
         read after the row, causal after the same apply, carries the association's geometry; no other apply (successful or not) lies
         between the apply's response and that read. With any read at or before the row the read rules decide (CP-3440 B).
         """
+        from moveit_msgs.srv import GetPlanningScene
+
         from ...act.scene_association import association_anchor, canonical, decode_ros
         from ...control.planning_scene.task_scene import normalized_scene_geometry
-        from moveit_msgs.srv import GetPlanningScene
 
         document = bound["association"]
         after = found["after"]

@@ -14,7 +14,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from offline_synthetic_bag import build_bag
 from so101_demo.act import episode_qc, qc_memo, topic_loss
 from so101_demo.act.offline.scan import scan_bag
@@ -245,7 +244,10 @@ def test_a_bag_recorded_without_the_breakdown_keeps_the_aggregate_rule(tmp_path)
 
 
 def test_the_per_topic_lines_of_the_recorders_debug_log_are_parsed_to_the_last_cumulative_total():
-    from so101_demo.act.offline.raw_recorder import RECORDER_LOG_LEVEL, transport_lost_by_topic_from_log
+    from so101_demo.act.offline.raw_recorder import (
+        RECORDER_LOG_LEVEL,
+        transport_lost_by_topic_from_log,
+    )
 
     log = ("[DEBUG] [1.0] [so101_raw_recorder]: Messages lost on transport layer for topic '/clock'. Total lost: 1\n"
            "[DEBUG] [2.0] [so101_raw_recorder]: Messages lost on transport layer for topic '/a/b'. Total lost: 4\n"

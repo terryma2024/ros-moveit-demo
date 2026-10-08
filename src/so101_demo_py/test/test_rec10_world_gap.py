@@ -55,8 +55,8 @@ def test_the_observer_keeps_what_it_saw_at_each_gap_and_rejection(monkeypatch):
 
 
 def test_the_world_observer_does_not_latch_a_sticky_hazard_at_a_gap_the_records_are_judged_instead(monkeypatch):
-    from so101_demo.backends.mujoco import observer as module
     from so101_demo.act.offline.sources import OfflineRosSources
+    from so101_demo.backends.mujoco import observer as module
     monkeypatch.setattr(module, "convert_message", lambda message: message)
     sources = OfflineRosSources.__new__(OfflineRosSources)
     node = SimpleNamespace(create_subscription=lambda *args: object())

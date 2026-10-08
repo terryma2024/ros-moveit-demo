@@ -30,8 +30,13 @@ from pathlib import Path
 
 from ..exception_chain import chain_text
 from ..qc_session import qc_session
+from ..teacher_event_stream import (
+    EventStreamMonitor,
+    StreamIdentity,
+    TeacherEventError,
+    decode_event,
+)
 from .policy import check_outputs_absent
-from ..teacher_event_stream import EventStreamMonitor, StreamIdentity, TeacherEventError, decode_event
 
 RC_VALID, RC_INVALID = 0, 3
 RESULT_SCHEMA = "SO101_RECORDER_RESULT_V1"
