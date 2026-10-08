@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 
 from .contracts import finite, integer, vector
+from .qc_session import load_model
 from .joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
 from .scene_association import (association_anchor, canonical, claim_scene_records, decode_ros, _call,
                                 verify_scene_association)
@@ -27,7 +28,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
         chunks = inputs["execution_snapshot"]["physics_chunks"]
         by_step, by_time, previous = {}, {}, None
         for chunk in raw_chunks:
-            verify_raw_chunk(chunk, previous=previous, session_id=identity["session_id"],
+            verify_raw_chunk(chunk, previous=previous, previous_verified=True, session_id=identity["session_id"],
                 reset_epoch=identity["reset_epoch"], nq=model_identity["nq"], nv=model_identity["nv"],
                 max_samples=chunks["max_samples"], max_contacts=chunks["max_contacts"])
             previous = chunk
@@ -52,7 +53,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
             if root not in models:
                 snapshot = verify_execution_snapshot(root,
                     expected_sha256=inputs["execution_snapshot"]["sha256"])
-                models[root] = mujoco.MjModel.from_xml_path(str(Path(root) / snapshot["scene_path"]))
+                models[root] = load_model(Path(root) / snapshot["scene_path"], root=root)
         required = (PlanningSceneComponents.WORLD_OBJECT_NAMES | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
                     | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS | PlanningSceneComponents.OBJECT_COLORS)
 

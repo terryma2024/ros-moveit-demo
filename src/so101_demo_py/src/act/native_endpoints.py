@@ -7,6 +7,7 @@ import math
 from pathlib import Path
 
 from .contracts import fields, integer, vector, finite
+from .qc_session import Identity, session_memo
 from .scene_association import _world, _raw_source_matches, source_model_data
 
 WORLD_KIND = "ACT_NATIVE_WORLD_SOURCE"
@@ -22,6 +23,14 @@ def world_source_record(received, scene, *, execution_root):
             "reset_epoch": world.reset_epoch, "simulation_step": world.simulation_step}}, allow_nan=False))
 
 
+def _world_source_key(document, *, identity, previous=None):
+    from .qc_session import Identity
+
+    return (Identity(document), None if previous is None else Identity(previous),
+            json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str))
+
+
+@session_memo(_world_source_key, copy_result=False)
 def validate_world_source(document, *, identity, previous=None):
     from ..adapters.act.scene_state import SceneStateObserver
     fields(document, {"kind", "schema_version", "execution_root", "physics", "received_monotonic_ns",
@@ -100,6 +109,13 @@ def _raw_steps_at(raw_steps, step):
     return _RAW_INDEX["index"].get(step, [])
 
 
+@session_memo(lambda model, world, scene: (Identity(model), Identity(world), Identity(scene)), copy_result=False)
+def _source_model_checked(model, world, scene):
+    """`source_model_data` for its verdict only (the data it builds is not used here); once per source inside a QC session."""
+    source_model_data(model, world, scene)
+    return True
+
+
 def verify_world_source(document, *, identity, model, model_identity, raw_steps, previous=None):
     import mujoco
     world = validate_world_source(document, identity=identity, previous=previous)
@@ -109,7 +125,7 @@ def verify_world_source(document, *, identity, model, model_identity, raw_steps,
     scene = document["scene_state"]
     if scene["model_sha256"] != model_identity["model_sha256"]:
         raise ValueError("WORLD_SOURCE_MODEL_INVALID")
-    source_model_data(model, world, scene)
+    _source_model_checked(model, world, scene)
     matches = _raw_steps_at(raw_steps, world.simulation_step)
     if len(matches) != 1:
         raise ValueError("WORLD_SOURCE_NATIVE_REQUIRED")
@@ -196,7 +212,7 @@ def first_world_after_stop(sources, boundary, *, identity, capture_clock, raw_st
     for source in sources:
         world = validate_world_source(source, identity=identity, previous=previous)
         previous = source
-        matches = [sample for sample in raw_steps if sample["physics_step"] == world.simulation_step]
+        matches = _raw_steps_at(raw_steps, world.simulation_step)
         if (len(matches) != 1 or round(matches[0]["simulation_time_s"] * 1e9) != round(world.simulation_time_s * 1e9)
                 or matches[0]["model_qpos"] != source["scene_state"]["qpos"]
                 or matches[0]["model_qvel"] != source["scene_state"]["qvel"]
@@ -263,7 +279,7 @@ def first_world_after_capture_start(sources, *, identity, reset_clock, capture_s
     for source in sources:
         world = validate_world_source(source, identity=identity, previous=previous)
         previous = source
-        matches = [sample for sample in raw_steps if sample["physics_step"] == world.simulation_step]
+        matches = _raw_steps_at(raw_steps, world.simulation_step)
         if (len(matches) != 1 or (matches[0]["simulation_session_id"], matches[0]["reset_epoch"])
                 != (identity["session_id"], identity["reset_epoch"])
                 or round(matches[0]["simulation_time_s"] * 1e9) != round(world.simulation_time_s * 1e9)

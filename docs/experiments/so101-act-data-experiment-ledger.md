@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3468
+latest_checkpoint: CP-3469
 next_experiment: A cleanup step 2 → B performance (≤10%) → C loss gate → D perception re-baseline/unpin → freeze + L1–L7.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3469 — phase B1/B2 done: QC 9.5× faster, replay 1.8×; three steps 2,951 s → 347 s (11.8%); QC byte-identical; B3 draft to review
+
+- Timing, L2 45315499, quiet machine, sequential (phaseb/times-base1.tsv → times-final1.tsv):
+
+| Stage | Before | After |
+|---|---|---|
+| offline processing (scan 13.5→13.0, replay 267→148, fresh QC 253→26) | 537 s | 190 s |
+| in-run commit proof | 421 s | 27 s |
+| readback qc | 247 s | 26 s |
+| readback verify-commit | 421 s | 27 s |
+| readback check-export | 1,325 s | 77 s |
+| three steps total | 2,951 s | 347 s (11.8%) |
+
+- Changes: act/qc_session.py (inside a session each pure verifier runs once per unchanged file set; one MuJoCo model per session), with sessions opened in recompute_native_qc, ActCollectionResultVerifier.verify and the engine's final seal; O(n²) raw-sample scans → step index; cheaper raw-chunk checks (same error raised); replay: seal/readback audit verifiers 6×→1×, a redundant deep copy removed, no re-verify of the previous chunk. PNG encode/decode was not a cost; deserialisation is 33 s and GIL-bound.
+- Acceptance:
+  - (a) qc-report.json is byte-identical between d33def737 and the new code on the live L2 sealed episode and the processor-built L2/147cb073 episodes, and the three readback outputs are byte-identical to the original hashes. INVALID/fault cases fail with the same error chain. 9 tampered copies of L2 reaching 5 QC stages give identical error chains, plus a byte-identical FAIL report for the Teacher-manifest case.
+  - (b) Processor outputs are EQUIVALENT on all 8 inputs; new nondeterminism item N9: the lossless writer queue's accept/write interleaving and its peak depth follow thread timing (seen in 1/8 runs).
+  - (c) Gate 7,490 pass / 186 skip / 0 fail (+23 test_b1_qc_session.py, RED = module missing); scratch install 212 pass.
+  - (d) Independence unchanged: QC never reads the memo; a session never leaves its process/block.
+- Docs: change doc 2026-10-08-qc-and-replay-speed.md. Backup p5b-base.tar.gz (4c5ae3b0…1205).
+- The 10% target is not yet met: check-export still recomputes QC 3×. B3 (one fresh-process `act_first_episode readback --run`: one QC shared by verify-commit and both export checks; projected ≈246 s) is drafted in 2026-10-08-single-fresh-readback.md and sent to independent review. Committed as a checkpoint.
 
 ## CP-3468 — phase A done: cleanup step 2 (live-only Recorder removed); golden EQUIVALENT on 8 inputs; gate PASS; committed
 

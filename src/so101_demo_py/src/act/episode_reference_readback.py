@@ -1,9 +1,11 @@
 """Original controller publications beside the exact projected label values."""
 
 from .contracts import integer
+from .qc_session import Identity, session_memo
 from .scene_association import canonical, decode_ros
 
 
+@session_memo(lambda frame, kind: (Identity(frame), kind), copy_result=False)
 def verify_original_frame(frame, kind):
     from control_msgs.msg import JointTrajectoryControllerState
     from .joints import ARM_JOINTS

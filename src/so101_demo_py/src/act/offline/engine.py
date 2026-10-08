@@ -29,6 +29,7 @@ import time
 from pathlib import Path
 
 from ..exception_chain import chain_text
+from ..qc_session import qc_session
 from .policy import check_outputs_absent
 from ..teacher_event_stream import EventStreamMonitor, StreamIdentity, TeacherEventError, decode_event
 
@@ -343,7 +344,11 @@ class OfflineEngine:
             elif self.ready and not self.invalid:
                 self._tail()
             self._check_sources()
-            self._seal()
+            # The seal and the readback of what was just sealed verify the same unchanged files through the same verifiers: inside one
+            # session each verifier runs once. The independent check of the sealed episode is the fresh-process QC, which never shares
+            # a session with this process.
+            with qc_session():
+                self._seal()
         except Exception as error:
             self.latch("RECORDER_FINALIZE_FAILED: " + self._reason(error))
         finally:

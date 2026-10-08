@@ -85,7 +85,8 @@ class RosEpisodePhysicsAdapter:
             raise ValueError("PHYSICS_RAW_PENDING_OVERFLOW")
         record = raw_chunk_from_ros(message, received_monotonic_ns=receipt,
             max_samples=self.max_samples, max_contacts=self.max_contacts)
-        verify_raw_chunk(record, previous=self._previous, session_id=self.session_id,
+        # `self._previous` is the record this method admitted (and verified with these same arguments) one chunk ago
+        verify_raw_chunk(record, previous=self._previous, previous_verified=True, session_id=self.session_id,
             reset_epoch=self.reset_epoch, nq=self.nq, nv=self.nv,
             max_samples=self.max_samples, max_contacts=self.max_contacts)
         self._pending.append(record)

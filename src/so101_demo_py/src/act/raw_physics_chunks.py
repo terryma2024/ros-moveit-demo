@@ -7,8 +7,9 @@ The native chunk does not publish a world publisher sequence or model digest.
 
 from __future__ import annotations
 
-import copy
 import math
+
+from .qc_session import Identity, session_memo
 
 _ENVELOPE = {"schema_version", "received_monotonic_ns", "chunk"}
 _CHUNK = {"chunk_sequence", "simulation_session_id", "reset_epoch", "first_physics_step",
@@ -32,7 +33,7 @@ _CONTACT_LISTS = ("left_fingertip_contacts", "right_fingertip_contacts", "other_
 
 
 def _exact(value, keys):
-    if not isinstance(value, dict) or set(value) != keys:
+    if not isinstance(value, dict) or value.keys() != keys:
         raise ValueError("PHYSICS_RAW_SCHEMA_INVALID")
 
 
@@ -49,17 +50,31 @@ def _number(value, *, nonnegative=False):
     return value
 
 
+_NUMBER_TYPES = frozenset((int, float))
+_isfinite = math.isfinite
+
+
+def _numbers(values, *, nonnegative=False):
+    """`_number` for every value of an iterable, with the type test and the finiteness test run in C over the whole batch.
+
+    Same verdict as calling `_number` on each value: an exact int or float (bool and subclasses are refused), finite, and
+    (when asked) not negative. The error is the same `PHYSICS_RAW_NUMBER_INVALID`.
+    """
+    values = list(values)
+    if not _NUMBER_TYPES.issuperset(map(type, values)) or not all(map(_isfinite, values)) \
+            or nonnegative and any(value < 0 for value in values):
+        raise ValueError("PHYSICS_RAW_NUMBER_INVALID")
+
+
 def _vector(value, size=None):
     if not isinstance(value, list) or not value or size is not None and len(value) != size:
         raise ValueError("PHYSICS_RAW_VECTOR_INVALID")
-    for item in value:
-        _number(item)
+    _numbers(value)
 
 
 def _xyz(value):
     _exact(value, {"x", "y", "z"})
-    for item in value.values():
-        _number(item)
+    _numbers(value.values())
 
 
 def raw_chunk_from_ros(message, *, received_monotonic_ns, max_samples=None, max_contacts=None):
@@ -74,17 +89,30 @@ def raw_chunk_from_ros(message, *, received_monotonic_ns, max_samples=None, max_
                                         for sample in message.samples):
         raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
     record = {"schema_version": 1, "received_monotonic_ns": received_monotonic_ns,
-              "chunk": copy.deepcopy(dict(message_to_ordereddict(message)))}
+              # `message_to_ordereddict` builds a new tree of containers around immutable scalars: a copy of it would be a second
+              # copy of nothing anyone else holds
+              "chunk": dict(message_to_ordereddict(message))}
     verify_raw_chunk(record, max_samples=max_samples, max_contacts=max_contacts)
     return record
 
 
+def _chunk_key(record, *, previous=None, session_id=None, reset_epoch=None, nq=None, nv=None, max_samples=None,
+               max_contacts=None, previous_verified=False):
+    return (Identity(record), None if previous is None else Identity(previous), session_id, reset_epoch, nq, nv, max_samples,
+            max_contacts, previous_verified)
+
+
+@session_memo(_chunk_key, copy_result=False)
 def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None,
-                     nq=None, nv=None, max_samples=None, max_contacts=None):
+                     nq=None, nv=None, max_samples=None, max_contacts=None, previous_verified=False):
     """Recompute source type, scope, loss, clocks and .002 s continuity from raw values.
 
     The first retained chunk may start after reset. Complete episode coverage must
     separately bind its actual first/last steps to reset/command/stop boundaries.
+
+    `previous` is verified first, as a record on its own, unless the caller states `previous_verified`: a loop that has just
+    verified `previous` with these very arguments as the current record of its previous pass (and so would have stopped on a
+    defect) says so, and the chunk is not checked a second time.
     """
     _exact(record, _ENVELOPE)
     if type(record["schema_version"]) is not int or record["schema_version"] != 1:
@@ -116,8 +144,9 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
         raise ValueError("PHYSICS_RAW_PRODUCER_BOUNDS_INVALID")
     prior = None
     if previous is not None:
-        verify_raw_chunk(previous, session_id=session_id, reset_epoch=reset_epoch, nq=nq, nv=nv,
-                         max_samples=max_samples, max_contacts=max_contacts)
+        if not previous_verified:
+            verify_raw_chunk(previous, session_id=session_id, reset_epoch=reset_epoch, nq=nq, nv=nv,
+                             max_samples=max_samples, max_contacts=max_contacts)
         prior_chunk = previous["chunk"]
         if (chunk["chunk_sequence"] != prior_chunk["chunk_sequence"] + 1
                 or (chunk["simulation_session_id"], chunk["reset_epoch"]) !=
@@ -147,7 +176,8 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
         _exact(pose, {"position", "orientation"})
         _xyz(pose["position"])
         _exact(pose["orientation"], {"x", "y", "z", "w"})
-        quat = [_number(item) for item in pose["orientation"].values()]
+        quat = list(pose["orientation"].values())
+        _numbers(quat)
         if abs(math.sqrt(sum(item * item for item in quat)) - 1.) > 1e-3:
             raise ValueError("PHYSICS_RAW_QUATERNION_INVALID")
         twist = sample["object_twist_world"]
@@ -159,8 +189,7 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
             raise ValueError("PHYSICS_RAW_SOURCE_HAZARD")
         if type(sample["has_contact"]) is not bool or type(sample["static_shadow_crossed"]) is not bool:
             raise ValueError("PHYSICS_RAW_FLAG_INVALID")
-        for name in _FORCES:
-            _number(sample[name], nonnegative=True)
+        _numbers((sample[name] for name in _FORCES), nonnegative=True)
         for name in _CONTACT_LISTS:
             if not isinstance(sample[name], list):
                 raise ValueError("PHYSICS_RAW_CONTACT_INVALID")

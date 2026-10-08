@@ -26,6 +26,7 @@ from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import RULE_VERSION, THRESHOLD_UNITS, evaluate_endpoint_pose  # legacy v2 only
 from so101_demo.act.episode_audit import verify_audit_manifest
+from so101_demo.act.qc_session import active, cached_lines, file_signature, load_model, session_memo
 
 PHYSICS_STREAM = "physics.jsonl"
 REFERENCE_STREAM = "references.jsonl"
@@ -42,6 +43,14 @@ def verify_original_references(references):
     return verify(references)
 
 
+def _native_events_key(events, *, identity, window, inputs):
+    from .qc_session import Identity
+
+    return (Identity(events), len(events),
+            json.dumps([identity, window, inputs], sort_keys=True, separators=(",", ":"), default=str))
+
+
+@session_memo(_native_events_key, copy_result=False)
 def verify_native_collection_events(events, *, identity, window, inputs):
     """Recompute complete collection boundaries from originals, without live ports.
 
@@ -83,7 +92,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             raise ValueError('NATIVE_QC_V1_EVENT_REJECTED')
         if event['kind'] == 'physics_chunk_v1':
             raw = event['payload']['raw_chunk']
-            verify_raw_chunk(raw, previous=previous, session_id=identity['session_id'],
+            verify_raw_chunk(raw, previous=previous, previous_verified=True, session_id=identity['session_id'],
                 reset_epoch=identity['reset_epoch'], nq=model_identity['nq'], nv=model_identity['nv'],
                 max_samples=chunks['max_samples'], max_contacts=chunks['max_contacts'])
             raw_steps.extend(raw['chunk']['samples']); previous = raw
@@ -191,7 +200,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
         root = source['execution_root']
         if root not in models:
             snapshot = verify_execution_snapshot(root, expected_sha256=inputs['execution_snapshot']['sha256'])
-            models[root] = mujoco.MjModel.from_xml_path(str(Path(root)/snapshot['scene_path']))
+            models[root] = load_model(Path(root)/snapshot['scene_path'], root=root)
         verify_world_source(source, identity=identity, model=models[root], model_identity=model_identity,
                             raw_steps=raw_steps, previous=previous)
         previous = source
@@ -352,6 +361,14 @@ def native_endpoint_records(events, *, identity, window, inputs, endpoint_inputs
         final_target=targets['final_target'], policy_sha256=binding['sha256'])
 
 
+def _physical_audit_key(episode_root, audit_manifest, scope):
+    from .qc_session import file_signature, tree_signature
+
+    root = Path(episode_root).absolute()
+    return (str(root), str(Path(audit_manifest).absolute()), tree_signature(root), file_signature(Path(scope).absolute()))
+
+
+@session_memo(_physical_audit_key)
 def verify_episode_physical_audit(episode_root, audit_manifest, scope):
     """Re-read sealed originals for the selected publisher and bound Coordinator.
 
@@ -381,10 +398,19 @@ def verify_episode_physical_audit(episode_root, audit_manifest, scope):
                     raise ValueError("original is not regular")
                 return stream.read()
 
+        def original_rows(path):
+            # strict: a blank line is an error here. A file that parses is the same list `read_verified_rows` would give, so the
+            # session shares it (the events are parsed once for the whole QC).
+            rows = cached_lines(path, lambda target: [json.loads(line) for line in read_original(target).splitlines()])
+            session = active()
+            if session is not None:
+                session.cache.setdefault(("lines", "lenient", file_signature(path)), rows)
+            return rows
+
         inputs = json.loads(read_original(manifest_path.parent / "inputs.json"))
-        rows = [json.loads(line) for line in read_original(root / "records.jsonl").splitlines()]
-        events = [json.loads(line) for line in read_original(manifest_path.parent / "events.jsonl").splitlines()]
-        references = [json.loads(line) for line in read_original(manifest_path.parent / "references.jsonl").splitlines()]
+        rows = original_rows(root / "records.jsonl")
+        events = original_rows(manifest_path.parent / "events.jsonl")
+        references = original_rows(manifest_path.parent / "references.jsonl")
         verify_original_references(references)
         summary = verify_episode_physical_rows(rows,
             raw_chunks=[event["payload"]["raw_chunk"] for event in events
@@ -732,6 +758,17 @@ def physics_chunk_count(events) -> int:
 
 
 def recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None):
+    """Read-only current data QC (schema 3); see `_recompute_native_qc`. The verifiers it repeats run once per session."""
+    import contextlib
+
+    from .qc_session import active, qc_session
+
+    with contextlib.nullcontext() if active() is not None else qc_session():
+        return _recompute_native_qc(episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                    teacher_manifest=teacher_manifest)
+
+
+def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None):
     """Read-only current data QC (schema 3), suitable for an installed fresh process.
 
     The caller supplies the original run scope and original frozen input set. Episode-local copies cannot substitute
@@ -843,7 +880,11 @@ def read_verified_rows(root: Path, stream: str) -> list[dict]:
     path = Path(root) / stream
     if not path.is_file():
         return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return cached_lines(path, _parse_stream_rows, "lenient")
+
+
+def _parse_stream_rows(path: Path) -> list[dict]:
+    return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
 def _manifest_digest(path: Path) -> str:

@@ -23,6 +23,7 @@ import os
 from pathlib import Path
 
 from .acquisition import CAMERAS, canonical_acquisition_id
+from .qc_session import cached_lines, load_model, session_memo
 from ..parallel_batch.contracts import ContractError, LeaseIdentity
 
 
@@ -1339,6 +1340,14 @@ class EpisodeAuditWriter:
             os.close(descriptor)
 
 
+def _audit_manifest_key(path: Path) -> tuple:
+    from .qc_session import tree_signature
+
+    path = Path(path).absolute()
+    return str(path), tree_signature(path.parent)
+
+
+@session_memo(_audit_manifest_key)
 def verify_audit_manifest(path: Path) -> dict:
     """Re-read a sealed audit and recompute it.
 
@@ -1416,11 +1425,15 @@ def verify_audit_manifest(path: Path) -> dict:
     return manifest
 
 
+def _parse_audit_lines(path: Path) -> list:
+    return [json.loads(line) for line in Path(path).read_text().splitlines()]
+
+
 def _records(path: Path, fields: frozenset, code: str, *,
              optional: frozenset = frozenset(),
              optional_any: tuple = ()) -> list:
     try:
-        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        rows = cached_lines(path, _parse_audit_lines)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError(code) from error
     # F3: alternative groups are options too, so the base requirement must not demand them
@@ -1696,7 +1709,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if row["kind"] == "physics_chunk_v1":
             from .raw_physics_chunks import verify_raw_chunk
             raw = payload["raw_chunk"]
-            verify_raw_chunk(raw, previous=raw_physics_previous,
+            verify_raw_chunk(raw, previous=raw_physics_previous, previous_verified=True,
                 session_id=identity["session_id"], reset_epoch=identity["reset_epoch"],
                 **({} if execution_model is None else {"nq": execution_model["nq"], "nv": execution_model["nv"],
                     "max_samples": execution_chunks["max_samples"], "max_contacts": execution_chunks["max_contacts"]}))
@@ -1731,7 +1744,6 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             verify_scene_association(association, inputs=inputs, identity=identity,
                 raw_steps=[] if step not in native_steps else [native_steps[step]])
     if world_sources:
-        import mujoco
         from .execution_snapshot import verify_execution_snapshot
         from .native_endpoints import verify_world_source
         if execution_model is None:
@@ -1742,7 +1754,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             root = source["execution_root"]
             if root not in models:
                 snapshot = verify_execution_snapshot(root, expected_sha256=inputs["execution_snapshot"]["sha256"])
-                models[root] = mujoco.MjModel.from_xml_path(str(Path(root) / snapshot["scene_path"]))
+                models[root] = load_model(Path(root) / snapshot["scene_path"], root=root)
             step = source["physics"]["simulation_step"]
             verify_world_source(source, identity=identity, model=models[root], model_identity=execution_model,
                 raw_steps=[] if step not in native_steps else [native_steps[step]], previous=previous)

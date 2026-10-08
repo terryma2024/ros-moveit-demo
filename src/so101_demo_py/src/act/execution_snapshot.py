@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 
+from .qc_session import session_memo
+
 KIND = "ACT_FIRST_EPISODE_EXECUTION_INPUTS"
 SCENE = "assets/mujoco/act/scene.xml"
 MOTION = "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
@@ -196,6 +198,14 @@ def freeze_execution_snapshot(source_root: Path, output: Path) -> dict:
     return verify_execution_snapshot(target)
 
 
+def _snapshot_key(root: Path, *, expected_sha256: str | None = None) -> tuple:
+    from .qc_session import tree_signature
+
+    root = Path(root).absolute()
+    return str(root), expected_sha256, tree_signature(root)
+
+
+@session_memo(_snapshot_key)
 def verify_execution_snapshot(root: Path, *, expected_sha256: str | None = None) -> dict:
     """Verify the retained bytes and independently recompute the frozen recipe targets."""
     root = Path(root).absolute()

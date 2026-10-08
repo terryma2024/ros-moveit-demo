@@ -11,6 +11,7 @@ from pathlib import Path
 import uuid
 
 from .contracts import fields, identifier, integer, sha256
+from .qc_session import Identity, load_model, session_memo
 
 KIND = "ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION"
 RULE = "frozen_geometry_from_native_step_v1"
@@ -166,7 +167,9 @@ def validate_scene_association(document):
     canonical(document)
 
 
+@session_memo(lambda document: Identity(document), copy_result=False)
 def _world(document):
+    # the result is a frozen dataclass: inside a QC session one document is decoded once and the object is shared
     from ..core.simulation.types import SimulationEvidence, ObjectState, ContactEvidence
     fields(document, {field.name for field in dataclass_fields(SimulationEvidence)})
     for key in ("has_contact", "paused", "truncated"):
@@ -251,6 +254,7 @@ def _xyz(value):
     return [value[key] for key in ("x", "y", "z")]
 
 
+@session_memo(lambda sample, world, scene: (Identity(sample), Identity(world), Identity(scene)), copy_result=False)
 def _raw_source_matches(sample, world, scene):
     state = world.object_state
     pose, twist = sample["object_pose_world"], sample["object_twist_world"]
@@ -306,7 +310,6 @@ def source_model_data(model, world, scene):
 
 def verify_scene_association(document, *, inputs, identity, raw_steps):
     """Authenticate frozen assets, reconstruct source geometry, and verify actual ROS contents."""
-    import mujoco
     from moveit_msgs.msg import PlanningSceneComponents
     from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
     from ..adapters.act.scene_state import SceneStateObserver
@@ -345,7 +348,7 @@ def verify_scene_association(document, *, inputs, identity, raw_steps):
             or round(scene["simulation_time_s"] * 1e9) != round(world.simulation_time_s * 1e9)
             or scene["paused"] or scene["clock_interval_begin_monotonic_ns"] > source["received_monotonic_ns"]):
         raise ValueError("SOURCE_ALIGNMENT_SCENE_SOURCE_INVALID")
-    model = mujoco.MjModel.from_xml_path(str(root / snapshot["scene_path"]))
+    model = load_model(root / snapshot["scene_path"], root=root)
     data = source_model_data(model, world, scene)
     matches = [sample for sample in raw_steps if sample["physics_step"] == world.simulation_step]
     if (len(matches) != 1 or matches[0]["model_qpos"] != scene["qpos"]

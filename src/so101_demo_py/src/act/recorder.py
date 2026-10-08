@@ -27,6 +27,7 @@ _AUDIT_KEYS = frozenset({
     "mujoco_truth", "contacts", "planning_scene", "controller_state",
 })
 from .episode_audit import verify_audit_manifest
+from .qc_session import file_signature, session_memo, tree_signature
 
 _PROVENANCE_KEYS = frozenset({
     "source_sha256", "scene_sha256", "config_sha256", "policy_fingerprint", "seed",
@@ -367,6 +368,14 @@ class EpisodeRecorder:
             raise RecorderInfraError("RECORDER_SEAL_FAILED") from error
 
 
+def _seal_key(path: Path, *, audit_manifest: Path | None = None, scope: Path | None = None) -> tuple:
+    path = Path(path).absolute()
+    audit = None if audit_manifest is None else Path(audit_manifest).absolute()
+    return (str(path), tree_signature(path.parent), None if audit is None else (str(audit), tree_signature(audit.parent)),
+            None if scope is None else file_signature(Path(scope).absolute()))
+
+
+@session_memo(_seal_key)
 def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
                         scope: Path | None = None) -> dict:
     path = Path(path)

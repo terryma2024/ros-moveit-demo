@@ -706,6 +706,16 @@ class ActCollectionResultVerifier:
             return None
 
     def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode, *, allow_legacy: bool = False) -> dict:
+        """Verify one sealed result without modifying it; see `_verify`. The verifiers a result check repeats (the seal, the physical
+        audit and the QC recomputation read the same files) run once per session."""
+        import contextlib
+
+        from .qc_session import active, qc_session
+
+        with contextlib.nullcontext() if active() is not None else qc_session():
+            return self._verify(lease, location, run_mode, allow_legacy=allow_legacy)
+
+    def _verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode, *, allow_legacy: bool = False) -> dict:
         """Verify one sealed result without modifying it.
 
         Schema 3 is the only schema the Coordinator may commit. Schema 1 and 2 are the read-only legacy of the coupled
