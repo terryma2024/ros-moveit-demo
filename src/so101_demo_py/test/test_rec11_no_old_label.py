@@ -22,8 +22,8 @@ def test_the_old_alignment_label_remains_nowhere_in_the_sources_or_the_tests():
 
 def test_the_new_names_are_the_ones_the_recorder_and_the_audit_use():
     from so101_demo.act import episode_audit, recorder_scene, scene_association
-    from so101_demo.ros import episode_recorder_sources as sources
+    from so101_demo.act.offline import sources as sources
     assert scene_association.KIND == "ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION"
     assert "source_alignment_v1" in episode_audit._EVENT_KINDS if hasattr(episode_audit, "_EVENT_KINDS") else True
     assert hasattr(recorder_scene, "describe_alignment_inputs")
-    assert sources.RosRecorderSources.ALIGNMENT_RETRY_S == 1.0
+    assert sources.OfflineRosSources.ALIGNMENT_RETRY_S == 1.0

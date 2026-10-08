@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ready-receipt", type=Path)
     # The frozen input set this run executes under (Phase A4c): the Teacher loads its execution snapshot and its frozen
     # policies from it and refuses a mismatch before any motion. The Teacher records nothing; the independent
-    # act_episode_recorder process owns the episode.
+    # offline episode processor builds the episode from the record-only bag.
     parser.add_argument("--frozen-inputs-manifest", type=Path)
     # Set by the orchestrator when an independent Recorder is collecting (`--collection on`): the Teacher then publishes
     # its confirmed final normal-stop proof. It changes nothing else about the run.

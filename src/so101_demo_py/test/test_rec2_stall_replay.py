@@ -1,28 +1,22 @@
-"""Recorder round 2 (CP-3403), item 3: a synthetic replay at real rates with an injected 160 ms main-thread stall.
+"""Recorder round 2 (CP-3403, cleanup step 2): a synthetic replay at real rates with an injected 160 ms main-thread stall.
 
 The Teacher script, the real PointEpisode (lossless writer, audit, seal, readback), the real physics adapter and the real
-engine are the ones `test_act_episode_recorder` uses. What changes is WHO delivers the sources and WHEN:
+engine are the ones `test_act_episode_recorder` uses. What changes is WHO delivers the sources and WHEN: the camera, numeric, chunk,
+planning-read and controller sources are delivered by their own threads at wall-clock rate and stamped at delivery, and the loop
+only drains and mints. A 160 ms busy pass of the loop (pure Python, GIL-contending) is injected while the capture runs. The recording
+must seal VALID.
 
-* `served_by_receiver=True` (the design): the camera, numeric, chunk, planning-read and controller sources are delivered by
-  their own threads at wall-clock rate and stamped at delivery, as the receiver thread, the scene poller and the chunk
-  spooler do. The loop only drains and mints. A 160 ms busy pass of the loop (pure Python, GIL-contending) is injected while
-  the capture runs. The recording must seal VALID.
-* `served_by_receiver=False` (the control, the L2 behaviour): the same sources are produced at the same rate but delivered and
-  stamped by the loop's own pass, so the stall ages them. The recording must be INVALID.
-
-Honest limit: this proves the engine, capture, adapter and seal tolerate a stalled loop when sources are stamped outside it. That
-the production receiver, poller and spooler do so is proved by `test_rec2_receiver` and `test_rec_chunk_spool` (a real rclpy node and
-a real spooler process); the full stack needs the live run.
+The control case of the live design (the loop serves the sources, so the stall ages them and the recording is INVALID) and the
+telemetry assertions went with the live Recorder: the offline engine runs on a virtual clock and cannot stall.
 """
 import threading
 import time
-from types import SimpleNamespace
 
-import pytest
 
-from so101_demo.act.episode_recorder_process import RC_INVALID, RC_VALID, RecorderEngine, load_recorder_policy
-from test_act_episode_recorder import (FRAME, NODE, POLICY_FILE, STAMPS, STREAM_IDENTITY, SyntheticSources,
-                                       make_episode, readback, result_of, teacher_script)
+from so101_demo.act.offline.engine import RC_INVALID, RC_VALID, OfflineEngine
+from so101_demo.act.offline.policy import load_recorder_policy
+from test_act_episode_recorder import (FRAME, NODE, NOT_EXHAUSTED, POLICY_FILE, STAMPS, STREAM_IDENTITY, SyntheticSources,
+                                       readback, result_of, teacher_script)
 from test_act_episode_recorder import PointEpisode, IDENTITY, SCOPE, PROVENANCE, episode_audit_pair
 from test_act_seal_and_downgrade import recorder_physical_audit
 
@@ -75,21 +69,18 @@ class ReadyAudit:
 
 
 class RealTimeSources(SyntheticSources):
-    def __init__(self, box, script, *, served_by_receiver, stall_at_s=1.15, stall_s=0.16, chunk_stall=None, drop_chunk=None):
-        super().__init__(box, script)
-        self.served_by_receiver = served_by_receiver
-        self.drop_chunk = drop_chunk
+    def __init__(self, box, script, *, stall_at_s=1.15, stall_s=0.16, chunk_stall=None, drop_chunk=None):
+        super().__init__(box, script, drop_chunk=drop_chunk)
         self.chunk_stall = chunk_stall      # (chunk index, seconds): the spooler/producer stalls before this chunk is delivered
         self.stall_at_s, self.stall_s, self.stalled = stall_at_s, stall_s, False
         self.lock = threading.Lock()
-        self.reads, self.controller, self.queue = [], [], []
+        self.reads, self.controller = [], []
         self.t0 = None
         self.stop = threading.Event()
         self.thread = None
         self.audit = ReadyAudit(self)
         self.delivered_ticks = 0
         self.feeder_error = None
-        self.physics_done = set()
 
     # -- the clock of the replay
     def sim_now(self):
@@ -133,47 +124,40 @@ class RealTimeSources(SyntheticSources):
         return self.sim_now() >= stamp
 
     def feeder(self, engine):
-        """Stands in for the receiver thread, the scene poller and the chunk spooler: deliver at the rate, stamp at delivery."""
+        """Stands in for the replay's delivery: deliver at the rate, stamp at delivery."""
         next_read, next_ctrl, tick, rest = SIM0, SIM0, 0, 0
         self.stall_until = None
         while not self.stop.is_set():
             now = self.sim_now()
-            if self.served_by_receiver:
-                while next_read <= now:
-                    with self.lock:
-                        self.reads.append(round(next_read * 1e9))
-                    next_read += 0.05
-                while next_ctrl <= now:
-                    with self.lock:
-                        self.controller.append(round(next_ctrl * 1e9))
-                    next_ctrl += 0.02
-            if not self.served_by_receiver:
-                while tick < len(CHUNK_STAMPS) and now >= CHUNK_STAMPS[tick] + 0.005:
-                    with self.lock:
-                        self.queue.append((tick, self.make_chunk(tick)))     # the old design: the loop delivers and stamps
-                    tick += 1
-            else:
-                # The chunk track and the rest track (frames, numerics, Teacher events) are independent, as the sources are: a
-                # stalled spooler delays chunks only, the cameras, the controller and the planning reads keep flowing.
-                while tick < len(CHUNK_STAMPS) and now >= CHUNK_STAMPS[tick] + 0.005:
-                    if self.chunk_stall is not None and self.chunk_stall[0] == tick and self.stall_until is None:
-                        self.stall_until = now + self.chunk_stall[1]
-                    if self.stall_until is not None and now < self.stall_until:
-                        break                                              # held: this and every later chunk arrive late
-                    if self.stall_until is not None:
-                        self.stall_until, self.chunk_stall = None, None
-                    if self.drop_chunk != tick:                            # a dropped chunk never reaches the Recorder
-                        try:
-                            self.deliver_physics((tick, self.make_chunk(tick)))
-                        except Exception as error:
-                            self.feeder_error = repr(error)
-                    tick += 1
-                while (rest < len(STAMPS) and now >= STAMPS[rest] + 0.005 and engine.episode.capture.started):
+            while next_read <= now:
+                with self.lock:
+                    self.reads.append(round(next_read * 1e9))
+                next_read += 0.05
+            while next_ctrl <= now:
+                with self.lock:
+                    self.controller.append(round(next_ctrl * 1e9))
+                next_ctrl += 0.02
+            # The chunk track and the rest track (frames, numerics, Teacher events) are independent, as the sources are: a
+            # stalled producer delays chunks only, the cameras, the controller and the planning reads keep flowing.
+            while tick < len(CHUNK_STAMPS) and now >= CHUNK_STAMPS[tick] + 0.005:
+                if self.chunk_stall is not None and self.chunk_stall[0] == tick and self.stall_until is None:
+                    self.stall_until = now + self.chunk_stall[1]
+                if self.stall_until is not None and now < self.stall_until:
+                    break                                              # held: this and every later chunk arrive late
+                if self.stall_until is not None:
+                    self.stall_until, self.chunk_stall = None, None
+                if self.drop_chunk != tick:                            # a dropped chunk never reaches the engine
                     try:
-                        self.deliver_rest(engine, (len(PRE) + rest, None))
-                    except Exception as error:      # the capture refused: the engine's verdict says why
+                        self.deliver_physics((tick, self.make_chunk(tick)))
+                    except Exception as error:
                         self.feeder_error = repr(error)
-                    rest += 1
+                tick += 1
+            while (rest < len(STAMPS) and now >= STAMPS[rest] + 0.005 and engine.episode.capture.started):
+                try:
+                    self.deliver_rest(engine, (len(PRE) + rest, None))
+                except Exception as error:      # the capture refused: the engine's verdict says why
+                    self.feeder_error = repr(error)
+                rest += 1
             time.sleep(0.002)
 
     def deliver_physics(self, item):
@@ -196,13 +180,6 @@ class RealTimeSources(SyntheticSources):
             engine.on_event_text(text)
         self.delivered_ticks = tick + 1
 
-    def deliver(self, engine, item):
-        """The receiver's side: stamp at delivery; frames wait (in the receiver) for the capture to start."""
-        self.deliver_physics(item)
-        while item[0] >= len(PRE) and not engine.episode.capture.started and not self.stop.is_set():
-            time.sleep(0.002)
-        self.deliver_rest(engine, item)
-
     # -- the loop's side
     def try_start(self, engine):
         if not self.audit.ready(STAMPS[0]):
@@ -211,23 +188,6 @@ class RealTimeSources(SyntheticSources):
         return STAMPS[0]
 
     def pump(self, engine):
-        if not self.served_by_receiver:                      # the old design: the loop is the one that reads and stamps
-            now = self.sim_now()
-            with self.lock:
-                self.reads.append(round(now * 1e9))
-                self.controller.append(round(now * 1e9))
-                items, self.queue = self.queue, []
-            held = []
-            for item in items:
-                if item[0] not in self.physics_done:
-                    self.deliver_physics(item)        # stamped by the loop, now
-                    self.physics_done.add(item[0])
-                if engine.episode.capture.started:
-                    self.deliver_rest(engine, item)
-                else:
-                    held.append(item)
-            with self.lock:
-                self.queue = held + self.queue
         if (not self.stalled and engine.episode.capture.started and self.sim_now() >= self.stall_at_s):
             self.stalled = True
             busy(self.stall_s)                                # the injected 160 ms pass
@@ -257,14 +217,13 @@ class RealTimeSources(SyntheticSources):
         super().close()
 
 
-def run_replay(tmp_path, *, served_by_receiver, chunk_stall=None, drop_chunk=None, script=None, sources_cls=None,
-               **sources_kwargs):
+def run_replay(tmp_path, *, chunk_stall=None, drop_chunk=None, script=None, sources_cls=None, **sources_kwargs):
     working = tmp_path / "working"
     working.mkdir()
     box = {}
     sources = (sources_cls or RealTimeSources)(
-        box, teacher_script() if script is None else script, served_by_receiver=served_by_receiver,
-        chunk_stall=chunk_stall, drop_chunk=drop_chunk, **sources_kwargs)
+        box, teacher_script() if script is None else script, chunk_stall=chunk_stall, drop_chunk=drop_chunk,
+        **sources_kwargs)
     # the live path's recorder: the lossless queue with its writer thread and watermarks, frozen policy of the collection config
     from so101_demo.act.collection_config import validate_recorder_policy
     recorder_policy = validate_recorder_policy({"sample_rate_hz": 10, "queue_capacity_samples": 16,
@@ -275,31 +234,20 @@ def run_replay(tmp_path, *, served_by_receiver, chunk_stall=None, drop_chunk=Non
                            scope_path=str(episode_audit_pair(working / "episode")[1]),
                            physical_audit=sources.audit, monotonic=time.monotonic, recorder_policy=recorder_policy)
     policy = dict(load_recorder_policy(POLICY_FILE), poll_s=0.002, max_duration_s=5.0, finish_budget_s=2.0)
-    engine = RecorderEngine(episode=episode, sources=sources, policy=policy, identity=STREAM_IDENTITY,
-                            ready_file=working / "recorder-ready.json", result_file=working / "recorder-result.json")
+    engine = OfflineEngine(episode=episode, sources=sources, policy=policy, identity=STREAM_IDENTITY,
+                           result_file=working / "recorder-result.json", clock=time.monotonic, sleep=time.sleep)
     box["engine"] = engine
     return engine, sources, working
 
 
 def test_a_160_ms_stalled_loop_still_seals_valid_when_the_sources_are_stamped_outside_it(tmp_path):
-    engine, sources, working = run_replay(tmp_path, served_by_receiver=True)
-    code = engine.run()
+    engine, sources, working = run_replay(tmp_path)
+    code = engine.process(NOT_EXHAUSTED)
     result = result_of(working)
     assert sources.stalled, "the capture ran and the stall was injected"
     assert code == RC_VALID and result["status"] == "VALID", result["reasons"]
     seal, manifest, references = readback(working)
     assert seal["status"] == "PASSED" and seal["record_count"] >= 2 and references["status"] == "PASS"
-    telemetry = __import__("json").loads((working / "episode" / "recorder-telemetry.json").read_text())
-    assert telemetry["passes"]["max_ms"] >= 150.0 and telemetry["stalls"], "the stall is in the telemetry"
-
-
-def test_control_the_same_stall_with_the_loop_serving_the_sources_is_invalid(tmp_path):
-    engine, sources, working = run_replay(tmp_path, served_by_receiver=False)
-    code = engine.run()
-    result = result_of(working)
-    assert code == RC_INVALID and result["status"] == "INVALID"
-    assert any(("INPUT_STALE" in item["reason"] or "CLOCK_INVALID" in item["reason"] or "NO_NEW" in item["reason"]
-                or "SOURCE" in item["reason"]) for item in result["reasons"]), result["reasons"]
 
 
 FRESH_READBACK = """
@@ -326,8 +274,8 @@ def test_the_replayed_recording_reads_back_in_a_fresh_process(tmp_path):
     import json
     import subprocess
     import sys
-    engine, sources, working = run_replay(tmp_path, served_by_receiver=True)
-    assert engine.run() == RC_VALID
+    engine, sources, working = run_replay(tmp_path)
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     done = subprocess.run([sys.executable, "-c", FRESH_READBACK, str(working)], capture_output=True, text=True, timeout=120)
     assert done.returncode == 0, done.stderr[-800:]
     report = json.loads(done.stdout.strip().splitlines()[-1])
@@ -338,12 +286,12 @@ def test_the_replayed_recording_reads_back_in_a_fresh_process(tmp_path):
 
 def test_a_400_ms_spooler_stall_is_a_valid_recording_wherever_it_falls(tmp_path):
     """CP-3410: a late chunk no longer fails the data. A 400 ms stall before the first row and one inside the recording
-    (the L2 case 283 ms and worse) both seal VALID; the lateness is in the receiver's telemetry."""
+    (the L2 case 283 ms and worse) both seal VALID; the lateness is in the receipt diagnostics."""
     for position in (3, len(PRE) + 2):
         sub = tmp_path / f"stall-{position}"
         sub.mkdir()
-        engine, sources, working = run_replay(sub, served_by_receiver=True, chunk_stall=(position, 0.4))
-        code = engine.run()
+        engine, sources, working = run_replay(sub, chunk_stall=(position, 0.4))
+        code = engine.process(NOT_EXHAUSTED)
         result = result_of(working)
         assert code == RC_VALID and result["status"] == "VALID", (position, result["reasons"])
         diagnostics = sources.adapter.receipt_diagnostics()
@@ -354,8 +302,8 @@ def test_a_400_ms_spooler_stall_is_a_valid_recording_wherever_it_falls(tmp_path)
 
 def test_a_dropped_chunk_is_still_an_invalid_recording(tmp_path):
     """Continuity is unchanged: one chunk that never arrives fails the data wherever it falls."""
-    engine, sources, working = run_replay(tmp_path, served_by_receiver=True, drop_chunk=len(PRE) + 2)
-    code = engine.run()
+    engine, sources, working = run_replay(tmp_path, drop_chunk=len(PRE) + 2)
+    code = engine.process(NOT_EXHAUSTED)
     result = result_of(working)
     assert code == RC_INVALID and any("PHYSICS_RAW_CONTINUITY_INVALID" in item["reason"] for item in result["reasons"]), \
         result["reasons"]

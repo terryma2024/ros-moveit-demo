@@ -1,15 +1,14 @@
-"""The act_episode_recorder process (Phase A4a): an independent consumer of the Teacher event stream and the sources.
+"""The offline episode engine (Phase A4a, cleanup step 2): a consumer of the Teacher event stream and the sources.
 
 The engine is driven here by a synthetic stream and synthetic sources over a real PointEpisode (real lossless writer,
-real audit, real seal and readback). The real physics adapter is used for the source-gap fault. The Teacher is never
-involved: every fault is a verdict on the data, never an input to control.
+real audit, real seal and readback). The real physics adapter is used for the source-gap case. The Teacher is never
+involved: every defect is a verdict on the data, never an input to control. The live Recorder process (ready file, signals,
+sandbox faults, console entry) no longer exists; the helpers below are shared by the other engine and source tests.
 """
 
 import json
 import os
 import re
-import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -23,9 +22,8 @@ from so101_demo.act.episode_assembly import PointEpisode, episode_audit_pair
 from so101_demo.act.episode_audit import verify_audit_manifest
 from so101_demo.act.recorder import verify_episode_seal
 from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStream
-from so101_demo.act.episode_recorder_process import (
-    FAULTS, RC_CONFIG, RC_INVALID, RC_VALID, FaultInjector, RecorderConfigRefused, RecorderEngine, RecorderSources,
-    check_outputs_absent, load_recorder_policy, require_fault_sandbox)
+from so101_demo.act.offline.engine import RC_INVALID, RC_VALID, OfflineEngine
+from so101_demo.act.offline.policy import RecorderConfigRefused, check_outputs_absent, load_recorder_policy
 from test_act_recorder import PROVENANCE
 from test_act_seal_and_downgrade import IDENTITY, SCOPE, recorder_physical_audit
 
@@ -37,6 +35,19 @@ STAMPS = (1.0, 1.1, 1.2, 1.3, 1.4, 1.5)
 START_STEP, END_STEP = 500, 700           # 1.0 s and 1.4 s at 2 ms per physics step
 NODE = SimpleNamespace(create_subscription=lambda *args, **kwargs: object(), destroy_subscription=lambda item: None,
                        context=None)
+#: the replay node of an engine that is driven by hand: the bag never ends
+NOT_EXHAUSTED = SimpleNamespace(exhausted=False)
+
+
+class EndingNode:
+    """A replay node whose bag is exhausted once `ended()` says so."""
+
+    def __init__(self, ended):
+        self._ended = ended
+
+    @property
+    def exhausted(self):
+        return self._ended()
 
 
 def observation(step, *, session="session-1", epoch=2):
@@ -101,32 +112,80 @@ def physics_chunk(sequence, first, count, *, session="session-1", epoch=2):
         last_simulation_time_s=samples[-1].simulation_time_s, samples=samples), base + count * 2_000_000
 
 
-class SyntheticSources(RecorderSources):
+class SourcesDefaults:
+    """What the engine asks of its sources, with the no-op defaults a synthetic source leaves out."""
+
+    def prepare(self, engine):
+        return None
+
+    def collect(self, engine):
+        return None
+
+    def on_teacher_event(self, engine, event):
+        return None
+
+    def start_gate_summary(self, engine):
+        return {}
+
+    def tail_ready(self, engine):
+        return True
+
+    def end_time_s(self, engine):
+        return engine.episode.capture.window["collection_end_s"]
+
+    def physics_steps(self, engine):
+        return []
+
+    def final_issues(self, engine):
+        return []
+
+    def source_counts(self, engine):
+        return {}
+
+    def close(self):
+        return None
+
+
+class SyntheticSources(SourcesDefaults):
     """One simulated 10 Hz tick per `pump`: RGB, numeric state, one physics chunk and the scripted Teacher events.
 
-    The physics adapter is the real `RosEpisodePhysicsAdapter` (fault-injectable), so continuity is the real check.
+    The physics adapter is the real `RosEpisodePhysicsAdapter`, so continuity is the real check. `drop_chunk` is the tick
+    (1-based) whose physics chunk never reaches the adapter; `read_only_after_start` makes the episode tree read-only once the
+    capture started (a write failure), and `close` gives the owner write access back.
     """
 
-    def __init__(self, engine_box, script, *, skip=(), raise_at=None, record_ready=None):
+    def __init__(self, engine_box, script, *, skip=(), raise_at=None, drop_chunk=None, read_only_after_start=False):
         self.box, self.script, self.skip = engine_box, script, set(skip)
         self.tick = 0
         self.raise_at = raise_at
+        self.drop_chunk = drop_chunk
+        self.read_only_after_start = read_only_after_start
+        self._modes = {}
         self.counts = {"head": 0, "wrist": 0, "physics": 0, "scene_state": 0, "world": 0, "joint_states": 0}
-        self.delivered_before_ready = []
-        self.record_ready = record_ready
         self.adapter = None
         self.receipt = [0]
         self.events_seen = []
 
     def prepare(self, engine):
         from so101_demo.adapters.act.ros_episode_physics import RosEpisodePhysicsAdapter
-        cls = engine.faults.physics_adapter_class(RosEpisodePhysicsAdapter)
-        self.adapter = cls(NODE, session_id="session-1", reset_epoch=2, nq=2, nv=1, audit=engine.episode.capture.audit,
+        self.adapter = RosEpisodePhysicsAdapter(NODE, session_id="session-1", reset_epoch=2, nq=2, nv=1, audit=engine.episode.capture.audit,
                            clock_ns=lambda: self.receipt[0], history_capacity=4096)
 
     def try_start(self, engine):
         engine.episode.start(STAMPS[0])
+        if self.read_only_after_start:
+            self._make_read_only(Path(engine.episode.capture.recorder.root))
         return STAMPS[0]
+
+    def _make_read_only(self, root):
+        paths = [root]
+        for directory, directories, files in os.walk(root):
+            paths.extend(Path(directory) / name for name in (*directories, *files))
+        for path in paths:
+            if not path.is_symlink():
+                mode = path.lstat().st_mode & 0o7777
+                self._modes[str(path)] = mode
+                os.chmod(path, mode & ~0o222)
 
     def pump(self, engine):
         if self.tick >= len(STAMPS) or not engine.episode.capture.started:
@@ -145,7 +204,8 @@ class SyntheticSources(RecorderSources):
             last = round(stamp / 0.002)
             chunk, receipt = physics_chunk(self.tick + 1, last - 49, 50)
             self.receipt[0] = receipt
-            self.adapter.accept_message(chunk)   # the fault-injecting class may drop exactly this message
+            if self.drop_chunk != self.tick + 1:
+                self.adapter.accept_message(chunk)
             self.adapter.drain()
             self.counts["physics"] = self.tick + 1
         except Exception as error:   # ROS callbacks are isolated: the stream keeps flowing after a source failure
@@ -153,8 +213,6 @@ class SyntheticSources(RecorderSources):
         for name in ("scene_state", "world", "joint_states"):
             if name not in self.skip:
                 self.counts[name] += 1
-        if self.record_ready is not None and self.script.get(self.tick):
-            self.delivered_before_ready.append(self.record_ready())
         for text in self.script.get(self.tick, ()):
             engine.on_event_text(text)
         self.tick += 1
@@ -188,13 +246,16 @@ class SyntheticSources(RecorderSources):
     def physics_steps(self, engine):
         return self.adapter.original_durable_steps()
 
-    def retained_history_start_s(self, engine):
-        return self.adapter.earliest_sample_time_s()
-
     def source_counts(self, engine):
         return dict(self.counts)
 
     def close(self):
+        for name in sorted(self._modes, key=len):   # parents before children
+            try:
+                os.chmod(name, self._modes[name])
+            except OSError:
+                pass
+        self._modes = {}
         if self.adapter is not None:
             self.adapter.close()
 
@@ -206,18 +267,17 @@ def make_episode(root):
         physical_audit=recorder_physical_audit, monotonic=time.monotonic)
 
 
-def build(tmp_path, *, script=None, fault="none", skip=(), raise_at=None, policy=None, clock=None, working=None,
-          **sources_kwargs):
+def build(tmp_path, *, script=None, skip=(), raise_at=None, policy=None, clock=None, working=None, **sources_kwargs):
     working = working or tmp_path / "working"
     working.mkdir(parents=True, exist_ok=True)
     box = {}
-    ready, result = working / "recorder-ready.json", working / "recorder-result.json"
+    result = working / "recorder-result.json"
     sources = SyntheticSources(box, teacher_script() if script is None else script, skip=skip, raise_at=raise_at,
-                               record_ready=lambda: ready.exists(), **sources_kwargs)
+                               **sources_kwargs)
     policy = dict(load_recorder_policy(POLICY_FILE), poll_s=0.0, **(policy or {}))
-    engine = RecorderEngine(episode=make_episode(working), sources=sources, policy=policy, identity=STREAM_IDENTITY,
-                            ready_file=ready, result_file=result, fault=fault,
-                            **({} if clock is None else {"clock": clock}))
+    engine = OfflineEngine(episode=make_episode(working), sources=sources, policy=policy, identity=STREAM_IDENTITY,
+                           result_file=result, clock=time.monotonic if clock is None else clock,
+                           sleep=lambda seconds: None)
     box["engine"] = engine
     return engine, sources, working
 
@@ -241,7 +301,7 @@ def readback(working):
     return seal, manifest, references
 
 
-# ---- policy and sandbox ------------------------------------------------------------------------------------------
+# ---- policy -------------------------------------------------------------------------------------------------------
 
 def test_the_frozen_policy_is_a_closed_hashed_document_with_a_bounded_max_duration():
     policy = load_recorder_policy(POLICY_FILE)
@@ -251,7 +311,7 @@ def test_the_frozen_policy_is_a_closed_hashed_document_with_a_bounded_max_durati
 
 
 def test_the_frozen_policy_carries_the_orchestrators_bounds_too():
-    """One frozen document bounds both processes: the Recorder's own loop and the orchestrator that starts and reaps it."""
+    """The closed policy document still carries the bounds only the retired live Recorder read; they stay validated (frozen manifests)."""
     policy = load_recorder_policy(POLICY_FILE)
     assert 0.1 <= policy["ready_timeout_s"] <= 60.0
     assert policy["exit_wait_s"] > policy["finish_budget_s"], "the Recorder must be able to finish within the wait"
@@ -280,45 +340,44 @@ def test_a_policy_missing_a_field_or_not_yaml_is_refused():
             load_recorder_policy(payload)
 
 
-def test_the_fault_option_set_is_exactly_the_recorder_side_set():
-    assert FAULTS == ("none", "queue_overflow", "source_gap", "output_write_failure")
+def test_an_existing_result_file_is_never_reused_and_no_output_check_trips_on_an_absent_one(tmp_path):
+    (tmp_path / "recorder-result.json").write_text("{}")
+    with pytest.raises(RecorderConfigRefused, match="RECORDER_OUTPUT_EXISTS"):
+        check_outputs_absent(tmp_path / "recorder-result.json")
+    check_outputs_absent(tmp_path / "never-written.json")
 
 
-@pytest.mark.parametrize("fault", ["queue_overflow", "source_gap", "output_write_failure"])
-def test_a_fault_outside_a_fault_sandbox_path_component_is_refused(fault, tmp_path):
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_OUTSIDE_SANDBOX"):
-        require_fault_sandbox(fault, tmp_path / "attempt" / "episode")
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_OUTSIDE_SANDBOX"):
-        require_fault_sandbox(fault, tmp_path / "fault-sandbox")   # the component must be an ancestor, not the leaf
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_OUTSIDE_SANDBOX"):
-        require_fault_sandbox(fault, tmp_path / "x-fault-sandbox-y" / "episode")
+def test_the_engine_refuses_to_start_over_an_existing_result_file(tmp_path):
+    engine, _, working = build(tmp_path)
+    (working / "recorder-result.json").write_text("{}")
+    with pytest.raises(RecorderConfigRefused, match="RECORDER_OUTPUT_EXISTS"):
+        engine.process(NOT_EXHAUSTED)
 
 
-def test_the_sandbox_check_covers_every_output_path_and_follows_symlinks(tmp_path):
-    sandbox = tmp_path / "run" / "fault-sandbox" / "a"
-    sandbox.mkdir(parents=True)
-    require_fault_sandbox("source_gap", sandbox / "episode", sandbox / "ready.json", sandbox / "result.json")
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_OUTSIDE_SANDBOX"):
-        require_fault_sandbox("source_gap", sandbox / "episode", tmp_path / "elsewhere" / "result.json")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (sandbox / "link").symlink_to(outside)
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_OUTSIDE_SANDBOX"):
-        require_fault_sandbox("source_gap", sandbox / "link" / "episode")
+def test_setup_py_no_longer_declares_the_live_recorder_entry_and_still_installs_the_policy_file(monkeypatch):
+    """Same capture pattern as test_src_layout: run setup.py with setuptools.setup replaced by a recorder."""
 
+    import runpy
 
-def test_no_fault_needs_no_sandbox_and_an_unknown_fault_is_refused(tmp_path):
-    require_fault_sandbox("none", tmp_path / "anywhere" / "episode")
-    for fault in ("recorder_absent", "recorder_late", "bogus"):
-        with pytest.raises(RecorderConfigRefused, match="RECORDER_FAULT_UNKNOWN"):
-            require_fault_sandbox(fault, tmp_path / "fault-sandbox" / "x" / "episode")
+    import setuptools
+
+    captured = {}
+    monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.chdir(PACKAGE)
+    runpy.run_path(str(PACKAGE / "setup.py"), run_name="__main__")
+    scripts = captured["entry_points"]["console_scripts"]
+    assert not any(entry.startswith("act_episode_recorder") for entry in scripts)
+    assert "act_offline_episode = so101_demo.cli.act_offline_episode:main" in scripts
+    # the frozen policy file is still installed with the other config files: frozen manifests are built from it
+    installed = [path for _, paths in captured["data_files"] for path in paths]
+    assert "config/act/episode_recorder_v1.yaml" in installed
 
 
 # ---- a normal run seals VALID ------------------------------------------------------------------------------------
 
 def test_a_normal_run_over_the_synthetic_stream_seals_valid_rc0_and_passes_the_readback(tmp_path):
     engine, sources, working = build(tmp_path)
-    assert engine.run() == RC_VALID == 0
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID == 0
     result = result_of(working)
     assert result["status"] == "VALID" and result["rc"] == 0 and result["reasons"] == []
     seal, manifest, references = readback(working)
@@ -331,33 +390,28 @@ def test_a_normal_run_over_the_synthetic_stream_seals_valid_rc0_and_passes_the_r
     assert result["event_stream"]["accepted"] == 7 and result["event_stream"]["last_seq"] == 7
     assert result["event_stream"]["terminal"]["teacher_task_result"] == "PASS"
     assert result["policy_sha256"] == engine.policy["policy_sha256"] and result["fault"] == "none"
+    # the document keeps the shape of schema V1: the process-specific fields of a live Recorder are constants
+    assert result["pid"] == 0 and result["listening"] is True and result["stall_telemetry"] == {}
+    assert result["faults"] == {"fault": "none", "physics_chunks_dropped": 0, "physics_chunks_seen": 0}
+    assert result["event_stream"]["deferred_replayed"] == 0 and result["event_stream"]["deferred_first"] is None
     assert sources.events_seen[0] == "reset_complete" and sources.events_seen[-1] == "terminal"
     assert list(working.glob("episode/**/*.tmp")) == []
 
 
-def test_the_ready_file_says_listening_before_the_first_teacher_event_and_the_result_names_the_recording_start(tmp_path):
+def test_the_result_names_the_recording_start(tmp_path):
     engine, sources, working = build(tmp_path)
-    engine.run()
-    assert sources.delivered_before_ready and all(sources.delivered_before_ready)
-    ready = json.loads((working / "recorder-ready.json").read_bytes())
-    # LISTENING first, then rewritten as CAPTURING once the capture's initial boundary is committed (CP-3425)
-    assert ready["schema"] == "SO101_RECORDER_READY_V1" and ready["state"] == "CAPTURING"
-    assert (ready["session_id"], ready["reset_epoch"], ready["attempt_id"]) == ("session-1", 2, "attempt-1")
-    assert ready["pid"] == os.getpid() and ready["collection_start_s"] == 1.0
-    assert ready["topic"] == "/so101/teacher/events" and ready["fault"] == "none"
-    assert ready["policy_sha256"] == engine.policy["policy_sha256"]
-    # the result records when the capture started
+    engine.process(NOT_EXHAUSTED)
     result = result_of(working)
+    assert result["schema"] == "SO101_RECORDER_RESULT_V1"
+    assert (result["identity"]["session_id"], result["identity"]["reset_epoch"], result["identity"]["attempt_id"]) == (
+        "session-1", 2, "attempt-1")
     assert result["listening"] is True and result["collection_start_s"] == 1.0
-    # an existing ready or result file is never reused: the Recorder refuses it before any recording starts
-    with pytest.raises(RecorderConfigRefused, match="RECORDER_OUTPUT_EXISTS"):
-        check_outputs_absent(working / "recorder-ready.json", working / "recorder-result.json")
-    check_outputs_absent(working / "never-written.json")
+    assert not (working / "recorder-ready.json").exists(), "there is no ready file any more"
 
 
 def test_a_teacher_that_failed_but_left_complete_data_seals_a_failed_record_without_a_teacher_pass(tmp_path):
     engine, _, working = build(tmp_path, script=teacher_script(result="FAIL"))
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     seal, _, references = readback(working)
     assert seal["status"] == "FAILED" and "TEACHER_TASK_NOT_PASSED" in seal["reason"]
     assert references["status"] == "PASS"
@@ -370,7 +424,7 @@ def test_the_recorder_keeps_servicing_its_sources_after_the_terminal_event_until
     original_pump = sources.pump
     sources.pump = lambda engine_: (pumps.append(sources.tick), original_pump(engine_))[1]
     sources.tail_ready = lambda engine_: (asked.append(len(pumps)), len(asked) >= 4)[1]
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     assert len(asked) == 4 and asked == sorted(asked) and asked[-1] > asked[0], "each ask follows a servicing pass"
     assert result_of(working)["status"] == "VALID"
 
@@ -379,7 +433,7 @@ def test_a_source_that_never_reaches_the_teachers_end_stops_the_wait_at_the_fini
     ticks = iter(range(0, 100_000))
     engine, sources, working = build(tmp_path, clock=lambda: next(ticks) * 1.0)
     sources.tail_ready = lambda engine_: False
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     result = assert_invalid_retained(working, code="RECORDER_TAIL_NOT_REACHED")
     assert result["event_stream"]["terminal"]["teacher_task_result"] == "PASS"
 
@@ -415,13 +469,13 @@ def assert_invalid_retained(working, *, code, sealed=None):
                                        ((4,), "TEACHER_EVENT_SEQUENCE_GAP")])
 def test_a_gap_in_the_event_seq_marks_the_data_invalid_with_a_retained_sealed_record(tmp_path, drop, code):
     engine, _, working = build(tmp_path, script=teacher_script(drop=drop))
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code=code)
 
 
 def test_a_repeated_event_marks_the_data_invalid(tmp_path):
     engine, _, working = build(tmp_path, script=teacher_script(repeat=(3,)))
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="TEACHER_EVENT_SEQUENCE_REPEATED")
 
 
@@ -429,7 +483,7 @@ def test_a_malformed_event_text_marks_the_data_invalid(tmp_path):
     script = teacher_script()
     script[2] = ["{not json"] + script.get(2, [])
     engine, _, working = build(tmp_path, script=script)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="TEACHER_EVENT_MALFORMED")
 
 
@@ -438,11 +492,11 @@ def test_events_of_another_attempt_are_ignored_and_a_wrong_epoch_of_this_attempt
     script = teacher_script()
     script[0] = other[0] + script[0]
     engine, _, working = build(tmp_path, script=script)
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     assert result_of(working)["event_stream"]["foreign"] == 2
     wrong = teacher_script(identity=StreamIdentity("session-1", 9, "attempt-1"))
     engine, _, working = build(tmp_path / "second", script=wrong)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="TEACHER_EVENT_IDENTITY_MISMATCH")
 
 
@@ -450,13 +504,13 @@ def test_events_of_another_attempt_are_ignored_and_a_wrong_epoch_of_this_attempt
                                        (("world",), "world"), (("joint_states",), "joint_states")])
 def test_a_missing_source_marks_the_data_invalid_naming_it(tmp_path, skip, name):
     engine, _, working = build(tmp_path, skip=skip)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code=f"RECORDER_SOURCE_MISSING: {name}", sealed=name != "wrist")
 
 
 def test_a_source_that_raises_marks_the_data_invalid_and_the_run_still_ends_at_the_terminal_event(tmp_path):
     engine, sources, working = build(tmp_path, raise_at=2)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     result = assert_invalid_retained(working, code="DATA_SOURCE_CALLBACK_FAILED", sealed=False)
     assert result["event_stream"]["terminal"]["teacher_task_result"] == "PASS"
 
@@ -472,13 +526,13 @@ def test_a_capture_start_that_raises_marks_the_data_invalid_and_the_run_still_en
     ticks = iter(range(0, 10_000))
     engine.clock = lambda: next(ticks) * 1.0
     engine.policy = dict(engine.policy, max_duration_s=20.0)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="RECORDER_CAPTURE_START_FAILED", sealed=False)
 
 
 def test_a_teacher_with_no_normal_stop_leaves_an_unsealed_but_retained_invalid_record(tmp_path):
     engine, _, working = build(tmp_path, script=teacher_script(with_stop=False))
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="RECORDER_NORMAL_STOP_MISSING", sealed=False)
 
 
@@ -486,19 +540,21 @@ def test_a_missing_terminal_event_ends_at_the_frozen_max_duration_with_a_retaine
     ticks = iter(range(0, 10_000))
     engine, _, working = build(tmp_path, script=teacher_script(with_terminal=False), clock=lambda: next(ticks) * 1.0,
                                policy={"max_duration_s": 100.0})
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="RECORDER_MAX_DURATION_EXCEEDED", sealed=True)
 
 
-def test_sigterm_before_the_terminal_event_leaves_a_retained_invalid_record(tmp_path):
+def test_a_bag_that_ends_without_a_terminal_event_is_invalid_with_a_retained_record(tmp_path):
     engine, sources, working = build(tmp_path, script=teacher_script(with_terminal=False))
-    assert engine.run(should_stop=lambda: sources.tick >= 2) == RC_INVALID
-    assert_invalid_retained(working, code="RECORDER_TERMINATED", sealed=False)
+    node = EndingNode(lambda: sources.tick >= len(STAMPS))
+    assert engine.process(node) == RC_INVALID
+    assert_invalid_retained(working, code="OFFLINE_BAG_ENDED_WITHOUT_TERMINAL", sealed=True)
 
 
-def test_sigterm_in_the_same_pass_as_the_terminal_event_does_not_discard_a_complete_recording(tmp_path):
-    engine, sources, working = build(tmp_path)
-    assert engine.run(should_stop=lambda: sources.tick >= len(STAMPS)) == RC_VALID
+def test_reasons_handed_to_the_engine_are_latched_before_the_replay(tmp_path):
+    engine, _, working = build(tmp_path)
+    assert engine.process(NOT_EXHAUSTED, preset_reasons=["OFFLINE_SOURCE_GAP: arm gaps=1"]) == RC_INVALID
+    assert_invalid_retained(working, code="OFFLINE_SOURCE_GAP: arm gaps=1")
 
 
 def test_the_teachers_setup_scene_operations_may_precede_the_capture_and_start_it(tmp_path):
@@ -518,7 +574,7 @@ def test_the_teachers_setup_scene_operations_may_precede_the_capture_and_start_i
         [kind for kind in seen if kind == "scene_operation"]) >= 2 else None
     for text in early:
         engine.on_event_text(text)
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     assert seen[:2] == ["scene_operation", "scene_operation"] and seen[2] == "reset_complete"
     assert result_of(working)["collection_start_s"] == 1.0
     assert result_of(working)["event_stream"]["accepted"] == 9
@@ -536,8 +592,8 @@ def test_a_capture_that_starts_only_after_the_teachers_start_observation_is_inva
     ticks = iter(range(0, 10_000))
     engine.clock = lambda: next(ticks) * 1.0
     engine.policy = dict(engine.policy, max_duration_s=60.0)
-    assert engine.run() == RC_INVALID
-    assert_invalid_retained(working, code="RECORDER_TEACHER_EVENT_BEFORE_CAPTURE_START")
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
+    assert_invalid_retained(working, code="RECORDER_NOT_READY_BEFORE_TEACHER_EVENT")
 
 
 def test_a_teacher_event_before_the_recorder_is_ready_marks_the_data_invalid(tmp_path):
@@ -548,97 +604,69 @@ def test_a_teacher_event_before_the_recorder_is_ready_marks_the_data_invalid(tmp
     engine.policy = dict(engine.policy, max_duration_s=50.0)
     for text in teacher_script()[0]:
         engine.on_event_text(text)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert_invalid_retained(working, code="RECORDER_NOT_READY_BEFORE_TEACHER_EVENT", sealed=False)
 
 
-def test_a_capture_that_never_starts_is_invalid_though_the_recorder_announced_listening(tmp_path):
+def test_a_capture_that_never_starts_is_invalid(tmp_path):
     engine, sources, working = build(tmp_path, script={})
     sources.try_start = lambda engine: None
     ticks = iter(range(0, 10_000))
     engine.clock = lambda: next(ticks) * 1.0
     engine.policy = dict(engine.policy, max_duration_s=20.0)
-    assert engine.run() == RC_INVALID
-    assert (working / "recorder-ready.json").exists(), "listening is announced whether or not the capture ever starts"
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     assert result_of(working)["collection_start_s"] is None
     assert_invalid_retained(working, code="RECORDER_CAPTURE_NEVER_STARTED", sealed=False)
 
 
-# ---- the three sandbox faults ------------------------------------------------------------------------------------
+def test_a_capture_that_starts_after_an_early_teacher_event_is_still_invalid(tmp_path):
+    """Events are no longer held for a late capture start: one that arrived before it makes the data INVALID."""
+    engine, sources, working = build(tmp_path)
+    started = []
+    sources.try_start = lambda engine_: (engine_.episode.start(STAMPS[0]), STAMPS[0])[1] if started else started.append(1)
+    for text in teacher_script()[0]:
+        engine.on_event_text(text)
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
+    result = assert_invalid_retained(working, code="RECORDER_NOT_READY_BEFORE_TEACHER_EVENT")
+    assert result["event_stream"]["deferred_replayed"] == 0 and result["event_stream"]["deferred_first"][0] == "reset_complete"
 
-def sandbox_working(tmp_path):
-    return tmp_path / "run" / "fault-sandbox" / "case" / "working"
 
+# ---- source and queue defects ------------------------------------------------------------------------------------
 
-def test_queue_overflow_reduces_only_the_recorder_side_event_queue_and_marks_the_data_invalid(tmp_path):
-    engine, _, working = build(tmp_path, fault="queue_overflow", working=sandbox_working(tmp_path))
-    assert engine.faults.inbox_capacity(256) == 2 and engine.faults.inbox_capacity(1) == 1
+def test_an_event_burst_beyond_the_inbox_capacity_marks_the_data_invalid(tmp_path):
+    engine, _, working = build(tmp_path, script={})
+    engine._capacity = 2
+    for tick, texts in sorted(teacher_script().items()):
+        for text in texts:
+            engine.on_event_text(text)
     ticks = iter(range(0, 100_000))
     engine.clock = lambda: next(ticks) * 1.0       # the dropped terminal event ends the run at the max duration
     engine.policy = dict(engine.policy, max_duration_s=60.0)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     result = result_of(working)
     assert any(item["reason"].startswith("RECORDER_EVENT_QUEUE_OVERFLOW") for item in result["reasons"])
-    assert result["fault"] == "queue_overflow" and result["status"] == "INVALID" and result["episode_inventory"]
+    assert result["status"] == "INVALID" and result["episode_inventory"]
     assert result["event_stream"]["inbox_dropped"] >= 1 and result["event_stream"]["inbox_capacity"] == 2
 
 
-def test_without_the_fault_the_same_stream_never_overflows_the_event_queue(tmp_path):
+def test_without_a_burst_the_same_stream_never_overflows_the_event_queue(tmp_path):
     engine, _, working = build(tmp_path)
-    assert engine.faults.inbox_capacity(256) == 256
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     assert result_of(working)["event_stream"]["inbox_dropped"] == 0
 
 
-def test_source_gap_drops_exactly_one_physics_chunk_and_the_real_adapter_marks_the_data_invalid(tmp_path):
-    engine, sources, working = build(tmp_path, fault="source_gap", working=sandbox_working(tmp_path))
-    assert engine.run() == RC_INVALID
-    result = assert_invalid_retained(working, code="PHYSICS_RAW_CONTINUITY_INVALID", sealed=False)
-    assert engine.faults.snapshot()["physics_chunks_seen"] >= 3 and engine.faults.snapshot()["physics_chunks_dropped"] == 1
-    assert result["fault"] == "source_gap"
-
-
-def test_the_gap_fault_class_drops_exactly_once_and_passes_every_other_chunk_through(tmp_path):
-    injector = FaultInjector("source_gap")
-    passed = [injector.physics_chunk(f"chunk-{index}") for index in range(1, 8)]
-    assert passed.count(None) == 1 and passed[2] is None, "the third chunk, after two good ones"
-    assert FaultInjector("none").physics_chunk("x") == "x"
-    assert FaultInjector("queue_overflow").physics_chunk("x") == "x"
+def test_a_missing_physics_chunk_is_a_gap_and_the_real_adapter_marks_the_data_invalid(tmp_path):
+    engine, sources, working = build(tmp_path, drop_chunk=3)
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
+    assert_invalid_retained(working, code="PHYSICS_RAW_CONTINUITY_INVALID", sealed=False)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="a root process ignores directory permissions")
-def test_output_write_failure_makes_the_sandbox_episode_read_only_and_marks_the_data_invalid(tmp_path):
-    working = sandbox_working(tmp_path)
-    engine, _, _ = build(tmp_path, fault="output_write_failure", working=working)
-    assert engine.run() == RC_INVALID
-    result = assert_invalid_retained(working, code="RECORDER_WRITE_FAILED", sealed=False)
-    assert result["fault"] == "output_write_failure"
-    # the permission change is undone at the end so the retained evidence can be inspected and later cleaned up
-    assert os.access(working / "episode", os.W_OK), "the Recorder restores owner write access to the retained tree"
-    assert os.access(working / "episode" / "frames", os.W_OK)
-
-
-@pytest.mark.skipif(os.geteuid() == 0, reason="a root process ignores directory permissions")
-def test_the_write_fault_never_touches_anything_outside_the_episode_tree(tmp_path):
-    working = sandbox_working(tmp_path)
-    marker = working.parent / "other-file.txt"
-    working.mkdir(parents=True)
-    marker.write_text("x")
-    before = working.stat().st_mode, marker.stat().st_mode
-    engine, _, _ = build(tmp_path, fault="output_write_failure", working=working)
-    engine.run()
-    assert (working.stat().st_mode, marker.stat().st_mode) == before
-    assert (working / "recorder-result.json").is_file(), "the result lives beside the episode, outside the fault"
-
-
-def test_a_recorder_fault_never_reaches_the_teacher_stream_or_control(tmp_path):
-    """The engine's only outputs are files; it holds no publisher, client or command connection."""
-    engine, _, working = build(tmp_path, fault="queue_overflow", working=sandbox_working(tmp_path))
-    ticks = iter(range(0, 100_000))
-    engine.clock = lambda: next(ticks) * 1.0
-    engine.policy = dict(engine.policy, max_duration_s=60.0)
-    engine.run()
-    assert not any(hasattr(engine, name) for name in ("publisher", "client", "connection", "revoke", "cancel", "pause"))
+def test_a_write_failure_marks_the_data_invalid_and_keeps_the_record(tmp_path):
+    engine, _, working = build(tmp_path, read_only_after_start=True)
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
+    assert_invalid_retained(working, code="RECORDER_WRITE_FAILED", sealed=False)
+    assert os.access(working / "episode", os.W_OK), "the owner write access is given back so the evidence can be cleaned up"
 
 
 # ---- threading ---------------------------------------------------------------------------------------------------
@@ -665,147 +693,11 @@ def test_events_may_arrive_from_the_ros_callback_thread_while_the_engine_steps(t
         if sources.tick >= len(STAMPS):
             thread.join(10)
     sources.pump = pump
-    assert engine.run() == RC_VALID
+    assert engine.process(NOT_EXHAUSTED) == RC_VALID
     assert result_of(working)["event_stream"]["accepted"] == len(texts) == 7
 
 
-# ---- the entry point -----------------------------------------------------------------------------------------------
-
-def test_setup_py_declares_the_act_episode_recorder_console_entry_and_it_resolves_to_a_callable(monkeypatch):
-    """Same capture pattern as test_src_layout: run setup.py with setuptools.setup replaced by a recorder."""
-
-    import importlib
-    import runpy
-
-    import setuptools
-
-    captured = {}
-    monkeypatch.setattr(setuptools, "setup", lambda **kwargs: captured.update(kwargs))
-    monkeypatch.chdir(PACKAGE)
-    runpy.run_path(str(PACKAGE / "setup.py"), run_name="__main__")
-    scripts = captured["entry_points"]["console_scripts"]
-    entry = "act_episode_recorder = so101_demo.cli.act_episode_recorder:main"
-    assert entry in scripts and scripts.count(entry) == 1
-    module_name, function = entry.split(" = ")[1].split(":")
-    assert callable(getattr(importlib.import_module(module_name), function))
-    # the new policy file is installed with the other config files, so the entry finds its default
-    installed = [path for _, paths in captured["data_files"] for path in paths]
-    assert "config/act/episode_recorder_v1.yaml" in installed
-
-
-def args(tmp_path, *extra, sandbox=False, ready=True):
-    base = tmp_path / "run" / ("fault-sandbox/case" if sandbox else "plain") / "working"
-    return ["--session-id", "session-1", "--expected-reset-epoch", "2", "--attempt-id", "attempt-1",
-            "--episode-root", str(base / "episode"), "--evidence-root", str(base / "dynamic"),
-            "--episode-scope", str(tmp_path / "scope.json"), "--episode-inputs-manifest", str(tmp_path / "inputs"),
-            "--ready-file", str(base / "recorder-ready.json"), "--result-file", str(base / "recorder-result.json"),
-            *extra]
-
-
-def policy_loader(options):
-    """The policy a real run takes from the frozen manifest; these tests give the repository's own file."""
-    return load_recorder_policy(POLICY_FILE)
-
-
-@pytest.mark.parametrize("fault", ["queue_overflow", "source_gap", "output_write_failure"])
-def test_main_refuses_a_fault_outside_the_sandbox_with_rc2_before_creating_anything(tmp_path, fault, capsys):
-    from so101_demo.cli import act_episode_recorder
-    opened = []
-    code = act_episode_recorder.main(args(tmp_path, "--fault", fault),
-                                     episode_factory=lambda options: opened.append(options), policy_loader=policy_loader)
-    assert code == RC_CONFIG == 2
-    assert opened == [], "no episode is opened for a refused configuration"
-    assert not (tmp_path / "run").exists()
-    assert "RECORDER_FAULT_OUTSIDE_SANDBOX" in capsys.readouterr().err
-
-
-@pytest.mark.parametrize("fault", ["recorder_absent", "recorder_late", "nonsense"])
-def test_main_refuses_unknown_faults_with_rc2(tmp_path, capsys, fault):
-    """`recorder_absent` and `recorder_late` are orchestrator faults: the Recorder process itself does not know them."""
-    from so101_demo.cli import act_episode_recorder
-    argv = args(tmp_path, "--fault", fault, sandbox=True)
-    assert act_episode_recorder.main(argv, episode_factory=lambda options: pytest.fail("opened"),
-                                     policy_loader=policy_loader) == RC_CONFIG
-    assert "RECORDER_FAULT_UNKNOWN" in capsys.readouterr().err
-
-
-def test_main_refuses_a_policy_that_was_not_frozen_with_rc2(tmp_path, capsys):
-    """The Recorder's bounds come from the frozen inputs, never from a live file: an unfrozen set is refused."""
-    from so101_demo.cli import act_episode_recorder
-    assert act_episode_recorder.main(args(tmp_path), episode_factory=lambda options: pytest.fail("opened")) == RC_CONFIG
-    assert "RECORDER_FROZEN_INPUTS_INVALID" in capsys.readouterr().err
-
-
-def test_main_refuses_missing_required_arguments_with_rc2_not_an_argparse_exit(tmp_path, capsys):
-    from so101_demo.cli import act_episode_recorder
-    assert act_episode_recorder.main(["--session-id", "s"]) == RC_CONFIG
-    assert capsys.readouterr().err
-
-
-def test_main_refuses_existing_output_files_with_rc2(tmp_path, capsys):
-    from so101_demo.cli import act_episode_recorder
-    argv = args(tmp_path)
-    ready = Path(argv[argv.index("--ready-file") + 1])
-    ready.parent.mkdir(parents=True)
-    ready.write_text("{}")
-    assert act_episode_recorder.main(argv, episode_factory=lambda options: pytest.fail("opened"),
-                                     policy_loader=policy_loader) == RC_CONFIG
-    assert "RECORDER_OUTPUT_EXISTS" in capsys.readouterr().err
-
-
-def test_main_runs_the_engine_over_injected_parts_and_returns_the_verdict_code(tmp_path):
-    from so101_demo.cli import act_episode_recorder
-    argv = args(tmp_path)
-    working = Path(argv[argv.index("--result-file") + 1]).parent
-    box = {}
-
-    def episode_factory(options):
-        working.mkdir(parents=True, exist_ok=True)
-        return make_episode(working)
-
-    def sources_factory(options, episode, policy, faults, node):
-        box["sources"] = SyntheticSources(box, teacher_script())
-        return box["sources"]
-
-    code = act_episode_recorder.main(argv, episode_factory=episode_factory, sources_factory=sources_factory,
-                                     node_factory=lambda options: SimpleNamespace(close=lambda: None),
-                                     policy_loader=policy_loader, install_signal_handlers=False)
-    assert code == RC_VALID
-    assert result_of(working)["status"] == "VALID"
-
-
-def test_main_returns_3_for_invalid_data_and_keeps_the_record(tmp_path):
-    from so101_demo.cli import act_episode_recorder
-    argv = args(tmp_path)
-    working = Path(argv[argv.index("--result-file") + 1]).parent
-    box = {}
-
-    def episode_factory(options):
-        working.mkdir(parents=True, exist_ok=True)
-        return make_episode(working)
-
-    code = act_episode_recorder.main(
-        argv, episode_factory=episode_factory,
-        sources_factory=lambda options, episode, policy, faults, node: SyntheticSources(box, teacher_script(drop=(3,))),
-        node_factory=lambda options: SimpleNamespace(close=lambda: None), policy_loader=policy_loader,
-        install_signal_handlers=False)
-    assert code == RC_INVALID
-    assert_invalid_retained(working, code="TEACHER_EVENT_SEQUENCE_GAP")
-
-
-def test_an_episode_that_cannot_be_opened_is_rc2_not_a_crash(tmp_path, capsys):
-    from so101_demo.cli import act_episode_recorder
-
-    def refuse(options):
-        raise ValueError("EPISODE_LEASE_NOT_CURRENT")
-
-    assert act_episode_recorder.main(args(tmp_path), episode_factory=refuse, policy_loader=policy_loader) == RC_CONFIG
-    assert "EPISODE_LEASE_NOT_CURRENT" in capsys.readouterr().err
-
-
-
-
-def test_c3_the_not_ready_reason_says_ready_means_listening_and_the_capture_had_not_started(tmp_path):
+def test_the_not_ready_reason_says_ready_means_listening_and_the_capture_had_not_started(tmp_path):
     engine, sources, working = build(tmp_path)
     sources.try_start = lambda engine: None
     ticks = iter(range(0, 10_000))
@@ -813,7 +705,7 @@ def test_c3_the_not_ready_reason_says_ready_means_listening_and_the_capture_had_
     engine.policy = dict(engine.policy, max_duration_s=50.0)
     for text in teacher_script()[0]:
         engine.on_event_text(text)
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     entries = [item for item in result_of(working)["reasons"]
                if "RECORDER_NOT_READY_BEFORE_TEACHER_EVENT" in item["reason"]]
     assert entries and entries[0]["capture_started"] == "False"

@@ -620,12 +620,12 @@ def test_c3b_first_durable_step_copies_at_most_one_sample(monkeypatch):
 
 
 def test_c3b_the_alignment_raw_lookup_uses_the_bounded_accessor():
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+    from so101_demo.act.offline.sources import OfflineRosSources
     adapter = _tail_adapter()
     try:
         adapter.original_durable_steps = lambda *a, **k: pytest.fail('whole-tail copy')
         holder = SimpleNamespace(binding=SimpleNamespace(physics_adapter=adapter))
-        assert RosRecorderSources._raw_lookup(holder, 1500)['sample']['physics_step'] == 1500
-        assert RosRecorderSources._raw_lookup(holder, 99999) is None
+        assert OfflineRosSources._raw_lookup(holder, 1500)['sample']['physics_step'] == 1500
+        assert OfflineRosSources._raw_lookup(holder, 99999) is None
     finally:
         adapter.close()

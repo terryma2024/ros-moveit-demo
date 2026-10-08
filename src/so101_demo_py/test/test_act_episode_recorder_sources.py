@@ -1,7 +1,7 @@
-"""The Recorder's ROS wiring (Phase A4a): shared logic is reused, nothing here can command, the gaps are named.
+"""The offline sources' ROS wiring (Phase A4a, cleanup step 2): shared logic is reused, nothing here can command, the gaps are named.
 
 These tests use a fake node (no DDS): they prove the composition, the reuse of the existing data-side code, parity of the
-controller reference record with the command broker's, and that the Recorder subscribes only.
+controller reference record with the command broker's, and that the sources subscribe only.
 """
 
 import copy
@@ -10,9 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.act.episode_recorder_process import FaultInjector, RecorderSources
+from so101_demo.act.offline import sources as module
 from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStream, decode_event
-from so101_demo.ros import episode_recorder_sources as module
 from so101_demo.ros.recorder_data_side import RecorderDataSide
 from test_act_collection_boundaries import original_reset
 
@@ -33,6 +32,12 @@ class RecordingNode:
 
     def get_clock(self):
         return SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=self.clock_ns))
+
+    def deliver_due(self):
+        return 0
+
+    def take_callback_errors(self):
+        return []
 
     def __getattr__(self, name):
         if name.startswith(("create_", "call_")) or "client" in name or "action" in name or "publisher" in name:
@@ -64,8 +69,10 @@ def test_the_data_side_carries_no_teacher_control_or_planning_function():
     assert [name for name in forbidden if hasattr(RecorderDataSide, name)] == []
 
 
-def test_the_recorder_sources_are_the_engine_source_protocol():
-    assert issubclass(module.RosRecorderSources, RecorderSources)
+def test_the_offline_sources_provide_every_method_the_engine_calls():
+    for name in ("prepare", "pump", "try_start", "collect", "on_teacher_event", "tail_ready", "end_time_s", "physics_steps",
+                 "final_issues", "source_counts", "start_gate_summary", "close"):
+        assert callable(getattr(module.OfflineRosSources, name)), name
 
 
 # ---- controller reference parity with the command broker -----------------------------------------------------------
@@ -176,10 +183,10 @@ def _engine(latched):
                                                   "types": {}})
 
 
-def _prepared(provider=None, *, faults=None, boundaries=None, bind=None):
+def _prepared(provider=None, *, boundaries=None, bind=None):
     node, latched = RecordingNode(), []
-    sources = module.RosRecorderSources(
-        node, _episode(boundaries if boundaries is not None else []), _options(), faults=faults or FaultInjector(),
+    sources = module.OfflineRosSources(
+        node, _episode(boundaries if boundaries is not None else []), _options(),
         bind=bind or (lambda *args, **kwargs: _binding()),
         world_observer_factory=lambda node, session: SimpleNamespace(callback_count=11),
         reference_port_factory=lambda node, **kwargs: SimpleNamespace(read=lambda when: {}, close=lambda: None),
@@ -223,8 +230,8 @@ def test_preparation_binds_the_real_physical_audit_provider_and_no_placeholder_r
     node, latched = RecordingNode(), []
     episode = _episode([])
     episode.bind_physical_provider = bound.append
-    sources = module.RosRecorderSources(
-        node, episode, _options(), faults=FaultInjector(), bind=lambda *a, **k: _binding(),
+    sources = module.OfflineRosSources(
+        node, episode, _options(), bind=lambda *a, **k: _binding(),
         world_observer_factory=lambda node, session: SimpleNamespace(callback_count=1),
         reference_port_factory=lambda node, **kwargs: SimpleNamespace(read=lambda when: {}, close=lambda: None))
     sources.prepare(_engine(latched))
@@ -238,29 +245,13 @@ def test_a_supplied_physical_provider_is_bound_before_the_capture_starts_and_not
     node, latched = RecordingNode(), []
     episode = _episode([])
     episode.bind_physical_provider = bound.append
-    sources = module.RosRecorderSources(
-        node, episode, _options(), faults=FaultInjector(), bind=lambda *a, **k: _binding(),
+    sources = module.OfflineRosSources(
+        node, episode, _options(), bind=lambda *a, **k: _binding(),
         world_observer_factory=lambda node, session: SimpleNamespace(callback_count=1),
         reference_port_factory=lambda node, **kwargs: SimpleNamespace(read=lambda when: {}, close=lambda: None),
         physical_provider=provider)
     sources.prepare(_engine(latched))
     assert bound == [provider] and latched == []
-
-
-def test_the_source_gap_fault_wraps_the_physics_adapter_class_only_during_the_binder_call():
-    from so101_demo.adapters.act import ros_episode_physics
-    original = ros_episode_physics.RosEpisodePhysicsAdapter
-    seen = []
-
-    def bind(*args, **kwargs):
-        seen.append(ros_episode_physics.RosEpisodePhysicsAdapter)
-        return _binding()
-
-    _prepared(faults=FaultInjector("source_gap"), bind=bind)
-    assert seen[0] is not original and issubclass(seen[0], original)
-    assert ros_episode_physics.RosEpisodePhysicsAdapter is original
-    _prepared(bind=bind)
-    assert seen[1] is original
 
 
 def test_the_binder_is_given_the_frozen_model_and_the_recorders_own_episode():
@@ -439,9 +430,7 @@ def test_acquisitions_are_counted_as_the_capture_takes_them():
     assert (sources._counts["head"], sources._counts["wrist"]) == (2, 1)
 
 
-def test_a_hazard_reported_by_a_data_adapter_becomes_an_invalid_verdict_never_an_exception(monkeypatch):
-    import rclpy
-    monkeypatch.setattr(rclpy, "spin_once", lambda *args, **kwargs: None)
+def test_a_hazard_reported_by_a_data_adapter_becomes_an_invalid_verdict_never_an_exception():
     sources, _, engine, latched = _prepared()
     del latched[:]
     sources.binding.hazards.append({"reason": "DATA_SOURCE_CALLBACK_FAILED: /so101/simulation/scene_state: x"})
@@ -456,30 +445,6 @@ def test_close_releases_every_subscription_it_created():
     sources.close()
     destroyed = [call[1] for call in node.calls if call[0] == "destroy_subscription"]
     assert "/so101/teacher/events" in destroyed and "/joint_states" in destroyed
-
-
-def test_the_node_factory_makes_a_simulation_time_node_whose_close_destroys_it_and_shuts_rclpy_down(monkeypatch):
-    import rclpy
-
-    events = []
-    created = {}
-
-    class Node:
-        def destroy_node(self):
-            events.append("destroy_node")
-
-    def create_node(name, parameter_overrides=()):
-        created["name"], created["parameters"] = name, parameter_overrides
-        return Node()
-
-    monkeypatch.setattr(rclpy, "init", lambda *args, **kwargs: events.append("init"))
-    monkeypatch.setattr(rclpy, "create_node", create_node)
-    monkeypatch.setattr(rclpy, "shutdown", lambda *args, **kwargs: events.append("shutdown"))
-    node = module.make_recorder_node()
-    assert created["name"] == "so101_act_episode_recorder"
-    assert [(item.name, item.value) for item in created["parameters"]] == [("use_sim_time", True)]
-    node.close()
-    assert events == ["init", "destroy_node", "shutdown"]
 
 
 # ---- the shared final-boundary code, run on the Recorder's host over stream events -------------------------------
@@ -523,8 +488,8 @@ def test_the_final_boundary_runs_on_the_recorder_host_from_stream_events_with_th
     latched = []
     engine = _engine(latched)
     engine.policy = {"finish_budget_s": 60.}
-    sources = module.RosRecorderSources(
-        node, episode, _options(), faults=FaultInjector(),
+    sources = module.OfflineRosSources(
+        node, episode, _options(),
         bind=lambda *args, **kwargs: SimpleNamespace(
             observer=SimpleNamespace(original_frames_with_receipts=lambda: []), physics_adapter=WindowAdapter(raw),
             observation_adapter=SimpleNamespace(), hazards=[], drain_sources=lambda: 0, close=lambda: None),

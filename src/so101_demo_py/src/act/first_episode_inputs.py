@@ -343,7 +343,7 @@ def _policy_loader(name: str):
     elif name == "teacher_execution_policy_v1":
         from .teacher_endpoint import load_teacher_execution_policy as loader
     else:
-        from .episode_recorder_process import load_recorder_policy as loader
+        from .offline.policy import load_recorder_policy as loader
     return loader
 
 

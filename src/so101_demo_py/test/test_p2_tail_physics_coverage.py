@@ -5,11 +5,11 @@ ending 115.828 s), which the bag recorded after the `terminal` event. The camera
 
 from types import SimpleNamespace
 
-from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+from so101_demo.act.offline.sources import OfflineRosSources
 
 
 def _sources(retained):
-    sources = object.__new__(RosRecorderSources)
+    sources = object.__new__(OfflineRosSources)
     sources._finish_started, sources._jobs, sources._admissions = True, [], []
     sources.episode = SimpleNamespace(capture=SimpleNamespace(window={"collection_end_s": 115.8}))
     sources.binding = SimpleNamespace(physics_adapter=SimpleNamespace(retained_step_range=lambda: retained))

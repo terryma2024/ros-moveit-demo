@@ -203,11 +203,10 @@ def test_apply_planning_scene_requests_are_only_built_in_the_teachers_own_scene_
     assert not hasattr(RosDynamicMujocoExecution, "_initial_world_sync_best_effort")
 
 
-DATA_SIDE_MODULES = ("act/episode_recorder_process.py", "ros/episode_recorder_sources.py", "act/recorder_scene.py",
+DATA_SIDE_MODULES = ("act/offline/engine.py", "act/offline/sources.py", "act/recorder_scene.py",
                      "act/scene_operation.py", "act/live_physical_audit.py", "act/episode_physical_readback.py",
                      "adapters/act/ros_episode_physics.py", "adapters/act/ros_observation.py",
-                     "adapters/act/scene_state.py", "adapters/act/ros_teacher_event_stream.py",
-                     "cli/act_episode_recorder.py")
+                     "adapters/act/scene_state.py", "adapters/act/ros_teacher_event_stream.py")
 
 
 @pytest.mark.parametrize("module", DATA_SIDE_MODULES)
@@ -222,10 +221,7 @@ def test_no_data_side_module_creates_a_client_or_sends_an_apply_request(module):
                 and node.value.id == "ApplyPlanningScene" and node.attr == "Request"
                 and module not in ("act/scene_operation.py", "act/scene_association.py")):
             raise AssertionError(f"{module} builds an ApplyPlanningScene request")
-    if module == "ros/episode_recorder_sources.py":
-        assert sorted(calls) == [("call_async", ["request"]),
-                                 ("create_client", ["GetPlanningScene", "'/get_planning_scene'"])], calls
-    elif module == "act/scene_operation.py":
+    if module == "act/scene_operation.py":
         assert calls == []
     else:
         assert calls == [], calls
@@ -234,22 +230,6 @@ def test_no_data_side_module_creates_a_client_or_sends_an_apply_request(module):
 def test_the_scene_operation_decoder_only_reads_apply_messages_it_never_sends_them():
     source = (SRC / "act/scene_operation.py").read_text()
     assert "deserialize_message" in source and "create_client" not in source and "call_async" not in source
-
-
-def test_the_recorder_reads_the_scene_only_through_the_get_service(frozen_scene):
-    """Behavioural twin of the static check: the Recorder's scene client refuses anything but a read request."""
-    from moveit_msgs.srv import ApplyPlanningScene
-
-    from test_act_recorder_scene import sources_fixture
-
-    ctx = Context(frozen_scene)
-    ctx.stamp()
-    from _pytest.monkeypatch import MonkeyPatch
-    with MonkeyPatch.context() as patch:
-        sources, engine, latched, appended, scene_calls, node = sources_fixture(ctx, patch)
-        sources._query_scene()
-        assert len(scene_calls) == 1 and not [call for call in node.calls if call[0] == "FORBIDDEN"]
-        assert type(scene_calls[0]) is not ApplyPlanningScene.Request
 
 
 # ---- the stream exists before the setup scene, and the setup calls are on it ------------------------------------

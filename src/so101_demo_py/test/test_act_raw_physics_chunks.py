@@ -527,18 +527,6 @@ def _publish_block(real_ros, adapter, seconds=0.3):
     return sequence - 1
 
 
-def test_dedicated_receiver_receives_while_the_main_thread_blocks_without_spinning(real_ros):
-    adapter = _real_adapter(real_ros, dedicated_receiver=True)
-    try:
-        published = _publish_block(real_ros, adapter)
-        diagnostics = adapter.receipt_diagnostics()
-        assert adapter.hazard is None
-        assert diagnostics["chunk_count"] >= published - 1 and diagnostics["chunk_count"] > 3
-        assert diagnostics["late_count"] == 0
-    finally:
-        adapter.close()
-
-
 def test_default_receiver_depends_on_the_main_node_being_spun(real_ros):
     adapter = _real_adapter(real_ros)
     try:
@@ -548,23 +536,7 @@ def test_default_receiver_depends_on_the_main_node_being_spun(real_ros):
         adapter.close()
 
 
-def test_close_joins_receiver_thread_destroys_rx_node_and_stops_callbacks(real_ros):
-    adapter = _real_adapter(real_ros, dedicated_receiver=True)
-    _publish_block(real_ros, adapter, seconds=0.1)
-    import time
-    thread = adapter._receiver_thread
-    assert thread.is_alive()
-    adapter.close()
-    assert not thread.is_alive()
-    assert adapter._rx_node is None
-    before = adapter.receipt_diagnostics()["chunk_count"]
-    real_ros.publisher.publish(_chunk(sequence=900, first=9001, receipt=time.monotonic_ns()))
-    time.sleep(0.1)
-    assert adapter.receipt_diagnostics()["chunk_count"] == before
-    adapter.close()
-
-
-def test_failed_drain_still_writes_failure_document_with_dedicated_receiver(real_ros, tmp_path):
+def test_failed_drain_still_writes_failure_document(real_ros, tmp_path):
     import time
     from so101_demo.adapters.act.ros_episode_physics import RosEpisodePhysicsAdapter
     root = tmp_path / "episode" / "audit"
@@ -573,90 +545,12 @@ def test_failed_drain_still_writes_failure_document_with_dedicated_receiver(real
         raise OSError("disk gone")
     sink = SimpleNamespace(append_raw_physics=broken, root=root, identity={"session_id": "live-source"})
     adapter = RosEpisodePhysicsAdapter(real_ros.main_node, session_id="live-source", reset_epoch=2, nq=2, nv=1,
-        audit=sink, clock_ns=time.monotonic_ns, dedicated_receiver=True)
-    _publish_block(real_ros, adapter, seconds=0.1)
+        audit=sink, clock_ns=time.monotonic_ns)
+    real_ros.wait_matched()
+    adapter.accept_message(_chunk(sequence=1, first=101, receipt=time.monotonic_ns()))
     with pytest.raises(ValueError, match="disk gone"):
         adapter.close()
     assert (root.parent / "physics-source-failure.json").is_file()
-    assert not adapter._receiver_thread.is_alive()
-
-
-def test_receiver_loop_exception_sets_receiver_failed_hazard(real_ros):
-    import time
-    adapter = _real_adapter(real_ros, dedicated_receiver=True)
-    try:
-        def explode(*args, **kwargs):
-            raise RuntimeError("executor broke")
-        adapter._rx_executor.spin_once = explode
-        deadline = time.monotonic() + 2
-        while adapter.hazard is None and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert adapter.hazard == "PHYSICS_RAW_RECEIVER_FAILED"
-        assert not adapter._receiver_thread.is_alive()
-    finally:
-        with pytest.raises(ValueError, match="PHYSICS_RAW_RECEIVER_FAILED"):
-            adapter.close()
-
-
-def test_real_binding_construction_puts_physics_subscription_in_the_spooler_process(real_ros):
-    import threading
-    from pathlib import Path
-    from so101_demo.act.synchronizer import RgbObservationSynchronizer
-    from so101_demo.ros.data_source_binding import bind_data_sources
-    topic = "/so101/simulation/physics_step_chunks"
-    capture = SimpleNamespace(ingress_lock=threading.RLock(), active=False, started=False,
-        on_acquisition=lambda frame, pixels: None,
-        audit=SimpleNamespace(append_raw_physics=lambda raw: None,
-            inputs={"execution_snapshot": {"physics_chunks": {"max_samples": 50, "max_contacts": 128}}}))
-    episode = SimpleNamespace(capture=capture,
-        synchronizer=RgbObservationSynchronizer(max_age_s=.1, max_skew_s=.1))
-    binding = bind_data_sources(real_ros.main_node, session_id="session", reset_epoch=2,
-        model_path=Path(__file__).parents[1] / "assets/mujoco/act/scene.xml", episode_recorder=episode)
-    adapter = binding.physics_adapter
-    try:
-        # A real node's chunk receipt lives in the spooler process: no physics subscription in this process.
-        assert adapter._spool is not None and adapter._rx_node is None
-        assert topic not in [s.topic_name for s in real_ros.main_node.subscriptions]
-        assert adapter._receiver_thread.is_alive() and adapter._spool.child.poll() is None
-        spool_directory = adapter._spool.directory
-    finally:
-        binding.close()
-    assert not adapter._receiver_thread.is_alive() and adapter._spool.child.poll() is not None
-    assert not spool_directory.exists()
-    assert topic not in [s.topic_name for s in real_ros.main_node.subscriptions]
-    assert adapter.snapshot()["closed"] is True
-
-
-def test_context_shutdown_before_close_ends_the_receiver_quietly(real_ros):
-    import time
-    adapter = _real_adapter(real_ros, dedicated_receiver=True)
-    _publish_block(real_ros, adapter, seconds=0.1)
-    thread = adapter._receiver_thread
-    real_ros.rclpy.shutdown(context=real_ros.context)
-    thread.join(2)
-    assert not thread.is_alive()
-    assert adapter.hazard is None
-    assert adapter._receiver_end_reason == "CONTEXT_SHUTDOWN"
-    adapter.close()  # destruction after an orderly shutdown completes without failure
-    assert adapter.hazard is None and adapter.snapshot()["closed"] is True
-    assert adapter._rx_node is None
-
-
-def test_receiver_exception_with_a_live_context_still_sets_the_hazard_and_no_end_reason(real_ros):
-    import time
-    adapter = _real_adapter(real_ros, dedicated_receiver=True)
-    try:
-        def explode(*args, **kwargs):
-            raise RuntimeError("executor broke")
-        adapter._rx_executor.spin_once = explode
-        deadline = time.monotonic() + 2
-        while adapter.hazard is None and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert adapter.hazard == "PHYSICS_RAW_RECEIVER_FAILED"
-        assert adapter._receiver_end_reason is None
-    finally:
-        with pytest.raises(ValueError, match="PHYSICS_RAW_RECEIVER_FAILED"):
-            adapter.close()
 
 
 def _drain_failure_lines(capsys):

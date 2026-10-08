@@ -54,16 +54,16 @@ def test_the_observer_keeps_what_it_saw_at_each_gap_and_rejection(monkeypatch):
     assert log["callbacks"] >= 0 and log["gaps"][0]["received_monotonic_s"] == 10.
 
 
-def test_the_recorders_world_observer_reports_gaps_to_the_sources_instead_of_a_sticky_hazard(monkeypatch):
+def test_the_world_observer_does_not_latch_a_sticky_hazard_at_a_gap_the_records_are_judged_instead(monkeypatch):
     from so101_demo.backends.mujoco import observer as module
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+    from so101_demo.act.offline.sources import OfflineRosSources
     monkeypatch.setattr(module, "convert_message", lambda message: message)
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     node = SimpleNamespace(create_subscription=lambda *args: object())
     world = sources._default_world_factory(node, "session-1")
     _, first = _world_pair(module, monkeypatch)
     feed(world, first, [1, 2, 5, 6])
-    assert sources.world_gaps()[0]["previous_sequence"] == 2
+    assert world.diagnostics()["gaps"][0]["previous_sequence"] == 2
     assert [item.evidence.publisher_sequence for item in world.original_records_after(4)] == [5, 6]
     with pytest.raises(module.EvidenceRejected, match="sequence gap"):
         world.original_records_after(0)

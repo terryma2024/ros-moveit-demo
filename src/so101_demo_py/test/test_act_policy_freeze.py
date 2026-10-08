@@ -40,7 +40,7 @@ def rehash(manifest_path, document):
 
 
 def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(tmp_path):
-    from so101_demo.act.episode_recorder_process import load_recorder_policy
+    from so101_demo.act.offline.policy import load_recorder_policy
     from so101_demo.act.teacher_endpoint import load_teacher_endpoint_policy, load_teacher_execution_policy
 
     manifest_path = freeze(tmp_path)
@@ -195,7 +195,7 @@ def test_the_teacher_loads_its_snapshot_and_policies_from_the_frozen_manifest(tm
     ("episode_recorder_v1", lambda values: values.update(ready_timeout_s=3.0))])
 def test_a_consistently_forged_policy_that_differs_from_the_execution_snapshot_is_refused_everywhere(
         tmp_path, name, change):
-    from so101_demo.act.episode_recorder_process import RecorderConfigRefused
+    from so101_demo.act.offline.policy import RecorderConfigRefused
     from so101_demo.act.frozen_runtime_inputs import load_recorder_frozen_policy, load_teacher_frozen_inputs
     from test_act_child_recorder_binding import frozen_child_inputs
     manifest_path, _, _ = frozen_child_inputs(tmp_path)
@@ -221,7 +221,7 @@ def test_a_frozen_set_without_the_teacher_policies_is_refused_by_the_teacher_loa
 
 
 def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
-    from so101_demo.act.episode_recorder_process import RecorderConfigRefused
+    from so101_demo.act.offline.policy import RecorderConfigRefused
     from so101_demo.act.frozen_runtime_inputs import load_recorder_frozen_policy
     manifest_path = freeze(tmp_path)
     policy = load_recorder_frozen_policy(manifest_path)

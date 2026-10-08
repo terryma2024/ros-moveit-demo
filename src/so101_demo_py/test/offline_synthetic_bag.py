@@ -15,11 +15,10 @@ from pathlib import Path
 
 import numpy as np
 
-from so101_demo.act.episode_recorder_process import RecorderSources
 from so101_demo.act.offline.bag_io import BagWriter
 from so101_demo.act.offline.raw_recorder import CORE_TOPICS, EVENTS_TOPIC, SCENE_READS_TOPIC
 from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStream
-from test_act_episode_recorder import END_STEP, START_STEP, STAMPS, observation
+from test_act_episode_recorder import END_STEP, START_STEP, STAMPS, SourcesDefaults, observation
 
 MONO0 = 2_000_000_000_000
 SYS_OFFSET = 1_700_000_000_000_000_000
@@ -198,15 +197,15 @@ def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=()) -> Path:
     return bag
 
 
-class BagSyntheticSources(RecorderSources):
+class BagSyntheticSources(SourcesDefaults):
     """`SyntheticSources`' job over the replay node: the capture is fed from the topics the bag delivers.
 
     Real parts: the physics adapter (continuity), `ControllerReferencePort` (the t+0.1 label from `controller_state`), the
     episode and its lossless writer, the engine. Stand-ins (as in `SyntheticSources`): the capture start and the row pushes.
     """
 
-    def __init__(self, node, episode, options, faults, policy):
-        self.node, self.episode, self.faults = node, episode, faults
+    def __init__(self, node, episode, options, policy):
+        self.node, self.episode = node, episode
         self.inbox = []
         self.counts = {"head": 0, "wrist": 0, "physics": 0, "scene_state": 1, "world": 0, "joint_states": 0}
         self.adapter = self.port = None
@@ -218,13 +217,12 @@ class BagSyntheticSources(RecorderSources):
         from sensor_msgs.msg import Image, JointState
         from so101_demo.adapters.act.ros_episode_physics import RosEpisodePhysicsAdapter
         from so101_demo.adapters.act.ros_teacher_event_stream import RosTeacherEventSubscription
-        from so101_demo.ros.episode_recorder_sources import ControllerReferencePort
+        from so101_demo.act.offline.sources import ControllerReferencePort
         from so101_mujoco_support.msg import SimulationEvidence
 
         self._events = RosTeacherEventSubscription(self.node, engine.on_event_text)
-        cls = self.faults.physics_adapter_class(RosEpisodePhysicsAdapter)
-        self.adapter = cls(self.node, session_id=SESSION, reset_epoch=EPOCH, nq=2, nv=1, audit=engine.episode.capture.audit,
-                           dedicated_receiver=False, history_capacity=4096)
+        self.adapter = RosEpisodePhysicsAdapter(self.node, session_id=SESSION, reset_epoch=EPOCH, nq=2, nv=1,
+                                                audit=engine.episode.capture.audit, history_capacity=4096)
         self.port = ControllerReferencePort(self.node, session_id=SESSION, reset_epoch=EPOCH)
         for camera in ("head", "wrist"):
             self.node.create_subscription(Image, f"/{camera}_camera/color",
@@ -293,9 +291,6 @@ class BagSyntheticSources(RecorderSources):
 
     def physics_steps(self, engine):
         return self.adapter.original_durable_steps()
-
-    def retained_history_start_s(self, engine):
-        return self.adapter.earliest_sample_time_s()
 
     def source_counts(self, engine):
         return dict(self.counts)

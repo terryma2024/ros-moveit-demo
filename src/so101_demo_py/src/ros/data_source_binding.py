@@ -47,7 +47,7 @@ class IsolatedDataNode:
 
 def bind_data_sources(node, *, session_id, reset_epoch, model_path,
                                max_age_s=0.1, expected_model=None, episode_recorder=None, scene_max_age_s=None,
-                      physics_backlog_max=None, physics_lag_max_s=None):
+                      physics_lag_max_s=None):
     """Own one subscription to the existing physics producer, under its actual model identity.
 
     `max_age_s` is the ACT data age (physics adapter). The scene observer is also read by the Teacher's release
@@ -85,39 +85,18 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
                                   subscription_depth=256 if episode_recorder is not None else 1)
     physics_adapter = None
     observation_adapter = None
-    spool_process = None
     if episode_recorder is not None:
         from ..adapters.act.ros_episode_physics import RosEpisodePhysicsAdapter
-        import rclpy.node
         try:
             chunks = episode_recorder.capture.audit.inputs["execution_snapshot"]["physics_chunks"]
-            # Real rclpy nodes always get the dedicated receiver; only non-rclpy test doubles keep the
-            # main-node subscription.
-            real_node = isinstance(node, rclpy.node.Node)
-            if real_node:
-                # The chunk receipt runs in its own process (act/chunk_spool.py): a stall of this process's GIL
-                # (a long json load, an import) cannot change a receipt; the stamp is recorded as telemetry (CP-3410).
-                import tempfile
-                from ..act.chunk_spool import SpoolProcess
-                spool_directory = tempfile.mkdtemp(prefix="so101-chunk-spool-")
-                spool_process = SpoolProcess(spool_directory, max_bytes=2 << 30,
-                                               convert=(chunks["max_samples"], chunks["max_contacts"]))
-                spool_process.start()
-                if not spool_process.wait_ready(30.0):
-                    spool_process.close()
-                    raise RuntimeError("PHYSICS_RAW_SPOOLER_NOT_READY")
             physics_adapter = RosEpisodePhysicsAdapter(data_node, session_id=session_id,
                 reset_epoch=reset_epoch, nq=model.nq, nv=model.nv,
                 audit=episode_recorder.capture.audit, max_age_s=max_age_s,
                 max_samples=chunks["max_samples"], max_contacts=chunks["max_contacts"],
-                dedicated_receiver=False,
-                spool=spool_process.reader() if real_node else None,
-                # CP-3410: the data fails on a spool backlog or a receiver lag beyond the frozen policy, not on a late chunk
-                spool_backlog_max_frames=physics_backlog_max, receiver_lag_max_s=physics_lag_max_s,
+                # CP-3410: the data fails on a receiver lag beyond the frozen policy, not on a late chunk
+                receiver_lag_max_s=physics_lag_max_s,
                 # Buffer capacity (about 8.2 s of 2 ms steps), not a threshold: endpoint lookup window.
                 history_capacity=4096)
-            if real_node:
-                physics_adapter.start_spool_reader()
             from ..adapters.act.ros_observation import RosObservationAdapter
             observation_adapter = RosObservationAdapter(data_node, episode_recorder.synchronizer,
                 capture=episode_recorder.capture, reset_epoch=reset_epoch, on_hazard=on_hazard,
@@ -133,8 +112,6 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
                     operation()
                 except Exception as cleanup_error:
                     error.add_note("Owned source construction retirement failed: " + str(cleanup_error))
-            if spool_process is not None:
-                spool_process.close()
             physics_adapter = observation_adapter = None
             on_hazard("DATA_SOURCE_CONSTRUCTION_FAILED: " + (str(error) or type(error).__name__)
                       + "".join(" | " + note for note in getattr(error, "__notes__", ())))
@@ -144,18 +121,6 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
             return physics_adapter.drain()
         return 0
 
-    spool_facts = {}
-
-    def remove_spool():
-        # The spool is a transient transport copy of chunks the audit already retains; it is not evidence. The spooler's
-        # own numbers (chunks, bytes, longest gap between its callbacks) are kept for the Recorder's telemetry first.
-        import shutil
-        try:
-            spool_facts.update(spool_process.reader().stats())
-        except Exception:
-            pass
-        shutil.rmtree(spool_process.directory, ignore_errors=True)
-
     closed = False
     def close():
         nonlocal closed
@@ -164,7 +129,6 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
             try:
                 for operation in (drain_sources,
                         *(() if physics_adapter is None else (physics_adapter.close,)),
-                        *(() if spool_process is None else (spool_process.close, remove_spool)),
                         *(() if observation_adapter is None else (observation_adapter.close,)),
                         lambda: node.destroy_subscription(adapter.subscription)):
                     try:
@@ -181,4 +145,4 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
     return SimpleNamespace(observer=observer, adapter=adapter, hazards=hazards, model=model,
                            model_identity=identity, close=close,
                            physics_adapter=physics_adapter, observation_adapter=observation_adapter,
-                           drain_sources=drain_sources, spool_stats=lambda: dict(spool_facts))
+                           drain_sources=drain_sources)

@@ -42,7 +42,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
 
 def load_recorder_frozen_policy(manifest_path: Path) -> dict:
     """The frozen `episode_recorder_v1` policy (values and policy_sha256), or a refusal when it was not frozen."""
-    from .episode_recorder_process import RecorderConfigRefused
+    from .offline.policy import RecorderConfigRefused
     from .first_episode_inputs import verify_frozen_inputs
 
     try:

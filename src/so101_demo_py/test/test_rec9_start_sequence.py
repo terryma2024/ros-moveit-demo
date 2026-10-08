@@ -7,9 +7,9 @@ frame is older than the newest world record by its own latency), and the few pas
 `detach` association then failed with RECORDER_SOURCE_ALIGNMENT_TEACHER_EVENT_UNAVAILABLE at job age 0.07 s: the same chunk lag, never retried.
 See rec9-start-sequence.md.
 
-Layer A drives the real `RosRecorderSources.try_start` over a seeded model of every source at its real rate.
-Layer B drives the real engine, capture, writer, seal and readback with seeded orderings of the Teacher's reset and start
-observation against the capture start.
+Layer A drives the real `OfflineRosSources.try_start` over a seeded model of every source at its real rate.
+Layer B (seeded orderings of the Teacher's reset and start observation against the capture start, VALID because the engine held the
+early events) went with the deferred events: an event before the capture start is now INVALID (cleanup step 2).
 """
 import random
 import time
@@ -18,14 +18,13 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.episode_assembly import PointEpisode
-from so101_demo.act.episode_recorder_process import RC_VALID
+from so101_demo.act.offline.engine import RC_INVALID
 from so101_demo.act.synchronizer import RgbObservationSynchronizer
 from so101_demo.adapters.act.ros_observation import RosObservationAdapter
-from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+from so101_demo.act.offline.sources import OfflineRosSources
 from test_act_capture_seed_validity import _image
 from test_act_continuous_capture import build
-from test_act_episode_recorder import STAMPS, readback, result_of, teacher_script
-from test_rec2_stall_replay import RealTimeSources, SIM0, run_replay
+from test_act_episode_recorder import NOT_EXHAUSTED, result_of, teacher_script
 
 SEEDS = range(24)
 BASE = 10.0   # simulation seconds at the model's t = 0
@@ -89,7 +88,7 @@ def start_gate_run(seed, *, max_age_s=0.2):
                         "lease": dict(batch_id="batch", coordinator_epoch=1, worker_id="worker", worker_generation=1,
                                       point_id="point", attempt_id="attempt-1", lease_generation=1,
                                       lease_issued_monotonic_s=now - 1.0, lease_deadline_monotonic_s=now + 120.0)}
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources._initial_built = False
     sources.binding = SimpleNamespace(observer=SimpleNamespace(hazard=None), observation_adapter=adapter)
     sources.episode = episode
@@ -192,7 +191,7 @@ def test_a_source_other_than_physics_that_is_not_causal_still_closes_the_gate():
 
 def test_a_teacher_named_association_source_that_has_not_arrived_is_retried_then_invalid():
     from so101_demo.act.recorder_scene import SceneAssociationError
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources.ALIGNMENT_RETRY_S = 1.0
     sources._jobs = [SimpleNamespace(created_monotonic_s=time.monotonic(), operation="detach", apply=None, query=None)]
     sources._admissions, sources._initial_built = [], True
@@ -214,87 +213,10 @@ def test_a_teacher_named_association_source_that_has_not_arrived_is_retried_then
         sources._service_associations(SimpleNamespace(telemetry=None))
 
 
-# ---- layer B: seeded orderings of Recorder-ready, the Teacher's reset and start observation, against the capture start -------
-
-class OrderedSources(RealTimeSources):
-    """The Teacher's reset and start observation reach the Recorder at seeded instants: before the capture starts or after it."""
-
-    def __init__(self, box, script, early, *, hold_s, **kwargs):
-        super().__init__(box, script, **kwargs)
-        self.early = sorted(early)               # (wall seconds since prepare, text)
-        self.hold_s = hold_s                     # the capture-start gate stays closed until then (source alignment, raw lag, loop stalls)
-        self.order = []
-
-    def pump(self, engine):
-        while self.early and time.monotonic() - self.t0 >= self.early[0][0]:
-            self.order.append("started" if engine.episode.capture.started else "before_start")
-            engine.on_event_text(self.early.pop(0)[1])
-        super().pump(engine)
-
-    def try_start(self, engine):
-        if time.monotonic() - self.t0 < self.hold_s:
-            return None
-        return super().try_start(engine)
-
-
-def ordered_replay(tmp_path, seed):
-    rng = random.Random(1000 + seed)
-    reset_sim = round(rng.uniform(0.3, 0.95), 3)
-    script = teacher_script(reset_sim_s=reset_sim, reset_tick=-1)
-    reset_text = script.pop(-1)[0]
-    start_obs_text = script[0].pop(0)
-    start_wall = STAMPS[0] - SIM0                       # the seed pair's own instant, in replay wall seconds (0.85 s)
-    reset_wall = max(0.05, reset_sim - SIM0 + rng.uniform(0.0, 0.2))
-    observation_wall = max(reset_wall + 0.001, start_wall + rng.uniform(-0.04, 0.09))   # emitted at sim >= the seed stamp
-    hold_s = rng.uniform(0.0, 0.05) + start_wall        # source alignment built / loop stalled: the gate may open later than the instant
-    return run_replay(tmp_path, served_by_receiver=True, script=script, sources_cls=OrderedSources,
-                      early=[(reset_wall, reset_text), (observation_wall, start_obs_text)], hold_s=hold_s)
-
-
-def run_ordering(tmp_path, seed):
-    """One wall-clock replay. A run whose own loop was stalled by the host (a pass of 100 ms or more in its telemetry) is a
-    loaded-machine run, not an ordering: it is repeated (at most three times) in a fresh directory; any other failure counts."""
-    import json
-    for attempt in range(3):
-        root = tmp_path / f"attempt{attempt}"
-        root.mkdir()
-        engine, sources, working = ordered_replay(root, seed)
-        code = engine.run()
-        result = result_of(working)
-        if code == RC_VALID:
-            return code, result, sources, working
-        telemetry = json.loads((working / "episode" / "recorder-telemetry.json").read_text())
-        if telemetry["passes"]["max_ms"] < 100.0:
-            break
-    return code, result, sources, working
-
-
-@pytest.mark.parametrize("seed", SEEDS)
-def test_every_healthy_ordering_of_reset_and_start_observation_against_the_capture_start_seals_valid(tmp_path, seed):
-    code, result, sources, working = run_ordering(tmp_path, seed)
-    assert code == RC_VALID and result["status"] == "VALID", (sources.order, result["reasons"])
-    seal, manifest, references = readback(working)
-    assert seal["status"] == "PASSED" and references["status"] == "PASS"
-    # an event offered before the start may still be handled in the pass that starts the capture (then it is not held)
-    assert result["event_stream"]["deferred_replayed"] <= sources.order.count("before_start"), sources.order
-
-
-def test_the_orderings_cover_both_sides_of_the_start_for_the_start_observation(tmp_path):
-    seen = set()
-    for seed in SEEDS:
-        rng = random.Random(1000 + seed)
-        reset_sim = round(rng.uniform(0.3, 0.95), 3)
-        reset_wall = max(0.05, reset_sim - SIM0 + rng.uniform(0.0, 0.2))
-        start_wall = STAMPS[0] - SIM0
-        observation_wall = max(reset_wall + 0.001, start_wall + rng.uniform(-0.04, 0.09))
-        hold = rng.uniform(0.0, 0.05) + start_wall
-        seen.add(observation_wall < hold)
-    assert seen == {True, False}
-
+# ---- the gate outcomes in the verdict -------------------------------------------------------------------------------------------
 
 def test_a_capture_that_never_starts_names_the_gate_outcomes_in_its_reason(tmp_path):
     from test_act_episode_recorder import build
-    from so101_demo.act.episode_recorder_process import RC_INVALID
     script = teacher_script(reset_sim_s=1.0, reset_tick=-1)
     engine, sources, working = build(tmp_path, script=script)
     for tick in list(script):
@@ -304,13 +226,13 @@ def test_a_capture_that_never_starts_names_the_gate_outcomes_in_its_reason(tmp_p
     sources.start_gate_summary = lambda engine_: {"seed_expired": 12605, "provider_not_ready": 41}
     ticks = iter(range(0, 10_000))
     engine.clock = lambda: next(ticks) * 1.0
-    assert engine.run() == RC_INVALID
+    assert engine.process(NOT_EXHAUSTED) == RC_INVALID
     entry = [item for item in result_of(working)["reasons"] if "NOT_READY" in item["reason"]][0]
     assert '"seed_expired": 12605' in entry["start_gate"]
 
 
 def test_the_start_gate_summary_counts_passes_by_cause():
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     for _ in range(3):
         sources._gate("seed_expired")
     sources._gate("started")

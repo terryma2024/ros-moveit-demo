@@ -1,7 +1,7 @@
 """Reachability planning and the Teacher's progress spin hold no data drain (A4c; the physics backlog is the Recorder's).
 
 What actual59 added here - draining the raw physics backlog on every reachability tick and on every `_progress` call - is
-REPLACED_BY the Recorder's own source pass (`RosRecorderSources.pump`): the Teacher only spins its own callbacks."""
+REPLACED_BY the Recorder's own source pass (`OfflineRosSources.pump`): the Teacher only spins its own callbacks."""
 
 import json
 import threading

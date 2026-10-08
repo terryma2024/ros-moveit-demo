@@ -1,8 +1,7 @@
 """Offline episode processor: a raw bag in, a sealed episode and a verdict out (P2, CP-3428).
 
-The live Recorder is replayed. The processor opens the same episode (frozen inputs, scope, lease), builds the same
-`RecorderEngine` and the same `RosRecorderSources`, and feeds them from the record-only process's bag on a virtual clock
-(`replay.py`). Every gate, join, label, continuity and seal rule is the live one; the one substitution is the receipt instant of a
+The processor opens the episode (frozen inputs, scope, lease), builds the `OfflineEngine` and the `OfflineRosSources`, and
+feeds them from the record-only process's bag on a virtual clock (`replay.py`). Every gate, join, label, continuity and seal rule is the live one; the one substitution is the receipt instant of a
 message: the record-only process's receipt (bag stamp mapped to the monotonic clock) stands in for the Recorder's.
 `p2-substitution.md` lists every rule where that is not exact.
 
@@ -36,8 +35,6 @@ LEASE_FIELDS = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation
 #: request", the 100 ms join); observed residuals are 0.9 us and 2.8 us on the two real bags. 2 ms leaves a factor of 700 above the
 #: observation and stays below the tightest rule (CP-3457; it was 10 ms).
 CLOCK_RESIDUAL_LIMIT_NS = 2_000_000
-#: a poll below this advances the replay by this much (a zero poll would never move the virtual clock)
-MIN_STEP_S = 0.001
 
 
 class OfflineRefused(ValueError):
@@ -89,60 +86,6 @@ def load_clock_map(bag, *, stats_file=None):
     return clock_map, facts
 
 
-# ---- the engine ------------------------------------------------------------------------------------------------------
-
-def _engine_class():
-    from ..episode_recorder_process import RecorderEngine, _publish_json
-
-    class OfflineEngine(RecorderEngine):
-        """`RecorderEngine` driven by the replay: one `step` per poll of virtual time, no process discipline, no telemetry file."""
-
-        def process(self, node, preset_reasons=()) -> int:
-            self.check_outputs_absent()
-            self._began = self.clock()
-            self.passes = 0
-            try:
-                self.sources.prepare(self)
-            except Exception as error:
-                self.latch("RECORDER_SOURCE_CONSTRUCTION_FAILED: " + self._reason(error))
-            for reason in preset_reasons:
-                self.latch(reason)
-            step_s = max(self.policy["poll_s"], MIN_STEP_S)
-            while True:
-                self.telemetry.begin_pass()
-                try:
-                    self.step()
-                except Exception as error:
-                    self.latch("RECORDER_STEP_FAILED: " + self._reason(error))
-                finally:
-                    self.telemetry.end_pass()
-                self.passes += 1
-                if self.terminal is not None:
-                    break
-                if node.exhausted:
-                    self._stop_reason = "OFFLINE_BAG_ENDED_WITHOUT_TERMINAL"
-                    break
-                if self.clock() - self._began > self.policy["max_duration_s"]:
-                    self._stop_reason = "RECORDER_MAX_DURATION_EXCEEDED"
-                    break
-                self.sleep(step_s)
-            return self.finalize()
-
-        def _finish_telemetry(self) -> None:
-            self._telemetry_document = {}   # wall-clock stall telemetry means nothing on a virtual clock; nothing is written
-
-        def _telemetry_summary(self) -> dict:
-            return {}
-
-        def _write_result(self) -> None:
-            super()._write_result()
-            document = json.loads(self.result_file.read_bytes())
-            document["pid"] = 0   # the one process-specific field of the result
-            _publish_json(self.result_file, document, replace=True)
-
-    return OfflineEngine
-
-
 # ---- inputs ----------------------------------------------------------------------------------------------------------
 
 def read_lease(path) -> dict:
@@ -191,12 +134,12 @@ def run_fresh_qc(episode_root, *, scope, inputs_manifest, teacher_manifest, outp
 
 
 _PIPELINE_MODULES = (
-    "so101_demo.ros.episode_recorder_sources", "so101_demo.ros.recorder_data_side", "so101_demo.ros.data_source_binding",
+    "so101_demo.act.offline.sources", "so101_demo.act.offline.engine", "so101_demo.ros.recorder_data_side", "so101_demo.ros.data_source_binding",
     "so101_demo.adapters.act.ros_episode_physics", "so101_demo.adapters.act.scene_state", "so101_demo.adapters.act.ros_observation",
     "so101_demo.adapters.act.controller_reference_observer", "so101_demo.backends.mujoco.observer",
     "so101_demo.act.live_physical_audit", "so101_demo.act.episode_assembly", "so101_demo.act.continuous_capture",
     "so101_demo.act.recorder", "so101_demo.act.lossless_recorder", "so101_demo.act.synchronizer",
-    "so101_demo.act.recorder_telemetry", "so101_demo.act.episode_audit", "so101_demo.act.episode_qc")
+    "so101_demo.act.episode_audit", "so101_demo.act.episode_qc")
 
 
 def preload_pipeline() -> None:
@@ -277,8 +220,8 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     from ..frozen_runtime_inputs import load_recorder_frozen_policy
     from ..collection_scope import build_collection_scope, write_collection_scope
     from ..first_episode_inputs import verify_frozen_inputs
-    from ..episode_recorder_process import FaultInjector
     from ..teacher_event_stream import StreamIdentity
+    from .engine import OfflineEngine
     from .replay import BagStream, CameraGridRepair, ReplayNode, TeacherClockRepair, VirtualClock, virtual_time
 
     if scope is None:
@@ -311,19 +254,17 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
             clock_repair = TeacherClockRepair() if teacher_clock_repair else None
             node = ReplayNode(stream, clock, camera_repair=repair, teacher_clock_repair=clock_repair,
                               start_at_stamp_ns=None if window_start is None else window_start["bag_stamp_ns"])
-            faults = FaultInjector("none")
             episode = (episode_factory or (lambda o: open_recorder_episode(o, offline=True)))(options)
             if sources_factory is None:
                 from .sources import OfflineRosSources
 
-                sources = OfflineRosSources(node, episode, options, faults=faults, policy=policy,
+                sources = OfflineRosSources(node, episode, options, policy=policy,
                                             final_normal_stop_seq=timeline.get("final_normal_stop_seq"))
             else:
-                sources = sources_factory(node, episode, options, policy, faults)
-            engine = _engine_class()(episode=episode, sources=sources, policy=policy, identity=stream_identity,
-                                     ready_file=Path(work) / "recorder-ready.json",
-                                     result_file=Path(work) / "recorder-result.json", faults=faults,
-                                     clock=clock.monotonic, sleep=clock.advance)
+                sources = sources_factory(node, episode, options, policy)
+            engine = OfflineEngine(episode=episode, sources=sources, policy=policy, identity=stream_identity,
+                                   result_file=Path(work) / "recorder-result.json",
+                                   clock=clock.monotonic, sleep=clock.advance)
             # a DIAGNOSTIC run looks past the camera defect: the scan names it, the engine is not told
             rc = engine.process(node, preset_reasons=[r for r in reasons
                                                        if not (camera_repair and r.startswith("OFFLINE_CAMERA_"))])

@@ -1,6 +1,6 @@
 """Actual66 K5/D16: a camera seed that passes validation is awaited by the Recorder, never by the Teacher; log seed refusal facts.
 
-The awaiting capture start moved out of the Teacher child (A4c) into `RosRecorderSources.try_start`."""
+The awaiting capture start moved out of the Teacher child (A4c) into `OfflineRosSources.try_start`."""
 
 import json
 import time
@@ -12,7 +12,7 @@ from sensor_msgs.msg import Image
 from so101_demo.act.episode_assembly import PointEpisode
 from so101_demo.act.synchronizer import RgbObservationSynchronizer
 from so101_demo.adapters.act.ros_observation import RosObservationAdapter
-from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+from so101_demo.act.offline.sources import OfflineRosSources
 from test_act_continuous_capture import build
 
 FLOOR = 2.075
@@ -91,7 +91,7 @@ def _causal(*, sim_now=2.3, stamps, progress=None, max_skew_s=0.1, world_time_s=
                       point_id="point", attempt_id="attempt-1", lease_generation=1,
                       lease_issued_monotonic_s=now - 1.0, lease_deadline_monotonic_s=now + 120.0)}
     binding = SimpleNamespace(observer=SimpleNamespace(hazard=None), observation_adapter=adapter)
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources._initial_built = True
     sources.binding, sources.episode = binding, episode
     record = SimpleNamespace(simulation_time_s=world_time_s, publisher_sequence=7, simulation_session_id="task-5",

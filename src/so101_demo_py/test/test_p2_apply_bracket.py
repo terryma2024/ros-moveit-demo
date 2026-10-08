@@ -88,7 +88,7 @@ def test_an_apply_that_is_not_the_governing_associations_is_invalid(frozen_scene
 # ---- the Recorder's source: the proof ------------------------------------------------------------------------------------
 
 def sources_with(frozen_scene, *, others=(), changed=False, extra_before=False):
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+    from so101_demo.act.offline.sources import OfflineRosSources
 
     source, values, t = provider(frozen_scene)
     document = source.scene_association_source(t)["association"]
@@ -96,7 +96,7 @@ def sources_with(frozen_scene, *, others=(), changed=False, extra_before=False):
     after = moved(values["planning"], READ_AFTER_APPLY_S, call_id="after")
     if changed:
         after["response"]["scene"]["world"]["collision_objects"][0]["id"] = "foreign"
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources._planning_lock = threading.Lock()
     sources._planning_calls = deque([after], maxlen=64)
     sources.tracker = SimpleNamespace(records=[copy.deepcopy(anchor), *others])

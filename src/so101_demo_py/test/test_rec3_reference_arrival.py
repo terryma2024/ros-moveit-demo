@@ -10,10 +10,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.ros import episode_recorder_sources as module
+from so101_demo.act.offline import sources as module
 from test_act_episode_recorder_sources import RecordingNode, _binding, _engine, _episode, _options
 from test_b2_controller_reference import PERIOD_NS, feed
-from so101_demo.act.episode_recorder_process import FaultInjector
 
 
 def port_with(frames_arm, frames_gripper, clock_ns):
@@ -41,11 +40,10 @@ def collect_with(port, clock_ns, requests):
     asked = []
     capture = SimpleNamespace(active=True, drain=lambda: None, on_reference=lambda record: None,
                               reference_requests=lambda through: asked.append(through) or ())
-    sources = module.RosRecorderSources.__new__(module.RosRecorderSources)
+    sources = module.OfflineRosSources.__new__(module.OfflineRosSources)
     sources.episode = SimpleNamespace(capture=capture)
     sources.node = SimpleNamespace(get_clock=lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=clock_ns)))
     sources.reference_port = port
-    sources._receiver = object()
     sources._refresh_scene = lambda: None
     sources.collect(SimpleNamespace())
     return asked
@@ -79,14 +77,14 @@ def test_a_real_gap_is_still_the_exact_publication_failure():
 
 
 def test_a_collect_failure_latches_the_capture_so_its_queues_cannot_overflow_behind_it(tmp_path):
-    from test_act_episode_recorder import build, result_of
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
     engine, sources, working = build(tmp_path)
 
     def failing(engine_):
         raise RuntimeError("COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE")
 
     sources.collect = failing
-    engine.run()
+    engine.process(NOT_EXHAUSTED)
     reasons = [item["reason"] for item in result_of(working)["reasons"]]
     assert reasons[0] == "COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE"
     with pytest.raises(ValueError, match="COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE"):

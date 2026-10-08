@@ -1,32 +1,29 @@
-"""The Recorder must bind actual frozen inputs and the full lease before creating evidence (opener: act.episode_open)."""
+"""The offline processor must bind actual frozen inputs and the full lease before creating evidence (opener: act.episode_open)."""
 
 import hashlib
 import json
 from pathlib import Path
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from so101_demo.act.collection_scope import build_collection_scope, write_collection_scope
 from so101_demo.act.first_episode_inputs import freeze_inputs
 from so101_demo.act.episode_open import open_recorder_episode
-from so101_demo.cli.act_episode_recorder import build_parser
 from test_act_first_episode_scope import _registry, _write_registry
 
 
 def _options(tmp_path, *, inputs=None, working=None):
-    """The Recorder CLI's own options for an attempt whose workspace is `working` (the reserved lease namespace)."""
+    """The processor's own options for an attempt whose workspace is `working` (the reserved lease namespace)."""
     working = working or tmp_path / "worker" / "attempts" / "task_start" / "attempt" / "working"
-    argv = ["--session-id", "session", "--attempt-id", "attempt", "--expected-reset-epoch", "2",
-            "--episode-root", str(working / "episode"), "--evidence-root", str(working / "dynamic"),
-            "--episode-scope", str(tmp_path / "scope.json"),
-            "--episode-inputs-manifest", str(inputs if inputs is not None else tmp_path / "absent-inputs.json"),
-            "--ready-file", str(working / "recorder-ready.json"), "--result-file", str(working / "recorder-result.json"),
-            "--batch-id", "batch", "--coordinator-epoch", "3", "--worker-id", "worker",
-            "--worker-generation", "4", "--point-id", "task_start", "--lease-generation", "5",
-            "--lease-issued-monotonic-s", str(time.monotonic() - 1),
-            "--lease-deadline-monotonic-s", str(time.monotonic() + 300)]
-    return build_parser().parse_args(argv)
+    return SimpleNamespace(
+        session_id="session", attempt_id="attempt", expected_reset_epoch=2, episode_root=working / "episode",
+        evidence_root=working / "dynamic", episode_scope=tmp_path / "scope.json",
+        episode_inputs_manifest=inputs if inputs is not None else tmp_path / "absent-inputs.json", fault="none",
+        batch_id="batch", coordinator_epoch=3, worker_id="worker", worker_generation=4, point_id="task_start",
+        lease_generation=5, lease_issued_monotonic_s=time.monotonic() - 1,
+        lease_deadline_monotonic_s=time.monotonic() + 300)
 
 
 def test_missing_frozen_manifest_refuses_before_creating_recorder(tmp_path):

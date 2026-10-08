@@ -5,12 +5,11 @@ OLD rule (removed): every chunk had to reach the Recorder within 100 ms of its n
 is the end-to-end sample -> publish thread -> DDS -> spooler path, outside the Recorder's control, and the spooler does no real-time
 intervention. NEW rule: lateness is admitted and recorded (telemetry); the data fails on what actually endangers it:
   - continuity (sequence, step contiguity, clocks), session/epoch and every content check: unchanged;
-  - processing errors: deserialization failure, spool corruption, spooler death, overflow;
-  - backlog beyond the frozen policy: unprocessed spool frames > N, receiver lag (newest received sample behind now) > X s.
+  - processing errors: refused content, overflow;
+  - receiver lag beyond the frozen policy (newest received sample behind now > X s).
+The spool backlog bound and the spool tests went with the chunk spool process (cleanup step 2).
 """
 import copy
-import json
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -134,60 +133,6 @@ def test_the_lag_check_ends_with_the_recording_and_never_runs_before_the_first_c
     now[0] += 60_000_000_000
     value.drain()
     assert value.hazard is None
-
-
-def staged_spool(tmp_path, count):
-    """`count` frames already in the spool when the reader starts: its first read sees exactly that backlog (no race)."""
-    from rclpy.serialization import serialize_message
-    from so101_demo.act.chunk_spool import SpoolReader, SpoolWriter
-    value, _ = adapter(spool_backlog_max_frames=4)
-    value._spool = SpoolReader(tmp_path)
-    writer = SpoolWriter(tmp_path, max_bytes=1 << 26)
-    for index in range(1, count + 1):
-        message, receipt = chunk_at(index)
-        writer.write(receipt, serialize_message(message))
-    return value
-
-
-def finish(value):
-    value._receiver_stop.set()
-    value._receiver_thread.join(2)
-
-
-def test_a_spool_backlog_within_the_policy_does_not_fail_the_data(tmp_path):
-    value = staged_spool(tmp_path, 4)                      # N frames: at the limit
-    value.start_spool_reader()
-    end = time.monotonic() + 3
-    while value.receipt_diagnostics()["chunk_count"] < 4 and time.monotonic() < end:
-        time.sleep(0.01)
-    finish(value)
-    assert value.hazard is None and value.receipt_diagnostics()["chunk_count"] == 4
-    assert value.receipt_diagnostics()["max_spool_backlog_frames"] == 4
-
-
-def test_a_spool_backlog_over_the_policy_fails_the_data(tmp_path):
-    value = staged_spool(tmp_path, 10)                     # N + 6 unprocessed frames
-    value.start_spool_reader()
-    end = time.monotonic() + 3
-    while value.hazard is None and time.monotonic() < end:
-        time.sleep(0.01)
-    finish(value)
-    assert value.hazard == "PHYSICS_RAW_SPOOL_BACKLOG_EXCEEDED"
-    assert value.receipt_diagnostics()["max_spool_backlog_frames"] == 10
-
-
-def test_processing_errors_are_named_and_fail_the_data(tmp_path):
-    from so101_demo.act.chunk_spool import SpoolReader, SpoolWriter
-    value, _ = adapter()
-    value._spool = SpoolReader(tmp_path)
-    SpoolWriter(tmp_path, max_bytes=1 << 20).write(1, b"not a serialized message")
-    value.start_spool_reader()
-    end = time.monotonic() + 3
-    while value.hazard is None and time.monotonic() < end:
-        time.sleep(0.01)
-    assert value.hazard == "PHYSICS_RAW_DESERIALIZE_FAILED"
-    value._receiver_stop.set()
-    value._receiver_thread.join(2)
 
 
 def test_the_latency_split_reports_percentiles_for_every_leg():

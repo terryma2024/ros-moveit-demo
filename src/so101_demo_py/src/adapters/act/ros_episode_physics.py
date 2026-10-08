@@ -1,4 +1,4 @@
-"""Bounded full native chunk ingress into the executing child's single audit writer."""
+"""Bounded full native chunk ingress into the episode's single audit writer."""
 
 from collections import deque
 import copy
@@ -28,7 +28,7 @@ class RosEpisodePhysicsAdapter:
     def __init__(self, node, *, session_id, reset_epoch, nq, nv, audit,
                  clock_ns=time.monotonic_ns, pending_capacity=128, max_age_s=.1,   # max_age_s: the sim-time causal join window of source_at, not a delivery rule
                  max_samples=None, max_contacts=None, history_capacity=256,
-                 dedicated_receiver=False, spool=None, spool_backlog_max_frames=None, receiver_lag_max_s=None):
+                 receiver_lag_max_s=None):
         if (not isinstance(session_id, str) or not session_id or type(reset_epoch) is not int
                 or reset_epoch < 1 or type(nq) is not int or nq < 1
                 or type(nv) is not int or nv < 1 or not callable(clock_ns)
@@ -53,165 +53,21 @@ class RosEpisodePhysicsAdapter:
         # Callback admission cannot publish a source until the sole writer appends it.
         self._history = deque(maxlen=history_capacity)
         self._previous = None
-        # CP-3410 policy (frozen in episode_recorder_v1): the data fails on a backlog, not on a late chunk.
-        self._backlog_max = spool_backlog_max_frames
+        # CP-3410 policy (frozen in episode_recorder_v1): the data fails on a receiver lag, not on a late chunk.
         self._lag_max_ns = None if receiver_lag_max_s is None else round(receiver_lag_max_s * 1e9)
         self._lag_check_ended = False
         self._latency = {leg: deque(maxlen=_LATENCY_WINDOW) for leg in _LATENCY_LEGS}
-        self._latency_peaks = {"max_spool_backlog_frames": 0, "max_publish_deferrals_total": 0, "max_receiver_lag_ns": 0}
+        self._latency_peaks = {"max_publish_deferrals_total": 0, "max_receiver_lag_ns": 0}
         self._rejected = None
         self._closed = False
         self._closing = False
         self._receipt = {"chunk_count": 0, "late_count": 0, "late_lines": 0, "max_delay_ns": None,
                          "max_delay_sequence": None, "last_delay_ns": None, "last_sequence": None,
                          "last_receipt_ns": None}
-        self._rx_node = self._rx_executor = self._receiver_thread = None
-        self._spool = spool
-        self._receiver_stop = threading.Event()
-        self._receiver_end_reason = None
-        self._shutdown_destroy_notes = []
         qos = QoSProfile(depth=100, reliability=ReliabilityPolicy.RELIABLE,
                          durability=DurabilityPolicy.VOLATILE)
-        if spool is not None:
-            # The chunk receipt lives in the spooler process (act/chunk_spool.py): nothing to subscribe here.
-            self.subscription = None
-            return
-        if not dedicated_receiver:
-            self.subscription = node.create_subscription(PhysicsStepEvidenceChunk,
-                "/so101/simulation/physics_step_chunks", self.accept_message, qos)
-            return
-        # Receipt freshness is a property of this receiver, not of whether the runtime thread is
-        # spinning: the same subscription lives on a private node served by its own thread.
-        import rclpy
-        from rclpy.executors import SingleThreadedExecutor
-        self._rx_node = rclpy.create_node(f"so101_episode_physics_rx_{os.getpid()}", context=node.context)
-        try:
-            self._rx_executor = SingleThreadedExecutor(context=node.context)
-            self._rx_executor.add_node(self._rx_node)
-            self.subscription = self._rx_node.create_subscription(PhysicsStepEvidenceChunk,
-                "/so101/simulation/physics_step_chunks", self.accept_message, qos)
-        except BaseException:
-            self._destroy_receiver()
-            raise
-        self._receiver_thread = threading.Thread(target=self._receiver_loop, daemon=True,
-                                                 name="so101-episode-physics-receiver")
-        self._receiver_thread.start()
-
-    def start_spool_reader(self):
-        """Start the thread that ingests the spooler's frames with the spooler's own receipt stamps."""
-        self._receiver_thread = threading.Thread(target=self._spool_loop, daemon=True,
-                                                 name="so101-episode-physics-spool-reader")
-        self._receiver_thread.start()
-
-    def _spool_loop(self):
-        from rclpy.serialization import deserialize_message
-        try:
-            while not self._receiver_stop.is_set():
-                frames = self._spool.read_frames()
-                with self._lock:
-                    self._note_backlog(len(frames))       # every frame read and not yet processed is backlog
-                    self._check_lag()
-                for position, (is_record, receipt, data) in enumerate(frames):
-                    if self.hazard is not None:
-                        break                       # nothing more is admitted: do not spend the GIL deserializing the rest
-                    try:
-                        if is_record:
-                            # converted by the spooler, in its own process (the main process no longer pays ~25 ms per chunk)
-                            decoded = json.loads(data)
-                        else:
-                            decoded = deserialize_message(data, PhysicsStepEvidenceChunk)
-                    except Exception:
-                        with self._lock:
-                            if self.hazard is None:
-                                self.hazard = "PHYSICS_RAW_DESERIALIZE_FAILED"
-                        break
-                    if is_record:
-                        self.accept_record(decoded, receipt_ns=receipt)
-                    else:
-                        self.accept_message(decoded, receipt_ns=receipt)
-                    with self._lock:
-                        self._note_backlog(len(frames) - position - 1)
-                        self._check_lag()
-                failure = self._spool.failure()
-                if failure is not None:
-                    with self._lock:
-                        if self.hazard is None:
-                            self.hazard = failure
-                    return
-                if not frames:
-                    self._receiver_stop.wait(0.005)
-        except BaseException as error:
-            with self._lock:
-                if self.hazard is None:
-                    self.hazard = "PHYSICS_RAW_RECEIVER_FAILED" if not isinstance(error, ValueError) else str(error)
-
-    def _receiver_loop(self):
-        try:
-            while not self._receiver_stop.is_set():
-                self._rx_executor.spin_once(timeout_sec=0.05)
-        except BaseException:
-            if not self._receiver_stop.is_set():
-                try:
-                    context_ok = bool(self._rx_node.context.ok())
-                except BaseException:
-                    context_ok = True  # an unreadable context is not proof of an orderly shutdown
-                if not context_ok:
-                    # Orderly rclpy shutdown before close(): no chunk can arrive any more, so the
-                    # receiver ends without a hazard. Incomplete data is still caught by the
-                    # continuity, terminal and seal checks; nothing is fabricated here.
-                    self._receiver_end_reason = "CONTEXT_SHUTDOWN"
-                    return
-                with self._lock:
-                    if self.hazard is None:
-                        self.hazard = "PHYSICS_RAW_RECEIVER_FAILED"
-
-    def _destroy_receiver(self, subscription=None):
-        """Destroy the private receiver resources; return every failure, first one first."""
-        errors = []
-        try:
-            context_ok = bool(self._rx_node.context.ok())
-        except BaseException:
-            context_ok = True
-        for operation in (
-                *(() if subscription is None else (lambda: self._rx_node.destroy_subscription(subscription),)),
-                lambda: self._rx_executor is None or self._rx_executor.shutdown(),
-                lambda: self._rx_node is None or self._rx_node.destroy_node()):
-            try:
-                operation()
-            except BaseException as error:
-                if context_ok:
-                    errors.append(error)
-                else:
-                    # Destruction after an orderly context shutdown is a note, not a failure.
-                    self._shutdown_destroy_notes.append(repr(error))
-        self._rx_node = self._rx_executor = None
-        return errors
-
-    def _stop_receiver(self):
-        """Join the receiver thread (2 s bound), then destroy its subscription, executor and node."""
-        if self._spool is not None:
-            self._receiver_stop.set()
-            errors = []
-            thread = self._receiver_thread
-            if thread is not None:
-                thread.join(2.0)
-                if thread.is_alive():
-                    errors.append(RuntimeError("PHYSICS_RAW_RECEIVER_JOIN_TIMEOUT"))
-            try:
-                self._spool.close()
-            except BaseException as error:
-                errors.append(error)
-            return errors
-        if self._rx_node is None:
-            return []
-        errors = []
-        self._receiver_stop.set()
-        thread = self._receiver_thread
-        thread.join(2.0)
-        if thread.is_alive():
-            errors.append(RuntimeError("PHYSICS_RAW_RECEIVER_JOIN_TIMEOUT"))
-        errors.extend(self._destroy_receiver(self.subscription))
-        return errors
+        self.subscription = node.create_subscription(PhysicsStepEvidenceChunk,
+            "/so101/simulation/physics_step_chunks", self.accept_message, qos)
 
     def accept_message(self, message, receipt_ns=None):
         receipt = self.clock_ns() if receipt_ns is None else receipt_ns
@@ -223,32 +79,6 @@ class RosEpisodePhysicsAdapter:
                 self._admit(message, receipt)
             except (AttributeError, TypeError, ValueError, OverflowError) as error:
                 self._refuse(message, receipt, error)
-
-    def accept_record(self, record, receipt_ns=None):
-        """`accept_message` for a chunk the spooler already converted to its record (same rules, same hazards)."""
-        receipt = self.clock_ns() if receipt_ns is None else receipt_ns
-        with self._lock:
-            if self._closed or self._closing or self.hazard is not None:
-                return
-            self._note_receipt_record(record, receipt)
-            try:
-                self._admit_record(record)
-            except (AttributeError, TypeError, ValueError, OverflowError, KeyError) as error:
-                self._refuse_record(record, receipt, error)
-
-    def _admit_record(self, record):
-        if len(self._pending) >= self.capacity:
-            raise ValueError("PHYSICS_RAW_PENDING_OVERFLOW")
-        verify_raw_chunk(record, previous=self._previous, session_id=self.session_id,
-            reset_epoch=self.reset_epoch, nq=self.nq, nv=self.nv,
-            max_samples=self.max_samples, max_contacts=self.max_contacts)
-        self._pending.append(record)
-        self._previous = record
-
-    def _refuse_record(self, record, receipt, error):
-        self.hazard = str(error) or "PHYSICS_RAW_CALLBACK_INVALID"
-        # the original ROS message was converted in the spooler; the converted original is what is kept for failure readback
-        self._rejected = {"received_monotonic_ns": receipt, "reason": self.hazard, "record": record}
 
     def _admit(self, message, receipt):
         if len(self._pending) >= self.capacity:
@@ -273,7 +103,7 @@ class RosEpisodePhysicsAdapter:
         except Exception as serialization_error:
             self._rejected["serialization_error"] = str(serialization_error)
 
-    # ---- backlog and receiver lag: the data fails on these, never on one late chunk (CP-3410) ---------------------------
+    # ---- receiver lag: the data fails on this, never on one late chunk (CP-3410) ---------------------------
 
     def end_lag_check(self):
         """The recording is over: the simulation may stop publishing, so a growing lag is no longer a defect."""
@@ -289,12 +119,6 @@ class RosEpisodePhysicsAdapter:
         self._latency_peaks["max_receiver_lag_ns"] = max(self._latency_peaks["max_receiver_lag_ns"], lag)
         if lag > self._lag_max_ns:
             self.hazard = "PHYSICS_RAW_RECEIVER_LAG_EXCEEDED"
-
-    def _note_backlog(self, frames):
-        """Unprocessed spool frames at this instant; fail the data beyond the policy. Needs the lock."""
-        self._latency_peaks["max_spool_backlog_frames"] = max(self._latency_peaks["max_spool_backlog_frames"], frames)
-        if self._backlog_max is not None and frames > self._backlog_max and self.hazard is None:
-            self.hazard = "PHYSICS_RAW_SPOOL_BACKLOG_EXCEEDED"
 
     # ---- lateness telemetry -------------------------------------------------------------------------------------------
 
@@ -314,19 +138,6 @@ class RosEpisodePhysicsAdapter:
                              int(message.samples[-1].clock_interval_end_monotonic_ns), receipt, previous,
                              int(message.handoff_monotonic_ns), int(message.publish_monotonic_ns),
                              int(message.publish_deferrals_total))
-        except Exception:
-            pass
-
-    def _note_receipt_record(self, record, receipt):
-        previous = self._receipt["last_receipt_ns"]
-        self._count_receipt(receipt)
-        try:
-            chunk = record["chunk"]
-            last = chunk["samples"][-1]
-            self._note_delay(int(chunk["chunk_sequence"]), int(last["clock_interval_begin_monotonic_ns"]),
-                             int(last["clock_interval_end_monotonic_ns"]), receipt, previous,
-                             int(chunk["handoff_monotonic_ns"]), int(chunk["publish_monotonic_ns"]),
-                             int(chunk["publish_deferrals_total"]))
         except Exception:
             pass
 
@@ -379,8 +190,7 @@ class RosEpisodePhysicsAdapter:
             "max_delay_sequence": state["max_delay_sequence"],
             "last_delay_ms": None if state["last_delay_ns"] is None else state["last_delay_ns"] / 1e6,
             "last_sequence": state["last_sequence"], "last_receipt_ns": state["last_receipt_ns"],
-            "latency_ms": summary, "max_spool_backlog_frames": peaks["max_spool_backlog_frames"],
-            "max_publish_deferrals_total": peaks["max_publish_deferrals_total"],
+            "latency_ms": summary, "max_publish_deferrals_total": peaks["max_publish_deferrals_total"],
             "max_receiver_lag_ms": peaks["max_receiver_lag_ns"] / 1e6}
 
     def _emit_drain_failure(self, error, record):
@@ -470,13 +280,6 @@ class RosEpisodePhysicsAdapter:
                     return copy.deepcopy(record['sample'])
             return None
 
-    def earliest_sample_time_s(self):
-        """Simulation time of the oldest sample still in the bounded lookup history, or None when it is empty."""
-        with self._lock:
-            if not self._history:
-                return None
-            return self._history[0]['sample']['simulation_time_s']
-
     def latest_sample_time_s(self):
         """Simulation time of the newest sample received (pending or drained), or None before the first chunk."""
         with self._lock:
@@ -548,11 +351,6 @@ class RosEpisodePhysicsAdapter:
                     return
             if self._closing:
                 failure = None
-                for error in self._stop_receiver():
-                    if failure is None:
-                        failure = error
-                    else:
-                        failure.add_note("Owned physics receiver close failed: " + str(error))
                 try:
                     self.drain(retain_failed=True)
                 except BaseException as error:
@@ -562,8 +360,7 @@ class RosEpisodePhysicsAdapter:
                         failure.add_note("Physics drain failed: " + str(error))
                 finally:
                     try:
-                        if self._receiver_thread is None and self._spool is None:
-                            self._node.destroy_subscription(self.subscription)
+                        self._node.destroy_subscription(self.subscription)
                     except BaseException as error:
                         if failure is None:
                             failure = error

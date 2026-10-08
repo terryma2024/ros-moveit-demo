@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.adapters.act.controller_reference_observer import ControllerReferenceObserver
-from so101_demo.ros import episode_recorder_sources as module
+from so101_demo.act.offline import sources as module
 from test_act_episode_recorder_sources import RecordingNode
 
 PERIOD_NS = 2_000_000

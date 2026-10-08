@@ -1,4 +1,6 @@
-"""CP-3410: the backlog and receiver-lag bounds are frozen policy (episode_recorder_v1), strictly loaded, and reach the adapter."""
+"""CP-3410: the backlog and receiver-lag bounds are frozen policy (episode_recorder_v1), strictly loaded; the lag bound reaches the adapter.
+
+The backlog bound belonged to the retired chunk spool: it stays in the closed document (frozen manifests carry it) and nothing reads it."""
 import math
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from so101_demo.act.episode_recorder_process import RecorderConfigRefused, load_recorder_policy
+from so101_demo.act.offline.policy import RecorderConfigRefused, load_recorder_policy
 from test_act_episode_recorder_sources import RecordingNode, _binding, _engine, _episode, _options
 
 POLICY_FILE = Path(__file__).resolve().parents[1] / "config/act/episode_recorder_v1.yaml"
@@ -53,38 +55,35 @@ def test_the_policy_hash_covers_the_bounds():
 
 
 def test_the_sources_hand_the_frozen_bounds_to_the_physics_binding():
-    from so101_demo.act.episode_recorder_process import FaultInjector
-    from so101_demo.ros import episode_recorder_sources as module
+    from so101_demo.act.offline import sources as module
     seen = {}
 
     def bind(node, **kwargs):
         seen.update(kwargs)
         return _binding()
 
-    sources = module.RosRecorderSources(
-        RecordingNode(), _episode([]), _options(), faults=FaultInjector(), bind=bind,
+    sources = module.OfflineRosSources(
+        RecordingNode(), _episode([]), _options(), bind=bind,
         world_observer_factory=lambda node, session: SimpleNamespace(callback_count=1),
         reference_port_factory=lambda node, **kw: SimpleNamespace(read=lambda when: {}, close=lambda: None),
         policy=load_recorder_policy(POLICY_FILE))
     sources.prepare(_engine([]))
-    assert seen["physics_backlog_max"] == 64 and seen["physics_lag_max_s"] == 5.0
+    assert seen["physics_lag_max_s"] == 5.0 and "physics_backlog_max" not in seen
 
 
 def test_the_binding_hands_them_to_the_adapter():
     import inspect
     from so101_demo.ros import data_source_binding
     text = inspect.getsource(data_source_binding.bind_data_sources)
-    assert "spool_backlog_max_frames=physics_backlog_max" in text and "receiver_lag_max_s=physics_lag_max_s" in text
+    assert "receiver_lag_max_s=physics_lag_max_s" in text and "spool" not in text
 
 
 def test_the_sources_wait_for_a_raw_chunk_as_long_as_the_receiver_lag_policy_and_the_default_stays_100_ms():
-    from so101_demo.act.episode_recorder_process import FaultInjector
-    from so101_demo.ros import episode_recorder_sources as module
+    from so101_demo.act.offline import sources as module
     from so101_demo.ros.recorder_data_side import RecorderDataSide
-    made = module.RosRecorderSources(RecordingNode(), _episode([]), _options(), faults=FaultInjector(),
-                                     policy=load_recorder_policy(POLICY_FILE))
+    made = module.OfflineRosSources(RecordingNode(), _episode([]), _options(), policy=load_recorder_policy(POLICY_FILE))
     assert made._chunk_wait_s == 5.0 and made.ALIGNMENT_RETRY_S == 5.0
-    plain = module.RosRecorderSources(RecordingNode(), _episode([]), _options(), faults=FaultInjector())
+    plain = module.OfflineRosSources(RecordingNode(), _episode([]), _options())
     assert plain._chunk_wait_s == 0.1 and plain.ALIGNMENT_RETRY_S == 1.0
     host = RecorderDataSide.__new__(RecorderDataSide)
     host._scene_source_binding = SimpleNamespace(physics_adapter=SimpleNamespace(received_max_step=lambda: 5,

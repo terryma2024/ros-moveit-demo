@@ -89,7 +89,7 @@ def test_the_interval_test_is_only_the_extension_and_the_age_rule_is_unchanged()
 
 def sources_with(frozen_scene, *, applies=(), next_geometry_changed=False):
     from so101_demo.act import scene_association
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+    from so101_demo.act.offline.sources import OfflineRosSources
     import threading
     from collections import deque
 
@@ -99,7 +99,7 @@ def sources_with(frozen_scene, *, applies=(), next_geometry_changed=False):
     after = moved(before, 0.2, call_id="after")
     if next_geometry_changed:
         after["response"]["scene"]["world"]["collision_objects"][0]["id"] = "foreign"
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources._planning_lock = threading.Lock()
     sources._planning_calls = deque([before, after], maxlen=64)
     sources.tracker = SimpleNamespace(records=list(applies))

@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 
 from ..collection_orchestration import RecorderOutcome, require_under_sandbox
-from ..episode_recorder_process import RESULT_SCHEMA
+from .engine import RESULT_SCHEMA
 from .pilot import PilotRecording
 
 PROCESSOR_ROLE = "act-offline-processor"

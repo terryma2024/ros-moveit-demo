@@ -557,8 +557,8 @@ def run_dynamic_execute(
 ) -> int:
     """Run the MuJoCo dynamic strategy through the shared state machine.
 
-    The Teacher records nothing and holds no data side (Phase A4c). The independent `act_episode_recorder` process
-    observes the Teacher's event stream and the shared sources; whatever it does cannot reach this function. Returned
+    The Teacher records nothing and holds no data side (Phase A4c). The offline episode processor
+    rebuilds the episode from the record-only bag of the Teacher's event stream and the shared sources; whatever it does cannot reach this function. Returned
     codes: 0 = the Teacher COMPLETED; 1 = it did not (or one of its own resources failed to clean up). The data verdict
     is the Recorder's, never this process's.
 

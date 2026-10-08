@@ -13,7 +13,7 @@ import pytest
 
 from so101_demo.act.collection_orchestration import (
     COLLECTION_FAULTS, CollectionOptions, CollectionRefused, collection_from_document, validate_collection_request)
-from so101_demo.act.episode_recorder_process import RESULT_SCHEMA
+from so101_demo.act.offline.engine import RESULT_SCHEMA
 from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import (
     BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, LEASE_FIELDS, OfflineCollection, drop_bag_messages)

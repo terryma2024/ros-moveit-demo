@@ -29,9 +29,9 @@ def test_a_row_waits_for_an_association_job_that_is_issued_and_not_built_yet():
 
 
 def test_the_sources_report_the_apply_time_of_every_unbuilt_job():
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
+    from so101_demo.act.offline.sources import OfflineRosSources
 
-    sources = object.__new__(RosRecorderSources)
+    sources = object.__new__(OfflineRosSources)
     apply = {"response_ros_clock": {"sim_time_ns": 21_862_000_000}}
     query = {"response_ros_clock": {"sim_time_ns": 21_884_000_000}}
     sources._jobs = [AssociationJob("world_sync", apply, query, None, 0.0),

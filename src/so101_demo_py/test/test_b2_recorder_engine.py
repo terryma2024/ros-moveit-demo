@@ -1,17 +1,19 @@
-"""B2: the Recorder engine turns a missing, foreign, V1 or gapped Teacher event into an INVALID verdict."""
+"""B2: the offline engine turns a missing, foreign, V1 or gapped Teacher event into an INVALID verdict."""
 import json
 from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.act.episode_recorder_process import RecorderEngine, RecorderSources
+import time
+
+from so101_demo.act.offline.engine import OfflineEngine
 from so101_demo.act.teacher_event_stream import StreamIdentity
 
 V2 = "SO101_TEACHER_EVENT_V2"
 IDENTITY = StreamIdentity("s", 1, "a")
 
 
-class Sources(RecorderSources):
+class Sources:
     def __init__(self):
         self.seen = []
 
@@ -22,8 +24,8 @@ class Sources(RecorderSources):
 def make_engine(tmp_path):
     episode = SimpleNamespace(capture=SimpleNamespace(started=True))
     policy = {"event_inbox_capacity": 64, "poll_s": 0.001, "finish_budget_s": 1.0}
-    engine = RecorderEngine(episode=episode, sources=Sources(), policy=policy, identity=IDENTITY,
-                            ready_file=tmp_path / "ready.json", result_file=tmp_path / "result.json")
+    engine = OfflineEngine(episode=episode, sources=Sources(), policy=policy, identity=IDENTITY,
+                           result_file=tmp_path / "result.json", clock=time.monotonic, sleep=time.sleep)
     engine.ready = True
     return engine
 

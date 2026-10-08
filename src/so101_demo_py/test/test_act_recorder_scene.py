@@ -10,7 +10,6 @@ session or a scene whose membership is wrong. Nothing here writes a planning sce
 
 import copy
 import json
-import threading
 import time
 from types import SimpleNamespace
 
@@ -604,16 +603,13 @@ def test_a_setup_world_sync_fails_the_qc_readback_when_its_clocks_are_moved(ctx)
 # ---- the Recorder's sources run the whole chain with the real QC verification -------------------------------------
 
 def sources_fixture(ctx, monkeypatch):
-    """RosRecorderSources over fakes that stand for the Recorder's own recorded sources; real verification runs."""
+    """OfflineRosSources over fakes that stand for the Recorder's own recorded sources; real verification runs."""
     from dataclasses import asdict
 
-    import rclpy
-    from so101_demo.ros import episode_recorder_sources as module
-    from so101_demo.act.episode_recorder_process import FaultInjector
+    from so101_demo.act.offline import sources as module
     from so101_demo.parallel_batch.contracts import LeaseIdentity
     from test_act_episode_recorder_sources import RecordingNode
 
-    monkeypatch.setattr(rclpy, "spin_once", lambda *args, **kwargs: None)
     lease = LeaseIdentity(batch_id="b", coordinator_epoch=1, worker_id="w00", worker_generation=1, point_id="p",
                           attempt_id="alignment-attempt", lease_generation=1, lease_issued_monotonic_s=1.0,
                           lease_deadline_monotonic_s=time.monotonic() + 600.)
@@ -641,26 +637,31 @@ def sources_fixture(ctx, monkeypatch):
                              invalid=latched, policy={"finish_budget_s": 1.0}, end_obs=None)
     scene_calls = []
 
-    class Client:
-        def wait_for_service(self, timeout_sec=None):
-            return True
-
-        def call_async(self, request):
-            from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
-            assert type(request) is GetPlanningScene.Request, "the Recorder may only read the scene"
-            scene_calls.append(request)
-            response = over_dds(GetPlanningScene.Response(scene=ctx.world_scene(0.003)))
-            return SimpleNamespace(done=lambda: True, result=lambda: response)
-
     node = RecordingNode()
     node.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(nanoseconds=ctx.sim_ns + ctx.offset_ns))
-    sources = module.RosRecorderSources(
-        node, episode, SimpleNamespace(session_id="alignment-session", expected_reset_epoch=1), faults=FaultInjector(),
+    sources = module.OfflineRosSources(
+        node, episode, SimpleNamespace(session_id="alignment-session", expected_reset_epoch=1),
         bind=lambda *a, **k: binding, world_observer_factory=lambda n, s: world,
-        reference_port_factory=lambda n, **k: SimpleNamespace(read=lambda when: {}, close=lambda: None),
-        scene_client_factory=lambda n: Client())
+        reference_port_factory=lambda n, **k: SimpleNamespace(read=lambda when: {}, close=lambda: None))
     sources.prepare(engine)
     return sources, engine, latched, appended, scene_calls, node
+
+
+def read_scene(sources, ctx, scene_calls):
+    """One read-only GetPlanningScene as the record-only process made it, visible to the row audit (the replay's `_refresh_scene`)."""
+    from moveit_msgs.msg import PlanningSceneComponents
+    from moveit_msgs.srv import GetPlanningScene
+
+    from so101_demo.control.planning_scene.task_scene import record_scene_service_call
+
+    request = GetPlanningScene.Request()
+    request.components.components = (PlanningSceneComponents.WORLD_OBJECT_NAMES | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+                                     | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+                                     | PlanningSceneComponents.OBJECT_COLORS)
+    scene_calls.append(request)
+    response = over_dds(GetPlanningScene.Response(scene=ctx.world_scene(0.003)))
+    record_scene_service_call(request=request, phase="RECORDER_ROW_SCENE", service="/get_planning_scene",
+                              invoke=lambda: response, records=sources._planning_calls, ros_clock=sources.node.get_clock())
 
 
 def event_of(payload, seq=1):
@@ -685,11 +686,11 @@ def settle(sources, engine, *, rounds=200):
 def test_the_recorders_sources_turn_the_teachers_setup_and_attach_events_into_admitted_verified_associations(
         ctx, monkeypatch):
     ctx.stamp()
-    sources, engine, latched, appended, _, node = sources_fixture(ctx, monkeypatch)
+    sources, engine, latched, appended, scene_calls, node = sources_fixture(ctx, monkeypatch)
     assert sources._execution_root() == ctx.root
     # the initial alignment is the Recorder's own read before the Teacher's SETUP: no Teacher event is involved (CP-3425)
     ctx.stamp()
-    sources._query_scene()
+    read_scene(sources, ctx, scene_calls)
     settle(sources, engine)
     assert latched == [] and [item["operation"] for item in appended] == ["initial"]
     assert sources._initial_built is True and len(sources.associations.history) == 1
@@ -731,7 +732,7 @@ def test_rows_wait_while_an_association_is_owed_and_are_ready_once_it_is_admitte
     sources._service_associations(engine)
     assert provider.ready(at_s) is False, "built but not yet admitted"
     settle(sources, engine)
-    sources._query_scene()
+    read_scene(sources, ctx, scene_calls)
     # CP-3403: the pumps that settled the association already read the scene (reads start at the built initial association)
     assert len(scene_calls) >= 1 and provider.ready(at_s) is True
     ctx.stamp()
@@ -765,8 +766,9 @@ def test_a_cdr_digest_mismatch_raises_to_the_engine_which_marks_the_data_invalid
 
 def test_the_engine_turns_a_digest_mismatch_and_a_sequence_gap_of_scene_events_into_invalid_verdicts(ctx, monkeypatch,
                                                                                                     tmp_path):
-    from so101_demo.act.episode_recorder_process import RecorderEngine, load_recorder_policy
-    from test_act_episode_recorder import POLICY_FILE, make_episode
+    from so101_demo.act.offline.engine import OfflineEngine
+    from so101_demo.act.offline.policy import load_recorder_policy
+    from test_act_episode_recorder import POLICY_FILE, SourcesDefaults, make_episode
 
     for case in ("digest", "gap"):
         ctx.stamp()
@@ -787,9 +789,7 @@ def test_the_engine_turns_a_digest_mismatch_and_a_sequence_gap_of_scene_events_i
             pass
 
         seen = []
-        from so101_demo.act.episode_recorder_process import RecorderSources
-
-        class Recording(RecorderSources):
+        class Recording(SourcesDefaults):
             def pump(self, engine):
                 pass
 
@@ -801,10 +801,10 @@ def test_the_engine_turns_a_digest_mismatch_and_a_sequence_gap_of_scene_events_i
 
         working = tmp_path / case
         working.mkdir()
-        engine = RecorderEngine(episode=make_episode(working), sources=Recording(),
-                                policy=dict(load_recorder_policy(POLICY_FILE), poll_s=0.0),
-                                identity=StreamIdentity("session-1", 2, "attempt-1"),
-                                ready_file=working / "ready.json", result_file=working / "result.json")
+        engine = OfflineEngine(episode=make_episode(working), sources=Recording(),
+                               policy=dict(load_recorder_policy(POLICY_FILE), poll_s=0.0),
+                               identity=StreamIdentity("session-1", 2, "attempt-1"),
+                               result_file=working / "result.json", clock=time.monotonic, sleep=time.sleep)
         engine.episode.start(1.0)
         for text in texts:
             engine.on_event_text(text)
@@ -842,34 +842,28 @@ def test_the_capture_start_waits_for_the_initial_association_to_be_built(ctx, mo
     ctx.stamp()
     sources, engine, *_ = sources_fixture(ctx, monkeypatch)
     assert sources.try_start(engine) is None
-    assert sources.listening(engine) is True
 
 
-def test_admission_runs_the_real_verification_off_the_loop_and_a_failing_one_surfaces_as_an_exception(ctx, monkeypatch):
+def test_admission_runs_the_real_verification_inline_and_a_failing_one_surfaces_as_an_exception(ctx, monkeypatch):
+    """The offline replay verifies on the caller's thread (a thread would only add wall-clock races): the admission is settled
+    by the next service pass, and a failing verification is raised from it."""
     ctx.stamp()
     sources, engine, latched, appended, _, _ = sources_fixture(ctx, monkeypatch)
-    release = threading.Event()
     original = sources._provider.admit_scene_association
 
-    def slow(bound):
-        release.wait(5)
-        altered = copy.deepcopy(bound)
-        altered["association"]["receipt"]["sha256"] = "0" * 64
-        return original(altered)
+    def altered(bound):
+        changed = copy.deepcopy(bound)
+        changed["association"]["receipt"]["sha256"] = "0" * 64
+        return original(changed)
 
-    sources._provider.admit_scene_association = slow
+    sources._provider.admit_scene_association = altered
     ctx.stamp()
     for payload in Teacher(ctx).setup():
         sources.on_teacher_event(engine, event_of(payload))
-    began = time.monotonic()
     sources._service_associations(engine)
-    assert time.monotonic() - began < 2.0, "the loop never waits for the verification"
     assert len(sources._admissions) == 1 and sources.associations.history == []
-    release.set()
     with pytest.raises(ValueError, match="SOURCE_ALIGNMENT_"):
-        for _ in range(500):
-            sources._service_associations(engine)
-            time.sleep(0.01)
+        sources._service_associations(engine)
 
 
 def test_c2_an_unavailable_source_names_what_the_recorder_had_so_the_cause_is_retained(ctx):

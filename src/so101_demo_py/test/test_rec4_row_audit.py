@@ -62,7 +62,7 @@ def test_a_capture_over_the_live_row_shape_seals_through_the_real_recorder(tmp_p
 def test_a_queue_write_failure_names_the_writers_exception_in_the_result(tmp_path):
     """L2 named only RECORDER_QUEUE_WRITE_FAILED: the writer thread's exception was kept in the queue and never reported."""
     import json
-    from test_act_episode_recorder import build, result_of
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
     engine, sources, working = build(tmp_path)
 
     def failing(engine_):
@@ -74,7 +74,7 @@ def test_a_queue_write_failure_names_the_writers_exception_in_the_result(tmp_pat
     engine.episode.capture.recorder = type("Q", (), {"snapshot": lambda self: {"writer_error": "ValueError('EPISODE_AUDIT_SCHEMA')"},
                                                     "check": lambda self: None, "close": lambda self: None,
                                                     "root": engine.episode.capture.recorder.root})()
-    engine.run()
+    engine.process(NOT_EXHAUSTED)
     first = result_of(working)["reasons"][0]
     assert first["reason"] == "RECORDER_QUEUE_WRITE_FAILED" and "EPISODE_AUDIT_SCHEMA" in first["writer_error"]
 

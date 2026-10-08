@@ -3,8 +3,8 @@
 L2 5daa904e: the Teacher announced its reset as the oldest record of its own 3 s observer ring, stamped with a receipt time,
 10 ms before its first command, so no live capture start could satisfy verified_reset <= capture_start <= initial_capture <=
 first_command. The order is now: the worker resets and resumes the simulation; the Recorder starts, takes its own pre-SETUP
-alignment, starts the capture on its own clock and commits the initial boundary (ready file CAPTURING); only then the
-Teacher starts; its SETUP is a `world_sync` alignment; its first command comes last. The verified reset is the Recorder's own
+alignment, starts the capture on its own clock and commits the initial boundary; only then the
+Teacher starts (the ready file CAPTURING is gone with the live Recorder); its SETUP is a `world_sync` alignment; its first command comes last. The verified reset is the Recorder's own
 first evidence of the epoch on the evidence producer's clock. Nothing here changes what the Teacher does or whether it runs.
 """
 import copy
@@ -14,9 +14,9 @@ import time
 import pytest
 
 from b2_collection_fixtures import materials_v2
-from so101_demo.act.episode_recorder_process import RC_VALID
+from so101_demo.act.offline.engine import RC_VALID
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
-from test_act_episode_recorder import STAMPS, readback, result_of, teacher_script
+from test_act_episode_recorder import NOT_EXHAUSTED, readback, result_of, teacher_script
 from test_rec2_stall_replay import RealTimeSources, run_replay
 
 
@@ -95,34 +95,12 @@ def test_exactly_one_pre_setup_initial_alignment_of_the_current_schema_before_th
         verify(events, identity, window, frozen_scene)
 
 
-# ---- the Recorder side: CAPTURING, and the verified reset ----------------------------------------------------------------
-
-def test_the_ready_file_becomes_capturing_only_when_the_capture_is_committed(tmp_path):
-    import json
-    from test_act_episode_recorder import build
-    engine, sources, working = build(tmp_path)
-    committed = []
-    sources.capture_committed = lambda engine_: bool(committed)
-    seen = []
-    original = sources.pump
-
-    def pump(engine_):
-        original(engine_)
-        path = working / "recorder-ready.json"
-        if path.exists():
-            seen.append(json.loads(path.read_text())["state"])
-        if engine_.ready and len(seen) > 3:
-            committed.append(1)
-    sources.pump = pump
-    engine.run()
-    assert seen[0] == "LISTENING" and "CAPTURING" not in seen[:3]
-    assert json.loads((working / "recorder-ready.json").read_text())["state"] == "CAPTURING"
-
+# ---- the Recorder side: the verified reset ----------------------------------------------------------------------------------
 
 def test_the_verified_reset_is_taken_from_the_producers_clock_of_the_first_world_record_that_has_its_raw_step():
     from types import SimpleNamespace
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    from so101_demo.act.offline.sources import OfflineRosSources
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     sources.episode = SimpleNamespace(identity={"session_id": "s", "attempt_id": "a", "reset_epoch": 1})
     raw = {5: {"sample": {"clock_interval_begin_monotonic_ns": 10_000_000, "clock_interval_end_monotonic_ns": 10_100_000}}}
     sources._raw_lookup = lambda step: raw.get(step)
@@ -202,15 +180,13 @@ class TeacherAfterCapturing(RealTimeSources):
 
 @pytest.mark.parametrize("seed", range(6))
 def test_a_real_rate_replay_with_the_teacher_starting_after_the_capture_seals_valid_and_reads_back(tmp_path, seed):
-    engine, sources, working = run_replay(tmp_path, served_by_receiver=True, script=teacher_script(),
+    engine, sources, working = run_replay(tmp_path, script=teacher_script(),
                                           sources_cls=TeacherAfterCapturing)
     sources.DELAY_S = 0.15 + 0.05 * random.Random(seed).randint(0, 6)
     # the replay's own script ends the data 0.5 s after the capture start: the held events must still fit
-    code = engine.run()
+    code = engine.process(NOT_EXHAUSTED)
     result = result_of(working)
     assert sources.delivered_after_start and min(sources.delivered_after_start) >= sources.DELAY_S - 0.01
     assert code == RC_VALID and result["status"] == "VALID", result["reasons"]
     seal, manifest, references = readback(working)
     assert seal["status"] == "PASSED" and references["status"] == "PASS"
-    import json
-    assert json.loads((working / "recorder-ready.json").read_text())["state"] == "CAPTURING"

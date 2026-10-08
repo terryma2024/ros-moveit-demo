@@ -95,8 +95,8 @@ def test_the_audit_binding_check_never_refuses_what_the_provider_admits(age_ns, 
 
 def stage_sources(*, world_error=None):
     from types import SimpleNamespace
-    from so101_demo.ros.episode_recorder_sources import RosRecorderSources
-    sources = RosRecorderSources.__new__(RosRecorderSources)
+    from so101_demo.act.offline.sources import OfflineRosSources
+    sources = OfflineRosSources.__new__(OfflineRosSources)
     calls = []
     sources.binding = SimpleNamespace(drain_sources=lambda: calls.append("physics"))
 

@@ -45,14 +45,14 @@ def synthetic_qc(episode_root, **_):
 
 
 def run(tmp_path, bag, name="sealed", **overrides):
-    from so101_demo.act.episode_recorder_process import load_recorder_policy
+    from so101_demo.act.offline.policy import load_recorder_policy
 
     out = tmp_path / name
     policy = dict(load_recorder_policy(POLICY_FILE), poll_s=0.005)
     arguments = dict(inputs_manifest=tmp_path / "inputs-manifest.json", lease=LEASE, scope=tmp_path / "scope.json", policy=policy,
                      episode_factory=lambda options: make_episode(out),
-                     sources_factory=lambda node, episode, options, policy, faults: BagSyntheticSources(
-                         node, episode, options, faults, policy),
+                     sources_factory=lambda node, episode, options, policy: BagSyntheticSources(
+                         node, episode, options, policy),
                      qc_runner=synthetic_qc)
     arguments.update(overrides)
     return processor.process_bag(bag, out, **arguments), out

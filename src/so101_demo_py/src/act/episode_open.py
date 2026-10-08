@@ -1,7 +1,7 @@
 """Open the Recorder's episode from the frozen inputs and the full issued lease (Phase A4c).
 
-This is the opener the Teacher child used to carry inside its own CLI; it lives here so that only the independent
-`act_episode_recorder` process owns it. It reads the frozen manifest, never the live configuration.
+This is the opener the Teacher child used to carry inside its own CLI; it lives here so that only the offline episode
+processor owns it. It reads the frozen manifest, never the live configuration.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     import json
     import time
 
-    from .episode_recorder_process import FAULT_SANDBOX_COMPONENT
+    from .collection_orchestration import FAULT_SANDBOX_COMPONENT
     from .episode_assembly import episode_audit_pair, open_point_episode
     from .collection_scope import build_collection_scope, read_collection_scope
     from .contact_calibration import proposal_validation_mode, verify_disabled_proposal

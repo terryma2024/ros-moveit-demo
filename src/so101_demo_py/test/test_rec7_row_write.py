@@ -31,8 +31,8 @@ def joint_state_message(stamp_ns):
 
 
 def sources_with_history():
-    from so101_demo.ros import episode_recorder_sources as module
-    sources = module.RosRecorderSources.__new__(module.RosRecorderSources)
+    from so101_demo.act.offline import sources as module
+    sources = module.OfflineRosSources.__new__(module.OfflineRosSources)
     import collections
     import threading
     sources._counts = {"joint_states": 0}
@@ -162,7 +162,7 @@ def test_the_queue_keeps_the_writers_whole_chain_not_the_wrapper(tmp_path):
 
 
 def test_the_result_carries_the_chain_of_a_queue_failure_and_of_a_seal_failure(tmp_path):
-    from test_act_episode_recorder import build, result_of
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
     engine, sources, working = build(tmp_path)
     chain = '{"links":[{"type":"RecorderInfraError","message":"' + "w" * 700 + '"},{"type":"ValueError","message":"nan"}]}'
     engine.episode.capture.recorder = type("Q", (), {"snapshot": lambda self: {"writer_error": chain},
@@ -172,13 +172,13 @@ def test_the_result_carries_the_chain_of_a_queue_failure_and_of_a_seal_failure(t
         raise RuntimeError("RECORDER_QUEUE_WRITE_FAILED")
 
     sources.collect = failing
-    engine.run()
+    engine.process(NOT_EXHAUSTED)
     reasons = result_of(working)["reasons"]
     assert reasons[0]["writer_error"] == chain, "up to 2000 characters, not the 300 of an ordinary fact"
 
 
 def test_a_seal_failure_names_its_exception_chain(tmp_path):
-    from test_act_episode_recorder import build, result_of
+    from test_act_episode_recorder import NOT_EXHAUSTED, build, result_of
     engine, sources, working = build(tmp_path)
 
     def broken_finish(*args, **kwargs):
@@ -188,6 +188,6 @@ def test_a_seal_failure_names_its_exception_chain(tmp_path):
             raise ValueError("EPISODE_SEAL_INVALID") from error
 
     engine.episode.finish = broken_finish
-    engine.run()
+    engine.process(NOT_EXHAUSTED)
     seal = next(item for item in result_of(working)["reasons"] if item["reason"].startswith("RECORDER_SEAL_FAILED"))
     assert "OSError" in seal["exception_chain"] and "No space left" in seal["exception_chain"]

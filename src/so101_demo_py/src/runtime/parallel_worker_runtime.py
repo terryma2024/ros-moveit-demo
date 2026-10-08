@@ -918,8 +918,8 @@ class ParallelWorkerRuntime:
         # (the CLI, which also knows the scope values and where the audit pair goes). Optional: a runtime that does not
         # record is still a valid runtime, which is why this is not among REQUIRED.
         self._open_episode = open_episode
-        # Collection (Phase A4c): `collection` is a CollectionOptions. Enabled, every attempt starts an independent
-        # act_episode_recorder before its Teacher, with the bounds frozen in episode_recorder_v1.
+        # Collection (Phase A4c): `collection` is a CollectionOptions. Enabled, every attempt records a raw bag
+        # before its Teacher and is processed offline afterwards, with the bounds frozen in episode_recorder_v1.
         self._collection = collection
         self._recorders: dict[tuple[object, ...], Any] = {}
         self._teacher_exit_callback: Callable[[], None] | None = None

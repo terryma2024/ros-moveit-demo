@@ -517,31 +517,6 @@ class ReplayNode:
         return self.stream.peek() is None and not any(self._held.values())
 
 
-class ReplayReceiver:
-    """The receiver the sources expect (`start/stop/failure/take_callback_errors/stats`), served by the replay node."""
-
-    def __init__(self, node: ReplayNode) -> None:
-        self.node = node
-
-    def start(self) -> None:
-        return None
-
-    def stop(self, timeout: float = 2.0) -> None:
-        return None
-
-    def alive(self) -> bool:
-        return True
-
-    def failure(self):
-        return None
-
-    def take_callback_errors(self) -> list:
-        return self.node.take_callback_errors()
-
-    def stats(self) -> dict:
-        return {"mode": "offline_replay", "delivered": self.node.delivered}
-
-
 class InlineExecutor:
     """`ThreadPoolExecutor(max_workers=1)` run on the caller's thread: the work is done when `submit` returns."""
 

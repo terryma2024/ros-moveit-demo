@@ -17,9 +17,9 @@ SRC = Path(__file__).parents[1] / "src"
 
 #: every module that belongs to the data path of a recording
 DATA_PATH = (
-    "cli/act_episode_recorder.py", "act/episode_recorder_process.py", "act/recorder_scene.py", "act/scene_operation.py",
+    "act/offline/engine.py", "act/offline/policy.py", "act/recorder_scene.py", "act/scene_operation.py",
     "act/episode_open.py", "act/collection_orchestration.py", "act/collection_reference.py",
-    "act/frozen_runtime_inputs.py", "act/teacher_event_stream.py", "ros/episode_recorder_sources.py",
+    "act/frozen_runtime_inputs.py", "act/teacher_event_stream.py", "act/offline/sources.py",
     "ros/recorder_data_side.py", "ros/data_source_binding.py", "adapters/act/ros_teacher_event_stream.py",
     "adapters/act/ros_episode_physics.py", "adapters/act/ros_observation.py", "adapters/act/scene_state.py")
 
@@ -35,8 +35,8 @@ CONTROL_NAMES = {
 #: (`ros.data_source_binding` and `act.frozen_runtime_inputs` are shared on purpose: the Teacher binds its own scene-state
 #: observer through the former and loads its frozen snapshot through the latter.)
 RECORDER_MODULES = {
-    "so101_demo.ros.recorder_data_side", "so101_demo.ros.episode_recorder_sources",
-    "so101_demo.act.episode_recorder_process", "so101_demo.cli.act_episode_recorder", "so101_demo.act.recorder_scene",
+    "so101_demo.ros.recorder_data_side", "so101_demo.act.offline.sources",
+    "so101_demo.act.offline.engine", "so101_demo.act.offline.policy", "so101_demo.act.recorder_scene",
     "so101_demo.act.episode_open", "so101_demo.act.collection_orchestration"}
 
 
@@ -101,7 +101,7 @@ def test_a_prepared_recorder_holds_no_control_object_in_its_object_graph():
     from test_act_episode_recorder_sources import _prepared
     sources, node, engine, latched = _prepared()
     names = reachable_class_names(sources)
-    assert "RecorderDataSide" in names and "RosRecorderSources" in names
+    assert "RecorderDataSide" in names and "OfflineRosSources" in names
     assert sorted(names & CONTROL_NAMES) == []
     assert not [call for call in node.calls if call[0] == "FORBIDDEN"], "the node was only ever asked to subscribe"
 

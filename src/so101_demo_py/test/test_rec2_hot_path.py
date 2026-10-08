@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.adapters.act.controller_reference_observer import ControllerReferenceObserver
-from so101_demo.ros import episode_recorder_sources as sources_module
+from so101_demo.act.offline import sources as sources_module
 from so101_demo.ros import recorder_data_side as data_side_module
 from test_b2_controller_reference import ARM, PERIOD_NS, feed
 from test_act_episode_recorder_sources import RecordingNode
