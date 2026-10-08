@@ -99,13 +99,14 @@ def _overlaps(gap, intervals) -> bool:
     return any(gap[0] < b and a < gap[1] for a, b in intervals)
 
 
-def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, transport_lost_by_topic=None) -> dict:
+def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, transport_lost_by_topic=None,
+             transport_lost_events=None) -> dict:
     """{"reasons": [...], "timeline": {...}, "continuity": {...}, "counts": {...}, "topic_loss": {...}} for the bag at `bag`.
 
     `transport_lost` is the number of messages the recorder reported lost on the transport layer (None when unknown, which fails
     closed), `scene_reads_expected` the number of planning-scene reads the sidecar made (its own count), `transport_lost_by_topic`
     the recorder's per-topic breakdown of that total ({} when it ran with debug logging and lost nothing; None for a bag recorded
-    without the breakdown, which keeps the aggregate rule)."""
+    without the breakdown, which keeps the aggregate rule), `transport_lost_events` its per-event log times (see `_with_breakdown`)."""
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
@@ -117,6 +118,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     types: dict = {}
     events_text, states, chunks, worlds, cameras = [], defaultdict(list), [], [], defaultdict(list)
     clock_stamps, joint_stamps, scene_states, color_stamps = [], [], [], defaultdict(list)
+    clock_marks = []        # (simulation ns, bag stamp ns) of every /clock message: the map between the two clocks
     read_counts: dict = defaultdict(int)
     for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _DECODED if t in counts]):
         read_counts[topic] += 1
@@ -131,6 +133,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
             cameras[topic].append(_stamp_ns(message.header.stamp))
         elif topic == CLOCK_TOPIC:
             clock_stamps.append(int(message.clock.sec) * _NS + int(message.clock.nanosec))
+            clock_marks.append((clock_stamps[-1], int(bag_stamp)))
         elif topic == JOINT_STATES_TOPIC:
             joint_stamps.append(_stamp_ns(message.header.stamp))
         elif topic == SCENE_STATE_TOPIC:
@@ -244,7 +247,8 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
         chunks=chunks, worlds=worlds, cameras=cameras, clock_stamps=clock_stamps, joint_stamps=joint_stamps,
         scene_states=scene_states, color_stamps=color_stamps, transport_lost=transport_lost,
         scene_reads_expected=scene_reads_expected, start_sim=start_sim, transport_lost_by_topic=transport_lost_by_topic,
-        contact_missing=contact_missing, event_sequence=sequence)
+        contact_missing=contact_missing, event_sequence=sequence, transport_lost_events=transport_lost_events,
+        clock_marks=clock_marks)
     return report
 
 
@@ -273,7 +277,8 @@ def _sequence_missing(values) -> int:
 
 def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns, epoch, states, chunks, worlds, cameras,
                 clock_stamps, joint_stamps, scene_states, color_stamps, transport_lost, scene_reads_expected, start_sim,
-                transport_lost_by_topic=None, contact_missing=None, event_sequence=()) -> dict:
+                transport_lost_by_topic=None, contact_missing=None, event_sequence=(), transport_lost_events=None,
+                clock_marks=()) -> dict:
     """Phase C: every topic the episode uses is judged on its own continuity over the window, and the recorder's aggregate
     transport loss is reconciled with what the topics show. Adds reasons to `reasons`; returns the facts for the gate document.
 
@@ -414,7 +419,8 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
         topics[EVENTS_TOPIC]["rule"] = "seq 1..N up to the terminal event (a loss after it is outside the episode)"
     if transport_lost_by_topic is not None and transport_lost is not None:
         return _with_breakdown(topics, detected, reasons, lo=lo, end=end, rows_lo=rows_lo, rows_hi=rows_hi,
-                               transport_lost=transport_lost, by_topic=transport_lost_by_topic)
+                               transport_lost=transport_lost, by_topic=transport_lost_by_topic,
+                               events=transport_lost_events, wall_begin_ns=next((wall for sim, wall in clock_marks if sim >= lo), None))
     # ---- the recorder's aggregate
     unattributed = None if transport_lost is None else max(transport_lost - attributed, 0)
     aggregate = {"reported": transport_lost, "attributed": attributed, "unattributed": 0 if unattributed is None else unattributed}
@@ -427,15 +433,40 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
 
 
 
-def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, transport_lost, by_topic) -> dict:
-    """The per-topic reconciliation (C5), used when the recorder reported its losses topic by topic.
+#: A loss line is stamped when rosbag2 reports the loss, which can lag the message by delivery latency: a line must precede the window's
+#: first instant by this much before the loss is called provably outside.
+LOSS_LOG_MARGIN_NS = 100_000_000
 
-    * the per-topic numbers must add up to the aggregate, and every one must belong to a topic the recorder subscribes to, else
-      OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED;
-    * on a topic the episode uses the reported count must not exceed what that topic's own rule shows missing (a gap, a missing
-      sequence number, an image without its camera_info, a read without its record), else OFFLINE_TOPIC_LOSS:<topic>; a gap inside
-      the window is already judged by the rule itself;
-    * on a topic the episode does not use the loss is recorded and never fatal.
+
+def _split_events(count, events, wall_begin_ns):
+    """(outside, inside): how many of a topic's `count` reported losses were logged before the window began, and how many were not.
+
+    `events` are the topic's log lines with their cumulative totals. A line is outside only when its time is an int that precedes the
+    wall time of the window's first `/clock` message by the margin; anything else (no times, no clock, a time that is not a number, a
+    total the lines do not account for) is inside: unmappable fails closed."""
+    outside = previous = 0
+    mapped = wall_begin_ns is not None
+    for event in sorted(events, key=lambda e: (e["log_time_ns"] if type(e.get("log_time_ns")) is int else 1 << 62, e.get("total", 0))):
+        total, when = event.get("total"), event.get("log_time_ns")
+        if type(total) is not int or total <= previous:
+            continue
+        increment, previous = total - previous, total
+        if mapped and type(when) is int and when < wall_begin_ns - LOSS_LOG_MARGIN_NS:
+            outside += increment
+    if previous > count:             # the lines claim more than the recorder's own figure: nothing can be trusted
+        return 0, count
+    return outside, count - outside
+
+
+def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, transport_lost, by_topic, events=None,
+                    wall_begin_ns=None) -> dict:
+    """The per-topic reconciliation (C5, rule `topic_loss_v2`), used when the recorder reported its losses topic by topic.
+
+    * the per-topic numbers must sum to the total and name only recorded topics (else OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED);
+    * a loss whose log line precedes the window is provably outside it (a line is never earlier than the loss) and is only recorded;
+      every other loss on a topic the episode uses must be matched by a gap that topic's own rule shows missing in the bag, each gap
+      once, else OFFLINE_TOPIC_LOSS:<topic> reported_in_window=n detected=m (a gap inside the window is itself judged by the rule);
+    * on a topic the episode does not use the loss is recorded only.
     """
     from .raw_recorder import TOPICS
 
@@ -451,20 +482,28 @@ def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, tra
     if unattributed:
         reasons.append(f"OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: {unattributed} of {transport_lost} "
                        f"(per-topic sum {named}, unnamed topics {sorted(t for t in by_topic if t not in TOPICS)})")
+    by_event: dict = {}
+    for event in events or ():
+        if type(event) is dict and type(event.get("topic")) is str:
+            by_event.setdefault(event["topic"], []).append(event)
     attributed = 0
     for topic, count in sorted(by_topic.items()):
         if topic not in topics:
             continue
         item = topics[topic]
+        outside, inside = _split_events(count, by_event.get(topic, ()), wall_begin_ns)
         item["reported"], item["detected"] = count, detected.get(topic, 0)
+        item["reported_outside_window"], item["reported_in_window"] = outside, inside
         if not item["used"]:
             attributed += count
-        elif count > item["detected"]:
-            unattributed += count - item["detected"]
-            reasons.append(f"OFFLINE_TOPIC_LOSS:{topic} reported={count} detected={item['detected']}")
+        elif inside > item["detected"]:
+            unattributed += inside - item["detected"]
+            attributed += outside + item["detected"]
+            reasons.append(f"OFFLINE_TOPIC_LOSS:{topic} reported_in_window={inside} detected={item['detected']}")
         else:
             attributed += count
     aggregate = {"reported": transport_lost, "attributed": attributed, "unattributed": unattributed,
                  "by_topic": dict(sorted(by_topic.items()))}
-    return {"window": {"begin_sim_ns": lo, "end_sim_ns": end, "rows_begin_sim_ns": rows_lo, "rows_end_sim_ns": rows_hi},
+    return {"window": {"begin_sim_ns": lo, "end_sim_ns": end, "rows_begin_sim_ns": rows_lo, "rows_end_sim_ns": rows_hi,
+                       "begin_wall_ns": wall_begin_ns},
             "transport_lost": aggregate, "topics": topics}

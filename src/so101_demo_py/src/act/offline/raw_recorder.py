@@ -61,6 +61,21 @@ _TRANSPORT_LOST = re.compile(r"Number of messages lost on the transport layer:\s
 
 
 _TOPIC_LOST = re.compile(r"Messages lost on transport layer for topic '([^']+)'\. Total lost:\s*(\d+)")
+_TOPIC_LOST_EVENT = re.compile(r"\[(\d+)\.(\d{1,9})\]\s.*?Messages lost on transport layer for topic '([^']+)'\. Total lost:\s*(\d+)")
+
+
+def transport_lost_events_from_log(text: str) -> list:
+    """One entry per per-topic loss line of the recorder's debug log: {"topic", "total" (cumulative), "log_time_ns"}.
+
+    `log_time_ns` is the system-clock time rosbag2 stamped the line with (the same clock as the bag's message stamps). A line is
+    written when the loss is reported, never before the loss, so a line logged before an instant proves the loss was earlier."""
+    events = []
+    for match in _TOPIC_LOST_EVENT.finditer(text):
+        seconds, fraction, topic, total = match.groups()
+        events.append({"topic": topic, "total": int(total), "log_time_ns": int(seconds) * 10**9 + int(fraction.ljust(9, "0"))})
+    return events
+
+
 
 
 def transport_lost_by_topic_from_log(text: str) -> dict:
@@ -317,6 +332,7 @@ class RawRecorder:
                 log_text = log_path.read_text(errors="replace")
                 stats["transport_lost"] = transport_lost_from_log(log_text)
                 stats["transport_lost_by_topic"] = transport_lost_by_topic_from_log(log_text)
+                stats["transport_lost_events"] = transport_lost_events_from_log(log_text)
             except OSError:
                 stats["transport_lost"] = None
             self.anchor_end = clock_anchor()

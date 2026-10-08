@@ -137,7 +137,8 @@ def test_the_loss_facts_come_from_the_stats_or_from_the_recorders_log(tmp_path):
     stats = tmp_path / "raw" / "record-stats.json"
     stats.write_text(json.dumps({"transport_lost": 7, "scene_reads": {"count": 5, "errors": 0}}))
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats) == {"transport_lost": 7, "scene_reads_expected": 5,
-                                                                                   "transport_lost_by_topic": None}
+                                                                                   "transport_lost_by_topic": None,
+                                                                                   "transport_lost_events": None}
     stats.write_text(json.dumps({"scene_reads": {"count": 5, "errors": 0}}))
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost"] is None
     (tmp_path / "raw" / "bag-record.log").write_text(
@@ -156,10 +157,12 @@ READS = "/so101/raw/planning_scene_reads"
 JOINTS_UNUSED = "/so101/simulation/joints"
 
 
-def scan_by_topic(tmp_path, by_topic, *, name="raw", transport_lost=None, drop=(), reads=1):
+def scan_by_topic(tmp_path, by_topic, *, name="raw", transport_lost=None, drop=(), reads=1, events=None):
     total = sum(by_topic.values()) if transport_lost is None else transport_lost
-    bag = build_bag(tmp_path / name, drop=drop, transport_lost=total, transport_lost_by_topic=by_topic)
-    return scan_bag(bag, transport_lost=total, scene_reads_expected=reads, transport_lost_by_topic=by_topic)
+    bag = build_bag(tmp_path / name, drop=drop, transport_lost=total, transport_lost_by_topic=by_topic,
+                    transport_lost_events=events)
+    return scan_bag(bag, transport_lost=total, scene_reads_expected=reads, transport_lost_by_topic=by_topic,
+                    transport_lost_events=events)
 
 
 def test_a_breakdown_with_no_loss_passes_and_is_recorded_in_the_document(tmp_path):
@@ -178,7 +181,7 @@ def test_a_reported_loss_that_the_topics_own_rule_shows_outside_the_window_is_re
 def test_a_reported_loss_on_a_used_topic_with_no_gap_to_show_for_it_is_invalid_and_names_the_topic(tmp_path):
     # the shape of the L2 residual: the recorder says the topic lost messages, the bag shows none
     report = scan_by_topic(tmp_path, {JOINT: 3})
-    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported=3 detected=0" in report["reasons"], report["reasons"]
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=3 detected=0" in report["reasons"], report["reasons"]
     assert report["topic_loss"]["transport_lost"]["unattributed"] == 3
 
 
@@ -206,7 +209,7 @@ def test_a_loss_named_on_a_topic_the_recorder_does_not_subscribe_to_fails_closed
 def test_a_gap_inside_the_window_stays_invalid_with_the_breakdown_too(tmp_path):
     report = scan_by_topic(tmp_path, {JOINT: 1}, drop=[(JOINT, IN_WINDOW)])
     assert any(r.startswith(f"OFFLINE_TOPIC_LOSS:{JOINT} gaps=1") for r in report["reasons"]), report["reasons"]
-    assert not any("reported=" in r for r in report["reasons"])
+    assert not any("reported_in_window=" in r for r in report["reasons"])
 
 
 def test_a_loss_on_the_events_topic_after_a_whole_sequence_is_after_the_terminal_event(tmp_path):
@@ -218,9 +221,9 @@ def test_a_loss_on_the_events_topic_after_a_whole_sequence_is_after_the_terminal
 def test_a_planning_scene_read_the_sidecar_made_and_the_bag_lacks_is_explained_by_its_span_rule(tmp_path):
     report = scan_by_topic(tmp_path, {READS: 1}, reads=2)
     assert any(r.startswith(f"OFFLINE_TOPIC_LOSS:{READS} missing=1") for r in report["reasons"]), report["reasons"]
-    assert not any("reported=" in r for r in report["reasons"])
+    assert not any("reported_in_window=" in r for r in report["reasons"])
     over = scan_by_topic(tmp_path, {READS: 2}, name="over", reads=1)
-    assert f"OFFLINE_TOPIC_LOSS:{READS} reported=2 detected=0" in over["reasons"], over["reasons"]
+    assert f"OFFLINE_TOPIC_LOSS:{READS} reported_in_window=2 detected=0" in over["reasons"], over["reasons"]
 
 
 def test_the_contact_step_span_is_read_only_when_the_recorder_reported_a_loss_on_it(tmp_path, monkeypatch):
@@ -258,11 +261,131 @@ def test_the_processor_reads_the_breakdown_and_makes_an_unexplained_used_topic_l
 
     bag = build_bag(tmp_path / "raw", transport_lost=3, transport_lost_by_topic={JOINT: 3})
     report, out = run(tmp_path, bag)
-    assert report["verdict"] == "INVALID" and f"OFFLINE_TOPIC_LOSS:{JOINT} reported=3 detected=0" in report["reasons"]
+    assert report["verdict"] == "INVALID" and f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=3 detected=0" in report["reasons"]
     assert json.loads((out / topic_loss.DOCUMENT_NAME).read_bytes())["transport_lost"]["by_topic"] == {JOINT: 3}
     unused = build_bag(tmp_path / "raw2", transport_lost=3, transport_lost_by_topic={JOINTS_UNUSED: 3})
     kept, _ = run(tmp_path, unused, name="sealed2")
     assert kept["verdict"] == "VALID", kept["reasons"]
+
+
+# ---- CP-3394: the log time of a per-topic loss says whether it lies before the window ------------------------------------------
+
+CLOCK_TOPIC = "/clock"
+SEC = 1_000_000_000
+
+
+def window_wall_ns(tmp_path):
+    """The wall time (bag stamp) of the window's first /clock message in the synthetic bag."""
+    return scan_by_topic(tmp_path, {}, name="probe")["topic_loss"]["window"]["begin_wall_ns"]
+
+
+def event(topic, when, total=1):
+    return {"topic": topic, "total": total, "log_time_ns": when}
+
+
+def test_start_of_stream_losses_logged_before_the_window_are_recorded_and_the_data_stays_valid(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    events = [event(CLOCK_TOPIC, wall - 3 * SEC), event(JOINT, wall - 3 * SEC), event(SCENE, wall - 2 * SEC)]
+    report = scan_by_topic(tmp_path, {CLOCK_TOPIC: 1, JOINT: 1, SCENE: 1}, events=events)
+    assert loss_reasons(report) == [], report["reasons"]
+    facts = report["topic_loss"]
+    assert facts["transport_lost"]["unattributed"] == 0 and facts["transport_lost"]["attributed"] == 3
+    assert facts["topics"][JOINT]["reported_outside_window"] == 1 and facts["topics"][JOINT]["reported_in_window"] == 0
+
+
+def test_one_loss_logged_inside_the_window_with_no_detected_gap_is_invalid(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    report = scan_by_topic(tmp_path, {JOINT: 1}, events=[event(JOINT, wall + SEC)])
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=1 detected=0" in report["reasons"], report["reasons"]
+
+
+def test_a_loss_logged_inside_the_window_that_a_gap_outside_it_matches_is_valid(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    report = scan_by_topic(tmp_path, {JOINT: 1}, drop=[(JOINT, BEFORE_WINDOW)], events=[event(JOINT, wall + SEC)])
+    assert loss_reasons(report) == [], report["reasons"]
+    assert report["topic_loss"]["topics"][JOINT]["detected"] == 1
+
+
+def test_one_detected_gap_cannot_account_for_two_losses(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    events = [event(JOINT, wall + SEC, 1), event(JOINT, wall + 2 * SEC, 2)]
+    report = scan_by_topic(tmp_path, {JOINT: 2}, drop=[(JOINT, BEFORE_WINDOW)], events=events)
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=2 detected=1" in report["reasons"], report["reasons"]
+    mixed = [event(JOINT, wall - 3 * SEC, 1), event(JOINT, wall + SEC, 2)]
+    ok = scan_by_topic(tmp_path, {JOINT: 2}, name="mixed", drop=[(JOINT, BEFORE_WINDOW)], events=mixed)
+    assert loss_reasons(ok) == [], "the start-of-stream loss needs no gap, so the one gap matches the one in-window loss"
+
+
+@pytest.mark.parametrize("when", [None, "never", float("nan"), 1.5])
+def test_a_log_time_that_cannot_be_mapped_is_treated_as_inside_the_window(tmp_path, when):
+    report = scan_by_topic(tmp_path, {JOINT: 1}, events=[event(JOINT, when)])
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=1 detected=0" in report["reasons"], report["reasons"]
+
+
+def test_losses_the_log_lines_do_not_account_for_and_a_line_just_before_the_window_are_inside(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    short = scan_by_topic(tmp_path, {JOINT: 2}, name="short", events=[event(JOINT, wall - 3 * SEC, 1)])
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=1 detected=0" in short["reasons"], short["reasons"]
+    edge = scan_by_topic(tmp_path, {JOINT: 1}, name="edge", events=[event(JOINT, wall - 10_000_000)])    # inside the 100 ms margin
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=1 detected=0" in edge["reasons"], edge["reasons"]
+    over = scan_by_topic(tmp_path, {JOINT: 1}, name="over", events=[event(JOINT, wall - 3 * SEC, 5)])
+    assert "reported_in_window=1" in " ".join(over["reasons"]), "lines that claim more than the recorder reported are not trusted"
+
+
+def test_an_unused_topic_loss_inside_the_window_is_recorded_only(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    report = scan_by_topic(tmp_path, {JOINTS_UNUSED: 1}, events=[event(JOINTS_UNUSED, wall + SEC)])
+    assert loss_reasons(report) == [], report["reasons"]
+
+
+def test_the_aggregate_must_still_equal_the_sum_of_the_last_per_topic_totals(tmp_path):
+    wall = window_wall_ns(tmp_path)
+    report = scan_by_topic(tmp_path, {JOINT: 1}, transport_lost=3, events=[event(JOINT, wall - 3 * SEC)])
+    assert any(r.startswith("OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 2 of 3") for r in report["reasons"]), report["reasons"]
+
+
+def test_the_log_lines_become_events_with_their_exact_times():
+    from so101_demo.act.offline.raw_recorder import transport_lost_events_from_log
+
+    log = ("[DEBUG] [1791468693.120143303] [so101_raw_recorder]: Messages lost on transport layer for topic '/clock'. Total lost: 1\n"
+           "[DEBUG] [1791468693.1] [so101_raw_recorder]: Messages lost on transport layer for topic '/a/b'. Total lost: 4\n"
+           "[WARN] [1791468782.424240667] [so101_raw_recorder]: Number of messages lost on the transport layer: 5\n")
+    assert transport_lost_events_from_log(log) == [
+        {"topic": "/clock", "total": 1, "log_time_ns": 1791468693120143303},
+        {"topic": "/a/b", "total": 4, "log_time_ns": 1791468693100000000}]
+
+
+def test_the_loss_facts_carry_the_events_from_the_stats_or_from_the_log_beside_them(tmp_path):
+    from so101_demo.act.offline.processor import load_loss_facts
+
+    (tmp_path / "raw").mkdir()
+    stats = tmp_path / "raw" / "record-stats.json"
+    line = "[DEBUG] [1791468693.120143303] [r]: Messages lost on transport layer for topic '/clock'. Total lost: 1\n"
+    stats.write_text(json.dumps({"transport_lost": 1, "transport_lost_by_topic": {"/clock": 1}}))
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost_events"] is None      # no log, no events
+    (tmp_path / "raw" / "bag-record.log").write_text(line)
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost_events"] == [
+        {"topic": "/clock", "total": 1, "log_time_ns": 1791468693120143303}]
+    (tmp_path / "raw" / "bag-record.log").write_text(line.replace("Total lost: 1", "Total lost: 2"))
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost_events"] is None, "totals must agree with the stats"
+    stats.write_text(json.dumps({"transport_lost": 1, "transport_lost_by_topic": {"/clock": 1},
+                                 "transport_lost_events": [{"topic": "/clock", "total": 1, "log_time_ns": 5}]}))
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost_events"][0]["log_time_ns"] == 5
+
+
+def test_the_processor_keeps_a_bag_with_start_of_stream_losses_valid_and_a_loss_inside_the_window_invalid(tmp_path):
+    from test_p2_offline_processor import run
+
+    wall = window_wall_ns(tmp_path)
+    start = build_bag(tmp_path / "raw1", transport_lost=2, transport_lost_by_topic={CLOCK_TOPIC: 1, JOINT: 1},
+                      transport_lost_events=[event(CLOCK_TOPIC, wall - 3 * SEC), event(JOINT, wall - 3 * SEC)])
+    kept, out = run(tmp_path, start, name="sealed1")
+    assert kept["verdict"] == "VALID", kept["reasons"]
+    assert json.loads((out / topic_loss.DOCUMENT_NAME).read_bytes())["rule_version"] == "topic_loss_v2"
+    inside = build_bag(tmp_path / "raw2", transport_lost=1, transport_lost_by_topic={JOINT: 1},
+                       transport_lost_events=[event(JOINT, wall + SEC)])
+    lost, _ = run(tmp_path, inside, name="sealed2")
+    assert lost["verdict"] == "INVALID" and f"OFFLINE_TOPIC_LOSS:{JOINT} reported_in_window=1 detected=0" in lost["reasons"]
 
 
 # ---- the QC check and the rule version ---------------------------------------------------------------------------------------
@@ -285,7 +408,7 @@ def write_document(root, **changes):
 def test_the_qc_check_passes_a_clean_document_and_names_it_by_digest(tmp_path):
     path = write_document(tmp_path)
     check = topic_loss.qc_check(tmp_path / "episode", identity=IDENTITY)
-    assert check["status"] == "PASS" and check["rule_version"] == "topic_loss_v1" and check["lost_in_window"] == 0
+    assert check["status"] == "PASS" and check["rule_version"] == "topic_loss_v2" and check["lost_in_window"] == 0
     assert check["document_sha256"] == __import__("hashlib").sha256(path.read_bytes()).hexdigest()
     topic_loss.validate_check(check)
 

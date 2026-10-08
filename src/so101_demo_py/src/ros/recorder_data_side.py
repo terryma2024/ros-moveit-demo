@@ -262,7 +262,11 @@ class RecorderDataSide:
             if any(raw and source['physics']['simulation_step'] <= max(steps) for source in missing):
                 self._endpoint_source_facts('final', sources, raw, missing)
                 raise ValueError('ENDPOINT_NATIVE_SOURCE_INVALID')
-            if not sources or missing:
+            # Only the world records before the first one that still waits for its physics chunk can be the final boundary: a record
+            # after it is not needed to select it, and waiting for the next chunk (up to 100 ms of simulation, one chunk) made the
+            # capture clock lag the selected record by more than the 100 ms the endpoint allows (CP-3394, L2 e6be258c: 110 ms).
+            ready = sources if not missing else sources[:next(i for i, source in enumerate(sources) if source is missing[0])]
+            if not ready:
                 if self._native_sources_expired('final', sources, raw, missing, now):
                     raise RuntimeError('DYNAMIC_FINAL_NATIVE_SOURCE_EXPIRED')
                 self._progress()
@@ -271,7 +275,7 @@ class RecorderDataSide:
             stamp = self._node.get_clock().now().nanoseconds
             provisional = dict(sim_time_ns=stamp, begin_monotonic_ns=begin, end_monotonic_ns=begin)
             try:
-                selected = first_world_after_stop(sources, stop, identity=episode.identity,
+                selected = first_world_after_stop(ready, stop, identity=episode.identity,
                                                   capture_clock=provisional, raw_steps=raw)
             except ValueError as error:
                 if str(error) == 'ENDPOINT_CAPTURE_CLOCK_INVALID':
@@ -283,6 +287,8 @@ class RecorderDataSide:
                     raise
                 if str(error) != 'ENDPOINT_FINAL_SOURCE_UNAVAILABLE':
                     raise
+                if missing and self._native_sources_expired('final', sources, raw, missing, now):
+                    raise RuntimeError('DYNAMIC_FINAL_NATIVE_SOURCE_EXPIRED')
                 self._progress()
                 continue
             clock = validate_source_clock(dict(provisional, end_monotonic_ns=time.monotonic_ns()))

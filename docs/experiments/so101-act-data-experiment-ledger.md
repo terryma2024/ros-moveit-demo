@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3475
+latest_checkpoint: CP-3476
 next_experiment: A cleanup step 2 → B performance (≤10%) → C loss gate → D perception re-baseline/unpin → freeze + L1–L7.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3476 — topic_loss_v2 (log-time rule) + final-boundary chunk-wait fix; e6be258c re-processes VALID/QC PASS offline; committed; re-freeze + live round 2 started
+
+- topic_loss_v2: per-topic loss lines parsed as transport_lost_events (topic, cumulative total, system-clock log time); log time → sim time via the bag's /clock; a line >100 ms before window.begin_wall_ns (bag stamps are receipt times) → recorded outside the window; otherwise on a used topic it must be matched by a detected gap (each gap used once) else OFFLINE_TOPIC_LOSS:<t> reported_in_window=n detected=m; an unmappable time → inside (fail closed); unused topics recorded; aggregate = sum of last per-topic totals; no breakdown → old rule; v1 documents refused. RED→GREEN tests incl. edge-of-margin, double use of one gap, unmappable types.
+- Second defect found behind the first: the final boundary waited for the physics chunk of every retained world record, including those after the selected one (world records every 12 ms, chunks every 100 ms) → ENDPOINT_CAPTURE_CLOCK_INVALID (110 ms vs the 100 ms limit) on e6be258c, deterministic; the writer estimates ≈1 in 10 collection-on runs would hit it. Fix: only records before the first one still waiting for its chunk are selection candidates (the selection rule, sealed reader and expiry are unchanged). RED test test_final_boundary_does_not_wait_for_the_chunk_of_a_world_record_after_the_selected_one.
+- Offline re-processing: e6be258c → VALID, rc 0, QC PASS (episode_data, teacher_reference_consistency, topic_loss_gate PASS; all 7 losses reported_outside_window). Fault bags keep their fault reasons (b728c111/f93d9fd4 show later boundary reasons since the replay goes further); c5decb3a/e9cb12f2 not re-processable (no sealed attempt). The 8 golden inputs keep verdicts and reasons.
+- Gates: test/ 7,580 pass / 186 skip / rc 0 (the known load-sensitive test_rec12b_capturing flake in two overlapping runs; 3/3 alone). Scratch install 252 pass. Backup p5g-base.tar.gz (b708c0dc…).
+- Tooling: tooling/live-r8.zsh = live-r7 with the r11 wrapper (run-qualified-live-20261010-r11.zsh).
+- Next: commit; cycle-r5 freeze p6-claude-1009a; second demo gate; live-r8 L1 off, L2a/L2b on (expect VALID, QC PASS, readback receipt with 1 recompute), S1–S4 off (Teacher spot-checks; watch RUNNING_EVIDENCE_UNAVAILABLE), L3–L7 (expect rc 3 + readback PASS with QC NOT_APPLICABLE).
 
 ## CP-3475 — P1(b) AUDIT_WINDOW_INVALID fixed; P3 readback for INVALID implemented; P2 diagnostics; P1(a) decided: judge per-topic losses by log-line time
 

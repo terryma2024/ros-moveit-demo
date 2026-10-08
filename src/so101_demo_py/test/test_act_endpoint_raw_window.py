@@ -629,3 +629,16 @@ def test_c3b_the_alignment_raw_lookup_uses_the_bounded_accessor():
         assert OfflineRosSources._raw_lookup(holder, 99999) is None
     finally:
         adapter.close()
+
+
+def test_final_boundary_does_not_wait_for_the_chunk_of_a_world_record_after_the_selected_one(frozen_scene, monkeypatch):
+    """CP-3394 (L2 e6be258c): physics chunks arrive every 100 ms of simulation, world records every 12 ms. The boundary is the first
+    record after the stop; a later record whose chunk has not arrived yet is not needed to select it, and waiting for that chunk
+    made the capture clock lag the selected record by 110 ms against the 100 ms the endpoint allows."""
+    sources, boundary, final_clock, raw = final_boundary(frozen_scene)
+    expected = copy.deepcopy(sources[1])
+    later = shifted(sources[1], 6)                       # received, its physics step is beyond every chunk received so far
+    runtime, boundaries = final_runtime(frozen_scene, monkeypatch, sources + [later], raw, boundary, final_clock)
+    finish_data(runtime)                                  # _progress fails the test if the boundary waited
+    assert [stage for stage, _ in boundaries] == ['normal_stop', 'final_capture']
+    assert boundaries[1][1]['world_source'] == expected
