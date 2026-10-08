@@ -1638,6 +1638,7 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
         authorize=None,
         broker_generation=None,
         act_profile=False,
+        teacher_execution_policy=None,
     ):
         supplied = dict(side_effects or {})
         unknown = set(supplied) - self.REQUIRED
@@ -1653,6 +1654,8 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
                 "workspace_provider": workspace_provider,
                 "authorize": authorize,
                 "act_profile": act_profile,
+                # the values of the frozen execution policy this episode's manifest is bound to (None: structural checks only)
+                "teacher_execution_policy": teacher_execution_policy,
             },
         )
         self.side_effects = supplied
@@ -2446,6 +2449,17 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     runtime_kwargs = {}
     runtime_ports = None
     broker_proxy = None
+    frozen_execution_policy = None
+    if act_profile and mode is not RunMode.DRY_RUN:
+        # the manifest the worker writes is bound to this policy: place_height is required for v2 and rejected for v1
+        try:
+            from ..act.first_episode_inputs import verify_frozen_inputs
+            from ..act.frozen_runtime_inputs import frozen_execution_policy_name
+
+            frozen = verify_frozen_inputs(Path(document["episode_inputs_manifest"]))
+            frozen_execution_policy = dict(frozen[frozen_execution_policy_name(frozen)]["values"])
+        except (OSError, KeyError, TypeError, ValueError) as error:
+            raise CliError("WORKER_EPISODE_INPUT_INVALID") from error
     if mode is not RunMode.DRY_RUN:
         runtime_ports = RosWorkerRuntimePorts(
             resources,
@@ -2457,6 +2471,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
             authorize=coordinator.authorize_local,
             broker_generation=document["broker_generation"],
             act_profile=act_profile,
+            teacher_execution_policy=frozen_execution_policy,
         )
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace

@@ -1837,6 +1837,7 @@ class ParallelRosRuntimePorts:
             expected_final_cup_pose_world=self._trusted_final_cup_pose(
                 policy_path, policy_sha256
             ),
+            frozen_execution_policy=self.dependencies.get("teacher_execution_policy"),
         )
         if schema.endswith("-v1"):
             # legacy evidence of the coupled contract: nothing positive is claimed about the Teacher or its data

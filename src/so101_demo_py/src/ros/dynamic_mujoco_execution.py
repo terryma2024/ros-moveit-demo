@@ -67,6 +67,8 @@ _PLAN_START_DRIFT_MAX_RAD = 0.01
 # Defaults for a partially constructed adapter only; the frozen `teacher_execution_policy_v1.yaml` is always used when
 # it is loaded, and the Teacher refuses to start without it.
 _DEFAULT_STATE_MAX_AGE_S = 0.5
+#: tolerance of the 100 ms place-height stability window, on both sides (simulation time is a float sum of steps)
+_WINDOW_TOLERANCE_S = 1e-6
 _DEFAULT_STATE_UNAVAILABLE_STOP_S = 1.0
 
 
@@ -492,6 +494,7 @@ class RosDynamicMujocoExecution:
             return None
         from ..act.teacher_endpoint import validate_task_targets
 
+        self._check_place_geometry_before_motion()
         start_target, end_target = self._teacher_targets()
         try:
             validate_task_targets(policy, start_target, end_target)
@@ -514,6 +517,34 @@ class RosDynamicMujocoExecution:
             "received_monotonic_ns": boundary.get("received_monotonic_ns", time.monotonic_ns())})
         self._stream_emit("teacher_start_observation", {"observation": copy.deepcopy(observation)})
         return snapshot
+
+    def _check_place_geometry_before_motion(self) -> None:
+        """Policy v2 only: load and hash-check the scene geometry before any motion, so a bad scene refuses at the start of the
+        run instead of with the cup held at the place pose. Raises a terminal ``TEACHER_PLACE_*`` stop."""
+
+        policy = getattr(self, "_teacher_execution_policy", None)
+        if (policy is None or not policy.get("place_height_mode")
+                or getattr(self, "_execution_snapshot_root", None) is None):
+            return
+        from ..core.place_height import (
+            HEIGHT_OUT_OF_BOUNDS, MEASUREMENT_FAILED, PlaceHeightPolicy, PlaceHeightRefused)
+
+        try:
+            height_policy = PlaceHeightPolicy.from_document(policy)
+            geometry = self._place_geometry()
+            if geometry.scene_sha256 != height_policy.scene_sha256:
+                raise PlaceHeightRefused(
+                    HEIGHT_OUT_OF_BOUNDS, "the scene model is not the one the place geometry was fitted for")
+        except PlaceHeightRefused as refusal:
+            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": refusal.code,
+                                             "detail": str(refusal)[:300]}
+            self._write()
+            raise TeacherStop(refusal.code, str(refusal)) from refusal
+        except Exception as error:
+            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": MEASUREMENT_FAILED,
+                                             "detail": f"{type(error).__name__}: {error}"[:300]}
+            self._write()
+            raise TeacherStop(MEASUREMENT_FAILED, f"{type(error).__name__}: {error}"[:300]) from error
 
     def _verified_reset_boundary(self):
         """The first retained `SimulationEvidence` of this session and the expected reset epoch, or None.
@@ -2243,7 +2274,8 @@ class RosDynamicMujocoExecution:
         return geometry
 
     def _compensated_place_target(self, target, policy) -> PoseEvidence:
-        from ..core.place_height import PlaceHeightPolicy, PlaceHeightRefused, plan_place_height
+        from ..core.place_height import (
+            MEASUREMENT_FAILED, PlaceHeightPolicy, PlaceHeightRefused, plan_place_height)
 
         x, y, z = target.position_m
         height_policy = PlaceHeightPolicy.from_document(policy)
@@ -2255,6 +2287,17 @@ class RosDynamicMujocoExecution:
                                              "detail": str(refusal)[:300]}
             self._write()
             raise
+        except Exception as error:
+            # a stop that already has its own terminal code (force limit, user stop, ...) keeps it
+            if isinstance(error, TeacherStop) or str(error).split(":")[0] in TERMINAL_STOP_CODES:
+                raise
+            # anything else (scene parse error, no cup body, evidence or joint-state timeout) is terminal as well: the cup stays
+            # held; it must never reach RECOVER_LIFT_TO_SAFE_HEIGHT at the place pose
+            failure = PlaceHeightRefused(MEASUREMENT_FAILED, f"{type(error).__name__}: {error}"[:300])
+            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": MEASUREMENT_FAILED,
+                                             "detail": str(failure)[:300]}
+            self._write()
+            raise failure from error
         self._document["place_height"] = document
         self._write()
         return PoseEvidence((x, y, document["target_tcp_z_m"]), target.orientation_xyzw)
@@ -2277,17 +2320,31 @@ class RosDynamicMujocoExecution:
             last_sequence = value.publisher_sequence
             self._enforce_safety(getattr(self, "_safety_state", None), value)
             window.append((value.simulation_time_s, self._upright_tilt_rad(value.object_state.orientation_xyzw), value))
-            while window and value.simulation_time_s - window[0][0] > STABILITY_WINDOW_S:
+            while window and value.simulation_time_s - window[0][0] > STABILITY_WINDOW_S + _WINDOW_TOLERANCE_S:
                 window.pop(0)
-            if value.simulation_time_s - window[0][0] >= STABILITY_WINDOW_S - 1e-9:
+            if value.simulation_time_s - window[0][0] >= STABILITY_WINDOW_S - _WINDOW_TOLERANCE_S:
                 tilts = [item[1] for item in window]
                 if max(tilts) - min(tilts) < STABILITY_RANGE_RAD:
                     cup_z = value.object_state.position_world[2]
+                    self._require_fresh_joint_state()
                     tcp_z = self._ik.forward(self._motion_planning_start()).position_m[2]
+                    self._require_fresh_joint_state()
                     tilts.sort()
                     return tilts[len(tilts) // 2], tcp_z - cup_z
         raise PlaceHeightRefused(TILT_UNSTABLE, f"no {STABILITY_WINDOW_S * 1000:.0f} ms window with a tilt range under "
                                  f"{math.degrees(STABILITY_RANGE_RAD):.2f} deg within {STABILITY_TIMEOUT_S:.0f} s")
+
+    def _require_fresh_joint_state(self) -> None:
+        """k is computed from the joint state: it must be younger than the execution policy's ``state_max_age_s``."""
+
+        from ..core.place_height import MEASUREMENT_FAILED, PlaceHeightRefused
+
+        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        max_age = policy.get("state_max_age_s", _DEFAULT_STATE_MAX_AGE_S)
+        received = getattr(self, "_joint_state_received_monotonic_s", None)
+        age = None if received is None else self._monotonic() - received
+        if age is None or not 0.0 <= age <= max_age:
+            raise PlaceHeightRefused(MEASUREMENT_FAILED, f"the joint state is not fresh (age {age}, limit {max_age} s)")
 
     def _planning_scaling(self, state: State) -> tuple[float, float]:
         """(velocity, acceleration) MoveIt scaling: the frozen carry values for the carry states with frozen inputs."""

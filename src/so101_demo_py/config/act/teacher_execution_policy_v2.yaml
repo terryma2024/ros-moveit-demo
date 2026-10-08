@@ -15,11 +15,11 @@ carry_max_acceleration_scaling: 0.0075
 # cup tilt and k the TCP height above the cup origin, both measured on the evidence just before the descent (stability window
 # 100 ms, tilt range < 0.05 deg, 1 s timeout). The only known mode is `tilt_compensated`.
 place_height_mode: tilt_compensated
-# The arm stops this far (actual TCP) above the pose at which the cup first touches the table. Strictly positive: the cup margin is
-# 0, so a target at or above first contact leaves the cup without table contact and the release-support check fails. Loader bounds
-# 0.1 mm .. 1.0 mm. The v1 constant (-13.25 mm) corresponds to a guard of about 0.94 mm at the live tilt of 4.04 deg. 0.7 mm from the
+# The arm ends this far (actual TCP) past (below) the pose at which the cup first touches the table. Strictly positive: the cup
+# margin is 0, so a target at or above first contact leaves the cup without table contact and the release-support check fails.
+# Loader bounds: the EFFECTIVE guard (this value minus/plus the k half band) must stay within 0.35 mm .. 1.0 mm. The v1 constant (-13.25 mm) corresponds to a guard of about 0.94 mm at the live tilt of 4.04 deg. 0.7 mm from the
 # offline sweep (500 trials with timing and command jitter): guards of 0.1 mm (33 of 70 trials chatter, 37 force stops) and 0.2-0.3 mm
-# (summed force or compression up to 99.8% of the limit) are unsafe, 0.35 mm and above are clean; with k in its +- 0.3 mm band
+# (summed force or compression up to 99.8% of the limit) are unsafe, 0.35 mm and past are clean; with k in its +- 0.3 mm band
 # the effective guard stays within 0.4 .. 1.0 mm.
 place_touchdown_guard_m: 0.0007
 # Commanded minus actual TCP z at the end of a DESCEND_TO_PLACE (controller sag): 20 retained PASS bags, mean 0.158 mm, sd 0.014 mm.

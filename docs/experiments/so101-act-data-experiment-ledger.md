@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3483
+latest_checkpoint: CP-3485
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3485 — final-review changes implemented; δ (URDF vs MuJoCo TCP z) = 1.7e-13 mm; committed; freeze with policy v2 + 20 collection-on Teacher runs + faults started
+
+- (1) GUARD_MIN_M 0.35 mm; the loader requires the effective guard (g ± k half-band) within 0.35–1.0 mm; frozen g 0.7 mm, k 0.037454 ± 0.3 mm → effective 0.4–1.0 mm. (2) Wording fixed to "past (below) the first-contact pose"; the v2 YAML file hash changed (comments), values hash unchanged. (3) δ = 1.7e-13 mm on retained-bag joints → k/e_track stand (doc §2.3). (4) run_worker loads the frozen policy into RosWorkerRuntimePorts; the validator requires and checks place_height for v2 and rejects it for v1 (optional for a v2 ERROR before the measurement). (5) TEACHER_PLACE_MEASUREMENT_FAILED (scene parse/StopIteration, DYNAMIC_EVIDENCE_TIMEOUT, JOINT_STATE_TIMEOUT) → ERROR with the cup held; _check_place_geometry_before_motion refuses a bad scene/hash before motion. (6) Joint-state age ≤ state_max_age_s for k; inclusive 100 ms window ±1 µs. (7) Doc §2.3 tilt-invariance rationale + limits; no claim of removing the ≈2% stop. (8) read_inputs_manifest rejects both v1 and v2 bindings.
+- Gate 7,673 pass / 186 skip / rc 0; scratch install 326 pass; 25 new/changed tests RED against HEAD. Backup p5k-base.tar.gz (64f0dab4…). v1 policy hash unchanged (af0a5699…).
+- Tooling: prepare-qualified-inputs-20261009-r5.zsh (binds teacher_execution_policy_v2.yaml; requires the v2 binding, refuses v1) and tooling/cycle-r6.zsh (cycle-r5 with prepare r5).
+- Started (tmp/final-e5.zsh): cycle-r6 freeze p7-claude-1009b; second demo gate; T01–T20 collection on (Teacher v2 + VALID data + readback; bags for touchdown metrics); faults L3–L7.
+
+## CP-3484 — final review of policy v2 (365bb0d08): PASS-WITH-CHANGES; 8 required changes accepted
+
+- RESOLVED 9/12 earlier items; PARTIAL: g > 0 (the floor admits an unsafe guard), k (the runtime IK frame vs the offline MuJoCo so101_tcp site), versioning (the worker doesn't bind place_height to the policy). Safety core sound: no limit relaxed, no filtering; _enforce_safety runs on every measurement sample under DESCEND_TO_PLACE; bounded waits; Teacher-only observer; refusals terminal with the cup held. Gap: non-refusal failures in the new step go to RECOVER_LIFT_TO_SAFE_HEIGHT at the place pose (untested). Doc wording "g above" is inverted vs the code (past/below contact). The doc lacks the CP-3483 tilt-invariance rationale and has one "mechanism is gone" sentence.
+- Required (accepted, CP-3394): (1) GUARD_MIN ≥ 0.35 mm, or guard − k half-band ≥ 0.35 mm; (2) fix the direction wording + bump the policy hash; (3) measure δ = URDF _ik.forward TCP z − MuJoCo so101_tcp z on bag joints (re-derive k/e_track in the IK frame if δ ≥ 0.05 mm); (4) the worker validates place_height against the frozen policy (required for v2, rejected for v1); (5) non-refusal failures in the measurement/geometry step → terminal with the cup held; scene geometry loaded and hash-checked before the pick; (6) joint-state freshness for k; an inclusive 100 ms window with tolerance; (7) doc: the tilt-invariance rationale and limits, no claim of removing the ≈2% stop; (8) freeze validation rejects both execution bindings.
 
 ## CP-3483 — tilt-compensated place height implemented (policy v2); measurements contradict two premises; decision: activate v2 (guard 0.7 mm) for tilt-invariance, with honest limits; final review
 

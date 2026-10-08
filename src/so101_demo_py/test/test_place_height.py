@@ -77,6 +77,8 @@ def test_v1_is_byte_identical_and_v2_loads_without_the_constant_offset():
     {"place_height_mode": "constant"}, {"place_height_mode": None}, {"schema_version": 3}, {"schema_version": "2"},
     {"place_touchdown_guard_m": 0.0}, {"place_touchdown_guard_m": -0.0003}, {"place_touchdown_guard_m": 0.00005},
     {"place_touchdown_guard_m": 0.0011}, {"place_touchdown_guard_m": float("nan")},
+    {"place_touchdown_guard_m": 0.0003}, {"place_touchdown_guard_m": 0.0006}, {"place_touchdown_guard_m": 0.0008},
+    {"place_touchdown_guard_m": 0.00064},
     {"place_tracking_offset_m": -1e-4}, {"place_tracking_offset_m": 0.002},
     {"place_tilt_min_rad": 0.0}, {"place_tilt_min_rad": 0.1, "place_tilt_max_rad": 0.09}, {"place_tilt_max_rad": 0.5},
     {"place_grasp_offset_half_band_m": 0.0001}, {"place_grasp_offset_half_band_m": 0.01},
@@ -109,6 +111,23 @@ def ph_fields():
     return sorted(PLACE_HEIGHT_FIELDS)
 
 
+def test_the_effective_guard_stays_inside_the_swept_safe_band(policy):
+    """The offline sweep: 0.1 mm chatters, 0.2-0.3 mm runs to 97-99.8% of the compression limit, 0.35 mm and past is clean. The
+    worst case is the guard minus the k half band, so that is what the loader bounds (and the guard plus the band above)."""
+    assert ph.GUARD_MIN_M >= 3.5e-4
+    assert policy.guard_m - policy.grasp_offset_half_band_m >= 3.5e-4 - 1e-12
+    assert policy.guard_m + policy.grasp_offset_half_band_m <= 1e-3 + 1e-12
+    fields = {f: getattr(policy, f) for f in policy.__slots__}
+    for guard, band, ok in ((0.0007, 0.0003, True), (0.00065, 0.0003, True), (0.00064, 0.0003, False),
+                            (0.0007, 0.0004, False), (0.00068, 0.0003, True)):
+        candidate = ph.PlaceHeightPolicy(**{**fields, "guard_m": guard, "grasp_offset_half_band_m": band})
+        if ok:
+            candidate.validate()
+        else:
+            with pytest.raises(ValueError):
+                candidate.validate()
+
+
 def test_the_guard_is_strictly_positive_and_bounded(policy):
     assert 0.0 < ph.GUARD_MIN_M <= policy.guard_m <= ph.GUARD_MAX_M == 1e-3
     with pytest.raises(ValueError, match="guard"):
@@ -117,7 +136,7 @@ def test_the_guard_is_strictly_positive_and_bounded(policy):
 
 # ---- the target ----------------------------------------------------------------------------------------------------------------
 
-def test_the_target_ends_the_actual_arm_the_guard_above_first_contact(geometry, policy):
+def test_the_target_ends_the_actual_arm_the_guard_past_first_contact(geometry, policy):
     k = policy.grasp_offset_m
     target = ph.target_tcp_z(THETA, k, geometry, policy)
     assert target == pytest.approx(0.167706 + k + policy.tracking_offset_m - policy.guard_m, abs=2e-6)

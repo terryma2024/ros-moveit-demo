@@ -309,6 +309,9 @@ def read_inputs_manifest(path: Path) -> dict:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if document["kind"] != MANIFEST_KIND or document["schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise ValueError("INPUTS_MANIFEST_INVALID")
+    # exactly one execution binding: a manifest carrying both v1 and v2 names two policies for one attempt
+    if sum(name in document for name in EXECUTION_POLICY_BINDINGS) > 1:
+        raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["source_commit"], str) or not _HEX40.fullmatch(document["source_commit"]):
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["config_sha256"], str) or not _HEX64.fullmatch(document["config_sha256"]):

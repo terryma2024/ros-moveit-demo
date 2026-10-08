@@ -18,14 +18,14 @@ A Teacher run stopped in DESCEND_TO_PLACE with `DYNAMIC_CUP_FORCE_EXCEEDED` (1.9
 
 ## 2. Design
 
-Aim the descent so that it ends a small guard `g` above the pose at which the cup first touches the table, instead of continuing through it. No limit is relaxed and the force metric is not filtered.
+Aim the descent so that it ends a small guard `g` past (below) the pose at which the cup first touches the table, instead of continuing a further 0.94 mm through it. The guard keeps table contact, so the release-support check holds. No limit is relaxed and the force metric is not filtered.
 
     z_tcp_target = z_touch(theta) + k + e_track - g        (commanded TCP z, metres)
     z_touch(theta) = 0.12 + c cos(theta) + r sin(theta),    c = 0.045 m, r = 0.040 m
 
 - `z_touch` is exact for this cup. Its bottom is a round cylinder (`bottom_collision`, radius r = 0.040 m, half thickness 0.001 m, centred 0.044 m below the body origin, so the bottom face is c = 0.045 m below it); the lowest point of a tilted body is a point of the bottom rim in the tilt direction, whatever the azimuth. At 4.04 deg: 0.167706 m predicted, **0.16770 m measured** (sd 0.009 mm, 20 bags). The wall corners (radius 0.0413 m at z -0.043 m) become the lowest points only above about **56.6 deg** (`lowest_point_height` in `core/place_height.py` is the exact general form; a test compares it with the formula up to 55 deg and checks the crossover in 56.0-57.5 deg).
 - `theta`: the cup's tilt from the Teacher's own world observer (`_upright_tilt_rad`), the median of a 100 ms (simulation time) window of fresh evidence samples whose tilt range is under 0.05 deg; no such window within 1 s refuses (`TEACHER_PLACE_TILT_UNSTABLE`).
-- `k`: the TCP height above the cup origin, **by forward kinematics of the actual joints (sag included)** minus the evidence cup z, at the end of the same window. The target is a *commanded* pose, so `e_track` converts: the commanded minus the actual TCP z at the end of a descent, measured **0.158 mm (sd 0.014 mm, range 0.136-0.183 mm)** on the 20 bags, frozen in the policy. The arm therefore stops, in actual terms, `g` above the touching pose.
+- `k`: the TCP height above the cup origin, **by forward kinematics of the actual joints (sag included)** minus the evidence cup z, at the end of the same window. The target is a *commanded* pose, so `e_track` converts: the commanded minus the actual TCP z at the end of a descent, measured **0.158 mm (sd 0.014 mm, range 0.136-0.183 mm)** on the 20 bags, frozen in the policy. The arm therefore ends, in actual terms, `g` past (below) the first-contact pose.
 - `g` (guard): strictly positive and at most 1.0 mm in the loader (`GUARD_MIN_M` 0.1 mm, `GUARD_MAX_M` 1.0 mm): the cup margin is 0, so with `g <= 0` the cup has no table contact, `actual_table_support` fails and the run ends in `DYNAMIC_RELEASE_SUPPORT_NOT_PROVED`. **The frozen value is 0.7 mm** (section 7).
 - The old target (-13.25 mm) is equivalent to `g` = 0.944 mm at the live tilt (0.785 mm commanded below the touching TCP height; 0.943 mm actual). It was fitted offline at 3.5 deg with a 0.5 mm margin; the live 4.04 deg touches 0.38 mm earlier.
 
@@ -35,6 +35,12 @@ Aim the descent so that it ends a small guard `g` above the pose at which the cu
 - `ros/dynamic_mujoco_execution.py`: `_place_target` (called from `_perform_state` under `_safety_state = DESCEND_TO_PLACE` and **before `_phase_open`**, so nothing is published and no goal is sent if it refuses, and the force limits are enforced while it measures: `_measure_place_height` calls `_enforce_safety` on every sample) dispatches on the policy: v1 the constant offset, v2 `_compensated_place_target`. `core/dynamic_pick.py` `resolve_motion_targets` is unchanged (the policy place TCP stays the hover for MOVE_ABOVE_PLACE and RETREAT; the compensated target replaces only the DESCEND_TO_PLACE one, as the v1 offset did). The corridor (0.008 m), the carry scaling and the MoveIt tolerance are unchanged.
 - The policy the freeze names is loaded by `_select_execution_policy` (`ros/dynamic_runtime.py` calls it with the binding of the freeze).
 
+### 2.3 Tilt invariance (CP-3483): rationale and limits
+
+Rationale. The cup's lowest point is a point of its round bottom rim, so the first-contact height is a function of the tilt alone and not of the azimuth; the target follows it through `z_touch(theta)`. The grasp offset `k` is measured on the same window, so a grasp that shifted the TCP along the cup axis is absorbed rather than assumed. The guard is then a distance past first contact that does not depend on the tilt, and the effective guard stays in 0.35-1.0 mm over the whole calibrated tilt range and the k band (the loader requires `guard - half band >= 0.35 mm` and `guard + half band <= 1.0 mm`).
+
+Limits. (a) The geometry is exact only while the bottom rim is the lowest point, which holds up to about 56.6 deg; the calibrated range stops at 5.5 deg, far below. (b) `k` and `e_track` were measured with the URDF forward kinematics used by the runtime (`_ik.forward`); against the MuJoCo `so101_tcp` site on the retained-bag joints the difference is delta = 1.7e-13 mm (below the 0.05 mm re-derivation threshold), so they stand in the runtime IK frame. (c) The tilt is measured on a 100 ms window with range under 0.05 deg and the joint state must be fresh (`state_max_age_s`); a window or a state that is not available is a terminal stop, never a guess. (d) The surrogate metrics are the only evidence of an effect on the force stop (section 7).
+
 ### 2.2 Bounds, fail closed; the end state of a refusal
 
 Checked before any DESCEND_TO_PLACE motion (`check_measurement`, `plan_place_height`):
@@ -43,11 +49,12 @@ Checked before any DESCEND_TO_PLACE motion (`check_measurement`, `plan_place_hei
 | --- | --- |
 | `TEACHER_PLACE_TILT_UNSTABLE` | no 100 ms window with tilt range < 0.05 deg within 1 s |
 | `TEACHER_PLACE_TILT_OUT_OF_RANGE` | the tilt is not finite or outside the frozen range (initial 3.0-5.5 deg) |
+| `TEACHER_PLACE_MEASUREMENT_FAILED` | a failure of the measurement or geometry step that is not a refusal: a scene parse error, no cup body in the scene, `DYNAMIC_EVIDENCE_TIMEOUT`, `JOINT_STATE_TIMEOUT`, a stale joint state when `k` is computed |
 | `TEACHER_PLACE_HEIGHT_OUT_OF_BOUNDS` | `k` outside its band; the scene hash is not the one the geometry was fitted for; the target differs from the v1 constant-offset target of the same pose by more than 2.0 mm; the target is outside the workspace |
 
 The deviation bound is the geometric need: the z_touch spread over the tilt range plus the k band plus the guard difference to the v1 constant gives -0.73 .. +1.45 mm at the corners of the calibrated range, so 2.0 mm (it was 6 mm in the first draft).
 
-**End state.** All three are in `TERMINAL_STOP_CODES`: `resolve_transition` takes the failure straight to ERROR with no RECOVER_* chain, so no recovery goal and no gripper command is ever sent: **the cup stays held, it is not released**, the Teacher execution status is `STOPPED_SAFETY` and the outcome code is the refusal code (`failure` in the manifest, `phase_finish FAILED <code>`). The manifest carries `place_height: {"mode", "refused": <code>, "detail"}`. Tests: `test_a_refusal_ends_the_run_with_the_cup_held_and_a_stopped_safety_outcome` (no `_motion`, `_command_gripper`, `_phase_open`, `_open_supported_gripper`, `_attach` or `_detach_or_sync` is called; the code is terminal; the transition is ERROR; the status is STOPPED_SAFETY), one case per code.
+**End state.** All four are in `TERMINAL_STOP_CODES`: `resolve_transition` takes the failure straight to ERROR with no RECOVER_* chain, so no recovery goal and no gripper command is ever sent: **the cup stays held, it is not released**, the Teacher execution status is `STOPPED_SAFETY` and the outcome code is the refusal code (`failure` in the manifest, `phase_finish FAILED <code>`). The manifest carries `place_height: {"mode", "refused": <code>, "detail"}`. Tests: `test_a_refusal_ends_the_run_with_the_cup_held_and_a_stopped_safety_outcome` (no `_motion`, `_command_gripper`, `_phase_open`, `_open_supported_gripper`, `_attach` or `_detach_or_sync` is called; the code is terminal; the transition is ERROR; the status is STOPPED_SAFETY), one case per code.
 
 ## 3. Measurements from the 20 retained PASS bags (step 2 and 5 of the review)
 
@@ -81,7 +88,7 @@ The summed metric (left + right fingertip + other cup contacts, `ros/teacher_saf
 | Check | Effect | Re-qualification |
 | --- | --- | --- |
 | Force and compression limits (1.8916 N, 119.28 um; r10b) | unchanged, same states, same paths, not filtered; the r10b limits, the contact calibration hash and `dynamic_cup_pick/v1` are unchanged | section 4 |
-| Release support before OPEN_GRIPPER (contact, force above 0, distance <= 0.002 m, both fingertips) | the descent now stops `g` above touching instead of 0.94 mm through it; `g` > 0 is the loader's guarantee that contact exists | the sweep: supported in 55 of 55 trials for every guard from 0.3 mm, 16 of 70 at 0.1 mm |
+| Release support before OPEN_GRIPPER (contact, force above 0, distance <= 0.002 m, both fingertips) | the descent now ends `g` past first contact instead of 0.94 mm past it; `g` > 0 is the loader's guarantee that contact exists | the sweep: supported in 55 of 55 trials for every guard from 0.3 mm, 16 of 70 at 0.1 mm |
 | Endpoint (`teacher_endpoint_v2`, `final_z_m` 0.010, final xy 0.020) | the final pose after release is where the cup settles; the target moves by +0.23 mm | unchanged limits; evaluated on the live runs |
 | `VALIDATE_FINAL_PLACEMENT` (z 0.155-0.175, tilt <= 0.15 rad, table contact, no fingertip contact) | unchanged limits | the same |
 | Corridor 0.008 m, MoveIt 0.002 m | the target moves by 0.23 mm at the nominal pose (-0.73 .. +1.45 mm across the calibrated range) | planned on the live runs |
@@ -116,7 +123,7 @@ The summed metric (left + right fingertip + other cup contacts, `ros/teacher_saf
 - a guard of 0.1 mm is **unsafe** (the cup is barely touched and the contact chatters in half of the trials, 37 of 70 force or compression stops), so a small guard is not "safer"; 0.2-0.3 mm run to 97-99.8% of the compression limit in the worst trial;
 - guards of 0.35 mm and above are supported in every trial, with excursions under 0.19 N, and 0.4, 0.7, 0.9 mm are the cleanest; **the frozen 0.7 mm keeps the effective guard within 0.4-1.0 mm over the whole +-0.3 mm k band** (all clean) and cuts the first-contact speed by 15%.
 
-The claim that the mechanism is gone therefore rests on the live surrogate metrics of section 4 and its limit is explicit: twenty clean runs bound the failure rate at about 14% (95%, rule of three), and the improvement itself is modest (3.42 to 2.9 mm/s, 0.94 to 0.7 mm of travel after contact). A smaller guard would cut the speed more (0.4 mm: 2.2 mm/s) but leaves the band no margin before the unsafe region below 0.3 mm; this is a policy value, changed by a new policy file.
+This design does not claim that the roughly 2% force stop is removed. The sweep reproduces no failure under either guard, so it cannot show a difference; the only evidence for an effect is the live surrogate metrics of section 4, and twenty clean runs bound the failure rate at about 14% (95%, rule of three). What the design changes is smaller and stated: the first-contact speed (3.42 to 2.9 mm/s) and the travel after contact (0.94 to 0.7 mm), plus a target that follows the measured tilt and grasp offset instead of a constant. A smaller guard would cut the speed more (0.4 mm: 2.2 mm/s) but leaves the band no margin before the unsafe region below 0.35 mm; this is a policy value, changed by a new policy file.
 
 ## 8. ACT demonstration
 

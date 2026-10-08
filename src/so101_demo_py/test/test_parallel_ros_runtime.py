@@ -2519,3 +2519,52 @@ def test_running_evidence_returns_the_first_unpaused_message_past_the_image_stam
             return SimpleNamespace(simulation_session_id="session-1", paused=False, simulation_time_s=7.5)
 
     assert _ports_with_observer(monkeypatch, Running)._running_evidence(7.0).simulation_time_s == 7.5
+
+
+def test_the_worker_binds_the_manifest_to_the_frozen_execution_policy(tmp_path):
+    """CP-3483: the frozen policy reaches the manifest validator, so a v2 run needs its place_height record and a v1 run has none."""
+    import json
+    import os
+
+    from so101_demo.cli.mujoco_parallel_batch import RosWorkerRuntimePorts
+    from so101_demo.parallel_batch import dynamic_manifest
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    policy = {"place_height_mode": "tilt_compensated"}
+    ports = RosWorkerRuntimePorts(SimpleNamespace(session_id="session-1"), catalog={}, teacher_execution_policy=policy)
+    assert ports.dependencies["teacher_execution_policy"] is policy
+    assert RosWorkerRuntimePorts(SimpleNamespace(session_id="session-1"), catalog={}).dependencies["teacher_execution_policy"] is None
+
+    identity = {name: 1 for name in ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id",
+                                     "lease_generation")}
+    document = {
+        "schema": "so101-dynamic-mujoco-execute-v2", "parallel_lease_identity": identity, "status": "DONE",
+        "current_state": "DONE", "failure": None, "simulation_session_id": "session-1", "expected_reset_epoch": 3,
+        "policy_path": "p", "policy_sha256": "a" * 64, "state_trace": [], "transition_count": 0, "state_events": [],
+        "planning_attempts": [], "final_samples": [], "planning_scene_readback": {}, "release_marker_sequence": None,
+        "teacher_execution_status": "COMPLETED", "teacher_task_result": {}, "act_data_status": "VALID",
+        "process_diagnostics": [], "teacher_start_observation": {}, "teacher_end_observation": {}}
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document))
+    os.chmod(path, 0o600)
+    seen = {}
+
+    class Reached(Exception):
+        pass
+
+    def spy(*args, **kwargs):
+        seen.update(kwargs)
+        raise Reached
+
+    for dependency in (policy, None):
+        runtime = object.__new__(ParallelRosRuntimePorts)
+        runtime.dependencies = {"teacher_execution_policy": dependency}
+        runtime.resources = SimpleNamespace(session_id="session-1")
+        runtime._dynamic_policy_identity = lambda: ("p", "a" * 64)
+        runtime._trusted_final_cup_pose = lambda *a: None
+        lease = SimpleNamespace(**identity)
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(dynamic_manifest, "validate_dynamic_manifest_semantics", spy)
+            with pytest.raises(Reached):
+                runtime._dynamic_manifest_outcome(path, lease, SimpleNamespace(reset_epoch="reset-3"), 0)
+        assert seen["frozen_execution_policy"] is dependency

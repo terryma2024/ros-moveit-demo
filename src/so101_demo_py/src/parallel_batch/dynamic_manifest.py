@@ -246,9 +246,43 @@ def _target_valid(value: object) -> bool:
     )
 
 
+def _place_height_contract(
+    document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
+) -> None:
+    """The place_height record against the frozen execution policy of the run.
+
+    Without the frozen policy the record is only checked structurally. With it: a v2 (tilt_compensated) run that finished carries
+    a place_height record that is the formula applied to its own measurement within the frozen bounds (an ERROR run may stop
+    before the measurement, so its record is optional but still bound when present); a v1 run carries none."""
+
+    from ..core.place_height import PlaceHeightPolicy, validate_document as validate_place_height
+
+    present = "place_height" in document
+    if frozen_execution_policy is None:
+        if present:
+            try:
+                validate_place_height(document["place_height"])
+            except ValueError:
+                _fail("PLACE_HEIGHT")
+        return
+    if not frozen_execution_policy.get("place_height_mode"):
+        if present:
+            _fail("PLACE_HEIGHT")
+        return
+    if not present:
+        if expected_status == "DONE":
+            _fail("PLACE_HEIGHT")
+        return
+    try:
+        validate_place_height(document["place_height"], PlaceHeightPolicy.from_document(frozen_execution_policy))
+    except (ValueError, KeyError, TypeError):
+        _fail("PLACE_HEIGHT")
+
+
 def _teacher_contract(
     document: Mapping[str, object], expected_status: str, reset_epoch: int,
     expected_final_cup_pose_world: object,
+    frozen_execution_policy: Mapping[str, object] | None = None,
 ) -> AttemptStatus:
     """Structural integrity of the v2 Teacher fields, then the Teacher outcome they declare.
 
@@ -275,13 +309,7 @@ def _teacher_contract(
         _fail("TEACHER_RESULT")
     if (execution == "COMPLETED") != (expected_status == "DONE"):
         _fail("TEACHER_STATUS")
-    if "place_height" in document:
-        from ..core.place_height import validate_document as validate_place_height
-
-        try:
-            validate_place_height(document["place_height"])
-        except ValueError:
-            _fail("PLACE_HEIGHT")
+    _place_height_contract(document, expected_status, frozen_execution_policy)
     if result in {"PASS", "FAIL"}:
         if (
             execution != "COMPLETED"
@@ -363,6 +391,7 @@ def _error_contract(
 def validate_dynamic_manifest_semantics(
     document: Mapping[str, object], *, expected_status: str, expected_reset_epoch: int,
     expected_final_cup_pose_world: list[float] | None = None,
+    frozen_execution_policy: Mapping[str, object] | None = None,
 ) -> AttemptStatus:
     """Reject structurally incoherent manifests and return the Teacher outcome they declare.
 
@@ -394,4 +423,4 @@ def validate_dynamic_manifest_semantics(
     if schema == SCHEMA_V1:
         return AttemptStatus.INDETERMINATE
     return _teacher_contract(
-        document, expected_status, expected_reset_epoch, expected_final_cup_pose_world)
+        document, expected_status, expected_reset_epoch, expected_final_cup_pose_world, frozen_execution_policy)

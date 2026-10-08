@@ -305,3 +305,20 @@ def test_the_teacher_loader_wants_exactly_one_execution_policy(tmp_path):
     for frozen in ({}, {**v1, **v2}):
         with pytest.raises(ValueError, match="INPUTS_TEACHER_POLICY_REQUIRED"):
             frozen_execution_policy_name(frozen)
+
+
+def test_a_manifest_carrying_both_execution_bindings_is_rejected(tmp_path):
+    """CP-3483: a freeze names exactly one execution policy; a self-consistent manifest with v1 and v2 is not admitted."""
+    from so101_demo.act.first_episode_inputs import read_inputs_manifest
+    from so101_demo.act.frozen_runtime_inputs import load_teacher_frozen_inputs
+    from test_act_child_recorder_binding import frozen_child_inputs
+    manifest_path, document, _ = frozen_child_inputs(tmp_path, execution_policy=V2_NAME)
+    assert "teacher_execution_policy_v1" not in document
+    (manifest_path.parent / "policies/teacher_execution_policy_v1.yaml").write_bytes(
+        (CONFIG / "teacher_execution_policy_v1.yaml").read_bytes())
+    document["teacher_execution_policy_v1"] = policy_binding(
+        "teacher_execution_policy_v1", (CONFIG / "teacher_execution_policy_v1.yaml").read_bytes())
+    rehash(manifest_path, document)
+    for call in (read_inputs_manifest, verify_frozen_inputs, load_teacher_frozen_inputs):
+        with pytest.raises(ValueError, match="INPUTS_MANIFEST_INVALID"):
+            call(manifest_path)

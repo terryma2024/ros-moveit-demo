@@ -26,12 +26,18 @@ from pathlib import Path
 TILT_UNSTABLE = "TEACHER_PLACE_TILT_UNSTABLE"
 TILT_OUT_OF_RANGE = "TEACHER_PLACE_TILT_OUT_OF_RANGE"
 HEIGHT_OUT_OF_BOUNDS = "TEACHER_PLACE_HEIGHT_OUT_OF_BOUNDS"
-REFUSAL_CODES = (TILT_UNSTABLE, TILT_OUT_OF_RANGE, HEIGHT_OUT_OF_BOUNDS)
+#: a measurement or geometry step that failed for a reason other than a refusal (scene parse error, no cup body, stale or missing
+#: joint state, dynamic evidence timeout): terminal as well, with the cup held, never a RECOVER_* lift at the place pose
+MEASUREMENT_FAILED = "TEACHER_PLACE_MEASUREMENT_FAILED"
+REFUSAL_CODES = (TILT_UNSTABLE, TILT_OUT_OF_RANGE, HEIGHT_OUT_OF_BOUNDS, MEASUREMENT_FAILED)
 MODE = "tilt_compensated"
-#: the guard must be strictly positive: the cup margin is 0, so a target at or above first contact leaves the cup without table
+#: the guard must be strictly positive: the cup margin is 0, so a target at or above first contact (guard <= 0) leaves the cup without table
 #: contact, `actual_table_support` fails and the run ends in DYNAMIC_RELEASE_SUPPORT_NOT_PROVED
-GUARD_MIN_M = 1e-4
+#: the offline sweep chatters at 0.1 mm (33 of 70 trials) and only reaches the compression limit from 0.35 mm: the EFFECTIVE guard
+#: (guard minus the k half band, the worst case of the measured grasp offset) must stay inside [0.35 mm, 1.0 mm]
+GUARD_MIN_M = 3.5e-4
 GUARD_MAX_M = 1e-3
+EFFECTIVE_GUARD_TOLERANCE_M = 1e-9
 K_HALF_BAND_MIN_M = 3e-4
 #: the stability window the tilt is measured in: this long, with a tilt range under this
 STABILITY_WINDOW_S = 0.100
@@ -127,6 +133,10 @@ class PlaceHeightPolicy:
             raise ValueError("place height policy: a value is not finite")
         if not GUARD_MIN_M <= self.guard_m <= GUARD_MAX_M:
             raise ValueError(f"place height policy: place_touchdown_guard_m must be within [{GUARD_MIN_M}, {GUARD_MAX_M}]")
+        if (self.guard_m - self.grasp_offset_half_band_m < GUARD_MIN_M - EFFECTIVE_GUARD_TOLERANCE_M
+                or self.guard_m + self.grasp_offset_half_band_m > GUARD_MAX_M + EFFECTIVE_GUARD_TOLERANCE_M):
+            raise ValueError("place height policy: the effective guard (guard -/+ the k half band) must stay within "
+                             f"[{GUARD_MIN_M}, {GUARD_MAX_M}]")
         if not 0.0 <= self.tracking_offset_m <= 1e-3:
             raise ValueError("place height policy: place_tracking_offset_m must be within [0, 0.001]")
         if not 0.0 < self.tilt_min_rad < self.tilt_max_rad <= 0.2:
@@ -146,7 +156,7 @@ def target_tcp_z(theta_rad: float, k_m: float, geometry: CupGeometry, policy: Pl
 
     ``k`` is the actual TCP height above the cup body origin (forward kinematics of the actual joints, sag included) measured at
     the same instant as theta; the tracking offset is the calibrated difference between the commanded and the actual TCP z at the
-    end of the descent (0.16 mm), so that the ACTUAL arm stops ``guard`` above the table-touching pose."""
+    end of the descent (0.16 mm), so that the ACTUAL arm ends ``guard`` past (below) the first-contact pose."""
     return touch_center_z(theta_rad, geometry) + k_m + policy.tracking_offset_m - policy.guard_m
 
 

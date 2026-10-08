@@ -3,6 +3,7 @@ calibration with a terminal stop and leaves the cup held, and a freeze can bind 
 
 import dataclasses
 import math
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -129,8 +130,110 @@ def test_a_refusal_ends_the_run_with_the_cup_held_and_a_stopped_safety_outcome(t
     assert type(value)._teacher_execution_status(result, {}) == "STOPPED_SAFETY"
 
 
-def test_the_three_refusal_codes_are_terminal_stop_codes():
-    assert set(ph.REFUSAL_CODES) <= TERMINAL_STOP_CODES
+def test_the_refusal_codes_are_terminal_stop_codes():
+    assert set(ph.REFUSAL_CODES) <= TERMINAL_STOP_CODES and ph.MEASUREMENT_FAILED in ph.REFUSAL_CODES
+
+
+# ---- CP-3483: a failure that is not a refusal is terminal too; joint-state freshness; the window tolerance -----------------------
+
+def _run_descend(value):
+    forbidden = []
+    for name in ("_motion", "_command_gripper", "_phase_open", "_open_supported_gripper", "_attach", "_detach_or_sync"):
+        setattr(value, name, lambda *a, _n=name, **kw: forbidden.append(_n))
+    value._phase_finish = lambda *a, **kw: None
+    value._write = lambda: None
+    return value._perform_state(State.DESCEND_TO_PLACE, hover_target()), forbidden
+
+
+def _raiser(error):
+    def raise_it(*args, **kwargs):
+        raise error
+    return raise_it
+
+
+@pytest.mark.parametrize("name,error", [
+    ("_place_geometry", ET.ParseError("not well-formed")), ("_place_geometry", StopIteration()),
+    ("_snapshot", RuntimeError("DYNAMIC_EVIDENCE_TIMEOUT")), ("_motion_planning_start", RuntimeError("JOINT_STATE_TIMEOUT"))])
+def test_a_non_refusal_failure_of_the_measurement_is_terminal_with_the_cup_held(tmp_path, name, error):
+    value = v2_adapter(tmp_path)
+    setattr(value, name, _raiser(error))
+    result, forbidden = _run_descend(value)
+    assert forbidden == [] and result.status is ActionStatus.FAILED and result.failure.code == ph.MEASUREMENT_FAILED
+    assert resolve_transition(State.DESCEND_TO_PLACE, result.status, result.failure) is State.ERROR, "not RECOVER_LIFT_TO_SAFE_HEIGHT"
+    assert type(value)._teacher_execution_status(result, {}) == "STOPPED_SAFETY"
+    assert value._document["place_height"]["refused"] == ph.MEASUREMENT_FAILED
+    ph.validate_document(value._document["place_height"])
+
+
+def test_a_stop_with_its_own_terminal_code_keeps_it(tmp_path):
+    from so101_demo.ros.teacher_stop import TeacherStop
+
+    value = v2_adapter(tmp_path)
+    value._enforce_safety = _raiser(TeacherStop("TEACHER_USER_STOP"))
+    result, forbidden = _run_descend(value)
+    assert forbidden == [] and result.failure.code == "TEACHER_USER_STOP"
+
+
+def test_a_bad_scene_refuses_at_the_start_of_the_run_before_any_motion(tmp_path):
+    from so101_demo.ros.teacher_stop import TeacherStop
+
+    for broken, code in ((_raiser(ET.ParseError("not well-formed")), ph.MEASUREMENT_FAILED),
+                         (_raiser(StopIteration()), ph.MEASUREMENT_FAILED),
+                         (lambda: dataclasses.replace(ph.cup_geometry_from_scene(PACKAGE / "assets/mujoco/act/scene.xml"),
+                                                      scene_sha256="0" * 64), ph.HEIGHT_OUT_OF_BOUNDS)):
+        value = v2_adapter(tmp_path)
+        value._place_geometry = broken
+        value._teacher_endpoint_policy = SimpleNamespace()
+        value._teacher_targets = _raiser(AssertionError("the start capture went on past the geometry check"))
+        with pytest.raises(TeacherStop) as stop:
+            value._capture_teacher_start()
+        assert stop.value.code == code and code in TERMINAL_STOP_CODES
+        assert value._document["place_height"]["refused"] == code
+
+
+def test_a_good_scene_and_a_v1_run_pass_the_start_geometry_check(tmp_path):
+    value = v2_adapter(tmp_path)
+    value._check_place_geometry_before_motion()
+    assert value._place_geometry_value.scene_sha256 == value._teacher_execution_policy["place_geometry_scene_sha256"]
+    v1 = make_adapter(tmp_path)
+    v1._execution_snapshot_root = tmp_path           # no scene under it: v1 must not look for one
+    v1._check_place_geometry_before_motion()
+    assert "place_height" not in v1._document
+
+
+def test_k_needs_a_fresh_joint_state(tmp_path):
+    max_age = load_teacher_execution_policy(V2)["state_max_age_s"]
+    value = v2_adapter(tmp_path)
+    value._joint_state_received_monotonic_s = value._now[0] - max_age * 0.5
+    value._place_target(State.DESCEND_TO_PLACE, hover_target())
+    for received in (value._now[0] - max_age - 0.05, None, value._now[0] + 1.0):
+        stale = v2_adapter(tmp_path)
+        stale._joint_state_received_monotonic_s = received
+        with pytest.raises(ph.PlaceHeightRefused) as refusal:
+            stale._place_target(State.DESCEND_TO_PLACE, hover_target())
+        assert refusal.value.code == ph.MEASUREMENT_FAILED
+
+
+@pytest.mark.parametrize("step_s,closes", [(0.0099999, True), (0.01000005, True), (0.0100002, False), (0.0098, False)])
+def test_the_100_ms_window_is_inclusive_with_a_tolerance_on_both_sides(tmp_path, monkeypatch, step_s, closes):
+    """Ten steps spanning 0.1 s +- 1 us close the window (a sum of float steps is never exactly 0.1); a span further off, short or
+    long, does not."""
+    monkeypatch.setattr(ph, "STABILITY_TIMEOUT_S", 0.05)
+    value = v2_adapter(tmp_path)
+
+    class Timed(SteppingObserver):
+        def snapshot(self):
+            base = super().snapshot()
+            return dataclasses.replace(base, simulation_time_s=self.count * step_s, publisher_sequence=self.count)
+
+    value.observer = Timed(4.04)
+    if closes:
+        value._place_target(State.DESCEND_TO_PLACE, hover_target())
+        assert value.observer.count == 11
+    else:
+        with pytest.raises(ph.PlaceHeightRefused) as refusal:
+            value._place_target(State.DESCEND_TO_PLACE, hover_target())
+        assert refusal.value.code == ph.TILT_UNSTABLE
 
 
 def test_v1_keeps_the_constant_offset_and_a_policy_without_either_refuses(tmp_path):
@@ -156,3 +259,4 @@ def test_the_freeze_names_the_execution_policy_the_teacher_loads(tmp_path):
     assert value._teacher_execution_policy["place_descend_offset_m"] == -0.01325
     value._select_execution_policy("missing.yaml")
     assert value._teacher_execution_policy is None and value._teacher_config_error.startswith("TEACHER_POLICY_UNAVAILABLE")
+
