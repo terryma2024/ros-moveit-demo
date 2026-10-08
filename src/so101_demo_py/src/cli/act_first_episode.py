@@ -90,6 +90,11 @@ def build_parser() -> argparse.ArgumentParser:
     export=subparsers.add_parser('check-export',help='verify both common export boundaries refuse the committed diagnostic')
     export.add_argument('--run',required=True)
     export.add_argument('--output',required=True)
+    readback=subparsers.add_parser('readback',help='one independent readback of a finished run: the QC recomputation once, then the '
+        'commit proof and the diagnostic export refusals against it; writes qc.json, verify-commit.json, check-export.json and '
+        'readback-receipt.json')
+    readback.add_argument('--run',required=True)
+    readback.add_argument('--output-dir',required=True)
     return parser
 
 
@@ -205,6 +210,128 @@ def _check_export(arguments) -> int:
         return 3
     print(json.dumps(dict(status=proof['status'],output=arguments.output,sha256=digest),sort_keys=True))
     return 0
+
+
+_STAGES = {'qc': '_qc', 'verify-commit': '_verify_commit', 'check-export': '_check_export'}
+
+
+def _readback_entry(arguments) -> int:
+    """The entry points of an independent readback. Each one is a process that never trusts the QC memo (guarded: it refuses if the
+    process holds memo state or built a memo-trusting gate, and any memo access raises), holds one session in which the QC is
+    recomputed once and shared by its stages, and decides every stage from the files afresh."""
+    from ..act import qc_memo
+    from ..act.qc_session import qc_session
+
+    command = arguments.command
+    try:
+        with qc_memo.readback_guard(), qc_session(owner=f'readback:{command}') as session:
+            if command == 'readback':
+                return _readback(arguments, session)
+            return globals()[_STAGES[command]](arguments)
+    except qc_memo.ReadbackMemoForbidden as error:
+        print(f'act_first_episode: {error}', file=sys.stderr)
+        return 4
+
+
+# Exit codes. A stage keeps its standalone code; `readback` returns the first non-zero stage code in the order qc, verify-commit,
+# check-export, and 4 when the stages passed but the receipt's own checks did not.
+#   qc            0 PASS   3 FAIL verdict (report written, run mode)   4 error (run mode; 2 with --episode, 1 FAIL with --episode)
+#   verify-commit 0 proof written   3 refused or error
+#   check-export  0 both boundaries refused the diagnostic, proof written   3 refused, not diagnostic, or error
+#   readback      the stage codes above; check-export is NOT_APPLICABLE (0) for a run that is not a diagnostic
+READBACK_RECEIPT = 'readback-receipt.json'
+
+
+def _readback(arguments, session) -> int:
+    import types
+
+    from ..act.result_store import resolve_native_run, write_readback_receipt
+
+    out = Path(arguments.output_dir)
+    try:
+        out.mkdir(parents=True, exist_ok=False)
+        context = resolve_native_run(Path(arguments.run))
+        mode = _run_mode(context)
+        episode = context['episode']
+        session.watch = dict(episode_root=episode, scope=context['scope'], inputs_manifest=context['inputs_manifest'])
+        _guard_inputs(session, 'begin')
+    except (OSError, ValueError, TypeError, KeyError) as error:
+        print(f'act_first_episode: {error}', file=sys.stderr)
+        return 4
+    stages = {}
+    for name, function in (('qc', _qc), ('verify-commit', _verify_commit), ('check-export', _check_export)):
+        target = out / f'{name}.json'
+        if name == 'check-export' and mode != 'preselected_target_diagnostic':
+            stages[name] = dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None,
+                reason='DIAGNOSTIC_EXPORT_CHECK_MODE_REQUIRED: the export refusal check applies to diagnostic runs only')
+            continue
+        try:
+            _guard_inputs(session, f'before {name}')
+            rc = function(types.SimpleNamespace(command=name, run=arguments.run, episode=None, scope=None, inputs=None,
+                                                output=str(target)))
+            _guard_inputs(session, f'after {name}')
+        except ValueError as error:
+            print(f'act_first_episode: {error}', file=sys.stderr)
+            rc = 4
+        stages[name] = dict(status='PASS' if rc == 0 else 'FAIL', rc=rc, output=target.name if target.is_file() else None,
+                            sha256=hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None, reason=None)
+    receipt = _receipt(arguments, session, context, stages, mode)
+    try:
+        write_readback_receipt(receipt, out / READBACK_RECEIPT)
+    except ValueError as error:
+        print(f'act_first_episode: {error}', file=sys.stderr)
+        return 4
+    print(json.dumps(dict(status=receipt['status'], output=str(out / READBACK_RECEIPT), failures=receipt['failures']),
+                     sort_keys=True))
+    first = next((item['rc'] for item in stages.values() if item['rc'] != 0), 0)
+    return first if first else (0 if receipt['status'] == 'PASS' else 4)
+
+
+def _run_mode(context) -> str:
+    from ..act.collection_scope import read_collection_scope
+
+    return read_collection_scope(context['scope'])['mode']
+
+
+def _guard_inputs(session, label) -> None:
+    """The content fingerprint of everything the QC reads, hashed fresh; it must equal the one taken at the beginning."""
+    from ..act import qc_memo
+
+    watch = session.watch
+    fingerprint = qc_memo.fingerprint(**watch, use_cache=False)
+    if session.input_fingerprint is None:
+        session.input_fingerprint = fingerprint
+    elif fingerprint != session.input_fingerprint:
+        raise ValueError(f'READBACK_INPUT_CHANGED ({label})')
+
+
+def _receipt(arguments, session, context, stages, mode) -> dict:
+    from ..act import qc_memo
+
+    out = Path(arguments.output_dir)
+    recomputations = session.computations.get('recompute_native_qc', 0)
+    stored_path = Path(context['location']) / 'qc-report.json'
+    recomputed = stages['qc']['sha256']
+    stored = hashlib.sha256(stored_path.read_bytes()).hexdigest() if stored_path.is_file() else None
+    proof = {}
+    if stages['verify-commit']['output']:
+        proof = json.loads((out / stages['verify-commit']['output']).read_bytes())
+    bound = proof.get('qc_report_sha256')
+    failures = []
+    # a QC FAIL (rc 3) is a verdict about the data, recorded as `qc_verdict`; the receipt fails only for a stage that did not complete
+    if stages['qc']['rc'] not in (0, 3) or stages['verify-commit']['rc'] != 0 or stages['check-export']['rc'] != 0:
+        failures.append('STAGE_FAILED')
+    if recomputations != 1 and stages['qc']['rc'] in (0, 3) and stages['verify-commit']['rc'] == 0:
+        failures.append(f'READBACK_RECOMPUTE_COUNT: {recomputations}')
+    if stages['qc']['output'] and stages['verify-commit']['output'] and not (recomputed == stored == bound):
+        failures.append('READBACK_QC_DIGESTS_DISAGREE')
+    return dict(kind='ACT_READBACK_RECEIPT', schema_version=1, status='FAIL' if failures else 'PASS', failures=failures,
+                run=str(arguments.run), collection_mode=mode, pid=os.getpid(), code_digest=qc_memo.code_digest(),
+                input_fingerprint=session.input_fingerprint, journal_terminal_sha256=proof.get('journal_terminal_sha256'),
+                qc_report_sha256=dict(recomputed=recomputed, stored=stored, commit_proof=bound,
+                                      agree=bool(recomputed and recomputed == stored == bound)),
+                qc_verdict=None if not stages['qc']['output'] else json.loads((out / stages['qc']['output']).read_bytes())['status'],
+                qc_recomputations=recomputations, qc_reuse_hits=session.qc_hits, stages=stages)
 
 
 def _verified_run_completion(run_root):
@@ -527,12 +654,8 @@ def main(argv=None) -> int:
         return _prepare(arguments)
     if arguments.command == "preflight":
         return _preflight(arguments)
-    if arguments.command == 'qc':
-        return _qc(arguments)
-    if arguments.command == 'verify-commit':
-        return _verify_commit(arguments)
-    if arguments.command == 'check-export':
-        return _check_export(arguments)
+    if arguments.command in ('qc', 'verify-commit', 'check-export', 'readback'):
+        return _readback_entry(arguments)
     if arguments.command == "run":
         return _run(arguments)
     return 2

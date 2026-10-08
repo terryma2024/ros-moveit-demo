@@ -29,13 +29,15 @@ TEACHER_REFERENCE = {
 def report():
     """A current (schema 3) data QC report: data integrity only, no task success and no endpoint_pose_v1."""
     return {"kind": "ACT_EPISODE_QC", "schema_version": 3, "status": "PASS",
-        "rule_version": "act_data_qc_v3", "identity": {**IDENTITY, "lease": asdict(lease())},
+        "rule_version": "act_data_qc_v4", "identity": {**IDENTITY, "lease": asdict(lease())},
         "episode_seal_sha256": "a" * 64, "audit_manifest_sha256": "b" * 64,
         "inputs_sha256": "c" * 64, "scope_sha256": "d" * 64,
         "counts": {"records": 2, "head_acquisitions": 4, "wrist_acquisitions": 4,
                    "references": 4, "events": 1, "physics": 2, "native_steps": 51},
         "checks": {"episode_data": {"status": "PASS", "reason": ""},
-                   "teacher_reference_consistency": copy.deepcopy(TEACHER_REFERENCE)}, "reason": ""}
+                   "teacher_reference_consistency": copy.deepcopy(TEACHER_REFERENCE),
+                   "topic_loss_gate": {"status": "PASS", "reason": "", "document_sha256": "f" * 64,
+                                       "rule_version": "topic_loss_v1", "lost_in_window": 0}}, "reason": ""}
 
 
 def fail_teacher_reference(document, code="TEACHER_REFERENCE_END_AFTER_RECORDING"):

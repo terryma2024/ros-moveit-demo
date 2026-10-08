@@ -16,7 +16,10 @@ _COLLECTION_EVIDENCE_KEYS=frozenset({'coordinator_root','result_location','scope
 
 
 def _verify_collection_for_export(episode):
-    """Trace retained originals on every call; caller flags and cached proofs grant no eligibility."""
+    """Trace retained originals on every call; caller flags and cached proofs grant no eligibility.
+
+    A readback entry point may hold a session that shares one QC *recomputation* between its calls (a computation, not a proof): the
+    commit proof, the mode, the result status, the QC verdict and `export_eligible` are read and decided here afresh each time."""
     from .collection_scope import read_collection_scope
     from .result_store import verify_coordinator_commit,_safe
     evidence=episode.get('collection_evidence')
@@ -95,6 +98,9 @@ def _index(path) -> dict:
 def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
     """Episodes the coordinator committed, with a verifier receipt that agrees with the journal."""
 
+    from .qc_session import assert_export_path_allowed
+
+    assert_export_path_allowed()        # a cached proof grants no eligibility: only a readback entry point may hold a session here
     if not isinstance(manifest, dict) or not isinstance(manifest.get("episodes"), list):
         raise ValueError("MANIFEST_INVALID")
     committed = _index(campaign_index)
@@ -230,6 +236,9 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     import hashlib
     import os
 
+    from .qc_session import assert_export_path_allowed
+
+    assert_export_path_allowed()
     _bundle_digest(source_manifest_sha256, "EXPORT_SOURCE_DIGEST_INVALID")
     _bundle_digest(campaign_index_sha256, "EXPORT_INDEX_DIGEST_INVALID")
     if not isinstance(committed, (list, tuple)):

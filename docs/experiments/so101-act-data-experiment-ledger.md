@@ -69,11 +69,39 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3469
+latest_checkpoint: CP-3471
 next_experiment: A cleanup step 2 → B performance (≤10%) → C loss gate → D perception re-baseline/unpin → freeze + L1–L7.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3471 — phase C (topic-loss gate, act_data_qc_v4) and B3 (single fresh readback) implemented; B target met (248 s, 8.4%); L2 bag INVALID under C (3 of 7 losses unattributed)
+
+- C1: rosbag2 prints only an aggregate loss count at stop. Per-topic evidence comes from each topic's stamp grid or sequence. On 147cb073 (6 reported, 11 missing across topics) and on L2 (7 reported, 4 missing) every gap lies before the verified reset. A gap also seen on /clock is treated as a producer stall.
+- C2: new rules for /clock, /joint_states (10 ms grid), scene_state (each world record needs a same-step/same-stamp scene state), colour images (each camera_info stamp needs its image), and planning-scene read counts. They run in the raw-bag scan → topic-loss.json beside the episode. QC_RULE_VERSION act_data_qc_v4; the QC report's topic_loss_gate binds that file by digest, and the memo covers it; v3 reports/memos are refused.
+- C3 policy (CP-3394): a loss inside the window on a used topic → INVALID OFFLINE_TOPIC_LOSS:<topic>; outside the window or on an unused topic → recorded; an aggregate not accounted for by per-topic missing messages → INVALID OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED (fail closed).
+- Golden results: 147cb073 stays VALID (QC report diff only rule version + topic_loss_gate + derived digests). **45315499 (L2) becomes INVALID: OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED 3 of 7** (all per-topic rules pass). The other six stay INVALID, with extra reasons on 8d9ed9d3/031b82c6 (/clock, /joint_states) and fault-late (planning-scene reads). Tests test_c_topic_loss_gate.py 22 (RED→GREEN); gate 7,512 pass. Change doc 2026-10-08-transport-loss-attribution-gate.md. Backup p5c-base.tar.gz.
+- B3: `act_first_episode readback --run` is its own process (qc, verify-commit, check-export; one QC recompute; readback-receipt.json). run writes only commit-proof.json. Full-content fingerprint before/after/at lookup → READBACK_INPUT_CHANGED. Memo guards in readback; the export path refuses non-readback sessions. Formal mode → check-export NOT_APPLICABLE. Exit-code table in the doc. test_b3_single_readback.py 31 tests. Gate: only the known load-sensitive test_rec12b_capturing real-rate replay failed (17/17 alone). Tooling: run-qualified-live-20261009-r10.zsh, tooling/live-r7.zsh (the wrapper runs its own readback process and judges the receipt by pid and content).
+- B timing (quiet machine; readback measured on the pre-C source + B3, since C makes v3 reports unreadable): processing 537→190 s (+≈2 s scan from C); in-run proof 421→27 s; readback 1,993→31 s (1 recompute, 4 reuse hits; outputs byte-identical to the original hashes); total 2,951→248 s = 8.4% ✅. The outer session alone also gives 27 s; the report-level cache (≈4 s of fingerprinting) is kept for the one-recompute receipt (decision: keep).
+- Open: before deciding accept vs reject for unattributed residual losses, identify the source of L2's 3 residual losses (rosbag2 loss accounting: which subscriptions/topics count, e.g. /rosout, /parameter_events, topics recorded but unchecked, or counts before the first message). Investigation dispatched. Committed as a checkpoint; backup p5d-base.tar.gz (ccf64b5d…).
+
+## CP-3470 — B3 single-fresh-readback design: independent review PASS-WITH-CHANGES; all 8 required changes accepted
+
+- Review (fresh Opus reviewer; GPT-6 Astra unavailable), read-only. Key findings:
+  (1) Proposal 3 (the run writes the readback receipt) breaks independence: the run process builds ActCollectionResultVerifier(trust_fresh_qc_memo=True) (mujoco_parallel_batch.py:2846) and fills qc_memo._CACHE, so its proof is not a never-memo fresh process. Minimum = 3 recomputes: processor, in-run proof, separate readback.
+  (2) A stat key (size/inode/mtime) is unsafe: an in-place same-size rewrite with mtime restored gives a stale hit; a change during compute caches mixed bytes. Report-derived digests can't be the key (circular).
+  (3) Sharing must be limited to the QC recompute inside the verifier; export eligibility must be decided fresh on every call.
+- Decisions (CP-3394; all required changes accepted):
+  1. run keeps only commit-proof.json; `readback --run` is always its own process, and acceptance uses its receipt (qc_recomputations: 1, counted at report level).
+  2. The reuse key is a forced full-content fingerprint (all episode files + scope + frozen inputs + Teacher manifest + qc_memo.code_digest() + arguments, hashed fresh without the stat cache), checked before/after the recompute and at every lookup; any difference → READBACK_INPUT_CHANGED (fail closed).
+  3. Cache only recompute_native_qc results; sessions only in the readback CLI entry points; a guard fails on a session in the export path elsewhere.
+  4. Readback guard: refuse if a memo-trusting store/verifier is built or qc-verification-memo.json is opened.
+  5. The receipt binds recomputed qc sha = stored report sha = commit proof qc_report_sha256, plus the fingerprint, code digest, journal terminal frame and pid.
+  6. Define stage behaviour for QC FAIL with a valid commit, and for formal-mode export (NOT_APPLICABLE vs refusal), with an exit-code table.
+  7. Fix citations (qc_session.py already exists — extend it); measure the outer-session-only option before adding a report cache.
+  8. Rewrite the r10 tooling logic.
+  RED tests: stale-stat, change during compute, memo leak, no receipt from run, formal-mode export with an active session, session outside entry points, per-stage parity with the standalone commands, recompute count 3→1 for check-export.
+- Projected timing with the in-run proof kept: processing ≈190 + proof ≈27 + readback ≈30–35 ≈ 250 s (≈8.5%) — to be measured. Queued after phase C (single writer).
 
 ## CP-3469 — phase B1/B2 done: QC 9.5× faster, replay 1.8×; three steps 2,951 s → 347 s (11.8%); QC byte-identical; B3 draft to review
 

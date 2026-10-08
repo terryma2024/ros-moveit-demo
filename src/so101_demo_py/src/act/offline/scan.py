@@ -29,7 +29,15 @@ STATE_TAIL_NS = 100_000_000
 #: topics whose messages are decoded in the scan (the images are large, and only counted from the bag's own metadata)
 CAMERA_INFO_TOPICS = ("/head_camera/camera_info", "/wrist_camera/camera_info")   # same stamps as the images, and small
 CAMERA_PERIOD_NS = 100_000_000
-_DECODED = (EVENTS_TOPIC, CHUNK_TOPIC, WORLD_TOPIC, *CONTROLLER_STATE_TOPICS, *CAMERA_INFO_TOPICS)
+CLOCK_TOPIC = "/clock"
+JOINT_STATES_TOPIC = "/joint_states"
+SCENE_STATE_TOPIC = "/so101/simulation/scene_state"
+CONTACTS_TOPIC = "/so101/simulation/robot_contacts"
+COLOR_TOPICS = {"/head_camera/color": "/head_camera/camera_info", "/wrist_camera/color": "/wrist_camera/camera_info"}
+CLOCK_PERIOD_NS = 2_000_000
+JOINT_STATES_PERIOD_NS = 10_000_000
+_DECODED = (EVENTS_TOPIC, CHUNK_TOPIC, WORLD_TOPIC, *CONTROLLER_STATE_TOPICS, *CAMERA_INFO_TOPICS, CLOCK_TOPIC,
+            JOINT_STATES_TOPIC, SCENE_STATE_TOPIC, *COLOR_TOPICS)
 _NS = 1_000_000_000
 
 
@@ -78,8 +86,24 @@ def _stamp_ns(stamp) -> int:
     return int(stamp.sec) * _NS + int(stamp.nanosec)
 
 
-def scan_bag(bag, *, info=None) -> dict:
-    """{"reasons": [...], "timeline": {...}, "continuity": {...}, "counts": {...}} for the bag at `bag`."""
+def _missing(first, second, period) -> int:
+    """How many messages of a `period` grid are absent between two consecutive stamps that are not one period apart."""
+    return max(round((second - first) / period) - 1, 0)
+
+
+def _grid_gaps(stamps, period) -> list:
+    return [[a, b] for a, b in zip(stamps, stamps[1:]) if b - a != period]
+
+
+def _overlaps(gap, intervals) -> bool:
+    return any(gap[0] < b and a < gap[1] for a, b in intervals)
+
+
+def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None) -> dict:
+    """{"reasons": [...], "timeline": {...}, "continuity": {...}, "counts": {...}, "topic_loss": {...}} for the bag at `bag`.
+
+    `transport_lost` is the number of messages the recorder reported lost on the transport layer (None when unknown, which fails
+    closed), `scene_reads_expected` the number of planning-scene reads the sidecar made (its own count)."""
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
@@ -90,6 +114,7 @@ def scan_bag(bag, *, info=None) -> dict:
     reasons = [f"OFFLINE_BAG_TOPIC_MISSING: {topic}" for topic in required_topics() if counts.get(topic, 0) == 0]
     types: dict = {}
     events_text, states, chunks, worlds, cameras = [], defaultdict(list), [], [], defaultdict(list)
+    clock_stamps, joint_stamps, scene_states, color_stamps = [], [], [], defaultdict(list)
     read_counts: dict = defaultdict(int)
     for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _DECODED if t in counts]):
         read_counts[topic] += 1
@@ -102,13 +127,21 @@ def scan_bag(bag, *, info=None) -> dict:
             states[topic].append(_stamp_ns(message.header.stamp))
         elif topic in CAMERA_INFO_TOPICS:
             cameras[topic].append(_stamp_ns(message.header.stamp))
+        elif topic == CLOCK_TOPIC:
+            clock_stamps.append(int(message.clock.sec) * _NS + int(message.clock.nanosec))
+        elif topic == JOINT_STATES_TOPIC:
+            joint_stamps.append(_stamp_ns(message.header.stamp))
+        elif topic == SCENE_STATE_TOPIC:
+            scene_states.append((int(message.reset_epoch), int(message.simulation_step), _stamp_ns(message.header.stamp)))
+        elif topic in COLOR_TOPICS:
+            color_stamps[topic].append(_stamp_ns(message.header.stamp))
         elif topic == CHUNK_TOPIC:
             chunks.append((int(message.chunk_sequence), int(message.first_physics_step), int(message.last_physics_step),
                            round(message.first_simulation_time_s * _NS), round(message.last_simulation_time_s * _NS),
                            int(message.reset_epoch)))
         else:
             worlds.append((int(message.publisher_sequence), _stamp_ns(message.header.stamp), int(message.reset_epoch),
-                           bool(message.paused), int(bag_stamp)))
+                           bool(message.paused), int(bag_stamp), int(message.simulation_step)))
     for topic, count in read_counts.items():
         if count != counts[topic]:
             reasons.append(f"OFFLINE_BAG_READBACK_COUNT_MISMATCH: {topic} read={count} metadata={counts[topic]}")
@@ -201,4 +234,144 @@ def scan_bag(bag, *, info=None) -> dict:
     selected = [w for w in inside if begin <= w[1] <= end]
     gaps = [[a[0], b[0]] for a, b in zip(selected, selected[1:]) if b[0] != a[0] + 1]
     verdict(WORLD_TOPIC, selected, gaps, inside[0][1] if inside else None, inside[-1][1] if inside else None)
+    report["topic_loss"] = _topic_loss(
+        report, facts, counts, reasons, begin=begin, end=end, reset_ns=reset_ns, stop_ns=stop_ns, epoch=epoch, states=states,
+        chunks=chunks, worlds=worlds, cameras=cameras, clock_stamps=clock_stamps, joint_stamps=joint_stamps,
+        scene_states=scene_states, color_stamps=color_stamps, transport_lost=transport_lost,
+        scene_reads_expected=scene_reads_expected, start_sim=start_sim)
     return report
+
+
+def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns, epoch, states, chunks, worlds, cameras,
+                clock_stamps, joint_stamps, scene_states, color_stamps, transport_lost, scene_reads_expected, start_sim) -> dict:
+    """Phase C: every topic the episode uses is judged on its own continuity over the window, and the recorder's aggregate
+    transport loss is reconciled with what the topics show. Adds reasons to `reasons`; returns the facts for the gate document.
+
+    The window is [the start of the retained world (or the verified reset), the Teacher's terminal + 0.1 s]: wider than the
+    window of the older sequence rules, because rows are minted from the capture start. A message lost outside it is recorded,
+    never fatal.
+    """
+    lo = start_sim if report.get("window_start") is not None else (reset_ns if reset_ns is not None else begin)
+    lo = min(lo, begin)
+    topics: dict = {}
+    clock_gaps = _grid_gaps(clock_stamps, CLOCK_PERIOD_NS)
+    attributed = 0
+
+    def record(topic, *, rule, used, messages, gaps, period, window_lo=lo, window_hi=end, judged=True, reason=True):
+        """One gridded topic: gaps (stamp pairs) -> missing counts inside and outside the window; stalls (a gap that overlaps a
+        /clock gap: the producer's cycle was skipped, nothing was published) are not message losses."""
+        nonlocal attributed
+        stall = [g for g in gaps if topic != CLOCK_TOPIC and _overlaps(g, clock_gaps)]
+        lost = [g for g in gaps if g not in stall]
+        inside = [g for g in lost if g[1] > window_lo and g[0] < window_hi]
+        outside = [g for g in lost if g not in inside]
+        missing_in = sum(_missing(a, b, period) or 1 for a, b in inside)
+        missing_out = sum(_missing(a, b, period) or 1 for a, b in outside)
+        topics[topic] = {"rule": rule, "used": used, "messages": messages, "gaps": len(gaps), "stalls": len(stall),
+                         "missing_in_window": missing_in if judged else 0, "missing_outside_window": missing_out,
+                         "diagnostic_in_window": 0 if judged else missing_in,
+                         "first_missing": [g for g in lost][:10]}
+        if topic != CLOCK_TOPIC:       # a /clock gap is what defines a producer stall: it is judged, but it explains no lost message
+            attributed += missing_in + missing_out
+        if inside and used and judged and reason:
+            reasons.append(f"OFFLINE_TOPIC_LOSS:{topic} gaps={len(inside)} missing={missing_in}")
+
+    # existing sequence rules: their verdict stands, their facts join the document
+    for topic in CONTROLLER_STATE_TOPICS:
+        item = report["continuity"].get(topic, {})
+        gaps = _grid_gaps(states.get(topic, []), STATE_PERIOD_NS)
+        neck = topic.startswith("/neck_")
+        record(topic, rule="2 ms stamp grid; a gap judged where a label instant needs the frame (OFFLINE_SOURCE_GAP)",
+               used=not neck, messages=len(states.get(topic, [])), gaps=gaps, period=STATE_PERIOD_NS, judged=False, reason=False)
+        topics[topic]["missing_in_window"] = 0 if neck else item.get("gap_count", 0)
+        topics[topic]["diagnostic_in_window"] = item.get("diagnostic_gaps", 0) if not neck else item.get("gaps_in_window", 0)
+    for topic in CAMERA_INFO_TOPICS:
+        gaps = _grid_gaps(cameras.get(topic, []), CAMERA_PERIOD_NS)
+        record(topic, rule="100 ms stamp grid, head equals wrist (OFFLINE_CAMERA_GRID)", used=True,
+               messages=len(cameras.get(topic, [])), gaps=gaps, period=CAMERA_PERIOD_NS,
+               window_lo=reset_ns if reset_ns is not None else lo, window_hi=stop_ns if stop_ns is not None else end,
+               judged=False, reason=False)
+        topics[topic]["missing_in_window"] = report.get("camera_grid", {}).get("off_grid_count", 0) if topic == CAMERA_INFO_TOPICS[0] else 0
+
+    # new rules (C2)
+    record(CLOCK_TOPIC, rule="2 ms stamp grid", used=True, messages=len(clock_stamps), gaps=clock_gaps, period=CLOCK_PERIOD_NS)
+    record(JOINT_STATES_TOPIC, rule="10 ms header-stamp grid", used=True, messages=len(joint_stamps),
+           gaps=_grid_gaps(joint_stamps, JOINT_STATES_PERIOD_NS), period=JOINT_STATES_PERIOD_NS)
+    # the colour images: the camera_info of the same frame is the witness that the frame existed
+    rows_lo = reset_ns if reset_ns is not None else lo
+    rows_hi = stop_ns if stop_ns is not None else end
+    for image_topic, info_topic in COLOR_TOPICS.items():
+        have = set(color_stamps.get(image_topic, []))
+        absent = [s for s in cameras.get(info_topic, []) if s not in have]
+        inside = [s for s in absent if rows_lo <= s <= rows_hi]
+        topics[image_topic] = {"rule": "every camera_info stamp has its image", "used": True,
+                               "messages": len(color_stamps.get(image_topic, [])), "gaps": len(absent), "stalls": 0,
+                               "missing_in_window": len(inside), "missing_outside_window": len(absent) - len(inside),
+                               "diagnostic_in_window": 0, "first_missing": absent[:10]}
+        attributed += len(absent)
+        if inside:
+            reasons.append(f"OFFLINE_TOPIC_LOSS:{image_topic} missing={len(inside)}")
+    # scene_state is published in the same call as the world record (same snapshot): every world record of the window has its
+    # scene_state of the same step and stamp
+    have_scene = {(step, stamp) for e, step, stamp in scene_states if e == epoch}
+    needed = [(w[5], w[1]) for w in worlds if w[2] == epoch and lo <= w[1] <= end]
+    absent = [pair for pair in needed if pair not in have_scene]
+    # outside the window only from the first scene_state on (the world topic starts publishing before the scene state does)
+    first_scene = min((stamp for e, _step, stamp in scene_states if e == epoch), default=None)
+    absent_outside = [] if first_scene is None else [
+        (w[5], w[1]) for w in worlds if w[2] == epoch and w[1] >= first_scene and not lo <= w[1] <= end
+        and (w[5], w[1]) not in have_scene]
+    topics[SCENE_STATE_TOPIC] = {"rule": "every world record of the window has a scene_state of the same step and stamp",
+                                 "used": True, "messages": len(scene_states), "gaps": len(absent), "stalls": 0,
+                                 "missing_in_window": len(absent), "missing_outside_window": len(absent_outside),
+                                 "diagnostic_in_window": 0, "first_missing": [list(pair) for pair in absent[:10]]}
+    attributed += len(absent) + len(absent_outside)
+    if absent:
+        reasons.append(f"OFFLINE_TOPIC_LOSS:{SCENE_STATE_TOPIC} missing={len(absent)}")
+    # sequenced topics: facts and the numbers that count toward the attribution
+    for topic in (CHUNK_TOPIC, WORLD_TOPIC):
+        item = report["continuity"].get(topic, {})
+        topics[topic] = {"rule": "chunk sequence and step / publisher sequence", "used": True,
+                         "messages": counts.get(topic, 0), "gaps": item.get("gap_count", 0), "stalls": 0,
+                         "missing_in_window": item.get("gap_count", 0), "missing_outside_window": 0, "diagnostic_in_window": 0,
+                         "first_missing": item.get("first_gaps", [])}
+        attributed += item.get("gap_count", 0)
+    # the outside-window sequence gaps of chunks and world records are not scanned: both are cheap, so count them
+    inside_chunks = [c for c in chunks if c[5] == epoch]
+    out_chunks = sum(1 for a, b in zip(inside_chunks, inside_chunks[1:]) if b[0] != a[0] + 1 and not (a[4] >= begin and b[3] <= end))
+    topics[CHUNK_TOPIC]["missing_outside_window"] = out_chunks
+    attributed += out_chunks
+    seq = [w[0] for w in worlds if w[2] == epoch]
+    out_worlds = sum(1 for a, b in zip(seq, seq[1:]) if b != a + 1) - topics[WORLD_TOPIC]["missing_in_window"]
+    topics[WORLD_TOPIC]["missing_outside_window"] = max(out_worlds, 0)
+    attributed += max(out_worlds, 0)
+    # topics the episode does not use: counted and recorded only
+    expected_steps = sum(c[2] - c[1] + 1 for c in chunks)
+    topics[CONTACTS_TOPIC] = {"rule": "none (a lost sample is a lost sample of a chunk, which is covered)", "used": False,
+                              "messages": counts.get(CONTACTS_TOPIC, 0), "gaps": 0, "stalls": 0, "missing_in_window": 0,
+                              "missing_outside_window": 0, "diagnostic_in_window": 0, "first_missing": [],
+                              "chunk_steps": expected_steps}
+    for topic in ("/so101/simulation/joints", "/so101/simulation/physics_hazard"):
+        topics[topic] = {"rule": "none (not used by the episode)", "used": False, "messages": counts.get(topic, 0), "gaps": 0,
+                         "stalls": 0, "missing_in_window": 0, "missing_outside_window": 0, "diagnostic_in_window": 0,
+                         "first_missing": []}
+    reads = counts.get("/so101/raw/planning_scene_reads", 0)
+    short = 0 if scene_reads_expected is None else max(scene_reads_expected - reads, 0)
+    topics["/so101/raw/planning_scene_reads"] = {
+        "rule": "bag count equals the sidecar's own count of reads", "used": True, "messages": reads, "gaps": short, "stalls": 0,
+        "missing_in_window": short, "missing_outside_window": 0, "diagnostic_in_window": 0, "first_missing": [],
+        "sidecar_count": scene_reads_expected}
+    attributed += short
+    if short:
+        reasons.append(f"OFFLINE_TOPIC_LOSS:/so101/raw/planning_scene_reads missing={short}")
+    topics[EVENTS_TOPIC] = {"rule": "seq 1..N", "used": True, "messages": counts.get(EVENTS_TOPIC, 0), "gaps": 0, "stalls": 0,
+                            "missing_in_window": 0, "missing_outside_window": 0, "diagnostic_in_window": 0, "first_missing": []}
+    # ---- the recorder's aggregate
+    unattributed = None if transport_lost is None else max(transport_lost - attributed, 0)
+    aggregate = {"reported": transport_lost, "attributed": attributed, "unattributed": 0 if unattributed is None else unattributed}
+    if transport_lost is None:
+        reasons.append("OFFLINE_TRANSPORT_LOSS_UNKNOWN")
+    elif unattributed:
+        reasons.append(f"OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: {unattributed} of {transport_lost}")
+    return {"window": {"begin_sim_ns": lo, "end_sim_ns": end, "rows_begin_sim_ns": rows_lo, "rows_end_sim_ns": rows_hi},
+            "transport_lost": aggregate, "topics": topics}

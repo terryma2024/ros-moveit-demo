@@ -434,8 +434,9 @@ ENDPOINT_CHECK_FIELDS = frozenset({"status", "policy_sha256", "initial_sequence"
 
 
 QC_SCHEMA_VERSION = 3
-QC_RULE_VERSION = "act_data_qc_v3"
+QC_RULE_VERSION = "act_data_qc_v4"   # v4 (phase C): + the topic_loss_gate check; v3 reports and memos are refused
 REFERENCE_CHECK = "teacher_reference_consistency"
+TOPIC_LOSS_CHECK = "topic_loss_gate"
 #: the closed set of reasons data QC gives when the recording disagrees with the Teacher's recorded references
 TEACHER_REFERENCE_CODES = frozenset({
     "TEACHER_REFERENCE_MANIFEST_MISSING", "TEACHER_REFERENCE_START_MISSING", "TEACHER_REFERENCE_END_MISSING",
@@ -579,7 +580,7 @@ def validate_qc_report(report, *, legacy=False):
                 or any(type(value) is not int or value < 0 for value in counts.values())):
             raise ValueError("counts")
         checks = report["checks"]
-        if type(checks) is not dict or set(checks) != {"episode_data", REFERENCE_CHECK}:
+        if type(checks) is not dict or set(checks) != {"episode_data", REFERENCE_CHECK, TOPIC_LOSS_CHECK}:
             raise ValueError("checks")
         check = checks["episode_data"]
         if (type(check) is not dict or set(check) != {"status", "reason"}
@@ -587,7 +588,9 @@ def validate_qc_report(report, *, legacy=False):
                 or bool(check["reason"]) != (check["status"] == "FAIL")):
             raise ValueError("check")
         _validate_reference_check(checks[REFERENCE_CHECK])
-        failing = [item["reason"] for item in (checks["episode_data"], checks[REFERENCE_CHECK])
+        from .topic_loss import validate_check
+        validate_check(checks[TOPIC_LOSS_CHECK])
+        failing = [item["reason"] for item in (checks["episode_data"], checks[REFERENCE_CHECK], checks[TOPIC_LOSS_CHECK])
                    if item["status"] == "FAIL"]
         success = not failing
         if ((report["status"] == "PASS") != success or report["reason"] != (failing[0] if failing else "")
@@ -757,18 +760,55 @@ def physics_chunk_count(events) -> int:
     return sum(1 for event in events if type(event) is dict and event.get('kind') == 'physics_chunk_v1')
 
 
-def recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None):
+def recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None, topic_loss=None):
     """Read-only current data QC (schema 3); see `_recompute_native_qc`. The verifiers it repeats run once per session."""
     import contextlib
 
-    from .qc_session import active, qc_session
+    from .qc_session import ENTRY_OWNERS, active, qc_session
 
-    with contextlib.nullcontext() if active() is not None else qc_session():
+    session = active()
+    if session is not None and session.owner in ENTRY_OWNERS:
+        return _recompute_for_readback(session, episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                       teacher_manifest=teacher_manifest, topic_loss=topic_loss)
+    with contextlib.nullcontext() if session is not None else qc_session():
         return _recompute_native_qc(episode_root, scope=scope, inputs_manifest=inputs_manifest,
-                                    teacher_manifest=teacher_manifest)
+                                    teacher_manifest=teacher_manifest, topic_loss=topic_loss)
 
 
-def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None):
+def _recompute_for_readback(session, episode_root, *, scope, inputs_manifest, teacher_manifest, topic_loss):
+    """One full recomputation per readback process, shared by the stages that each need "the QC of these files".
+
+    Only this result is shared; the stored report, the journal, the index, the receipt and every eligibility decision are read and
+    decided afresh by each stage. The reuse key is a full-content fingerprint hashed without the memo's stat cache (every byte of the
+    episode, the scope, the frozen inputs, the Teacher manifest and the gate document), the QC code digest and the arguments. It is
+    computed before and after the recomputation and again at every lookup: any difference fails closed (READBACK_INPUT_CHANGED). A
+    stat key could hit stale after an in-place rewrite that restores the size and the mtime."""
+    import copy
+
+    from . import qc_memo
+
+    def content():
+        return qc_memo.fingerprint(episode_root=episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                   teacher_manifest=teacher_manifest, topic_loss=topic_loss, use_cache=False)
+
+    key = (str(episode_root), str(scope), str(inputs_manifest), str(teacher_manifest), str(topic_loss), qc_memo.code_digest())
+    before = content()
+    entry = session.qc_results.get(key)
+    if entry is not None:
+        if entry["fingerprint"] != before:
+            raise ValueError("READBACK_INPUT_CHANGED")
+        session.qc_hits += 1
+        return copy.deepcopy(entry["report"])
+    report = _recompute_native_qc(episode_root, scope=scope, inputs_manifest=inputs_manifest,
+                                  teacher_manifest=teacher_manifest, topic_loss=topic_loss)
+    if content() != before:
+        raise ValueError("READBACK_INPUT_CHANGED")
+    session.qc_results[key] = {"fingerprint": before, "report": copy.deepcopy(report), "code_digest": qc_memo.code_digest()}
+    session.note("recompute_native_qc")
+    return report
+
+
+def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None, topic_loss=None):
     """Read-only current data QC (schema 3), suitable for an installed fresh process.
 
     The caller supplies the original run scope and original frozen input set. Episode-local copies cannot substitute
@@ -809,9 +849,12 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
     reference = verify_teacher_references(teacher, identity=manifest['identity'], window=manifest['window'],
                                           physics_steps=_raw_physics_samples(events))
     reference['details']['teacher_manifest_sha256'] = teacher_sha256
-    checks = {"episode_data": dict(status='PASS', reason=''), REFERENCE_CHECK: reference}
+    from .topic_loss import qc_check as topic_loss_check
+    loss = topic_loss_check(root, identity=manifest['identity'], path=topic_loss)
+    checks = {"episode_data": dict(status='PASS', reason=''), REFERENCE_CHECK: reference, TOPIC_LOSS_CHECK: loss}
+    failing = [item for item in (reference, loss) if item['status'] == 'FAIL']
     document = dict(kind='ACT_EPISODE_QC', schema_version=QC_SCHEMA_VERSION, rule_version=QC_RULE_VERSION,
-        status=reference['status'], identity=manifest['identity'], reason=reference['reason'],
+        status='FAIL' if failing else 'PASS', identity=manifest['identity'], reason=failing[0]['reason'] if failing else '',
         episode_seal_sha256=_manifest_digest(root/'seal.json'), audit_manifest_sha256=_manifest_digest(manifest_path),
         inputs_sha256=frozen['inputs_sha256'], scope_sha256=_manifest_digest(scope_path),
         counts=dict(records=episode['record_count'], head_acquisitions=sum(row['camera']=='head' for row in acquisitions),

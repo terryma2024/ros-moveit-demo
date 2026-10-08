@@ -136,7 +136,19 @@ def messages(*, paused_worlds=()):
         message.paused = (world_index - 1) in paused_worlds
         message.object_pose_world.orientation.w = 1.0
         add("/so101/simulation/evidence", "so101_mujoco_support/msg/SimulationEvidence", sim_ns / 1e9, "world", message)
+        # the scene state is published in the same call as the world record: same step, same stamp (phase C rule)
+        scene = SceneStateEvidence(simulation_session_id=SESSION, reset_epoch=EPOCH, simulation_step=sim_ns // 2_000_000)
+        _stamp(scene.header.stamp, sim_ns)
+        add("/so101/simulation/scene_state", "so101_mujoco_support/msg/SceneStateEvidence", sim_ns / 1e9, "world", scene)
         sim_ns += 12_000_000
+    joint_ns = round(BAG_START_S * 1e9)
+    while joint_ns <= round(BAG_END_S * 1e9):
+        joints = JointState()
+        _stamp(joints.header.stamp, joint_ns)
+        joints.name = ["a", "b", "c", "d", "e", "f"]
+        joints.position = [0.0] * 6
+        add("/joint_states", "sensor_msgs/msg/JointState", joint_ns / 1e9, "joint", joints)
+        joint_ns += 10_000_000
     for sequence, stamp in enumerate(CHUNK_STAMPS, start=1):
         last = round(stamp / 0.002)
         add("/so101/simulation/physics_step_chunks", "so101_mujoco_support/msg/PhysicsStepEvidenceChunk", stamp, "chunk",
@@ -147,19 +159,11 @@ def messages(*, paused_worlds=()):
             _stamp(image.header.stamp, round(stamp * 1e9))
             image.header.frame_id = f"{camera}_camera"
             add(f"/{camera}_camera/color", "sensor_msgs/msg/Image", stamp, "image", image)
-        joints = JointState()
-        _stamp(joints.header.stamp, round(stamp * 1e9))
-        joints.name = ["a", "b", "c", "d", "e", "f"]
-        joints.position = [0.0] * 6
-        add("/joint_states", "sensor_msgs/msg/JointState", stamp, "joint", joints)
     for stamp in STAMPS:
         for camera in ("head", "wrist"):
             info = CameraInfo(height=480, width=640)
             _stamp(info.header.stamp, round(stamp * 1e9))
             add(f"/{camera}_camera/camera_info", "sensor_msgs/msg/CameraInfo", stamp, "image", info)
-    scene = SceneStateEvidence(simulation_session_id=SESSION, reset_epoch=EPOCH, simulation_step=475)
-    _stamp(scene.header.stamp, round(0.95 * 1e9))
-    add("/so101/simulation/scene_state", "so101_mujoco_support/msg/SceneStateEvidence", 0.95, "other", scene)
     add("/so101/simulation/robot_contacts", "so101_mujoco_support/msg/RobotContactEvidence", 0.95, "other",
         RobotContactEvidence(simulation_session_id=SESSION, reset_epoch=EPOCH, physics_step=475))
     mono = mono_of(0.95)
@@ -170,7 +174,7 @@ def messages(*, paused_worlds=()):
     return out
 
 
-def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=()) -> Path:
+def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transport_lost=0) -> Path:
     """Write `root/bag` (MCAP) and `root/record-stats.json`; returns the bag directory.
 
     `omit_topics`: topics left out entirely. `drop`: (topic, index) messages left out (index counts per topic from 0).
@@ -193,7 +197,8 @@ def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=()) -> Path:
     start, end = mono_of(BAG_START_S - 0.05), mono_of(BAG_END_S + 0.05)
     (root / "record-stats.json").write_text(json.dumps(
         {"anchor_start": {"system_ns": system_of(start), "monotonic_ns": start, "uncertainty_ns": 1000},
-         "anchor_end": {"system_ns": system_of(end), "monotonic_ns": end, "uncertainty_ns": 1000}}))
+         "anchor_end": {"system_ns": system_of(end), "monotonic_ns": end, "uncertainty_ns": 1000},
+         "transport_lost": transport_lost, "scene_reads": {"count": 1, "errors": 0}}))
     return bag
 
 
@@ -259,7 +264,7 @@ class BagSyntheticSources(SourcesDefaults):
                 engine.episode.push(camera, stamp_s=stamp, pixels=pixels)
                 self.counts[camera] += 1
                 self.last_image_stamp = max(self.last_image_stamp, stamp)
-            else:
+            elif any(abs(stamp - tick) < 1e-9 for tick in STAMPS):     # the capture takes the joint states of its own ticks
                 engine.episode.push_numeric(stamp_s=stamp, arm=list(message.position), neck=0.0)
                 self.counts["joint_states"] += 1
 

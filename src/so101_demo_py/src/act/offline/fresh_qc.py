@@ -19,6 +19,7 @@ def main(argv=None) -> int:
     parser.add_argument("--scope", type=Path, required=True)
     parser.add_argument("--inputs-manifest", type=Path, required=True)
     parser.add_argument("--teacher-manifest", type=Path)
+    parser.add_argument("--topic-loss", type=Path, help="the topic-loss gate document (default: beside the episode)")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--diagnostic-ignore-scene-colors", action="store_true",
                         help="DIAGNOSTIC ONLY: compare scene geometry without object colours, as the diagnostic processor run did")
@@ -39,14 +40,15 @@ def main(argv=None) -> int:
 
     try:
         report = recompute_native_qc(arguments.episode, scope=arguments.scope, inputs_manifest=arguments.inputs_manifest,
-                                     teacher_manifest=arguments.teacher_manifest)
+                                     teacher_manifest=arguments.teacher_manifest, topic_loss=arguments.topic_loss)
         digest = write_qc_report(report, arguments.output)
         if report["status"] == "PASS" and not arguments.diagnostic_ignore_scene_colors:
             # CP-3456: the run's result gates may rely on this exact recomputation instead of repeating it
             from .. import qc_memo
 
             qc_memo.write_memo(arguments.output, report, episode_root=arguments.episode, scope=arguments.scope,
-                               inputs_manifest=arguments.inputs_manifest, teacher_manifest=arguments.teacher_manifest)
+                               inputs_manifest=arguments.inputs_manifest, teacher_manifest=arguments.teacher_manifest,
+                               topic_loss=arguments.topic_loss)
     except (OSError, ValueError, TypeError, KeyError) as error:
         print(json.dumps({"status": "ERROR", "reason": f"{type(error).__name__}: {error}"[:500]}, sort_keys=True))
         return 2

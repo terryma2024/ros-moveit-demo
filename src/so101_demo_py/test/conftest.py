@@ -55,3 +55,17 @@ def isolated_ros_domain(monkeypatch):
     domain = 100 + (index * 8 + counter % 8) % 100
     monkeypatch.setenv("ROS_DOMAIN_ID", str(domain))
     return domain
+
+
+@pytest.fixture(autouse=True)
+def _fresh_readback_state():
+    """The memo and its readback guard are process state: no test inherits another's filled cache, trusting gates or open guard."""
+    try:
+        from so101_demo.act import qc_memo
+    except ImportError:
+        yield
+        return
+    qc_memo._CACHE.clear()
+    qc_memo._TRUSTING_BUILT[0] = 0
+    qc_memo._STRICT[0] = 0
+    yield

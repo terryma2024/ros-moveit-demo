@@ -58,6 +58,28 @@ def scene_read_pairs(bag) -> list:
     return pairs
 
 
+def load_loss_facts(bag, *, stats_file=None) -> dict:
+    """What the record-only process knows about losses: the transport-layer total (the stats key, or for stats written before the key
+    existed the line `ros2 bag record` printed into `bag-record.log` beside them; None when neither is there) and the number of
+    planning-scene reads the sidecar made."""
+    from .raw_recorder import transport_lost_from_log
+
+    stats_path = Path(stats_file) if stats_file is not None else Path(bag).parent / "record-stats.json"
+    lost, reads = None, None
+    if stats_path.is_file():
+        document = json.loads(stats_path.read_bytes())
+        if type(document.get("transport_lost")) is int:
+            lost = document["transport_lost"]
+        if isinstance(document.get("scene_reads"), dict) and type(document["scene_reads"].get("count")) is int:
+            reads = document["scene_reads"]["count"]
+        log = stats_path.parent / "bag-record.log"
+        if lost is None and log.is_file():
+            text = log.read_text(errors="replace")
+            if "Recording stopped" in text:
+                lost = transport_lost_from_log(text)
+    return {"transport_lost": lost, "scene_reads_expected": reads}
+
+
 def load_clock_map(bag, *, stats_file=None):
     """(ClockMap, facts): the system->monotonic mapping, from the record-only process's anchors when it left them."""
     from .replay import ClockMap
@@ -197,7 +219,8 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     info = bag_info(bag)
     clock_map, clock_facts = load_clock_map(bag, stats_file=stats_file)
     scan_began = _REAL["perf_counter"]()
-    scan = scan_bag(bag, info=info)
+    loss_facts = load_loss_facts(bag, stats_file=stats_file)
+    scan = scan_bag(bag, info=info, **loss_facts)
     scan_s = _REAL["perf_counter"]() - scan_began
     reasons = list(scan["reasons"])
     if clock_facts["max_residual_ns"] is not None and clock_facts["max_residual_ns"] > CLOCK_RESIDUAL_LIMIT_NS:
@@ -215,6 +238,18 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
         return report
     if lease.get("attempt_id") != identity["attempt_id"]:
         raise OfflineRefused("OFFLINE_LEASE_ATTEMPT_MISMATCH")
+    if scan.get("topic_loss") is not None:
+        # phase C: the gate document sits beside the episode; the QC binds it to its verdict
+        from .. import topic_loss as gate
+
+        gate_document = gate.build_document(
+            identity={key: identity[key] for key in ("session_id", "reset_epoch", "attempt_id")},
+            window=scan["topic_loss"]["window"], transport_lost=scan["topic_loss"]["transport_lost"],
+            topics=scan["topic_loss"]["topics"], reasons=list(scan["reasons"]))
+        gate_bytes = gate.canonical(gate_document)
+        (out / gate.DOCUMENT_NAME).write_bytes(gate_bytes)
+        report["topic_loss"] = {"status": gate_document["status"], "lost_in_window": gate_document["lost_in_window"],
+                                "transport_lost": gate_document["transport_lost"], "sha256": hashlib.sha256(gate_bytes).hexdigest()}
 
     from ..episode_open import open_recorder_episode
     from ..frozen_runtime_inputs import load_recorder_frozen_policy

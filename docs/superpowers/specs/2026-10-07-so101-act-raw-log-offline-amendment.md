@@ -183,23 +183,29 @@ Evidence on the real bag 147cb073 (`scratch/p3fault-*`): `source_gap` rc 3 in 14
 
 ## 6. Losslessness: how a loss is detected, per topic
 
-| topic | detection | gap |
-| --- | --- | --- |
-| `/clock` | stamp grid check on the scan window (2 ms) | none |
-| `arm`, `gripper` `controller_state` | 2 ms grid; a gap matters where a label instant needs the frame (CP-3439) | none |
-| `neck` `controller_state` | grid, diagnostic only (not a source of any row) | by design |
-| physics chunks | chunk sequence and step continuity | none |
-| `/so101/simulation/evidence` (world) | publisher sequence | none |
-| `/so101/simulation/robot_contacts` | `physics_step` sequence, consumed through the chunks' native steps | the topic itself is not scanned; a lost message is a lost sample in a chunk already covered |
-| camera `camera_info` | 100 ms grid, head equals wrist | images: only the `camera_info` of the same frame is checked against the grid; an image lost while its `camera_info` arrived is caught by the acquisition count and `NO_NEW_ACQUISITION` in the engine |
-| `/joint_states` | none in the scan. A lost message is bounded by the engine and the QC: a row takes the newest message within 100 ms before it (`_controller_source_at`), none in that window leaves the row unready (`INPUT_STALE`, INVALID), and the QC readback requires the row's measured state to equal the native step at the message's own stamp (`original measured state differs from native step`). A loss can therefore give a row from an older message inside the 100 ms limit, never a wrong value | no continuity check (bounded as stated) |
-| `/so101/simulation/scene_state` | none in the scan (it carries a step, sampled). `SceneStateObserver` refuses stale (`SCENE_STATE_STALE`, over `max_age`), reordered and time-regressing frames, and the row's cup and contact content is checked against the native chunk sample the QC re-reads, so a lost frame ends in a stale-source INVALID row or nothing, never a different content | no continuity check (bounded as stated) |
-| Teacher events | `seq` 1..N | none |
-| planning-scene reads | the sidecar's own error count, and the per-row bracket rules | none |
+Phase C (`plans/changes/2026-10-08-transport-loss-attribution-gate.md`) gave every topic the episode depends on a rule. The scan of the raw bag runs the rules (the sealed episode does not hold these topics), writes `topic-loss.json` beside the episode, and the QC (rule `act_data_qc_v4`, check `topic_loss_gate`) binds that document to its verdict. The window of the new rules is from the start of the retained world (the first unpaused world record after the last pause, or the verified reset) to the Teacher's terminal event plus 0.1 s; the older sequence rules keep their own windows. A loss inside the window on a topic the episode uses is INVALID (`OFFLINE_TOPIC_LOSS:<topic>`; the older rules keep `OFFLINE_SOURCE_GAP`, `OFFLINE_CAMERA_GRID`); a loss outside the window, or on a topic the episode does not use, is recorded in the document. A gap that overlaps a gap of `/clock` is a producer stall (the producer's cycle was skipped; nothing was published), counted as such and not as a lost message.
+
+| topic | used | detection | in-window loss |
+| --- | --- | --- | --- |
+| `/clock` | yes (drives the replay clock) | 2 ms stamp grid over the window (new) | INVALID |
+| `arm`, `gripper` `controller_state` | yes | 2 ms grid; a gap matters where a label instant needs the frame (CP-3439) | INVALID where a label needs the frame; other gaps recorded as diagnostic |
+| `neck` `controller_state` | no (no row is made from it) | grid, recorded | recorded |
+| physics chunks | yes | chunk sequence and step continuity | INVALID |
+| `/so101/simulation/evidence` (world) | yes | publisher sequence | INVALID |
+| `/so101/simulation/scene_state` | yes | published in the same call as the world record: every world record of the window must have a scene state of the same step and stamp (new). A lost frame is a world record without its pair | INVALID |
+| `/so101/simulation/robot_contacts` | no | none; a lost sample is a lost sample of a chunk, which is covered. Count recorded against the chunks' steps | recorded |
+| camera `camera_info` | yes | 100 ms grid, head equals wrist | INVALID |
+| camera `color` | yes | every `camera_info` stamp of the rows interval (verified reset to normal stop) has its image (new) | INVALID |
+| `/joint_states` | yes | 10 ms header-stamp grid over the window (new). The engine's own bound (a row takes the newest message within 100 ms) stays | INVALID |
+| Teacher events | yes | `seq` 1..N | INVALID |
+| planning-scene reads | yes | the bag's count equals the sidecar's own count of reads (new) | INVALID |
+| `/so101/simulation/joints`, `physics_hazard` | no | none (a latched pair and an empty latch) | recorded |
+
+The recorder's aggregate "messages lost on the transport layer" cannot be attributed to a topic from the recorder's output (it prints one total at stop; there are no per-topic counters in this rosbag2 version). It is reconciled instead: the messages the topics show missing anywhere in the bag (outside producer stalls) must account for the reported number, and the shortfall, if any, fails closed (`OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED`). A bag whose total is unknown fails closed too (`OFFLINE_TRANSPORT_LOSS_UNKNOWN`).
 
 QoS: the high-rate topics (chunks, contacts, the three controller states, `/clock`) use deep reliable queues. The colour image topics use the publisher's default QoS (no deep queue); an image lost to a full recorder queue is the camera case above.
 
-Transport losses: `ros2 bag record` prints the number of messages it lost on the transport layer at stop (bag 147cb073: 6; CP-3449: 5). This is now parsed into `record-stats.json` (`transport_lost`) and the orchestration facts. **It is a recorded fact and not yet a verdict**: it is a total with no topic, the bag was VALID with QC PASS with every sequenced or gridded topic gap-free, so the 6 were on a topic without a sequence or outside the window; making any loss fatal would have made the one good bag INVALID and, if the loss is a stop-time artefact, every bag. **This reverses the CP-3457 decision "INVALID if cheap".** CP-3457 recommended making any reported loss INVALID when cheap to implement. Implementing it was cheap and it would have turned the one good bag INVALID, so it was not made fatal; that is a reversal, taken knowingly, and is recorded as such. Follow-up (a gate, not a wish): before any non-diagnostic or formal collection, per-topic loss attribution must exist (a probe subscriber per unsequenced topic, or the recorder's per-topic lost counters) and a non-zero total must either be attributed to a topic outside the window or make the data INVALID. L2 and every diagnostic run report the count. A formal collection run is refused until this gate is closed.
+Transport losses: `ros2 bag record` prints the number of messages it lost on the transport layer at stop (bag 147cb073: 6; CP-3449: 5; the L2 bag 45315499: 7). It is parsed into `record-stats.json` (`transport_lost`; for stats written before the key existed, from `bag-record.log` beside them). CP-3457 had recommended making any reported loss INVALID and that was reversed because the one good bag would have become INVALID with no way to say why. Phase C closes the gate that reversal left open: per-topic rules above, plus the reconciliation. On the two reference bags (details in the change document) the 147cb073 total is accounted for (the topics show 11 missing messages outside the window, none inside); **the L2 bag 45315499 is not: its 7 reported losses are matched by only 4 messages missing on any topic, so 3 are unattributed and the gate fails it.** That is a real finding, reported to the coordinator before anything else was changed; it stands until a decision on it is recorded. A formal collection run stays refused until that decision.
 
 ## 7. Cleanup inventory
 
@@ -230,6 +236,6 @@ One behaviour is narrower and is recorded as such: a Teacher event other than `s
 
 ## 10. Change documents this amendment rests on
 
-`2026-10-08-p3-switch-to-the-bag-recorder-and-offline-processing`, `act-runtime-stage-bounds-for-offline-processing`, `teacher-bound-split-and-processing-budget`, `qualified-role-commands-and-broker-package`, `broker-detector-pin`, `fresh-qc-verification-memo`, `stop-native-step-at-the-stamp`, `apply-bounded-scene-bracket`, `planning-scene-freshness-by-bracketing`, `act-move-group-does-not-publish-the-monitored-scene`, `controller-tick-lockstep-and-lossless-clock`, `camera-sim-synchronous-rendering`, `offline-window-start-after-worker-pause`, `raw-pilot-lifecycle`, `last-normal-stop-and-late-camera-sequence`, `first-row-association-wait-and-tail-physics-coverage`, `teacher-event-clocks-colour-and-single-final-stop`, `controller-reference-label-instant-continuity`, `consumer-ready-receipt-race-and-pose-wait-stop`, `offline-processor-pilot-fixes`, `cleanup-step-2-live-recorder-removal`, `qc-and-replay-speed`.
+`2026-10-08-p3-switch-to-the-bag-recorder-and-offline-processing`, `act-runtime-stage-bounds-for-offline-processing`, `teacher-bound-split-and-processing-budget`, `qualified-role-commands-and-broker-package`, `broker-detector-pin`, `fresh-qc-verification-memo`, `stop-native-step-at-the-stamp`, `apply-bounded-scene-bracket`, `planning-scene-freshness-by-bracketing`, `act-move-group-does-not-publish-the-monitored-scene`, `controller-tick-lockstep-and-lossless-clock`, `camera-sim-synchronous-rendering`, `offline-window-start-after-worker-pause`, `raw-pilot-lifecycle`, `last-normal-stop-and-late-camera-sequence`, `first-row-association-wait-and-tail-physics-coverage`, `teacher-event-clocks-colour-and-single-final-stop`, `controller-reference-label-instant-continuity`, `consumer-ready-receipt-race-and-pose-wait-stop`, `offline-processor-pilot-fixes`, `cleanup-step-2-live-recorder-removal`, `qc-and-replay-speed`, `transport-loss-attribution-gate`, `single-fresh-readback`.
 
 Superseded: `scene-association-blockers-on-the-pilot-bag` (findings only, "decision needed"); its decisions are CP-3441 (stale first scene clock, colour), CP-3445 (colour root cause), CP-3440 B (read bracket) and CP-3449 (apply-bounded bracket). The document is marked superseded in its own header.

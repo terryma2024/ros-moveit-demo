@@ -20,12 +20,23 @@ import os
 from pathlib import Path
 
 _STACK: list = []
+#: the only owners that may hold a session while the export path runs: the readback entry points (`act_first_episode qc`,
+#: `verify-commit`, `check-export`, `readback`). A session opened anywhere else (bundle.py, training, a library) makes the export
+#: path refuse: a cached proof grants no eligibility, and only an entry point may share a recomputation between its stages.
+ENTRY_OWNERS = frozenset({"readback:qc", "readback:verify-commit", "readback:check-export", "readback:readback"})
 
 
 class QcSession:
     """The memo of one session, with counters (for the readback receipt and the tests)."""
 
-    def __init__(self) -> None:
+    def __init__(self, owner: str = "internal") -> None:
+        self.owner = owner
+        #: report-level reuse of full QC recomputations (entry-point sessions only): key -> {"fingerprint", "report"}
+        self.qc_results: dict = {}
+        self.qc_hits = 0
+        #: set by `act_first_episode readback`: the inputs it watches and the content fingerprint taken at its start
+        self.watch = None
+        self.input_fingerprint = None
         self.cache: dict = {}
         self.hits = 0
         self.misses = 0
@@ -36,8 +47,8 @@ class QcSession:
 
 
 @contextlib.contextmanager
-def qc_session():
-    session = QcSession()
+def qc_session(owner: str = "internal"):
+    session = QcSession(owner)
     _STACK.append(session)
     try:
         yield session
@@ -47,6 +58,13 @@ def qc_session():
 
 def active() -> QcSession | None:
     return _STACK[-1] if _STACK else None
+
+
+def assert_export_path_allowed() -> None:
+    """Called at the top of the export functions: a session that is not a readback entry point's is refused there."""
+    session = active()
+    if session is not None and session.owner not in ENTRY_OWNERS:
+        raise ValueError("QC_SESSION_IN_EXPORT_PATH")
 
 
 def file_signature(path) -> tuple:

@@ -256,6 +256,9 @@ class ActCollectionResultStore:
                  reserved_workspace=None, inputs_manifest=None, trust_fresh_qc_memo=None) -> None:
         if trust_fresh_qc_memo is not None:
             self.TRUST_FRESH_QC_MEMO = bool(trust_fresh_qc_memo)
+        if self.TRUST_FRESH_QC_MEMO:
+            from . import qc_memo
+            qc_memo.note_trusting_gate()
         self.workspace = _safe(workspace)
         self.lease = lease
         self.identity = _identity(lease)
@@ -603,6 +606,9 @@ class ActCollectionResultVerifier:
                  trust_fresh_qc_memo=None) -> None:
         if trust_fresh_qc_memo is not None:
             self.TRUST_FRESH_QC_MEMO = bool(trust_fresh_qc_memo)
+        if self.TRUST_FRESH_QC_MEMO:
+            from . import qc_memo
+            qc_memo.note_trusting_gate()
         self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
         self.run_mode = RunMode.EXECUTE
         #: a v2 seal is verified only when both artifacts are supplied (CP-2765)
@@ -710,8 +716,11 @@ class ActCollectionResultVerifier:
         audit and the QC recomputation read the same files) run once per session."""
         import contextlib
 
+        from . import qc_memo
         from .qc_session import active, qc_session
 
+        if self.TRUST_FRESH_QC_MEMO and qc_memo.strict_active():
+            raise qc_memo.ReadbackMemoForbidden("READBACK_MEMO_TRUST_FORBIDDEN")
         with contextlib.nullcontext() if active() is not None else qc_session():
             return self._verify(lease, location, run_mode, allow_legacy=allow_legacy)
 
@@ -1090,6 +1099,14 @@ def write_export_rejection_proof(proof,output):
                                     'direct_export':'DIAGNOSTIC_EPISODE_NOT_TRAINABLE'}):
         raise ValueError('EXPORT_REJECTION_PROOF_INVALID')
     return _publish_readback_proof(proof,output)
+
+
+def write_readback_receipt(receipt,output):
+    """Publish the combined receipt of one independent readback; it grants no execution, commit or export authority."""
+    if (type(receipt) is not dict or receipt.get('kind')!='ACT_READBACK_RECEIPT' or receipt.get('schema_version')!=1
+            or receipt.get('status') not in ('PASS','FAIL')):
+        raise ValueError('READBACK_RECEIPT_INVALID')
+    return _publish_readback_proof(receipt,output)
 
 
 def _publish_readback_proof(proof,output):

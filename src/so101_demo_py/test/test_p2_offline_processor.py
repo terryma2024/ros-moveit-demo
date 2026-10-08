@@ -433,7 +433,7 @@ def test_the_replay_withholds_only_the_world_evidence_recorded_before_the_window
     node.create_subscription(String, "/so101/teacher/events", lambda m: events.append(m.data), 10)
     node.deliver_due(mono_of(1.7))
     assert worlds and min(worlds) >= 1.044, "world evidence recorded before the window start is withheld"
-    assert min(joints) == 1.0, "every other source is delivered from the beginning of the bag"
+    assert min(joints) == 0.9, "every other source is delivered from the beginning of the bag"
     assert len(events) == 7, "every Teacher event is delivered whatever the window"
 
 

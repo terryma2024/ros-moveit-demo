@@ -402,7 +402,7 @@ def test_the_clock_map_limit_is_two_milliseconds_and_a_larger_residual_is_a_reas
     def run(residual):
         monkeypatch.setattr(bag_io, "bag_info", lambda bag: {"message_count": 1, "duration_ns": 1, "topics": {}})
         monkeypatch.setattr(processor, "load_clock_map", lambda bag, stats_file=None: ({}, {"max_residual_ns": residual}))
-        monkeypatch.setattr(scan, "scan_bag", lambda bag, info=None: {"reasons": [], "timeline": {"identity": None}, "continuity": {},
+        monkeypatch.setattr(scan, "scan_bag", lambda bag, info=None, **loss: {"reasons": [], "timeline": {"identity": None}, "continuity": {},
                                                                       "counts": {}})
         return processor.process_bag(tmp_path / "bag", tmp_path / "out", inputs_manifest=tmp_path / "i.json", lease=LEASE)
 
