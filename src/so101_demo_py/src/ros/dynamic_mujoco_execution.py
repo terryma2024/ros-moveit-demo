@@ -395,6 +395,7 @@ class RosDynamicMujocoExecution:
         self._teacher_execution_policy = None
         try:
             config_dir = Path(urdf_path).parents[2] / "config/act"
+            self._teacher_config_dir = config_dir
             endpoint_path = config_dir / "teacher_endpoint_v2.yaml"
             execution_path = config_dir / "teacher_execution_policy_v1.yaml"
             endpoint_bytes, execution_bytes = endpoint_path.read_bytes(), execution_path.read_bytes()
@@ -413,6 +414,30 @@ class RosDynamicMujocoExecution:
             "execution": {"path": str(execution_path), "file_sha256": hashlib.sha256(execution_bytes).hexdigest(),
                           "policy_sha256": self._teacher_execution_policy["policy_sha256"]},
         }
+
+    def _select_execution_policy(self, file_name: str) -> None:
+        """Load the execution policy the freeze names (``teacher_execution_policy_v1.yaml`` or ``..._v2.yaml``) instead of the default."""
+
+        import hashlib
+
+        from ..act.teacher_endpoint import load_teacher_execution_policy
+
+        config_dir = getattr(self, "_teacher_config_dir", None)
+        if config_dir is None:
+            return                                      # the policies did not load at all: the config error is already set
+        path = config_dir / file_name
+        try:
+            raw = path.read_bytes()
+            policy = load_teacher_execution_policy(raw)
+        except (OSError, ValueError) as error:
+            self._teacher_execution_policy = None
+            self._teacher_config_error = f"TEACHER_POLICY_UNAVAILABLE: {error}"
+            return
+        self._teacher_execution_policy = policy
+        files = getattr(self, "_teacher_policy_files", None)
+        if files:
+            files["execution"] = {"path": str(path), "file_sha256": hashlib.sha256(raw).hexdigest(),
+                                  "policy_sha256": policy["policy_sha256"]}
 
     @staticmethod
     def _teacher_pose_document(values) -> dict[str, object]:
@@ -2191,15 +2216,78 @@ class RosDynamicMujocoExecution:
     _CARRY_STATES = frozenset({State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE})
 
     def _place_target(self, state: State, target):
-        """The DESCEND_TO_PLACE target, lowered by the frozen ACT offset; every other target and run is untouched."""
+        """The DESCEND_TO_PLACE target for frozen inputs; every other target and run is untouched.
+
+        Policy v1: lowered by the constant ACT offset. Policy v2: computed from the cup tilt and the grasp offset measured on the
+        evidence now (``core.place_height``); a measurement outside what was calibrated raises a ``TEACHER_PLACE_*`` terminal stop
+        before any motion (the cup stays held, nothing is released). Called from ``_perform_state`` under
+        ``_safety_state = DESCEND_TO_PLACE`` and before ``_phase_open``, so the force limits are enforced while it measures."""
 
         if state is not State.DESCEND_TO_PLACE or target is None or getattr(self, "_execution_snapshot_root", None) is None:
             return target
         policy = getattr(self, "_teacher_execution_policy", None)
+        if policy is not None and policy.get("place_height_mode"):
+            return self._compensated_place_target(target, policy)
         if policy is None or "place_descend_offset_m" not in policy:
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: place_descend_offset_m")
         x, y, z = target.position_m
         return PoseEvidence((x, y, z + float(policy["place_descend_offset_m"])), target.orientation_xyzw)
+
+    def _place_geometry(self):
+        from ..core.place_height import cup_geometry_from_scene
+
+        geometry = getattr(self, "_place_geometry_value", None)
+        if geometry is None:
+            geometry = cup_geometry_from_scene(Path(self._execution_snapshot_root) / "assets/mujoco/act/scene.xml")
+            self._place_geometry_value = geometry
+        return geometry
+
+    def _compensated_place_target(self, target, policy) -> PoseEvidence:
+        from ..core.place_height import PlaceHeightPolicy, PlaceHeightRefused, plan_place_height
+
+        x, y, z = target.position_m
+        height_policy = PlaceHeightPolicy.from_document(policy)
+        try:
+            theta, k = self._measure_place_height()
+            document = plan_place_height(theta, k, z + height_policy.reference_offset_m, self._place_geometry(), height_policy)
+        except PlaceHeightRefused as refusal:
+            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": refusal.code,
+                                             "detail": str(refusal)[:300]}
+            self._write()
+            raise
+        self._document["place_height"] = document
+        self._write()
+        return PoseEvidence((x, y, document["target_tcp_z_m"]), target.orientation_xyzw)
+
+    def _measure_place_height(self) -> tuple[float, float]:
+        """(tilt rad, grasp offset m) of the held cup, from a stable window of fresh evidence: 100 ms of simulation whose tilt
+        range stays under 0.05 deg, within 1 s (else TEACHER_PLACE_TILT_UNSTABLE). ``k`` is the actual TCP height (forward
+        kinematics of the actual joints, sag included) above the cup origin at the end of the window."""
+
+        from ..core.place_height import (
+            STABILITY_RANGE_RAD, STABILITY_TIMEOUT_S, STABILITY_WINDOW_S, TILT_UNSTABLE, PlaceHeightRefused)
+
+        window: list[tuple[float, float, object]] = []
+        last_sequence = -1
+        deadline = time.monotonic() + STABILITY_TIMEOUT_S
+        while time.monotonic() < deadline:
+            value = self._snapshot()
+            if value.publisher_sequence == last_sequence:
+                continue
+            last_sequence = value.publisher_sequence
+            self._enforce_safety(getattr(self, "_safety_state", None), value)
+            window.append((value.simulation_time_s, self._upright_tilt_rad(value.object_state.orientation_xyzw), value))
+            while window and value.simulation_time_s - window[0][0] > STABILITY_WINDOW_S:
+                window.pop(0)
+            if value.simulation_time_s - window[0][0] >= STABILITY_WINDOW_S - 1e-9:
+                tilts = [item[1] for item in window]
+                if max(tilts) - min(tilts) < STABILITY_RANGE_RAD:
+                    cup_z = value.object_state.position_world[2]
+                    tcp_z = self._ik.forward(self._motion_planning_start()).position_m[2]
+                    tilts.sort()
+                    return tilts[len(tilts) // 2], tcp_z - cup_z
+        raise PlaceHeightRefused(TILT_UNSTABLE, f"no {STABILITY_WINDOW_S * 1000:.0f} ms window with a tilt range under "
+                                 f"{math.degrees(STABILITY_RANGE_RAD):.2f} deg within {STABILITY_TIMEOUT_S:.0f} s")
 
     def _planning_scaling(self, state: State) -> tuple[float, float]:
         """(velocity, acceleration) MoveIt scaling: the frozen carry values for the carry states with frozen inputs."""

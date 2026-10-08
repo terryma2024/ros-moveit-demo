@@ -1,0 +1,43 @@
+# SO-101 Teacher execution policy v2: the place height is computed from the measured cup tilt (design
+# docs/superpowers/plans/changes/2026-10-09-teacher-tilt-compensated-place-height.md, ledger CP-3480, decision CP-3394).
+# Everything of v1 except `place_descend_offset_m`, which v2 cannot express; the r10b force/compression limits, the contact
+# calibration hash and the dynamic_cup_pick/v1 motion policy are unchanged.
+kind: ACT_TEACHER_EXECUTION_POLICY
+schema_version: 2
+state_max_age_s: 0.5
+state_unavailable_stop_s: 1.0
+execution_deadline_s: 180.0
+gripper_close_target_rad: -0.047608632840292
+carry_max_velocity_scaling: 0.03
+carry_max_acceleration_scaling: 0.0075
+# DESCEND_TO_PLACE target (commanded TCP z) = z_touch(theta) + k + place_tracking_offset_m - place_touchdown_guard_m, with
+# z_touch(theta) = z_table + c cos(theta) + r sin(theta) from the frozen scene (c 0.045 m, r 0.040 m, z_table 0.12 m), theta the
+# cup tilt and k the TCP height above the cup origin, both measured on the evidence just before the descent (stability window
+# 100 ms, tilt range < 0.05 deg, 1 s timeout). The only known mode is `tilt_compensated`.
+place_height_mode: tilt_compensated
+# The arm stops this far (actual TCP) above the pose at which the cup first touches the table. Strictly positive: the cup margin is
+# 0, so a target at or above first contact leaves the cup without table contact and the release-support check fails. Loader bounds
+# 0.1 mm .. 1.0 mm. The v1 constant (-13.25 mm) corresponds to a guard of about 0.94 mm at the live tilt of 4.04 deg. 0.7 mm from the
+# offline sweep (500 trials with timing and command jitter): guards of 0.1 mm (33 of 70 trials chatter, 37 force stops) and 0.2-0.3 mm
+# (summed force or compression up to 99.8% of the limit) are unsafe, 0.35 mm and above are clean; with k in its +- 0.3 mm band
+# the effective guard stays within 0.4 .. 1.0 mm.
+place_touchdown_guard_m: 0.0007
+# Commanded minus actual TCP z at the end of a DESCEND_TO_PLACE (controller sag): 20 retained PASS bags, mean 0.158 mm, sd 0.014 mm.
+place_tracking_offset_m: 0.000158
+# Calibrated tilt range of the carried cup (3.0 .. 5.5 deg around the 4.04 deg of the 20 retained bags). Outside: refuse before
+# any motion (TEACHER_PLACE_TILT_OUT_OF_RANGE), the cup stays held.
+place_tilt_min_rad: 0.05235987755982989
+place_tilt_max_rad: 0.0959931088596881
+# k, TCP z minus cup origin z by actual-joint forward kinematics (sag included), 20 retained PASS bags: hover 0.037454 m, sd 0.018 mm,
+# touch 0.037469 m. Band = measured +- max(3 sd, 0.3 mm).
+place_grasp_offset_m: 0.037454
+place_grasp_offset_half_band_m: 0.0003
+# The target may differ from the v1 constant-offset target of the same pose by at most this much. The geometric need is the z_touch
+# spread over the tilt range plus the k band plus the guard difference to the v1 constant (+0.24 mm at 0.7 mm): -0.73 .. +1.45 mm
+# at the corners of the calibrated range; 2.0 mm leaves 0.55 mm.
+place_target_max_deviation_m: 0.002
+# The v1 constant place offset (-13.25 mm): used ONLY as the reference the deviation bound above is measured from; it is not a
+# target.
+place_reference_offset_m: -0.01325
+# sha256 of assets/mujoco/act/scene.xml the geometry was fitted for; a different scene refuses.
+place_geometry_scene_sha256: ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb

@@ -139,6 +139,10 @@ TERMINAL_STOP_CODES = frozenset({
     "DYNAMIC_SESSION_MISMATCH",
     "DYNAMIC_RESET_EPOCH_MISMATCH",
     "DYNAMIC_RELEASE_SUPPORT_NOT_PROVED",
+    # the tilt-compensated place height refused before any DESCEND_TO_PLACE motion: the cup stays held, nothing is released
+    "TEACHER_PLACE_TILT_UNSTABLE",
+    "TEACHER_PLACE_TILT_OUT_OF_RANGE",
+    "TEACHER_PLACE_HEIGHT_OUT_OF_BOUNDS",
     "TEACHER_DEADLINE",
     "TEACHER_USER_STOP",
     "TEACHER_PARENT_DIED",

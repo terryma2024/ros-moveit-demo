@@ -36,7 +36,7 @@ def test_missing_frozen_manifest_refuses_before_creating_recorder(tmp_path):
     assert not options.evidence_root.exists()
 
 
-def frozen_child_inputs(tmp_path):
+def frozen_child_inputs(tmp_path, execution_policy="teacher_execution_policy_v1.yaml"):
     """Synthetic approval/roles plus real frozen source/model for a Recorder boundary fixture."""
     from so101_demo.act.execution_snapshot import freeze_execution_snapshot
     from so101_demo.act.contact_policy import policy_fingerprint
@@ -44,7 +44,7 @@ def frozen_child_inputs(tmp_path):
     manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)), tmp_path / "inputs",
                                  mode="preselected_target_diagnostic",
                                  teacher_endpoint=config / "teacher_endpoint_v2.yaml",
-        teacher_execution_policy=config / "teacher_execution_policy_v1.yaml",
+        teacher_execution_policy=config / execution_policy,
         episode_recorder_policy=config / "episode_recorder_v1.yaml",
                                  runtime_policy=config / "endpoint_pose_development_runtime_v1.yaml")
     root = manifest_path.parent
@@ -74,7 +74,8 @@ def frozen_child_inputs(tmp_path):
     from so101_demo.act.first_episode_inputs import execution_snapshot_binding
     document["execution_snapshot"] = execution_snapshot_binding(snapshot, root / "execution")
     bindings = {**document["roles"], **{key: document[key] for key in
-                ("mode", "teacher_endpoint_v2", "teacher_execution_policy_v1", "episode_recorder_v1", "runtime_policy", "execution_snapshot")}}
+                ("mode", "teacher_endpoint_v2", "teacher_execution_policy_v1", "teacher_execution_policy_v2",
+                 "episode_recorder_v1", "runtime_policy", "execution_snapshot") if key in document}}
     document["inputs_sha256"] = hashlib.sha256(json.dumps(bindings, sort_keys=True,
                                                            separators=(",", ":")).encode()).hexdigest()
     manifest_path.write_text(json.dumps(document))

@@ -533,7 +533,7 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
-def _teacher_state_max_age_s(share_dir):
+def _teacher_state_max_age_s(share_dir, policy_file="teacher_execution_policy_v1.yaml"):
     """The frozen Teacher execution policy's state age, or None when it cannot be read.
 
     An unreadable policy is refused where the execution loads it (no motion without it); this only sizes the
@@ -543,7 +543,7 @@ def _teacher_state_max_age_s(share_dir):
 
     try:
         return load_teacher_execution_policy(
-            Path(share_dir) / "config/act/teacher_execution_policy_v1.yaml")["state_max_age_s"]
+            Path(share_dir) / "config/act" / policy_file)["state_max_age_s"]
     except (OSError, ValueError):
         return None
 
@@ -631,7 +631,7 @@ def run_dynamic_execute(
     frozen = None
     manifest_option = getattr(options, "frozen_inputs_manifest", None)
     if manifest_option is not None:
-        from ..act.frozen_runtime_inputs import load_teacher_frozen_inputs
+        from ..act.frozen_runtime_inputs import frozen_execution_policy_name, load_teacher_frozen_inputs
         try:
             frozen, execution_inputs, share_dir = load_teacher_frozen_inputs(Path(manifest_option))
         except Exception as error:
@@ -806,7 +806,8 @@ def run_dynamic_execute(
         if binder is not None:
             model_path = (share_dir / execution_inputs["scene_path"] if execution_inputs is not None
                           else share_dir / "assets/mujoco/scene.xml")
-            scene_age = _teacher_state_max_age_s(share_dir)
+            scene_age = _teacher_state_max_age_s(
+                share_dir, f"{frozen_execution_policy_name(frozen)}.yaml" if frozen is not None else "teacher_execution_policy_v1.yaml")
             scene_source_binding = binder(node, session_id=options.session_id,
                 reset_epoch=options.expected_reset_epoch, model_path=model_path,
                 expected_model=execution_inputs, max_age_s=.1,
@@ -891,6 +892,8 @@ def run_dynamic_execute(
             execution.final_stop_proof_enabled = True
         if execution_inputs is not None:
             execution._execution_snapshot_root = share_dir
+            # the freeze names the execution policy (v1 constant place offset, v2 tilt-compensated place height)
+            execution._select_execution_policy(f"{frozen_execution_policy_name(frozen)}.yaml")
         if scene_source_binding is not None:
             execution._scene_source_observer = scene_source_binding.observer
             execution._scene_source_binding = scene_source_binding

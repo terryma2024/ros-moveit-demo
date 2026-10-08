@@ -275,6 +275,13 @@ def _teacher_contract(
         _fail("TEACHER_RESULT")
     if (execution == "COMPLETED") != (expected_status == "DONE"):
         _fail("TEACHER_STATUS")
+    if "place_height" in document:
+        from ..core.place_height import validate_document as validate_place_height
+
+        try:
+            validate_place_height(document["place_height"])
+        except ValueError:
+            _fail("PLACE_HEIGHT")
     if result in {"PASS", "FAIL"}:
         if (
             execution != "COMPLETED"

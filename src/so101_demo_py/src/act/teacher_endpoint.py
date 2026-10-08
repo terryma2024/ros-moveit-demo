@@ -34,6 +34,15 @@ EXECUTION_FIELDS = frozenset({
     "place_descend_offset_m",
 })
 EXECUTION_VALUES = ("state_max_age_s", "state_unavailable_stop_s", "execution_deadline_s")
+#: Policy v2 (CP-3394/CP-3480): the place height is computed from the measured cup tilt instead of a constant offset. The constant
+#: `place_descend_offset_m` is not part of v2 (the document cannot express it); v1 stays the constant-offset policy, byte for byte.
+EXECUTION_SCHEMA_V2 = 2
+PLACE_HEIGHT_FIELDS = frozenset({
+    "place_height_mode", "place_touchdown_guard_m", "place_tracking_offset_m", "place_tilt_min_rad", "place_tilt_max_rad",
+    "place_grasp_offset_m", "place_grasp_offset_half_band_m", "place_target_max_deviation_m", "place_geometry_scene_sha256",
+    "place_reference_offset_m",
+})
+EXECUTION_FIELDS_V2 = (EXECUTION_FIELDS - {"place_descend_offset_m"}) | PLACE_HEIGHT_FIELDS
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
 
@@ -84,16 +93,21 @@ def load_teacher_endpoint_policy(source) -> dict:
 
 
 def load_teacher_execution_policy(source) -> dict:
-    """Load and validate the Teacher execution policy from YAML bytes or a path, with its sha256."""
+    """Load and validate the Teacher execution policy (schema 1: constant place offset; schema 2: tilt-compensated place height)
+    from YAML bytes or a path, with its sha256. An unknown schema, an unknown place height mode, a missing or extra field is
+    refused (``TEACHER_EXECUTION_POLICY_INVALID``)."""
 
     code = "TEACHER_EXECUTION_POLICY_INVALID"
     document = _load_document(source, code)
-    if not isinstance(document, dict) or set(document) != EXECUTION_FIELDS:
+    if not isinstance(document, dict):
         raise ValueError(f"{code}: not the closed policy document")
-    if (document["kind"] != EXECUTION_KIND or type(document["schema_version"]) is not int
-            or document["schema_version"] != SCHEMA_VERSION):
+    version = document.get("schema_version")
+    expected = {SCHEMA_VERSION: EXECUTION_FIELDS, EXECUTION_SCHEMA_V2: EXECUTION_FIELDS_V2}.get(version) if type(version) is int else None
+    if expected is None or set(document) != expected:
+        raise ValueError(f"{code}: not the closed policy document")
+    if document["kind"] != EXECUTION_KIND:
         raise ValueError(f"{code}: unknown kind or schema version")
-    policy = {"kind": EXECUTION_KIND, "schema_version": SCHEMA_VERSION}
+    policy = {"kind": EXECUTION_KIND, "schema_version": version}
     for key in EXECUTION_VALUES:
         policy[key] = _real(document[key], key, code, allow_zero=False)
     target = document["gripper_close_target_rad"]
@@ -107,11 +121,31 @@ def load_teacher_execution_policy(source) -> dict:
                 or not 0 < value <= 1):
             raise ValueError(f"{code}: {key} is not a finite scaling in (0, 1]")
         policy[key] = float(value)
-    offset = document["place_descend_offset_m"]
-    if (isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset)
-            or not -0.05 <= offset <= 0.05):
-        raise ValueError(f"{code}: place_descend_offset_m is not a finite offset within 0.05 m")
-    policy["place_descend_offset_m"] = float(offset)
+    if version == SCHEMA_VERSION:
+        offset = document["place_descend_offset_m"]
+        if (isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset)
+                or not -0.05 <= offset <= 0.05):
+            raise ValueError(f"{code}: place_descend_offset_m is not a finite offset within 0.05 m")
+        policy["place_descend_offset_m"] = float(offset)
+        return {**policy, "policy_sha256": _sha256(policy)}
+    from ..core.place_height import MODE, PlaceHeightPolicy
+
+    if document["place_height_mode"] != MODE:
+        raise ValueError(f"{code}: place_height_mode is not a known mode")
+    policy["place_height_mode"] = MODE
+    for key in sorted(PLACE_HEIGHT_FIELDS - {"place_height_mode", "place_geometry_scene_sha256"}):
+        value = document[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"{code}: {key} is not a finite number")
+        policy[key] = float(value)
+    sha = document["place_geometry_scene_sha256"]
+    if type(sha) is not str:
+        raise ValueError(f"{code}: place_geometry_scene_sha256 is not a sha256")
+    policy["place_geometry_scene_sha256"] = sha
+    try:
+        PlaceHeightPolicy.from_document(policy)
+    except (ValueError, TypeError, KeyError) as error:
+        raise ValueError(f"{code}: {error}") from error
     return {**policy, "policy_sha256": _sha256(policy)}
 
 

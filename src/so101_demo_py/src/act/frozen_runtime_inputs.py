@@ -8,7 +8,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-TEACHER_POLICY_BINDINGS = ("teacher_endpoint_v2", "teacher_execution_policy_v1")
+TEACHER_ENDPOINT_BINDING = "teacher_endpoint_v2"
+EXECUTION_POLICY_BINDINGS = ("teacher_execution_policy_v1", "teacher_execution_policy_v2")
+TEACHER_POLICY_BINDINGS = (TEACHER_ENDPOINT_BINDING, "teacher_execution_policy_v1")   # the v1 pair, kept for importers
+
+
+def frozen_execution_policy_name(frozen) -> str:
+    """The execution policy binding a freeze carries; exactly one of v1 (constant place offset) and v2 (tilt-compensated)."""
+    names = [name for name in EXECUTION_POLICY_BINDINGS if name in frozen]
+    if len(names) != 1:
+        raise ValueError("INPUTS_TEACHER_POLICY_REQUIRED: exactly one teacher execution policy")
+    return names[0]
 
 
 def load_teacher_frozen_inputs(manifest_path: Path):
@@ -25,15 +35,16 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     binding = frozen.get("execution_snapshot")
     if binding is None or "runtime_policy" not in frozen:
         raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
-    missing = [name for name in TEACHER_POLICY_BINDINGS if name not in frozen]
-    if missing:
-        raise ValueError("INPUTS_TEACHER_POLICY_REQUIRED: " + ",".join(missing))
+    execution_name = frozen_execution_policy_name(frozen)
+    if TEACHER_ENDPOINT_BINDING not in frozen:
+        raise ValueError("INPUTS_TEACHER_POLICY_REQUIRED: " + TEACHER_ENDPOINT_BINDING)
     validate_execution_snapshot_binding(binding, require_model=True)
     root = manifest_path.parent / binding["path"]
     snapshot = verify_execution_snapshot(root, expected_sha256=binding["sha256"])
-    for name in TEACHER_POLICY_BINDINGS:
+    for name in (TEACHER_ENDPOINT_BINDING, execution_name):
         config_path = {"teacher_endpoint_v2": "config/act/teacher_endpoint_v2.yaml",
-                       "teacher_execution_policy_v1": "config/act/teacher_execution_policy_v1.yaml"}[name]
+                       "teacher_execution_policy_v1": "config/act/teacher_execution_policy_v1.yaml",
+                       "teacher_execution_policy_v2": "config/act/teacher_execution_policy_v2.yaml"}[name]
         copy = snapshot["files"].get(config_path)
         if copy is None or copy["sha256"] != frozen[name]["file_sha256"]:
             raise ValueError("INPUTS_TEACHER_POLICY_MISMATCH: " + name)

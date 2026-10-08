@@ -51,7 +51,7 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
     sources = {"teacher_endpoint_v2": POLICY_FILES["teacher_endpoint"],
                "teacher_execution_policy_v1": POLICY_FILES["teacher_execution_policy"],
                "episode_recorder_v1": POLICY_FILES["episode_recorder_policy"]}
-    assert set(POLICY_BINDINGS) == set(loaders)
+    assert set(POLICY_BINDINGS) == set(loaders) | {"teacher_execution_policy_v2"}      # v2 is frozen instead of v1, never beside it
     for name, loader in loaders.items():
         binding, payload = document[name], sources[name].read_bytes()
         effective = loader(payload)
@@ -153,7 +153,7 @@ def test_a_manifest_from_before_the_replacement_still_reads_and_carries_no_new_b
     manifest_path = freeze(tmp_path)
     document = json.loads(manifest_path.read_bytes())
     for name in POLICY_BINDINGS:
-        document.pop(name)
+        document.pop(name, None)
     policy = load_endpoint_policy(CONFIG / "endpoint_pose_acceptance_v1.yaml")
     document["endpoint_policy"] = {"rule_version": policy["rule_version"], "thresholds": policy["thresholds"],
                                    "sha256": hashlib.sha256(_canonical(policy)).hexdigest()}
@@ -183,9 +183,11 @@ def test_the_teacher_loads_its_snapshot_and_policies_from_the_frozen_manifest(tm
     frozen, loaded, root = load_teacher_frozen_inputs(manifest_path)
     assert frozen == document and loaded == snapshot and root == manifest_path.parent / "execution"
     policies = verify_policy_bindings(frozen, manifest_path, loaded)
-    assert set(policies) == set(POLICY_BINDINGS)
+    assert set(policies) == set(POLICY_BINDINGS) - {"teacher_execution_policy_v2"}
     # the policy file the Teacher's own loader reads is the snapshot's copy of exactly the bound bytes
     for name, (_, config_path) in POLICY_BINDINGS.items():
+        if name not in frozen:
+            continue
         assert snapshot["files"][config_path]["sha256"] == frozen[name]["file_sha256"]
 
 
@@ -266,3 +268,40 @@ def test_the_teacher_refuses_a_forged_policy_before_any_motion_or_runtime_load(t
     assert run_dynamic_execute(options, _runtime=runtime) == 1
     output = capsys.readouterr().out
     assert "status=ERROR" in output and "execution snapshot copy differs" in output
+
+
+# ---- CP-3480: policy v2 (tilt-compensated place height) is frozen instead of v1 ----------------------------------------------------
+
+V2_NAME = "teacher_execution_policy_v2.yaml"
+
+
+def test_a_freeze_binds_v2_instead_of_v1_and_the_teacher_names_it(tmp_path):
+    from so101_demo.act.frozen_runtime_inputs import frozen_execution_policy_name, load_teacher_frozen_inputs
+    from test_act_child_recorder_binding import frozen_child_inputs
+    manifest_path, document, snapshot = frozen_child_inputs(tmp_path, execution_policy=V2_NAME)
+    assert "teacher_execution_policy_v2" in document and "teacher_execution_policy_v1" not in document
+    binding = document["teacher_execution_policy_v2"]
+    assert binding["path"] == "policies/" + V2_NAME and binding["values"]["place_height_mode"] == "tilt_compensated"
+    assert binding["file_sha256"] == hashlib.sha256((CONFIG / V2_NAME).read_bytes()).hexdigest()
+    frozen, loaded, root = load_teacher_frozen_inputs(manifest_path)
+    assert frozen_execution_policy_name(frozen) == "teacher_execution_policy_v2"
+    assert loaded["files"]["config/act/" + V2_NAME]["sha256"] == binding["file_sha256"]
+    assert set(verify_policy_bindings(frozen, manifest_path, loaded)) == {
+        "teacher_endpoint_v2", "teacher_execution_policy_v2", "episode_recorder_v1"}
+
+
+def test_a_schema_2_document_cannot_be_bound_as_v1_nor_a_schema_1_one_as_v2():
+    with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID: binding teacher_execution_policy_v1"):
+        policy_binding("teacher_execution_policy_v1", (CONFIG / V2_NAME).read_bytes())
+    with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID: binding teacher_execution_policy_v2"):
+        policy_binding("teacher_execution_policy_v2", (CONFIG / "teacher_execution_policy_v1.yaml").read_bytes())
+
+
+def test_the_teacher_loader_wants_exactly_one_execution_policy(tmp_path):
+    from so101_demo.act.frozen_runtime_inputs import frozen_execution_policy_name
+    v1 = {"teacher_execution_policy_v1": {}}
+    v2 = {"teacher_execution_policy_v2": {}}
+    assert frozen_execution_policy_name(v1) == "teacher_execution_policy_v1" and frozen_execution_policy_name(v2) == "teacher_execution_policy_v2"
+    for frozen in ({}, {**v1, **v2}):
+        with pytest.raises(ValueError, match="INPUTS_TEACHER_POLICY_REQUIRED"):
+            frozen_execution_policy_name(frozen)

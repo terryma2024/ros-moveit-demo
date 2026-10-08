@@ -69,11 +69,56 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3481
+latest_checkpoint: CP-3483
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3483 — tilt-compensated place height implemented (policy v2); measurements contradict two premises; decision: activate v2 (guard 0.7 mm) for tilt-invariance, with honest limits; final review
+
+- Measurements, 20 retained PASS bags (actual-joint FK incl. sag):
+  - k (TCP z − cup z at hover) = 0.037454 m, sd 0.018 mm (≪ the 0.3 mm stop criterion);
+  - tilt at the descent start − tilt at first contact: mean 0.028°, max 0.042° (limit 0.1°); a 0.16° mid-descent excursion returns before contact;
+  - the 100 ms/0.05° stability window is met immediately after MOVE_ABOVE_PLACE in 20/20;
+  - commanded − actual TCP z at the descent end 0.158 mm (sd 0.014) → e_track term;
+  - force: pre-contact hold 1.5386 N; first-contact spike +0.043 N (10 ms); end-of-descent floor 0.884 N (sd 0.005, table share 0.259 N).
+- Premises contradicted:
+  (1) the TCP travels 0.943 mm after first contact (cup 0.650 mm), not ≈2.2 mm, at a contact speed of 3.42 mm/s — the old target is effectively a ≈0.94 mm guard;
+  (2) the 1.658 N DESCEND_TO_PLACE peak occurs 1.9 s before touchdown, during the descent; the change can't lower it. Acceptance was rewritten on the touchdown window: peak above hold ≤ 0.05 N, end floor ≈0.884 N, contact speed, overtravel window.
+- Offline sweep (490 + 495 trials; replay fidelity: hold 1.536 N, touch 3.40 mm/s, 0.95 mm travel; 0–10 ms timing jitter + command noise):
+  - the old guard gave 0 chatter in 125 trials (can't resolve a ≈2% rate) → the sweep is downgraded to geometry/support/guard-margin qualification;
+  - small guards are unsafe: 0.1 mm chatters in 33/70 trials (37 force/compression stops); 0.2–0.3 mm reaches 97–99.8% of the compression limit worst-case;
+  - ≥ 0.35 mm is clean in every trial;
+  - the frozen guard g = 0.7 mm keeps the effective guard at 0.4–1.0 mm across the k band, all clean, with contact speed 3.4 → 2.9 mm/s (−15%) and travel after contact 0.7 mm.
+- Built:
+  - core/place_height.py: exact formula; wall corners lowest only above 56.6° (tested);
+  - teacher_execution_policy_v2.yaml (v1 byte-identical): loader g ∈ [0.1, 1.0] mm, unknown modes/missing fields refused, scene hash pinned, target-deviation bound 2.0 mm; a freeze binds exactly one of v1/v2;
+  - measurement inside _place_target before _phase_open;
+  - TEACHER_PLACE_* refusals → STOPPED_SAFETY with the cup held, not released (tested);
+  - a place_height manifest document validated at the worker;
+  - design doc rewritten with all 12 changes.
+  Gate 7,646 pass / 186 skip / rc 0; scratch install 230 pass; RED = modules absent. Backup p5j-base.tar.gz (0e2a5156…). Evidence writer-artifacts/phased/q2/.
+- Decision (CP-3394): activate v2 with g = 0.7 mm. The rationale is tilt-invariance, not a demonstrated rate reduction: at the fixed default start, v1 already sits at a ≈0.94 mm guard in the clean region, so v2's gain is modest (−15% contact speed); but under the randomized formal domain the tilt will vary, and a fixed target would move the guard with it, possibly into the unsafe < 0.35 mm region, while v2 holds it at 0.7 mm. Honest limit: the live 2% force stop is not reproduced offline; no claim that v2 removes it — live surrogates (touchdown window metrics) are monitored, and 20 clean runs bound the rate at ≈14%. Limits unchanged; no filtering.
+- Next: final independent review of doc + code, then freeze with v2, 20 Teacher runs (collection off) with touchdown metrics + L2 + L3–L7.
+
+## CP-3482 — Teacher place-height design: independent review PASS-WITH-CHANGES; all 12 required changes accepted; revise + implement
+
+- Review (fresh Opus reviewer; GPT-6 Astra unavailable). Key points:
+  - the chatter onset (+0.028 s after first contact, ≈0.1 mm of travel into the table) points at touchdown speed/loading rate, not accumulated overtravel; raising the target still helps (contact in the slow tail of the deceleration);
+  - the geometry checks against scene.xml (table top 0.12; bottom cylinder r 0.040, c 0.045; margin 0); the wall corners (r 0.0413 at z −0.043) become lowest only above ≈56°;
+  - k ≈ 0.0389 was circular (derived from the overtravel it compensates) and must be measured;
+  - g ≤ 0 cannot work: margin 0 means no table contact, so DYNAMIC_RELEASE_SUPPORT_NOT_PROVED;
+  - the bounds are mis-sized;
+  - the 3.0–5.5° tilt range comes from one operating point;
+  - the refusal end state is undefined;
+  - "peak within 0.03 N of the hold" is unattainable, because the summed metric includes the table normal force (≈0.196 N cup weight);
+  - the offline sweep needs a stopping rule and timing jitter;
+  - versioning needs to be explicit (policy v2 file, v1 unchanged, r10b/dynamic_cup_pick/v1 unchanged, schema fields);
+  - the pre-descent dwell changes the demonstration;
+  - the call order: inside _place_target, before _phase_open.
+- Decision (CP-3394): accept all 12 changes. Guarded descent stays a rejected alternative by default (reactive cancel on a 100 Hz flag with its own stop transient) unless the measured k spread makes height compensation unreliable. A carry-tilt sim over the randomized domain is a gate before formal collection (it does not block this implementation). Correction to CP-3480: the formula is z_touch(θ) = 0.12 + 0.045·cosθ + 0.040·sinθ (not rest + r·sinθ).
+- The writer revises the doc and implements; STOP if the measured k spread exceeds 0.3 mm or tilt drifts during the descent. A final review of doc + code follows, then freeze + live (Teacher runs with force-margin distribution + L1–L7).
 
 ## CP-3481 — hygiene round (H1–H4) and localizer z-clip (Q1) done; Teacher tilt-compensated place-height design drafted (Q2) → independent review; committed
 

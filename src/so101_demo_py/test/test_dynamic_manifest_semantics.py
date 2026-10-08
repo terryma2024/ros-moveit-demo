@@ -174,6 +174,32 @@ def test_valid_complete_done_manifest_is_accepted():
     validate(manifest(), "DONE")
 
 
+def _place_height_document():
+    from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
+    from so101_demo.core import place_height as ph
+    from pathlib import Path
+
+    package = Path(__file__).resolve().parents[1]
+    policy = ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(package / "config/act/teacher_execution_policy_v2.yaml"))
+    geometry = ph.cup_geometry_from_scene(package / "assets/mujoco/act/scene.xml")
+    return ph.plan_place_height(0.0705, policy.grasp_offset_m, 0.2176344 - 0.01325, geometry, policy)
+
+
+def test_a_manifest_with_a_consistent_place_height_document_is_accepted():
+    document = manifest()
+    document["place_height"] = _place_height_document()
+    validate(document, "DONE")
+
+
+@pytest.mark.parametrize("change", [
+    {"target_tcp_z_m": 0.21}, {"guard_m": 0.0}, {"mode": "constant"}, {"tilt_rad": float("nan")}, {"refused": "SOMETHING_ELSE"}])
+def test_a_manifest_with_an_inconsistent_place_height_document_is_rejected(change):
+    document = manifest()
+    document["place_height"] = {**_place_height_document(), **change}
+    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
+        validate(document, "DONE")
+
+
 @pytest.mark.parametrize(
     ("mutation", "error"),
     [
