@@ -57,65 +57,23 @@ def qualified_package_root(environ=None):
     return root
 
 
-#: CP-3460: the detector the broker runs is the image's own (09-24) `adapters/perception/yolo_seg.py`, not the freeze's. The freeze's
-#: file hands the RGB frame to Ultralytics as BGR (commit 828af7c91); the baked one does not, and CP-3454, CP-3455 and the calibrated
-#: limits were made with the baked behaviour. The corrected detector adds a second (0.36) candidate next to the cup and the Worker
-#: wants exactly one. Re-baselining perception with the corrected detector is a follow-up and a gate before formal collection.
-PINNED_IMAGE_SOURCE_SHA256 = '3624dac7c70603039f9337f9f5175f9bf8b427656bf4bf09ed6cd490308d84a2'
-PINNED_DETECTOR_SHA256 = '72d4e1fb3cbd9b0666d28f95bfc440e3756a4005e7b61532625ed1be52e4ce56'
-IMAGE_DETECTOR_PATH = IMAGE_PACKAGE_PATH + '/adapters/perception/yolo_seg.py'
-DETECTOR_PIN_NAME = 'broker-detector-baked-3624dac7'
-
-
-def detector_pin_root(environ=None):
-    """Where the durable copy of the baked detector lives: `$SO101_BROKER_DETECTOR_PIN_ROOT`, else `<evidence root>/deps/<name>` next to the
-    freeze's `experiments/` directory, else None (not a qualified run)."""
-    environ = os.environ if environ is None else environ
-    explicit = environ.get('SO101_BROKER_DETECTOR_PIN_ROOT')
-    if explicit:
-        return Path(explicit)
-    freeze = environ.get('SO101_QUALIFIED_FREEZE')
-    return None if not freeze else Path(freeze).parent.parent / 'deps' / DETECTOR_PIN_NAME
-
-
 def _file_sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def pinned_detector_source(environ=None):
-    """The baked `yolo_seg.py` to mount, verified against the hash fixed in this code and the pin's manifest; None outside a qualified run.
-
-    Fails closed (`DETECTOR_PIN_MISSING`, `DETECTOR_PIN_MISMATCH`) when the pin is absent, is a symbolic link, or any file differs."""
-    root = detector_pin_root(environ)
-    if root is None:
-        return None
-    manifest_path, source = root / 'manifest.json', root / 'perception' / 'yolo_seg.py'
-    if not manifest_path.is_file() or not source.is_file() and not source.is_symlink():
-        raise ValueError('DETECTOR_PIN_MISSING')
-    try:
-        manifest = json.loads(manifest_path.read_bytes())
-        files = manifest['files']
-        if (manifest['kind'] != 'BROKER_DETECTOR_PIN' or manifest['image_source_sha256'] != PINNED_IMAGE_SOURCE_SHA256
-                or manifest['mounted_file_sha256'] != PINNED_DETECTOR_SHA256 or files['yolo_seg.py'] != PINNED_DETECTOR_SHA256):
-            raise ValueError('manifest')
-        if source.is_symlink() or _file_sha256(source) != PINNED_DETECTOR_SHA256:
-            raise ValueError('source')
-        for name, digest in files.items():
-            member = root / 'perception' / name
-            if member.is_symlink() or not member.is_file() or _file_sha256(member) != digest:
-                raise ValueError('member')
-    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
-        raise ValueError('DETECTOR_PIN_MISMATCH') from error
-    return source
+#: Where the detector the broker runs sits inside the package that is mounted over the image's own (CP-3467: it is the freeze's
+#: own `yolo_seg.py`; the baked 09-24 file that CP-3460 pinned is gone, and rule R6 in the Worker's localizer takes the second
+#: candidate the corrected detector returns).
+DETECTOR_RELATIVE_PATH = Path('adapters') / 'perception' / 'yolo_seg.py'
 
 
-def detector_pin_record(source, package):
-    """The facts a run records about the broker's code: the package of the install and the pinned detector."""
-    root = Path(source).parent.parent
-    return {'kind': 'ACT_BROKER_SOURCE_PIN', 'schema_version': 1, 'package_root': str(package),
-            'package_source_sha256': source_hash(package), 'detector_path': str(source),
-            'detector_sha256': _file_sha256(source), 'manifest_sha256': _file_sha256(root / 'manifest.json'),
-            'image_source_sha256': PINNED_IMAGE_SOURCE_SHA256}
+def broker_source_record(package):
+    """The facts a run records about the broker's code: the install's package and the detector in it, with their hashes."""
+    package = Path(package)
+    detector = package / DETECTOR_RELATIVE_PATH
+    return {'kind': 'ACT_BROKER_SOURCE_PIN', 'schema_version': 2, 'package_root': str(package),
+            'package_source_sha256': source_hash(package), 'detector_path': str(detector),
+            'detector_sha256': _file_sha256(detector), 'detector_source': 'freeze'}
 
 
 def _checked_package(package):
@@ -130,7 +88,7 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
                        gpu_groups, uid, gid, batch_id, broker_generation,
                        runtime_root=None,
                        runtime_ipc_root=None,
-                       input_root=None, path_checker=checked_path, source_package=None, detector_pin=None):
+                       input_root=None, path_checker=checked_path, source_package=None):
     if type(uid) is not int or uid <= 0 or uid != os.getuid() or gid != os.getgid():
         raise ValueError('HOST_NONROOT_IDENTITY_REQUIRED')
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
@@ -173,17 +131,10 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
     yolo_weights = path_checker(yolo_weights)
     grounded_root = path_checker(grounded_root, directory=True)
     package = None if source_package is None else _checked_package(source_package)
-    if detector_pin is not None:
-        if package is None:
-            raise ValueError('DETECTOR_PIN_REQUIRES_PACKAGE')
-        detector_pin = Path(detector_pin)
-        if detector_pin.is_symlink() or not detector_pin.is_file() or _file_sha256(detector_pin) != PINNED_DETECTOR_SHA256:
-            raise ValueError('DETECTOR_PIN_MISMATCH')
     argv = ['docker', 'run', '--rm', '--init', '--cidfile', str(ipc / 'container.cid'),
             '--label', f'com.so101.batch-id={batch_id}',
             '--label', f'com.so101.broker-generation={broker_generation}',
             *([] if package is None else ['--label', f'com.so101.source-sha256={source_hash(package)}']),
-            *([] if detector_pin is None else ['--label', f'com.so101.detector-sha256={PINNED_DETECTOR_SHA256}']),
             '--gpus', 'all', '--network', 'none', '--ipc', 'private',
             '--read-only', '--security-opt', 'no-new-privileges', '--user', f'{uid}:{gid}',
             '--tmpfs', f'/tmp:rw,nosuid,nodev,mode=0700,uid={uid},gid={gid}']
@@ -191,8 +142,7 @@ def container_run_argv(batch_root, *, image_id, yolo_weights, grounded_root,
         argv.extend(['--group-add', str(group)])
     for mount in (f'{ipc}:/runtime:rw', f'{inputs}:/inputs:ro',
                   f'{yolo_weights}:/models/yolo/best.pt:ro', f'{grounded_root}:/models/grounded:ro',
-                  *([] if package is None else [f'{package}:{IMAGE_PACKAGE_PATH}:ro']),
-                  *([] if detector_pin is None else [f'{detector_pin}:{IMAGE_DETECTOR_PATH}:ro'])):
+                  *([] if package is None else [f'{package}:{IMAGE_PACKAGE_PATH}:ro'])):
         argv.extend(['--volume', mount])
     # Thread bounds are part of the measured runtime identity, and docker does not forward
     # the host environment: without this the container's torch and BLAS open one thread per
@@ -356,6 +306,7 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
     Both measured service latency and the adapter's inference latency are kept.
     """
     from so101_demo.core.detection import DetectionQuery
+    from so101_demo.runtime.parallel_perception_runtime import query_class_for
     last_time = None
 
     def now():
@@ -386,7 +337,7 @@ def smoke_models(runtime, frame, *, clock=time.monotonic):
                     raise ModelRuntimeInfrastructureError('BROKER_UNHEALTHY')
                 record['executed'] = True
                 candidate = normalize_batch(
-                    built.detector.detect(frame, DetectionQuery('plastic_cup')),
+                    built.detector.detect(frame, DetectionQuery(query_class_for(built.detector, 'plastic_cup'))),
                     frame,
                 )
                 record.update(

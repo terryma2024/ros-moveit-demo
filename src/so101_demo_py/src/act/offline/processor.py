@@ -65,11 +65,14 @@ def load_loss_facts(bag, *, stats_file=None) -> dict:
     from .raw_recorder import transport_lost_from_log
 
     stats_path = Path(stats_file) if stats_file is not None else Path(bag).parent / "record-stats.json"
-    lost, reads = None, None
+    lost, reads, by_topic = None, None, None
     if stats_path.is_file():
         document = json.loads(stats_path.read_bytes())
         if type(document.get("transport_lost")) is int:
             lost = document["transport_lost"]
+        by = document.get("transport_lost_by_topic")     # present only when the recorder ran with debug logging (C5)
+        if type(by) is dict and all(type(k) is str and type(v) is int and v >= 0 for k, v in by.items()):
+            by_topic = dict(sorted(by.items()))
         if isinstance(document.get("scene_reads"), dict) and type(document["scene_reads"].get("count")) is int:
             reads = document["scene_reads"]["count"]
         log = stats_path.parent / "bag-record.log"
@@ -77,7 +80,7 @@ def load_loss_facts(bag, *, stats_file=None) -> dict:
             text = log.read_text(errors="replace")
             if "Recording stopped" in text:
                 lost = transport_lost_from_log(text)
-    return {"transport_lost": lost, "scene_reads_expected": reads}
+    return {"transport_lost": lost, "scene_reads_expected": reads, "transport_lost_by_topic": by_topic}
 
 
 def load_clock_map(bag, *, stats_file=None):

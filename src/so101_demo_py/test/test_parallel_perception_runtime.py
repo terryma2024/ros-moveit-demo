@@ -1210,3 +1210,27 @@ def test_the_broker_argv_documents_the_device_the_platform_should_choose():
     device = argv[argv.index('--device') + 1]
     assert device == 'cuda', 'the Linux container argv keeps CUDA'
     assert '--no-cpu-fallback' in argv
+
+
+def test_each_model_is_asked_for_the_class_its_own_prompt_profile_declares(tmp_path, monkeypatch):
+    """CP-3467: Grounded DINO + SAM declares `cup`; asking it for the task class `plastic_cup` is UNSUPPORTED_DETECTION_QUERY,
+    which the Broker treats as an infrastructure failure. YOLO, trained on `plastic_cup`, keeps the snapshot's class."""
+    from dataclasses import replace
+
+    from so101_demo.cli.parallel_perception_broker import smoke_models
+    from so101_demo.core.detection import DetectionFrame
+    from so101_demo.parallel_batch.contracts import ModelOutcome, NormalizedInferenceResponseIdentity
+    from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
+
+    f = fixture_runtime(tmp_path, monkeypatch)
+    f.runtime.start()
+    f.runtime.detectors[GROUNDED_ID][0].detector.target_class_id = 'cup'
+    request = replace(f.req, model_id=GROUNDED_ID)
+    snapshot = replace(f.snapshot, start_identity=NormalizedInferenceResponseIdentity.from_request(request))
+    assert f.runtime.infer(request, snapshot).outcome is ModelOutcome.QUALIFIED
+    assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.QUALIFIED
+    assert [c[2] for c in f.calls if c[0] == 'detect'] == ['cup', 'plastic_cup']
+    f.calls.clear()
+    smoke_models(f.runtime, DetectionFrame(np.zeros((2, 3, 3), dtype=np.uint8), 1250000000, 'camera'), clock=iter([1., 2., 3., 4.]).__next__)
+    assert sorted(c[2] for c in f.calls if c[0] == 'detect') == ['cup', 'plastic_cup']
+    assert YOLO_ID in f.runtime.detectors

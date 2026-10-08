@@ -136,7 +136,8 @@ def test_the_loss_facts_come_from_the_stats_or_from_the_recorders_log(tmp_path):
     (tmp_path / "raw").mkdir()
     stats = tmp_path / "raw" / "record-stats.json"
     stats.write_text(json.dumps({"transport_lost": 7, "scene_reads": {"count": 5, "errors": 0}}))
-    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats) == {"transport_lost": 7, "scene_reads_expected": 5}
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats) == {"transport_lost": 7, "scene_reads_expected": 5,
+                                                                                   "transport_lost_by_topic": None}
     stats.write_text(json.dumps({"scene_reads": {"count": 5, "errors": 0}}))
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost"] is None
     (tmp_path / "raw" / "bag-record.log").write_text(
@@ -144,6 +145,124 @@ def test_the_loss_facts_come_from_the_stats_or_from_the_recorders_log(tmp_path):
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost"] == 6
     (tmp_path / "raw" / "bag-record.log").write_text("[INFO] [so101_raw_recorder]: Recording stopped\n")
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost"] == 0
+    stats.write_text(json.dumps({"transport_lost": 3, "transport_lost_by_topic": {"/clock": 3}}))
+    assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost_by_topic"] == {"/clock": 3}
+
+
+# ---- C5: the recorder's per-topic breakdown ----------------------------------------------------------------------------------
+
+EVENTS = "/so101/teacher/events"
+READS = "/so101/raw/planning_scene_reads"
+JOINTS_UNUSED = "/so101/simulation/joints"
+
+
+def scan_by_topic(tmp_path, by_topic, *, name="raw", transport_lost=None, drop=(), reads=1):
+    total = sum(by_topic.values()) if transport_lost is None else transport_lost
+    bag = build_bag(tmp_path / name, drop=drop, transport_lost=total, transport_lost_by_topic=by_topic)
+    return scan_bag(bag, transport_lost=total, scene_reads_expected=reads, transport_lost_by_topic=by_topic)
+
+
+def test_a_breakdown_with_no_loss_passes_and_is_recorded_in_the_document(tmp_path):
+    report = scan_by_topic(tmp_path, {})
+    assert report["reasons"] == [], report["reasons"]
+    assert report["topic_loss"]["transport_lost"] == {"reported": 0, "attributed": 0, "unattributed": 0, "by_topic": {}}
+
+
+def test_a_reported_loss_that_the_topics_own_rule_shows_outside_the_window_is_recorded_not_fatal(tmp_path):
+    report = scan_by_topic(tmp_path, {JOINT: 1}, drop=[(JOINT, BEFORE_WINDOW)])
+    assert loss_reasons(report) == [], report["reasons"]
+    assert report["topic_loss"]["transport_lost"] == {"reported": 1, "attributed": 1, "unattributed": 0, "by_topic": {JOINT: 1}}
+    assert report["topic_loss"]["topics"][JOINT]["reported"] == 1 and report["topic_loss"]["topics"][JOINT]["detected"] == 1
+
+
+def test_a_reported_loss_on_a_used_topic_with_no_gap_to_show_for_it_is_invalid_and_names_the_topic(tmp_path):
+    # the shape of the L2 residual: the recorder says the topic lost messages, the bag shows none
+    report = scan_by_topic(tmp_path, {JOINT: 3})
+    assert f"OFFLINE_TOPIC_LOSS:{JOINT} reported=3 detected=0" in report["reasons"], report["reasons"]
+    assert report["topic_loss"]["transport_lost"]["unattributed"] == 3
+
+
+def test_a_reported_loss_on_an_unused_topic_is_recorded_only(tmp_path):
+    report = scan_by_topic(tmp_path, {JOINTS_UNUSED: 3, "/neck_controller/controller_state": 2})
+    assert loss_reasons(report) == [], report["reasons"]
+    facts = report["topic_loss"]
+    assert facts["transport_lost"] == {"reported": 5, "attributed": 5, "unattributed": 0,
+                                       "by_topic": {"/neck_controller/controller_state": 2, JOINTS_UNUSED: 3}}
+    assert facts["topics"][JOINTS_UNUSED]["reported"] == 3 and facts["topics"][JOINTS_UNUSED]["used"] is False
+
+
+def test_per_topic_numbers_that_do_not_add_up_to_the_aggregate_fail_closed(tmp_path):
+    report = scan_by_topic(tmp_path, {JOINTS_UNUSED: 1}, transport_lost=4)
+    assert any(r.startswith("OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 3 of 4") for r in report["reasons"]), report["reasons"]
+    over = scan_by_topic(tmp_path, {JOINTS_UNUSED: 5}, name="over", transport_lost=4)
+    assert any(r.startswith("OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 1 of 4") for r in over["reasons"]), over["reasons"]
+
+
+def test_a_loss_named_on_a_topic_the_recorder_does_not_subscribe_to_fails_closed(tmp_path):
+    report = scan_by_topic(tmp_path, {"/not/a/recorded/topic": 2})
+    assert any(r.startswith("OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 2 of 2") for r in report["reasons"]), report["reasons"]
+
+
+def test_a_gap_inside_the_window_stays_invalid_with_the_breakdown_too(tmp_path):
+    report = scan_by_topic(tmp_path, {JOINT: 1}, drop=[(JOINT, IN_WINDOW)])
+    assert any(r.startswith(f"OFFLINE_TOPIC_LOSS:{JOINT} gaps=1") for r in report["reasons"]), report["reasons"]
+    assert not any("reported=" in r for r in report["reasons"])
+
+
+def test_a_loss_on_the_events_topic_after_a_whole_sequence_is_after_the_terminal_event(tmp_path):
+    report = scan_by_topic(tmp_path, {EVENTS: 2})
+    assert loss_reasons(report) == [], report["reasons"]
+    assert report["topic_loss"]["topics"][EVENTS]["reported"] == 2
+
+
+def test_a_planning_scene_read_the_sidecar_made_and_the_bag_lacks_is_explained_by_its_span_rule(tmp_path):
+    report = scan_by_topic(tmp_path, {READS: 1}, reads=2)
+    assert any(r.startswith(f"OFFLINE_TOPIC_LOSS:{READS} missing=1") for r in report["reasons"]), report["reasons"]
+    assert not any("reported=" in r for r in report["reasons"])
+    over = scan_by_topic(tmp_path, {READS: 2}, name="over", reads=1)
+    assert f"OFFLINE_TOPIC_LOSS:{READS} reported=2 detected=0" in over["reasons"], over["reasons"]
+
+
+def test_the_contact_step_span_is_read_only_when_the_recorder_reported_a_loss_on_it(tmp_path, monkeypatch):
+    from so101_demo.act.offline import scan as scan_module
+
+    calls = []
+    monkeypatch.setattr(scan_module, "_contact_step_gaps", lambda bag: calls.append(bag) or 2)
+    clean = scan_by_topic(tmp_path, {})
+    assert calls == [] and loss_reasons(clean) == []
+    lossy = scan_by_topic(tmp_path, {"/so101/simulation/robot_contacts": 2}, name="lossy")
+    assert len(calls) == 1 and lossy["topic_loss"]["topics"]["/so101/simulation/robot_contacts"]["detected"] == 2
+    assert loss_reasons(lossy) == []
+
+
+def test_a_bag_recorded_without_the_breakdown_keeps_the_aggregate_rule(tmp_path):
+    report = scan(tmp_path, transport_lost=3)
+    assert "OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED: 3 of 3" in report["reasons"]
+    assert report["topic_loss"]["transport_lost"] == {"reported": 3, "attributed": 0, "unattributed": 3}
+
+
+def test_the_per_topic_lines_of_the_recorders_debug_log_are_parsed_to_the_last_cumulative_total():
+    from so101_demo.act.offline.raw_recorder import RECORDER_LOG_LEVEL, transport_lost_by_topic_from_log
+
+    log = ("[DEBUG] [1.0] [so101_raw_recorder]: Messages lost on transport layer for topic '/clock'. Total lost: 1\n"
+           "[DEBUG] [2.0] [so101_raw_recorder]: Messages lost on transport layer for topic '/a/b'. Total lost: 4\n"
+           "[DEBUG] [3.0] [so101_raw_recorder]: Messages lost on transport layer for topic '/clock'. Total lost: 2\n"
+           "[WARN] [4.0] [so101_raw_recorder]: Number of messages lost on the transport layer: 6\n")
+    assert RECORDER_LOG_LEVEL == "debug"
+    assert transport_lost_by_topic_from_log(log) == {"/a/b": 4, "/clock": 2}
+    assert transport_lost_by_topic_from_log("[INFO] nothing lost\n") == {}
+
+
+def test_the_processor_reads_the_breakdown_and_makes_an_unexplained_used_topic_loss_invalid(tmp_path):
+    from test_p2_offline_processor import run
+
+    bag = build_bag(tmp_path / "raw", transport_lost=3, transport_lost_by_topic={JOINT: 3})
+    report, out = run(tmp_path, bag)
+    assert report["verdict"] == "INVALID" and f"OFFLINE_TOPIC_LOSS:{JOINT} reported=3 detected=0" in report["reasons"]
+    assert json.loads((out / topic_loss.DOCUMENT_NAME).read_bytes())["transport_lost"]["by_topic"] == {JOINT: 3}
+    unused = build_bag(tmp_path / "raw2", transport_lost=3, transport_lost_by_topic={JOINTS_UNUSED: 3})
+    kept, _ = run(tmp_path, unused, name="sealed2")
+    assert kept["verdict"] == "VALID", kept["reasons"]
 
 
 # ---- the QC check and the rule version ---------------------------------------------------------------------------------------

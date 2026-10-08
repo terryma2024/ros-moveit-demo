@@ -55,7 +55,23 @@ DEEP_RELIABLE = {"/so101/simulation/physics_step_chunks": 1000, "/so101/simulati
                  "/neck_controller/controller_state": 20000, "/clock": 20000}
 
 
+#: `debug` is what makes rosbag2 print the per-topic loss lines (there is no per-topic status at `info`).
+RECORDER_LOG_LEVEL = "debug"
 _TRANSPORT_LOST = re.compile(r"Number of messages lost on the transport layer:\s*(\d+)")
+
+
+_TOPIC_LOST = re.compile(r"Messages lost on transport layer for topic '([^']+)'\. Total lost:\s*(\d+)")
+
+
+def transport_lost_by_topic_from_log(text: str) -> dict:
+    """{topic: messages lost} from the DEBUG lines `ros2 bag record --log-level debug` prints per lost-message event.
+
+    Each line carries the subscription's cumulative total, so the last (largest) value of a topic is its loss. A log without such
+    lines gives {} (a recorder that ran without debug logging, or lost nothing): the caller then knows only the aggregate."""
+    by_topic: dict = {}
+    for match in _TOPIC_LOST.finditer(text):
+        by_topic[match.group(1)] = max(by_topic.get(match.group(1), 0), int(match.group(2)))
+    return dict(sorted(by_topic.items()))
 
 
 def transport_lost_from_log(text: str) -> int:
@@ -221,6 +237,7 @@ class RawRecorder:
         self._log = open(self.bag_dir.parent / (self.bag_dir.name + "-record.log"), "xb")
         self._recorder = subprocess.Popen([executable, "bag", "record", "-s", "mcap", "-o", str(self.bag_dir),
                                           "--node-name", self.node_name, "--disable-keyboard-controls",
+                                          "--log-level", RECORDER_LOG_LEVEL,
                                           "--max-cache-size", str(256 * 1024 * 1024),
                                           "--qos-profile-overrides-path", str(qos_path), *self.topics],
                                          stdout=self._log, stderr=subprocess.STDOUT, start_new_session=True,
@@ -297,7 +314,9 @@ class RawRecorder:
                 self._log = None
             try:
                 log_path = self.bag_dir.parent / (self.bag_dir.name + "-record.log")
-                stats["transport_lost"] = transport_lost_from_log(log_path.read_text(errors="replace"))
+                log_text = log_path.read_text(errors="replace")
+                stats["transport_lost"] = transport_lost_from_log(log_text)
+                stats["transport_lost_by_topic"] = transport_lost_by_topic_from_log(log_text)
             except OSError:
                 stats["transport_lost"] = None
             self.anchor_end = clock_anchor()

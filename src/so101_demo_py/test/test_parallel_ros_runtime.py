@@ -368,7 +368,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
                 depth=actual_depth,
                 transform=lookup("world", candidate.source_frame_id, candidate.source_stamp_ns),
             )
-            return "localized-from-mask"
+            return SimpleNamespace(tag="localized-from-mask", points_world=np.array([[0.0, 0.0, 0.12], [0.0, 0.0, 0.21]]))
 
     value = BrokerMaskLocalizer(localizer=Localizer()).localize(
         response,
@@ -376,11 +376,136 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
         depth_message=depth,
         lookup_exact=lambda target, source, stamp: (target, source, stamp),
     )
-    assert value == "localized-from-mask"
+    assert value.tag == "localized-from-mask"
     assert seen["mask"].tolist() == [[False, True, True], [False, False, True]]
     assert seen["camera"] is camera
     assert seen["depth"] is depth
     assert seen["transform"] == ("world", "task_camera_frame", 12_000_000_000)
+
+
+# ---- R6 (CP-3467): the candidate that is the cup is the one that localizes as a cup and is >= 0.05 m tall ---------------------------
+
+def _broker_response(masks):
+    """A qualified Broker response with one candidate per entry of `masks` (a 2x3 list of lists of 0/1), ids cand-0, cand-1, ..."""
+    from so101_demo.parallel_batch.broker import BrokerResponse
+    from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest, ModelOutcome
+
+    request = InferenceRequest(
+        request_id="attempt-1-yolo", model_id="plastic-cup-yolo11n-seg-v1", execution_kind=ExecutionKind.ATTEMPT,
+        batch_id="batch-1", coordinator_epoch=1, worker_id="worker-01", worker_generation=1, point_id="task_start",
+        lease_generation=1, reset_epoch="reset-2", image_timestamp_s=12.0,
+        input_relative_path="worker-01/attempts/task_start/attempt-1/working/perception/input/rgb.npy",
+        input_sha256="ab" * 32, deadline_s=5.0, attempt_id="attempt-1")
+
+    def rle(mask):
+        flat = [int(v) for row in mask for v in row]
+        counts, current, run = [], 0, 0
+        for value in flat:
+            if value == current:
+                run += 1
+            else:
+                counts.append(run)
+                current, run = value, 1
+        counts.append(run)
+        return {"shape": [2, 3], "counts": counts}
+
+    document = {
+        "model_id": "plastic-cup-yolo11n-seg-v1", "weights_sha256": "ab" * 32, "runtime_device": "cuda",
+        "inference_latency_ms": 1.0, "shape": [2, 3, 3], "source_stamp_ns": 12_000_000_000,
+        "source_frame_id": "task_camera_frame",
+        "candidates": [{"instance_id": f"cand-{index}", "class_id": "plastic_cup", "confidence": 0.9 - 0.1 * index,
+                        "bbox_xyxy": [0.0, 0.0, 3.0, 2.0], "segmentation_quality": 0.95, "mask_rle": rle(mask)}
+                       for index, mask in enumerate(masks)]}
+    return BrokerResponse(request, 1, ModelOutcome.QUALIFIED, document, None, 1.0, 2.0, 1.1, 2.1, 1.2)
+
+
+class _ByInstance:
+    """A localizer whose verdict per candidate is given: a z-extent (metres), or an exception to raise."""
+
+    def __init__(self, outcomes):
+        self.outcomes, self.calls = outcomes, []
+
+    def localize(self, candidate, camera_info, depth_message, lookup):
+        self.calls.append((candidate.instance_id, camera_info, depth_message, lookup("world", "f", 1)))
+        outcome = self.outcomes[candidate.instance_id]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(instance_id=candidate.instance_id, center_world_xyz=(0.02, -0.28, 0.165),
+                               points_world=np.array([[0.0, 0.0, 0.12], [0.0, 0.0, 0.12 + outcome]]))
+
+
+def _r6(outcomes, masks=None):
+    from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+
+    masks = masks or [[[0, 1, 1], [0, 0, 1]]] * len(outcomes)
+    localizer = _ByInstance(outcomes)
+    return localizer, lambda: BrokerMaskLocalizer(localizer=localizer).localize(
+        _broker_response(masks), camera_info="camera", depth_message="depth", lookup_exact=lambda *a: a)
+
+
+def test_r6_keeps_the_cup_and_drops_a_flat_ring_candidate():
+    localizer, call = _r6({"cand-0": 0.003, "cand-1": 0.09})      # the ring is the first (higher confidence) candidate
+    assert call().instance_id == "cand-1"
+    assert [c[0] for c in localizer.calls] == ["cand-0", "cand-1"], "every candidate is localized"
+    assert all(c[1:3] == ("camera", "depth") for c in localizer.calls), "each against the same exact depth and TF"
+
+
+def test_r6_drops_a_candidate_whose_circle_fit_is_rejected():
+    from so101_demo.application.object_pose import LocalizationError
+
+    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("GEOMETRY_REJECTED", "radius 0.07 outside 0.04 +- 0.01")})
+    assert call().instance_id == "cand-0"
+    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("DEPTH_INVALID", "30 valid points")})
+    assert call().instance_id == "cand-0"
+
+
+def test_r6_two_cups_are_ambiguous_and_the_message_names_the_count():
+    _, call = _r6({"cand-0": 0.09, "cand-1": 0.08})
+    with pytest.raises(RuntimeError, match=r"BROKER_CANDIDATE_AMBIGUOUS: 2 of 2"):
+        call()
+
+
+def test_r6_with_no_cup_among_several_candidates_is_a_geometry_rejection_so_the_policy_tries_its_next_model():
+    from so101_demo.application.object_pose import LocalizationError
+
+    _, call = _r6({"cand-0": 0.003, "cand-1": 0.004})
+    with pytest.raises(LocalizationError, match=r"GEOMETRY_REJECTED: no candidate is a cup \(0 of 2\)") as error:
+        call()
+    assert error.value.code == "GEOMETRY_REJECTED"
+
+
+def test_r6_a_lone_flat_candidate_is_not_a_cup_and_a_lone_failure_keeps_its_own_error():
+    from so101_demo.application.object_pose import LocalizationError
+
+    _, call = _r6({"cand-0": 0.003})
+    with pytest.raises(LocalizationError, match="no candidate is a cup"):
+        call()
+    _, call = _r6({"cand-0": LocalizationError("DEPTH_INVALID", "30 valid points")})
+    with pytest.raises(LocalizationError, match="DEPTH_INVALID: 30 valid points"):
+        call()
+
+
+def test_r6_a_failure_of_the_shared_inputs_is_no_verdict_on_a_candidate():
+    from so101_demo.application.object_pose import LocalizationError
+
+    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("TF_UNAVAILABLE", "no transform")})
+    with pytest.raises(LocalizationError, match="TF_UNAVAILABLE"):
+        call()
+
+
+def test_r6_the_survivors_pose_is_the_localizers_result_for_its_mask_unchanged():
+    localizer, call = _r6({"cand-0": 0.003, "cand-1": 0.09})
+    assert call().center_world_xyz == (0.02, -0.28, 0.165)
+
+
+def test_a_qualified_response_without_candidates_is_still_ambiguous():
+    from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+
+    response = _broker_response([[[1, 0, 0], [0, 0, 0]]])
+    response.candidate["candidates"].clear()
+    with pytest.raises(RuntimeError, match="BROKER_CANDIDATE_AMBIGUOUS"):
+        BrokerMaskLocalizer(localizer=_ByInstance({})).localize(response, camera_info=None, depth_message=None,
+                                                                lookup_exact=lambda *a: a)
 
 
 def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):

@@ -174,7 +174,7 @@ def messages(*, paused_worlds=()):
     return out
 
 
-def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transport_lost=0) -> Path:
+def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transport_lost=0, transport_lost_by_topic=None) -> Path:
     """Write `root/bag` (MCAP) and `root/record-stats.json`; returns the bag directory.
 
     `omit_topics`: topics left out entirely. `drop`: (topic, index) messages left out (index counts per topic from 0).
@@ -195,10 +195,12 @@ def build_bag(root: Path, *, omit_topics=(), drop=(), paused_worlds=(), transpor
         writer.write(topic, message, system_ns)
     writer.close()
     start, end = mono_of(BAG_START_S - 0.05), mono_of(BAG_END_S + 0.05)
-    (root / "record-stats.json").write_text(json.dumps(
-        {"anchor_start": {"system_ns": system_of(start), "monotonic_ns": start, "uncertainty_ns": 1000},
+    stats = {"anchor_start": {"system_ns": system_of(start), "monotonic_ns": start, "uncertainty_ns": 1000},
          "anchor_end": {"system_ns": system_of(end), "monotonic_ns": end, "uncertainty_ns": 1000},
-         "transport_lost": transport_lost, "scene_reads": {"count": 1, "errors": 0}}))
+         "transport_lost": transport_lost, "scene_reads": {"count": 1, "errors": 0}}
+    if transport_lost_by_topic is not None:
+        stats["transport_lost_by_topic"] = transport_lost_by_topic
+    (root / "record-stats.json").write_text(json.dumps(stats))
     return bag
 
 

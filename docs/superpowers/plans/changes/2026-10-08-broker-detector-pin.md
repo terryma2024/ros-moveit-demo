@@ -1,5 +1,7 @@
 # The broker keeps the image's own YOLO detector; the freeze's package is mounted for everything else
 
+> **Superseded (CP-3467, `2026-10-08-perception-rebaseline-r6-unpin`).** The pin described here is removed; the broker runs the freeze's own detector and rule R6 in the Worker's localizer keeps the cup. This document stays as the record of the deviation while it was in force.
+
 Date: 2026-10-08
 
 Trigger: live L1 (`nonhead-first-episode-c6a995a1-...`) and L2 (`...a4e633bd-...`) on freeze fgNI7yJj, the first runs whose broker executed the freeze's code (`2026-10-08-qualified-role-commands-and-broker-package`). Both ended rc 4 `RESULT_RUN_CONTEXT_INVALID`: `failure_boundary: request_model`, `BROKER_CANDIDATE_AMBIGUOUS`, then `TEACHER_USER_STOP` with `/cup_pose` count 0.

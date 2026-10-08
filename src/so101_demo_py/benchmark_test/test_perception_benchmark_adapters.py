@@ -111,6 +111,13 @@ def _frame() -> DetectionFrame:
     )
 
 
+def _colored_frame() -> DetectionFrame:
+    """A frame whose three channels differ (R=10, G=20, B=30), so a channel-order mistake is visible."""
+    rgb = np.zeros((16, 20, 3), dtype=np.uint8)
+    rgb[..., 0], rgb[..., 1], rgb[..., 2] = 10, 20, 30
+    return DetectionFrame(rgb, 7, "task_camera_frame")
+
+
 def _mask() -> np.ndarray:
     value = np.zeros((16, 20), dtype=bool)
     value[2:10, 3:13] = True
@@ -804,11 +811,13 @@ def test_yolo_low_floor_uses_exact_irreversible_settings_and_class_score(
     """Catch a raw YOLO run using a higher floor or hiding NMS/max-det loss."""
 
     model = _YoloModel()
-    result = _yolo_adapter(tmp_path, model=model).collect(_frame(), CollectionMode.LOW_FLOOR)
+    result = _yolo_adapter(tmp_path, model=model).collect(_colored_frame(), CollectionMode.LOW_FLOOR)
 
     assert len(model.predict_calls) == 1
     call = model.predict_calls[0]
-    np.testing.assert_array_equal(call.pop("source"), _frame().rgb8)
+    source = call.pop("source")
+    np.testing.assert_array_equal(source, _colored_frame().rgb8[:, :, ::-1])   # Ultralytics reads a numpy array as BGR
+    assert source[0, 0].tolist() == [30, 20, 10] and source.flags["C_CONTIGUOUS"]
     assert call == {
         "imgsz": 640,
         "device": "mps",
@@ -1684,10 +1693,11 @@ def test_yolo_calibrated_detector_implements_real_detect_port(
         model_factory=lambda _: model,
     )
 
-    batch = detector.detect(_frame(), DetectionQuery("plastic_cup"))
+    batch = detector.detect(_colored_frame(), DetectionQuery("plastic_cup"))
 
     assert isinstance(batch, DetectionBatch)
     assert batch.runtime_device == "mps"
+    assert model.predict_calls[-1]["source"][0, 0].tolist() == [30, 20, 10], "BGR, as the production detector hands it over"
     assert model.predict_calls[-1]["conf"] == 0.50
     assert model.predict_calls[-1]["iou"] == 0.70
     assert model.predict_calls[-1]["imgsz"] == 640

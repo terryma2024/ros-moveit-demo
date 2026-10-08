@@ -62,6 +62,10 @@ def test_the_bag_records_everything_published_after_recording_and_closes_with_it
         stats = recorder.stop()
         node.destroy_node()
     assert stats["closed"] and stats["failure"] is None and stats["missing_core_topics"] == [], stats
+    # C5: the recorder runs with debug logging (the per-topic loss lines exist only there) and reports the per-topic breakdown, an
+    # empty one when nothing was lost
+    assert stats["transport_lost"] == 0 and stats["transport_lost_by_topic"] == {}, stats
+    assert "[DEBUG]" in (tmp_path / "raw" / "bag-record.log").read_text(errors="replace")
     assert stats["anchor_start"]["system_ns"] > 0 and stats["anchor_end"]["monotonic_ns"] > stats["anchor_start"]["monotonic_ns"]
     for name in names:
         count = stats["bag"]["topics"][name]["count"]

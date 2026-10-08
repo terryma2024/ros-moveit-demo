@@ -504,7 +504,8 @@ def _decode_row_major_mask(document: Mapping[str, object]) -> np.ndarray:
     return flat.reshape(tuple(shape), order="C")
 
 
-def _candidate_from_response(response: BrokerResponse) -> DetectionCandidate:
+def _candidates_from_response(response: BrokerResponse) -> list[DetectionCandidate]:
+    """Every candidate of an authenticated, qualified Broker response, each validated and its mask decoded."""
     if (
         type(response) is not BrokerResponse
         or response.outcome is not ModelOutcome.QUALIFIED
@@ -521,18 +522,8 @@ def _candidate_from_response(response: BrokerResponse) -> DetectionCandidate:
         "source_stamp_ns",
         "source_frame_id",
         "candidates",
-    } or type(batch["candidates"]) is not list or len(batch["candidates"]) != 1:
+    } or type(batch["candidates"]) is not list or not batch["candidates"]:
         raise RuntimeError("BROKER_CANDIDATE_AMBIGUOUS")
-    item = batch["candidates"][0]
-    if type(item) is not dict or set(item) != {
-        "instance_id",
-        "class_id",
-        "confidence",
-        "bbox_xyxy",
-        "segmentation_quality",
-        "mask_rle",
-    }:
-        raise RuntimeError("BROKER_CANDIDATE_FIELDS")
     shape = batch["shape"]
     if (
         type(shape) is not list
@@ -541,37 +532,91 @@ def _candidate_from_response(response: BrokerResponse) -> DetectionCandidate:
         or any(type(value) is not int or value <= 0 for value in shape)
     ):
         raise RuntimeError("BROKER_CANDIDATE_SHAPE")
-    try:
-        return DetectionCandidate(
-            item["instance_id"],
-            item["class_id"],
-            item["confidence"],
-            tuple(item["bbox_xyxy"]),
-            _decode_row_major_mask(item["mask_rle"]),
-            batch["source_stamp_ns"],
-            batch["source_frame_id"],
-            shape[1],
-            shape[0],
-            item["segmentation_quality"],
-        )
-    except (TypeError, ValueError) as error:
-        raise RuntimeError("BROKER_CANDIDATE_INVALID") from error
+    candidates = []
+    for item in batch["candidates"]:
+        if type(item) is not dict or set(item) != {
+            "instance_id",
+            "class_id",
+            "confidence",
+            "bbox_xyxy",
+            "segmentation_quality",
+            "mask_rle",
+        }:
+            raise RuntimeError("BROKER_CANDIDATE_FIELDS")
+        try:
+            candidates.append(
+                DetectionCandidate(
+                    item["instance_id"],
+                    item["class_id"],
+                    item["confidence"],
+                    tuple(item["bbox_xyxy"]),
+                    _decode_row_major_mask(item["mask_rle"]),
+                    batch["source_stamp_ns"],
+                    batch["source_frame_id"],
+                    shape[1],
+                    shape[0],
+                    item["segmentation_quality"],
+                )
+            )
+        except (TypeError, ValueError) as error:
+            raise RuntimeError("BROKER_CANDIDATE_INVALID") from error
+    return candidates
+
+
+#: R6 (CP-3467): a candidate is the cup only if it localizes as one (the xy circle fit of radius 0.04 +- 0.01 m succeeds) and its
+#: points span at least this much height. The red landing ring is flat (a few millimetres), the cup is 0.09 m tall.
+MINIMUM_CUP_Z_EXTENT_M = 0.05
+#: A candidate that fails for a reason of its own is dropped; a failure of the shared inputs (the TF, the depth image) is not a
+#: verdict on any candidate and propagates.
+_CANDIDATE_LEVEL_FAILURES = frozenset({"GEOMETRY_REJECTED", "DEPTH_INVALID"})
 
 
 class BrokerMaskLocalizer:
-    """Feed only the authenticated Broker mask to the reviewed RGB-D localizer."""
+    """Feed the authenticated Broker masks to the reviewed RGB-D localizer and keep the one that is the cup (rule R6)."""
 
     def __init__(self, *, localizer=None):
         self.localizer = localizer or RgbdLocalizer()
 
     def localize(self, response, *, camera_info, depth_message, lookup_exact):
-        candidate = _candidate_from_response(response)
-        return self.localizer.localize(
-            candidate,
-            camera_info,
-            depth_message,
-            lookup_exact,
+        """Localize every candidate; exactly one must be a cup: it localizes (circle fit) and spans >= 0.05 m in z.
+
+        The survivor's pose is the localizer's own result for its mask, unchanged. More than one survivor is
+        BROKER_CANDIDATE_AMBIGUOUS (the count is in the message); none is GEOMETRY_REJECTED (the policy then tries its next model)
+        unless the only candidate failed for a reason that is not geometry, which propagates as it did before R6.
+        """
+        candidates = _candidates_from_response(response)
+        survivors, rejected, first_error = [], [], None
+        for candidate in candidates:
+            try:
+                localized = self.localizer.localize(candidate, camera_info, depth_message, lookup_exact)
+            except LocalizationError as error:
+                if error.code not in _CANDIDATE_LEVEL_FAILURES or len(candidates) == 1:
+                    raise
+                first_error = first_error or error
+                rejected.append(f"{candidate.instance_id}:{error.code}")
+                continue
+            extent = _z_extent_m(localized)
+            if extent is None or extent < MINIMUM_CUP_Z_EXTENT_M:
+                shown = "unknown" if extent is None else f"{extent:.4f}"
+                rejected.append(f"{candidate.instance_id}:Z_EXTENT={shown}")
+                continue
+            survivors.append(localized)
+        if len(survivors) == 1:
+            return survivors[0]
+        if survivors:
+            raise RuntimeError(f"BROKER_CANDIDATE_AMBIGUOUS: {len(survivors)} of {len(candidates)} candidates are cups")
+        raise LocalizationError(
+            "GEOMETRY_REJECTED",
+            f"no candidate is a cup (0 of {len(candidates)}): {', '.join(rejected)}",
         )
+
+
+def _z_extent_m(localized) -> float | None:
+    points = getattr(localized, "points_world", None)
+    if points is None:
+        return None
+    z = np.asarray(points, dtype=np.float64)[:, 2]
+    return float(z.max() - z.min()) if z.size else None
 
 
 def observe_parallel_initial_gate(
@@ -1263,8 +1308,7 @@ class ParallelRosRuntimePorts:
                 or response.candidate.get("model_id") != request.model_id
             ):
                 return False
-            candidate = _candidate_from_response(response)
-            return bool(candidate.mask.any())
+            return any(candidate.mask.any() for candidate in _candidates_from_response(response))
 
         latch = PoseAdmissionLatch(
             workspace_provider(lease),

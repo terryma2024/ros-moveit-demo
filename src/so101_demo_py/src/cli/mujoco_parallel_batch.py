@@ -3232,7 +3232,6 @@ class ProductionBatchComposition:
                 container_run_argv,
                 gpu_groups,
                 image_record,
-                pinned_detector_source,
                 qualified_package_root,
             )
 
@@ -3240,7 +3239,6 @@ class ProductionBatchComposition:
             if not isinstance(image_id, str):
                 raise CliError("BROKER_IMAGE_ID_REQUIRED")
             package = qualified_package_root()
-            detector_pin = pinned_detector_source()
             try:
                 current_image = image_record(self.spec.broker_image)
             except Exception as error:
@@ -3263,20 +3261,19 @@ class ProductionBatchComposition:
                 gid=os.getgid(),
                 batch_id=self.spec.request.batch_id,
                 broker_generation=self.broker_generation,
-                # CP-3459: the baked package of the image is replaced by the running, qualified one ...
+                # CP-3459: the baked package of the image is replaced by the running, qualified one; its detector (the freeze's
+                # own, CP-3467) is what the broker runs, and the run records its hash
                 source_package=package,
-                # ... CP-3460: except the detector, which stays the image's own and is recorded
-                detector_pin=detector_pin,
             )
-            if detector_pin is not None:
-                self._record_broker_source_pin(detector_pin, package)
+            if os.environ.get("SO101_QUALIFIED_FREEZE"):
+                self._record_broker_source_pin(package)
         return self.supervisor.start("broker", command)
 
-    def _record_broker_source_pin(self, detector_pin, package):
-        """Write what the broker's code is: the install's package and the pinned detector with their hashes (once per run)."""
-        from so101_demo.cli.parallel_perception_broker import detector_pin_record
+    def _record_broker_source_pin(self, package):
+        """Write what the broker's code is: the install's package and its detector with their hashes (once per run)."""
+        from so101_demo.cli.parallel_perception_broker import broker_source_record
 
-        document = detector_pin_record(detector_pin, package)
+        document = broker_source_record(package)
         path = self.spec.request.evidence_root / "broker-source-pin.json"
         payload = (json.dumps(document, sort_keys=True, indent=1) + "\n").encode()
         try:

@@ -7,7 +7,7 @@ Trigger: the amendment (section 6) left a gate open when it reversed the CP-3457
 Options considered for the aggregate:
 
 1. Treat any reported loss as INVALID (CP-3457). Rejected before: it needs no attribution but cannot say what was lost.
-2. Per-topic counters from the recorder. Not available: see C1.
+2. Per-topic counters from the recorder. Not available at the default log level (see C1); **available with `--log-level debug`, added in C5 below.**
 3. Judge every used topic on its own continuity, then reconcile the recorder's total with what the topics show missing; fail closed on the shortfall. Taken.
 
 ## C1. Attribution: what the recorder can and cannot say
@@ -81,3 +81,20 @@ Where the rule runs, and what the QC check is. A sealed episode holds the retain
 ## Rollback
 
 `p5c-base.tar.gz` (sha256 in `p5c-base.tar.gz.sha256`) holds the files this change touched as of c039b78be.
+
+
+## C5. Per-topic loss reporting from the recorder (CP-3394)
+
+Decision (coordinator): implement per-topic reporting for new bags and keep the aggregate rule for bags already recorded; L2 45315499 stays INVALID, and the rule that would have excused its three unplaced losses was rejected.
+
+Investigation of the L2 residual (before the decision): the aggregate is the sum of `message_lost` callbacks per subscription, over the 16 topics the recorder subscribes to plus the events and planning-scene reads topics only (not /rosout, /tf or /events/*). A late join (a transient-local history overflow before the recorder subscribes) is not counted: a throwaway publisher with depth 10 sent 100 messages before the recorder joined, the bag held 10 and no loss was logged. Every recorded topic of L2 is gapless over its own span except the controller states (4 placed gaps); the staggered starts of the three controller states (5, 7 and 8 ticks after `/clock`) are late join, reconcile exactly with `/clock` and are not losses. The three unplaced losses are therefore on a topic or at an edge the bag cannot show, and only a per-topic figure can say which.
+
+What changed:
+
+- `raw_recorder.py`: `ros2 bag record` runs with `--log-level debug` (`RECORDER_LOG_LEVEL`); `transport_lost_by_topic_from_log` takes the last cumulative total per topic from the DEBUG lines; `stop()` writes `transport_lost_by_topic` into the stats next to `transport_lost`. A flooded two-topic test publisher gave 54 + 56 = 110 = the aggregate.
+- `processor.load_loss_facts` returns `transport_lost_by_topic` (None when the key is absent or malformed: old bags). `scan_bag(..., transport_lost_by_topic=)` runs `_with_breakdown` when it is a dict.
+- Gate logic with a breakdown: the per-topic sum must equal the aggregate and every name must be a recorded topic (else `OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED`); a used topic's reported count must be at most what its rule shows missing anywhere in the bag (messages missing on the grid or sequence, stalls included, images without their `camera_info`, reads short of the sidecar), else `OFFLINE_TOPIC_LOSS:<topic> reported=n detected=m`; unused topics (`neck` controller state, contacts, joints, physics hazard) are recorded only. `topic-loss.json` gains `transport_lost.by_topic` and per-topic `reported` / `detected` fields only when a breakdown exists, so documents of old bags are byte-identical to before; the rule version stays `topic_loss_v1`.
+- Span checks: the publisher-sequence (world), chunk sequence, Teacher event `seq` and planning-scene-read rules existed; the robot-contact step span is new and is decoded only when the recorder reports a loss on that topic (the topic is unused by the episode, and decoding 46k messages on every scan is not worth it). The Teacher's terminal event carries no published count (payload: status, execution status, task result, failure), so the events tail cannot be checked against one: a loss reported on the events topic after a gap-free `seq` that reaches the terminal event is a message after it and is recorded only.
+- Cost of debug logging, measured on a synthetic 6-topic, 500 Hz (3 kHz total) reliable publisher over 20 s, two alternating repeats: recorder CPU (utime + stime) 115 and 142 ticks at `info`, 122 and 172 at `debug` (the repeat-to-repeat spread is as large as the difference, so no overhead is resolved; at most about 20% of a recorder that uses about 6% of a core); recorded counts varied between repeats at both levels (51.9k to 58.8k of 60k, from discovery timing) and not with the level; no loss was reported at either level. The log grows from 2 KB to 8-9 MB (rcl logs two lines per received message; `ros2 bag record` has no per-logger switch, `--ros-args` is refused). A 90 s production recording is about 40 MB of log. Not measured on the live stack (not allowed in this round).
+
+Tests (RED against CP-3471): 13 new/changed in `test_c_topic_loss_gate.py` (breakdown with no loss, outside-window loss explained, the L2 shape reported-without-gap INVALID and naming the topic, unused topic recorded only, sum mismatch both ways, unknown topic, in-window gap stays INVALID, events tail, planning-scene reads, contact span read lazily, old bag keeps the aggregate rule, the log parser, the processor end to end) and `test_rec13_raw_recorder.py` (the real recorder reports `transport_lost_by_topic == {}` and a debug log). The eight golden inputs have no breakdown; their verdicts are unchanged (see the ledger note).

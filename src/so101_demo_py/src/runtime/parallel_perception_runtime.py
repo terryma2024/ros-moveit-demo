@@ -124,6 +124,13 @@ def write_receipt(path, document):
         os.close(fd)
 
 
+def query_class_for(detector, default):
+    """The class a detector is asked for: the one its own prompt profile declares (`target_class_id`, as Grounded DINO + SAM does:
+    `cup`), else the snapshot's task class (`plastic_cup`, which the YOLO model was trained on). Asking Grounded for `plastic_cup`
+    raised UNSUPPORTED_DETECTION_QUERY, an infrastructure error, the first time the policy fell back to it (CP-3467)."""
+    return getattr(detector, 'target_class_id', None) or default
+
+
 def normalize_batch(batch, frame):
     """Validate even mutated adapter objects before lossless wire conversion."""
     try:
@@ -329,9 +336,10 @@ class ParallelPerceptionRuntime:
             if executor_index >= len(instances):
                 raise ModelRuntimeInfrastructureError('EXECUTOR_INDEX')
             frame = self._frame(request, snapshot)
-            query = DetectionQuery(snapshot.query_class_id)
+            detector = instances[executor_index].detector
+            query = DetectionQuery(query_class_for(detector, snapshot.query_class_id))
             try:
-                batch = instances[executor_index].detector.detect(frame, query)
+                batch = detector.detect(frame, query)
                 candidate = normalize_batch(batch, frame)
                 result = (ModelResult(ModelOutcome.QUALIFIED, candidate=candidate)
                           if candidate['candidates'] else ModelResult(ModelOutcome.NORMAL_REJECTION))
