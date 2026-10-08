@@ -1,5 +1,6 @@
 """Only a separate source-replayed calibration manifest may use held-cup rows."""
 
+from act_identity import ACT_MODEL_SHA256
 import copy
 import json
 from pathlib import Path
@@ -28,7 +29,7 @@ LIFT = PACKAGE / "config/mujoco/act/held_cup_micro_lift_candidates_v1.json"
 
 
 class Pairs:
-    model_sha256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+    model_sha256 = ACT_MODEL_SHA256
     fingerprint = "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11"
 
     def __init__(self, **kwargs):

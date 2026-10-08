@@ -10,10 +10,9 @@ from so101_demo.act.bundle import export_dataset
 from so101_demo.act.training import require_exported_dataset, train_act
 
 
-def _export(tmp_path):
-    committed = tuple({"scene_id": f"act-{index}", "split": "train", "status": "PASSED",
-                       "content": {"frames": 2, "state": [0.0] * 8}}
-                      for index in range(2))
+def _export(tmp_path,monkeypatch):
+    from act_export_fixture import complete_export_entries
+    committed=complete_export_entries(tmp_path,monkeypatch,('act-0','act-1'))
     output = tmp_path / "dataset"
     export_dataset(committed, output, source_manifest_sha256="a" * 64,
                    campaign_index_sha256="b" * 64)
@@ -34,8 +33,8 @@ def _bundle(_config, _dataset, _output):
     return {"schema_version": 1, "kind": "act_bundle"}
 
 
-def test_a_run_passes_the_gates_trains_and_records_completion(tmp_path):
-    dataset = _export(tmp_path)
+def test_a_run_passes_the_gates_trains_and_records_completion(tmp_path,monkeypatch):
+    dataset = _export(tmp_path,monkeypatch)
     seen = {}
 
     def trainer(config, path, output):
@@ -51,8 +50,8 @@ def test_a_run_passes_the_gates_trains_and_records_completion(tmp_path):
     assert not list(tmp_path.glob("*.partial"))
 
 
-def test_a_failed_run_leaves_a_failed_state_with_the_error(tmp_path):
-    dataset = _export(tmp_path)
+def test_a_failed_run_leaves_a_failed_state_with_the_error(tmp_path,monkeypatch):
+    dataset = _export(tmp_path,monkeypatch)
 
     def exploding(_config, _dataset, _output):
         raise RuntimeError("CUDA out of memory")
@@ -64,8 +63,8 @@ def test_a_failed_run_leaves_a_failed_state_with_the_error(tmp_path):
     assert state["status"] == "FAILED" and "CUDA out of memory" in state["error"]
 
 
-def test_training_is_refused_before_the_trainer_when_a_gate_fails(tmp_path):
-    dataset = _export(tmp_path)
+def test_training_is_refused_before_the_trainer_when_a_gate_fails(tmp_path,monkeypatch):
+    dataset = _export(tmp_path,monkeypatch)
     calls = []
 
     def trainer(*_args):

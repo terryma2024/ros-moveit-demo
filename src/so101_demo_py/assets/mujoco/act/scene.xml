@@ -30,7 +30,7 @@
       <geom name="target_landing_tolerance_ring" type="mesh" mesh="target_landing_tolerance_ring" material="target_landing_red" pos="-0.08 -0.05 0.0201" group="0" contype="0" conaffinity="0" />
     </body>
     <body name="plastic_cup" pos="0.02 -0.28 0.165">
-      <joint name="cup_free_joint" type="free" damping="1.0" />
+      <joint name="cup_free_joint" type="free" damping="0.01" frictionloss="0" armature="0" />
       <inertial pos="0 0 0" mass="0.020" diaginertia="0.0000295 0.0000295 0.0000320" />
       <geom name="wall_near_visual" class="cup_visual" type="box" pos="0 0.039 0.001" euler="0 0 0" size="0.010352762 0.001 0.044" />
       <geom name="wall_near_collision" class="cup_collision" type="box" pos="0 0.039 0.001" euler="0 0 0" size="0.010352762 0.001 0.044" />

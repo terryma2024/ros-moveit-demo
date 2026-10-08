@@ -21,8 +21,8 @@ from so101_demo.act.contact_calibration import _canonical
 from so101_demo.adapters.act.physics import model_sha256
 
 _MUJOCO_VERSION = "3.12.0"
-_SCENE_SHA256 = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
-_MODEL_SHA256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+_SCENE_SHA256 = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
+_MODEL_SHA256 = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
 _MOTION_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 _MAX_FORCE_N = 11.6
 _MAX_DISPLACEMENT_M = .03
@@ -136,7 +136,11 @@ def collect_offline_sample(
     start = np.array(policy["states"]["DESCEND"]["waypoints"][-1] + [preopen])
     closed = start.copy(); closed[5] = close
     lift = np.array(policy["states"]["LIFT"]["waypoints"][0] + [close])
-    opened = lift.copy(); opened[5] = preopen
+    # D2: after the hold the Teacher's OPEN_GRIPPER -> RETREAT at the pick pose (motion policy release_q6 and the
+    # RECOVER_RETREAT waypoints), so the released cup is left alone on the table.
+    release = policy["gripper_actions"]["release_q6"]
+    opened = lift.copy(); opened[5] = release
+    retreat = np.array(policy["states"]["RECOVER_RETREAT"]["waypoints"][-1] + [release])
     arm_addresses = [
         int(model.jnt_qposadr[mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, str(index))])
         for index in range(1, 7)
@@ -159,8 +163,8 @@ def collect_offline_sample(
     mujoco.mj_forward(model, data)
     schedule = [("settle", .5, start, start), ("close", 2., start, closed),
                 ("lift", 2., closed, lift), ("hold", .5, lift, lift),
-                ("release", 2., lift, opened),
-                ("settle_after_release", .5, opened, opened)]
+                ("release", 2., lift, opened), ("retreat", 2., opened, retreat),
+                ("settle_after_release", .5, retreat, retreat)]
     chosen_phase, length = _SCENARIOS[regime]
     window = deque(maxlen=length)
     step = 0

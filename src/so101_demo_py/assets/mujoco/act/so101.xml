@@ -85,7 +85,7 @@
           <geom name="upper_arm_collision_01" class="robot_collision" mesh="upper_arm_so101_v1" pos="-0.065085 0.012 0.0182" quat="1.3267948966775328e-06 0.99999999999911982 -6.2068261343512995e-38 4.6780599999958828e-32" />
           <inertial pos="-0.0898471 -0.00838224 0.0184089" mass="0.103" fullinertia="4.08002e-05 0.000147318 0.000142487 -1.97819e-05 -4.03016e-08 8.97326e-09" />
           <body name="lower_arm" pos="-0.11257 -0.028 2.46331e-16" quat="0.707105482511236 -6.37848076863978e-16 -2.30607077595038e-16 0.707108079859474">
-            <joint name="3" type="hinge" axis="0 0 1" limited="true" range="-1.74533 1.5708" />
+            <joint name="3" type="hinge" axis="0 0 1" limited="true" range="-1.69 1.69" />
             <geom name="lower_arm_visual_00" class="robot_visual" mesh="under_arm_so101_v1" pos="-0.0648499 -0.032 0.0182" quat="1.3267948966775328e-06 -0.99999999999911982 -1.9721499999982641e-31 2.6166385554825964e-37" material="3d_printed" />
             <geom name="lower_arm_visual_01" class="robot_visual" mesh="motor_holder_so101_wrist_v1" pos="-0.0648499 -0.032 0.018" quat="1.3267948966775328e-06 -0.99999999999911982 -3.9442736002675227e-31 2.3665855233262914e-30" material="3d_printed" />
             <geom name="lower_arm_visual_02" class="robot_visual" mesh="sts3215_03a_v1" pos="-0.1224 0.0052 0.0187" quat="1.7585944628495481e-12 -1.3267948966763673e-06 0.99999999999823963 -1.3267948966763673e-06" material="sts3215" />
@@ -101,7 +101,7 @@
               <geom name="wrist_collision_01" class="robot_collision" mesh="wrist_roll_pitch_so101_v2" pos="0 -0.028 0.0181" quat="0.49999816339744829 -0.49999999999662686 -0.49999999999662686 -0.5000018366025516" />
               <inertial pos="-0.000103312 -0.0386143 0.0281156" mass="0.079" fullinertia="3.68263e-05 2.5391e-05 2.1e-05 1.7893e-08 -5.28128e-08 3.6412e-06" />
               <body name="gripper" pos="0 -0.0611 0.0181" quat="9.050176421647e-07 9.71353573374498e-07 0.707108079858806 0.707105482510657">
-                <joint name="5" type="hinge" axis="0 0 1" limited="true" range="-2.79253 2.79253" />
+                <joint name="5" type="hinge" axis="0 0 1" limited="true" range="-2.7438472969992493 2.841206309382605" />
                 <geom name="gripper_visual_00" class="robot_visual" mesh="sts3215_03a_v1" pos="0.0077 0.0001 -0.0234" quat="0.70710548251123628 -0.70710807985947355 4.8669503151504822e-15 -4.9061847117376227e-15" material="sts3215" />
                 <geom name="gripper_visual_01" class="robot_visual" mesh="wrist_roll_follower_so101_v1" pos="5.55112e-17 -0.000218214 0.000949706" quat="1.3267948966775328e-06 -0.99999999999911982 -3.2236428434226965e-23 -2.7755599999981656e-17" material="3d_printed" />
                 <geom name="fixed_fingertip_pad_visual" class="robot_visual" mesh="fixed_fingertip_pad" pos="5.55112e-17 -0.000218214 0.000949706" quat="1.3267948966775328e-06 -0.99999999999911982 -3.2236428434226965e-23 -2.7755599999981656e-17" material="tpu_95a_adapter" />
@@ -122,7 +122,7 @@
                 <inertial pos="0.000213627 0.000245138 -0.025187" mass="0.087" fullinertia="2.75087e-05 4.33657e-05 3.45059e-05 -3.35241e-07 -5.7352e-06 -5.17847e-08" />
                 <site name="so101_tcp" pos="0.0214 0 -0.083949" quat="1 0 0 0" size="0.003" />
                 <body name="jaw" pos="0.0202 0.0188 -0.0234" quat="0.707105482511236 0.707108079859474 -4.92037996991591e-15 -4.88400903784375e-15">
-                  <joint name="6" type="hinge" axis="0 0 1" limited="true" range="-0.059600220867817 1.74533" />
+                  <joint name="6" type="hinge" axis="0 0 1" limited="true" range="-0.17453297762778586 1.7453291995659765" />
                   <geom name="jaw_visual_00" class="robot_visual" mesh="moving_jaw_so101_v1" pos="-5.55112e-17 0.0004 0.0189" quat="1 4.7657250000000003e-17 -2.3304650000000001e-24 1.1106355312125001e-40" material="3d_printed" />
                   <geom name="moving_fingertip_pad_visual" class="robot_visual" mesh="moving_fingertip_pad" pos="-5.55112e-17 0.0004 0.0189" quat="1 4.7657250000000003e-17 -2.3304650000000001e-24 1.1106355312125001e-40" material="tpu_95a_adapter" />
                   <geom name="moving_jaw_contact_convex_000" class="robot_collision" mesh="moving_jaw_contact_convex_000" pos="-5.55112e-17 0.0004 0.0189" quat="1 4.7657250000000003e-17 -2.3304650000000001e-24 1.1106355312125001e-40" />
@@ -162,10 +162,10 @@
   <actuator>
     <position name="1" joint="1" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-1.91986 1.91986" />
     <position name="2" joint="2" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-1.74533 1.74533" />
-    <position name="3" joint="3" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-1.74533 1.5708" />
+    <position name="3" joint="3" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-1.69 1.69" />
     <position name="4" joint="4" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-1.65806 1.65806" />
-    <position name="5" joint="5" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-2.79253 2.79253" />
-    <position name="6" joint="6" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-0.059600220867817 1.74533" />
+    <position name="5" joint="5" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-2.74385 2.84121" />
+    <position name="6" joint="6" kp="998.22" kv="2.731" forcelimited="true" forcerange="-3.35 3.35" ctrllimited="true" ctrlrange="-0.17453 1.74533" />
     <position name="neck_yaw_joint" joint="neck_yaw_joint" kp="8" kv="0.6" forcelimited="true" forcerange="-0.3 0.3" ctrllimited="false" />
   </actuator>
 </mujoco>

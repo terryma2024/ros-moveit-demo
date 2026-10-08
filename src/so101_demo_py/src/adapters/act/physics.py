@@ -12,6 +12,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import sys
+import time
 import threading
 
 import mujoco
@@ -42,7 +43,7 @@ class MujocoPathChecker:
         if min(self.step,self.clearance,*self.velocity_limits,*self.acceleration_limits)<=0:
             raise ValueError('PATH_CONFIG_INVALID')
         if type(max_samples) is not int or max_samples<2:raise ValueError('PATH_CONFIG_INVALID')
-        self.max_samples=max_samples;self._lock=threading.RLock();self.last_check=None
+        self.max_samples=max_samples;self._lock=threading.RLock();self.last_check=None;self.last_timing=None
         self._data=mujoco.MjData(self.model)
         self.joints=[]
         for name in ARM_JOINTS:
@@ -96,7 +97,9 @@ class MujocoPathChecker:
         # stage because the engine can change the contact count/storage.
         contacts=self._data.contact;geoms=contacts.geom;distances=contacts.dist
         relevant=self._protected_mask[geoms].any(axis=1)
-        if held:relevant|=self._cup_mask[geoms].any(axis=1)
+        # EMPTY leaves the actual cup at its original source pose. Its volume
+        # and nonallowed contacts remain part of safety in that state too.
+        relevant|=self._cup_mask[geoms].any(axis=1)
         candidates=np.flatnonzero(relevant&(~np.isfinite(distances)|(distances<=self.clearance)))
         for index in candidates:
             a,b=geoms[index];pair=tuple(sorted((self.names[int(a)],self.names[int(b)])))

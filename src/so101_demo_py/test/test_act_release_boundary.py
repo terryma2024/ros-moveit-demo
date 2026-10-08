@@ -117,7 +117,7 @@ class FakePort:
                 "planning_scene_ok": True, "head_rgb_ok": True, "wrist_rgb_ok": True}
 
     def release_preflight(self, request):
-        return {"holding_state": "HOLDING", "cup_supported": self.cup_supported, "fresh": True,
+        return {"holding_state": "HOLDING", "cup_supported": self.cup_supported, "bilateral_contact": True, "fresh": True,
                 "planning_attached": self.attached, "session_id": "s", "attempt_id": "a",
                 "reset_epoch": 1, "release_epoch": 1, "physics_step": self._next()}
 
@@ -146,6 +146,27 @@ def test_the_positive_control_opens_exactly_once_at_the_release_phase():
     assert port.opened == ["RELEASE"]
     assert port.stops == ["FULL_COMPLETE"]
     assert result["live_evidence_artifact"]["schema_version"] == 2
+
+
+def test_truthful_supported_bilateral_grasp_is_accepted_before_open():
+    port = FakePort()
+    original_set_down, original_preflight = port.set_down, port.release_preflight
+    port.set_down = lambda request: {**original_set_down(request), "holding_state": "APPROACHING"}
+    port.release_preflight = lambda request: {**original_preflight(request), "holding_state": "APPROACHING"}
+    result = PickPlaceRunner(port).run(request())
+    assert result["status"] == "PASSED"
+    assert port.opened == ["RELEASE"]
+
+
+def test_unilateral_supported_preflight_after_bilateral_set_down_never_detaches_or_opens():
+    port = FakePort()
+    preflight = port.release_preflight
+    port.release_preflight = lambda request: {**preflight(request), "holding_state": "APPROACHING",
+                                             "bilateral_contact": False}
+    with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
+        PickPlaceRunner(port).run(request())
+    assert port.attached is True
+    assert port.opened == []
 
 
 def test_a_detach_failure_never_opens_and_stops_instead():
@@ -205,7 +226,7 @@ def test_the_audit_receives_the_events_the_run_actually_produced():
         # T3-F3(c): the release event names the epoch the controller entered, emitted before that phase's own
         # phase_complete; its payload is the release schema, so this projection sees no phase or reason for it
         [entry for phase in PickPlaceRunner.PHASES
-         for entry in (((("k2_apply", None), ("k2_query", None), ("k2_receipt", None)) if phase == "RELEASE"
+         for entry in (((("alignment_apply", None), ("alignment_query", None), ("alignment_receipt", None)) if phase == "RELEASE"
                         else ())
                        + ((("release", None),) if phase == "RELEASE" else ())
                        + (("phase_complete", phase),))]

@@ -1,5 +1,7 @@
 # SO-101 ACT 首条非 Head Search 闭环 Implementation Plan
 
+> **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 项目规定覆盖一般 subagent 建议：实现由 ai-station 的同一 tmux `dst` 执行，串行写入同一 worktree/branch，不创建第二实现执行器。
 
 **Goal:** 完成一条真实 MuJoCo 桌面抓放 episode，经正式 Recorder 无损保存、独立回读 QC PASS，并取得真实 Coordinator 提交。

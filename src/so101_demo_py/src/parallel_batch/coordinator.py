@@ -773,8 +773,19 @@ class BatchCoordinator:
         self._emit('LEASE_RENEWED', {'workers': {lease.worker_id: worker}})
         return LeaseIdentity(**worker['lease'])
 
+    @_locked
+    def heartbeat_projection(self, lease):
+        """Return the same committed renewal's detached phase/heartbeat projection.
+
+        The enclosing existing Coordinator lock keeps renewal and readback one
+        transaction. There is exactly one renewal and no new deadline policy.
+        """
+        self.heartbeat(lease)
+        return self.snapshot().workers[lease.worker_id]
+
     def _commit(self, lease, location, request_key, *, validation, discovered=False):
-        from so101_demo.act.result_store import ActCollectionResultVerifier
+        from so101_demo.act.result_store import (
+            ACT_POINT_RESULT_KEYS, ACT_RESULT_RECEIPT_KEYS, ActCollectionResultVerifier)
         kind = 'VALIDATION_COMMITTED' if validation else 'RESULT_COMMITTED'
         identity = {**self._identity(lease), 'location': str(location)}
         duplicate = self._duplicate(request_key, kind, identity)
@@ -824,8 +835,17 @@ class BatchCoordinator:
             'recovery_deadline_monotonic_s': worker[
                 'recovery_deadline_monotonic_s'],
         }
-        self._emit(kind, {'points': {lease.point_id: point}, 'workers': {lease.worker_id: worker}},
-                   request_key=request_key, identity=identity, response=response)
+        delta = {'points': {lease.point_id: point}, 'workers': {lease.worker_id: worker}}
+        if isinstance(self.result_port, ActCollectionResultVerifier) and 'qc_report_sha256' in result:
+            response.update({key:result[key] for key in ('qc_report_sha256','episode_seal_sha256','inputs_sha256',
+                'scope_sha256','audit_manifest_sha256','collection_mode')})
+        if isinstance(self.result_port, ActCollectionResultVerifier) and 'act_data_qc' in result:
+            # Schema 3: the attempt status above is the Teacher's. The data verdict is recorded beside it in the
+            # receipt, the journal event and the index, and never changes the point status.
+            response.update({key:result[key] for key in ACT_RESULT_RECEIPT_KEYS})
+            delta['act_results'] = {**self._state.get('act_results', {}),
+                lease.point_id: {key:result[key] for key in ACT_POINT_RESULT_KEYS}}
+        self._emit(kind, delta, request_key=request_key, identity=identity, response=response)
         self._evaluate()
         return response
 
@@ -1104,7 +1124,8 @@ class BatchCoordinator:
             validation_statuses={p: v.validation_status for p, v in points.items()
                                  if v.validation_status is not None},
             batch_cleanup_complete=value['batch_cleanup_complete'],
-            terminal_reason=value['terminal_reason'])
+            terminal_reason=value['terminal_reason'],
+            act_results=value.get('act_results', {}))
         return CoordinatorSnapshot(
             workers, points, value['batch_started_monotonic_s'],
             value['batch_deadline_monotonic_s'], value['broker_healthy'],

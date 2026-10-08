@@ -12,8 +12,8 @@
   "properties": {
     "schema_version": {"const": 1},
     "mujoco_version": {"const": "3.12.0"},
-    "model_sha256": {"const": "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"},
-    "scene_sha256": {"const": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"},
+    "model_sha256": {"const": "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"},
+    "scene_sha256": {"const": "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"},
     "motion_policy_sha256": {"const": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"},
     "policy_id": {"const": "so101-act-contact-20260925"},
     "allowed_other_contact_bodies": {"const": ["table"]},

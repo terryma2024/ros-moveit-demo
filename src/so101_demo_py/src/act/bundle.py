@@ -12,6 +12,47 @@ import json
 from pathlib import Path
 
 _EPISODE_KEYS = ("scene_id", "journal_sha256", "verifier_sha256")
+_COLLECTION_EVIDENCE_KEYS=frozenset({'coordinator_root','result_location','scope_path','inputs_manifest','receipt'})
+
+
+def _verify_collection_for_export(episode):
+    """Trace retained originals on every call; caller flags and cached proofs grant no eligibility."""
+    from .collection_scope import read_collection_scope
+    from .result_store import verify_coordinator_commit,_safe
+    evidence=episode.get('collection_evidence')
+    if (episode.get('kind')!='ACT_COMMITTED_EPISODE' or type(episode.get('schema_version')) is not int
+            or episode['schema_version']!=2 or type(evidence) is not dict or set(evidence)!=_COLLECTION_EVIDENCE_KEYS):
+        raise ValueError('EPISODE_COLLECTION_EVIDENCE_REQUIRED')
+    if any(not isinstance(episode.get(key),str) or len(episode[key])!=64
+            or any(character not in '0123456789abcdef' for character in episode[key]) for key in _EPISODE_KEYS[1:]):
+        raise ValueError('EPISODE_RECEIPT_INVALID')
+    try:
+        paths={key:_safe(Path(evidence[key])) for key in _COLLECTION_EVIDENCE_KEYS-{'receipt'}}
+        scope=read_collection_scope(paths['scope_path'])
+        proof=verify_coordinator_commit(paths['coordinator_root'],location=paths['result_location'],
+            scope=paths['scope_path'],inputs_manifest=paths['inputs_manifest'])
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
+    if (episode.get('journal_sha256')!=proof['commit_frame_sha256']
+            or episode.get('verifier_sha256')!=proof['result_sha256']
+            or evidence['receipt']!=proof['receipt']):
+        raise ValueError('EPISODE_RECEIPT_CONFLICT')
+    if (episode['scene_id']!=scope['scene_id'] or proof['collection_mode']!=scope['mode']
+            or ('collection_mode' in episode and episode['collection_mode']!=scope['mode'])):
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
+    if scope['mode']=='preselected_target_diagnostic':
+        raise ValueError('DIAGNOSTIC_EPISODE_NOT_TRAINABLE')
+    if scope['mode']!='formal':
+        raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
+    if proof['status']!='PASS' or proof.get('result_schema_version')!=3:
+        # schema 1/2 results are read-only legacy of the coupled contract and are never exportable
+        raise ValueError('EXPORT_EPISODE_LEGACY_RESULT')
+    if proof['result_status']!='PASSED':
+        raise ValueError('EXPORT_EPISODE_NOT_PASSED')
+    if proof.get('act_data_qc')!='PASS' or proof.get('export_eligible') is not True:
+        # the Teacher passed, but only an independent data QC PASS makes the episode training data
+        raise ValueError('EXPORT_EPISODE_DATA_QC_NOT_PASSED')
+    return scope['mode']
 
 
 def training_rows(rows) -> list:
@@ -41,8 +82,14 @@ def _index(path) -> dict:
     committed = document.get("committed_episodes", [])
     if not isinstance(committed, list):
         raise ValueError("CAMPAIGN_INDEX_INVALID")
-    return {entry["scene_id"]: entry for entry in committed
-            if isinstance(entry, dict) and isinstance(entry.get("scene_id"), str)}
+    entries={}
+    for entry in committed:
+        if not isinstance(entry,dict) or not isinstance(entry.get('scene_id'),str):
+            raise ValueError('CAMPAIGN_INDEX_INVALID')
+        if entry['scene_id'] in entries:
+            raise ValueError('EPISODE_RECEIPT_CONFLICT')
+        entries[entry['scene_id']]=entry
+    return entries
 
 
 def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
@@ -55,19 +102,26 @@ def resolve_committed_episodes(*, manifest: dict, campaign_index) -> tuple:
     for episode in manifest["episodes"]:
         if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
             raise ValueError("MANIFEST_INVALID")
-        if episode.get("status") != "PASSED":
-            continue                                   # a business failure is retained, not exported
         entry = committed.get(episode["scene_id"])
+        if entry is None and type(episode.get('collection_evidence')) is dict:
+            from .result_store import _safe
+            evidence=episode['collection_evidence']
+            try:
+                actual_index=_safe(Path(evidence['coordinator_root']))/'aggregate_results.json'
+                if _safe(Path(campaign_index))==actual_index:
+                    entry=episode  # The verifier replays this exact original index and journal below.
+            except (OSError,ValueError,TypeError,KeyError) as error:
+                raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID') from error
         if entry is None:
             continue                                   # a directory without a coordinator commit
-        if any(not isinstance(entry.get(key), str) or len(entry[key]) != 64
-               for key in _EPISODE_KEYS[1:]):
-            raise ValueError("EPISODE_RECEIPT_INVALID")
-        if entry.get("journal_sha256") != entry.get("verifier_sha256"):
-            raise ValueError("EPISODE_RECEIPT_CONFLICT")
+        if episode.get('status')!='PASSED' and entry.get('kind')!='ACT_COMMITTED_EPISODE':
+            continue                                   # archival business failures are retained
+        mode=_verify_collection_for_export(entry)
         # carry the content locator through: a resolved episode that forgets where its content lives
         # forces the exporter to guess, and guessing is what this module exists to prevent
-        resolved.append({"scene_id": episode["scene_id"],
+        resolved.append({"kind":'ACT_COMMITTED_EPISODE',"schema_version":2,
+                         "collection_evidence":entry['collection_evidence'],"collection_mode":mode,"status":'PASSED',
+                         "scene_id": episode["scene_id"],
                          "split": episode.get("split"),
                          "journal_sha256": entry["journal_sha256"],
                          "verifier_sha256": entry["verifier_sha256"],
@@ -201,11 +255,15 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
         if any(stale in scene_id or stale in str(episode.get("dataset_id", ""))
                for stale in _STALE_DATASET_IDS):
             raise ValueError("EXPORT_STALE_DATASET_ID")
+        if episode.get('kind')=='ACT_COMMITTED_EPISODE':
+            _verify_collection_for_export(episode)
         if episode.get("status", "PASSED") != "PASSED":
             raise ValueError("EXPORT_EPISODE_NOT_PASSED")
         content = episode.get("content")
         if not isinstance(content, dict) or not content:
             raise ValueError("EXPORT_EPISODE_CONTENT_MISSING")
+        if episode.get('kind')!='ACT_COMMITTED_EPISODE':
+            _verify_collection_for_export(episode)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
         records.append({"scene_id": scene_id, "split": split,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),

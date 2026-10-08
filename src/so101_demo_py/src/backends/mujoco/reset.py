@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -58,6 +60,7 @@ class MujocoResetClient:
         if names == ACT_JOINTS:
             services.enable_reset_joint_audit()
         self.last_reset_joint_snapshot = None
+        self.last_reset_convergence = None
         self._expected_object = tuple(float(value) for value in expected_object_position)
         self._timeout_s = timeout_s
         self._joint_tolerance = joint_tolerance
@@ -201,33 +204,27 @@ class MujocoResetClient:
                 raise ValueError("reset override must cover the expected joint set exactly once")
             if ordered_positions(written, self._expected_joint_names) != self._expected_joints:
                 raise ValueError("reset override and expected feedback disagree")
+        seen = {}  # diagnostic only: values the existing calls below already return
         def converged(after_count):
             kwargs = {"after_callback_count": after_count}
             if self._expected_joint_names != ARM_JOINTS:
                 kwargs["names"] = self._expected_joint_names
             if not self._services.joints_converged(self._expected_joints, self._joint_tolerance,
                                                    **kwargs):
+                seen.update(stage="positions", abs_velocity=None)
                 return False
             if self._expected_joint_names != ARM_JOINTS:
-                velocities = self._services.latest_joint_velocities(self._expected_joint_names)
+                velocities = tuple(self._services.latest_joint_velocities(self._expected_joint_names))
                 # Leave headroom for the final paused scalar sample: the
                 # controller can still move between this read and the pause.
-                return all(abs(value) <= self._joint_tolerance / 4.0 for value in velocities)
+                ok = all(abs(value) <= self._joint_tolerance / 4.0 for value in velocities)
+                seen.update(stage="velocity" if not ok else "converged",
+                            abs_velocity=[abs(value) for value in velocities])
+                return ok
+            seen.update(stage="converged", abs_velocity=None)
             return True
         deadline = self._monotonic() + self._timeout_s
         try:
-            # Establish the broker's stopped/reset ticket before waiting for a
-            # paused snapshot. The negative CancelGoal proof is time limited;
-            # a late pause/resume would otherwise be refused while this lease
-            # is RUNNING and idle proof refresh is suspended.
-            context = getattr(self._services, "control_context", None)
-            if context is not None:
-                prepare = getattr(self._services, "prepare_reset", None)
-                if prepare is not None:
-                    self._require(prepare(), "broker reset preparation")
-                else:
-                    from so101_demo.adapters.act.leased_action_client import connection_for
-                    connection_for(context).request("prepare_reset", context)
             old = self._wait_for_initial_snapshot(deadline=deadline)
             expected_epoch = old.reset_epoch + 1
             # The observer may still hold its last running frame after another
@@ -281,14 +278,35 @@ class MujocoResetClient:
                 self._services.switch_controllers(activate=self._controllers, deactivate=()),
                 "activate",
             )
+            activate_ack = time.monotonic()  # diagnostic clock; decisions use self._monotonic
+            polls = converged_calls = 0
+            callback_count = joint_callback_count_after_reset
+            last_unconverged = None
             while self._monotonic() <= deadline:
                 self._progress()
-                if (
-                    self._services.joint_callback_count > joint_callback_count_after_reset
-                    and converged(joint_callback_count_after_reset)
-                ):
-                    break
+                polls += 1
+                callback_count = self._services.joint_callback_count
+                if callback_count > joint_callback_count_after_reset:
+                    converged_calls += 1
+                    if converged(joint_callback_count_after_reset):
+                        outcome = "converged"
+                        break
+                    last_unconverged = dict(seen)
             else:
+                outcome = "timeout"
+            loop_exit = time.monotonic()
+            try:
+                self.last_reset_convergence = dict(
+                    outcome=outcome, activate_ack_monotonic_s=activate_ack,
+                    loop_exit_monotonic_s=loop_exit, elapsed_s=loop_exit - activate_ack,
+                    polls=polls, converged_calls=converged_calls,
+                    joint_callback_delta=callback_count - joint_callback_count_after_reset,
+                    last_unconverged=last_unconverged)
+                logging.getLogger(__name__).error("MUJOCO_RESET_CONVERGENCE_EVIDENCE %s",
+                    json.dumps(self.last_reset_convergence, sort_keys=True, separators=(",", ":"), default=float))
+            except Exception:
+                pass
+            if outcome == "timeout":
                 raise self._failure("fresh joint convergence timeout")
             self._require(self._services.pause(True), "re-pause")
             saw_expected_epoch_unpaused = False
@@ -316,8 +334,6 @@ class MujocoResetClient:
                         raise self._failure("controller convergence failed")
                     if not converged(joint_callback_count_after_reset):
                         raise self._failure("joint convergence failed")
-                    if context is not None:
-                        self._require(self._services.finish_reset(), "broker reset final evidence")
                     return ResetReceipt(
                         old_epoch=old.reset_epoch,
                         new_epoch=reset_snapshot.reset_epoch,

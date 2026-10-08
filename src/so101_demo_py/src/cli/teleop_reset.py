@@ -50,11 +50,13 @@ def execute_mujoco_reset(
     *,
     keyframe: str,
     cup_position_world_m: tuple[float, float, float] | None = None,
+    act_profile: bool = False,
 ):
     """Reset physical state, then restore MoveIt's canonical scene shadow."""
 
+    act_kwargs = {"act_profile": True} if act_profile else {}
     if cup_position_world_m is None:
-        receipt = transactional_reset(session_id, keyframe=keyframe)
+        receipt = transactional_reset(session_id, keyframe=keyframe,**act_kwargs)
     else:
         override = FreeJointResetOverride(
             name="plastic_cup",
@@ -65,6 +67,7 @@ def execute_mujoco_reset(
             keyframe=keyframe,
             expected_object_position=cup_position_world_m,
             free_joint_overrides=(override,),
+            **act_kwargs,
         )
     scene_receipt = execute_scene_operation("mujoco", "setup")
     if not scene_receipt.success:

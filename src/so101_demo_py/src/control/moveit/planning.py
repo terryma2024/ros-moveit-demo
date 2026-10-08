@@ -8,6 +8,31 @@ from typing import Any, Callable
 from ...core.domain import Failure, FailureCategory
 
 
+# Observation only (plan A28): the last start state sent to MoveIt, for the Teacher's first-knot diagnostic. The request
+# carries POSITIONS only; the start-state velocity and effort fields stay empty, so nothing time-derived from the
+# joint states reaches the planner and the first-knot velocities/accelerations come from MoveIt's own response adapters.
+LAST_PLAN_REQUEST: dict = {}
+
+
+def _note_plan_request(request: Any, wire: Any) -> None:
+    try:
+        import time as _time
+        motion = wire.motion_plan_request
+        joint_state = motion.start_state.joint_state
+        LAST_PLAN_REQUEST.clear()
+        LAST_PLAN_REQUEST.update(
+            kind=type(request).__name__, planning_group=str(motion.group_name)[:32],
+            start_names=[str(name)[:16] for name in joint_state.name][:12],
+            start_positions=[float(value) for value in joint_state.position][:12],
+            start_velocities_sent=len(joint_state.velocity), start_efforts_sent=len(joint_state.effort),
+            velocity_scaling=float(motion.max_velocity_scaling_factor),
+            acceleration_scaling=float(motion.max_acceleration_scaling_factor),
+            source="observer evidence positions (MotionPlanner.plan: evidence.positions)",
+            built_monotonic_ns=_time.monotonic_ns())
+    except Exception:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class JointPlanRequest:
     joint_names: tuple[str, ...]
@@ -122,6 +147,7 @@ class MoveItPlanningClient:
             wire_request = make_get_motion_plan_pose_request(request)
         else:
             wire_request = make_get_motion_plan_request(request)
+        _note_plan_request(request, wire_request)
         future = self._client.call_async(wire_request)
         deadline = time.monotonic() + timeout_s
         while not future.done() and time.monotonic() < deadline:

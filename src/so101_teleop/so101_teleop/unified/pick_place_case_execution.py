@@ -138,7 +138,14 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
     """Never publish a case PASS until its child, stack and graph are gone."""
     journal_path = Path(journal_path)
     manifest, case, manifest_path = _preflight(spec, case_id, journal_path)
-    context, worker = await owner.start(spec)
+    try:
+        context, worker = await owner.start(spec)
+    except BaseException:
+        # Startup may have spawned a stack before readiness failed. Keep its
+        # admission fenced unless the exact failed-start owner can retire it.
+        if getattr(owner, "context", None) is not None:
+            await owner.retire_failed_start(attempt_id=case_id)
+        raise
     try:
         campaign = PickPlaceValidationCampaign(manifest_path, context, worker, journal_path)
         planned = campaign.planned_cases(deadline_ns=spec.deadline_ns)

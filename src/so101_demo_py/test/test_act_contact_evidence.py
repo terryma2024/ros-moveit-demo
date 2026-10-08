@@ -193,3 +193,120 @@ def test_record_backpressure_latches_hazard_and_stops_without_losing_ros_callbac
     adapter.arm(SimpleNamespace(simulation_session_id='s',reset_epoch=2,simulation_time_s=.006,paused=True,simulation_step=0))
     adapter.accept_message(RobotContactEvidence(**frame(reset_epoch=2,simulation_time_s=.008)))
     assert port.safe()
+
+
+# ---- R6: recent_steps() is the copy-free twin of recent_frames_with_receipts() ----
+
+def _contact_outcome(port,call):
+    try:return call(port),None,port.hazard
+    except ValueError as error:return None,str(error),port.hazard
+
+
+def _contacts_for(case):
+    now=[10.];port=observer(now);port.reset('s',1,source_floor_s=0.)
+    if case=='unavailable':return port
+    port.accept(frame(1));now[0]+=.05
+    port.accept(frame(2));port.accept(frame(3))
+    if case=='hazard':port.accept(frame(9))
+    if case=='partially_stale':now[0]+=.11
+    if case=='all_stale':now[0]+=1.
+    return port
+
+
+@pytest.mark.parametrize('case',['fresh','partially_stale','all_stale','hazard','unavailable'])
+def test_contact_recent_steps_matches_recent_frames_with_receipts(case):
+    full=_contact_outcome(_contacts_for(case),
+        lambda port:tuple(item['physics_step'] for item,_ in port.recent_frames_with_receipts()))
+    steps=_contact_outcome(_contacts_for(case),lambda port:port.recent_steps())
+    assert steps==full,(case,steps,full)
+    if case=='fresh':assert steps[0]==(1,2,3)
+    if case=='partially_stale':assert steps[0]==(2,3)
+
+
+def test_contact_recent_steps_makes_no_deepcopy(monkeypatch):
+    import copy
+    port=_contacts_for('fresh')
+    calls=[]
+    real=copy.deepcopy
+    monkeypatch.setattr(copy,'deepcopy',lambda *a,**k:calls.append(1) or real(*a,**k))
+    assert port.recent_steps()==(1,2,3)
+    assert calls==[]
+
+
+# ---- A2b: process-expectation pairs and completeness gaps are audit-only for the Teacher source ----
+
+PROCESS={('arm','forearm')}
+
+
+def audit_observer(now,*,process_pairs=PROCESS,audit_integrity=True,sink=None):
+    return RobotContactObserver(known_geoms={'arm','table','mast','forearm'},allowed_pairs=set(),
+        max_age_s=.15,max_sim_gap_s=.003,monotonic=lambda:now[0],process_pairs=process_pairs,
+        audit_integrity=audit_integrity,audit=(lambda code,**facts:sink.append((code,facts))) if sink is not None else None)
+
+
+def test_a_process_expectation_pair_is_not_a_hazard_but_a_collision_pair_is():
+    value=frame(geom_a=['arm'],geom_b=['forearm'],signed_distance_m=[-.001],normal_force_n=[2.])
+    assert contact_hazard(value,set())  # default (ACT) semantics are unchanged
+    assert not contact_hazard(value,set(),PROCESS)
+    collision=frame(geom_a=['arm'],geom_b=['table'],signed_distance_m=[-.001],normal_force_n=[2.])
+    assert contact_hazard(collision,set(),PROCESS)
+    mixed=frame(geom_a=['arm','arm'],geom_b=['forearm','table'],signed_distance_m=[-.001]*2,normal_force_n=[2.]*2)
+    assert contact_hazard(mixed,set(),PROCESS)
+
+
+def test_observer_audits_a_process_expectation_violation_without_a_hazard():
+    now=[10.];sink=[];port=audit_observer(now,sink=sink);port.reset('s',1,source_floor_s=0.)
+    port.accept(frame());port.accept(frame(2,geom_a=['arm'],geom_b=['forearm'],signed_distance_m=[-.001],normal_force_n=[2.]))
+    port.accept(frame(3));assert port.safe() and port.hazard is None
+    assert [code for code,_ in sink]==['CONTACT_PROCESS_EXPECTATION']
+    assert sink[0][1]['pairs']==[('arm','forearm')] and sink[0][1]['physics_step']==2
+
+
+def test_observer_still_latches_a_collision_pair_in_every_mode():
+    now=[10.];port=audit_observer(now);port.reset('s',1,source_floor_s=0.)
+    port.accept(frame());port.accept(frame(2,geom_a=['arm'],geom_b=['table'],signed_distance_m=[-.001],normal_force_n=[2.]))
+    assert not port.safe() and port.hazard=='ROBOT_CONTACT_HAZARD'
+
+
+def test_observer_audits_step_and_time_gaps_and_resyncs():
+    # RED on the unchanged source: the constructor has no audit mode and the gap latches.
+    now=[10.];sink=[];port=audit_observer(now,sink=sink);port.reset('s',1,source_floor_s=0.)
+    port.accept(frame());port.accept(frame(4))
+    assert port.safe() and port.hazard is None
+    assert {code for code,_ in sink}=={'CONTACT_STEP_GAP','CONTACT_TIME_GAP'}
+    port.accept(frame(5));assert port.safe() and port.last['physics_step']==5
+
+
+@pytest.mark.parametrize('bad',({'physics_step':1},{'physics_step':0},{'simulation_time_s':.0005},
+    {'truncated':True},{'evidence_loss':True},{'reset_epoch':0},{'simulation_session_id':'other'},
+    {'geom_a':['unknown'],'geom_b':['table'],'signed_distance_m':[-.001],'normal_force_n':[2.]}))
+def test_observer_audit_mode_keeps_inconsistent_or_unevaluable_evidence_a_hazard(bad):
+    now=[10.];port=audit_observer(now);port.reset('s',1,source_floor_s=0.)
+    port.accept(frame());port.accept({**frame(2),**bad})
+    assert not port.safe() and port.hazard
+
+
+def test_receiver_overflow_before_arm_is_audited_in_audit_mode_and_latches_otherwise():
+    from so101_demo.adapters.act.contact_evidence import RosRobotContactAdapter
+    from so101_mujoco_support.msg import RobotContactEvidence
+    from types import SimpleNamespace
+    snapshot=SimpleNamespace(simulation_session_id='s',reset_epoch=1,simulation_time_s=0.,paused=True,simulation_step=0)
+    results={}
+    for mode in (True,False):
+        now=[10.];sink=[];hazards=[]
+        port=audit_observer(now,audit_integrity=mode,sink=sink,process_pairs=frozenset())
+        adapter=RosRobotContactAdapter(SimpleNamespace(create_subscription=lambda *args:None),port,
+            on_hazard=hazards.append,pending_capacity=2)
+        for step in (1,2,3):adapter.accept_message(RobotContactEvidence(**frame(step)))
+        adapter.arm(snapshot)
+        adapter.accept_message(RobotContactEvidence(**frame(4)))
+        results[mode]=(port.hazard,'CONTACT_RECEIVER_OVERFLOW' in {code for code,_ in sink},port.safe())
+    assert results[True]==(None,True,True)
+    assert results[False][0] is not None and results[False][2] is False
+
+
+def test_process_pairs_must_be_known_sorted_pairs():
+    now=[10.]
+    for bad in ({('forearm','arm')},{('arm','nowhere')},{('arm',)},'x'):
+        with pytest.raises(ValueError,match='CONTACT_CONFIG_INVALID'):
+            audit_observer(now,process_pairs=bad)

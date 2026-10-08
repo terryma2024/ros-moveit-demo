@@ -14,10 +14,10 @@ from so101_demo.act.execution import bounded_positions
 from so101_demo.adapters.act.physics import model_sha256
 
 
-_SCENE_SHA = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
+_SCENE_SHA = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
 _PLUGIN_SHA = "612212d5a61c74c4086c0cf2b229cfb5552e58055f8744ee0e9e4d46db655fae"
-_PROFILE_SHA = "25a272abeffbfaa7e6d6710f0e844856adca6bd09d81a40261956ccbd8021abe"
-_MODEL_SHA = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+_PROFILE_SHA = "b9c73aa3ee5e75c049f13c9f39aea692fa7635c05290a7a2c74d09d2c4c0e687"
+_MODEL_SHA = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
 _PROFILE_KEYS = frozenset({
     "schema_version", "kind", "eligible_for_collection", "model_sha256",
     "scene_sha256", "source_route_sha256", "cup_start_m", "joint_start_rad",

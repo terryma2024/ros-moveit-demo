@@ -446,6 +446,22 @@ def require_case_row_matches_bundle(row: dict, *, identities: dict,
     return dict(row)
 
 
+def actual_table_support(evidence, *, support_distance_max_m: float) -> bool:
+    """Only force-bearing contacts of this cup with the table can authorize opening."""
+    body = getattr(getattr(evidence, "object_state", None), "body", None)
+    threshold = support_distance_max_m
+    if not _finite(threshold) or threshold <= 0 or not isinstance(body, str) or not body:
+        return False
+    for contact in getattr(evidence, "other_object_contacts", ()):
+        force = getattr(contact, "normal_force_n", None)
+        distance = getattr(contact, "signed_distance_m", None)
+        if (getattr(contact, "body1", None) == body
+                and getattr(contact, "body2", None) == "table"
+                and _finite(force) and force > 0 and _finite(distance) and distance <= threshold):
+            return True
+    return False
+
+
 def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
     """The per-frame canonical fields that follow from physics evidence alone.
 
@@ -457,7 +473,7 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
     right = tuple(getattr(evidence, "right_fingertip_contacts", ()))
     other = tuple(getattr(evidence, "other_object_contacts", ()))
     distance = getattr(evidence, "minimum_signed_distance_m", None)
-    if not _finite(distance) or distance < 0:
+    if not _finite(distance):
         raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
     state = getattr(evidence, "object_state", None)
     position = list(getattr(state, "position_world", ()))
@@ -465,7 +481,7 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
     if len(position) != 3 or len(orientation) != 4:
         raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
     bilateral = bool(left) and bool(right)
-    supported = bool(other) or distance <= support_distance_max_m
+    supported = actual_table_support(evidence, support_distance_max_m=support_distance_max_m)
     if bilateral and not supported:
         holding = "HOLDING"
     elif not left and not right and supported:
@@ -476,7 +492,7 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
         holding = "UNKNOWN"
     return {"holding_state": holding, "bilateral_contact": bilateral,
             "no_fingertip_contact": not (left or right), "cup_supported": supported,
-            "cup_support_distance_m": distance, "cup_position_m": position,
+            "cup_support_distance_m": max(0.0, distance), "cup_position_m": position,
             "cup_orientation_xyzw": orientation}
 
 

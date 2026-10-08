@@ -76,6 +76,48 @@ def complete_audit(tmp_path):
     return writer, window
 
 
+def test_an_episode_that_starts_after_the_first_camera_frames_seals_and_verifies(tmp_path):
+    """CP-3440 A: the window starts after the worker's last pause, so frames the camera adapter numbered before the capture started
+    (sequence 1 ...) are not in the episode: the retained sequence of a camera begins wherever the capture began and must then be
+    contiguous. (Pilot bag 031b82c6: the first audited head frame was sequence 2 and the seal failed AUDIT_ACQUISITION_INVALID.)"""
+
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(), {"inputs_sha256": "a" * 64})
+    minter = AcquisitionMinter()
+    frames = {}
+    for camera in ("head", "wrist"):
+        minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=0.9, received_monotonic_ns=900_000_001, pixels=ZERO)  # not audited
+        for stamp in (1.0, 1.1):
+            frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                                received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
+            writer.append_acquisition(frame)
+            frames[(camera, stamp)] = frame
+    assert frames[("head", 1.0)].sequence == 2
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True})
+    writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id, frames[("wrist", 1.0)].acquisition_id, 1)
+    path = writer.seal({"start_s": 1.0, "end_s": 1.1, "label_cutoff_s": 1.0})
+    assert verify_audit_manifest(path)["window"]["start_s"] == 1.0
+
+
+def test_a_gap_inside_the_retained_camera_sequence_is_still_refused(tmp_path):
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), identity(), {"inputs_sha256": "a" * 64})
+    minter = AcquisitionMinter()
+    frames = {}
+    for camera in ("head", "wrist"):
+        for stamp in (1.0, 1.1, 1.2):
+            frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=stamp,
+                                received_monotonic_ns=int(stamp * 1e9) + 1, pixels=ZERO)
+            if not (camera == "head" and stamp == 1.1):          # the audit never saw the middle head frame
+                writer.append_acquisition(frame)
+            frames[(camera, stamp)] = frame
+    writer.append_source("references", {"reference_time_s": 1.1, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6], "accepted": True})
+    writer.bind_row(0, 1.0, frames[("head", 1.0)].acquisition_id, frames[("wrist", 1.0)].acquisition_id, 1)
+    path = writer.seal({"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.0})
+    with pytest.raises(ValueError, match="AUDIT_ACQUISITION_INVALID"):
+        verify_audit_manifest(path)
+
+
 def test_sealed_audit_is_not_overwritten(tmp_path):
     writer, window = complete_audit(tmp_path)
     path = writer.seal(window)
@@ -329,6 +371,34 @@ def test_a_binding_must_name_an_accepted_reference_for_that_instant(tmp_path):
     with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
         # the revocation voids the earlier acceptance for the same instant (T3-F2 residual)
         other.bind_row(0, 1.0, other_frames["head"], other_frames["wrist"], 1)
+
+
+def test_a_camera_stamp_one_nanosecond_off_the_microsecond_grid_still_binds_its_exact_reference(tmp_path):
+    """Pilot bag 031b82c6: the head/wrist frames carried 4.803999999 s (sec=4, nanosec=803999999). The capture's reference target is
+    the nanosecond sum (4.903999999); the binding check rounded the target to microseconds (4.904) and refused the capture's own row
+    (AUDIT_BINDING_REFERENCE_INVALID). The rule is unchanged: the reference must be for exactly stamp + 0.1 s, in nanoseconds."""
+
+    from so101_demo.act.acquisition import AcquisitionMinter
+
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope(), {"session_id": "s", "attempt_id": "a", "reset_epoch": 1,
+                                                                 "release_epoch": 1}, {"inputs_sha256": "a" * 64})
+    minter, ids = AcquisitionMinter(), {}
+    for camera in ("head", "wrist"):
+        frame = minter.mint(camera, session_id="s", reset_epoch=1, stamp_s=4.803999999, received_monotonic_ns=1, pixels=ZERO)
+        writer.append_acquisition(frame)
+        ids[camera] = frame.acquisition_id
+    target = (round(4.803999999 * 1e9) + round(0.1 * 1e9)) / 1e9
+    writer.append_source("references", {"reference_time_s": target, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": True})
+    writer.bind_row(0, 4.803999999, ids["head"], ids["wrist"], 1)
+    off = (round(4.803999999 * 1e9) + round(0.1 * 1e9) + 1) / 1e9      # one more nanosecond is still a different instant
+    writer.append_source("references", {"reference_time_s": off, "source": "CONTROLLER_REFERENCE",
+                                        "positions": [0.1] * 6, "accepted": True})
+    other, other_ids = _staging(tmp_path / "second")
+    other.append_source("references", {"reference_time_s": 1.1 + 1e-9, "source": "CONTROLLER_REFERENCE",
+                                       "positions": [0.1] * 6, "accepted": True})
+    with pytest.raises(ValueError, match="AUDIT_BINDING_REFERENCE_INVALID"):
+        other.bind_row(0, 1.0, other_ids["head"], other_ids["wrist"], 2)
 
 
 def test_rows_must_be_a_contiguous_schedule(tmp_path):
@@ -795,6 +865,12 @@ def test_the_ratified_window_schema_is_enforced_for_a_formal_audit(tmp_path):
     # to it: an interrupted diagnostic window is legal, a complete one without a cutoff is not
     interrupted = EpisodeAuditWriter(tmp_path / "interrupted", scope(), identity(),
                                      {"inputs_sha256": "a" * 64})
+    # An interrupted capture still names original acquired frames, never an invented inventory.
+    minter = AcquisitionMinter()
+    for camera in ("head", "wrist"):
+        for stamp in (1., 1.1, 1.2):
+            interrupted.append_acquisition(minter.mint(camera, session_id="s", reset_epoch=1,
+                stamp_s=stamp, received_monotonic_ns=round(stamp * 1e9) + 1, pixels=ZERO))
     assert interrupted.seal(_window(outcome="interrupted_diagnostic", label_cutoff_s=None)).is_file()
     bad_diagnostic = EpisodeAuditWriter(tmp_path / "bad-diagnostic", scope(), identity(),
                                         {"inputs_sha256": "a" * 64})
@@ -970,6 +1046,34 @@ def test_the_ratified_reference_frames_are_accepted_and_validated(tmp_path):
         mixed.append_source("references", {**base, **_ratified_reference(),
                                            "joint_names": ["a"], "sim_stamp_ns": 1,
                                            "received_monotonic_ns": 1, "velocities": [0.0]})
+
+
+@pytest.mark.parametrize("change", ["positive", "wrong_target", "evaluated_position",
+                                   "evaluated_velocity", "future_outside_tolerance"])
+def test_sealed_readback_checks_published_reference_causality(tmp_path, change):
+    writer, window = complete_audit(tmp_path)
+    path = writer.seal(window)
+    row = json.loads(writer.files.references.read_text().splitlines()[0])
+    row.update(_ratified_reference())
+    for frame in row["frames"].values():
+        frame["evaluation"].update(basis="published", goal_id=None, accepted_sim_s=None)
+    arm = row["frames"]["arm"]
+    if change == "wrong_target":
+        arm["sim_stamp_ns"] -= 10_000_000
+    elif change == "future_outside_tolerance":
+        arm["sim_stamp_ns"] += 1001
+    elif change == "evaluated_position":
+        arm["evaluated_positions"][0] = 0.9
+        row["projected_positions"][0] = row["positions"][0] = 0.9
+    elif change == "evaluated_velocity":
+        arm["evaluated_velocities"][0] = 0.02
+    _resign(writer, path, "references.jsonl",
+            (json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n").encode())
+    if change == "positive":
+        assert verify_audit_manifest(path)["kind"] == MANIFEST_KIND
+    else:
+        with pytest.raises(ValueError, match="AUDIT_SCHEMA_INVALID"):
+            verify_audit_manifest(path)
 
 
 def test_the_planning_scene_and_feedback_records_are_validated(tmp_path):
@@ -1281,7 +1385,7 @@ def test_the_expert_carries_the_ratified_group_into_the_audit(tmp_path):
         evaluated = projected[:5] if kind == "arm" else projected[5:]
         return {"joint_names": ([f"{index + 1}" for index in range(size)]
                                   if kind == "arm" else ["6"]),
-                "published_positions": [0.0] * size, "published_velocities": [0.0] * size,
+                "published_positions": list(evaluated), "published_velocities": [0.0] * size,
                 "evaluated_positions": list(evaluated), "evaluated_velocities": [0.0] * size,
                 "evaluation": {"requested_sim_time_s": when, "basis": "published",
                                "goal_id": None, "accepted_sim_s": None, "revoked_sim_s": None},

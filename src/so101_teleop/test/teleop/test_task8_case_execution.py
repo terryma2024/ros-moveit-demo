@@ -20,7 +20,7 @@ CHILD_OWNER = OwnerKey(23456, 23456, 202, "c" * 64, "d" * 64)
 
 
 def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False,
-              omit_child_receipt=False):
+              omit_child_receipt=False, start_fails=False):
     anchors = {
         name: {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.0}
         for name in ("default", "left", "forward")
@@ -89,7 +89,13 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
             events.append("start")
             assert passed is spec
             self.context = context
+            if start_fails:
+                raise RuntimeError("stack readiness failed")
             return context, self.worker
+
+        async def retire_failed_start(self, *, attempt_id):
+            events.append("recover")
+            await self.finish(attempt_id=attempt_id)
 
         async def finish(self, *, attempt_id):
             events.append("finish")
@@ -130,9 +136,13 @@ def test_case_result_is_written_only_after_own_stack_and_child_retire(tmp_path):
 
 
 def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
+    # the artifact must read back byte for byte, so the fixture writes a real sealed file
+    payload = b'{"case": "full-01"}'
+    artifact = tmp_path / "live.json"
+    artifact.write_bytes(payload)
+    digest = hashlib.sha256(payload).hexdigest()
     full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
-            "live_evidence_artifact": {"path": str(tmp_path / "live.json"), "sha256": "a" * 64,
-                                       "schema_version": 1},
+            "live_evidence_artifact": {"path": str(artifact), "sha256": digest, "schema_version": 1},
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
     row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
@@ -169,6 +179,23 @@ def test_case_cleanup_failure_retains_admission_and_refuses_success_record(tmp_p
     with pytest.raises(RuntimeError, match="stop unconfirmed"):
         asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
+    assert owner.context is not None and not journal.exists()
+
+
+def test_failed_start_attempts_retirement_without_publishing_case(tmp_path):
+    spec, owner, journal, events = _prepared(tmp_path, start_fails=True)
+    with pytest.raises(RuntimeError, match="stack readiness failed"):
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+    assert events == ["start", "recover", "finish"]
+    assert owner.context is None and not journal.exists()
+
+
+def test_failed_start_recovery_failure_keeps_admission_fenced(tmp_path):
+    spec, owner, journal, events = _prepared(
+        tmp_path, start_fails=True, cleanup_fails=True)
+    with pytest.raises(RuntimeError, match="stop unconfirmed"):
+        asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
+    assert events == ["start", "recover", "finish"]
     assert owner.context is not None and not journal.exists()
 
 

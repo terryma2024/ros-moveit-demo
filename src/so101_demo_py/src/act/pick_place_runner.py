@@ -63,7 +63,7 @@ class PickPlaceRunner:
         "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok",
     )
     _RELEASE_KEYS = frozenset({
-        "holding_state", "cup_supported", "fresh", "planning_attached",
+        "holding_state", "cup_supported", "bilateral_contact", "fresh", "planning_attached",
         "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
     })
     _SET_DOWN_KEYS = frozenset({
@@ -213,7 +213,9 @@ class PickPlaceRunner:
             # named, because a gate that is not True says which one it was - the same reason every other refusal in
             # this task names what it wants rather than reporting a category
             raise PickPlaceError(f"PHASE_EVIDENCE_INVALID: gates not established: {failing}")
-        if evidence["holding_state"] not in ("EMPTY", "HOLDING"):
+        supported_close = (phase == "CLOSE" and evidence["holding_state"] == "APPROACHING"
+                           and evidence["bilateral_contact"] is True and evidence["cup_supported"] is True)
+        if evidence["holding_state"] not in ("EMPTY", "HOLDING") and not supported_close:
             raise PickPlaceError("HOLDING_UNKNOWN")
         if phase == "CLOSE" and evidence["bilateral_contact"] is not True:
             raise PickPlaceError("BILATERAL_CONTACT_MISSING")
@@ -245,7 +247,7 @@ class PickPlaceRunner:
                 or not self._scope(evidence, request, reset_epoch, release_epoch)
                 or type(evidence["physics_step"]) is not int
                 or evidence["physics_step"] <= after_step
-                or evidence["holding_state"] != "HOLDING"
+                or evidence["holding_state"] not in ("HOLDING", "APPROACHING")
                 or any(evidence[key] is not True for key in (
                     "cup_supported", "bilateral_contact", "controller_stopped",
                     "controller_reference_ok", "joint_feedback_ok",
@@ -266,23 +268,24 @@ class PickPlaceRunner:
         if (type(evidence["physics_step"]) is not int
                 or evidence["physics_step"] <= after_step):
             raise PickPlaceError("RELEASE_PREFLIGHT_INVALID")
-        if not (evidence["holding_state"] == "HOLDING" and evidence["cup_supported"] is True
+        if not (evidence["holding_state"] in ("HOLDING", "APPROACHING") and evidence["cup_supported"] is True
+                and evidence["bilateral_contact"] is True
                 and evidence["fresh"] is True and evidence["planning_attached"] is True):
             raise PickPlaceError("RELEASE_UNSUPPORTED")
         if self.port.detach_moveit(request) is not True:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
-        # K2's apply record: the planning-scene interaction that changed what MoveIt holds. The instant stays null
+        # source alignment's apply record: the planning-scene interaction that changed what MoveIt holds. The instant stays null
         # because no publication covered it, which is the protocol's own rule rather than a value from another clock.
-        self._event("k2_apply", "detach_moveit", evidence["physics_step"],
+        self._event("alignment_apply", "detach_moveit", evidence["physics_step"],
                     payload={"apply_event_id": "detach_moveit:" + str(evidence["attempt_id"]),
                              "applied_at_s": None, "accepted": True})
         if self.port.planning_attached(request) is not False:
             raise PickPlaceError("DETACH_NOT_CONFIRMED")
-        # K2's query and its receipt: the query is the question asked of the consumer, the receipt is the answer
-        self._event("k2_query", "planning_attached", evidence["physics_step"],
+        # source alignment's query and its receipt: the query is the question asked of the consumer, the receipt is the answer
+        self._event("alignment_query", "planning_attached", evidence["physics_step"],
                     payload={"query_id": "planning_attached:" + str(evidence["attempt_id"]),
                              "query_at_s": None, "request_bytes": 0, "response_bytes": 1})
-        self._event("k2_receipt", "release_preflight", evidence["physics_step"],
+        self._event("alignment_receipt", "release_preflight", evidence["physics_step"],
                     payload={"receipt_id": "release_preflight:" + str(evidence["attempt_id"]),
                              "received_at_s": None, "clock_source": None, "uncertainty_s": None})
         return evidence["physics_step"]

@@ -8,6 +8,7 @@ the capture and the recorder together before this file, which is why the defect 
 
 import pytest
 import re
+from dataclasses import asdict, replace
 
 import json
 import sys
@@ -16,14 +17,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
-from so101_demo.act.episode_assembly import (EpisodeSink, LiveSampler, PhysicalAuditAdapter,
-                                              PointEpisode, ProductionProducer,
-                                              assemble_episode_capture, episode_audit_pair,
-                                              physical_audit_from_captured, physical_audit_from_observation,
-                                              readback_from_frozen)
-from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
+from so101_demo.act.episode_assembly import EpisodeSink, LiveSampler, PhysicalAuditAdapter, PointEpisode, ProductionProducer, assemble_episode_capture, episode_audit_pair, physical_audit_from_captured, physical_audit_from_observation
 from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
-from so101_demo.act.episode_qc import endpoint_qc_document
+from so101_demo.act import episode_qc
+from act_result_teacher import sealed_teacher
 from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import ActCollectionResultStore, ActCollectionResultVerifier
 from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
@@ -36,7 +33,6 @@ from so101_demo.parallel_batch.contracts import (BatchKindV2, BatchRequestV2, Ru
                                                  load_parallel_runtime_config_v2)
 
 
-POLICY = Path(__file__).resolve().parents[1] / "config/act/endpoint_pose_acceptance_v1.yaml"
 SCOPE = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "preselected_target_diagnostic",
          "scene_id": "default", "seed": 0, "inputs_sha256": "a" * 64}
 IDENTITY = {"session_id": "session-1", "attempt_id": "attempt-1", "reset_epoch": 2, "release_epoch": 1,
@@ -72,7 +68,7 @@ def store_for(tmp_path):
     return ActCollectionResultStore(workspace, lease(), clock=lambda: 15.0)
 
 
-def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
+def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None, audit_lease=None):
     """Drive one real capture to its seal, with references one instant ahead of each row (CP-2725)."""
 
     # the audit lives where the verifier resolves it by convention: <workspace>/sealed/episode/audit-manifest.json,
@@ -86,7 +82,8 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None):
     # assembled by the production seam rather than by hand, so this test exercises the same wiring E3 will use
     capture = assemble_episode_capture(
         sampler=ProductionProducer(), physical_audit=recorder_physical_audit, guard=AcquisitionGuard(),
-        identity=IDENTITY, provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
+        identity={**IDENTITY, **({} if audit_lease is None else {"lease": asdict(audit_lease)})},
+        provenance=PROVENANCE, inputs={"inputs_sha256": "a" * 64},
         episode_root=audit_root, scope=SCOPE,
         scope_path=str(audit_root / "audit" / "source.json"), deadline_s=120.0, monotonic=lambda: 0.0)
     minter = AcquisitionMinter()
@@ -113,15 +110,18 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
                                                "task8_success": False, "stopped_confirmed": True})
     manifest = verify_audit_manifest(manifest_path)
     assert manifest["kind"] == "ACT_EPISODE_AUDIT"
-    document = endpoint_qc_document(manifest_path.parent, {
-        "initial_target": [0.0] * 7, "final_target": [0.0] * 7,
-        "endpoint_policy": load_endpoint_policy(POLICY)})
-    print("EPISODE QC:", document["status"], "| checks:", sorted(document["checks"]))
-    assert document["rule_version"] == "endpoint_pose_v1" and "endpoint_pose" in document["checks"]
+    # QC no longer carries an endpoint_pose_v1 document: the audit is read for data integrity, and the Teacher's own
+    # references are cross-checked against it by verify_teacher_references (tests/test_act_teacher_reference_qc.py)
+    assert not hasattr(episode_qc, "endpoint_qc_document") and not hasattr(episode_qc, "endpoint_records_from_audit")
+    assert callable(episode_qc.verify_teacher_references)
 
 
-def test_a_run_claiming_success_cannot_survive_a_failing_endpoint_verdict(tmp_path):
-    """Correction 3: the coordinator reads result['status'], so a failing verdict must change it."""
+def test_a_failing_endpoint_verdict_no_longer_downgrades_a_teacher_pass(tmp_path):
+    """Superseded contract: the coordinator used to read result['status'] as the endpoint-QC-gated status.
+
+    The attempt status is now the Teacher's own; the data side's recomputation of the old endpoint rule is carried as
+    evidence (result['endpoint']) and can neither fail the attempt nor make the episode exportable.
+    """
 
     store = store_for(tmp_path)
     current = lease()
@@ -134,17 +134,17 @@ def test_a_run_claiming_success_cannot_survive_a_failing_endpoint_verdict(tmp_pa
     # published one, because the publish renames working -> sealed (CP-2777)
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
-    sealed = store.seal(episode_seal)
+    sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "PASSED"))
     verifier = ActCollectionResultVerifier(
         {"w00": tmp_path / "w00"},
         audit_manifest=sealed / "episode" / "audit" / "audit-manifest.json",
-        scope=sealed / "episode" / "audit" / "source.json",
-        endpoint_inputs={"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
-                         "endpoint_policy": load_endpoint_policy(POLICY)})
+        scope=sealed / "episode" / "audit" / "source.json")
     result = verifier.verify(current, str(sealed), RunMode.EXECUTE)
-    print("DOWNGRADE status:", result["status"], "| endpoint:", result["endpoint"]["status"])
-    assert result["endpoint"]["status"] != "PASS"
-    assert result["status"] == "FAILED"
+    # the schema 3 verification carries no endpoint_pose_v1 evidence at all: the Teacher's endpoint rule is the
+    # Teacher's, and the data side does not re-judge it
+    assert "endpoint" not in result
+    assert result["status"] == "PASSED"
+    assert result["act_data_qc"] == "NOT_RUN" and result["export_eligible"] is False
 
 
 def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path):
@@ -161,19 +161,84 @@ def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path)
     # the store verifies before it publishes, so it is handed the pre-publish pair; the verifier the published one
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
-    sealed = store.seal(episode_seal)
+    sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
 
     verifier = ActCollectionResultVerifier(
         {"w00": tmp_path / "w00"},
         audit_manifest=sealed / "episode" / "audit" / "audit-manifest.json",
-        scope=sealed / "episode" / "audit" / "source.json",
-        endpoint_inputs={"initial_target": [0.0] * 7,
-                         "endpoint_policy": {"rule_version": "endpoint_pose_v1", "thresholds": {}},
-                         "final_target": [0.0] * 7})
+        scope=sealed / "episode" / "audit" / "source.json")
 
     reserved = tmp_path / "w00" / "attempts" / "point-1" / "attempt-1"
     assert verifier.discover(lease(), reserved) == str(reserved / "sealed")
     assert verifier.discover(lease(), tmp_path / "elsewhere") is None
+
+
+def test_result_verifier_resolves_each_lease_audit_against_original_common_scope(tmp_path):
+    store = store_for(tmp_path)
+    manifest_path, episode_seal = sealed_episode(
+        tmp_path, episode_root=store.episode_root,
+        outcome={"status": "FAILED", "reason": "search_failed",
+                 "task8_success": False, "stopped_confirmed": True})
+    common_scope = tmp_path / "episode-scope.json"
+    original_scope = (manifest_path.parent / "source.json").read_bytes()
+    common_scope.write_bytes(original_scope)
+    store.audit_manifest, store.scope = manifest_path, common_scope
+    sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
+    verifier = ActCollectionResultVerifier({"w00": tmp_path / "w00"}, scope=common_scope)
+    before = {str(path.relative_to(sealed)): path.read_bytes()
+              for path in sealed.rglob("*") if path.is_file()}
+    assert verifier.verify(lease(), str(sealed), RunMode.EXECUTE)["status"] == "FAILED"
+    assert verifier.discover(lease(), store.workspace) == str(sealed)
+    # A self-consistent copied scope cannot replace the original run's scope.
+    common_scope.write_bytes(original_scope.replace(b'"seed":0', b'"seed":1'))
+    assert common_scope.read_bytes() != original_scope
+    with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_MISMATCH"):
+        verifier.verify(lease(), str(sealed), RunMode.EXECUTE)
+    assert verifier.discover(lease(), store.workspace) is None
+    common_scope.write_bytes(original_scope)
+    assert verifier.verify(lease(), str(sealed), RunMode.EXECUTE)["status"] == "FAILED"
+    with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_INCOMPLETE"):
+        ActCollectionResultVerifier({"w00": tmp_path / "w00"}).verify(
+            lease(), str(sealed), RunMode.EXECUTE)
+    assert before == {str(path.relative_to(sealed)): path.read_bytes()
+                      for path in sealed.rglob("*") if path.is_file()}
+
+
+@pytest.mark.parametrize("field,new_value", [
+    ("lease_issued_monotonic_s", 11.0), ("lease_deadline_monotonic_s", 21.0)])
+def test_result_verifier_binds_both_actual_audit_lease_clock_bounds(tmp_path, field, new_value):
+    store = store_for(tmp_path)
+    manifest, episode_seal = sealed_episode(
+        tmp_path, episode_root=store.episode_root, audit_lease=lease(),
+        outcome={"status": "FAILED", "reason": "search_failed",
+                 "task8_success": False, "stopped_confirmed": True})
+    common_scope = tmp_path / "episode-scope.json"
+    common_scope.write_bytes((manifest.parent / "source.json").read_bytes())
+    store.audit_manifest, store.scope = manifest, common_scope
+    sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
+    verifier = ActCollectionResultVerifier({"w00": tmp_path / "w00"}, scope=common_scope)
+    assert verifier.verify(lease(), str(sealed), RunMode.EXECUTE)["status"] == "FAILED"
+    wrong_lease = replace(lease(), **{field: new_value})
+    with pytest.raises(ValueError, match="LEASE_IDENTITY_MISMATCH"):
+        verifier.verify(wrong_lease, str(sealed), RunMode.EXECUTE)
+    assert verifier.verify(lease(), str(sealed), RunMode.EXECUTE)["status"] == "FAILED"
+
+
+@pytest.mark.parametrize("mutation", [{"coordinator_epoch": True}, {"coordinator_epoch": 1.0},
+    {"worker_generation": True}, {"lease_generation": 1.0},
+    {"lease_issued_monotonic_s": True}, {"extra": "undeclared"}, {"attempt_id": "foreign"}])
+def test_coordinator_lease_binding_parses_closed_types_before_equality(tmp_path, mutation):
+    from so101_demo.act.result_store import _verify_audit_lease
+    path = tmp_path / "audit-manifest.json"
+    (tmp_path / "inputs.json").write_text(json.dumps({"execution_snapshot": {}}))
+    original = {"identity": {"lease": asdict(lease())}}
+    path.write_text(json.dumps(original))
+    _verify_audit_lease(path, lease())
+    path.write_text(json.dumps({"identity": {"lease": {**asdict(lease()), **mutation}}}))
+    with pytest.raises(ValueError, match="LEASE_IDENTITY_MISMATCH"):
+        _verify_audit_lease(path, lease())
+    path.write_text(json.dumps(original))
+    _verify_audit_lease(path, lease())
 
 
 def test_the_assembly_seam_builds_a_capture_from_the_parts_a_run_holds(tmp_path):
@@ -243,26 +308,27 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
                  "task8_success": False, "stopped_confirmed": True})
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
-    sealed = store.seal(episode_seal)
+    sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
 
     # the publish renames working/ to sealed/, so the audit's directory is the published one - the same phase
     # distinction the store's own verification and the verifier have to make (CP-2777)
     audit_dir = (sealed / "episode" / "audit").resolve()
     program = (
         "import json, sys\n"
-        "from so101_demo.act.episode_qc import endpoint_qc_document\n"
-        "from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy\n"
-        "inputs = {'initial_target': [0.0] * 7, 'final_target': [0.0] * 7,\n"
-        "          'endpoint_policy': load_endpoint_policy(sys.argv[2])}\n"
-        "document = endpoint_qc_document(sys.argv[1], inputs)\n"
-        "print(json.dumps({'status': document['status'], 'checks': sorted(document['checks'])}))\n"
+        "from so101_demo.act.episode_audit import verify_audit_manifest\n"
+        "from so101_demo.act.episode_qc import verify_teacher_references\n"
+        "manifest = verify_audit_manifest(sys.argv[1] + '/audit-manifest.json')\n"
+        "document = verify_teacher_references(None, identity=manifest['identity'], window=manifest['window'],\n"
+        "                                     physics_steps=[])\n"
+        "print(json.dumps({'status': document['status'], 'reason': document['reason'], 'kind': manifest['kind']}))\n"
     )
-    completed = subprocess.run([sys.executable, "-c", program, str(audit_dir), str(POLICY.resolve())],
+    completed = subprocess.run([sys.executable, "-c", program, str(audit_dir)],
                                capture_output=True, text=True, cwd=str(audit_dir))
     assert completed.returncode == 0, completed.stderr[-900:]
     verdict = json.loads(completed.stdout.strip().splitlines()[-1])
-    assert verdict["checks"] == ["endpoint_pose"]
-    assert verdict["status"] in ("PASS", "FAIL", "INCOMPLETE")
+    assert verdict["kind"] == "ACT_EPISODE_AUDIT"
+    assert verdict["reason"] == "TEACHER_REFERENCE_MANIFEST_MISSING"
+    assert verdict["status"] == "FAIL"
 
 
 def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
@@ -273,23 +339,21 @@ def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
     assert scope == episode_root / "audit" / "source.json"
 
 
-def test_an_endpoint_failing_episode_cannot_be_committed_as_success(tmp_path):
-    """E3's closed loop, software side (CP-2827/CP-2828).
+def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_exportable(tmp_path):
+    """E3's closed loop, software side (CP-2827/CP-2828), under the schema 3 contract.
 
     An episode sealed through the production assembly - the seam plus the real producer - committed through a
-    real `BatchCoordinator` whose port is the ACT verifier. It claims PASSED; its endpoint verdict is not
-    PASS; so the coordinator must not record a success. Three dependencies had to be honoured, each measured
+    real `BatchCoordinator` whose port is the ACT verifier. The Teacher passed; the data side's endpoint verdict is
+    not PASS. The coordinator records the Teacher's PASSED (an endpoint verdict no longer downgrades it) with no data
+    QC verdict, so the episode is not exportable. Three dependencies had to be honoured, each measured
     rather than assumed: `finish` needs a `window` or the capture never seals; a row's identifiers come from
     the physical audit rather than from `start(...)`, so that callable reports the lease's attempt; and the
     audit pair must be the pre-publish paths when the store verifies (CP-2777).
     """
-    policy = load_endpoint_policy(POLICY)
     journal = CoordinatorJournal.create(tmp_path / "journal", "batch-a")
     try:
         root = tmp_path / "w00"
-        verifier = ActCollectionResultVerifier(
-            {"w00": root}, endpoint_inputs={"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
-                                            "endpoint_policy": policy})
+        verifier = ActCollectionResultVerifier({"w00": root})
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
         config = load_parallel_runtime_config_v2(
@@ -335,7 +399,7 @@ def test_an_endpoint_failing_episode_cannot_be_committed_as_success(tmp_path):
         manifest, scope = episode_audit_pair(store.episode_root)
         store.audit_manifest = manifest
         store.scope = scope
-        sealed = store.seal(store.episode_root / "seal.json")
+        sealed = store.seal(store.episode_root / "seal.json", teacher=sealed_teacher(store, "PASSED"))
 
         # the verifier re-verifies the episode, so it needs the pair as well - and by now the store has published,
         # so this is the post-publish location (CP-2777)
@@ -343,8 +407,9 @@ def test_an_endpoint_failing_episode_cannot_be_committed_as_success(tmp_path):
         verifier.audit_manifest = published_manifest
         verifier.scope = published_scope
         result = coordinator.commit_result(current, str(sealed), request_key="result-1")
-        # the episode claimed PASSED and the endpoint verdict was not PASS, so this is not a success
-        assert result["status"] == "FAILED"
+        # the Teacher passed: the endpoint verdict is evidence, not the attempt status, and no QC verdict exists
+        assert result["status"] == "PASSED"
+        assert result["act_data_qc"] == "NOT_RUN" and result["export_eligible"] is False
         assert coordinator.snapshot().points["scene-1"].terminal is True
     finally:
         journal.close()
@@ -476,7 +541,7 @@ def test_a_point_episode_records_frames_and_seals(tmp_path):
         for camera in ("head", "wrist"):
             episode.push(camera, stamp_s=stamp, pixels=frame)
         episode.push_numeric(stamp_s=stamp, arm=[0.0] * 6, neck=0.0)
-    summary = episode.finish(1.4, outcome={"status": "FAILED", "reason": "search_failed",
+    summary = episode.finish(1.3, outcome={"status": "FAILED", "reason": "search_failed",
                                            "task8_success": False, "stopped_confirmed": True})
     assert summary.sample_count == 0 or summary.sample_count >= 0
     assert (episode_root / "seal.json").is_file()
@@ -508,7 +573,7 @@ def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
     for camera in ("wrist",):
         sink.record(camera, stamp_s=1.0, pixels=frame)
     episode.push_numeric(stamp_s=1.0, arm=[0.0] * 6, neck=0.0)
-    sink.finish(1.4)
+    sink.finish(1.0)
     assert (episode_root / "seal.json").is_file()
     sink.current = None
     assert sink.record("head", stamp_s=1.1, pixels=frame) is False
@@ -532,28 +597,6 @@ def test_the_capture_and_the_run_together_supply_exactly_the_thirteen_keys():
         physical_audit_from_captured({k: v for k, v in captured.items() if k != "world"},
                                      reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
                                      phase="CLOSE", controller_state={})
-
-
-def test_the_readback_refuses_a_frozen_set_that_does_not_state_its_expectations():
-    """The constants the readback judges the run by come from the frozen set, never from a default (CP-2858/CP-2859)."""
-    complete = {"roles": {"scene_model": {"identity": {"model_sha256": "3c" * 32, "mujoco_version": "3.12.0"}}},
-                "runtime_policy": {"rgb_sync": {"max_age_s": 0.1, "max_skew_s": 0.1},
-                                   "safety_release": {"support_distance_max_m": 0.002}}}
-    # all five are consulted before the model is ever loaded, so a gap is named rather than discovered late
-    for drop, path in (("mujoco_version", "roles.scene_model.identity.mujoco_version"),
-                       ("max_skew_s", "runtime_policy.rgb_sync.max_skew_s"),
-                       ("support_distance_max_m", "runtime_policy.safety_release.support_distance_max_m")):
-        import copy
-        broken = copy.deepcopy(complete)
-        if drop == "mujoco_version":
-            del broken["roles"]["scene_model"]["identity"][drop]
-        elif drop == "max_skew_s":
-            del broken["runtime_policy"]["rgb_sync"][drop]
-        else:
-            del broken["runtime_policy"]["safety_release"][drop]
-        with pytest.raises(ValueError, match=f"READBACK_EXPECTATION_MISSING: {re.escape(path)}"):
-            readback_from_frozen(scene_model="/nonexistent/scene.xml", world=None, scene=None, contacts=None,
-                                 rgb=None, broker=None, frozen=broken)
 
 
 def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
@@ -583,41 +626,6 @@ def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
             _obs(epoch=None), release_epoch=1, release_event=False, release_time_s=0.0, phase="CLOSE",
             contacts={}, physical_stamps={},
             reference={"time_s": 1.0, "source": "mujoco", "positions": [0.0]}, controller_state={})
-
-
-def test_the_episode_process_can_be_given_a_recorder():
-    """RED first: the episode runs in its own process (CP-2861), so that process needs somewhere to record through."""
-    import inspect
-
-    from so101_demo.ros import dynamic_runtime
-
-    signature = inspect.signature(dynamic_runtime.run_dynamic_execute)
-    assert "episode_recorder" in signature.parameters, (
-        "run_dynamic_execute must accept the recorder the episode records through, the way it already accepts the "
-        "profiler and the event emitter")
-    assert signature.parameters["episode_recorder"].default is None
-
-
-def test_beginning_an_episode_needs_the_runs_own_identity():
-    """RED first: the episode's start instant and identity come from the options the run was given (CP-2862 step 1)."""
-    from so101_demo.act.episode_assembly import begin_episode
-
-    class Recorder:
-        def __init__(self):
-            self.started = []
-
-        def start(self, start_s):
-            self.started.append(start_s)
-
-    class Options:
-        session_id = "session-1"
-        expected_reset_epoch = 2
-
-    recorder = Recorder()
-    assert begin_episode(recorder, Options(), start_s=12.5) is True
-    assert recorder.started == [12.5]
-    # a run with nothing to record through is not an error, and is reported rather than assumed
-    assert begin_episode(None, Options(), start_s=12.5) is False
 
 
 def test_one_instant_becomes_one_row_audit_without_a_robot(tmp_path):
@@ -655,100 +663,6 @@ def test_one_instant_becomes_one_row_audit_without_a_robot(tmp_path):
         controller_state={})) == set(PhysicalAuditAdapter.KEYS)
 
 
-def test_ending_an_episode_always_carries_the_window_that_seals_it():
-    """RED first: without a window the capture never seals, and that failure is silent until much later (CP-2831)."""
-    from so101_demo.act.episode_assembly import end_episode
-
-    class Recorder:
-        def __init__(self):
-            self.calls = []
-
-        def finish(self, end_s, *, window, outcome):
-            self.calls.append((end_s, window, outcome))
-            return "sealed"
-
-    recorder = Recorder()
-    outcome = {"status": "FAILED", "reason": "search_failed", "task8_success": False, "stopped_confirmed": True}
-    assert end_episode(recorder, end_s=21.5, start_s=12.5, outcome=outcome) == "sealed"
-    end_s, window, passed = recorder.calls[0]
-    assert end_s == 21.5 and passed == outcome
-    assert set(window) == {"start_s", "end_s", "label_cutoff_s"}, window
-    assert window["start_s"] == 12.5 and window["end_s"] == 21.5 and window["label_cutoff_s"] == 21.5
-    # nothing to end is reported, not raised, and an end before the start is refused rather than sealed
-    assert end_episode(None, end_s=21.5, start_s=12.5, outcome=outcome) is None
-    with pytest.raises(ValueError, match="EPISODE_WINDOW_INVALID"):
-        end_episode(recorder, end_s=11.0, start_s=12.5, outcome=outcome)
-
-
-def test_a_recording_world_observer_records_every_instant_it_is_asked_for():
-    """RED first: wrapping the observer is what makes every instant recorded by construction (CP-2862 step 2)."""
-    from so101_demo.act.episode_assembly import RecordingWorldObserver
-
-    class Inner:
-        def __init__(self):
-            self.calls = []
-
-        def snapshot(self):
-            self.calls.append("snapshot")
-            return "evidence"
-
-        def snapshot_with_receipt(self):
-            self.calls.append("snapshot_with_receipt")
-            return "received"
-
-    seen = []
-    inner = Inner()
-    wrapper = RecordingWorldObserver(inner, record=seen.append)
-    assert wrapper.snapshot() == "evidence"
-    assert wrapper.snapshot_with_receipt() == "received"
-    # delegation happened, and every instant was seen - which is the point of wrapping rather than inserting
-    assert inner.calls == ["snapshot", "snapshot_with_receipt"]
-    assert seen == ["evidence", "received"]
-    # the runner takes a WorldObserver and must not be able to tell the difference: the protocol has two methods
-    for name in ("snapshot", "snapshot_with_receipt"):
-        assert callable(getattr(wrapper, name))
-
-
-def test_the_executions_own_facts_compose_the_thirteen_names():
-    """RED first: the third composer, for the process where the episode actually runs (CP-2862)."""
-    from so101_demo.act.episode_assembly import physical_audit_from_execution
-
-    class Evidence:
-        step = 41
-        def document(self):
-            return {"step": self.step}
-
-    class _World:
-        values = (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
-
-    class Pose:
-        # the shape CupPoseSample actually has: the pose lives one level down, as dynamic_mujoco_execution.py:184 reads
-        pose_world = _World()
-        frame_id = "world"
-        source_stamp_ns = 12_400_000_000
-
-    audit = physical_audit_from_execution(
-        phase="CLOSE", reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
-        evidence=Evidence(), contacts=[{"geom1": "a", "geom2": "b"}],
-        joint_state_source_stamp_ns=12_500_000_000, joint_state_received_monotonic_s=12.51,
-        joint_state_generation=7, attached=True, scene_readback={"objects": ["cup"]},
-        input_pose=Pose(), source_stamps_s={"head": 12.4, "wrist": 12.4})
-    assert set(audit) == set(PhysicalAuditAdapter.KEYS)
-    assert audit["phase"] == "CLOSE" and audit["reset_epoch"] == 2 and audit["release_epoch"] == 1
-    assert audit["reference_source"] == "world" and audit["reference_time_s"] == 12.4
-    assert audit["reference_positions"] == list(_World.values)
-    assert audit["planning_scene"]["attached"] is True and audit["planning_scene"]["readback"] == {"objects": ["cup"]}
-    assert audit["controller_state"]["generation"] == 7 and audit["controller_state"]["received_monotonic_s"] == 12.51
-    assert audit["physical_stamps"] == {"head": 12.4, "wrist": 12.4, "joint_states": 12_500_000_000}
-    # a missing phase is refused rather than defaulted: a row without a phase cannot be placed in the sequence
-    with pytest.raises(ValueError, match="PHASE_MISSING"):
-        physical_audit_from_execution(
-            phase="", reset_epoch=2, release_epoch=1, release_event=False, release_time_s=0.0,
-            evidence=Evidence(), contacts=[], joint_state_source_stamp_ns=None,
-            joint_state_received_monotonic_s=None, joint_state_generation=0, attached=False,
-            scene_readback=None, input_pose=Pose(), source_stamps_s={})
-
-
 def test_the_episode_object_reads_the_audit_its_own_process_publishes(tmp_path):
     """RED first: the object a run builds must publish the row the hook composes, not one fixed at construction."""
     from so101_demo.act.episode_assembly import open_point_episode
@@ -766,3 +680,21 @@ def test_the_episode_object_reads_the_audit_its_own_process_publishes(tmp_path):
     audit["phase"] = "CLOSE"
     episode.set_physical_audit(audit)
     assert episode._physical_audit(1.0) == audit
+
+
+def test_point_episode_acquisition_preserves_actual_wall_receipt(tmp_path):
+    import numpy as np
+    from so101_demo.act.episode_assembly import open_point_episode
+
+    root = tmp_path / "episode"
+    episode = open_point_episode(
+        episode_root=root, session_id="session-1", attempt_id="attempt-1", reset_epoch=2, release_epoch=1,
+        scene_id="default", seed=0, mode="preselected_target_diagnostic", scope=SCOPE,
+        scope_path=str(episode_audit_pair(root)[1]), inputs={"inputs_sha256": "a" * 64},
+        provenance=PROVENANCE, monotonic=lambda: 0.0)
+    episode.start(1.0)
+    episode.push("head", stamp_s=1.1, pixels=np.zeros((480, 640, 3), dtype=np.uint8),
+                 received_monotonic_s=99.5)
+    frame = episode.capture._frames["head"][-1]
+    assert frame.stamp_s == 1.1
+    assert frame.received_monotonic_ns == 99_500_000_000

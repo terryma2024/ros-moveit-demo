@@ -54,7 +54,7 @@ def make(tmp_path):
 
     def factory(
         points=('p1', 'p2'), workers=1, k=3, mode=RunMode.EXECUTE,
-        *, point_selector=None, adaptive=False, start_guard=None,
+        *, point_selector=None, adaptive=False, start_guard=None, clock_port=None, worker_ids=None,
     ):
         module = importlib.import_module('so101_demo.parallel_batch.coordinator')
         root = tmp_path / str(len(journals))
@@ -75,7 +75,7 @@ def make(tmp_path):
             # v1 request type stays importable for historical reading only.
             request = BatchRequestV2('batch-a', mode, points, workers, root,
                                      BatchKindV2.FIRST_PASS)
-        clock, results = Clock(), Results()
+        clock, results = (Clock() if clock_port is None else clock_port), Results()
         config = load_parallel_runtime_config_v2(
             Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v2.yaml')
         selector_args = (
@@ -84,8 +84,10 @@ def make(tmp_path):
         coordinator = module.BatchCoordinator(
             journal, request, config=config, clock=clock, result_port=results,
             **selector_args)
-        for i in range(workers):
-            coordinator.register_worker(f'w{i + 1}', generation=1)
+        names = tuple(f'w{i + 1}' for i in range(workers)) if worker_ids is None else tuple(worker_ids)
+        assert len(names) == workers
+        for name in names:
+            coordinator.register_worker(name, generation=1)
         return coordinator, clock, results, journal, request
 
     yield factory

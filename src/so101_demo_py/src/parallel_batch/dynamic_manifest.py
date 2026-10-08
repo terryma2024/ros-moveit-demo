@@ -3,33 +3,51 @@
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping
 
-from ..application.e2e_acceptance import (
-    FINAL_MAX_ANGULAR_SPEED_RAD_S,
-    FINAL_MAX_LINEAR_SPEED_M_S,
-    FINAL_MAX_UPRIGHT_TILT_RAD,
-    FINAL_SUPPORT_HEIGHT_RANGE_M,
-    FINAL_XY_TOLERANCE_M,
-)
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
-from ..core.workflow import SO101_WORKFLOW
+from ..core.workflow import SO101_WORKFLOW, TERMINAL_STOP_CODES
 from .contracts import AttemptStatus
 
-
-def _success_trace() -> tuple[str, ...]:
-    trace = [State.IDLE]
-    while trace[-1] not in SO101_WORKFLOW.terminal_states:
-        trace.append(SO101_WORKFLOW.transitions[trace[-1]][0])
-    return tuple(state.value for state in trace)
-
-
-_DONE_TRACE = _success_trace()
+SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
+SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+EXECUTION_STATUSES = frozenset({
+    "COMPLETED", "FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE", "INDETERMINATE",
+})
+FAILED_EXECUTIONS = frozenset({"FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE"})
+TASK_RESULTS = frozenset({"PASS", "FAIL", "UNCONFIRMED"})
+DATA_STATUSES = frozenset({"VALID", "INVALID", "DISABLED", "PENDING_QC"})
+RULE_VERSION = "teacher_endpoint_v2"
+_TASK_FIELDS = frozenset({
+    "rule_version", "policy_sha256", "result", "reasons", "measured", "start_target", "end_target",
+    "start_observation", "end_observation",
+})
 
 
 def _fail(boundary: str) -> None:
     raise ValueError(f"DYNAMIC_MANIFEST_{boundary}")
+
+
+def teacher_attempt_status(execution: str, result: str) -> AttemptStatus:
+    """The attempt status as a function of the Teacher's own two fields, and of nothing else.
+
+    A completed execution is judged by the endpoint result (PASS, FAIL or UNCONFIRMED -> INDETERMINATE). An execution
+    that did not complete is FAILED when the Teacher itself failed, stopped or ran out of time, and INDETERMINATE when
+    its own outcome is unconfirmed. A PASS needs a completed execution. Data QC never enters this function.
+    """
+
+    if execution not in EXECUTION_STATUSES or result not in TASK_RESULTS:
+        raise ValueError("RESULT_TEACHER_FIELDS_INVALID")
+    if execution == "COMPLETED":
+        return {
+            "PASS": AttemptStatus.PASSED, "FAIL": AttemptStatus.FAILED,
+            "UNCONFIRMED": AttemptStatus.INDETERMINATE,
+        }[result]
+    if result == "PASS":
+        raise ValueError("RESULT_TEACHER_FIELDS_INVALID")
+    return AttemptStatus.FAILED if execution in FAILED_EXECUTIONS else AttemptStatus.INDETERMINATE
 
 
 def _finite_number(value: object) -> bool:
@@ -88,6 +106,27 @@ def _scene_is_detached_world(scene: object) -> bool:
     )
 
 
+def _scene_is_attached_cup(scene: object) -> bool:
+    return (
+        type(scene) is dict
+        and scene.get("attached_object_ids") == ["plastic_cup"]
+        and type(scene.get("world_primitive_counts")) is dict
+        and "plastic_cup" not in scene["world_primitive_counts"]
+    )
+
+
+def _terminal_stop_edge(document: Mapping[str, object], current: State, following: State) -> bool:
+    """R9.2: a terminal stop code goes straight from the state it stopped in to ERROR, with no RECOVER_* chain."""
+
+    failure = document.get("failure")
+    return (
+        following is State.ERROR
+        and current is not State.ERROR
+        and isinstance(failure, str)
+        and failure.split(":", 1)[0] in TERMINAL_STOP_CODES
+    )
+
+
 def _trace_contract(document: Mapping[str, object], expected_status: str):
     trace = document.get("state_trace")
     if (
@@ -105,16 +144,18 @@ def _trace_contract(document: Mapping[str, object], expected_status: str):
     for current, following in zip(states, states[1:]):
         if current not in SO101_WORKFLOW.transitions:
             _fail("TRACE")
-        if following not in SO101_WORKFLOW.transitions[current]:
+        if following not in SO101_WORKFLOW.transitions[current] and not _terminal_stop_edge(
+                document, current, following):
             _fail("TRACE")
-    if expected_status == "DONE" and tuple(trace) != _DONE_TRACE:
-        _fail("TRACE")
     failure_boundaries = [
         current
         for current, following in zip(states, states[1:])
         if following == SO101_WORKFLOW.transitions[current][1]
+        or _terminal_stop_edge(document, current, following)
     ]
     if expected_status == "ERROR" and not failure_boundaries:
+        _fail("TRACE")
+    if expected_status == "DONE" and failure_boundaries:
         _fail("TRACE")
     return states, failure_boundaries
 
@@ -141,7 +182,7 @@ def _event_contract(document: Mapping[str, object], states: list[State], boundar
             success, failure = SO101_WORKFLOW.transitions[current]
             if current in SO101_WORKFLOW.action_states and following == success:
                 expected_with_failed.append(current.value)
-            elif boundary is current and following == failure:
+            elif boundary is current and (following == failure or _terminal_stop_edge(document, current, following)):
                 failed_index = len(expected_with_failed)
                 expected_with_failed.append(current.value)
         allowed_failed_record = (
@@ -180,63 +221,91 @@ def _planning_contract(document: Mapping[str, object], states: list[State]) -> N
             _fail("PLANNING")
 
 
-def _upright_tilt(orientation: list[float]) -> float:
-    x, y, _z, w = orientation
-    cosine = max(-1.0, min(1.0, 1.0 - 2.0 * (x * x + y * y)))
-    return math.acos(cosine)
-
-
-def _done_contract(
-    document: Mapping[str, object],
-    reset_epoch: int,
-    events,
-    expected_final_cup_pose_world: object,
-) -> None:
-    if document.get("failure") is not None:
-        _fail("DONE")
-    release = document.get("release_marker_sequence")
-    samples = document.get("final_samples")
-    if type(release) is not int or release <= 0 or type(samples) is not list or len(samples) != 1:
-        _fail("RELEASE_ORDER")
-    final = samples[0]
-    if not _physical_sample(final, reset_epoch):
-        _fail("FINAL_PHYSICAL")
-    if final["publisher_sequence"] <= release:
-        _fail("RELEASE_ORDER")
-    if not _scene_is_detached_world(document.get("planning_scene_readback")):
-        _fail("SCENE")
-    validation = next(
-        (item for item in events if item.get("state") == "VALIDATE_FINAL_PLACEMENT"), None
+def _observation_valid(value: object, reset_epoch: int) -> bool:
+    return (
+        type(value) is dict
+        and _finite_vector(value.get("position"), 3)
+        and type(value.get("orientation")) is dict
+        and set(value["orientation"]) == {"x", "y", "z", "w"}
+        and _unit_quaternion([value["orientation"][key] for key in "xyzw"])
+        and _finite_number(value.get("simulation_time_s"))
+        and value.get("frame_id") == "world"
+        and isinstance(value.get("object_id"), str) and bool(value["object_id"])
+        and isinstance(value.get("session_id"), str) and bool(value["session_id"])
+        and value.get("reset_epoch") == reset_epoch
     )
-    expected = None if validation is None else validation.get("expected_cup_pose_world")
-    if not _finite_vector(expected, 7) or not _unit_quaternion(expected[3:]):
-        _fail("FINAL_PHYSICAL")
+
+
+def _target_valid(value: object) -> bool:
+    return (
+        type(value) is dict
+        and _finite_vector(value.get("position"), 3)
+        and type(value.get("orientation")) is dict
+        and set(value["orientation"]) == {"x", "y", "z", "w"}
+        and _unit_quaternion([value["orientation"][key] for key in "xyzw"])
+    )
+
+
+def _teacher_contract(
+    document: Mapping[str, object], expected_status: str, reset_epoch: int,
+    expected_final_cup_pose_world: object,
+) -> AttemptStatus:
+    """Structural integrity of the v2 Teacher fields, then the Teacher outcome they declare.
+
+    The worker does not re-judge process quality: PASSED needs a COMPLETED execution and an endpoint PASS.
+    """
+
+    execution = document.get("teacher_execution_status")
+    task = document.get("teacher_task_result")
+    if execution not in EXECUTION_STATUSES or type(task) is not dict or not _TASK_FIELDS.issubset(task):
+        _fail("TEACHER_RESULT")
+    result = task["result"]
+    reasons = task["reasons"]
+    if (
+        result not in TASK_RESULTS
+        or task["rule_version"] != RULE_VERSION
+        or type(reasons) is not list
+        or any(not isinstance(reason, str) for reason in reasons)
+        or document.get("act_data_status") not in DATA_STATUSES
+        or type(document.get("process_diagnostics")) is not list
+        or any(type(item) is not dict for item in document["process_diagnostics"])
+        or document.get("teacher_start_observation") != task["start_observation"]
+        or document.get("teacher_end_observation") != task["end_observation"]
+    ):
+        _fail("TEACHER_RESULT")
+    if (execution == "COMPLETED") != (expected_status == "DONE"):
+        _fail("TEACHER_STATUS")
+    if result in {"PASS", "FAIL"}:
+        if (
+            execution != "COMPLETED"
+            or not _observation_valid(task["start_observation"], reset_epoch)
+            or not _observation_valid(task["end_observation"], reset_epoch)
+            or not _target_valid(task["start_target"])
+            or not _target_valid(task["end_target"])
+            or not isinstance(task["policy_sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", task["policy_sha256"]) is None
+        ):
+            _fail("TEACHER_RESULT")
+        if (result == "PASS") != (not reasons):
+            _fail("TEACHER_RESULT")
+    elif execution == "COMPLETED" and not reasons:
+        _fail("TEACHER_RESULT")
     trusted = expected_final_cup_pose_world
-    if trusted is not None:
+    if trusted is not None and result in {"PASS", "FAIL"}:
+        # Only XY and the attitude of the frozen end target are the coordinator's trusted final placement; the
+        # target height is the input cup's resting height and is not part of that trusted pose.
         if not _finite_vector(trusted, 7) or not _unit_quaternion(trusted[3:]):
             _fail("TRUSTED_FINAL_TARGET")
-        position_error = math.dist(expected[:3], trusted[:3])
-        orientation_alignment = abs(sum(
-            left * right for left, right in zip(expected[3:], trusted[3:])
-        ))
-        if position_error > 1e-9 or 1.0 - orientation_alignment > 1e-9:
+        target = task["end_target"]
+        quaternion = [target["orientation"][key] for key in "xyzw"]
+        alignment = abs(sum(left * right for left, right in zip(quaternion, trusted[3:])))
+        if (math.dist(target["position"][:2], trusted[:2]) > 1e-9 or 1.0 - alignment > 1e-9):
             _fail("TRUSTED_FINAL_TARGET")
-        expected = trusted
-    position = final["cup_position_world_m"]
-    linear = final["cup_linear_velocity_world_m_s"]
-    angular = final["cup_angular_velocity_world_rad_s"]
-    orientation = final["cup_orientation_world_xyzw"]
-    if (
-        math.dist(position[:2], expected[:2]) > FINAL_XY_TOLERANCE_M
-        or not FINAL_SUPPORT_HEIGHT_RANGE_M[0] <= position[2] <= FINAL_SUPPORT_HEIGHT_RANGE_M[1]
-        or _upright_tilt(orientation) > FINAL_MAX_UPRIGHT_TILT_RAD
-        or max(abs(value) for value in linear) > FINAL_MAX_LINEAR_SPEED_M_S
-        or max(abs(value) for value in angular) > FINAL_MAX_ANGULAR_SPEED_RAD_S
-        or final["table_contact"] is not True
-        or final["left_contact_count"] != 0
-        or final["right_contact_count"] != 0
-    ):
-        _fail("FINAL_PHYSICAL")
+    if execution == "COMPLETED" and document.get("failure") is not None:
+        _fail("DONE")
+    if execution != "COMPLETED" and result == "PASS":
+        _fail("TEACHER_STATUS")
+    return teacher_attempt_status(execution, result)
 
 
 def _error_contract(
@@ -262,7 +331,13 @@ def _error_contract(
         return
     sample = evidence.get("terminal_sample")
     scene = evidence.get("planning_scene_readback")
-    if not _physical_sample(sample, reset_epoch) or not _scene_is_detached_world(scene):
+    # A terminal stop skips the RECOVER_* chain, so the cup may still be attached to the MoveIt scene.
+    stopped_in_place = any(
+        _terminal_stop_edge(document, State(current), State(following))
+        for current, following in zip(document["state_trace"], document["state_trace"][1:])
+    )
+    if not _physical_sample(sample, reset_epoch) or not (
+            _scene_is_detached_world(scene) or stopped_in_place and _scene_is_attached_cup(scene)):
         _fail("FAILURE_EVIDENCE")
     prior_sequences = [
         value["publisher_sequence"]
@@ -282,7 +357,13 @@ def validate_dynamic_manifest_semantics(
     document: Mapping[str, object], *, expected_status: str, expected_reset_epoch: int,
     expected_final_cup_pose_world: list[float] | None = None,
 ) -> AttemptStatus:
-    """Reject structurally present but physically or procedurally incoherent results."""
+    """Reject structurally incoherent manifests and return the Teacher outcome they declare.
+
+    Only the exact v2 schema carries a Teacher outcome. A v1 manifest is read-only legacy evidence of the old
+    process-quality contract: it is structurally checked and never classified PASSED or FAILED. Any other schema,
+    or none, is rejected. Process-quality observations (contacts, velocities, release order, scene shadow) are
+    audit-only and never decide the outcome.
+    """
 
     if expected_status not in {"DONE", "ERROR"}:
         _fail("STATUS")
@@ -294,19 +375,16 @@ def validate_dynamic_manifest_semantics(
         or expected_reset_epoch < 0
     ):
         _fail("STATUS")
+    schema = document.get("schema")
+    if type(schema) is not str or schema not in {SCHEMA_V1, SCHEMA_V2}:
+        _fail("SCHEMA")
     states, boundaries = _trace_contract(document, expected_status)
     boundary = boundaries[0] if boundaries else None
     events = _event_contract(document, states, boundary)
     _planning_contract(document, states)
-    if expected_status == "DONE":
-        _done_contract(
-            document,
-            expected_reset_epoch,
-            events,
-            expected_final_cup_pose_world,
-        )
-        return AttemptStatus.PASSED
-    _error_contract(document, expected_reset_epoch, events, boundary)
-    if document["failure_evidence"]["physical_action_proven_absent"] is True:
-        return AttemptStatus.FAILED
-    return AttemptStatus.INDETERMINATE
+    if expected_status == "ERROR":
+        _error_contract(document, expected_reset_epoch, events, boundary)
+    if schema == SCHEMA_V1:
+        return AttemptStatus.INDETERMINATE
+    return _teacher_contract(
+        document, expected_status, expected_reset_epoch, expected_final_cup_pose_world)

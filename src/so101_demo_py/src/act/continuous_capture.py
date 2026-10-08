@@ -16,11 +16,15 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 import math
+import copy
+import threading
+from functools import wraps
 import time
 from pathlib import Path
 
 from .acquisition import Acquisition, AcquisitionGuard, pixel_digest
 from .deadline import ACT_TIMEOUT_S
+from .synchronizer import source_age_ok_ns, time_ns
 
 _TOLERANCE_S = 1e-6
 _REFERENCE_SOURCE = "CONTROLLER_REFERENCE"
@@ -31,6 +35,14 @@ _RAW_REFERENCE_FIELDS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns",
 # A.1 moved the evaluation inside each frame, so it is no longer a record-level key and forwarding
 # it would be refused by the audit's closed schema
 _PACKED_REFERENCE_FIELDS = ("frames", "projected_positions", "projection_map")
+
+
+def _serialized(method):
+    @wraps(method)
+    def invoke(self, *args, **kwargs):
+        with self._ingress_lock:
+            return method(self, *args, **kwargs)
+    return invoke
 
 
 @dataclass(frozen=True)
@@ -51,7 +63,7 @@ class ContinuousEpisodeCapture:
                  dt_s: float = 0.1, max_source_age_s: float = 0.1, max_skew_s: float = 0.0,
                  deadline_s: float = ACT_TIMEOUT_S, monotonic=time.monotonic,
                  frame_capacity: int = 8, reference_capacity: int = 128,
-                 pending_capacity: int = 32) -> None:
+                 pending_capacity: int = 32, asynchronous_sources: bool = False) -> None:
         if dt_s != 0.1 or max_source_age_s != 0.1:
             raise ValueError("CAPTURE_GRID_INVALID")
         if isinstance(deadline_s, bool) or not isinstance(deadline_s, (int, float)) \
@@ -65,7 +77,12 @@ class ContinuousEpisodeCapture:
             raise ValueError("CAPTURE_CLOCK_INVALID")
         if type(pending_capacity) is not int or pending_capacity < 1:
             raise ValueError("CAPTURE_GRID_INVALID")
+        if (type(frame_capacity) is not int or frame_capacity < 1
+                or type(reference_capacity) is not int or reference_capacity < 1
+                or type(asynchronous_sources) is not bool):
+            raise ValueError("CAPTURE_GRID_INVALID")
         self.recorder = recorder
+        self._ingress_lock = threading.RLock()
         self.sampler = sampler
         self.physical_audit = physical_audit
         self.audit_writer = audit_writer
@@ -85,7 +102,13 @@ class ContinuousEpisodeCapture:
         self._monotonic = monotonic
         self._pending_capacity = pending_capacity
         self._reference_capacity = reference_capacity
+        self._raw_references = deque()
+        self._reference_ordinal = 0
+        self._asynchronous_sources = asynchronous_sources
+        self._source_wait_started = None
         self._frames: dict = {camera: deque(maxlen=frame_capacity) for camera in _STREAMS}
+        self._acquisition_audit_queue = deque()
+        self._acquisition_audit_capacity = 2 * frame_capacity
         self._references: dict = {}
         self._pending: deque = deque()
         self._completed: list = []
@@ -94,6 +117,7 @@ class ContinuousEpisodeCapture:
         self._attempt_id = None
         self._reset_epoch = None
         self._next_grid_s = None
+        self._next_grid_ns = None
         self._physical_end_s = None
         self._observed_sim_s = None
         self._collection_start_s = None
@@ -101,6 +125,7 @@ class ContinuousEpisodeCapture:
         self._reference_horizon_s = None
         self._last_labelled_target_s = None
         self._stopped_at_s = None
+        self._normal_end_clock = None
         self._deadline_started = None
         self._stopped = False
         self._finished = False
@@ -109,6 +134,7 @@ class ContinuousEpisodeCapture:
 
     # -- lifecycle ---------------------------------------------------------
 
+    @_serialized
     def start(self, session_id, attempt_id, reset_epoch, start_s) -> None:
         if self._session_id is not None:
             raise ValueError("CAPTURE_ALREADY_STARTED")
@@ -123,8 +149,10 @@ class ContinuousEpisodeCapture:
         self._session_id = session_id
         self._attempt_id = attempt_id
         self._reset_epoch = reset_epoch
-        self._next_grid_s = float(start_s)
+        self._next_grid_ns = time_ns(start_s)
+        self._next_grid_s = self._next_grid_ns / 1e9
 
+    @_serialized
     def on_acquisition(self, frame: Acquisition, pixels) -> None:
         self._require_running()
         self._check_deadline()
@@ -142,14 +170,24 @@ class ContinuousEpisodeCapture:
             self._reject(str(error))
         if digest != frame.pixel_sha256:
             self._reject("ACQUISITION_PIXEL_MISMATCH")
+        if len(self._frames[frame.camera]) >= self._frames[frame.camera].maxlen:
+            self._fail("CAPTURE_ACQUISITION_OVERFLOW")
+        if self.audit is not None:
+            if len(self._acquisition_audit_queue) >= self._acquisition_audit_capacity:
+                self._fail("CAPTURE_ACQUISITION_OVERFLOW")
+            # Retain original identities, including frames never selected for a label.
+            # IO remains in the existing drain path, outside the camera callback.
+            self._acquisition_audit_queue.append(frame)
         self._frames[frame.camera].append(frame)
         self._observe(frame.stamp_s)
 
+    @_serialized
     def on_reference(self, message) -> None:
         self._require_running()
         self._check_deadline()
         self._record_reference(message)
 
+    @_serialized
     def on_event(self, event) -> None:
         if self._session_id is None:
             raise ValueError("CAPTURE_NOT_STARTED")
@@ -160,7 +198,21 @@ class ContinuousEpisodeCapture:
             if self._deadline_started is not None:
                 # the motion deadline starts once and is never reset
                 raise ValueError("CAPTURE_DEADLINE_FIXED")
-            self._deadline_started = self._monotonic()
+            now=self._monotonic()
+            original=event.get('source_clock')
+            if original is not None:
+                from .native_endpoints import validate_source_clock
+                try:
+                    validate_source_clock(original)
+                    if (original['end_monotonic_ns']>round(now*1e9)
+                            or round(event['sim_time_s']*1e9)!=original['sim_time_ns']):
+                        raise ValueError('mapping')
+                except (ValueError,KeyError,TypeError) as error:
+                    self._fail('CAPTURE_DISPATCH_CLOCK_INVALID')
+                    raise ValueError('CAPTURE_DISPATCH_CLOCK_INVALID') from error
+                self._deadline_started=original['begin_monotonic_ns']/1e9
+            else:
+                self._deadline_started=now
             if isinstance(event.get("sim_time_s"), (int, float)) \
                     and not isinstance(event.get("sim_time_s"), bool):
                 self._first_command_s = float(event["sim_time_s"])
@@ -186,6 +238,35 @@ class ContinuousEpisodeCapture:
 
     # -- the only IO steps -------------------------------------------------
 
+    @_serialized
+    def on_normal_motion_end(self, source_clock):
+        """Fixed confirmed motion end; original ingress remains open for the endpoint tail.
+
+        The existing owner supplies its independently confirmed normal-stop clock.
+        This is bookkeeping, and grants no command or stopping authority.
+        """
+        self._require_running()
+        self._check_deadline()
+        if self._normal_end_clock is not None:
+            self._fail('CAPTURE_NORMAL_END_FIXED')
+        from .native_endpoints import validate_source_clock
+        try:
+            validate_source_clock(source_clock)
+            if (source_clock['end_monotonic_ns']>round(self._monotonic()*1e9)
+                    or self._first_command_s is None
+                    or source_clock['sim_time_ns']/1e9<self._first_command_s):
+                raise ValueError('mapping')
+        except (ValueError,TypeError,KeyError) as error:
+            self._fail('CAPTURE_NORMAL_END_INVALID')
+            raise ValueError('CAPTURE_NORMAL_END_INVALID') from error
+        when=source_clock['sim_time_ns']/1e9
+        if self._last_labelled_target_s is not None and when<=self._last_labelled_target_s+_TOLERANCE_S:
+            self._fail('CAPTURE_LABEL_REVOKED')
+        self._normal_end_clock=dict(source_clock)
+        self._stopped_at_s=self._physical_end_s=when
+        self._observe(when)
+
+    @_serialized
     def drain(self) -> int:
         self._require_running()
         self._check_deadline()
@@ -193,7 +274,75 @@ class ContinuousEpisodeCapture:
             raise ValueError(self._failure)
         return self._service()
 
-    def finish(self, physical_end_s, *, window=None, outcome=None) -> CaptureSummary:
+    @_serialized
+    def reference_requests(self, through_s):
+        """Expose due unserved row targets without advancing or relabelling any row."""
+        self._require_running()
+        if type(through_s) not in (int, float) or not math.isfinite(through_s) or through_s < 0:
+            raise ValueError("CAPTURE_REFERENCE_CLOCK_INVALID")
+        self._check_deadline()
+        if self._failure is not None:
+            raise ValueError(self._failure)
+        return tuple(row["target_s"] for row in self._pending
+                     if round(row["target_s"] * 1e9) <= round(through_s * 1e9)
+                     and (self._normal_end_clock is None or row['target_s']<self._stopped_at_s-_TOLERANCE_S)
+                     and row["target_s"] not in self._references)
+
+    @_serialized
+    def reject_source(self, reason: str) -> None:
+        """Latch an actual producer refusal so later good input cannot restore collection."""
+        if not isinstance(reason, str) or not reason:
+            raise ValueError("CAPTURE_SOURCE_HAZARD_INVALID")
+        self._reject(reason)
+
+    @_serialized
+    def check_health(self) -> None:
+        if self._failure is not None:
+            raise ValueError(self._failure)
+        self._check_deadline()
+        if hasattr(self.recorder, "check"):
+            self.recorder.check()
+
+    @_serialized
+    def on_source_clock(self, sim_time_s: float) -> None:
+        self._require_running()
+        if type(sim_time_s) not in (int, float) or not math.isfinite(sim_time_s) or sim_time_s < 0:
+            self._fail("CAPTURE_SOURCE_CLOCK_INVALID")
+        self._observe(float(sim_time_s))
+
+    @property
+    def started(self) -> bool:
+        return self._session_id is not None
+
+    @property
+    def active(self) -> bool:
+        return self._session_id is not None and not self._finished and not self._stopped
+
+    @property
+    def ingress_lock(self):
+        return self._ingress_lock
+
+    @_serialized
+    def finish(self, physical_end_s, *, window=None, outcome=None, derive_window=False) -> CaptureSummary:
+        failure = None
+        try:
+            return self._finish(physical_end_s, window=window, outcome=outcome,
+                                derive_window=derive_window)
+        except BaseException as error:
+            failure = error
+            raise
+        finally:
+            if hasattr(self.recorder, "close"):
+                try:
+                    self.recorder.close()
+                except Exception as error:
+                    if failure is None:
+                        raise
+                    failure.add_note("Owned Recorder close also failed: " + str(error))
+
+    def _finish(self, physical_end_s, *, window=None, outcome=None, derive_window=False) -> CaptureSummary:
+        if type(derive_window) is not bool or (derive_window and (window is not None or self.audit is None)):
+            raise ValueError("CAPTURE_WINDOW_INVALID")
         if self._session_id is None:
             raise ValueError("CAPTURE_NOT_STARTED")
         if self._finished:
@@ -201,6 +350,8 @@ class ContinuousEpisodeCapture:
         if isinstance(physical_end_s, bool) or not isinstance(physical_end_s, (int, float)) \
                 or not math.isfinite(physical_end_s):
             raise ValueError("CAPTURE_IDENTITY_INVALID")
+        if self._normal_end_clock is not None and round(physical_end_s*1e9)!=self._normal_end_clock['sim_time_ns']:
+            self._fail('CAPTURE_NORMAL_END_CHANGED')
         if self._failure is not None:
             # a latched failure is never turned into a normal-looking summary
             raise ValueError(self._failure)
@@ -213,9 +364,16 @@ class ContinuousEpisodeCapture:
         # the tail is handed off before finalization is declared, so a refusing writer leaves the
         # capture retryable and reported with its own reason instead of finished
         paths = tuple(self._tail_paths())
+        if derive_window:
+            window = self.audit.observed_collection_window(self.window, cadence_s=self.dt_s)
         # a v2 episode binds its raw audit and the scope it was collected under, so when those are supplied the
         # audit is sealed here and the recorder is finished with both - and when they are not, nothing changes
         if self.audit is not None and window is not None:
+            if hasattr(self.recorder, "flush"):
+                self.recorder.flush()
+                self.recorder.close()
+                self.recorder.check()
+                self.audit.append_recorder_queue(self.recorder.snapshot(), sim_time_s=float(physical_end_s))
             audit_manifest = self.audit.seal(window)
             if self.recorder is not None and self.scope is not None and outcome is not None:
                 self.recorder.finish(outcome, audit_manifest=audit_manifest, scope=self.scope)
@@ -286,7 +444,7 @@ class ContinuousEpisodeCapture:
             self._observed_sim_s = float(sim_time_s)
 
     def _check_deadline(self) -> None:
-        if self._deadline_started is None:
+        if self._deadline_started is None or self._normal_end_clock is not None:
             return
         if self._monotonic() - self._deadline_started > self.deadline_s:
             self._fail("CAPTURE_DEADLINE_EXCEEDED")
@@ -301,7 +459,7 @@ class ContinuousEpisodeCapture:
         if not isinstance(message, dict) or message.get("source") != _REFERENCE_SOURCE:
             self._reject("CAPTURE_REFERENCE_INVALID")
         at_s = message.get("requested_sim_time_s")
-        if isinstance(at_s, bool) or not isinstance(at_s, (int, float)) or not math.isfinite(at_s):
+        if isinstance(at_s, bool) or not isinstance(at_s, (int, float)) or not math.isfinite(at_s) or at_s < 0:
             self._reject("CAPTURE_REFERENCE_INVALID")
         positions = message.get("positions")
         if not isinstance(positions, (list, tuple)) or len(positions) != 6:
@@ -312,7 +470,7 @@ class ContinuousEpisodeCapture:
             self._reject("CAPTURE_REFERENCE_INVALID")
         if any(not math.isfinite(value) for value in values):
             self._reject("CAPTURE_REFERENCE_INVALID")
-        key = round(float(at_s), 6)
+        key = time_ns(at_s) / 1e9
         accepted = message.get("accepted") is True
         if self.audit is not None:
             # every message is kept, acceptance and revocation alike, so the audit holds the raw
@@ -320,13 +478,13 @@ class ContinuousEpisodeCapture:
             # is terminal like every other dependency
             raw = {name: message[name] for name in (*_RAW_REFERENCE_FIELDS,
                                                      *_PACKED_REFERENCE_FIELDS) if name in message}
-            try:
-                self.audit.append_source("references", {"reference_time_s": key,
-                                                        "source": _REFERENCE_SOURCE,
-                                                        "positions": values, "accepted": accepted,
-                                                        **raw})
-            except Exception as error:  # noqa: BLE001
-                self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
+            if len(self._raw_references) >= self._reference_capacity:
+                self._fail("CAPTURE_REFERENCE_OVERFLOW")
+            self._raw_references.append(copy.deepcopy({"reference_time_s": key,
+                "source": _REFERENCE_SOURCE, "positions": values, "accepted": accepted, **raw}))
+        # The reference sequence names the raw stream ordinal, including repeated and revoked
+        # publications. It is never derived from the number of distinct action instants.
+        self._reference_ordinal += 1
         if (not accepted and self._last_labelled_target_s is not None
                 and key <= self._last_labelled_target_s + _TOLERANCE_S):
             # a trajectory revoked after its instant was labelled voids that label: an irreversible
@@ -340,56 +498,119 @@ class ContinuousEpisodeCapture:
         elif existing is None:
             if len(self._references) >= self._reference_capacity:
                 self._fail("CAPTURE_REFERENCE_OVERFLOW")
-            self._reference_ordinal = getattr(self, "_reference_ordinal", 0) + 1
             self._references[key] = {"sequence": self._reference_ordinal, "positions": values,
                                      "accepted": accepted, "revoked": not accepted}
         self._reference_horizon_s = max(self._reference_horizon_s or 0.0, key)
 
     def _causal(self, camera: str, at_s: float):
+        at_ns = time_ns(at_s)
         for frame in reversed(self._frames[camera]):
-            if frame.stamp_s > at_s + _TOLERANCE_S:
+            stamp_ns = time_ns(frame.stamp_s)
+            if stamp_ns > at_ns:
                 continue
-            if at_s - frame.stamp_s > self.max_source_age_s + _TOLERANCE_S:
+            if not source_age_ok_ns(at_ns, stamp_ns, time_ns(self.max_source_age_s)):
                 return None
             return frame
         return None
 
     def _service(self) -> int:
+        while self._acquisition_audit_queue:
+            try:
+                self.audit.append_acquisition(self._acquisition_audit_queue[0])
+            except Exception as error:  # noqa: BLE001
+                self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
+            self._acquisition_audit_queue.popleft()
+        while self._raw_references:
+            try:
+                self.audit.append_source("references", self._raw_references[0])
+            except Exception as error:  # noqa: BLE001
+                self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
+            self._raw_references.popleft()
         self._mint_rows()
         return self._service_pending()
 
     def _mint_rows(self) -> None:
         while True:
-            at_s = round(self._next_grid_s, 6)
+            at_s = self._next_grid_ns / 1e9
             if self._physical_end_s is not None and at_s > self._physical_end_s + _TOLERANCE_S:
                 break
             head = self._causal("head", at_s)
             wrist = self._causal("wrist", at_s)
             if head is None or wrist is None:
+                if self._asynchronous_sources and self._physical_end_s is None:
+                    if self._observed_sim_s is None or self._observed_sim_s < at_s - _TOLERANCE_S:
+                        break  # No actual source has established eligibility for this next slot.
+                    # Ordered camera delivery can still supply the original missing partner.
+                    # Once that camera has advanced beyond this grid instant, no future callback
+                    # can supply a causal frame. Otherwise retain this exact grid slot for <=.1s.
+                    missing = (camera for camera, frame in (("head", head), ("wrist", wrist))
+                               if frame is None)
+                    if any(self._frames[camera]
+                           and self._frames[camera][-1].stamp_s > at_s + _TOLERANCE_S
+                           for camera in missing):
+                        self._fail("NO_NEW_ACQUISITION")
+                    if self._source_wait_started is None:
+                        self._source_wait_started = self._monotonic()
+                    if self._monotonic() - self._source_wait_started > self.max_source_age_s:
+                        self._fail("NO_NEW_ACQUISITION")
+                    break
                 if not self._frames["head"] and not self._frames["wrist"]:
                     # both sources have run dry: a genuine terminal tail
                     break
                 # a source still holds frames but cannot serve this instant with a new acquisition,
                 # so the 10 Hz grid would have a hole before the label cutoff
                 self._fail("NO_NEW_ACQUISITION")
+            if self._asynchronous_sources and not self._sources_ready(at_s):
+                if self._awaiting_arrival(at_s):
+                    # A source is still IN FLIGHT (CP-3410: a late physics chunk is no failure). Its arrival is bounded by the
+                    # receiver-lag policy of the adapter that owns it, not by this wall-clock wait.
+                    self._source_wait_started = None
+                    break
+                if self._source_wait_started is None:
+                    self._source_wait_started = self._monotonic()
+                if (self._physical_end_s is not None
+                        or self._monotonic() - self._source_wait_started > self.max_source_age_s):
+                    self._fail("INPUT_STALE")
+                break
+            self._source_wait_started = None
             self._mint(at_s, head, wrist)
             self._frames["head"].remove(head)
             self._frames["wrist"].remove(wrist)
-            self._next_grid_s = at_s + self.dt_s
+            self._next_grid_ns += time_ns(self.dt_s)
+            self._next_grid_s = self._next_grid_ns / 1e9
+
+    def _awaiting_arrival(self, at_s) -> bool:
+        hook = getattr(self.physical_audit, "awaiting_arrival", None)
+        if hook is None:
+            return False
+        try:
+            return hook(at_s) is True
+        except Exception:  # noqa: BLE001 - a hook that fails is "not in flight": the ordinary wait applies
+            return False
+
+    def _sources_ready(self, at_s):
+        for source in (self.sampler, self.physical_audit):
+            ready = getattr(source, "ready", None)
+            if ready is None:
+                continue
+            try:
+                available = ready(at_s)
+                if type(available) is not bool:
+                    raise ValueError("CAPTURE_SOURCE_READINESS_INVALID")
+            except Exception as error:
+                self._reject(self._reason(error, "CAPTURE_PHYSICAL_AUDIT_INVALID"))
+            if not available:
+                return False
+        return True
 
     def _mint(self, at_s: float, head: Acquisition, wrist: Acquisition) -> None:
-        if self.audit is not None:
-            # the audit's acquisition stream is written from the frames themselves, and this is the layer that holds
-            # them: the row callback only ever sees the observation and the audit (CP-2745)
-            self.audit.append_acquisition(head)
-            self.audit.append_acquisition(wrist)
         try:
             self.guard.accept(head)
             self.guard.accept(wrist)
         except ValueError as error:
             # the guard's own refusal (reuse, regression) is terminal for the capture too
             self._reject(str(error))
-        if abs(head.stamp_s - wrist.stamp_s) > self.max_skew_s + _TOLERANCE_S:
+        if abs(time_ns(head.stamp_s) - time_ns(wrist.stamp_s)) > time_ns(self.max_skew_s):
             self._fail("CAPTURE_SOURCE_SKEW")
         try:
             observation, source_audit = self.sampler.sample_with_audit(
@@ -418,10 +639,13 @@ class ContinuousEpisodeCapture:
             self._reject(self._reason(error, "CAPTURE_PHYSICAL_AUDIT_INVALID"))
         audit = dict(physical)
         audit.update(source_audit)
+        # The recorder's closed audit set names the episode it belongs to; the physical half and the sampler do not supply
+        # it, the capture owns it (CP-3407: without these two keys the first live row was refused with EPISODE_AUDIT_SCHEMA).
         audit.update({"head_acquisition_id": head.acquisition_id,
-                      "wrist_acquisition_id": wrist.acquisition_id})
+                      "wrist_acquisition_id": wrist.acquisition_id,
+                      "session_id": self._session_id, "attempt_id": self._attempt_id})
         self._pending.append({"observation": observation, "audit": audit,
-                              "acquisitions": (head, wrist), "target_s": round(at_s + self.dt_s, 6),
+                              "acquisitions": (head, wrist), "target_s": (time_ns(at_s) + time_ns(self.dt_s)) / 1e9,
                               "labelled": False, "reference": None})
 
     def _reference_state(self, row) -> str:
@@ -474,9 +698,12 @@ class ContinuousEpisodeCapture:
                 # the seal requires every recorded row to be bound to the acquisitions it consumed, and that binding
                 # goes to the episode's audit writer directly - `audit_writer` stays the tail's callback for the
                 # evidence that never became a row (CP-2757/CP-2793)
-                self.audit.bind_row(index, row["observation"]["sim_time_s"],
-                                    audit["head_acquisition_id"], audit["wrist_acquisition_id"],
-                                    entry["sequence"])
+                try:
+                    self.audit.bind_row(index, row["observation"]["sim_time_s"],
+                                        audit["head_acquisition_id"], audit["wrist_acquisition_id"],
+                                        entry["sequence"])
+                except Exception as error:  # noqa: BLE001
+                    self._reject(self._reason(error, "CAPTURE_AUDIT_WRITE_FAILED"))
             self._last_labelled_target_s = row["target_s"]
             written += 1
         if self._pending:

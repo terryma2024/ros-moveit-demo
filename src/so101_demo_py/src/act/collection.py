@@ -1,23 +1,6 @@
-"""Closed ACT workload port for the existing fixed ParallelWorker lifecycle."""
+"""ACT collection eligibility rules and payload keys."""
 
 from __future__ import annotations
-
-
-class ActCollectionWorkload:
-    """Delegate one authorized scenario while retaining Worker lease boundaries."""
-
-    kind = "act_collection"
-
-    def run_authorized(self, lease, *, runtime, broker, boundary,
-                       start_event_id, start_event_type, reset_epoch):
-        collect = getattr(runtime, "collect_authorized_scenario", None)
-        if not callable(collect):
-            raise RuntimeError("ACT_COLLECTION_RUNTIME_UNAVAILABLE")
-        return boundary(lambda current: collect(
-            current, broker=broker, boundary=boundary,
-            start_event_id=start_event_id, start_event_type=start_event_type,
-            reset_epoch=reset_epoch,
-        ))
 
 
 # the collection modes whose episodes may enter the training manifest. The preselected-target
@@ -47,81 +30,6 @@ def training_eligible(record: dict) -> bool:
     return (record.get("status") == "PASSED" and record.get("qc") == "PASS"
             and record.get("done") is True and record.get("interventions") == 0
             and record.get("coordinator_committed") is True)
-
-
-SCENARIO_KEYS = frozenset({"scene_id", "split", "xy", "arm_q", "search_start_rad", "seed",
-                           "config_sha256"})
-
-# the plan's collection order: search through QC. The second half is deliberately not given a reset
-# port, so a mid-scenario reset is impossible by construction rather than by a runtime check.
-COLLECTION_PHASES = ("SEARCH", "LOCK", "STABLE", "RECORD", "TEACHER_INFERENCE", "EXPERT", "RELEASE",
-                     "RETREAT", "FINAL_CHECK", "QC")
-
-
-def prepare_scenario(scenario: dict, *, reset_port, joints_port, ledger=None,
-                     attempt_id=None) -> dict:
-    """One reset, a seven-joint readback and a readiness proof, for a frozen scenario.
-
-    The caller passes the result to `collect_authorized_scenario`; nothing else may reset.
-    """
-
-    if not isinstance(scenario, dict) or set(scenario) != SCENARIO_KEYS:
-        raise ValueError("SCENARIO_INVALID")
-    if ledger is not None:
-        if ledger.terminal(scenario["scene_id"]) is not None:
-            raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
-        # noted BEFORE the port is asked, so a retry after a failed reset is refused too
-        ledger.note_reset(attempt_id if attempt_id is not None else scenario["scene_id"])
-    reset = reset_port.reset(scenario)
-    if (not isinstance(reset, dict) or type(reset.get("reset_epoch")) is not int
-            or reset["reset_epoch"] < 1 or reset.get("ready") is not True
-            or not isinstance(reset.get("proof"), dict) or not reset["proof"]):
-        raise ValueError("SCENARIO_RESET_UNPROVED")
-    joints = joints_port.read()
-    if (not isinstance(joints, (list, tuple)) or len(joints) != 7
-            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in joints)):
-        raise ValueError("SEVEN_JOINT_READBACK_INVALID")
-    return {"scene_id": scenario["scene_id"], "split": scenario["split"],
-            "reset_epoch": reset["reset_epoch"], "joints": [float(value) for value in joints],
-            "proof": dict(reset["proof"]),
-            "scene_sha256": reset.get("scene_sha256")}
-
-
-def collect_authorized_scenario(prepared: dict, scenario: dict, *, phase_port, recorder,
-                                qc_port, ledger=None) -> dict:
-    """Search through QC for an already-prepared scenario, with no second reset.
-
-    A business failure is sealed as an immutable FAILED record; an infrastructure fault (recorder or
-    persistence) is raised instead, because it must not be sealed as a business outcome.
-    """
-
-    if (not isinstance(prepared, dict) or prepared.get("scene_id") != scenario.get("scene_id")
-            or prepared.get("split") != scenario.get("split")):
-        raise ValueError("SCENARIO_NOT_PREPARED")
-    if ledger is not None and ledger.terminal(scenario["scene_id"]) is not None:
-        raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
-    observed = []
-    for phase in COLLECTION_PHASES:
-        if phase == "QC":
-            break
-        evidence = phase_port.run(phase, dict(prepared))
-        if not isinstance(evidence, dict) or evidence.get("phase") != phase:
-            raise ValueError("COLLECTION_PHASE_EVIDENCE_INVALID")
-        if evidence.get("infra_fault"):
-            raise RuntimeError("COLLECTION_INFRA_FAULT")
-        observed.append(phase)
-        recorder.append({"scene_id": scenario["scene_id"], "phase": phase,
-                         "reset_epoch": prepared["reset_epoch"], "evidence": evidence})
-    verdict = qc_port.verdict(dict(prepared), tuple(observed))
-    if verdict not in ("PASS", "FAIL"):
-        raise ValueError("QC_VERDICT_INVALID")
-    record = {"scene_id": scenario["scene_id"], "split": scenario["split"],
-              "status": "PASSED" if verdict == "PASS" else "FAILED", "qc": verdict,
-              "done": True, "interventions": 0, "coordinator_committed": True,
-              "reset_epoch": prepared["reset_epoch"], "phases": list(observed)}
-    if ledger is not None:
-        ledger.seal(scenario["scene_id"], record)
-    return record
 
 
 COLLECTION_PAYLOAD_KEYS = frozenset({
@@ -204,28 +112,3 @@ def require_collection_selection(manifest: dict, *, qualification_mode: bool) ->
     if not selected:
         raise ValueError("COLLECTION_SELECTION_EMPTY")
     return selected
-
-
-class AttemptLedger:
-    """One reset per attempt, and a terminal scene result nothing may overwrite.
-
-    The ledger is bookkeeping the caller owns across a run: it is what turns "the plan says a scenario
-    resets once" into something a second caller cannot violate.
-    """
-
-    def __init__(self) -> None:
-        self._resets: dict = {}
-        self._terminal: dict = {}
-
-    def note_reset(self, attempt_id: str) -> None:
-        if attempt_id in self._resets:
-            raise ValueError("SCENARIO_RESET_ALREADY_PERFORMED")
-        self._resets[attempt_id] = True
-
-    def seal(self, scene_id: str, record: dict) -> None:
-        if scene_id in self._terminal:
-            raise ValueError("SCENE_TERMINAL_STATE_IMMUTABLE")
-        self._terminal[scene_id] = dict(record)
-
-    def terminal(self, scene_id: str):
-        return self._terminal.get(scene_id)

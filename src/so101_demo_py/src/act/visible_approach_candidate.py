@@ -13,6 +13,7 @@ from so101_demo.act.visible_approach_diagnostic import (
     build_route_manifest, require_route_sources,
 )
 from so101_demo.adapters.act.physics import MujocoPathChecker
+from so101_demo.adapters.act.phase_contact_allowlist import stationary_cup_support_pairs
 
 
 _PROFILE_KEYS = frozenset({
@@ -94,7 +95,8 @@ def require_candidate_profile(profile: dict, source_route: dict) -> list[dict]:
         path_step_s=.002, path_clearance_m=.002,
         velocity_limit_rad_s=[.25] * 6,
         acceleration_limit_rad_s2=[1.2] * 6,
-        allowed_pairs_by_phase={},
+        allowed_pairs_by_phase={"APPROACH": stationary_cup_support_pairs(
+            mujoco.MjModel.from_xml_path(source_route["scene_path"]))},
     )
     if checker.model_sha256 != source_route["model_sha256"]:
         raise ValueError("APPROACH_CANDIDATE_MODEL_INVALID")

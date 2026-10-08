@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
-from .domain import ActionStatus, State
+from .domain import ActionStatus, Failure, State
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +126,37 @@ def _validate(definition: WorkflowDefinition) -> None:
 _validate(SO101_WORKFLOW)
 
 
-def resolve_transition(state: State, outcome: ActionStatus) -> State:
-    """Return the success destination only for an explicit success outcome."""
+# A failure with one of these codes is a protective stop, a deadline, a user stop or a cancel that never settled. It
+# ends the run: the failure destination is ERROR and no recovery goal (lift, move, open the gripper) is ever sent.
+# Only the other failures (a controller reject or abort, planning, scene) may take the original RECOVER_* route.
+TERMINAL_STOP_CODES = frozenset({
+    "DYNAMIC_FORCE_LIMIT_EXCEEDED",
+    "DYNAMIC_CUP_FORCE_EXCEEDED",
+    "DYNAMIC_CUP_COMPRESSION_EXCEEDED",
+    "DYNAMIC_COLLISION_STOP",
+    "DYNAMIC_PHYSICS_HAZARD",
+    "DYNAMIC_STATE_UNAVAILABLE_STOP",
+    "DYNAMIC_SESSION_MISMATCH",
+    "DYNAMIC_RESET_EPOCH_MISMATCH",
+    "DYNAMIC_RELEASE_SUPPORT_NOT_PROVED",
+    "TEACHER_DEADLINE",
+    "TEACHER_USER_STOP",
+    "TEACHER_PARENT_DIED",
+    "TEACHER_CANCEL_UNSETTLED",
+})
+
+
+def resolve_transition(
+    state: State, outcome: ActionStatus, failure: Failure | None = None
+) -> State:
+    """Return the success destination only for an explicit success outcome.
+
+    A terminal stop failure (`TERMINAL_STOP_CODES`) goes straight to ERROR from any state.
+    """
+    if (
+        outcome is not ActionStatus.SUCCEEDED
+        and failure is not None
+        and failure.code in TERMINAL_STOP_CODES
+    ):
+        return State.ERROR
     return SO101_WORKFLOW.transitions[state][outcome is not ActionStatus.SUCCEEDED]

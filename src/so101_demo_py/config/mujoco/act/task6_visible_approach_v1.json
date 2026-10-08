@@ -14,8 +14,8 @@
     0.0
   ],
   "kind": "TASK6_VISIBLE_APPROACH_DIAGNOSTIC_PROFILE",
-  "model_sha256": "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78",
-  "scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
+  "model_sha256": "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114",
+  "scene_sha256": "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb",
   "schema_version": 1,
   "source_route_sha256": "f3f4d678791992cf219366f8689023d6aa7df67f77ba872545a88b0069ff8f53",
   "visual_detour": {

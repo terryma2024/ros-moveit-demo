@@ -63,10 +63,10 @@ def _vector(value: Any, length: int, name: str) -> list[float]:
     return [_finite(item, name) for item in value]
 
 
-def chunk_from_ros(
-    message: Any, *, cup_qpos_address: int, cup_qvel_address: int,
+def step_from_ros(
+    sample: Any, *, cup_qpos_address: int, cup_qvel_address: int,
 ) -> dict:
-    """Convert the actual 500 Hz ROS message without inventing per-step state."""
+    """Project one original sample; do not construct a replacement chunk."""
 
     def contacts(items: Any, category: str) -> list[dict]:
         converted = []
@@ -96,45 +96,57 @@ def chunk_from_ros(
     try:
         _integer(cup_qpos_address, "cup_qpos_address")
         _integer(cup_qvel_address, "cup_qvel_address")
-        samples = []
-        for sample in message.samples:
-            qpos = [_finite(value, "model_qpos") for value in sample.model_qpos]
-            qvel = [_finite(value, "model_qvel") for value in sample.model_qvel]
-            cup = qpos[cup_qpos_address:cup_qpos_address + 3]
-            velocity = qvel[cup_qvel_address:cup_qvel_address + 3]
-            if len(cup) != 3 or len(velocity) != 3:
-                raise ValueError("live MuJoCo state is incomplete")
-            pose = sample.object_pose_world.position
-            if any(abs(a - _finite(getattr(pose, axis), axis)) > 1e-8
-                   for a, axis in zip(cup, ("x", "y", "z"), strict=True)):
-                raise ValueError("live object pose disagrees with MuJoCo state")
-            grouped = {
-                "left_contacts": contacts(sample.left_fingertip_contacts, "left_contacts"),
-                "right_contacts": contacts(sample.right_fingertip_contacts, "right_contacts"),
-                "other_contacts": contacts(sample.other_object_contacts, "other_contacts"),
-            }
-            maximum = max((item["normal_force_n"] for group in grouped.values()
-                           for item in group), default=0.0)
-            total = sum(item["normal_force_n"] for group in grouped.values()
-                        for item in group)
-            if (abs(maximum - _finite(sample.maximum_normal_force_n,
-                                     "maximum_normal_force_n", 0)) > 1e-8
-                    or abs(maximum - _finite(sample.global_max_single_contact_force_n,
-                                             "global_max_single_contact_force_n", 0)) > 1e-8
-                    or abs(total - _finite(sample.total_normal_force_n,
-                                           "total_normal_force_n", 0)) > 1e-8):
-                raise ValueError("live reported force disagrees with contacts")
-            samples.append({
-                "simulation_session_id": sample.simulation_session_id,
-                "reset_epoch": sample.reset_epoch,
-                "physics_step": sample.physics_step,
-                "simulation_time_s": sample.simulation_time_s,
-                "model_qpos": qpos, "model_qvel": qvel,
-                "cup_position_m": cup, "cup_velocity_m_s": velocity,
-                **grouped,
-                "truncated": sample.truncated,
-                "diagnostic_hazard_breached": sample.diagnostic_hazard_breached,
-            })
+        qpos = [_finite(value, "model_qpos") for value in sample.model_qpos]
+        qvel = [_finite(value, "model_qvel") for value in sample.model_qvel]
+        cup = qpos[cup_qpos_address:cup_qpos_address + 3]
+        velocity = qvel[cup_qvel_address:cup_qvel_address + 3]
+        if len(cup) != 3 or len(velocity) != 3:
+            raise ValueError("live MuJoCo state is incomplete")
+        pose = sample.object_pose_world.position
+        if any(abs(a - _finite(getattr(pose, axis), axis)) > 1e-8
+               for a, axis in zip(cup, ("x", "y", "z"), strict=True)):
+            raise ValueError("live object pose disagrees with MuJoCo state")
+        grouped = {
+            "left_contacts": contacts(sample.left_fingertip_contacts, "left_contacts"),
+            "right_contacts": contacts(sample.right_fingertip_contacts, "right_contacts"),
+            "other_contacts": contacts(sample.other_object_contacts, "other_contacts"),
+        }
+        maximum = max((item["normal_force_n"] for group in grouped.values()
+                       for item in group), default=0.0)
+        total = sum(item["normal_force_n"] for group in grouped.values()
+                    for item in group)
+        if (abs(maximum - _finite(sample.maximum_normal_force_n,
+                                 "maximum_normal_force_n", 0)) > 1e-8
+                or abs(maximum - _finite(sample.global_max_single_contact_force_n,
+                                         "global_max_single_contact_force_n", 0)) > 1e-8
+                or abs(total - _finite(sample.total_normal_force_n,
+                                       "total_normal_force_n", 0)) > 1e-8):
+            raise ValueError("live reported force disagrees with contacts")
+        return {
+            "simulation_session_id": sample.simulation_session_id,
+            "reset_epoch": sample.reset_epoch,
+            "physics_step": sample.physics_step,
+            "simulation_time_s": sample.simulation_time_s,
+            "model_qpos": qpos, "model_qvel": qvel,
+            "cup_position_m": cup, "cup_velocity_m_s": velocity,
+            **grouped,
+            "truncated": sample.truncated,
+            "diagnostic_hazard_breached": sample.diagnostic_hazard_breached,
+        }
+    except (AttributeError, IndexError, TypeError) as error:
+        raise ValueError("live ROS physics message is incomplete") from error
+
+
+def chunk_from_ros(
+    message: Any, *, cup_qpos_address: int, cup_qvel_address: int,
+) -> dict:
+    """Convert the actual 500 Hz ROS message without inventing per-step state."""
+    try:
+        _integer(cup_qpos_address, "cup_qpos_address")
+        _integer(cup_qvel_address, "cup_qvel_address")
+        samples = [step_from_ros(sample, cup_qpos_address=cup_qpos_address,
+                                 cup_qvel_address=cup_qvel_address)
+                   for sample in message.samples]
         return {
             "chunk_sequence": message.chunk_sequence,
             "simulation_session_id": message.simulation_session_id,

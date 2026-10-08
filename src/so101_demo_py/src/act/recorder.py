@@ -13,6 +13,7 @@ import tempfile
 import zlib
 
 from .contracts import finite, identifier, integer, sha256, validate_action, validate_observation, vector
+from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns, time_ns
 
 
 class RecorderInfraError(RuntimeError):
@@ -173,15 +174,28 @@ class EpisodeRecorder:
         stamps = audit["source_stamps"]
         if not isinstance(stamps, dict) or set(stamps) != {"head", "wrist", "arm", "neck"}:
             raise ValueError("EPISODE_SOURCE_STAMPS_INVALID")
-        if any(not 0 <= t - finite(stamp, nonnegative=True) <= self.max_source_age_s
+        if any(not source_age_ok_ns(time_ns(t), time_ns(stamp), time_ns(self.max_source_age_s))
                for stamp in stamps.values()):
             raise ValueError("EPISODE_SOURCE_STALE")
         physical = audit["physical_stamps"]
         if not isinstance(physical, dict) or set(physical) != {"cup", "contacts", "planning_scene"}:
             raise ValueError("EPISODE_PHYSICAL_STAMPS_INVALID")
-        if any(not 0 <= t - finite(stamp, nonnegative=True) <= self.max_source_age_s
-               for stamp in physical.values()):
+        scene = audit["planning_scene"]
+        bracket = scene.get("bracket") if isinstance(scene, dict) else None
+        record = scene.get("record") if isinstance(scene, dict) else None
+        if (isinstance(record, dict) and record.get("service") == "/apply_planning_scene" and bracket is None):
+            # CP-3449: an apply is a scene source only together with the read that follows it
             raise ValueError("EPISODE_SOURCE_STALE")
+        for name, stamp in physical.items():
+            if name == "planning_scene" and bracket is not None:
+                # CP-3440 B: a read older than the age rule is admitted only with the next read it was bracketed by
+                if (not isinstance(bracket, dict) or set(bracket) != {"next_query_id", "next_record"}
+                        or not isinstance(bracket["next_record"], dict)
+                        or not bracketed_age_ok_ns(time_ns(t), time_ns(stamp),
+                                                   bracket["next_record"]["response_ros_clock"]["sim_time_ns"])):
+                    raise ValueError("EPISODE_SOURCE_STALE")
+            elif not source_age_ok_ns(time_ns(t), time_ns(stamp), time_ns(self.max_source_age_s)):
+                raise ValueError("EPISODE_SOURCE_STALE")
         if audit["release_event"]:
             release_time = finite(audit["release_time_s"], nonnegative=True)
             if (not self._times or not self._times[-1] < release_time <= t

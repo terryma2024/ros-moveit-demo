@@ -1,5 +1,7 @@
 # SO-101 ACT Task 8 MuJoCo measurement protocol implementation plan
 
+> **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the production MuJoCo measurement driver and deterministic measurement protocol required to create a genuine `TASK8_READY`, then rerun Task 8L from a new generation root and make Task 8P4 capable of producing a genuine 33-field `QUALIFIED` report.

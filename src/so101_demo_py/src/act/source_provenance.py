@@ -26,9 +26,6 @@ _ROLE_SPECS = (
     # (role, kind, source_rel, install_rel, overlay): `overlay` names the install root that OWNS the artefact, so
     # the provenance describes what the runtime actually loads. A `dependency` role is produced by its own package
     # in the dependency overlay and keeps that package's own lib directory; nothing is relocated between packages.
-    ("command_broker", "verbatim_install",
-     "src/so101_demo_py/src/adapters/act/command_broker.py",
-     "so101_demo_py/lib/python3.12/site-packages/so101_demo/adapters/act/command_broker.py", "worktree"),
     ("task8_runner", "verbatim_install",
      "src/so101_demo_py/src/act/task8.py",
      "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/task8.py", "worktree"),
@@ -44,9 +41,6 @@ _ROLE_SPECS = (
     ("simulation_evidence_plugin", "compiled",
      "src/so101_mujoco_support/src/simulation_evidence_plugin.cpp",
      "so101_mujoco_support/lib/libso101_simulation_evidence_plugin.so", "worktree"),
-    ("broker_owned_controller_plugin", "compiled",
-     "src/so101_mujoco_support/src/broker_owned_trajectory_controller.cpp",
-     "so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so", "worktree"),
     # the vendored plugin is built by its OWN package (third_party/mujoco_ros2_control/mujoco_ros2_control,
     # `add_library(mujoco_ros2_control SHARED ...)`), installed into that package's lib directory in the
     # dependency overlay, and loaded from there at runtime

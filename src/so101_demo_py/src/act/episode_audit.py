@@ -25,6 +25,13 @@ from pathlib import Path
 from .acquisition import CAMERAS, canonical_acquisition_id
 from ..parallel_batch.contracts import ContractError, LeaseIdentity
 
+
+def _reference_target_s(sim_time_s):
+    """The instant a row's label belongs to: stamp + 0.1 s, summed in the sources' own nanoseconds (the capture mints its target the
+    same way). A stamp one nanosecond off the microsecond grid is a legal camera stamp; rounding the target to microseconds named a
+    different instant than the reference the capture had accepted."""
+    return (round(sim_time_s * 1_000_000_000) + round(_GRID_S * 1_000_000_000)) / 1_000_000_000
+
 MANIFEST_KIND = "ACT_EPISODE_AUDIT"
 _METADATA_FILES = ("source.json", "inputs.json", "episode.json")
 # the ratified collection-window contract (Proposal B): every field, with per-outcome ordering
@@ -91,13 +98,21 @@ _EVENT_PAYLOADS = {
     "contact": frozenset({"left_contacts", "right_contacts", "table_contact"}),
     "release": frozenset({"release_epoch", "supported", "no_fingertip_contact"}),
     "final_check": frozenset({"placement_stable", "retreat_stable"}),
-    # K2's record kinds (the passed protocol table, section 3): the key sets its five record types declare
-    "k2_apply": frozenset({"apply_event_id", "applied_at_s", "accepted"}),
-    "k2_query": frozenset({"query_id", "query_at_s", "request_bytes", "response_bytes"}),
-    "k2_receipt": frozenset({"receipt_id", "received_at_s", "clock_source", "uncertainty_s"}),
+    # source alignment's record kinds (the passed protocol table, section 3): the key sets its five record types declare
+    "alignment_apply": frozenset({"apply_event_id", "applied_at_s", "accepted"}),
+    "alignment_query": frozenset({"query_id", "query_at_s", "request_bytes", "response_bytes"}),
+    "alignment_receipt": frozenset({"receipt_id", "received_at_s", "clock_source", "uncertainty_s"}),
+    "recorder_queue_v1": frozenset({"queue_evidence"}),
+    "physics_chunk_v1": frozenset({"raw_chunk"}),
+    "source_alignment_v1": frozenset({"association"}),
+    "world_source_v1": frozenset({"world_source"}),
+    "teacher_event_v2": frozenset({"teacher_event"}),
+    "teacher_event_summary_v2": frozenset({"event_summary"}),
+    "controller_reference_v2": frozenset({"reference_continuity"}),
+    "collection_boundary_v1": frozenset({"collection_boundary"}),
 }
 _EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept",
-                  "apply_event_id": "k2_apply", "query_id": "k2_query", "receipt_id": "k2_receipt"}
+                  "apply_event_id": "alignment_apply", "query_id": "alignment_query", "receipt_id": "alignment_receipt"}
 _EVENT_FLAGS = {"stopped_confirmed", "table_contact", "supported", "no_fingertip_contact",
                 "placement_stable", "retreat_stable", "accepted"}
 _EVENT_COUNTS = {"left_contacts", "right_contacts", "request_bytes", "response_bytes"}
@@ -249,6 +264,13 @@ def _feedback_ok(record) -> bool:
     return abs(source - record["sim_time_s"]) <= _FEEDBACK_SOURCE_SKEW_S + 1e-9
 
 
+def controller_feedback_valid(records, sim_time_s) -> bool:
+    """Validate the same ratified source records in live gates and sealed readback."""
+    return (isinstance(records, (list, tuple)) and len(records) == 2
+            and all(_feedback_ok(record) and record["sim_time_s"] == sim_time_s for record in records)
+            and sorted(record["controller"] for record in records) == sorted(_FEEDBACK_CONTROLLERS))
+
+
 def _reference_frames_ok(record, *, history: dict | None = None) -> None:
     """Validate the ratified per-frame raw history and its evaluation, or refuse."""
 
@@ -256,8 +278,11 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
     if not isinstance(frames, dict) or set(frames) != set(_FRAME_KINDS):
         raise ValueError("AUDIT_SCHEMA_INVALID")
     for kind, frame in frames.items():
-        if not isinstance(frame, dict) or set(frame) != _FRAME_FIELDS:
+        if not isinstance(frame, dict) or set(frame) not in (_FRAME_FIELDS, _FRAME_FIELDS | {"original_message"}):
             raise ValueError("AUDIT_SCHEMA_INVALID")
+        if "original_message" in frame:
+            from .episode_reference_readback import verify_original_frame
+            verify_original_frame(frame, kind)
         names = frame["joint_names"]
         if (not isinstance(names, list) or len(names) != _FRAME_SIZES[kind]
                 or any(not isinstance(name, str) or not name for name in names)
@@ -303,6 +328,13 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
                 raise ValueError("AUDIT_SCHEMA_INVALID")
         elif goal is not None or accepted is not None:
             raise ValueError("AUDIT_SCHEMA_INVALID")
+        if evaluation["basis"] == "published":
+            # A publication is its own value at the target; a different instant/value needs a
+            # proven accepted interval rather than an unverified evaluation claim.
+            if (abs(frame["sim_stamp_ns"] - round(target * 1e9)) > round(_TOLERANCE_S * 1e9)
+                    or frame["evaluated_positions"] != frame["published_positions"]
+                    or frame["evaluated_velocities"] != frame["published_velocities"]):
+                raise ValueError("AUDIT_SCHEMA_INVALID")
         if revoked is not None and not _finite_vector([revoked]):
             raise ValueError("AUDIT_SCHEMA_INVALID")
         if accepted is not None and accepted > target + _TOLERANCE_S:
@@ -317,13 +349,13 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
         raise ValueError("AUDIT_SCHEMA_INVALID")
     seen = set()
     for index, pair in enumerate(mapping):
+        if (not isinstance(pair, list) or len(pair) != 2 or pair[0] not in _FRAME_KINDS
+                or type(pair[1]) is not int):
+            raise ValueError("AUDIT_SCHEMA_INVALID")
         if (pair[0], pair[1]) in seen:
             # six dimensions of one action cannot reuse the same source dimension twice
             raise ValueError("AUDIT_SCHEMA_INVALID")
         seen.add((pair[0], pair[1]))
-        if (not isinstance(pair, list) or len(pair) != 2 or pair[0] not in _FRAME_KINDS
-                or type(pair[1]) is not int):
-            raise ValueError("AUDIT_SCHEMA_INVALID")
         # A.1 ratified: the map selects the evaluated value, the publication stays untouched
         source = frames[pair[0]]["evaluated_positions"]
         if pair[1] < 0 or pair[1] >= len(source):
@@ -462,7 +494,7 @@ def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int |
     return True
 
 
-#: K2's instants and uncertainties: finite reals, non-negative except an uncertainty
+#: source alignment's instants and uncertainties: finite reals, non-negative except an uncertainty
 _EVENT_FLOATS = frozenset({"applied_at_s", "query_at_s", "received_at_s", "uncertainty_s"})
 #: a string that is legitimately null - the clock source of a record no publication covered (protocol section 2)
 _EVENT_NULLABLE_STRINGS = frozenset({"clock_source"})
@@ -498,6 +530,57 @@ def _payload_typed(payload) -> bool:
                 return False
         elif key in _EVENT_STRINGS:
             if not isinstance(value, str) or not value:
+                return False
+        elif key == "queue_evidence":
+            from .lossless_recorder import verify_queue_evidence
+            try:
+                verify_queue_evidence(value)
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "raw_chunk":
+            from .raw_physics_chunks import verify_raw_chunk
+            try:
+                verify_raw_chunk(value)
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "association":
+            from .scene_association import validate_scene_association
+            try:
+                validate_scene_association(value)
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "world_source":
+            from .native_endpoints import validate_world_source
+            try:
+                validate_world_source(value, identity={"session_id": value["physics"]["simulation_session_id"],
+                    "reset_epoch": value["physics"]["reset_epoch"]})
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "teacher_event":
+            from .teacher_collection_v2 import RETAINED_TYPES, validate_teacher_event
+            try:
+                validate_teacher_event(value)
+                if value["type"] not in RETAINED_TYPES:
+                    return False
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "event_summary":
+            from .teacher_collection_v2 import validate_event_summary
+            try:
+                validate_event_summary(value)
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "reference_continuity":
+            from .teacher_collection_v2 import validate_reference_continuity
+            try:
+                validate_reference_continuity(value)
+            except (KeyError, TypeError, ValueError):
+                return False
+        elif key == "collection_boundary":
+            from .collection_boundaries import validate_collection_boundary
+            try:
+                validate_collection_boundary(value)
+            except (KeyError, TypeError, ValueError):
                 return False
         else:
             return False
@@ -650,6 +733,32 @@ class _Files:
                 "events": self.events, "references": self.references, "physics": self.physics}
 
 
+def _capture_window_matches_observed(window, row_times, acquisitions, *, mode):
+    """Recompute the continuous camera inventory and label clocks in either scope."""
+    if (not _window_ok(window, mode=mode)
+            or window["streams_required"] != ["head", "wrist"]
+            or set(window["source_schedule"]) != {"head", "wrist"}
+            or window["cadence_s"] != _GRID_S or window["permitted_gaps_s"] != []):
+        return False
+    observed = {camera: sorted(row["stamp_s"] for row in acquisitions.values()
+                               if row["camera"] == camera) for camera in ("head", "wrist")}
+    if (any(not stamps or stamps != sorted(set(stamps)) for stamps in observed.values())
+            or window["source_schedule"] != observed):
+        return False
+    stamps = [stamp for values in observed.values() for stamp in values]
+    if (window["collection_start_s"] != min(stamps) or window["collection_end_s"] != max(stamps)
+            or any(later - earlier > _GRID_S * 1.5 + _TOLERANCE_S
+                   for values in observed.values() for earlier, later in zip(values, values[1:]))):
+        return False
+    # Source/audit sequences and row instants were already validated at ingress/readback.
+    # The physical stop and first dispatch need their own original boundary proof;
+    # neither clock is inferred from a camera or from a physics-history extreme here.
+    if row_times:
+        return (window["outcome"] in ("complete", "interrupted_diagnostic")
+                and window["label_cutoff_s"] == max(row_times))
+    return window["outcome"] != "complete" and window["label_cutoff_s"] is None
+
+
 def _window_matches_observed(window: dict, row_times, acquisitions, physics_times=()) -> bool:
     """T3-F11: one predicate for the window, shared by the seal and the readback."""
 
@@ -737,6 +846,10 @@ class EpisodeAuditWriter:
         if not _hex64(digest):
             # the audit always names the frozen inputs it belongs to
             raise ValueError("AUDIT_INPUTS_INVALID")
+        from .first_episode_inputs import audit_execution_model_identity
+        self._execution_model = audit_execution_model_identity(inputs)
+        self._execution_chunks = (inputs["execution_snapshot"]["physics_chunks"]
+                                  if self._execution_model is not None else None)
         # the episode's directory is owned by the recorder, which creates it and refuses to reuse one; the audit
         # writer roots at that same directory so its manifest sits where verification resolves it, and accepts an
         # existing root for exactly that reason - it still refuses anything that is not a directory (CP-2773)
@@ -767,6 +880,12 @@ class EpisodeAuditWriter:
         self._bound_references: set = set()
         self._revoked_targets: set = set()
         self._event_release_epoch: int | None = None
+        self._world_source_previous = None
+        self._world_source_hashes = {}
+        self._teacher_event_last_seq = 0
+        self._collection_boundaries = set()
+        self._native_first_dispatch_clock = None
+        self._native_normal_end_clock = None
         self._event_kinds: set = set()
         # F3: which release epochs a `release` event actually named, so seal() can require that every step the
         # stream takes is named by one rather than only that some release happened somewhere
@@ -777,6 +896,8 @@ class EpisodeAuditWriter:
         self._release_epoch: int | None = None
         self._observed_epochs: dict = {}
         self._sealed: Path | None = None
+        self._raw_physics_previous = None
+        self._scene_records = {}
 
     # -- the only writer ---------------------------------------------------
 
@@ -836,7 +957,7 @@ class EpisodeAuditWriter:
             # rows are a contiguous 10 Hz schedule, not merely consecutive integers
             raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
         entry = self._references.get(record["reference_sequence"])
-        target = round(record["sim_time_s"] + _GRID_S, 6)
+        target = _reference_target_s(record["sim_time_s"])
         if (entry is None or entry["reference_time_s"] != target
                 or entry["accepted"] is not True
                 or entry["reference_time_s"] in self._revoked_targets):
@@ -849,6 +970,92 @@ class EpisodeAuditWriter:
         self._bound.update((head_id, wrist_id))
         self._bound_references.add(record["reference_sequence"])
         self._append("row-bindings", record)
+
+    def append_recorder_queue(self, document, *, sim_time_s):
+        from .lossless_recorder import verify_queue_evidence
+        import time
+        verify_queue_evidence(document)
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity["release_epoch"] = self._event_release_epoch
+        self.append_source("events", {"kind": "recorder_queue_v1", "identity": identity,
+            "sim_time_s": sim_time_s, "monotonic_ns": time.monotonic_ns(),
+            "payload": {"queue_evidence": document}})
+
+    def append_raw_physics(self, document):
+        """Retain the complete native chunk under this episode's actual identity."""
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity["release_epoch"] = self._event_release_epoch
+        self.append_source("events", {"kind": "physics_chunk_v1", "identity": identity,
+            "sim_time_s": document["chunk"]["last_simulation_time_s"],
+            "monotonic_ns": time.monotonic_ns(), "payload": {"raw_chunk": document}})
+
+    def append_scene_association(self, document):
+        """Retain actual source alignment records; native references are mandatory at sealed readback."""
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity["release_epoch"] = self._event_release_epoch
+        self.append_source("events", {"kind": "source_alignment_v1", "identity": identity,
+            "sim_time_s": document["source"]["physics"]["simulation_time_s"],
+            "monotonic_ns": time.monotonic_ns(), "payload": {"association": document}})
+
+    def append_world_source(self, document):
+        """Retain a published original candidate, without applying endpoint quality selection."""
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity["release_epoch"] = self._event_release_epoch
+        self.append_source("events", {"kind": "world_source_v1", "identity": identity,
+            "sim_time_s": document["physics"]["simulation_time_s"], "monotonic_ns": time.monotonic_ns(),
+            "payload": {"world_source": document}})
+
+    def append_teacher_event(self, document):
+        """Retain one accepted `SO101_TEACHER_EVENT_V2` event verbatim, in strictly increasing `seq` order.
+
+        Scene operations take sequence numbers without being retained here, so a skip is allowed; the sealed summary
+        (`append_teacher_event_summary`) is what proves that nothing else was lost.
+        """
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity['release_epoch'] = self._event_release_epoch
+        self.append_source('events', dict(kind='teacher_event_v2', identity=identity,
+            sim_time_s=document['sim_time_ns'] / 1e9, monotonic_ns=time.monotonic_ns(),
+            payload={'teacher_event': document}))
+
+    def append_teacher_event_summary(self, summary):
+        """Seal the Recorder's own count of every V2 event it accepted (retained or not)."""
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity['release_epoch'] = self._event_release_epoch
+        self.append_source('events', dict(kind='teacher_event_summary_v2', identity=identity, sim_time_s=None,
+            monotonic_ns=time.monotonic_ns(), payload={'event_summary': summary}))
+
+    def append_reference_continuity(self, report):
+        """Seal the per-controller `controller_state` gap report (the label stream's continuity)."""
+        import time
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity['release_epoch'] = self._event_release_epoch
+        self.append_source('events', dict(kind='controller_reference_v2', identity=identity, sim_time_s=None,
+            monotonic_ns=time.monotonic_ns(), payload={'reference_continuity': report}))
+
+    def append_collection_boundary(self, stage, value):
+        """Preserve one original boundary without observing a replacement source clock."""
+        import time
+        from .collection_boundaries import validate_collection_boundary, boundary_clock
+        document = dict(kind='ACT_COLLECTION_BOUNDARY', schema_version=2, stage=stage, value=value)
+        validate_collection_boundary(document, identity=self.identity)
+        identity = dict(self.identity)
+        if self._event_release_epoch is not None:
+            identity['release_epoch'] = self._event_release_epoch
+        self.append_source('events', dict(kind='collection_boundary_v1', identity=identity,
+            sim_time_s=boundary_clock(document)['sim_time_ns'] / 1e9, monotonic_ns=time.monotonic_ns(),
+            payload={'collection_boundary': document}))
 
     def append_source(self, kind, record) -> None:
         self._require_open()
@@ -873,6 +1080,58 @@ class EpisodeAuditWriter:
             if not _payload_typed(item["payload"]):
                 # every value must be the type its key declares, per kind
                 raise ValueError("AUDIT_SCHEMA_INVALID")
+            if item['kind']=='teacher_event_v2':
+                from .teacher_collection_v2 import first_command_clock, validate_teacher_event
+                document=item['payload']['teacher_event']
+                validate_teacher_event(document, identity=self.identity)
+                if (document['seq'] <= self._teacher_event_last_seq
+                        or item['monotonic_ns'] < document['monotonic_ns']
+                        or item['sim_time_s'] != document['sim_time_ns'] / 1e9):
+                    raise ValueError('AUDIT_TEACHER_EVENT_INVALID')
+                self._teacher_event_last_seq = document['seq']
+                clock = first_command_clock(document)
+                if clock is not None and self._native_first_dispatch_clock is None:
+                    self._native_first_dispatch_clock = dict(clock)
+            if item['kind'] == 'collection_boundary_v1':
+                from .collection_boundaries import claim_collection_boundary
+                boundary=claim_collection_boundary(item, identity=self.identity, seen=self._collection_boundaries,
+                    world_hashes=self._world_source_hashes)
+                if boundary['stage']=='normal_stop':
+                    self._native_normal_end_clock=dict(boundary['value']['source_clock'])
+            if item["kind"] == "physics_chunk_v1":
+                from .raw_physics_chunks import verify_raw_chunk
+                raw = item["payload"]["raw_chunk"]
+                verify_raw_chunk(raw, previous=self._raw_physics_previous,
+                    session_id=self.identity["session_id"], reset_epoch=self.identity["reset_epoch"],
+                    **({} if self._execution_model is None else {
+                        "nq": self._execution_model["nq"], "nv": self._execution_model["nv"],
+                        "max_samples": self._execution_chunks["max_samples"],
+                        "max_contacts": self._execution_chunks["max_contacts"]}))
+                if (item["monotonic_ns"] < raw["received_monotonic_ns"]
+                        or item["sim_time_s"] != raw["chunk"]["last_simulation_time_s"]):
+                    raise ValueError("AUDIT_PHYSICS_RAW_EVENT_INVALID")
+                self._raw_physics_previous = json.loads(_canonical(raw))
+            if item["kind"] == "source_alignment_v1":
+                association = item["payload"]["association"]
+                source = association["source"]["physics"]
+                if (source["simulation_session_id"] != self.identity["session_id"]
+                        or source["reset_epoch"] != self.identity["reset_epoch"]
+                        or source["simulation_time_s"] != item["sim_time_s"]
+                        or association["query"]["record"]["response_ros_clock"]["end_monotonic_ns"]
+                        > item["monotonic_ns"]):
+                    raise ValueError("AUDIT_SOURCE_ALIGNMENT_INVALID")
+                from .scene_association import claim_scene_records
+                claim_scene_records(association, self._scene_records)
+            if item["kind"] == "world_source_v1":
+                from .native_endpoints import validate_world_source
+                source = item["payload"]["world_source"]
+                validate_world_source(source, identity=self.identity, previous=self._world_source_previous)
+                if (source["physics"]["simulation_time_s"] != item["sim_time_s"]
+                        or item["monotonic_ns"] < max(source["received_monotonic_ns"], source["scene_received_monotonic_ns"])):
+                    raise ValueError("AUDIT_WORLD_SOURCE_INVALID")
+                self._world_source_previous = json.loads(_canonical(source))
+                from .collection_boundaries import world_source_digest
+                self._world_source_hashes[source['physics']['publisher_sequence']]=world_source_digest(source)
             if item["kind"] == "phase_complete":
                 _integer(item["payload"]["physics_step"], "AUDIT_SCHEMA_INVALID")
                 if not isinstance(item["payload"]["phase"], str) or not item["payload"]["phase"]:
@@ -939,6 +1198,31 @@ class EpisodeAuditWriter:
             item["task_sequence"] = self._task_sequence
         self._append(kind, item)
 
+    def observed_collection_window(self, facts: dict, *, cadence_s: float) -> dict:
+        """Build the collection claim from original acquired frames and capture clocks."""
+        self._require_open()
+        schedule = {camera: sorted(row["stamp_s"] for row in self._acquisitions.values()
+                                  if row["camera"] == camera)
+                    for camera in ("head", "wrist")}
+        if any(not stamps or stamps != sorted(set(stamps)) for stamps in schedule.values()):
+            raise ValueError("AUDIT_WINDOW_INVALID")
+        stamps = [stamp for values in schedule.values() for stamp in values]
+        first, cutoff = facts["first_command_s"], facts["label_cutoff_s"]
+        window = {"source_schedule": schedule, "streams_required": ["head", "wrist"],
+            "cadence_s": cadence_s, "permitted_gaps_s": [],
+            "collection_start_s": min(stamps), "collection_end_s": max(stamps),
+            "first_command_s": first, "physics_end_s": facts["physics_end_s"],
+            "label_cutoff_s": cutoff,
+            "outcome": "complete" if cutoff is not None else
+                       "no_command" if first is None else "no_label"}
+        if not _window_ok(window, mode=self.scope["mode"]):
+            raise ValueError("AUDIT_WINDOW_INVALID")
+        # A collection claim cannot permit a camera hole or omit an acquired instant.
+        if any(later - earlier > cadence_s * 1.5 + _TOLERANCE_S
+               for values in schedule.values() for earlier, later in zip(values, values[1:])):
+            raise ValueError("AUDIT_WINDOW_INVALID")
+        return window
+
     def seal(self, window: dict) -> Path:
         self._require_open()
         if self.scope.get("mode") == "formal":
@@ -963,9 +1247,15 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_BINDING_REVOKED")
         if not isinstance(window, dict) or not window:
             raise ValueError("AUDIT_WINDOW_INVALID")
+        from .teacher_collection_v2 import validate_first_command_window, validate_normal_end_window
+        validate_first_command_window(self._native_first_dispatch_clock,window)
+        validate_normal_end_window(self._native_normal_end_clock,window)
         if (self.scope.get("mode") == "formal" or set(window) == _WINDOW_FIELDS) and not _window_ok(
                 window, mode=self.scope.get("mode")):
             # a formal audit states the ratified window; a diagnostic audit may record a legacy one
+            raise ValueError("AUDIT_WINDOW_INVALID")
+        if set(window) == _WINDOW_FIELDS and not _capture_window_matches_observed(
+                window, self._row_times, self._acquisitions, mode=self.scope["mode"]):
             raise ValueError("AUDIT_WINDOW_INVALID")
         if self.scope.get("mode") == "formal" and not self._window_matches_rows(window):
             # T3-F11: and it must describe the rows and acquisitions this audit actually holds
@@ -1013,7 +1303,7 @@ class EpisodeAuditWriter:
             self._observed_epochs[epoch] = supported
 
     def _next_task(self) -> int:
-        """The one counter every record draws from, so any two records can be ordered from the records alone (K2)."""
+        """The one counter every record draws from, so any two records can be ordered from the records alone (source alignment)."""
 
         self._task_sequence += 1
         return self._task_sequence
@@ -1089,6 +1379,24 @@ def verify_audit_manifest(path: Path) -> dict:
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
     _verify_streams(audit, manifest["identity"])
+    from .teacher_collection_v2 import first_command_clock, validate_first_command_window, validate_normal_end_window
+    first_commands=[clock for clock in (first_command_clock(row['payload']['teacher_event'])
+                    for row in _records(audit/'events.jsonl',_EVENT_FIELDS,'AUDIT_EVENT_INVALID')
+                    if row['kind']=='teacher_event_v2') if clock is not None]
+    validate_first_command_window(None if not first_commands else first_commands[0], manifest['window'])
+    normal_ends=[row['payload']['collection_boundary']['value']['source_clock']
+        for row in _records(audit/'events.jsonl',_EVENT_FIELDS,'AUDIT_EVENT_INVALID')
+        if row['kind']=='collection_boundary_v1' and row['payload']['collection_boundary']['stage']=='normal_stop']
+    validate_normal_end_window(None if not normal_ends else normal_ends[0],manifest['window'])
+    if set(manifest["window"]) == _WINDOW_FIELDS:
+        bound = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        acquired = _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
+                            "AUDIT_ACQUISITION_INVALID")
+        if not _capture_window_matches_observed(manifest["window"],
+                [row["sim_time_s"] for row in bound],
+                {row["acquisition_id"]: row for row in acquired},
+                mode=json.loads((audit / "source.json").read_bytes())["mode"]):
+            raise ValueError("AUDIT_WINDOW_INVALID")
     if formal_window:
         # T3-F11: the seal's window-to-observed predicate is repeated here, from the rows this readback holds,
         # so an invented in-range instant cannot pass by satisfying `_window_ok` and the coverage gate alone
@@ -1233,6 +1541,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     for row in _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
                         "AUDIT_ACQUISITION_INVALID"):
         if (row["camera"] not in CAMERAS or list(row["shape"]) != [480, 640, 3]
+                or row["session_id"] != identity.get("session_id")
+                or row["reset_epoch"] != identity.get("reset_epoch")
                 or row["dtype"] != "uint8" or not _hex64(row["pixel_sha256"])
                 or type(row["sequence"]) is not int or row["sequence"] < 1
                 or type(row["reset_epoch"]) is not int or row["reset_epoch"] < 0
@@ -1245,8 +1555,10 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                 row["session_id"], row["reset_epoch"], row["camera"], row["sequence"]):
             raise ValueError("AUDIT_ACQUISITION_INVALID")
         key = (row["camera"], row["session_id"], row["reset_epoch"])
-        previous_sequence, previous_stamp = per_camera.get(key, (0, -1.0))
-        if (row["acquisition_id"] in acquisitions or row["sequence"] <= previous_sequence
+        # The retained sequence of a camera begins wherever the capture began (frames the adapter numbered before the capture
+        # started, or before the episode window, are not in the episode) and is contiguous from there: a gap is still refused.
+        previous_sequence, previous_stamp = per_camera.get(key, (row["sequence"] - 1, -1.0))
+        if (row["acquisition_id"] in acquisitions or row["sequence"] != previous_sequence + 1
                 or row["stamp_s"] <= previous_stamp):
             # a new sequence must also be a new source instant: ordering alone is not monotonic time
             raise ValueError("AUDIT_ACQUISITION_INVALID")
@@ -1314,7 +1626,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if last_time is not None and abs(row["sim_time_s"] - (last_time + _GRID_S)) > _TOLERANCE_S:
             raise ValueError("AUDIT_ROW_SCHEDULE_INVALID")
         last_time = row["sim_time_s"]
-        target = round(row["sim_time_s"] + _GRID_S, 6)
+        target = _reference_target_s(row["sim_time_s"])
         if type(row["reference_sequence"]) is not int:
             # T3-F3 residual: the writer admits an exact integer for this binding, and Python's key equality
             # would let `true` or `1.0` resolve integer key 1 on readback, so the type is required on both sides
@@ -1327,6 +1639,18 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             raise ValueError("AUDIT_BINDING_REVOKED")
     sequence = 0
     event_epoch: int | None = None
+    queues = []
+    raw_physics_previous = None
+    inputs = json.loads((audit / "inputs.json").read_bytes())
+    from .first_episode_inputs import audit_execution_model_identity
+    execution_model = audit_execution_model_identity(inputs)
+    execution_chunks = inputs["execution_snapshot"]["physics_chunks"] if execution_model is not None else None
+    associations = []
+    world_sources = []
+    world_hashes = {}
+    teacher_event_last_seq = 0
+    collection_boundaries = set()
+    native_steps = {}
     for row in _records(audit / "events.jsonl", _EVENT_FIELDS, "AUDIT_EVENT_INVALID"):
         payload = row["payload"]
         if (type(row["sequence"]) is not int or row["sequence"] != sequence + 1
@@ -1356,7 +1680,81 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             raise ValueError("AUDIT_EVENT_INVALID")
         if not _payload_typed(payload):
             raise ValueError("AUDIT_EVENT_INVALID")
+        if row['kind']=='teacher_event_v2':
+            from .teacher_collection_v2 import validate_teacher_event
+            document = payload['teacher_event']
+            validate_teacher_event(document, identity=identity)
+            if (document['seq'] <= teacher_event_last_seq or row['monotonic_ns'] < document['monotonic_ns']
+                    or row['sim_time_s'] != document['sim_time_ns'] / 1e9):
+                raise ValueError('AUDIT_EVENT_INVALID')
+            teacher_event_last_seq = document['seq']
+        if row['kind'] == 'collection_boundary_v1':
+            from .collection_boundaries import claim_collection_boundary
+            claim_collection_boundary(row, identity=identity, seen=collection_boundaries,world_hashes=world_hashes)
+        if row["kind"] == "recorder_queue_v1":
+            queues.append(payload["queue_evidence"])
+        if row["kind"] == "physics_chunk_v1":
+            from .raw_physics_chunks import verify_raw_chunk
+            raw = payload["raw_chunk"]
+            verify_raw_chunk(raw, previous=raw_physics_previous,
+                session_id=identity["session_id"], reset_epoch=identity["reset_epoch"],
+                **({} if execution_model is None else {"nq": execution_model["nq"], "nv": execution_model["nv"],
+                    "max_samples": execution_chunks["max_samples"], "max_contacts": execution_chunks["max_contacts"]}))
+            if (row["monotonic_ns"] < raw["received_monotonic_ns"]
+                    or row["sim_time_s"] != raw["chunk"]["last_simulation_time_s"]):
+                raise ValueError("AUDIT_PHYSICS_RAW_EVENT_INVALID")
+            raw_physics_previous = raw
+            for sample in raw["chunk"]["samples"]:
+                native_steps[sample["physics_step"]] = sample
+        if row["kind"] == "source_alignment_v1":
+            association = payload["association"]
+            if (association["source"]["physics"]["simulation_time_s"] != row["sim_time_s"]
+                    or association["query"]["record"]["response_ros_clock"]["end_monotonic_ns"]
+                    > row["monotonic_ns"]):
+                raise ValueError("AUDIT_SOURCE_ALIGNMENT_INVALID")
+            associations.append(association)
+        if row["kind"] == "world_source_v1":
+            source = payload["world_source"]
+            if (source["physics"]["simulation_time_s"] != row["sim_time_s"]
+                    or row["monotonic_ns"] < max(source["received_monotonic_ns"], source["scene_received_monotonic_ns"])):
+                raise ValueError("AUDIT_WORLD_SOURCE_INVALID")
+            world_sources.append(source)
+            from .collection_boundaries import world_source_digest
+            world_hashes[source['physics']['publisher_sequence']]=world_source_digest(source)
         sequence = row["sequence"]
+    if associations:
+        from .scene_association import claim_scene_records, verify_scene_association
+        scene_records = {}
+        for association in associations:
+            claim_scene_records(association, scene_records)
+            step = association["source"]["physics"]["simulation_step"]
+            verify_scene_association(association, inputs=inputs, identity=identity,
+                raw_steps=[] if step not in native_steps else [native_steps[step]])
+    if world_sources:
+        import mujoco
+        from .execution_snapshot import verify_execution_snapshot
+        from .native_endpoints import verify_world_source
+        if execution_model is None:
+            raise ValueError("WORLD_SOURCE_FROZEN_INPUTS_REQUIRED")
+        models = {}
+        previous = None
+        for source in world_sources:
+            root = source["execution_root"]
+            if root not in models:
+                snapshot = verify_execution_snapshot(root, expected_sha256=inputs["execution_snapshot"]["sha256"])
+                models[root] = mujoco.MjModel.from_xml_path(str(Path(root) / snapshot["scene_path"]))
+            step = source["physics"]["simulation_step"]
+            verify_world_source(source, identity=identity, model=models[root], model_identity=execution_model,
+                raw_steps=[] if step not in native_steps else [native_steps[step]], previous=previous)
+            previous = source
+    inputs = json.loads((audit / "inputs.json").read_bytes())
+    if "execution_snapshot" in inputs:
+        bound_rows = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
+        if (len(queues) != 1 or queues[0]["accepted_samples"] != len(bound_rows)
+                or queues[0]["written_samples"] != len(bound_rows)):
+            raise ValueError("AUDIT_RECORDER_QUEUE_INCOMPLETE")
+        if raw_physics_previous is None:
+            raise ValueError("AUDIT_PHYSICS_RAW_INCOMPLETE")
     # F3: on a formal audit every release step the stream takes must be named by a release event - the
     # writer's own tie (CP-2137) restated here, because a re-signed stream never passes through the writer.
     # A diagnostic audit is out of scope, exactly as it is for that gate.

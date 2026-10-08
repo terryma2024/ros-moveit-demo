@@ -1,5 +1,7 @@
 # SO-101 双 RGB 视角 ACT、颈部搜索与随机示教设计
 
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+
 日期：2026-09-10
 
 更新：2026-09-24，按 `main` 的 fixed exact-N v3 shared queue、统一 Web 全局仲裁和八 Worker 测试门重写并行采集与训练边界；ACT 单次运行上限仍为 2 分钟。

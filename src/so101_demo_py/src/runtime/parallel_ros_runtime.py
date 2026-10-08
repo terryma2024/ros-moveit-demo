@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+import sys
 import threading
 import time
 from types import SimpleNamespace
@@ -730,6 +731,23 @@ def observe_parallel_initial_gate(
             rclpy.shutdown()
 
 
+def _ready_failure_message(completed) -> str:
+    """One bounded line naming why `motion_stack_ready` refused: its failure code, phase and unmet dependency."""
+    text = (completed.stdout or "").strip().splitlines()
+    for line in reversed(text):
+        try:
+            document = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(document, dict) and "failure_code" in document:
+            evidence = document.get("evidence") if isinstance(document.get("evidence"), dict) else {}
+            parts = [f"READY_PROBE_FAILED code={document.get('failure_code')} phase={document.get('phase')}"]
+            if evidence.get("dependency"):
+                parts.append(f"dependency={evidence['dependency']}")
+            return " ".join(parts)[:300]
+    return f"READY_PROBE_FAILED rc={completed.returncode} " + ((completed.stderr or "").strip()[-200:] or "no output")
+
+
 class ParallelRosRuntimePorts:
     """Lazy concrete Task 10 ports; tests may replace individual observations."""
 
@@ -808,7 +826,7 @@ class ParallelRosRuntimePorts:
         )
 
     @classmethod
-    def worker_node_inventory_matches(cls, nodes):
+    def worker_node_inventory_matches(cls, nodes, *, teacher_profile=False):
         if (
             type(nodes) is not tuple
             or any(not isinstance(node, str) for node in nodes)
@@ -817,6 +835,8 @@ class ParallelRosRuntimePorts:
         ):
             return False
         required = set(cls.expected_worker_nodes())
+        if teacher_profile:
+            required.add("/neck_controller")
         fixed_internal = {
             "/controller_manager",
             "/move_group/moveit",
@@ -894,16 +914,38 @@ class ParallelRosRuntimePorts:
         call = self.dependencies.get("ready_probe")
         if call is not None:
             return call(_requirements)
+        # The ACT station also has the neck controller; there is no broker to wait for.
+        arguments = ("--include-neck",) if self.dependencies.get("act_profile") is True else ()
         completed = subprocess.run(
-            ros2_command("run", "so101_demo_py", "motion_stack_ready", "--timeout-s", "60"),
+            ros2_command("run", "so101_demo_py", "motion_stack_ready", "--timeout-s", "60", *arguments),
             timeout=65.0,
             check=False,
+            capture_output=True,
+            text=True,
         )
+        # The probe's own verdict used to go to the parent's stdout only; keep it (and say why in the worker result).
+        for stream, text in ((sys.stdout, completed.stdout), (sys.stderr, completed.stderr)):
+            if text:
+                stream.write(text)
+                stream.flush()
+        self.ready_failure_message = None
+        if completed.returncode != 0:
+            self.ready_failure_message = _ready_failure_message(completed)
+            root = getattr(getattr(self, "resources", None), "worker_root", None)
+            if root is not None:
+                try:
+                    (Path(root) / "ready-probe-failure.json").write_text(json.dumps(
+                        {"returncode": completed.returncode, "message": self.ready_failure_message,
+                         "stdout_tail": (completed.stdout or "")[-4000:], "stderr_tail": (completed.stderr or "")[-2000:]},
+                        sort_keys=True) + "\n")
+                except OSError:
+                    pass
         return completed.returncode == 0
 
     def reset_point(self, lease):
         call = self.dependencies.get("reset_point")
         point = self.catalog[lease.point_id]
+        act_kwargs = {"act_profile": True} if self.dependencies.get("act_profile") is True else {}
         qualified = call is None
         if qualified:
             call = self.dependencies.get("execute_reset")
@@ -916,6 +958,7 @@ class ParallelRosRuntimePorts:
                 self.resources.session_id,
                 keyframe="task_start",
                 cup_position_world_m=tuple(point["cup_position_world_m"]),
+                **act_kwargs,
             )
             if getattr(scene, "success", None) is not True:
                 raise RuntimeError("RESET_PLANNING_SCENE_RESTORE")
@@ -958,6 +1001,7 @@ class ParallelRosRuntimePorts:
         return call(lease, reset_receipt)
 
     def initial_gate(self, lease, reset_receipt):
+        teacher_profile = self.dependencies.get("act_profile") is True
         call = self.dependencies.get("observe_initial", observe_parallel_initial_gate)
         value = call(reset_receipt)
         if type(value) is not InitialGateObservation:
@@ -989,7 +1033,8 @@ class ParallelRosRuntimePorts:
                 ("stable_graph", value.node_graph_stable is True),
                 (
                     "worker_nodes",
-                    self.worker_node_inventory_matches(value.worker_node_fqns),
+                    self.worker_node_inventory_matches(value.worker_node_fqns,
+                                                       teacher_profile=teacher_profile),
                 ),
             )
             failures = [name for name, accepted in predicates if not accepted]
@@ -1530,9 +1575,13 @@ class ParallelRosRuntimePorts:
             payload = os.read(descriptor, 8193)
         finally:
             os.close(descriptor)
+        if not payload.strip():
+            return None     # created and not yet written: not ready yet (the Teacher publishes it atomically now)
         try:
             document = json.loads(payload)
         except (UnicodeError, json.JSONDecodeError) as error:
+            if not payload.endswith(b"\n"):
+                return None   # a receipt is one line with a final newline: a cut-off one is still being written
             raise RuntimeError("DYNAMIC_READY_RECEIPT_JSON") from error
         integer_fields = (
             "coordinator_epoch",
@@ -1682,7 +1731,15 @@ class ParallelRosRuntimePorts:
         }
         if type(document) is not dict or not required.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
-        if document["schema"] != "so101-dynamic-mujoco-execute-v1":
+        # Exactly two versions are known: v2 carries the Teacher result, v1 is read-only legacy. Anything else
+        # is rejected rather than silently read with the old coupled meaning.
+        schema = document["schema"]
+        if type(schema) is not str or schema not in {
+                "so101-dynamic-mujoco-execute-v1", "so101-dynamic-mujoco-execute-v2"}:
+            raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
+        if schema.endswith("-v2") and not {
+                "teacher_execution_status", "teacher_task_result", "act_data_status", "process_diagnostics",
+                "teacher_start_observation", "teacher_end_observation"}.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
         expected_identity = {
             name: getattr(lease, name)
@@ -1705,8 +1762,11 @@ class ParallelRosRuntimePorts:
         ):
             raise ValueError("DYNAMIC_MANIFEST_RUNTIME_IDENTITY")
         policy_path, policy_sha256 = self._dynamic_policy_identity()
+        # Content identity: a frozen run's Teacher loads the policy from the frozen snapshot, so its recorded path is
+        # that copy's, not this worker's installed one. What must match is the content: the recorded sha256 is the
+        # worker's own trusted policy's, and the trusted final pose is computed from the worker's file.
         if (
-            document["policy_path"] != policy_path
+            not isinstance(document["policy_path"], str)
             or document["policy_sha256"] != policy_sha256
             or re.fullmatch(r"[0-9a-f]{64}", policy_sha256) is None
         ):
@@ -1714,9 +1774,12 @@ class ParallelRosRuntimePorts:
         status = document["status"]
         failure = document["failure"]
         if status == "DONE":
+            # The Teacher child exits 0 when it COMPLETED and 1 otherwise; the data verdict is the Recorder's and is
+            # never part of this exit code (Phase A4c).
             if exit_code != 0:
                 raise ValueError("DYNAMIC_MANIFEST_DONE")
         elif status == "ERROR":
+            # Exit 0 never ends an ERROR manifest.
             if exit_code == 0:
                 raise ValueError("DYNAMIC_MANIFEST_ERROR")
         else:
@@ -1731,17 +1794,33 @@ class ParallelRosRuntimePorts:
                 policy_path, policy_sha256
             ),
         )
+        if schema.endswith("-v1"):
+            # legacy evidence of the coupled contract: nothing positive is claimed about the Teacher or its data
+            return outcome, "DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY", dict(
+                teacher_execution_status="INDETERMINATE", teacher_task_result="UNCONFIRMED",
+                act_data_status="INVALID", act_data_reason="DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY")
+        task = document["teacher_task_result"]
+        # The Teacher manifest carries no data verdict (constant DISABLED); the Recorder's replaces it afterwards.
+        data_status = document["act_data_status"]
+        fields = dict(teacher_execution_status=document["teacher_execution_status"],
+                      teacher_task_result=task["result"], act_data_status=data_status, act_data_reason=None)
         if outcome is AttemptStatus.PASSED:
-            return outcome, "OK"
+            return outcome, "OK", fields
+        if document["teacher_execution_status"] == "COMPLETED":
+            first = task["reasons"][0].split(":", 1)[0] if task["reasons"] else task["result"]
+            prefix = "TEACHER_TASK_FAIL" if outcome is AttemptStatus.FAILED else "TEACHER_TASK_UNCONFIRMED"
+            return outcome, f"{prefix}:{first}", fields
         if outcome is AttemptStatus.FAILED:
-            return outcome, failure
-        return outcome, f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED"
+            return outcome, failure, fields
+        return outcome, f"{failure}:CONTROLLER_OUTCOME_UNCONFIRMED", fields
 
     def execute_result(self, lease, admitted, child):
         call = self.dependencies.get("execute_result")
         if call is not None:
             return call(lease, admitted, child)
-        timeout_s = getattr(self.config, "executing_hard_timeout_s", 180.0)
+        from ..parallel_batch.contracts import teacher_execution_bound_s
+
+        timeout_s = teacher_execution_bound_s(self.config)
         deadline = time.monotonic() + timeout_s
         status = None
         while time.monotonic() < deadline:
@@ -1758,18 +1837,23 @@ class ParallelRosRuntimePorts:
         from ..parallel_batch.contracts import AttemptStatus
 
         try:
-            outcome, reason = self._dynamic_manifest_outcome(
+            outcome, reason, teacher = self._dynamic_manifest_outcome(
                 manifest, lease, admitted, status
             )
         except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
             outcome = AttemptStatus.INDETERMINATE
             reason = "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+            teacher = dict(teacher_execution_status="INDETERMINATE", teacher_task_result="UNCONFIRMED",
+                           act_data_status="INVALID", act_data_reason="DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE")
+        # The decision carries the Teacher's own result and the data verdict of its child side by side: the attempt
+        # status is derived from the Teacher fields alone, and the result store grades the data separately.
         decision = RuntimeDecision(
             outcome,
             reason,
             physical_action_proven_absent=False,
+            **teacher,
         )
-        return ExecutionCompletionReceipt(decision, time.monotonic())
+        return ExecutionCompletionReceipt(decision, time.monotonic(), teacher_child_exited=status is not None)
 
     def capture_numeric_evidence(self, lease, localized, root, boundary):
         root.mkdir(parents=True, exist_ok=False)

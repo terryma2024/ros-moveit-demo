@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -10,6 +11,7 @@ from typing import Any, Callable
 from ..application.task_reachability import SegmentPlanReceipt
 from ..control.moveit.deterministic_horizon import (
     MOVE_ABOVE_PLAN_CANDIDATE_COUNT,
+    HorizonIkCache,
     HorizonStep,
     HorizonWaypoint,
     cartesian_candidate_score,
@@ -18,12 +20,42 @@ from ..control.moveit.deterministic_horizon import (
     validate_cartesian_corridor,
 )
 from ..control.moveit.planning import JointPlanRequest, make_get_motion_plan_request
-from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
 from ..control.planning_scene.cup import make_cup_collision_object
 from ..core.domain import State
 from ..core.dynamic_pick import DynamicPickTemplate, ResolvedMotionTargets
 from ..ports.evidence import PoseEvidence
 from ..ports.robot_control import JointStateEvidence
+
+
+def _compute_while_progressing(compute: Callable[[], Any], progress: Callable[[], None]) -> Any:
+    """Run a pure computation off-thread while the caller keeps spinning ``progress``.
+
+    ``compute`` must not touch rclpy or shared mutable ROS state. It has no deadline of
+    its own. A ``progress`` error stops spinning, waits for the worker, and propagates.
+    """
+
+    outcome: list[Any] = []
+
+    def run() -> None:
+        try:
+            outcome.append((True, compute()))
+        except BaseException as error:  # re-raised unchanged on the calling thread
+            outcome.append((False, error))
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    try:
+        while worker.is_alive():
+            progress()
+            time.sleep(0.001)
+    except BaseException:
+        worker.join()
+        raise
+    worker.join()
+    succeeded, value = outcome[0]
+    if not succeeded:
+        raise value
+    return value
 
 
 def make_move_group_goal(
@@ -93,6 +125,7 @@ class RosMoveGroupReachabilityPlanner:
         *,
         action_client: Any | None = None,
         ik: Any | None = None,
+        ik_backend: str | None = None,
         progress: Callable[[], None] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -104,11 +137,14 @@ class RosMoveGroupReachabilityPlanner:
             from ament_index_python.packages import get_package_share_directory
 
             urdf = Path(get_package_share_directory("so101_demo_py")) / "assets/mujoco/so101.urdf"
-            ik = UnderactuatedPoseIk.from_urdf(
+            from ..control.moveit.pose_ik import create_pose_ik
+
+            ik = create_pose_ik(
                 urdf,
                 template.arm_joint_names,
                 template.planning_frame,
                 template.tcp_link,
+                backend=ik_backend,
             )
         self._ik = ik
         self._prepared_steps: dict[State, tuple[HorizonStep, ...]] = {}
@@ -119,6 +155,12 @@ class RosMoveGroupReachabilityPlanner:
 
             action_client = ActionClient(node, MoveGroup, "/move_action")
         self._plan_client = action_client
+
+    @property
+    def ik_provenance(self) -> dict[str, object]:
+        from ..control.moveit.pose_ik import describe_pose_ik
+
+        return describe_pose_ik(self._ik)
 
     def _spin_once(self) -> None:
         import rclpy
@@ -162,13 +204,17 @@ class RosMoveGroupReachabilityPlanner:
     def prepare_horizon(self, targets: ResolvedMotionTargets, start: JointStateEvidence) -> None:
         """Prove the full pick prefix before the first plan-only request."""
 
+        # Opt in only the project solver; injected/stateful implementations keep their semantics.
+        from ..control.moveit.pose_ik import cacheable_pose_ik
+
+        ik = HorizonIkCache(self._ik) if cacheable_pose_ik(self._ik) else self._ik
         above = targets.for_state(State.MOVE_ABOVE_OBJECT)
         descend = targets.for_state(State.DESCEND)
+        start_positions = self._arm_positions(start)
         waypoints = list(
-            interpolated_move_above_waypoints(
-                self._ik,
-                self._arm_positions(start),
-                above,
+            _compute_while_progressing(
+                lambda: interpolated_move_above_waypoints(ik, start_positions, above),
+                self._progress,
             )
         )
         waypoints.extend(
@@ -185,13 +231,16 @@ class RosMoveGroupReachabilityPlanner:
                 HorizonWaypoint(State.LIFT, 0, targets.for_state(State.LIFT)),
             )
         )
-        result = solve_horizon(
-            self._ik,
-            tuple(waypoints),
-            self._arm_positions(start),
-            position_tolerance_m=self._template.position_tolerance_m,
-            orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
-            beam_width=3,
+        result = _compute_while_progressing(
+            lambda: solve_horizon(
+                ik,
+                tuple(waypoints),
+                start_positions,
+                position_tolerance_m=self._template.position_tolerance_m,
+                orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
+                beam_width=3,
+            ),
+            self._progress,
         )
         self._prepared_receipts = tuple(
             receipt.to_document() for receipt in result.candidate_receipts
@@ -209,13 +258,17 @@ class RosMoveGroupReachabilityPlanner:
         prepared = self._prepared_steps.get(state)
         if prepared:
             return prepared, self._prepared_receipts
-        result = solve_horizon(
-            self._ik,
-            (HorizonWaypoint(state, 0, target),),
-            self._arm_positions(start),
-            position_tolerance_m=self._template.position_tolerance_m,
-            orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
-            beam_width=3,
+        start_positions = self._arm_positions(start)
+        result = _compute_while_progressing(
+            lambda: solve_horizon(
+                self._ik,
+                (HorizonWaypoint(state, 0, target),),
+                start_positions,
+                position_tolerance_m=self._template.position_tolerance_m,
+                orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
+                beam_width=3,
+            ),
+            self._progress,
         )
         receipts = tuple(item.to_document() for item in result.candidate_receipts)
         return (() if not result.paths else result.paths[0].steps), receipts

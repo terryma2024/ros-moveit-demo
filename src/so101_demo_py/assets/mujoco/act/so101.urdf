@@ -453,7 +453,7 @@
     <parent link="gripper" />
     <child link="jaw" />
     <axis xyz="0 0 1" />
-    <limit effort="10" lower="-0.059600220867817" upper="1.74533" velocity="10" />
+    <limit effort="10" lower="-0.17453297762778586" upper="1.7453291995659765" velocity="10" />
   </joint>
   <transmission name="6_trans">
     <type>transmission_interface/SimpleTransmission</type>
@@ -470,7 +470,7 @@
     <parent link="wrist" />
     <child link="gripper" />
     <axis xyz="0 0 1" />
-    <limit effort="10" lower="-2.79253" upper="2.79253" velocity="10" />
+    <limit effort="10" lower="-2.7438472969992493" upper="2.841206309382605" velocity="10" />
   </joint>
   <transmission name="5_trans">
     <type>transmission_interface/SimpleTransmission</type>
@@ -504,7 +504,7 @@
     <parent link="upper_arm" />
     <child link="lower_arm" />
     <axis xyz="0 0 1" />
-    <limit effort="10" lower="-1.74533" upper="1.5708" velocity="10" />
+    <limit effort="10" lower="-1.69" upper="1.69" velocity="10" />
   </joint>
   <transmission name="3_trans">
     <type>transmission_interface/SimpleTransmission</type>

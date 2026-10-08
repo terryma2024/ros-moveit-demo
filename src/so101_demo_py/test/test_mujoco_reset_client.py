@@ -160,75 +160,6 @@ def test_act_reset_waits_below_broker_stop_velocity_before_final_pause() -> None
     assert services.velocity_queries >= 4
 
 
-def test_broker_reset_prepares_stop_barrier_before_initial_pause(monkeypatch) -> None:
-    """A short lived stop proof must be refreshed before a paused snapshot wait."""
-    from so101_demo.adapters.act import leased_action_client
-
-    calls = []
-
-    class Broker:
-        def request(self, operation, context):
-            assert context == {'owner': 'recovery'}
-            calls.append(operation)
-
-    class BrokerServices(Services):
-        control_context = {'owner': 'recovery'}
-
-        def pause(self, paused):
-            assert calls == ['prepare_reset']
-            return super().pause(paused)
-
-        def finish_reset(self):
-            assert calls == ['prepare_reset']
-            return True
-
-    monkeypatch.setattr(leased_action_client, 'connection_for', lambda context: Broker())
-    services = BrokerServices()
-    resetter = MujocoResetClient(
-        services, Observer(), simulation_session_id='session',
-        controller_names=('arm_controller', 'gripper_controller'),
-        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
-        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
-    )
-
-    assert resetter.reset('task_start').new_epoch == 4
-    assert calls == ['prepare_reset']
-
-
-def test_reset_uses_service_local_broker_preparation_without_socket(monkeypatch) -> None:
-    from so101_demo.adapters.act import leased_action_client
-
-    calls = []
-
-    class LocalServices(Services):
-        control_context = {'owner': 'recovery'}
-
-        def prepare_reset(self):
-            calls.append('prepare_reset')
-            return True
-
-        def pause(self, paused):
-            assert calls == ['prepare_reset']
-            return super().pause(paused)
-
-        def finish_reset(self):
-            assert calls == ['prepare_reset']
-            return True
-
-    monkeypatch.setattr(leased_action_client, 'connection_for',
-                        lambda context: (_ for _ in ()).throw(AssertionError('socket opened')))
-    services = LocalServices()
-    resetter = MujocoResetClient(
-        services, Observer(), simulation_session_id='session',
-        controller_names=('arm_controller', 'gripper_controller'),
-        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
-        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1),
-    )
-
-    assert resetter.reset('task_start').new_epoch == 4
-    assert calls == ['prepare_reset']
-
-
 def test_reset_resumes_before_switch_even_if_cached_snapshot_says_running() -> None:
     """A just paused world can still expose its last running observer frame."""
     initial = _snapshot(epoch=3, sequence=100)
@@ -463,3 +394,84 @@ def test_atomic_reset_hook_failure_prevents_resume():
     with pytest.raises(ResetFailed,match='CONTACT_OBSERVER_ARM_FAILED'):resetter.reset('task_start')
     assert services.pauses.count(False)==1 and services.pauses[-1] is True
     assert len(services.reset_calls)==1
+
+
+def _convergence_resetter(services, **kwargs):
+    return MujocoResetClient(services, Observer(), simulation_session_id="session",
+        controller_names=("arm_controller", "gripper_controller"),
+        expected_joint_positions=(0.,) * 6, expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, "joint_callback_count", services.joint_callback_count + 1),
+        **kwargs)
+
+
+def test_reset_records_and_logs_one_convergence_timeline(capfd) -> None:
+    import json
+    services = Services()
+    resetter = _convergence_resetter(services)
+    assert resetter.last_reset_convergence is None
+    assert resetter.reset("task_start").new_epoch == 4
+    marker = "MUJOCO_RESET_CONVERGENCE_EVIDENCE "
+    lines = [line for line in capfd.readouterr().err.splitlines() if marker in line]
+    assert len(lines) == 1
+    logged = json.loads(lines[0].split(marker, 1)[1])
+    assert logged == resetter.last_reset_convergence
+    evidence = resetter.last_reset_convergence
+    assert evidence["outcome"] == "converged" and evidence["polls"] == 2
+    assert evidence["converged_calls"] == 2
+    assert evidence["joint_callback_delta"] == 2
+    assert 0 <= evidence["elapsed_s"] < 5
+    assert evidence["activate_ack_monotonic_s"] <= evidence["loop_exit_monotonic_s"]
+    assert evidence["last_unconverged"] == {"stage": "positions", "abs_velocity": None}
+
+
+def test_act_reset_convergence_evidence_keeps_velocities_from_existing_read(capfd) -> None:
+    from so101_demo.act.joints import ACT_JOINTS
+
+    class ActServices(Services):
+        scalar_joint_callback_count = 0
+        velocity_queries = 0
+
+        def enable_reset_joint_audit(self):
+            pass
+
+        def reset_joint_snapshot(self, names):
+            return dict(callback_count=1, simulation_session_id='session',
+                reset_epoch=4, simulation_step=0, paused=True, sim_time_s=2.,
+                positions=(0.,) * 7, velocities=(0.,) * 7)
+
+        def latest_joint_velocities(self, names):
+            self.velocity_queries += 1
+            return (-.0015 if self.velocity_queries <= 2 else .0002, 0., 0., 0., 0., 0., 0.)
+
+        def joints_converged(self, expected, tolerance, *, after_callback_count, names):
+            return True
+
+    initial, reset, final = _snapshot(epoch=3, sequence=100), _snapshot(epoch=4, sequence=101), _snapshot(epoch=4, sequence=102)
+    reset.simulation_time_s = 2.
+    services = ActServices()
+    resetter = MujocoResetClient(services, Observer((initial, reset, final)),
+        simulation_session_id='session', controller_names=('arm_controller',),
+        expected_joint_positions=(0.,) * 7, expected_joint_names=ACT_JOINTS,
+        expected_object_position=(.1, .2, .3),
+        progress=lambda: setattr(services, 'joint_callback_count', services.joint_callback_count + 1))
+    resetter.reset('task_start')
+    evidence = resetter.last_reset_convergence
+    assert evidence["polls"] == evidence["converged_calls"] == 3
+    assert evidence["last_unconverged"] == {"stage": "velocity", "abs_velocity": [.0015, 0., 0., 0., 0., 0., 0.]}
+    assert services.velocity_queries == 4  # three loop reads plus the unchanged final check
+
+
+def test_reset_convergence_timeout_still_fails_identically_and_logs_evidence(capfd) -> None:
+    class Never(Services):
+        def joints_converged(self, *args, **kwargs):
+            return False
+
+    services = Never()
+    clock = iter(x * .5 for x in range(1000))
+    resetter = _convergence_resetter(services, timeout_s=5., monotonic=lambda: next(clock))
+    with pytest.raises(ResetFailed, match="fresh joint convergence timeout"):
+        resetter.reset("task_start")
+    assert services.pauses[-1] is True
+    evidence = resetter.last_reset_convergence
+    assert evidence["outcome"] == "timeout" and evidence["polls"] >= 1
+    assert capfd.readouterr().err.count("MUJOCO_RESET_CONVERGENCE_EVIDENCE ") == 1

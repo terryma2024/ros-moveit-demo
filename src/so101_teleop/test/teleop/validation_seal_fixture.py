@@ -8,6 +8,7 @@ from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.workflow import SO101_WORKFLOW
 from so101_demo.parallel_batch.artifacts import AttemptWorkspace
 from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_V2
 
 
 def make_sealed_attempt(worker_root, identity, *, succeeded=True):
@@ -84,7 +85,24 @@ def make_sealed_attempt(worker_root, identity, *, succeeded=True):
             item.update(expected_cup_pose_world=[-0.08, -0.25, 0.1648, 0, 0, 0, 1],
                         final_xy_error_m=0.0, final_upright_tilt_rad=0.0)
         events.append(item)
+    def observation(position, time_s):
+        return {"position": list(position), "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+                "simulation_time_s": time_s, "frame_id": "world", "object_id": "plastic_cup",
+                "session_id": session, "reset_epoch": 7}
+
+    start_target = {"position": [-0.02, -0.28, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
+    end_target = {"position": [-0.08, -0.25, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
+    start_observation = observation(start_target["position"], 32.0)
+    end_observation = observation(end_target["position"], 40.0)
     workspace.write_json("dynamic/dynamic-execute-manifest.json", {
+        # the 10-05 Teacher contract: the Teacher's own outcome decides PASSED, data QC is separate (DISABLED here)
+        "schema": SCHEMA_V2, "teacher_execution_status": "COMPLETED",
+        "teacher_task_result": {
+            "rule_version": "teacher_endpoint_v2", "policy_sha256": "a" * 64, "result": "PASS", "reasons": [],
+            "measured": {}, "start_target": start_target, "end_target": end_target,
+            "start_observation": start_observation, "end_observation": end_observation},
+        "teacher_start_observation": start_observation, "teacher_end_observation": end_observation,
+        "act_data_status": "DISABLED", "process_diagnostics": [],
         "parallel_lease_identity": asdict(identity), "simulation_session_id": session,
         "expected_reset_epoch": 7, "status": "DONE", "current_state": "DONE",
         "failure": None, "state_trace": [state.value for state in trace],

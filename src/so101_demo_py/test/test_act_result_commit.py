@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from act_result_teacher import sealed_teacher, write_manifest
 from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import (
     ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults, ResultInfraError,
@@ -42,7 +43,7 @@ def test_exact_lease_seal_verifies_and_discovers_only_reserved_workspace(tmp_pat
     current = lease()
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    sealed = store.seal(failed_episode(store))
+    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
     verifier = ActCollectionResultVerifier({"w00": worker_root})
     result = verifier.verify(current, str(sealed), RunMode.EXECUTE)
     assert result["status"] == "FAILED" and len(result["sha256"]) == 64
@@ -57,7 +58,7 @@ def test_verifier_rejects_self_declared_late_completion_and_identity_tamper(tmp_
     worker_root = tmp_path / "w00"
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 19.)
-    sealed = store.seal(failed_episode(store))
+    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
     verifier = ActCollectionResultVerifier({"w00": worker_root})
     later = replace(current, lease_deadline_monotonic_s=18.)
     with pytest.raises(ValueError, match="RESULT_AFTER_LEASE_DEADLINE"):
@@ -72,7 +73,7 @@ def test_episode_hash_and_business_status_are_independently_verified(tmp_path):
     worker_root = tmp_path / "w00"
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    sealed = store.seal(failed_episode(store))
+    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
     verifier = ActCollectionResultVerifier({"w00": worker_root})
     episode = sealed / "episode/seal.json"
     episode.write_text(episode.read_text() + " ")
@@ -92,26 +93,36 @@ def test_unsealed_directory_cannot_be_discovered_or_committed(tmp_path):
         verifier.verify(current, str(store.episode_root.parent), RunMode.EXECUTE)
 
 
-def test_corrupt_episode_never_becomes_business_failed_result(tmp_path):
+def test_corrupt_episode_marks_the_data_invalid_and_never_the_teacher_result(tmp_path):
+    """A corrupt episode is a data problem: the Teacher's FAILED stays FAILED and the data is INVALID/NOT_RUN."""
+    import json
     current = lease()
     workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
     episode_path = failed_episode(store)
     episode_path.write_text(episode_path.read_text() + " ")
-    with pytest.raises(ResultInfraError, match="RESULT_EPISODE_INVALID"):
-        store.seal(episode_path)
-    assert not (workspace / "sealed").exists()
+    sealed = store.seal(episode_path, teacher=sealed_teacher(store, "FAILED"))
+    result = json.loads((sealed / "result.json").read_bytes())
+    assert result["status"] == "FAILED" and result["act_data_status"] == "INVALID"
+    assert result["act_data_qc"] == "NOT_RUN" and "RESULT_EPISODE_INVALID" in result["act_data_reason"]
 
 
-def test_worker_result_port_requires_decision_to_match_episode(tmp_path):
+def _decision(status, fields, episode_path):
+    return SimpleNamespace(status=status, episode_seal_path=episode_path,
+        teacher_execution_status=fields["execution_status"], teacher_task_result=fields["task_result"],
+        act_data_status=fields["data_status"], act_data_reason=None)
+
+
+def test_worker_result_port_requires_decision_to_match_the_teacher_result(tmp_path):
     current = lease()
     workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
     episode_path = failed_episode(store)
-    wrong = SimpleNamespace(status=AttemptStatus.PASSED, episode_seal_path=episode_path)
+    fields = sealed_teacher(store, "FAILED")
+    wrong = _decision(AttemptStatus.PASSED, fields, episode_path)
     with pytest.raises(ValueError, match="RESULT_TERMINAL_MISMATCH"):
         store.seal_attempt(current, wrong)
-    right = SimpleNamespace(status=AttemptStatus.FAILED, episode_seal_path=episode_path)
+    right = _decision(AttemptStatus.FAILED, fields, episode_path)
     sealed = store.seal_attempt(current, right)
     assert ActCollectionResultVerifier({"w00": tmp_path / "w00"}).verify(
         current, sealed, RunMode.EXECUTE)["status"] == "FAILED"
@@ -175,9 +186,14 @@ def test_worker_factory_requires_episode_scope_to_match_reset_receipt(tmp_path):
                                provenance=PROVENANCE)
     path = recorder.finish({"status": "FAILED", "reason": "search_failed",
                             "task8_success": False, "stopped_confirmed": True})
-    decision = SimpleNamespace(status=AttemptStatus.FAILED, episode_seal_path=path)
-    with pytest.raises(ResultInfraError, match="RESULT_EPISODE_INVALID"):
-        results.seal_attempt(current, decision)
+    store = results._store(current)
+    decision = _decision(AttemptStatus.FAILED, sealed_teacher(store, "FAILED"), path)
+    # the episode of another session is a data problem: it is graded INVALID and the Teacher result is kept
+    import json
+    sealed = results.seal_attempt(current, decision)
+    result = json.loads((Path(sealed) / "result.json").read_bytes())
+    assert result["status"] == "FAILED" and result["act_data_status"] == "INVALID"
+    assert "RESULT_EPISODE_INVALID" in result["act_data_reason"]
 
 
 def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
@@ -208,7 +224,7 @@ def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
         store = ActCollectionResultStore(workspace, current, clock=lambda: 1.)
         with pytest.raises(ValueError, match="RESULT_MISSING"):
             coordinator.commit_result(current, str(workspace / "sealed"), request_key="result-1")
-        sealed = store.seal(failed_episode(store))
+        sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
         result = coordinator.commit_result(current, str(sealed), request_key="result-1")
         assert result["status"] == "FAILED"
         assert coordinator.snapshot().points["scene-1"].terminal is True

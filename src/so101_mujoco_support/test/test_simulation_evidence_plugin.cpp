@@ -8,8 +8,11 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <atomic>
 #include <limits>
 #include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <type_traits>
@@ -31,6 +34,7 @@ using so101_mujoco_support::EvidenceBuilder;
 using so101_mujoco_support::EvidenceState;
 using so101_mujoco_support::PhysicsStepEvidenceBuffer;
 using so101_mujoco_support::SimulationEvidencePlugin;
+using so101_mujoco_support::StampingChunkPublisher;
 using so101_mujoco_support::make_physics_step_evidence;
 using so101_mujoco_support::make_cancellation_ack;
 using so101_mujoco_support::msg::ContactSample;
@@ -140,6 +144,103 @@ TEST_F(AtomicEvidenceTest, PhysicsStepPoseMatchesPostIntegrationFreeJointState)
   EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.x, step.model_qpos[address + 4]);
   EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.y, step.model_qpos[address + 5]);
   EXPECT_DOUBLE_EQ(step.object_pose_world.orientation.z, step.model_qpos[address + 6]);
+}
+
+TEST_F(AtomicEvidenceTest, WorldPoseAndRawStepMatchTheSamePostIntegrationConfiguration)
+{
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  const int joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[joint];
+  const int velocity_address = model_->jnt_dofadr[joint];
+  data_->qvel[velocity_address] = .2;
+  data_->qvel[velocity_address + 4] = .3;
+  mj_forward(model_.get(), data_.get());
+  mj_step(model_.get(), data_.get());
+  ASSERT_GT(std::abs(data_->qpos[address] - data_->xpos[3 * body]), 1e-8);
+  ASSERT_GT(std::abs(data_->qpos[address + 5] - data_->xquat[4 * body + 2]), 1e-8);
+  const std::vector<mjtNum> original_qpos(data_->qpos, data_->qpos + model_->nq);
+  const std::vector<mjtNum> original_qvel(data_->qvel, data_->qvel + model_->nv);
+  const std::vector<mjtNum> original_xpos(data_->xpos, data_->xpos + 3 * model_->nbody);
+  const std::vector<mjtNum> original_xquat(data_->xquat, data_->xquat + 4 * model_->nbody);
+  const auto world = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto raw = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.x, original_qpos[address]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.y, original_qpos[address + 1]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.position.z, original_qpos[address + 2]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.w, original_qpos[address + 3]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.x, original_qpos[address + 4]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.y, original_qpos[address + 5]);
+  EXPECT_DOUBLE_EQ(world.object_pose_world.orientation.z, original_qpos[address + 6]);
+  EXPECT_EQ(world.object_pose_world, raw.object_pose_world);
+  EXPECT_EQ(original_qpos, std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(original_qvel, std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv));
+  EXPECT_EQ(original_xpos, std::vector<mjtNum>(data_->xpos, data_->xpos + 3 * model_->nbody));
+  EXPECT_EQ(original_xquat, std::vector<mjtNum>(data_->xquat, data_->xquat + 4 * model_->nbody));
+}
+
+TEST_F(AtomicEvidenceTest, WorldTwistMatchesForwardedPostIntegrationStateWithoutMutatingLiveData)
+{
+  const auto xml_path = std::filesystem::temp_directory_path() / "so101_atomic_evidence.xml";
+  std::ifstream source(xml_path);
+  std::string xml((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+  const auto geom_offset = xml.find("name=\"cup_geom\"");
+  ASSERT_NE(geom_offset, std::string::npos);
+  xml.insert(geom_offset, "pos=\".015 0 0\" ");
+  const auto offset_path = std::filesystem::temp_directory_path() / "so101_offset_evidence.xml";
+  std::ofstream(offset_path) << xml;
+  char error[1024]{};
+  model_.reset(mj_loadXML(offset_path.c_str(), nullptr, error, sizeof(error)));
+  ASSERT_NE(model_, nullptr) << error;
+  data_.reset(mj_makeData(model_.get()));
+  ASSERT_NE(data_, nullptr);
+  ASSERT_TRUE(builder_.configure(model_.get(), "cup", "left_tip", "right_tip", {"table"}, 32));
+  place_free_body("cup_joint", 0, 0, .2);
+  place_free_body("left_joint", -.3, 0, .2);
+  place_free_body("right_joint", .3, 0, .2);
+  const int joint = mj_name2id(model_.get(), mjOBJ_JOINT, "cup_joint");
+  const int body = mj_name2id(model_.get(), mjOBJ_BODY, "cup");
+  const int address = model_->jnt_qposadr[joint];
+  const int velocity_address = model_->jnt_dofadr[joint];
+  // A rotated body with a nonzero inertial offset exercises world angular
+  // conversion and the original mjOBJ_BODY centre-of-mass velocity semantics.
+  ASSERT_NEAR(model_->body_ipos[3 * body], .015, 1e-12);
+  data_->qpos[address + 3] = std::sqrt(.5);
+  data_->qpos[address + 6] = std::sqrt(.5);
+  data_->qvel[velocity_address] = .2;
+  data_->qvel[velocity_address + 4] = .3;
+  mj_forward(model_.get(), data_.get());
+  mj_step(model_.get(), data_.get());
+  std::unique_ptr<mjData, DataDeleter> independent(mj_makeData(model_.get()));
+  ASSERT_NE(independent, nullptr);
+  mj_copyData(independent.get(), model_.get(), data_.get());
+  mj_forward(model_.get(), independent.get());
+  mjtNum expected[6]{};
+  mj_objectVelocity(model_.get(), independent.get(), mjOBJ_BODY, body, expected, 0);
+  mjtNum body_origin[6]{};
+  mj_objectVelocity(model_.get(), independent.get(), mjOBJ_XBODY, body, body_origin, 0);
+  ASSERT_GT(std::abs(expected[5] - body_origin[5]), .001)
+    << "the fixture must exercise the nonzero COM rotational velocity correction";
+  mjtNum cached[6]{};
+  mj_objectVelocity(model_.get(), data_.get(), mjOBJ_BODY, body, cached, 0);
+  ASSERT_GT(std::abs(expected[5] - cached[5]), 1e-8);
+  const std::vector<mjtNum> original_qpos(data_->qpos, data_->qpos + model_->nq);
+  const std::vector<mjtNum> original_qvel(data_->qvel, data_->qvel + model_->nv);
+  const std::vector<mjtNum> original_cvel(data_->cvel, data_->cvel + 6 * model_->nbody);
+  const auto world = builder_.build(model_.get(), data_.get(), false, state_);
+  const auto raw = builder_.build_step(model_.get(), data_.get(), false, state_, 0, 1.0, 10.0);
+  EXPECT_NEAR(world.object_twist_world.angular.x, expected[0], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.angular.y, expected[1], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.angular.z, expected[2], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.x, expected[3], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.y, expected[4], 1e-12);
+  EXPECT_NEAR(world.object_twist_world.linear.z, expected[5], 1e-12);
+  EXPECT_EQ(world.object_twist_world, raw.object_twist_world);
+  EXPECT_EQ(original_qpos, std::vector<mjtNum>(data_->qpos, data_->qpos + model_->nq));
+  EXPECT_EQ(original_qvel, std::vector<mjtNum>(data_->qvel, data_->qvel + model_->nv));
+  EXPECT_EQ(original_cvel, std::vector<mjtNum>(data_->cvel, data_->cvel + 6 * model_->nbody));
 }
 
 TEST_F(AtomicEvidenceTest, ResetGenerationIsTheOnlyEpochAuthority)
@@ -681,6 +782,28 @@ TEST(PhysicsStepEvidenceBufferTest, FailedPublishAttemptRetainsContinuousRangeAn
   }
 }
 
+TEST(PhysicsStepEvidenceBufferTest, CumulativePublishDeferralsAreCarriedByEveryChunkAndResetWithTheBuffer)
+{
+  PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
+  for (uint64_t step = 1; step <= 5; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, static_cast<double>(step))));
+  }
+  buffer.mark_publish_failed();
+  buffer.mark_publish_failed();
+  const auto deferred = buffer.prepare_chunk();
+  EXPECT_EQ(deferred.failed_publish_attempts, 2U);
+  EXPECT_EQ(deferred.publish_deferrals_total, 2U);
+  buffer.mark_published();
+  for (uint64_t step = 6; step <= 10; ++step) {
+    ASSERT_TRUE(buffer.append(physics_step_sample(step, static_cast<double>(step))));
+  }
+  const auto next = buffer.prepare_chunk();
+  EXPECT_EQ(next.failed_publish_attempts, 0U);       // per chunk: reset by the publish
+  EXPECT_EQ(next.publish_deferrals_total, 2U);       // cumulative: survives it
+  buffer.reset();
+  EXPECT_EQ(buffer.prepare_chunk().publish_deferrals_total, 0U);
+}
+
 TEST(PhysicsStepEvidenceBufferTest, EmptyLossSentinelRetainsTheLastObservedIdentity)
 {
   PhysicsStepEvidenceBuffer buffer(64, 5, 11.60);
@@ -837,6 +960,14 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   EXPECT_EQ(chunks.front().first_physics_step, 1U);
   EXPECT_EQ(chunks.front().last_physics_step, 5U);
   EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");
+  // CP-3410: the publish path stamps itself. handoff = the physics thread posted the chunk; publish = the publishing thread
+  // was about to call publish(); both on the clock of the samples' clock intervals.
+  const auto & stamped = chunks.front();
+  EXPECT_GT(stamped.handoff_monotonic_ns, 0U);
+  EXPECT_GE(stamped.handoff_monotonic_ns,
+    static_cast<uint64_t>(stamped.samples.back().clock_interval_end_monotonic_ns));
+  EXPECT_GE(stamped.publish_monotonic_ns, stamped.handoff_monotonic_ns);
+  EXPECT_EQ(stamped.publish_deferrals_total, 0U);
   plugin.cleanup();
   executor.remove_node(observer);
   executor.remove_node(node);
@@ -1028,6 +1159,217 @@ TEST(RobotContactBufferTest, OverflowAndTransientContactPersistUntilExplicitEpoc
   EXPECT_FALSE(buffer.front().evidence_loss);
 }
 
+// ---- plan A21: RobotContactEvidence has its own non-real-time publishing thread ----
+
+namespace
+{
+using so101_mujoco_support::RobotContactPublisher;
+using so101_mujoco_support::msg::RobotContactEvidence;
+
+RobotContactEvidence contact_step(uint64_t epoch, uint64_t step)
+{
+  RobotContactEvidence sample;
+  sample.simulation_session_id = "s";
+  sample.reset_epoch = epoch;
+  sample.physics_step = step;
+  sample.simulation_time_s = static_cast<double>(step) * .002;
+  return sample;
+}
+
+struct Delivered
+{
+  std::mutex mutex;
+  std::vector<RobotContactEvidence> rows;
+  void add(const RobotContactEvidence & row)
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    rows.push_back(row);
+  }
+  std::size_t count()
+  {
+    std::lock_guard<std::mutex> lock(mutex);
+    return rows.size();
+  }
+};
+
+template<typename Predicate>
+bool wait_until(Predicate predicate, std::chrono::milliseconds limit = std::chrono::milliseconds(5000))
+{
+  const auto end = std::chrono::steady_clock::now() + limit;
+  while (std::chrono::steady_clock::now() < end) {
+    if (predicate()) {return true;}
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  return predicate();
+}
+}  // namespace
+
+TEST(RobotContactPublisherTest, PacedPushAtTheStepRateIsDeliveredCompletelyInOrderAtTheSameRate)
+{
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&delivered](const RobotContactEvidence & row) {delivered.add(row);});
+  const int count = 600;
+  const auto begin = std::chrono::steady_clock::now();
+  for (int step = 1; step <= count; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+    std::this_thread::sleep_for(std::chrono::microseconds(1500));  // faster than the 2 ms physics step
+  }
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == static_cast<std::size_t>(count);}));
+  const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
+  EXPECT_GE(static_cast<double>(count) / seconds, 400.0);  // delivered at (about) the push rate, no backlog growth
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  for (int index = 0; index < count; ++index) {
+    ASSERT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));  // in order, none missing
+    EXPECT_FALSE(delivered.rows[index].evidence_loss);
+  }
+  const auto stats = publisher.stats();
+  EXPECT_EQ(stats.pushed, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.published, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.dropped, 0u);
+}
+
+TEST(RobotContactPublisherTest, ABurstFasterThanOneMessagePerPublishCycleIsDrainedInBatchesInOrder)
+{
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&delivered](const RobotContactEvidence & row) {
+      std::this_thread::sleep_for(std::chrono::microseconds(30));  // a sink slower than the push loop
+      delivered.add(row);
+    });
+  const int count = 3000;
+  for (int step = 1; step <= count; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));  // never blocks on the sink
+  }
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == static_cast<std::size_t>(count);}));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  for (int index = 0; index < count; ++index) {
+    ASSERT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));
+  }
+  const auto stats = publisher.stats();
+  EXPECT_GT(stats.high_water, 100u);  // the backlog really queued up behind the slow sink and was fully drained
+  EXPECT_EQ(stats.published, static_cast<uint64_t>(count));
+  EXPECT_EQ(stats.dropped, 0u);
+}
+
+TEST(RobotContactPublisherTest, ThePhysicsThreadNeverBlocksOnASinkThatIsStuck)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  RobotContactPublisher publisher(5000, [&](const RobotContactEvidence &) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);  // stuck until released
+    });
+  const auto begin = std::chrono::steady_clock::now();
+  for (int step = 1; step <= 1000; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+  }
+  EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::milliseconds(500));
+  hold.unlock();
+  ASSERT_TRUE(wait_until([&]() {return publisher.stats().published == 1000u;}));
+}
+
+TEST(RobotContactPublisherTest, OverflowKeepsTheLossSignallingOnEveryLaterMessageUntilReset)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  Delivered delivered;
+  RobotContactPublisher publisher(8, [&](const RobotContactEvidence & row) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);
+      delivered.add(row);
+    });
+  ASSERT_TRUE(publisher.push(contact_step(1, 1)));
+  ASSERT_TRUE(wait_until([&]() {return entered.load() == 1;}));  // step 1 is in flight, the queue is empty
+  for (int step = 2; step <= 9; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));  // fills the 8-slot queue
+  }
+  EXPECT_FALSE(publisher.push(contact_step(1, 10)));  // overflow: refused, exactly like RobotContactBuffer::append
+  EXPECT_EQ(publisher.stats().dropped, 1u);
+  hold.unlock();
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 9u;}));
+  {
+    std::lock_guard<std::mutex> lock(delivered.mutex);
+    EXPECT_FALSE(delivered.rows[0].evidence_loss);  // left before the overflow
+    for (int index = 1; index < 9; ++index) {
+      EXPECT_EQ(delivered.rows[index].physics_step, static_cast<uint64_t>(index + 1));
+      EXPECT_TRUE(delivered.rows[index].evidence_loss);  // the latch is applied to every later message
+    }
+  }
+  ASSERT_TRUE(publisher.push(contact_step(1, 11)));
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 10u;}));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  EXPECT_TRUE(delivered.rows[9].evidence_loss);  // persists until an explicit epoch reset
+}
+
+TEST(RobotContactPublisherTest, ResetClearsTheQueueDropsTheRestOfABatchAndKeepsEpochSemantics)
+{
+  std::mutex gate;
+  std::unique_lock<std::mutex> hold(gate);
+  std::atomic<int> entered{0};
+  Delivered delivered;
+  RobotContactPublisher publisher(5000, [&](const RobotContactEvidence & row) {
+      ++entered;
+      std::lock_guard<std::mutex> wait(gate);
+      delivered.add(row);
+    });
+  for (int step = 1; step <= 6; ++step) {
+    ASSERT_TRUE(publisher.push(contact_step(1, step)));
+  }
+  ASSERT_TRUE(wait_until([&]() {return entered.load() == 1;}));
+  std::thread resetter([&]() {publisher.reset(2);});  // waits (bounded) for the one in-flight message
+  std::this_thread::sleep_for(std::chrono::milliseconds(80));
+  hold.unlock();
+  resetter.join();
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() >= 1u;}));
+  ASSERT_TRUE(publisher.push(contact_step(2, 1)));  // the new epoch restarts at step 1, no loss carried over
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() >= 2u;}));
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  std::lock_guard<std::mutex> lock(delivered.mutex);
+  ASSERT_EQ(delivered.rows.size(), 2u);  // steps 2..6 of epoch 1 never follow the new epoch
+  EXPECT_EQ(delivered.rows[0].reset_epoch, 1u);
+  EXPECT_EQ(delivered.rows[1].reset_epoch, 2u);
+  EXPECT_EQ(delivered.rows[1].physics_step, 1u);
+  EXPECT_FALSE(delivered.rows[1].evidence_loss);
+}
+
+TEST(RobotContactPublisherTest, ASinkFailureIsLostEvidenceAndStopJoinsTheThread)
+{
+  std::atomic<int> calls{0};
+  Delivered delivered;
+  auto publisher = std::make_unique<RobotContactPublisher>(100, [&](const RobotContactEvidence & row) {
+      if (++calls == 1) {throw std::runtime_error("publish failed");}
+      delivered.add(row);
+    });
+  ASSERT_TRUE(publisher->push(contact_step(1, 1)));
+  ASSERT_TRUE(wait_until([&]() {return publisher->stats().sink_errors == 1u;}));
+  ASSERT_TRUE(publisher->push(contact_step(1, 2)));
+  ASSERT_TRUE(wait_until([&]() {return delivered.count() == 1u;}));
+  EXPECT_TRUE(delivered.rows[0].evidence_loss);  // the message that never left is signalled as lost evidence
+  publisher->stop();
+  publisher->stop();  // idempotent
+  const auto after_stop = calls.load();
+  publisher->push(contact_step(1, 3));
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  EXPECT_EQ(calls.load(), after_stop);  // the joined thread delivers nothing more
+  publisher.reset();  // destructor after stop is clean
+}
+
+TEST(RobotContactPublisherTest, DestructionWithQueuedMessagesJoinsWithoutHanging)
+{
+  std::atomic<int> calls{0};
+  {
+    RobotContactPublisher publisher(5000, [&](const RobotContactEvidence &) {
+        ++calls;
+        std::this_thread::sleep_for(std::chrono::microseconds(200));
+      });
+    for (int step = 1; step <= 2000; ++step) {publisher.push(contact_step(1, step));}
+  }  // joins here; queued messages are discarded
+  const auto at_exit = calls.load();
+  std::this_thread::sleep_for(std::chrono::milliseconds(30));
+  EXPECT_EQ(calls.load(), at_exit);
+}
+
 TEST_F(AtomicEvidenceTest, WholeRobotRetainsArmTableArmArmAndArmMastPairs)
 {
   so101_mujoco_support::RobotContactBuilder robot;
@@ -1086,4 +1428,54 @@ TEST_F(AtomicEvidenceTest, FullSceneStateTracksEveryDynamicBodyAndBindsCompiledM
   so101_mujoco_support::SceneStateBuilder changed;
   ASSERT_TRUE(changed.configure(model_.get()));
   EXPECT_NE(changed.model_sha256(), fingerprint);
+}
+
+
+TEST(StampingChunkPublisherTest, StampsThePublishTimeInItsOwnThreadAndNeverBlocksThePostingThread)
+{
+  rclcpp::init(0, nullptr);
+  auto node = std::make_shared<rclcpp::Node>("stamping_publisher_test");
+  const auto topic = "/test/so101/stamping_chunks";
+  std::vector<PhysicsStepEvidenceChunk> received;
+  const auto subscription = node->create_subscription<PhysicsStepEvidenceChunk>(
+    topic, rclcpp::QoS(rclcpp::KeepLast(100)).reliable(),
+    [&received](const PhysicsStepEvidenceChunk & message) {received.push_back(message);});
+  (void)subscription;
+  auto publisher = node->create_publisher<PhysicsStepEvidenceChunk>(
+    topic, rclcpp::QoS(rclcpp::KeepLast(100)).reliable());
+  StampingChunkPublisher stamping(publisher);
+  rclcpp::executors::SingleThreadedExecutor executor;
+  executor.add_node(node);
+
+  std::size_t accepted = 0;
+  std::chrono::nanoseconds slowest{0};
+  for (uint64_t sequence = 1; sequence <= 50; ++sequence) {
+    PhysicsStepEvidenceChunk chunk;
+    chunk.chunk_sequence = sequence;
+    chunk.handoff_monotonic_ns = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count());
+    const auto before = std::chrono::steady_clock::now();
+    const bool posted = stamping.try_post(chunk);
+    slowest = std::max(slowest, std::chrono::steady_clock::now() - before);
+    accepted += posted ? 1U : 0U;
+    executor.spin_some();
+  }
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+  while (received.size() < accepted && std::chrono::steady_clock::now() < deadline) {
+    executor.spin_some();
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  EXPECT_GT(accepted, 0U);
+  EXPECT_EQ(received.size(), accepted);                   // everything accepted is published, in order
+  EXPECT_LT(slowest, std::chrono::milliseconds(5));       // the physics thread is never blocked
+  uint64_t previous_sequence = 0;
+  for (const auto & chunk : received) {
+    EXPECT_GT(chunk.chunk_sequence, previous_sequence);
+    previous_sequence = chunk.chunk_sequence;
+    EXPECT_GE(chunk.publish_monotonic_ns, chunk.handoff_monotonic_ns);
+    EXPECT_GT(chunk.publish_monotonic_ns, 0U);
+  }
+  executor.remove_node(node);
+  rclcpp::shutdown();
 }

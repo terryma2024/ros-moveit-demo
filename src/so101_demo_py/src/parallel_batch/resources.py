@@ -90,6 +90,7 @@ _BASE_ENVIRONMENT_ALLOWLIST = (
     'LD_LIBRARY_PATH',
     'PYTHONPATH',
     'RMW_IMPLEMENTATION',
+    'SO101_IK_BACKEND',
 )
 
 
@@ -1083,6 +1084,9 @@ class WorkerResourceAllocator:
         if not isinstance(source_environment, Mapping):
             raise ResourceAllocationError('BASE_ENVIRONMENT')
         self.base_environment = dict(source_environment)
+        if ('SO101_IK_BACKEND' in self.base_environment
+                and self.base_environment['SO101_IK_BACKEND'] not in ('native', 'quik')):
+            raise ResourceAllocationError('IK_BACKEND_UNSUPPORTED')
         self.claim_root = (
             runtime_ipc_base() / 'so101-parallel-domain-claims'
             if claim_root is None

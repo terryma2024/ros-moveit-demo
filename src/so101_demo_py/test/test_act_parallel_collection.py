@@ -336,15 +336,15 @@ def test_the_worker_accepts_either_act_workload_only_in_execute_mode(tmp_path):
     from test_parallel_batch_worker import Fake
     from so101_demo.parallel_batch.worker import ParallelWorker, RunMode, WorkerError
 
-    from so101_demo.act.collection import ActCollectionWorkload
+    from so101_demo.act import collection as act_collection
     from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
     workload = ActFixedCollectionWorkload(SimpleNamespace(run=lambda: {}), runtime=None)
     ports = Fake(RunMode.EXECUTE).ports()
     ports["workload"] = workload
     ParallelWorker(ports)                                     # accepted in EXECUTE mode
-    ports["workload"] = ActCollectionWorkload()
-    ParallelWorker(ports)                                     # the single-scenario port still is too
+    # the single-scenario port was dead code (no runtime implements `collect_authorized_scenario`) and is gone
+    assert not hasattr(act_collection, "ActCollectionWorkload")
 
     # outside EXECUTE mode neither may be attached
     for mode in (RunMode.PLAN_ONLY, RunMode.DRY_RUN):

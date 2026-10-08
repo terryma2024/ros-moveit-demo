@@ -145,9 +145,18 @@ class WorkerOwnedProcessTree:
                 tuple(identity for identity, _child in self._children)
             )
 
-    def start(self, spec, *, environment=None):
+    def start(self, spec, *, environment=None, pass_fds=()):
+        if (not isinstance(pass_fds, tuple)
+                or any(type(fd) is not int or fd < 0 for fd in pass_fds)
+                or len(set(pass_fds)) != len(pass_fds)):
+            raise ValueError("WORKER_INHERITED_FDS_INVALID")
+        try:
+            for fd in pass_fds:
+                os.fstat(fd)
+        except OSError as error:
+            raise ValueError("WORKER_INHERITED_FDS_INVALID") from error
         with self._lock:
-            return self._start_locked(spec, environment=environment)
+            return self._start_locked(spec, environment=environment, pass_fds=pass_fds)
 
     def _starting_identity(self, child):
         """Allow the exact child a brief fork/exec window to expose /proc."""
@@ -167,12 +176,20 @@ class WorkerOwnedProcessTree:
                     raise
                 time.sleep(min(0.01, max(0.0, deadline - time.monotonic())))
 
-    def _start_locked(self, spec, *, environment=None):
+    def _start_locked(self, spec, *, environment=None, pass_fds=()):
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
+        argv = list(spec.argv)
+        from .qualified_commands import qualified_prefix_from_env, resolve_role_command
+
+        prefix = qualified_prefix_from_env()
+        if prefix is not None:
+            # CP-3459: in a qualified run no child is found by PATH or comes from outside the install
+            argv = list(resolve_role_command(argv, prefix=prefix))
         child = self._popen(
-            list(spec.argv), start_new_session=False,
+            argv, start_new_session=False,
             env=None if environment is None else dict(environment),
+            **({"pass_fds": pass_fds} if pass_fds else {}),
         )
         identity = None
         try:
@@ -263,6 +280,51 @@ class WorkerOwnedProcessTree:
             ]
             self._write_manifest_locked()
             return True
+
+    def _owned_child(self, expected):
+        for identity, child in self._children:
+            if identity == expected:
+                return identity, child
+        return None
+
+    def exit_code(self, expected):
+        """The exact owned child's return code, or None while it still runs (also None for an unknown child)."""
+        with self._lock:
+            owned = self._owned_child(expected)
+            return None if owned is None else owned[1].poll()
+
+    def wait_exit(self, expected, timeout_s):
+        """Wait at most `timeout_s` for the exact owned child to exit on its own; its return code, or None if it did not."""
+        with self._lock:
+            owned = self._owned_child(expected)
+        if owned is None:
+            return None
+        try:
+            return owned[1].wait(timeout=max(0.0, float(timeout_s)))
+        except subprocess.TimeoutExpired:
+            return None
+
+    def terminate(self, expected, grace_s):
+        """SIGTERM the exact owned child (never its siblings), allow `grace_s`, then SIGKILL; its return code."""
+        with self._lock:
+            owned = self._owned_child(expected)
+            if owned is None:
+                return None
+            identity, child = owned
+            if child.poll() is None:
+                if not self._matches(identity):
+                    raise RuntimeError(f"{identity.role}: identity changed")
+                try:
+                    self._signal_process(identity.pid, signal.SIGTERM)
+                    child.wait(timeout=float(grace_s))
+                except subprocess.TimeoutExpired:
+                    if not self._matches(identity):
+                        raise RuntimeError(f"{identity.role}: identity changed")
+                    self._signal_process(identity.pid, signal.SIGKILL)
+                    child.wait(timeout=self._terminate_timeout_s)
+                except ProcessLookupError:
+                    pass
+            return child.poll()
 
     def _shutdown_locked(self):
         failures = []
@@ -413,12 +475,22 @@ class RuntimeDecision:
     numeric_evidence: NumericEvidenceReceipt | None = None
     terminal_artifacts: tuple[Path, ...] = ()
     completion_monotonic_s: float | None = None
+    #: the Teacher's own result (from its child's manifest) and the data status that child reported; the attempt
+    #: status above is derived from the first two alone. None outside an ACT Teacher execution.
+    teacher_execution_status: str | None = None
+    teacher_task_result: str | None = None
+    act_data_status: str | None = None
+    act_data_reason: str | None = None
+    #: the independent fresh-process QC report written beside the episode (Phase A4c); None when QC did not produce one
+    qc_report_path: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ExecutionCompletionReceipt:
     decision: RuntimeDecision
     completion_monotonic_s: float
+    #: False when the wait for the Teacher child gave up with the child still alive (CP-3459): the Teacher has not exited
+    teacher_child_exited: bool = True
 
     def __post_init__(self) -> None:
         if not isinstance(self.decision, RuntimeDecision):
@@ -743,6 +815,10 @@ class ParallelWorkerRuntime:
         process_group: Any | None = None,
         station_config: Callable[[WorkerResources], PersistentStackConfig] | None = None,
         ready_probe: Callable[[tuple[str, ...]], bool] | None = None,
+        initializing_acknowledged: Callable[[Any], Any] | None = None,
+        heartbeat_acknowledged: Callable[[Any], Any] | None = None,
+        attempt_started_acknowledged: Callable[[Any], Any] | None = None,
+        finalizing_acknowledged: Callable[[Any], Any] | None = None,
         reset_point: Callable[[Any], Any] | None = None,
         reserve_workspace: Callable[[Any, Any], Any] | None = None,
         initial_gate: Callable[[Any, Any], Any] | None = None,
@@ -755,6 +831,11 @@ class ParallelWorkerRuntime:
         capture_rgb: Callable[[Path, float], SourceStampedCapture] | None = None,
         open_episode: Callable[[Any], Any] | None = None,
         episode_scope_path: str | None = None,
+        episode_inputs_manifest: str | None = None,
+        collection: Any | None = None,
+        recorder_policy: dict | None = None,
+        recorder_clock: Callable[[], float] = time.monotonic,
+        recorder_sleep: Callable[[float], None] = time.sleep,
         capture_numeric_evidence: Callable[
             [Any, Any, Path, float], NumericEvidenceReceipt
         ]
@@ -790,9 +871,28 @@ class ParallelWorkerRuntime:
         # The station shape is a platform decision (Linux headless, Darwin visible), so it is a
         # port with a default rather than a hard-coded launch command.
         self._station_config = station_config or task_station_config
+        if station_config is None and episode_inputs_manifest is not None:
+            # A first-episode run is the ACT station, chosen by the frozen inputs (never by the ambient environment).
+            from dataclasses import replace
+            from .act_first_episode_station import FirstEpisodeStation
+            self._station_config = FirstEpisodeStation.bind(episode_inputs_manifest, episode_scope_path)
+            self.resources = replace(resources, environment=self._station_config.environment(resources))
         if not callable(self._station_config):
             raise TypeError("station_config must be callable")
         self._ready_probe = ready_probe or _required("ready_probe")
+        if initializing_acknowledged is not None and not callable(initializing_acknowledged):
+            raise TypeError("initializing ACK hook must be callable")
+        self._initializing_acknowledged=initializing_acknowledged
+        if heartbeat_acknowledged is not None and not callable(heartbeat_acknowledged):
+            raise TypeError("heartbeat ACK hook must be callable")
+        self._heartbeat_acknowledged=heartbeat_acknowledged
+        if attempt_started_acknowledged is not None and not callable(attempt_started_acknowledged):
+            raise TypeError("attempt-started ACK hook must be callable")
+        self._attempt_started_acknowledged=attempt_started_acknowledged
+        if finalizing_acknowledged is not None and not callable(finalizing_acknowledged):
+            raise TypeError("finalizing ACK hook must be callable")
+        self._finalizing_acknowledged=finalizing_acknowledged
+        self._started_leases={}
         self._reset_point = reset_point or _required("reset_point")
         # Task 11 production always supplies the durable reservation owner.  The
         # no-op default preserves the reusable Task 10 unit-test seam.
@@ -813,9 +913,25 @@ class ParallelWorkerRuntime:
         # this path rather than the frozen values, because a scope assembled from a second reading is how
         # a document and the run it describes drift apart (CP-2862). None means no episode is recorded.
         self.episode_scope_path = None if episode_scope_path is None else str(episode_scope_path)
+        self.episode_inputs_manifest = (None if episode_inputs_manifest is None
+                                        else str(episode_inputs_manifest))
         # (the CLI, which also knows the scope values and where the audit pair goes). Optional: a runtime that does not
         # record is still a valid runtime, which is why this is not among REQUIRED.
         self._open_episode = open_episode
+        # Collection (Phase A4c): `collection` is a CollectionOptions. Enabled, every attempt starts an independent
+        # act_episode_recorder before its Teacher, with the bounds frozen in episode_recorder_v1.
+        self._collection = collection
+        self._recorders: dict[tuple[object, ...], Any] = {}
+        self._teacher_exit_callback: Callable[[], None] | None = None
+        self._recorder_clock = recorder_clock
+        self._recorder_sleep = recorder_sleep
+        self._recorder_policy = recorder_policy
+        if collection is not None and collection.enabled:
+            if episode_inputs_manifest is None or episode_scope_path is None:
+                raise TypeError("collection on requires the frozen inputs manifest and the episode scope")
+            if self._recorder_policy is None:
+                from ..act.frozen_runtime_inputs import load_recorder_frozen_policy
+                self._recorder_policy = load_recorder_frozen_policy(Path(episode_inputs_manifest))
         self._cancel_motion = cancel_motion or (lambda _lease: True)
         self._confirm_no_controller_goal = confirm_no_controller_goal or (
             lambda _lease: True
@@ -877,6 +993,12 @@ class ParallelWorkerRuntime:
 
     def worker_ready_gate(self) -> bool:
         return self._physical_started and self._ready_probe(_READY_REQUIREMENTS) is True
+
+    def ready_failure(self) -> str | None:
+        """Why the last ready probe refused, when its owner recorded a reason (surfaced in the worker result)."""
+        owner = getattr(self._ready_probe, "__self__", None)
+        message = getattr(owner, "ready_failure_message", None)
+        return message if isinstance(message, str) and message else None
 
     @staticmethod
     def _lease_value(lease: Any, name: str) -> Any:
@@ -1058,6 +1180,40 @@ class ParallelWorkerRuntime:
         self._reset_receipts[key] = receipt
         return receipt
 
+    def initializing_acknowledged(self,lease):
+        if self._initializing_acknowledged is not None:
+            self._execution_allowed()
+            if not self._physical_started:
+                raise RuntimeError("teacher initializing ACK requires the existing physical station")
+            self._initializing_acknowledged(lease)
+
+    def heartbeat_acknowledged(self,lease):
+        if self._heartbeat_acknowledged is not None:
+            self._execution_allowed()
+            if not self._physical_started:
+                raise RuntimeError("teacher heartbeat ACK requires the existing physical station")
+            self._heartbeat_acknowledged(lease)
+
+    def attempt_started_acknowledged(self,lease):
+        if self._attempt_started_acknowledged is not None:
+            self._execution_allowed()
+            key=self._lease_key(lease)
+            if (self.run_mode is not RunMode.EXECUTE or not self._physical_started
+                    or key not in self._reset_receipts or key not in self._paused_for_inference
+                    or key in self._started_leases):
+                raise RuntimeError("teacher start ACK requires the original paused point gate")
+            self._attempt_started_acknowledged(lease)
+            self._execution_allowed()
+            self._started_leases[key]=lease
+
+    def finalizing_acknowledged(self,lease):
+        if self._finalizing_acknowledged is not None:
+            self._execution_allowed()
+            if self.run_mode is not RunMode.EXECUTE or not self._physical_started:
+                raise RuntimeError("teacher finalizing ACK requires the existing physical station")
+            self._finalizing_acknowledged(lease)
+            self._execution_allowed()
+
     def inference_snapshot(self, lease: Any) -> InferenceSnapshotReceipt:
         """Return only the post-reset snapshot bound to this exact lease."""
 
@@ -1099,17 +1255,10 @@ class ParallelWorkerRuntime:
                 "initial camera frame is not newer than reset simulation watermark"
             )
         if self.run_mode is RunMode.EXECUTE:
-            reset_epoch = getattr(reset_receipt, "reset_epoch", None)
-            argv = self.consumer_argv(reset_epoch, lease)
-            if argv is None:
-                raise RuntimeError("execute consumer command is unavailable")
-            child = self._processes.start(
-                StackProcessSpec("dynamic-consumer", argv),
-                environment=self.resources.environment,
-            )
-            if self._consumer_ready(child) is not True:
-                raise RuntimeError("dynamic consumer subscription is not ready")
-            self._execute_consumers[key] = child
+            # The Recorder starts first and is waited for a bounded time; the Teacher starts whatever happened to it.
+            self._start_recorder_first(lease, reset_receipt)
+            self._start_execute_consumer(lease)
+            self._recorder_teacher_started(lease)
         inference = self._capture_inference_rgb(lease, boundary)
         reset_session = getattr(reset_receipt, "simulation_session_id", None)
         if simulation_time is not None and (
@@ -1138,6 +1287,23 @@ class ParallelWorkerRuntime:
     def reset_and_validate_point(self, lease: Any):
         receipt = self.reset_point(lease)
         return receipt, self.point_initial_gate(lease, receipt)
+
+    def _start_execute_consumer(self,lease):
+        self._execution_allowed()
+        key=self._lease_key(lease)
+        if key in self._execute_consumers:
+            raise RuntimeError("execute consumer was already started")
+        reset=self._reset_receipts[key]
+        argv=self.consumer_argv(getattr(reset,"reset_epoch",None),lease)
+        if argv is None:
+            raise RuntimeError("execute consumer command is unavailable")
+        environment=dict(self.resources.environment)
+        self._execution_allowed()
+        child=self._processes.start(StackProcessSpec("dynamic-consumer",argv),environment=environment)
+        if self._consumer_ready(child) is not True:
+            raise RuntimeError("dynamic consumer subscription is not ready")
+        self._execution_allowed()
+        self._execute_consumers[key]=child
 
     def localize_and_admit_pose(self, lease: Any, broker_result: Any):
         self._execution_allowed()
@@ -1252,6 +1418,10 @@ class ParallelWorkerRuntime:
                 lease.attempt_id,
                 "--lease-generation",
                 str(lease.lease_generation),
+                "--lease-issued-monotonic-s",
+                str(lease.lease_issued_monotonic_s),
+                "--lease-deadline-monotonic-s",
+                str(lease.lease_deadline_monotonic_s),
                 "--evidence-root",
                 str(point_root / "dynamic"),
                 "--ready-receipt",
@@ -1260,10 +1430,89 @@ class ParallelWorkerRuntime:
                 "observe_only",
             )
         )
-        if self.episode_scope_path is not None:
-            # the consumer is told where the scope document is, not what it says: one artefact, read once
-            argv = argv + ("--episode-scope", str(self.episode_scope_path))
+        if self.episode_inputs_manifest is not None:
+            # the Teacher loads its snapshot and policies from the frozen set and refuses a mismatch before motion
+            argv = argv + ("--frozen-inputs-manifest", self.episode_inputs_manifest)
+        if self._collection is not None and self._collection.enabled:
+            # the only Teacher-side difference collection makes: the confirmed final normal-stop proof
+            argv = argv + ("--final-stop-proof",)
         return argv
+
+    # ---- the data side: a record-only bag during the run, the offline processor after it (CP-3456) ------------------
+
+    def _offline_identity(self, lease: Any, reset_epoch: object) -> dict:
+        return {"session_id": self.resources.session_id, "reset_epoch": self._reset_epoch_integer(reset_epoch),
+                "attempt_id": lease.attempt_id}
+
+    def _start_recorder_first(self, lease: Any, reset_receipt: Any) -> None:
+        """Start the record-only bag recorder before the Teacher and wait a bounded time for RECORDING. A refusal of the collection
+        request raises (before any Teacher start); every other defect is data INVALID and never reaches the Teacher."""
+        if self._collection is None or not self._collection.enabled:
+            return
+        from ..act.offline.orchestration import OfflineCollection
+
+        key = self._lease_key(lease)
+        _point_key, point_root = self._point_root(lease)
+        identity = self._offline_identity(lease, getattr(reset_receipt, "reset_epoch", None))
+        collection = OfflineCollection(
+            processes=self._processes, point_root=point_root, sandbox_root=self._collection.sandbox_root,
+            fault=self._collection.fault, environment=dict(self.resources.environment),
+            spec_factory=lambda role, argv: StackProcessSpec(role, tuple(argv)),
+            inputs_manifest=self.episode_inputs_manifest, scope=self.episode_scope_path, identity=identity,
+            policy=self._recorder_policy, clock=self._recorder_clock, sleep=self._recorder_sleep)
+        self._recorders[key] = collection
+        collection.start_before_teacher()
+
+    def _recorder_teacher_started(self, lease: Any) -> None:
+        """The Teacher is running. `recorder_late` starts its bag from a side thread once the Teacher has produced its setup
+        evidence; nothing here blocks the Teacher."""
+        collection = self._recorders.get(self._lease_key(lease))
+        if collection is None:
+            return
+        collection.teacher_started_now()
+        _key, point_root = self._point_root(lease)
+        collection.arm_late_start(point_root / "dynamic" / "reachability-observed.json")
+
+    def _finish_collection(self, lease: Any, decision: RuntimeDecision) -> RuntimeDecision:
+        """After the Teacher ended: close the bag and run the offline processor (episode, fresh-process QC). Returns the decision
+        with the data status, its reason and the QC report; the Teacher fields are never touched."""
+        key = self._lease_key(lease)
+        collection = self._recorders.pop(key, None)
+        if self._collection is None:
+            return decision  # a run that never asked for collection: the decision is the Teacher's and nothing more
+        if not self._collection.enabled:
+            return replace(decision, act_data_status="DISABLED", act_data_reason=None)
+        if collection is None:
+            if decision.act_data_status == "INVALID":
+                return decision   # a verdict already made (a timed-out Teacher retires its collection) keeps its own reason
+            return replace(decision, act_data_status="INVALID", act_data_reason="RECORDER_NEVER_ORCHESTRATED")
+        _key, point_root = self._point_root(lease)
+        skip = None
+        if decision.act_data_status == "INVALID":
+            skip = decision.act_data_reason or "TEACHER_MANIFEST_UNVERIFIABLE"
+        from ..act.offline.orchestration import LEASE_FIELDS
+
+        outcome = collection.finish(lease={name: getattr(lease, name) for name in LEASE_FIELDS}, skip_processing=skip,
+                                    deadline_s=float(lease.lease_deadline_monotonic_s))
+        status, reason = outcome.data_status, outcome.reason
+        qc_path = None
+        if status == "VALID":
+            qc_path = Path(outcome.facts["qc_report_path"])
+        outcome.facts["act_data_status"] = status
+        self._write_collection_record(point_root, outcome.facts, reason)
+        return replace(decision, act_data_status=status, act_data_reason=reason, qc_report_path=qc_path)
+
+    @staticmethod
+    def _write_collection_record(point_root: Path, facts: dict, reason) -> None:
+        try:
+            payload = json.dumps({"schema": "SO101_RECORDER_ORCHESTRATION_V1", "reason": reason, **facts},
+                                 sort_keys=True, default=str, allow_nan=False).encode() + b"\n"
+            with open(Path(point_root) / "recorder-orchestration.json", "xb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except (OSError, ValueError, TypeError):
+            pass
 
     @staticmethod
     def _reset_epoch_integer(value):
@@ -1275,6 +1524,19 @@ class ParallelWorkerRuntime:
         ):
             raise RuntimeError("execute consumer reset epoch is not canonical")
         return int(value[6:])
+
+    def bind_teacher_exit(self, callback: Callable[[], None] | None) -> None:
+        """The Worker's callback that closes the Teacher-child window (and stops the Teacher deadline guard)."""
+        self._teacher_exit_callback = callback
+
+    def _teacher_has_exited(self) -> None:
+        """The Teacher child ended: tell the Worker before any data work, so processing never runs inside the Teacher's window."""
+        callback = self._teacher_exit_callback
+        if callback is not None:
+            try:
+                callback()
+            except Exception:   # noqa: BLE001 - the data side never decides control's result
+                pass
 
     def execute_expert(self, lease: Any, admitted: Any):
         self._execution_allowed()
@@ -1309,13 +1571,38 @@ class ParallelWorkerRuntime:
         receipt = self._execute_result(lease, admitted, child)
         if type(receipt) is not ExecutionCompletionReceipt:
             raise RuntimeError("execute result lacks an authoritative completion receipt")
+        teacher_stopped = True
+        if receipt.teacher_child_exited:
+            self._teacher_has_exited()
+        else:
+            # CP-3459: the wait gave up with the Teacher child alive. It is stopped first, by the same path the Teacher-deadline
+            # revocation uses (`cancel_motion`: the consumer child and the controller goal); only then is the window closed. If it cannot be
+            # stopped the window and its deadline guard stay open, and no data work runs.
+            try:
+                teacher_stopped = self.cancel_motion(lease) is True
+            except Exception:   # noqa: BLE001
+                teacher_stopped = False
+            if teacher_stopped:
+                self._teacher_has_exited()
         decision = receipt.decision
+        if not receipt.teacher_child_exited:
+            decision = replace(decision, act_data_status="INVALID",
+                               act_data_reason="TEACHER_CHILD_TIMED_OUT" if teacher_stopped else "TEACHER_CHILD_NOT_STOPPED")
         if receipt.completion_monotonic_s <= self._reset_boundaries[key]:
             raise RuntimeError("execution completion is not newer than the reset boundary")
-        terminal = self.capture_terminal(
-            lease,
-            action_boundary_monotonic_s=receipt.completion_monotonic_s,
-        )
+        try:
+            terminal = self.capture_terminal(
+                lease,
+                action_boundary_monotonic_s=receipt.completion_monotonic_s,
+            )
+        except Exception as error:
+            # Terminal capture and the episode seal are data work. The Teacher has already finished and its result
+            # is the manifest's: a failure here makes the data INVALID and never changes that result.
+            terminal = ()
+            decision = replace(
+                decision, act_data_status="INVALID",
+                act_data_reason=("TERMINAL_CAPTURE_FAILED: " + (str(error) or type(error).__name__))[:300])
+        decision = self._finish_collection(lease, decision)
         return replace(
             decision,
             numeric_evidence=self._numeric_receipts[key],
@@ -1374,7 +1661,14 @@ class ParallelWorkerRuntime:
             stop_thread.join()
             if consumer_stopped:
                 self._execute_consumers.pop(key, None)
+        self._retire_recorder(key)
         return consumer_stopped and controller_stopped
+
+    def _retire_recorder(self, key) -> None:
+        """A cancelled attempt ends its bag recorder too, best effort: the data side never decides control's result."""
+        collection = self._recorders.pop(key, None)
+        if collection is not None:
+            collection.retire()
 
     def record_revocation(
         self,

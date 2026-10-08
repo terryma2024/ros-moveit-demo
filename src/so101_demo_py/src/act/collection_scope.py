@@ -74,7 +74,8 @@ def build_collection_scope(mode, *, scene_id: str, seed: int, inputs_sha256: str
 
 
 def _canonical(document: dict) -> bytes:
-    return json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                      allow_nan=False).encode()
 
 
 def require_valid_scope(document, *, expected_inputs_sha256: str | None = None,

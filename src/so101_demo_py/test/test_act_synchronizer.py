@@ -13,6 +13,23 @@ def test_causal_sampling_rejects_future_and_stale_values():
             causal_sample(values, 1.05, .1)
 
 
+@pytest.mark.parametrize("extra_ns", [0, 1])
+def test_causal_age_and_skew_inclusive_nanosecond_boundary(extra_ns):
+    pixels = np.zeros((480, 640, 3), np.uint8)
+    sync = RgbObservationSynchronizer(max_age_s=.1, max_skew_s=.1)
+    sync.reset("s")
+    for stream, stamp, value in (("head", 1., pixels), ("wrist", 1.1, pixels),
+                                ("arm", 1.1, (0.,) * 6), ("neck", 1.1, 0.)):
+        sync.push(stream, "s", stamp, value)
+    at_s = 1.1 + extra_ns / 1e9
+    if extra_ns:
+        with pytest.raises(ValueError, match="INPUT_STALE"):
+            sync.sample("s", "attempt", at_s)
+    else:
+        assert causal_sample([(1., "original")], at_s, .1) == "original"
+        assert sync.sample("s", "attempt", at_s)["sim_time_s"] == at_s
+
+
 def filled(session="epoch1", head=1., wrist=1.):
     sync = RgbObservationSynchronizer(max_age_s=.15, max_skew_s=.02, capacity=8)
     sync.reset(session)

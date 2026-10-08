@@ -251,6 +251,19 @@ def _ros_chunk():
               failed_publish_attempts=0, evidence_loss=False, samples=[step])
 
 
+def test_original_single_step_projection_matches_the_lossless_chunk_without_new_envelope():
+    from so101_demo.act import contact_live
+    message=_ros_chunk()
+    method=getattr(contact_live,'step_from_ros',None)
+    assert callable(method), 'original single-step reader requires a synthetic chunk'
+    projected=method(message.samples[0],cup_qpos_address=0,cup_qvel_address=0)
+    assert projected==chunk_from_ros(message,cup_qpos_address=0,cup_qvel_address=0)['samples'][0]
+    projected['model_qpos'][0]=99.
+    assert method(message.samples[0],cup_qpos_address=0,cup_qvel_address=0)['model_qpos'][0]!=99.
+    message.samples[0].maximum_normal_force_n+=.01
+    with pytest.raises(ValueError): method(message.samples[0],cup_qpos_address=0,cup_qvel_address=0)
+
+
 def test_ros_chunk_converter_checks_same_step_state_and_contact_identity(tmp_path):
     message = _ros_chunk()
     chunk = chunk_from_ros(message, cup_qpos_address=0, cup_qvel_address=0)

@@ -101,6 +101,23 @@ def test_scope_document_is_closed_and_binds_the_frozen_inputs(tmp_path):
     assert read_collection_scope(target) == scope
 
 
+def test_unicode_common_scope_keeps_the_exact_audit_payload_bytes(tmp_path):
+    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    scope = build_collection_scope("preselected_target_diagnostic", scene_id="场景", seed=0,
+                                   inputs_sha256=INPUTS_SHA)
+    target = tmp_path / "collection-scope.json"
+    write_collection_scope(scope, target)
+    writer = EpisodeAuditWriter(tmp_path / "episode", scope,
+        {"session_id": "session", "attempt_id": "attempt", "reset_epoch": 1, "release_epoch": 0,
+         "mode": scope["mode"], "scene_id": scope["scene_id"], "seed": 0},
+        {"inputs_sha256": INPUTS_SHA})
+    try:
+        assert target.read_bytes() == writer.files.source.read_bytes()
+    finally:
+        for stream in writer._streams.values():
+            stream.close()
+
+
 def test_scope_document_is_bound_to_the_frozen_inputs_digest(tmp_path):
     scope = build_collection_scope(CollectionMode.DIAGNOSTIC, scene_id="default", seed=0,
                                    inputs_sha256=INPUTS_SHA)
@@ -521,7 +538,11 @@ def test_inputs_manifest_is_closed_and_read_back_strictly(tmp_path):
     candidates = _write_registry(tmp_path, _registry(tmp_path))
     manifest_path = freeze_inputs(candidates, tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
-    for mutation in ({"kind": "OTHER"}, {"schema_version": 2}, {"extra": 1}):
+    assert manifest["schema_version"] == 2
+    # a version 1 manifest, or one still carrying the retired broker roles, is refused rather than read silently
+    for mutation in ({"kind": "OTHER"}, {"schema_version": 1}, {"schema_version": 3}, {"extra": 1},
+                     {"broker" + "_stop_policy": {"path": "p", "sha256": "0" * 64, "bytes": 1}},
+                     {"teacher_bound" + "_timing": {"path": "p", "sha256": "0" * 64, "bytes": 1}}):
         broken = dict(manifest, **mutation)
         manifest_path.write_bytes(_canonical(broken))
         with pytest.raises(ValueError, match="INPUTS_MANIFEST_INVALID"):
@@ -779,14 +800,14 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
     root = tmp_path / "source"
     (root / "src/so101_demo_py/config/act").mkdir(parents=True)
     (root / "src/so101_demo_py/config/mujoco").mkdir(parents=True)
-    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml").write_bytes(RUNTIME_YAML)
+    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3_act_offline.yaml").write_bytes(RUNTIME_YAML)
     (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_bytes(COLLECTION_YAML)
     ready = _inspect_resource_thresholds(root)
     assert ready["status"] == "READY"
     assert ready["identity"]["rtf_hard_stop"] == 0.5
     assert ready["identity"]["queue_hard_stop"]["queue_high_watermark_samples"] == 12
 
-    runtime = root / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    runtime = root / "src/so101_demo_py/config/mujoco/parallel_batch_v3_act_offline.yaml"
     runtime.write_bytes(RUNTIME_YAML.replace(b"hard_stops:", b"unrelated:"))
     missing = _inspect_resource_thresholds(root)
     assert missing["status"] == "MISSING"

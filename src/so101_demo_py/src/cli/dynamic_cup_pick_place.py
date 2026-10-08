@@ -10,6 +10,7 @@ from pathlib import Path
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dynamic_cup_pick_place")
     parser.add_argument("--backend", default="gazebo")
+    parser.add_argument("--ik-backend", choices=("native", "quik"))
     parser.add_argument("--mode", choices=("plan_only", "execute"), default="plan_only")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--plan-only-state")
@@ -23,10 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-reset-epoch", type=int)
     parser.add_argument("--evidence-root", type=Path)
     parser.add_argument("--ready-receipt", type=Path)
-    # the scope document the parent wrote for this episode: when present, this run records through it (CP-2862).
-    # Passed as a file rather than as its four values so the document and the path the capture is given are the
-    # same artefact, and a run without it behaves exactly as before.
-    parser.add_argument("--episode-scope", type=Path)
+    # The frozen input set this run executes under (Phase A4c): the Teacher loads its execution snapshot and its frozen
+    # policies from it and refuses a mismatch before any motion. The Teacher records nothing; the independent
+    # act_episode_recorder process owns the episode.
+    parser.add_argument("--frozen-inputs-manifest", type=Path)
+    # Set by the orchestrator when an independent Recorder is collecting (`--collection on`): the Teacher then publishes
+    # its confirmed final normal-stop proof. It changes nothing else about the run.
+    parser.add_argument("--final-stop-proof", action="store_true")
     parser.add_argument("--batch-id")
     parser.add_argument("--coordinator-epoch", type=int)
     parser.add_argument("--worker-id")
@@ -34,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--point-id")
     parser.add_argument("--attempt-id")
     parser.add_argument("--lease-generation", type=int)
+    parser.add_argument("--lease-issued-monotonic-s", type=float)
+    parser.add_argument("--lease-deadline-monotonic-s", type=float)
     parser.add_argument(
         "--profiling",
         choices=("off", "summary", "trace"),
@@ -42,33 +48,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--profiling-output-root", type=Path)
     parser.add_argument("--profiling-session-id")
     return parser
-
-
-def _episode_recorder(arguments, options):
-    """Open the episode this run records into, or None when the parent did not ask for one.
-
-    The scope document is read from the path the parent wrote rather than rebuilt here: rebuilding it would need the
-    frozen set, which this process is deliberately not given, and a scope assembled from a second reading is exactly
-    how a document and the run it describes drift apart.
-    """
-    scope_path = getattr(arguments, "episode_scope", None)
-    if scope_path is None:
-        return None
-    import json
-
-    from ..act.episode_assembly import episode_audit_pair, open_point_episode
-
-    document = json.loads(Path(scope_path).read_bytes())
-    return open_point_episode(
-        episode_root=Path(options.evidence_root), session_id=options.session_id,
-        attempt_id=getattr(options, "attempt_id", None) or options.session_id,
-        reset_epoch=int(options.expected_reset_epoch), release_epoch=int(document.get("release_epoch", 1)),
-        scene_id=str(document["scene_id"]), seed=int(document["seed"]), mode=str(document["mode"]),
-        # two different pairs, deliberately: `scope` is the run's document, read from the file the parent wrote, while
-        # `scope_path` is where this episode's own audit source goes - one per episode, not one per run
-        scope=document, scope_path=str(episode_audit_pair(Path(options.evidence_root))[1]),
-        inputs={"inputs_sha256": str(document["inputs_sha256"])},
-        provenance={"source_commit": getattr(options, "source_commit", "UNRECORDED_SOURCE")})
 
 
 def _application_arguments(arguments: list[str] | None) -> list[str]:
@@ -96,7 +75,7 @@ def main(arguments: list[str] | None = None) -> int:
         from ..ros.dynamic_runtime import run_dynamic_execute
 
         if options.profiling == "off":
-            return run_dynamic_execute(options, episode_recorder=_episode_recorder(arguments, options))
+            return run_dynamic_execute(options)
         parser = build_parser()
         if options.profiling_output_root is None:
             parser.error("enabled profiling requires --profiling-output-root")
@@ -120,12 +99,11 @@ def main(arguments: list[str] | None = None) -> int:
                 )
             )
         except OSError:
-            return run_dynamic_execute(options, episode_recorder=_episode_recorder(arguments, options))
+            return run_dynamic_execute(options)
         assert profiler is not None
         token = profiler.start_span("runtime.total", {"backend": options.backend})
         try:
-            result = run_dynamic_execute(options, profiler=profiler,
-                                         episode_recorder=_episode_recorder(arguments, options))
+            result = run_dynamic_execute(options, profiler=profiler)
         except Exception as error:
             profiler.finish_span(
                 token,

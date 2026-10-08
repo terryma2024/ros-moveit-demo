@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +32,10 @@ MOVEIT_ACTION_NAMES = (
     "/gripper_controller/follow_joint_trajectory",
 )
 CONTROLLER_MANAGER_SERVICE = "/controller_manager/list_controllers"
+# Minimum spacing between the starts of NEW ListControllers requests. spin_once returns at once
+# whenever any callback is ready, so an unpaced loop floods controller_manager and starves the
+# spawners' own list_controllers calls.
+CONTROLLER_QUERY_MIN_INTERVAL_S = 0.1
 
 _CONTROLLERS = CONTROLLER_NAMES
 _SERVICES = MOVEIT_SERVICE_NAMES
@@ -58,6 +62,7 @@ def poll_controller_states(
     spin_until_future_complete,
     node,
     timeout_s: float,
+    query_evidence=None,
 ):
     """Advance one controller query without creating overlapping requests."""
 
@@ -65,10 +70,16 @@ def poll_controller_states(
         if not client.service_is_ready():
             return None, None
         pending = client.call_async(request_factory())
+        if query_evidence is not None:
+            query_evidence['requests_started']+=1
     spin_until_future_complete(node, pending, timeout_sec=timeout_s)
     if not pending.done():
         return pending, None
     response = pending.result()
+    if query_evidence is not None:
+        query_evidence['responses_completed']+=1
+        query_evidence['last_response_monotonic_ns']=time.monotonic_ns()
+        query_evidence['last_response_was_none']=response is None
     if response is None:
         return None, None
     return None, {value.name: value.state for value in response.controller}
@@ -81,6 +92,7 @@ def evaluate_readiness(
     actions: dict[str, bool],
     controller_service_visible: bool = True,
     controller_call_timed_out: bool = False,
+    require_neck: bool = False,
 ) -> MotionStackReadiness:
     """Aggregate the final readiness verdict from independent observations.
 
@@ -103,7 +115,8 @@ def evaluate_readiness(
             "MOTION_STACK_CONTROLLER_CALL_TIMEOUT",
             {"dependency": CONTROLLER_MANAGER_SERVICE},
         )
-    for name in _CONTROLLERS:
+    required_controllers=(*_CONTROLLERS,'neck_controller') if require_neck else _CONTROLLERS
+    for name in required_controllers:
         if controllers.get(name) != "active":
             return MotionStackReadiness(
                 False,
@@ -119,7 +132,8 @@ def evaluate_readiness(
                 "MOTION_STACK_MOVEIT_SERVICE_UNAVAILABLE",
                 {"dependency": name},
             )
-    for name in _ACTIONS:
+    required_actions=(*_ACTIONS,'/neck_controller/follow_joint_trajectory') if require_neck else _ACTIONS
+    for name in required_actions:
         if not actions.get(name, False):
             return MotionStackReadiness(
                 False,
@@ -142,6 +156,7 @@ def evaluate_readiness(
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="motion_stack_ready")
     parser.add_argument("--timeout-s", type=float, default=60.0)
+    parser.add_argument("--include-neck", action="store_true")
     options = parser.parse_args(arguments)
     if options.timeout_s <= 0.0:
         parser.error("--timeout-s must be positive")
@@ -184,6 +199,9 @@ def main(arguments: list[str] | None = None) -> int:
             "/gripper_controller/follow_joint_trajectory",
         ),
     }
+    if options.include_neck:
+        action_clients['/neck_controller/follow_joint_trajectory']=ActionClient(
+            node,FollowJointTrajectory,'/neck_controller/follow_joint_trajectory')
     deadline = time.monotonic() + options.timeout_s
     latest = MotionStackReadiness(
         False, "CONTROLLERS", "MOTION_STACK_CONTROLLER_NOT_ACTIVE", {}
@@ -191,7 +209,18 @@ def main(arguments: list[str] | None = None) -> int:
     try:
         controllers: dict[str, str] = {}
         controller_future = None
+        controller_query_deadline = None
+        controller_call_expired = False
         controller_service_seen = False
+        controller_query_last_start = None
+        query_evidence={'requests_started':0,'responses_completed':0,
+                        'last_response_monotonic_ns':None,'last_response_was_none':None,
+                        'query_timeouts':0,'last_completed_controllers':{}}
+        def original_query_result(result):
+            return replace(result,evidence={**result.evidence,'controller_query':{
+                **query_evidence,'controllers':dict(controllers),
+                'service_visible':controller_client.service_is_ready(),
+                'service_seen':controller_service_seen,'pending':controller_future is not None}})
         while rclpy.ok() and time.monotonic() < deadline:
             services = {
                 name: client.service_is_ready()
@@ -207,26 +236,54 @@ def main(arguments: list[str] | None = None) -> int:
             )
             if controller_query_allowed(
                 controller_service_visible=controller_service_visible
+            ) and (
+                controller_future is not None
+                or controller_query_last_start is None
+                or time.monotonic() - controller_query_last_start
+                >= CONTROLLER_QUERY_MIN_INTERVAL_S
             ):
                 remaining = max(0.0, deadline - time.monotonic())
+                if controller_future is None:
+                    controller_query_deadline = min(deadline, time.monotonic() + 1.0)
+                    started_before = query_evidence['requests_started']
+                    query_start_time = time.monotonic()
+                else:
+                    started_before = None
                 controller_future, observed = poll_controller_states(
                     controller_client,
                     controller_future,
                     request_factory=ListControllers.Request,
                     spin_until_future_complete=rclpy.spin_until_future_complete,
                     node=node,
-                    timeout_s=min(1.0, remaining),
+                    timeout_s=min(remaining, max(0.0, controller_query_deadline - time.monotonic())),
+                    query_evidence=query_evidence,
                 )
+                if (
+                    started_before is not None
+                    and query_evidence['requests_started'] > started_before
+                ):
+                    controller_query_last_start = query_start_time
                 if observed is not None:
                     controllers = observed
+                    query_evidence['last_completed_controllers'] = dict(observed)
+                    controller_call_expired = False
+                if controller_future is not None and time.monotonic() >= controller_query_deadline:
+                    # Retire only this read-only query's client bookkeeping. A later response
+                    # cannot become a readiness observation; the whole gate deadline is fixed.
+                    controller_client.remove_pending_request(controller_future)
+                    controller_future = None
+                    controllers = {}
+                    query_evidence['query_timeouts'] += 1
+                    controller_call_expired = True
             latest = evaluate_readiness(
                 controllers=controllers,
                 services=services,
                 actions=actions,
                 controller_service_visible=controller_service_seen,
+                require_neck=options.include_neck,
             )
             if latest.ready:
-                print(json.dumps(asdict(latest), sort_keys=True), flush=True)
+                print(json.dumps(asdict(original_query_result(latest)), sort_keys=True), flush=True)
                 return 0
             rclpy.spin_once(node, timeout_sec=0.05)
         latest = evaluate_readiness(
@@ -240,9 +297,10 @@ def main(arguments: list[str] | None = None) -> int:
                 for name, client in action_clients.items()
             },
             controller_service_visible=controller_service_seen,
-            controller_call_timed_out=controller_future is not None,
+            controller_call_timed_out=controller_future is not None or controller_call_expired,
+            require_neck=options.include_neck,
         )
-        print(json.dumps(asdict(latest), sort_keys=True), flush=True)
+        print(json.dumps(asdict(original_query_result(latest)), sort_keys=True), flush=True)
         return 1
     finally:
         node.destroy_node()

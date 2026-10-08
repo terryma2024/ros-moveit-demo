@@ -13,19 +13,15 @@ from so101_demo.cli.act_train import main
 SOURCE_LOCK = Path(__file__).resolve().parents[1] / "config/act/requirements.lock"
 
 
-def _workspace(tmp_path, *, episodes=2):
+def _workspace(tmp_path,monkeypatch, *, episodes=2):
+    from act_export_fixture import complete_export_entries
     manifest = {"episodes": [{"scene_id": f"act-{index}", "status": "PASSED", "split": "train"}
                              for index in range(episodes)]}
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest))
-    entries = []
-    for index in range(episodes):
-        content = tmp_path / f"episode-{index}.json"
-        content.write_text(json.dumps({"frames": 2, "state": [0.0] * 8}))
-        entries.append({"scene_id": f"act-{index}", "journal_sha256": "a" * 64,
-                        "verifier_sha256": "a" * 64, "content_path": content.name,
-                        "content_sha256": hashlib.sha256(content.read_bytes()).hexdigest()})
-    index = {"committed_episodes": entries}
+    entries=[{key:value for key,value in entry.items() if key!='content'} for entry in
+        complete_export_entries(tmp_path,monkeypatch,tuple(f'act-{index}' for index in range(episodes)))]
+    index = {"schema_version":2,"committed_episodes": entries}
     index_path = tmp_path / "campaign-index.json"
     index_path.write_text(json.dumps(index))
     binding = tmp_path / "gpu-binding.json"
@@ -54,7 +50,7 @@ def _resolved_lock(tmp_path):
 
 
 def test_the_cli_exports_trains_and_records_the_run(tmp_path, capsys, monkeypatch):
-    manifest, index, binding, config = _workspace(tmp_path)
+    manifest, index, binding, config = _workspace(tmp_path,monkeypatch)
     output = tmp_path / "bundle.json"
     # an unresolved lock is what blocks a training run. The shipped lock used to be that blocker; now that a
     # training interpreter has resolved it, the refusal is exercised with a synthetic unresolved lock and the
@@ -85,12 +81,12 @@ def test_the_cli_exports_trains_and_records_the_run(tmp_path, capsys, monkeypatc
     assert json.loads((tmp_path / "bundle.json.state.json").read_text())["status"] == "COMPLETED"
 
 
-def test_the_production_trainer_fails_closed_and_never_overwrites_an_output(tmp_path):
+def test_the_production_trainer_fails_closed_and_never_overwrites_an_output(tmp_path,monkeypatch):
     from so101_demo.cli.act_train import _trainer
 
     with pytest.raises(ValueError, match="TRAINING_(INTERPRETER_REQUIRED|ADAPTER_UNAVAILABLE)"):
         _trainer({}, tmp_path, tmp_path / "out")
-    manifest, index, binding, config = _workspace(tmp_path)
+    manifest, index, binding, config = _workspace(tmp_path,monkeypatch)
     output = tmp_path / "bundle.json"
     output.write_text("{}")
     with pytest.raises(ValueError, match="TRAINING_OUTPUT_EXISTS"):

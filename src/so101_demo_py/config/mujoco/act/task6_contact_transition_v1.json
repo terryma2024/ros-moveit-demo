@@ -24,7 +24,7 @@
     0.46506013702475757
   ],
   "kind": "TASK6_CONTACT_TRANSITION_DIAGNOSTIC_PROFILE",
-  "model_sha256": "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78",
+  "model_sha256": "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114",
   "mujoco_version": "3.12.0",
   "near_arm_rad": [
     -0.00022718445825241064,
@@ -34,7 +34,7 @@
     0.0004507317198526945
   ],
   "policy_fingerprint": "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11",
-  "scene_sha256": "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f",
+  "scene_sha256": "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb",
   "schema_version": 1,
-  "source_route_profile_sha256": "25a272abeffbfaa7e6d6710f0e844856adca6bd09d81a40261956ccbd8021abe"
+  "source_route_profile_sha256": "b9c73aa3ee5e75c049f13c9f39aea692fa7635c05290a7a2c74d09d2c4c0e687"
 }

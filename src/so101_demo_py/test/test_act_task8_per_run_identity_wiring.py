@@ -4,7 +4,7 @@
 and the search start is derived from the reset targets. The adapter already supplies them that way -
 
     config = binding.search_config(session_id=request["session_id"], attempt_id=request["attempt_id"],
-                                   search_start_rad=targets.joints_rad[6])          # pick_place_search_binding.py:57
+                                   search_start_rad=targets.joints_rad[6])          # (the retired search binding)
 
 - while the production composition reads them through `getattr(context, ...)`, and a context the CLI builds cannot
 carry them because they do not exist yet at admission. The owner's decision (CP-1635) was to let the DRIVER pass them

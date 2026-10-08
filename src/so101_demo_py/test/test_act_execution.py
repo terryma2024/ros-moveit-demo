@@ -65,6 +65,45 @@ def test_delayed_first_target_reaches_both_controller_goals():
     assert a['prefix_sha256']==g['prefix_sha256']==prefix_sha256(route)
 
 
+def test_physics_grid_prefix_reaches_both_controllers_and_binds_permit():
+    adapter, clock, arm, grip, _ = setup()
+    route = dict(prefix(), first_target_delay_s=.1, target_interval_s=.002,
+                 target_times_s=(1.102, 1.104),
+                 positions=((.001,)*6, (.002,)*6))
+    approved_hash = prefix_sha256(route)
+    submit(adapter, route)
+    a, g = arm.goals[0], grip.goals[0]
+    assert a['time_from_start_s'] == g['time_from_start_s'] == pytest.approx(
+        (0., .072, .074))
+    assert a['prefix_sha256'] == g['prefix_sha256'] == approved_hash
+    assert a['positions'] == ((0.,)*5, (.001,)*5, (.002,)*5)
+    assert g['positions'] == ((0.,), (.001,), (.002,))
+    changed = dict(route, sequence=1, positions=((.001,)*6, (.003,)*6))
+    with pytest.raises(PermissionError):
+        adapter.submit(changed, {'prefix_sha256': approved_hash})
+    assert len(arm.goals) == len(grip.goals) == 1
+
+
+def test_full_physics_grid_serializes_all_controller_ticks():
+    from so101_demo.adapters.act.ros_execution import trajectory_message
+
+    adapter, clock, arm, grip, _ = setup()
+    route = dict(prefix(), first_target_delay_s=.1, target_interval_s=.002,
+                 target_times_s=tuple(1.1 + .002 * (index + 1)
+                                      for index in range(600)),
+                 positions=tuple((.001,) * 6 for _ in range(600)))
+    submit(adapter, route)
+    for goal in (arm.goals[0], grip.goals[0]):
+        message = trajectory_message(goal)
+        assert len(message.points) == 601
+        assert [(point.time_from_start.sec, point.time_from_start.nanosec)
+                for point in (message.points[0], message.points[1],
+                              message.points[-1])] == [
+                                  (0, 0), (0, 72000000), (1, 270000000)]
+        assert all(not point.velocities and not point.accelerations
+                   for point in message.points)
+
+
 def test_held_cup_response_window_accepts_delayed_pair_before_common_start():
     clock = Clock()
     clock.sim, clock.wall = 1., 10.

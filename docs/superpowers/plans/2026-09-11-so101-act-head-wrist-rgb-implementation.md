@@ -1,5 +1,7 @@
 # SO-101 Head/Wrist RGB ACT Implementation Plan
 
+> **2026-10-05 修订（优先）**：本计划中 Teacher/Recorder/QC 耦合、过程质量成功判定与数据故障停 Teacher 的步骤已被 [`2026-10-05-so101-teacher-act-decoupling-implementation.md`](2026-10-05-so101-teacher-act-decoupling-implementation.md)（设计 [`../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md`](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)）替代；执行者不得继续按旧条款实现。
+
 > **2026-09-24 refresh:** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) is approved and incorporated below. MuJoCo is the only simulator; campaign resource binding is checked once at admission; W2 proceeds directly to one independent 40-scene exact-W8 qualification, without W4/W6. This plan supersedes the earlier Task 7A–11A wording.
 
 > **2026-09-28 refresh:** [Task 8 artifact preparation design](../specs/2026-09-28-so101-act-task8-artifact-preparation-design.md) is approved and incorporated as Tasks 8P1–8P4 and 8L. Task 8 core and all later source-changing collection tasks are completed, committed and installed before the final runtime identity is frozen; Task 8 live cannot start until a self-contained bundle has an atomically published `preparation-receipt.json` and production admission accepts it.

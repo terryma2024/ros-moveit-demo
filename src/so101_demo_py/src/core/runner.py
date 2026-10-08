@@ -809,7 +809,7 @@ class StateMachineRunner:
                 original_failure = action_result.failure or Failure(
                     FailureCategory.INTERNAL, "ACTION_FAILED"
                 )
-            next_state = resolve_transition(current, action_result.status)
+            next_state = resolve_transition(current, action_result.status, action_result.failure)
             commit_failure = self._commit(request, current, next_state, count, original_failure)
             if commit_failure is not None:
                 return RunResult(

@@ -1418,6 +1418,14 @@ def _start_guard_for(config):
     return compose_default_start_guard(config.start_guard)
 
 
+def test_selected_ik_backend_survives_worker_environment_allocation(tmp_path, config):
+    resource_allocator = allocator(
+        tmp_path, config, environment={'SO101_IK_BACKEND': 'quik'}, suffix='ik-backend'
+    )
+    manifest = resource_allocator.allocate(worker_count=1)
+    assert manifest.workers[0].environment.get('SO101_IK_BACKEND') == 'quik'
+
+
 def test_resources_use_frozen_domain_sequence_and_private_worker_layout(tmp_path, config):
     resource_allocator = WorkerResourceAllocator(
         config,

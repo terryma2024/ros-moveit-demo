@@ -98,18 +98,7 @@ def load_collection_config(path: Path, *, package_share: Path) -> dict:
             or recovery["max_infra_attempts_per_scenario"] != 2
             or recovery["resume_requires_identical_business_hashes"] is not True):
         raise ValueError("COLLECTION_RECOVERY_INVALID")
-    recorder = document["recorder"]
-    if (type(recorder) is not dict or set(recorder) != _RECORDER
-            or recorder["sample_rate_hz"] != 10
-            or recorder["queue_capacity_samples"] != 16
-            or recorder["queue_high_watermark_samples"] != 12
-            or recorder["queue_recovery_watermark_samples"] != 8
-            or recorder["queue_high_watermark_hold_s"] != 0.2
-            or recorder["lossless"] is not True
-            or not (0 < recorder["queue_recovery_watermark_samples"]
-                    < recorder["queue_high_watermark_samples"]
-                    < recorder["queue_capacity_samples"])):
-        raise ValueError("COLLECTION_RECORDER_INVALID")
+    validate_recorder_policy(document["recorder"])
     telemetry = document["telemetry"]
     if type(telemetry) is not dict or set(telemetry) != _TELEMETRY or telemetry["period_s"] != 1.0:
         raise ValueError("COLLECTION_TELEMETRY_INVALID")
@@ -120,3 +109,22 @@ def load_collection_config(path: Path, *, package_share: Path) -> dict:
         if key in document:
             raise ValueError("COLLECTION_CONFIG_INVALID")
     return document
+
+
+def validate_recorder_policy(recorder: dict) -> dict:
+    """Validate the exact approved sample queue before creating its writer."""
+    if (type(recorder) is not dict or set(recorder) != _RECORDER
+            or any(type(recorder[key]) is not int for key in
+                   ("sample_rate_hz", "queue_capacity_samples", "queue_high_watermark_samples",
+                    "queue_recovery_watermark_samples"))
+            or recorder["sample_rate_hz"] != 10
+            or recorder["queue_capacity_samples"] != 16
+            or recorder["queue_high_watermark_samples"] != 12
+            or recorder["queue_recovery_watermark_samples"] != 8
+            or recorder["queue_high_watermark_hold_s"] != 0.2
+            or recorder["lossless"] is not True
+            or not (0 < recorder["queue_recovery_watermark_samples"]
+                    < recorder["queue_high_watermark_samples"]
+                    < recorder["queue_capacity_samples"])):
+        raise ValueError("COLLECTION_RECORDER_INVALID")
+    return dict(recorder)

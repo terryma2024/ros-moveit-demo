@@ -15,10 +15,10 @@ from so101_demo.act.contracts import validate_action_prefix
 from so101_demo.act.execution import bounded_positions
 from so101_demo.adapters.act.physics import model_sha256
 
-_SCENE_SHA = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
+_SCENE_SHA = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
 _MOTION_SHA = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 _PLUGIN_SHA = "6a030c48fe4829803bd4e2ed980adbe53217ef39b271c274286081830eaf7aac"
-_MODEL_SHA = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+_MODEL_SHA = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
 _ROWS = {
     "no_contact": 5, "bilateral_touch": 45, "over_compression": 50,
     "micro_lift_slip": 45, "stable_hold": 50, "table_only": 5,
@@ -110,8 +110,10 @@ def build_contact_diagnostic_manifest(
         for name in (*cup_geoms, *finger_geoms)
     ):
         raise ValueError("physical diagnostic geometry whitelist invalid")
+    from so101_demo.adapters.act.phase_contact_allowlist import stationary_cup_support_pairs
     pairs = sorted({tuple(sorted((cup, finger)))
-                    for cup in cup_geoms for finger in finger_geoms})
+                    for cup in cup_geoms for finger in finger_geoms}
+                   | stationary_cup_support_pairs(model))
     jitter = 0.0 if regime == "left_only" else round(
         random.Random(seed).uniform(-.000008, .000008), 12
     )

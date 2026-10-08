@@ -7,7 +7,7 @@ import threading
 import time
 
 from .contracts import finite, identifier, validate_action, validate_action_prefix, vector
-from .joints import ARM_JOINTS, JOINT_LIMITS
+from .joints import ARM_JOINTS, joint_limits_for
 
 
 def split_positions(rows):
@@ -22,9 +22,10 @@ def prefix_sha256(prefix):
                                      allow_nan=False).encode()).hexdigest()
 
 
-def bounded_positions(row):
+def bounded_positions(row, profile="act"):
     checked=validate_action(row)
-    if any(not JOINT_LIMITS[name][0]<=value<=JOINT_LIMITS[name][1]
+    limits=joint_limits_for(profile)
+    if any(not limits[name][0]<=value<=limits[name][1]
            for name,value in zip(ARM_JOINTS,checked,strict=True)):
         raise ValueError('JOINT_LIMIT_INVALID')
     return checked

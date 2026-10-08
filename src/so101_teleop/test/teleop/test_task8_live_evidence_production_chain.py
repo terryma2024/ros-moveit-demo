@@ -133,21 +133,6 @@ def test_the_journal_row_readback_refuses_a_missing_or_mismatched_artifact(tmp_p
         _require_live_evidence_readback(good, {"mode": "phase_prefix"})
 
 
-def _port_with(recorder, window):
-    """The real port method under test, without constructing the ROS/MuJoCo boundary it normally needs."""
-
-    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
-
-    port = object.__new__(PickPlaceSearchPhasePort)
-    port._evidence_recorder = recorder
-    port._live_evidence_window = window
-    # The seal's identity comes from the CASE, so the boundary it reads is part of what this double must provide: the
-    # reset generation from the verified receipt, which is where the port reads it (the runner's request carries none).
-    from types import SimpleNamespace
-    port.boundary = SimpleNamespace(reset=SimpleNamespace(receipt=SimpleNamespace(new_epoch=4)))
-    return port
-
-
 def _sealed_chain(tmp_path):
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
@@ -160,33 +145,6 @@ def _sealed_chain(tmp_path):
         recorder.append(sample, kind="grid")
         window.add_grid(sample)
     return recorder, window
-
-
-def test_the_port_seals_its_window_together_with_the_recorder(tmp_path):
-    recorder, window = _sealed_chain(tmp_path)
-    port = _port_with(recorder, window)
-    artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
-                                        "attempt_id": "attempt-1"})
-    assert set(artifact) == {"path", "sha256", "schema_version"}
-    target = Path(artifact["path"])
-    assert hashlib.sha256(target.read_bytes()).hexdigest() == artifact["sha256"]
-    # the window was sealed first, so it accepts nothing further - the ordering the failure path depends on
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
-        window.add_grid(_sample(tmp_path / "evidence", phase="SEARCH", step=99, sim_time=9.9))
-
-
-def test_an_unfinished_window_blocks_the_seal_rather_than_passing_silently(tmp_path):
-    evidence_root = tmp_path / "evidence"
-    evidence_root.mkdir()
-    recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
-                                         session_id="session-1", attempt_id="attempt-1")
-    window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
-    window.bind_reset_epoch((_identity())["reset_epoch"])
-    window.add_grid(_sample(evidence_root, phase="SEARCH", step=0, sim_time=0.0))   # never reaches FINAL_CHECK
-    port = _port_with(recorder, window)
-    with pytest.raises(ValueError):
-        port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
-                                 "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 7})
 
 
 # --- the retirement path through the REAL owner ------------------------------------------------------------

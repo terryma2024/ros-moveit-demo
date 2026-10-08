@@ -80,7 +80,7 @@ class FakePort:
     def release_preflight(self, req):
         self.calls.append(("release_preflight", None))
         self.physics_step += 1
-        return {"holding_state": "HOLDING", "cup_supported": self.supported,
+        return {"holding_state": "HOLDING", "cup_supported": self.supported, "bilateral_contact": True,
                 "fresh": True, "planning_attached": self.attached,
                 "session_id": req["session_id"], "attempt_id": req["attempt_id"],
                 "reset_epoch": 4, "release_epoch": self.release_epoch,

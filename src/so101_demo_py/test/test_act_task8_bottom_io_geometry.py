@@ -91,16 +91,21 @@ def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():
     import numpy as np
 
     from so101_demo.act.task8_bottom_io import ModelFrameSource
+    from so101_demo.core.detection import DetectionFrame
 
     with ModelFrameSource(_scene()) as source:
         frame = source({"anchor": "default"})
-        assert isinstance(frame, np.ndarray) and frame.shape == (480, 640, 3)
-        assert frame.dtype == np.uint8
-        assert float(frame.std()) > 1.0, "a blank buffer is not a frame the model rendered"
+        assert isinstance(frame, DetectionFrame)
+        assert frame.source_frame_id == "head_camera" and frame.source_stamp_ns > 0
+        assert isinstance(frame.rgb8, np.ndarray) and frame.rgb8.shape == (480, 640, 3)
+        assert frame.rgb8.dtype == np.uint8
+        assert float(frame.rgb8.std()) > 1.0, "a blank buffer is not a frame the model rendered"
         # and a DIFFERENT camera gives a different image, which is what proves the name was honoured
         wrist = source({"camera": "wrist_camera"})
-        assert wrist.shape == frame.shape
-        assert not np.array_equal(wrist, frame), "head and wrist cameras cannot see the same thing"
+        assert wrist.source_frame_id == "wrist_camera"
+        assert wrist.source_stamp_ns > frame.source_stamp_ns
+        assert wrist.rgb8.shape == frame.rgb8.shape
+        assert not np.array_equal(wrist.rgb8, frame.rgb8), "head and wrist cameras cannot see the same thing"
 
 
 def test_an_unknown_camera_is_refused_by_name():
@@ -122,10 +127,10 @@ def test_posing_the_arm_changes_what_the_wrist_camera_sees():
     from so101_demo.act.task8_bottom_io import ModelFrameSource
 
     with ModelFrameSource(_scene(), camera="wrist_camera") as source:
-        at_rest = source({}).copy()
+        at_rest = source({}).rgb8.copy()
         source.pose([0.4, -0.3, 0.2, 0.0, 0.5, 0.0, 0.3])
         posed = source({})
-        assert not np.array_equal(at_rest, posed), "a gripper-mounted camera must follow the joints"
+        assert not np.array_equal(at_rest, posed.rgb8), "a gripper-mounted camera must follow the joints"
 
 
 # ----------------------------------------------------------------------------------------------------------------------

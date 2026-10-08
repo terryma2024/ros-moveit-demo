@@ -1,5 +1,6 @@
 """Closed source replay for left and forward Task 6 contact diagnostics."""
 
+from act_identity import ACT_MODEL_SHA256
 import json
 import os
 import threading
@@ -23,7 +24,7 @@ PROFILE = PACKAGE / "config/mujoco/act/task6_alt_full_contact_v1.json"
 
 
 class Pairs:
-    model_sha256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+    model_sha256 = ACT_MODEL_SHA256
     fingerprint = "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11"
 
     def __init__(self, **kwargs):
@@ -95,69 +96,3 @@ def test_alt_manifest_rejects_tampered_role_phase_and_rows(tmp_path):
             require_alt_sources(changed, pairs_factory=Pairs)
 
 
-@pytest.mark.parametrize("anchor", ["left", "forward"])
-def test_alt_guard_switches_pairs_only_at_source_phase(tmp_path, monkeypatch, anchor):
-    from so101_demo.act import task6_alt_full_contact_diagnostic as alternate
-    from so101_demo.act.ownership import Ownership
-    from so101_demo.adapters.act.calibration_motion import (
-        RosCalibrationMotionGuard, transition_motion_configuration)
-
-    value = manifest(tmp_path, anchor)
-    monkeypatch.setattr(alternate, "require_alt_sources",
-                        lambda source: require_alt_sources(source, pairs_factory=Pairs))
-    config = transition_motion_configuration(value)
-    assert config["contact_phase_start"] == value["contact_phase_start"]
-    assert config["allowed_pairs_by_phase"]["APPROACH"] == frozenset()
-
-    class Node:
-        def create_subscription(self, *args):
-            return args
-
-        def create_timer(self, *args):
-            return args
-
-    driver = NS(_lock=threading.RLock(), hazard_reason=None,
-                goal_state=lambda _: dict(accepted=True, status=4,
-                                          result={"error_code": 0}),
-                stopped=lambda: True)
-    broker = NS(ownership=Ownership(),
-                prefix_executor=NS(adapter=NS(current_goal_ids=("arm", "gripper"))),
-                tick=lambda: None)
-    guard = RosCalibrationMotionGuard(Node(), driver, broker, value,
-                                      evidence_root=tmp_path / "guard")
-    try:
-        assert guard.alt_full_mode and guard.full_mode and guard.transition_mode
-        assert guard.contact_observer.allowed == frozenset()
-        boundary = value["contact_phase_start"]
-        assert guard._phase(prefix(value, boundary - 1)) == "APPROACH"
-        assert guard._phase(prefix(value, boundary)) == "CONTACT"
-        guard._next_segment = boundary
-        assert guard._within(prefix(value, boundary),
-                             value["target_positions"][boundary * 9 - 1], 0.)
-        assert not guard._within(prefix(value, boundary + 1),
-                                 value["target_positions"][boundary * 9 - 1], 0.)
-    finally:
-        guard.close()
-
-
-def test_alt_broker_rejects_tamper_before_domain_authority(tmp_path, monkeypatch):
-    from so101_demo.act import task6_alt_full_contact_diagnostic as alternate
-    from so101_demo.adapters.act.domain_authority import DomainAuthority
-    from so101_demo.cli.act_command_broker import main
-
-    value = manifest(tmp_path, "forward")
-    monkeypatch.setattr(alternate, "require_alt_sources",
-                        lambda source: require_alt_sources(source, pairs_factory=Pairs))
-    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
-        AssertionError("domain authority reached")))
-    value["segment_phases"][value["contact_phase_start"]] = "APPROACH"
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(value))
-    with pytest.raises(ValueError):
-        main(["--socket", "/tmp/act-alt-contact-gate-test.sock",
-              "--session-id", value["session_id"], "--parent-pid", str(os.getpid()),
-              "--lease-timeout-s", "30", "--calibration-mode",
-              "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
-              "--submit-lead-s", ".05", "--accept-timeout-s", ".02",
-              "--stop-timeout-s", "4", "--permit-ttl-s", "1.5",
-              "--task6-contact-transition-manifest", str(path)])

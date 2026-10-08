@@ -45,7 +45,12 @@ def test_the_vendored_plugin_points_at_its_real_submodule_sources():
 
 
 def test_the_worktree_plugins_stay_in_the_worktree_overlay():
-    for name in ("simulation_evidence_plugin", "broker_owned_controller_plugin"):
+    for name in ("simulation_evidence_plugin",):
         spec = _by_name(name)
         assert spec[4] == "worktree", spec
         assert spec[3].startswith("so101_mujoco_support/lib/"), spec[3]
+
+
+def test_the_broker_rows_are_gone_from_the_registry():
+    names = {spec[0] for spec in runtime_role_specs()}
+    assert "command" + "_broker" not in names and "broker_owned" + "_controller_plugin" not in names

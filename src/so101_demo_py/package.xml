@@ -32,6 +32,7 @@
   <depend>sensor_msgs</depend>
   <depend>shape_msgs</depend>
   <depend>so101_mujoco_support</depend>
+  <depend version_eq="0.1.0">so101_quik</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>tf2_msgs</depend>

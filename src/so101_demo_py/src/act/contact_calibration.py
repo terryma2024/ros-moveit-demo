@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from so101_demo.act.contact_policy import (
-    canonical_policy_payload, policy_fingerprint, verify_activation,
+    SPOT_CHECK_CANDIDATE, VALIDATION_DECISION, VALIDATION_MODES, VALIDATION_OFFLINE_SPOT_CHECK,
+    canonical_policy_payload, policy_fingerprint, validation_descriptor_sha256, verify_activation,
 )
 
 REGIMES = (
@@ -279,8 +280,38 @@ def _canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
 
 
-def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
-    """Fit on 20 deterministic samples and evaluate on five isolated live samples per regime."""
+def _validation_mode(value: Any) -> str | None:
+    if value is None:
+        return None
+    if value not in VALIDATION_MODES:
+        raise ValueError("unknown validation mode")
+    return value
+
+
+def proposal_validation_mode(proposal: dict[str, Any]) -> str | None:
+    """The validation mode an envelope declares (None for the default live-cohort mode)."""
+
+    declared = proposal.get("validation") if isinstance(proposal, dict) else None
+    return None if declared is None else declared.get("mode") if isinstance(declared, dict) else "invalid"
+
+
+def analyze_evidence(offline: dict[str, Any], live: dict[str, Any] | None, metadata: dict[str, Any],
+                     *, validation_mode: str | None = None) -> dict[str, Any]:
+    """Fit on 20 deterministic samples and evaluate on five isolated live samples per regime.
+
+    The default mode demands the live cohort. `validation_mode="offline_fit_teacher_spot_check"` (the user's recorded
+    deviation CP-3389) takes no live cohort: the offline cohort is self-classified with the fitted thresholds, every
+    control is still required, and the mode is bound into the payload through `live_collector_sha256`.
+    """
+
+    mode = _validation_mode(validation_mode)
+    if mode is None and live is None:
+        raise ValueError("default validation mode requires the live cohort")
+    if mode is not None and live is not None:
+        raise ValueError("offline spot-check mode takes no live cohort")
+    if mode is not None and metadata.get("live_collector_sha256") != validation_descriptor_sha256(mode):
+        raise ValueError("validation descriptor mismatch")
+    check, check_count = ("live", 5) if mode is None else ("offline", 20)
 
     meta = _exact(metadata, _METADATA_KEYS, "calibration metadata")
     limits = _exact(meta["diagnostic_limits"], _LIMIT_KEYS, "diagnostic limits")
@@ -291,7 +322,7 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: di
     grouped = {}
     ids = set()
     sessions = set()
-    for source, cohort, expected in (("offline", offline, 20), ("live", live, 5)):
+    for source, cohort, expected in (("offline", offline, 20), *((("live", live, 5),) if mode is None else ())):
         item = _exact(cohort, frozenset({"source", "samples"}), f"{source} cohort")
         if item["source"] != source or not isinstance(item["samples"], list):
             raise ValueError("cohort source mismatch")
@@ -331,18 +362,19 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: di
     confusion = {regime: {predicted: 0 for predicted in (*REGIMES, "left_only", "right_only")}
                  for regime in REGIMES}
     for regime in REGIMES:
-        for sample in grouped["live"][regime]:
+        for sample in grouped[check][regime]:
             confusion[regime][_classify(sample, thresholds)] += 1
-    controls = {name: [_classify(sample, thresholds) for sample in grouped["live"][name]]
+    controls = {name: [_classify(sample, thresholds) for sample in grouped[check][name]]
                 for name in CONTROLS}
-    if any(confusion[regime][regime] != 5 for regime in REGIMES):
-        raise ValueError("live hold/compression classification has false results")
+    if any(confusion[regime][regime] != check_count for regime in REGIMES):
+        raise ValueError(f"{check} hold/compression classification has false results")
     if any(pred == "stable_hold" for values in controls.values() for pred in values):
         raise ValueError("negative control was classified as stable hold")
     for side in ("left_only", "right_only"):
         if any(pred != side for pred in controls[side]):
             raise ValueError("unilateral rejection contract failed")
     source_hash = hashlib.sha256(_canonical({"offline": offline, "live": live})).hexdigest()
+    live_count = 5 if mode is None else 0
     payload = {
         "schema_version": 1, "policy_id": meta["policy_id"],
         "thresholds": thresholds, "evaluation": meta["evaluation"],
@@ -361,10 +393,13 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any], metadata: di
         "status": "DISABLED", "payload": payload,
         "policy_fingerprint": policy_fingerprint(payload),
         "source_evidence_sha256": source_hash,
-        "counts": {name: {"offline": 20, "live": 5} for name in REGIMES},
+        "counts": {name: {"offline": 20, "live": live_count} for name in REGIMES},
         "negative_controls": controls, "confusion_matrix": confusion,
         "false_positive_rate": 0.0, "false_negative_rate": 0.0,
     }
+    if mode is not None:
+        result["validation"] = {"mode": mode, "decision": VALIDATION_DECISION, "teacher_spot_check": "PENDING",
+                                "live_cohort": "NOT_COLLECTED"}
     result["proposal_sha256"] = hashlib.sha256(_canonical(result)).hexdigest()
     return result
 
@@ -440,40 +475,53 @@ def _read_cohort(manifest_path: Path, expected_source: str) -> dict[str, Any]:
 
 
 def analyze_manifests(
-    offline_manifest: Path, live_manifest: Path, metadata: dict[str, Any]
+    offline_manifest: Path, live_manifest: Path | None, metadata: dict[str, Any],
+    *, validation_mode: str | None = None,
 ) -> dict[str, Any]:
-    """Read only the two explicitly supplied sealed cohorts; never scan directories."""
+    """Read only the explicitly supplied sealed cohorts (two in the default mode); never scan directories."""
 
     return analyze_evidence(
         _read_cohort(offline_manifest, "offline"),
-        _read_cohort(live_manifest, "live"),
-        metadata,
+        None if live_manifest is None else _read_cohort(live_manifest, "live"),
+        metadata, validation_mode=validation_mode,
     )
 
 
-def verify_disabled_proposal(proposal: dict[str, Any]) -> None:
-    """Validate the entire envelope, distinct from the canonical payload hash."""
+def verify_disabled_proposal(proposal: dict[str, Any], *, validation_mode: str | None = None) -> None:
+    """Validate the entire envelope, distinct from the canonical payload hash.
 
-    item = _exact(
-        proposal,
-        frozenset({"status", "payload", "policy_fingerprint", "source_evidence_sha256",
-                   "counts", "negative_controls", "confusion_matrix",
-                   "false_positive_rate", "false_negative_rate", "proposal_sha256"}),
-        "disabled proposal",
-    )
+    `validation_mode=None` is the default mode (live cohort 5 per regime); `offline_fit_teacher_spot_check` must be
+    requested explicitly and must agree with BOTH the envelope's declaration and the payload's fingerprinted binding.
+    """
+
+    mode = _validation_mode(validation_mode)
+    base_keys = frozenset({"status", "payload", "policy_fingerprint", "source_evidence_sha256",
+                           "counts", "negative_controls", "confusion_matrix",
+                           "false_positive_rate", "false_negative_rate", "proposal_sha256"})
+    item = _exact(proposal, base_keys | ({"validation"} if isinstance(proposal, dict) and "validation" in proposal
+                                         else set()), "disabled proposal")
     if item["status"] != "DISABLED":
         raise ValueError("proposal is not disabled")
+    if proposal_validation_mode(item) != mode:
+        raise ValueError("proposal validation mode mismatch")
+    if mode is not None and item["validation"] != {
+            "mode": mode, "decision": VALIDATION_DECISION, "teacher_spot_check": "PENDING",
+            "live_cohort": "NOT_COLLECTED"}:
+        raise ValueError("proposal validation record invalid")
     canonical_policy_payload(item["payload"])
+    if (item["payload"]["live_collector_sha256"] == validation_descriptor_sha256()) != (mode is not None):
+        raise ValueError("proposal validation mode disagrees with its payload")
     if item["policy_fingerprint"] != policy_fingerprint(item["payload"]):
         raise ValueError("proposal payload fingerprint mismatch")
     if item["source_evidence_sha256"] != item["payload"]["source_evidence_sha256"]:
         raise ValueError("proposal evidence hash mismatch")
-    if item["counts"] != {name: {"offline": 20, "live": 5} for name in REGIMES}:
+    live_count, check_count = (5, 5) if mode is None else (0, 20)
+    if item["counts"] != {name: {"offline": 20, "live": live_count} for name in REGIMES}:
         raise ValueError("proposal cohort counts are incomplete")
     for name in REGIMES:
         row = item["confusion_matrix"].get(name)
-        if not isinstance(row, dict) or row.get(name) != 5 or sum(row.values()) != 5:
-            raise ValueError("proposal live confusion matrix is incomplete")
+        if not isinstance(row, dict) or row.get(name) != check_count or sum(row.values()) != check_count:
+            raise ValueError("proposal confusion matrix is incomplete")
     controls = item["negative_controls"]
     if not isinstance(controls, dict) or set(controls) != set(CONTROLS):
         raise ValueError("proposal negative controls are incomplete")
@@ -492,11 +540,19 @@ def verify_disabled_proposal(proposal: dict[str, Any]) -> None:
 
 def make_activation_receipt(
     proposal: dict[str, Any], approved_fingerprint: str, *, approved_by: str,
-    approval_reference: str, evidence_root: Path, approved_at: str,
+    approval_reference: str, evidence_root: Path, approved_at: str, receipt_kind: str | None = None,
 ) -> dict[str, Any]:
-    """Build a separate receipt only for the exact externally approved fingerprint."""
+    """Build a separate receipt only for the exact externally approved fingerprint.
 
-    verify_disabled_proposal(proposal)
+    `receipt_kind="spot_check_candidate"` (D4) is only for an offline_fit_teacher_spot_check proposal and a
+    plan/agent approver; it is verifiable only by a frozen preselected_target_diagnostic input set.
+    """
+
+    if receipt_kind not in (None, SPOT_CHECK_CANDIDATE):
+        raise ValueError("unknown receipt kind")
+    verify_disabled_proposal(proposal, validation_mode=proposal_validation_mode(proposal))
+    if receipt_kind is not None and proposal_validation_mode(proposal) != VALIDATION_OFFLINE_SPOT_CHECK:
+        raise ValueError("a spot-check candidate receipt needs an offline spot-check proposal")
     if approved_fingerprint != proposal["policy_fingerprint"]:
         raise ValueError("approved fingerprint does not match proposal payload")
     receipt = {
@@ -507,5 +563,7 @@ def make_activation_receipt(
         "approved_at": approved_at,
         "evidence_root": str(evidence_root),
     }
-    verify_activation(proposal["payload"], receipt)
+    if receipt_kind is not None:
+        receipt["receipt_kind"] = receipt_kind
+    verify_activation(proposal["payload"], receipt, allow_spot_check_candidate=receipt_kind is not None)
     return receipt

@@ -9,10 +9,38 @@ import time
 from .contracts import finite, identifier, validate_observation, vector
 
 
+def time_ns(seconds):
+    """Represent source and grid seconds at the original ROS nanosecond resolution."""
+    return round(finite(seconds, nonnegative=True) * 1_000_000_000)
+
+
+MAX_SOURCE_AGE_NS = 100_000_000
+
+
+def source_age_ok_ns(at_ns, stamp_ns, max_age_ns=MAX_SOURCE_AGE_NS):
+    """THE source-age rule, in integer nanoseconds: the source is not from the future and at most `max_age_ns` old.
+
+    The provider, the capture, the synchronizer and the recorder's row audit all admit a source through this one test.
+    Floating-point seconds are never compared: a physics stamp is `step * 0.002`, so a source exactly 100 ms old differs
+    from the limit by rounding noise (L2 VeUKeAls, EPISODE_SOURCE_STALE).
+    """
+    return 0 <= at_ns - stamp_ns <= max_age_ns
+
+
+def bracketed_age_ok_ns(at_ns, stamp_ns, next_stamp_ns):
+    """The one extension of the source-age rule (CP-3440 B): a planning-scene read whose content provably did not change up to the
+    NEXT read is valid at every instant from its own stamp until that next read, not only for `max_age_ns`.
+
+    "Provably" is established by the caller from the two reads (identical scene content, no Teacher apply between them) and
+    recorded in the row; this function is only the interval test. Where there is no such evidence `source_age_ok_ns` applies
+    unchanged.
+    """
+    return stamp_ns <= at_ns < next_stamp_ns
+
+
 def causal_sample(samples, at_s, max_age_s):
-    finite(at_s, nonnegative=True)
-    finite(max_age_s, nonnegative=True)
-    valid = [(stamp, value) for stamp, value in samples if 0 <= at_s - stamp <= max_age_s]
+    at_ns, age_ns = time_ns(at_s), time_ns(max_age_s)
+    valid = [(stamp, value) for stamp, value in samples if source_age_ok_ns(at_ns, time_ns(stamp), age_ns)]
     if not valid:
         raise ValueError("INPUT_STALE")
     return max(valid, key=lambda item: item[0])[1]
@@ -21,13 +49,21 @@ def causal_sample(samples, at_s, max_age_s):
 class RgbObservationSynchronizer:
     STREAMS = ("head", "wrist", "arm", "neck")
 
-    def __init__(self, *, max_age_s, max_skew_s, capacity=32,
+    #: The joint-state streams arrive at the controller rate (500 Hz): a ring of 32 holds 64 ms, so a loop pass longer than
+    #: about 60 ms found no sample inside the 100 ms window of the row it was minting and failed INPUT_STALE (L2 5daa904e: a
+    #: 500 ms pass). 2048 entries cover 4 s; they are two floats each. Camera rings stay at `capacity` (a frame is 0.9 MB).
+    STATE_CAPACITY = 2048
+
+    def __init__(self, *, max_age_s, max_skew_s, capacity=None,
                  monotonic=time.monotonic):
+        explicit = capacity is not None
+        capacity = 32 if capacity is None else capacity
         self.max_age_s = finite(max_age_s, nonnegative=True)
         self.max_skew_s = finite(max_skew_s, nonnegative=True)
         if type(capacity) is not int or capacity < 2:
             raise ValueError("invalid ring capacity")
-        self.buffers = {stream: deque(maxlen=capacity) for stream in self.STREAMS}
+        self.buffers = {stream: deque(maxlen=capacity if explicit or stream in ("head", "wrist") else self.STATE_CAPACITY)
+                        for stream in self.STREAMS}
         self._session = None
         self._attempt = None
         self._last_sample = None
@@ -77,7 +113,7 @@ class RgbObservationSynchronizer:
                                             at_s, self.max_age_s)
                       for stream, buffer in self.buffers.items()}
             stamps = [item[0] for item in values.values()]
-            if max(stamps) - min(stamps) > self.max_skew_s:
+            if max(map(time_ns, stamps)) - min(map(time_ns, stamps)) > time_ns(self.max_skew_s):
                 raise ValueError("INPUT_SKEW")
             yaw = values["neck"][1]
             result = dict(session_id=session_id, attempt_id=attempt_id, sim_time_s=at_s,

@@ -113,6 +113,105 @@ def _finish_adapter():
     return adapter
 
 
+def test_actual_dynamic_child_scene_calls_retain_full_request_response_bounds():
+    from moveit_msgs.srv import ApplyPlanningScene
+    from test_task_scene_builder import _geometry
+    from so101_demo.control.planning_scene.task_scene import make_task_scene
+
+    class Client:
+        def wait_for_service(self, **kwargs):
+            return True
+
+        def call_async(self, request):
+            return SimpleNamespace(done=lambda: True,
+                                   result=lambda: ApplyPlanningScene.Response(success=True))
+
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    adapter._apply_scene = Client()
+    adapter._get_scene = object()
+    adapter._node = object()
+    adapter._scene_service_calls = []
+    request = ApplyPlanningScene.Request(scene=make_task_scene(_geometry()))
+    assert adapter._call(adapter._apply_scene, request, 0.1, "DYNAMIC_DETACH_SYNC").success
+    record, = adapter._scene_service_calls
+    assert record["service"] == "/apply_planning_scene"
+    assert record["phase"] == "DYNAMIC_DETACH_SYNC"
+    assert record["request"]["scene"]["world"]["collision_objects"][2]["id"] == "plastic_cup"
+    assert record["response"] == {"success": True}
+    assert 0 < record["request_monotonic_ns"] <= record["response_monotonic_ns"]
+    assert "simulation_step" not in record and "sim_time_s" not in record
+
+
+@pytest.mark.parametrize("change", ["positive", "wrong_pose", "wrong_dimension", "wrong_color"])
+def test_actual_dynamic_detach_verifies_full_source_derived_geometry(change):
+    from dataclasses import replace
+    from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
+    from so101_demo.core.simulation.types import SimulationEvidence, ObjectState
+    from so101_demo.core.task_geometry import Pose7
+    from so101_demo.control.planning_scene.task_scene import make_task_scene
+    from test_task_scene_builder import _geometry
+
+    base = _geometry()
+    cup_pose = (0.04, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
+    source = SimulationEvidence(
+        simulation_time_s=1.25, frame_id="world", publisher_sequence=9, simulation_step=625,
+        reset_epoch=1, simulation_session_id="s", paused=False,
+        object_state=ObjectState(1, "plastic_cup", cup_pose[:3], cup_pose[3:],
+                                 (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+        has_contact=False, minimum_signed_distance_m=0.0, maximum_normal_force_n=0.0,
+        truncated=False, left_fingertip_contacts=(), right_fingertip_contacts=(), other_object_contacts=())
+    expected = replace(base, objects=(*base.objects[:2], replace(base.objects[2], pose=Pose7(cup_pose))))
+    response_scene = make_task_scene(expected)
+    response_scene.robot_state.attached_collision_objects = []
+    if change == "wrong_pose":
+        response_scene.world.collision_objects[2].pose.position.x += 0.01
+    elif change == "wrong_dimension":
+        response_scene.world.collision_objects[2].primitives[0].dimensions[0] += 0.01
+    elif change == "wrong_color":
+        response_scene.object_colors[2].color.r = 0.0
+    adapter = object.__new__(RosDynamicMujocoExecution)
+    adapter._task_geometry = base
+    adapter._apply_scene, adapter._get_scene = object(), object()
+    adapter._snapshot = lambda: source
+    adapter._supported_release_preflight = lambda: source
+    adapter._touch_collision_allowed = False
+    adapter._session_id, adapter._expected_reset_epoch = "s", 1
+    adapter._document = {}
+    adapter._write = lambda: None
+    # This geometry-only fixture assumes release safety at its explicit seam.
+    # The separate supported-release tests exercise that preflight itself.
+    adapter._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
+    adapter._teacher_execution_policy = {"state_max_age_s": 0.5}
+    adapter._monotonic = lambda: 10.0
+    from so101_demo.core.simulation.types import ReceivedSimulationEvidence
+    adapter._selected_release_source = ReceivedSimulationEvidence(source, 10.0)
+    records, calls = [], []
+    adapter._record = lambda *args, **kwargs: records.append(kwargs)
+
+    def call(client, request, *_, before_dispatch=None):
+        if before_dispatch is not None:
+            before_dispatch()
+        calls.append(request)
+        return (ApplyPlanningScene.Response(success=True) if client is adapter._apply_scene else
+                GetPlanningScene.Response(scene=response_scene))
+
+    adapter._call = call
+    if change == "positive":
+        adapter._detach_or_sync(State.DETACH_MOVEIT)
+        assert len(records) == 1
+        assert adapter._scene_readback["geometry_verification"]["mismatches"] == []
+        assert adapter._scene_readback["source_physics"]["publisher_sequence"] == 9
+        assert calls[0].scene.world.collision_objects[0].pose.position.x == 0.04
+    else:
+        with pytest.raises(RuntimeError, match="DYNAMIC_DETACH_SYNC_GEOMETRY_MISMATCH"):
+            adapter._detach_or_sync(State.DETACH_MOVEIT)
+        assert records == []
+    retained, = adapter._document["scene_transactions"]
+    assert retained["source_physics"]["publisher_sequence"] == 9
+    assert retained["source_physics"]["object_state"]["position_world"] == cup_pose[:3]
+    assert retained["expected_geometry"]["objects"][2]["pose"]["values"] == cup_pose
+
+
 def test_finish_records_explicit_no_action_authority_for_idle_failure():
     adapter = _finish_adapter()
     adapter._snapshot = lambda: pytest.fail("pre-action failure must not require physics")
@@ -287,7 +386,7 @@ def test_joint_state_waits_for_a_generation_after_the_execution_boundary() -> No
     assert adapter._joint_state_received_monotonic_s is not None
 
 
-def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
+def test_unproved_micro_lift_is_an_audit_diagnostic_and_persists_terminal_joint_tcp_and_cup_facts(
     tmp_path,
 ) -> None:
     adapter = object.__new__(RosDynamicMujocoExecution)
@@ -307,6 +406,7 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
         )
     )
     adapter._snapshot = lambda: next(snapshots)
+    adapter._positions = dict(zip(RosDynamicMujocoExecution._ARM_JOINTS, start_joints))  # measured start == plan start
     adapter._joint_state_generation = 4
     adapter._joint_state_source_stamp_ns = 1_000_000_100
     adapter._joint_state_received_monotonic_s = 2.0
@@ -350,13 +450,16 @@ def test_failed_micro_lift_persists_terminal_joint_tcp_and_cup_diagnostics(
     adapter._evidence_file = tmp_path / "failed-micro-lift.json"
     target = PoseEvidence((0.0200, -0.3130, 0.2040), (0.0, 0.0, 0.0, 1.0))
 
-    with pytest.raises(RuntimeError, match="DYNAMIC_MICRO_LIFT_NOT_PROVED"):
-        adapter._motion(State.MICRO_LIFT, target)
+    adapter._motion(State.MICRO_LIFT, target)  # audit-only (D3): the state no longer fails
 
     assert len(adapter._state_events) == 1
     event = adapter._state_events[0]
     assert event["state"] == State.MICRO_LIFT.value
-    assert event["validation_failure"] == "DYNAMIC_MICRO_LIFT_NOT_PROVED"
+    assert event["validation_failure"] is None
+    diagnostic, = adapter._document["process_diagnostics"]
+    assert diagnostic["code"] == "DYNAMIC_MICRO_LIFT_NOT_PROVED" and diagnostic["audit_only"] is True
+    assert diagnostic["facts"] == {"physical_cup_lift_m": pytest.approx(0.0007),
+                                   "bilateral_contact": True, "table_contact": False}
     assert event["terminal_joint_positions_rad"] == list(terminal_joints)
     assert event["terminal_fk_pose"] == pytest.approx([*terminal_joints[:3], 0.0, 0.0, 0.0, 1.0])
     assert event["terminal_position_error_m"] == pytest.approx(
@@ -431,11 +534,10 @@ def test_dynamic_motion_rejects_sampled_tcp_detour_before_execution(tmp_path) ->
     assert adapter._planning_attempts[-1]["failure_code"] == ("CARTESIAN_CORRIDOR_DEVIATION")
 
 
-def test_dynamic_motion_preserves_exact_table_contact_that_cancelled_execution(tmp_path) -> None:
+def test_dynamic_early_table_contact_is_an_audit_diagnostic_and_the_force_limit_still_cancels(tmp_path) -> None:
+    """REPLACED_BY: early table contact no longer cancels the trajectory (D3); only the force limit does."""
+
     adapter = object.__new__(RosDynamicMujocoExecution)
-    target = PoseEvidence((0.0, 0.0, 0.26), (0.0, 0.0, 0.0, 1.0))
-    joints = (0.0, 0.0, 0.26, 0.0, 0.0)
-    before = _mujoco_sample(sequence=100, step=1000, cup_z_m=0.225, table_contact=False)
     contact = SimpleNamespace(
         geom1="bottom_collision", geom2="table_collision",
         position_world=(0.01, -0.20, 0.12), signed_distance_m=-0.0004,
@@ -443,60 +545,44 @@ def test_dynamic_motion_preserves_exact_table_contact_that_cancelled_execution(t
     )
     trigger = _mujoco_sample(sequence=101, step=1001, cup_z_m=0.227, table_contact=True)
     trigger.other_object_contacts = (contact,)
-    snapshots = iter((before, trigger))
-    adapter._snapshot = lambda: next(snapshots)
-    adapter._joint_state = lambda *_args, **_kwargs: joints
-    adapter._joint_state_generation = 4
-    adapter._joint_state_received_monotonic_s = 2.0
+    adapter._monitor_sample = lambda: trigger  # the monitor reads the latest sample without the blocking _snapshot
     adapter._positions = {**{str(index): 0.0 for index in range(1, 6)}, "6": -0.0485}
-    adapter._ik = SimpleNamespace(forward=lambda *_args: target)
-    receipt = SimpleNamespace(
-        joint_positions_rad=joints,
-        to_document=lambda: {"state": State.MOVE_ABOVE_PLACE.value},
-    )
-    adapter._motion_horizon = lambda *_args: [
-        SimpleNamespace(waypoint=SimpleNamespace(target=target), receipt=receipt)
-    ]
-    adapter._plan_candidate_set = lambda **_kwargs: (
-        SimpleNamespace(trajectory=SimpleNamespace()), []
-    )
-    cancelled = []
-
-    def execute(*_args, monitor):
-        try:
-            monitor()
-        except RuntimeError as error:
-            cancelled.append(str(error))
-            return ActionResult(
-                ActionStatus.FAILED,
-                Failure(FailureCategory.EXECUTION, "MOVEIT_EXECUTION_MONITOR_ABORTED", str(error)),
-            )
-        raise AssertionError("the table-contact monitor did not cancel execution")
-
-    adapter._trajectory = SimpleNamespace(execute=execute)
+    adapter._joint_state_received_monotonic_s = 2.0
     adapter._planning_attempts = []
     adapter._document = {"planning_attempts": adapter._planning_attempts}
     adapter._evidence_file = tmp_path / "dynamic-execute-manifest.json"
 
-    with pytest.raises(RuntimeError, match="DYNAMIC_EARLY_TABLE_CONTACT"):
-        adapter._motion(State.MOVE_ABOVE_PLACE, target)
+    adapter._motion_monitor(State.MOVE_ABOVE_PLACE)()  # does not raise
 
-    assert cancelled == ["DYNAMIC_EARLY_TABLE_CONTACT"]
     persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
-    violation = persisted["monitor_violation"]
-    assert violation["state"] == State.MOVE_ABOVE_PLACE.value
-    assert violation["reason"] == "DYNAMIC_EARLY_TABLE_CONTACT"
-    assert violation["sample"]["publisher_sequence"] == 101
-    assert violation["sample"]["cup_position_world_m"] == [0.02, -0.33, 0.227]
-    assert violation["contacts"]["other"] == [{
+    assert "monitor_violation" not in persisted
+    diagnostic, = persisted["process_diagnostics"]
+    assert diagnostic["code"] == "DYNAMIC_EARLY_TABLE_CONTACT"
+    assert diagnostic["state"] == State.MOVE_ABOVE_PLACE.value
+    assert diagnostic["audit_only"] is True
+    assert diagnostic["sample"]["publisher_sequence"] == 101
+    assert diagnostic["sample"]["cup_position_world_m"] == [0.02, -0.33, 0.227]
+    assert diagnostic["contacts"]["other"] == [{
         "geom1": "bottom_collision", "geom2": "table_collision",
         "position_world_m": [0.01, -0.20, 0.12],
         "signed_distance_m": -0.0004, "normal_force_n": 1.25,
     }]
+
+    forced = _mujoco_sample(sequence=102, step=1002, cup_z_m=0.227, table_contact=True)
+    forced.maximum_normal_force_n = 12.0
+    adapter._monitor_sample = lambda: forced
+    with pytest.raises(RuntimeError, match="DYNAMIC_FORCE_LIMIT_EXCEEDED"):
+        adapter._motion_monitor(State.MOVE_ABOVE_PLACE)()
+    adapter._write()
+    persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
+    violation = persisted["monitor_violation"]
+    assert violation["state"] == State.MOVE_ABOVE_PLACE.value
+    assert violation["reason"] == "DYNAMIC_FORCE_LIMIT_EXCEEDED"
+    assert violation["sample"]["publisher_sequence"] == 102
     assert violation["last_joint_positions_rad"]["6"] == -0.0485
 
     adapter._record_monitor_violation(
-        State.RECOVER_LIFT_TO_SAFE_HEIGHT, "DYNAMIC_FORCE_LIMIT_EXCEEDED", trigger
+        State.RECOVER_LIFT_TO_SAFE_HEIGHT, "DYNAMIC_FORCE_LIMIT_EXCEEDED", forced
     )
     adapter._write()
     persisted = json.loads(adapter._evidence_file.read_text(encoding="utf-8"))
@@ -543,6 +629,7 @@ def test_dynamic_motion_scores_bounded_moveit_candidates_and_executes_one(
         )
     )
     joint_states = iter((start, target_joints, target_joints))
+    adapter._positions = dict(zip(RosDynamicMujocoExecution._ARM_JOINTS, start))  # measured start == plan start
     adapter._snapshot = lambda: next(snapshots)
     adapter._joint_state_generation = 4
     adapter._joint_state_source_stamp_ns = 1_000_000_100

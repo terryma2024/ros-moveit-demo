@@ -176,7 +176,13 @@ class OwnedProcessGroup:
         *,
         environment: Mapping[str, str] | None = None,
         birth_identity_probe: Callable[[int], int] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> OwnedProcessIdentity:
+        if (type(pass_fds) is not tuple or any(type(fd) is not int or fd < 0 for fd in pass_fds)
+                or len(set(pass_fds)) != len(pass_fds)):
+            raise ValueError("owned process inherited descriptors are invalid")
+        for fd in pass_fds:
+            os.fstat(fd)
         if any(identity.role == spec.role for identity, _child in self._children):
             raise RuntimeError(f"owned process role already exists: {spec.role}")
         merged_environment = dict(os.environ)
@@ -193,6 +199,7 @@ class OwnedProcessGroup:
                 list(spec.argv),
                 start_new_session=True,
                 env=merged_environment,
+                **({"pass_fds": pass_fds, "close_fds": True} if pass_fds else {}),
             )
         except BaseException as error:
             self._abandon_owner_record(recorder, error)

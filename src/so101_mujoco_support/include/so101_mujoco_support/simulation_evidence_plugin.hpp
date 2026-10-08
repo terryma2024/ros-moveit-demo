@@ -6,12 +6,17 @@
 #include <mujoco/mujoco.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp>
@@ -124,9 +129,36 @@ private:
   std::deque<msg::PhysicsStepEvidence> samples_;
   uint64_t chunk_sequence_{0};
   uint64_t failed_publish_attempts_{0};
+  uint64_t publish_deferrals_total_{0};
   bool evidence_loss_{false};
   std::optional<msg::PhysicsStepEvidence> last_observed_;
   std::optional<msg::PhysicsHazardLatch> hazard_latch_;
+};
+
+/// Publishes physics-step chunks from its own thread and stamps the moment it is about to call `publish()`.
+///
+/// The physics thread only posts (never blocks): `try_post()` refuses while the previous post has not been taken by the
+/// publishing thread. `realtime_tools::RealtimePublisher` offers no hook at the publish call, so the stamp
+/// (`publish_monotonic_ns`, the clock of the samples' clock intervals) is taken here (CP-3410).
+class StampingChunkPublisher
+{
+public:
+  using Chunk = msg::PhysicsStepEvidenceChunk;
+  explicit StampingChunkPublisher(rclcpp::Publisher<Chunk>::SharedPtr publisher);
+  ~StampingChunkPublisher();
+  StampingChunkPublisher(const StampingChunkPublisher &) = delete;
+  StampingChunkPublisher & operator=(const StampingChunkPublisher &) = delete;
+  bool try_post(const Chunk & chunk);
+
+private:
+  void loop();
+  rclcpp::Publisher<Chunk>::SharedPtr publisher_;
+  std::mutex mutex_;
+  std::condition_variable condition_;
+  Chunk slot_;
+  bool full_{false};
+  bool stop_{false};
+  std::thread thread_;
 };
 
 class RobotContactBuilder
@@ -151,12 +183,64 @@ public:
   msg::RobotContactEvidence front() const;
   void pop_published();
   void reset(uint64_t epoch);
+  // Observation / loss helpers for the publishing thread (plan A21).
+  std::size_t size() const;
+  void note_loss();
 private:
   std::size_t capacity_;
   std::deque<msg::RobotContactEvidence> samples_;
   std::optional<msg::RobotContactEvidence> last_;
   std::optional<uint64_t> epoch_;
   bool loss_{false};
+};
+
+// Ordered, bounded hand-off of RobotContactEvidence from the physics step to a dedicated NON-real-time publishing
+// thread (plan A21). The physics thread only takes a short mutex to push (never touches DDS); the thread publishes
+// EVERY queued message per wake, in order, through the sink. Overflow, invalid and truncated samples keep the
+// RobotContactBuffer semantics (the loss flag persists on every later message until an explicit reset(epoch)).
+class RobotContactPublisher
+{
+public:
+  using Sink = std::function<void(const msg::RobotContactEvidence &)>;
+  using Log = std::function<void(const std::string &)>;
+  struct Stats
+  {
+    uint64_t pushed{0};
+    uint64_t published{0};
+    uint64_t dropped{0};       // overflow / invalid samples refused by the buffer
+    uint64_t sink_errors{0};   // sink exceptions (counted as evidence loss)
+    std::size_t depth{0};
+    std::size_t high_water{0};
+  };
+  RobotContactPublisher(
+    std::size_t capacity, Sink sink, Log log = nullptr,
+    std::chrono::milliseconds stats_period = std::chrono::milliseconds(5000));
+  ~RobotContactPublisher();
+  RobotContactPublisher(const RobotContactPublisher &) = delete;
+  RobotContactPublisher & operator=(const RobotContactPublisher &) = delete;
+  // Physics thread. Never blocks on the sink; false when the sample was refused (overflow or invalid).
+  bool push(const msg::RobotContactEvidence & sample);
+  // Physics thread, rare. Clears the queue and starts the new epoch; waits (bounded) for the one message that may be
+  // in flight so no old-epoch message can follow the new epoch.
+  void reset(uint64_t epoch);
+  // Stops and joins the thread; queued messages are discarded. Idempotent.
+  void stop();
+  Stats stats() const;
+private:
+  void run();
+  static constexpr std::size_t kBatch = 512;
+  mutable std::mutex mutex_;
+  std::condition_variable wake_;
+  std::condition_variable idle_;
+  RobotContactBuffer buffer_;
+  Sink sink_;
+  Log log_;
+  std::chrono::milliseconds stats_period_;
+  bool stop_{false};
+  bool inflight_{false};
+  uint64_t generation_{0};
+  Stats stats_;
+  std::thread thread_;
 };
 
 class SimulationEvidencePlugin final
@@ -179,7 +263,6 @@ private:
     const mjModel * model, const mjData * data, bool paused,
     uint64_t reset_generation, bool advance_physics_step);
   void try_publish_chunk();
-  void try_publish_robot_contacts();
   void publish_hazard_if_needed();
   void acknowledge_cancellation_request(
     const msg::PhysicsCancellationRequest & request);
@@ -187,8 +270,7 @@ private:
   rclcpp::Publisher<Evidence>::SharedPtr publisher_;
   std::unique_ptr<realtime_tools::RealtimePublisher<Evidence>> realtime_publisher_;
   rclcpp::Publisher<EvidenceChunk>::SharedPtr chunk_publisher_;
-  std::unique_ptr<realtime_tools::RealtimePublisher<EvidenceChunk>>
-  realtime_chunk_publisher_;
+  std::unique_ptr<StampingChunkPublisher> chunk_stamping_publisher_;
   rclcpp::Publisher<msg::PhysicsHazardLatch>::SharedPtr hazard_publisher_;
   rclcpp::Subscription<msg::PhysicsCancellationRequest>::SharedPtr
     cancellation_request_subscription_;
@@ -203,9 +285,8 @@ private:
   rclcpp::Publisher<msg::SceneStateEvidence>::SharedPtr scene_publisher_;
   std::unique_ptr<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>> realtime_scene_publisher_;
   rclcpp::Publisher<msg::RobotContactEvidence>::SharedPtr robot_publisher_;
-  std::unique_ptr<realtime_tools::RealtimePublisher<msg::RobotContactEvidence>> realtime_robot_publisher_;
   RobotContactBuilder robot_builder_;
-  std::unique_ptr<RobotContactBuffer> robot_buffer_;
+  std::unique_ptr<RobotContactPublisher> robot_contacts_;
   EvidenceBuilder builder_;
   EvidenceState state_;
   EvidenceState physics_state_;

@@ -32,3 +32,26 @@ def pytest_configure(config) -> None:
 
 def pytest_addoption(parser) -> None:
     parser.addoption("--installed-share", type=Path, default=None)
+
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture
+def isolated_ros_domain(monkeypatch):
+    """A ROS domain of this test's own (CP-3405).
+
+    Tests that publish to fixed topic names (`/arm_controller/controller_state`, ...) and start a spooler process must not share a
+    domain with the same test on another xdist worker, or with the live runs (domains 181 and 216-222): the frames of one worker
+    arrived in another worker's spooler and produced ORDER_INVALID hazards, gaps that were never seen and shifted sequences.
+    Domain 100 + 8 per worker + a per-worker counter keeps parallel workers apart; the child processes inherit it.
+    """
+    import os
+
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+    index = int(worker[2:]) if worker.startswith("gw") and worker[2:].isdigit() else 0
+    counter = getattr(isolated_ros_domain, "_count", 0) + 1
+    isolated_ros_domain._count = counter
+    domain = 100 + (index * 8 + counter % 8) % 100
+    monkeypatch.setenv("ROS_DOMAIN_ID", str(domain))
+    return domain

@@ -30,8 +30,12 @@ def acquire_one(
     on_invalid: Callable[[Exception], None],
     timeout_s: float,
     monotonic: Callable[[], float] = time.monotonic,
+    stop_check: Callable[[], None] | None = None,
 ) -> TValue:
-    """Return the first valid value without extending the absolute deadline."""
+    """Return the first valid value without extending the absolute deadline.
+
+    `stop_check` (raises when the owner asked to stop) runs on every pass, so a stop request ends the wait at once.
+    """
 
     if not math.isfinite(timeout_s) or timeout_s <= 0.0:
         raise ValueError("timeout_s must be finite and positive")
@@ -39,6 +43,8 @@ def acquire_one(
     received_any = False
     last_error: Exception | None = None
     while True:
+        if stop_check is not None:
+            stop_check()
         remaining = deadline - monotonic()
         if remaining <= 0.0:
             if received_any:

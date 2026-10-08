@@ -55,6 +55,7 @@ from so101_demo.parallel_batch.adaptive_runner import (
 )
 from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import (
+    teacher_execution_bound_s,
     AttemptIdentity,
     AttemptStatus,
     BatchRequest,
@@ -1441,10 +1442,25 @@ def _identity(lease, mode):
 class _ArtifactResults:
     """Produce reviewed Task 4 artifacts for the Worker and verify recovery receipts."""
 
-    def __init__(self, worker_roots: Mapping[str, Path], mode: RunMode):
+    def __init__(self, worker_roots: Mapping[str, Path], mode: RunMode, *,
+                 collection_scope=None, collection_inputs_manifest=None, clock=time.monotonic):
         self.worker_roots = {key: Path(value) for key, value in worker_roots.items()}
         self.mode = mode
         self._workspaces = {}
+        self._act_stores = {}
+        self._collection_scope = None
+        self._collection_inputs_manifest = collection_inputs_manifest
+        if collection_inputs_manifest is not None and collection_scope is None:
+            raise ValueError('RESULT_QC_ORIGINAL_BINDING_REQUIRED')
+        self._clock = clock
+        if collection_scope is not None:
+            from so101_demo.act.collection_scope import read_collection_scope
+            if mode is not RunMode.EXECUTE:
+                raise ValueError("ACT_RESULT_EXECUTE_REQUIRED")
+            if not callable(clock):
+                raise ValueError("RESULT_CLOCK_INVALID")
+            self._collection_scope = Path(collection_scope)
+            read_collection_scope(self._collection_scope)
 
     @staticmethod
     def _key(lease):
@@ -1456,6 +1472,13 @@ class _ArtifactResults:
     def reserve_workspace(self, lease, reset_receipt):
         if self.mode is RunMode.DRY_RUN:
             raise CliError("DRY_RUN_WORKSPACE_RESERVATION")
+        if self._collection_scope is not None:
+            from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
+            from so101_demo.parallel_batch.contracts import LeaseIdentity
+            if type(lease) is not LeaseIdentity or type(reset_receipt) is not ResetBoundaryReceipt:
+                raise ValueError("ACT_RESET_RECEIPT_SCHEMA")
+            if not lease.lease_issued_monotonic_s < reset_receipt.reset_completed_monotonic_s < lease.lease_deadline_monotonic_s:
+                raise ValueError("ACT_RESET_TIME_INVALID")
         reset_epoch = getattr(reset_receipt, "reset_epoch", None)
         completed = getattr(reset_receipt, "reset_completed_monotonic_s", None)
         session = getattr(reset_receipt, "simulation_session_id", None)
@@ -1482,6 +1505,15 @@ class _ArtifactResults:
         prior = self._workspaces.setdefault(key, workspace)
         if prior.path != workspace.path or prior._metadata != workspace._metadata:
             raise CliError("WORKSPACE_IDENTITY_MISMATCH")
+        if self._collection_scope is not None:
+            from so101_demo.act.result_store import ActCollectionResultStore
+            if key in self._act_stores:
+                raise ValueError("ACT_WORKSPACE_ALREADY_RESERVED")
+            self._act_stores[key] = ActCollectionResultStore(workspace.path.parent, lease,
+                clock=self._clock, audit_manifest=workspace.path / "episode/audit/audit-manifest.json",
+                scope=self._collection_scope, expected_session_id=session,
+                inputs_manifest=self._collection_inputs_manifest, trust_fresh_qc_memo=True,
+                expected_reset_epoch=reset_receipt.reset_epoch_value, reserved_workspace=workspace)
         return True
 
     def workspace(self, lease):
@@ -1491,6 +1523,12 @@ class _ArtifactResults:
             raise CliError("WORKSPACE_NOT_RESERVED") from error
 
     def _seal(self, lease, decision):
+        if self._collection_scope is not None:
+            try:
+                store = self._act_stores[self._key(lease)]
+            except KeyError as error:
+                raise ValueError("ACT_WORKSPACE_NOT_RESERVED") from error
+            return store.seal_attempt(lease, decision)
         identity = _identity(lease, self.mode)
         if self.mode is RunMode.DRY_RUN:
             workspace = ValidationWorkspace.create(
@@ -1599,6 +1637,7 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
         workspace_provider=None,
         authorize=None,
         broker_generation=None,
+        act_profile=False,
     ):
         supplied = dict(side_effects or {})
         unknown = set(supplied) - self.REQUIRED
@@ -1613,6 +1652,7 @@ class RosWorkerRuntimePorts(_ConcreteRosWorkerRuntimePorts):
             dependencies={
                 "workspace_provider": workspace_provider,
                 "authorize": authorize,
+                "act_profile": act_profile,
             },
         )
         self.side_effects = supplied
@@ -1660,6 +1700,7 @@ _RPC_PAYLOAD_FIELDS = {
     },
     "replace_resources": {"expected_generation"},
     "heartbeat": set(),
+    "heartbeat_teacher_v1": set(),
     "ack_lease": set(),
     "ack_attempt_started": {"gate_summary"},
     "ack_validation_started": {"gate_summary"},
@@ -2148,7 +2189,7 @@ class _WorkerBrokerProxy:
         self._client_factory = client_factory
         self.client = client_factory(
             endpoint,
-            deadline_s=config.executing_hard_timeout_s,
+            deadline_s=teacher_execution_bound_s(config),
             max_frame_bytes=config.broker_max_frame_bytes,
         )
         self.resources = resources
@@ -2196,7 +2237,7 @@ class _WorkerBrokerProxy:
                     raise CliError("BROKER_GENERATION_ROLLBACK")
                 client = self._client_factory(
                     authority["broker_socket_path"],
-                    deadline_s=self.config.executing_hard_timeout_s,
+                    deadline_s=teacher_execution_bound_s(self.config),
                     max_frame_bytes=self.config.broker_max_frame_bytes,
                 )
                 if self._broker_generation_consumer is not None:
@@ -2293,7 +2334,7 @@ class _WorkerBrokerProxy:
             "deadline_s": getattr(
                 self.client,
                 "deadline_s",
-                self.config.executing_hard_timeout_s,
+                teacher_execution_bound_s(self.config),
             ),
         }
         if execution_kind is ExecutionKind.ATTEMPT:
@@ -2366,9 +2407,10 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     adaptive_fields = {
         "start_paused", "worker_start_timeout_s", "adaptive_workers"
     }
+    episode_fields = {"episode_scope_path", "episode_inputs_manifest", "collection"}
     if (
         type(document) is not dict
-        or set(document) not in (required_fields, required_fields | adaptive_fields)
+        or set(document) - episode_fields not in (required_fields, required_fields | adaptive_fields)
         or document["schema_version"] != 1
         or (
             "start_paused" in document
@@ -2379,11 +2421,17 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         )
     ):
         raise CliError("WORKER_SPEC_INVALID")
+    for name in (episode_fields - {"collection"}) & set(document):
+        value = document[name]
+        if not isinstance(value, str) or not Path(value).is_absolute() or ".." in Path(value).parts:
+            raise CliError("WORKER_EPISODE_INPUT_INVALID")
     if type(document["broker_generation"]) is not int or document["broker_generation"] <= 0:
         raise CliError("WORKER_SPEC_BROKER_GENERATION")
     resources = _resource_from_dict(document["resources"])
     mode = RunMode(document["run_mode"])
     config = _load_runtime_config(Path(document["config_path"]))
+    # The ACT station (neck controller, seven-joint reset) is selected by the frozen inputs manifest. No broker lifecycle.
+    act_profile = mode is RunMode.EXECUTE and document.get("episode_inputs_manifest") is not None
     coordinator = _CoordinatorRpcProxy(
         document["socket_path"],
         document["token_path"],
@@ -2392,7 +2440,9 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         mode=mode,
         coordinator_epoch=document["coordinator_epoch"],
     )
-    results = _ArtifactResults({resources.worker_id: resources.worker_root}, mode)
+    results = _ArtifactResults({resources.worker_id: resources.worker_root}, mode,
+        collection_scope=document["episode_scope_path"] if act_profile else None,
+        collection_inputs_manifest=document["episode_inputs_manifest"] if act_profile else None)
     runtime_kwargs = {}
     runtime_ports = None
     broker_proxy = None
@@ -2406,16 +2456,28 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
             workspace_provider=results.workspace,
             authorize=coordinator.authorize_local,
             broker_generation=document["broker_generation"],
+            act_profile=act_profile,
         )
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
-        runtime_kwargs["pose_receive_timeout_s"] = config.executing_hard_timeout_s
+        runtime_kwargs["pose_receive_timeout_s"] = teacher_execution_bound_s(config)
         # the scope document this worker's episode belongs to, if the specification names one (CP-2862): the path
         # travels in the specification because that is how every other fact from outside the worker arrives here,
         # and a worker whose specification omits it records nothing, exactly as before.
         _scope_path = document.get("episode_scope_path")
         if _scope_path is not None:
             runtime_kwargs["episode_scope_path"] = str(_scope_path)
+        _inputs_manifest = document.get("episode_inputs_manifest")
+        if _inputs_manifest is not None:
+            runtime_kwargs["episode_inputs_manifest"] = str(_inputs_manifest)
+        if "collection" in document:
+            # the independent Recorder this worker starts around every Teacher attempt (Phase A4c); re-validated here
+            # so a specification that names a fault outside the sandbox refuses the worker before any Teacher starts
+            from so101_demo.act.collection_orchestration import CollectionRefused, collection_from_document
+            try:
+                runtime_kwargs["collection"] = collection_from_document(document["collection"])
+            except CollectionRefused as error:
+                raise CliError(str(error)) from error
         # A stable slot replacement is represented by the next private Worker
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
@@ -2638,6 +2700,9 @@ class ProductionBatchComposition:
             # Popped rather than read: _initialize names its keywords one by one and takes no **kwargs, so a key left
             # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
             self._episode_scope_path = kwargs.pop("episode_scope_path", None)
+            self._episode_inputs_manifest = kwargs.pop("episode_inputs_manifest", None)
+            # the validated collection options of an ACT first-episode run (Phase A4c); None for every other caller
+            self._collection = kwargs.pop("collection", None)
             # the container-broker flag defaults here as well as in _initialize: tests replace _initialize to keep
             # its side effects out, and an attribute that only exists when the real initialiser ran is an attribute
             # those tests cannot rely on - which is how this one started failing once the container-free route was
@@ -2665,7 +2730,6 @@ class ProductionBatchComposition:
         supervisor=None,
         broker_command_builder=None,
         container_brokers: bool = True,
-        endpoint_inputs=None,
         provenance_revalidator=None,
         broker_health_client_factory=UnixRpcClient,
         container_runner=subprocess.run,
@@ -2700,9 +2764,12 @@ class ProductionBatchComposition:
         self._clock = clock
         self._sleep = sleep
         self._startup_stage = "process_supervisor"
+        from so101_demo.runtime.qualified_commands import qualified_prefix_from_env
+
         self.supervisor = supervisor or ProcessSupervisor(
             spec.request.batch_id,
             manifest_path=spec.request.evidence_root / "owned-processes.json",
+            qualified_prefix=qualified_prefix_from_env(),
         )
         self._container_runner = container_runner
         # the spec is written before any builder runs (3002 vs 3110), so this cannot be inferred from the command:
@@ -2711,10 +2778,6 @@ class ProductionBatchComposition:
         if type(container_brokers) is not bool:
             raise ValueError("CONTAINER_BROKERS_INVALID")
         self._uses_production_broker_container = container_brokers
-        # the endpoint inputs a port needs to judge endpoints: the frozen policy and the final target. Present, the
-        # composition builds a port the coordinator's ACT gate recognises; absent, the generic adapter
-        # keeps its own paths (CP-2796/CP-2800)
-        self._endpoint_inputs = endpoint_inputs
         self.journal = None
         self._startup_stage = "allocator_create"
         self.allocator = WorkerResourceAllocator(
@@ -2763,8 +2826,8 @@ class ProductionBatchComposition:
         worker_roots = {
             worker.worker_id: worker.worker_root for worker in self.resource_manifest.workers
         }
-        if self._endpoint_inputs is None:
-            # no endpoint inputs: the generic production adapter keeps its own paths, as the coordinator's gate
+        if self._episode_scope_path is None:
+            # no episode scope: the generic production adapter keeps its own paths, as the coordinator's gate
             # requires (its comment in _commit says the ACT gate is "selected by the result contract the port
             # implements - the generic production adapter must keep its own paths")
             self.result_verifier = SealedResultAdapter(
@@ -2773,18 +2836,22 @@ class ProductionBatchComposition:
                 expected_final_cup_pose_world=spec.expected_final_cup_pose_world,
             )
         else:
-            # endpoint inputs present: build the port that judges endpoints, so the ACT gate fires on a real ACT
-            # episode. It takes the same worker_roots, and its verify() has the same signature as the adapter's
-            # (CP-2796/CP-2801)
+            # an episode scope is present: build the ACT result port, so the ACT gate fires on a real ACT episode. It
+            # takes the same worker_roots, and its verify() has the same signature as the adapter's
             from so101_demo.act.result_store import ActCollectionResultVerifier
             self.result_verifier = ActCollectionResultVerifier(
-                worker_roots, endpoint_inputs=self._endpoint_inputs,
+                worker_roots,
+                scope=self._episode_scope_path,
+                inputs_manifest=self._episode_inputs_manifest,
+                trust_fresh_qc_memo=True,
             )
         self._startup_stage = "coordinator_journal"
         if self.journal is None:
             self.journal = CoordinatorJournal.create(
                 spec.request.evidence_root / "coordinator", spec.request.batch_id
             )
+        if self._episode_scope_path is not None:
+            self.result_verifier.bind_execution_journal(self.journal)
         self._startup_stage = "coordinator"
         self.coordinator = BatchCoordinator(
             self.journal,
@@ -2877,6 +2944,9 @@ class ProductionBatchComposition:
                 "schema_version": 1,
                 **({} if self._episode_scope_path is None
                    else {"episode_scope_path": str(self._episode_scope_path)}),
+                **({} if self._episode_inputs_manifest is None
+                   else {"episode_inputs_manifest": str(self._episode_inputs_manifest)}),
+                **({} if self._collection is None else {"collection": self._collection.document()}),
                 "batch_id": spec.request.batch_id,
                 "run_mode": spec.request.run_mode.value,
                 "config_path": str(spec.config_path),
@@ -3162,11 +3232,15 @@ class ProductionBatchComposition:
                 container_run_argv,
                 gpu_groups,
                 image_record,
+                pinned_detector_source,
+                qualified_package_root,
             )
 
             image_id = self.spec.provenance.get("image_id")
             if not isinstance(image_id, str):
                 raise CliError("BROKER_IMAGE_ID_REQUIRED")
+            package = qualified_package_root()
+            detector_pin = pinned_detector_source()
             try:
                 current_image = image_record(self.spec.broker_image)
             except Exception as error:
@@ -3189,8 +3263,33 @@ class ProductionBatchComposition:
                 gid=os.getgid(),
                 batch_id=self.spec.request.batch_id,
                 broker_generation=self.broker_generation,
+                # CP-3459: the baked package of the image is replaced by the running, qualified one ...
+                source_package=package,
+                # ... CP-3460: except the detector, which stays the image's own and is recorded
+                detector_pin=detector_pin,
             )
+            if detector_pin is not None:
+                self._record_broker_source_pin(detector_pin, package)
         return self.supervisor.start("broker", command)
+
+    def _record_broker_source_pin(self, detector_pin, package):
+        """Write what the broker's code is: the install's package and the pinned detector with their hashes (once per run)."""
+        from so101_demo.cli.parallel_perception_broker import detector_pin_record
+
+        document = detector_pin_record(detector_pin, package)
+        path = self.spec.request.evidence_root / "broker-source-pin.json"
+        payload = (json.dumps(document, sort_keys=True, indent=1) + "\n").encode()
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            if path.read_bytes() != payload:
+                raise CliError("BROKER_SOURCE_PIN_RECORD_CHANGED") from None
+            return
+        try:
+            os.write(descriptor, payload)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
 
     def _container_inspect(self, container_id):
         return self._container_runner(
@@ -3480,6 +3579,11 @@ class ProductionBatchComposition:
     def _request_worker_recovery(self):
         return self._worker_control("recover")
 
+    @staticmethod
+    def worker_command(path):
+        """The Worker child: the running interpreter and module, an absolute command that no PATH can change."""
+        return (sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch", "--internal-worker", str(path))
+
     def _start_workers(self):
         self._check_fixed_web_stop()
         adaptive_processes = {}
@@ -3487,10 +3591,7 @@ class ProductionBatchComposition:
             self.worker_specs, self.resource_manifest.workers, strict=True
         ):
             self._check_fixed_web_stop()
-            command = (
-                sys.executable, "-m", "so101_demo.cli.mujoco_parallel_batch",
-                "--internal-worker", str(path),
-            )
+            command = self.worker_command(path)
             process = self.supervisor.start(
                 "worker", command, environment=dict(resources.environment)
             )
@@ -3695,6 +3796,8 @@ class ProductionBatchComposition:
         lease = self._active_lease(message)
         if operation == "heartbeat":
             return _jsonable(self.coordinator.heartbeat(lease))
+        if operation == "heartbeat_teacher_v1":
+            return _jsonable(self.coordinator.heartbeat_projection(lease))
         if operation == "ack_lease":
             return _jsonable(self.coordinator.ack_lease(
                 lease, request_key=message["idempotency_key"]
@@ -4151,6 +4254,14 @@ def outcome_document(summary: BatchSummary) -> tuple[int, dict[str, object]]:
         "validation_passed": summary.validation_passed,
         "qualification_applicable": summary.qualification_applicable,
         "qualification_passed": summary.qualification_passed,
+        # The Teacher success rate counts every started, legal Teacher attempt. The data side is reported apart from
+        # it: how many committed results passed the independent QC and how many episodes may be exported.
+        "teacher_attempts_started": summary.teacher_attempts_started,
+        "teacher_passed": summary.teacher_passed,
+        "teacher_success_rate": summary.teacher_success_rate,
+        "act_data_qc_passed": summary.act_data_qc_passed,
+        "act_data_pass_rate": summary.act_data_pass_rate,
+        "committable_episodes": summary.committable_episodes,
     }
     if summary.run_mode is RunMode.EXECUTE:
         passed = summary.qualification_passed

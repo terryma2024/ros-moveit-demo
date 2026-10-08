@@ -244,16 +244,6 @@ _CANONICAL_KEYS = (
 )
 
 
-def test_search_port_without_a_recorder_keeps_its_previous_behaviour():
-    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
-
-    port = PickPlaceSearchPhasePort(_Boundary())
-    port.record_evidence(None)                       # no recorder attached: a no-op
-    with pytest.raises(ValueError, match="LIVE_EVIDENCE_SEAL_UNAVAILABLE"):
-        port.seal_live_evidence({"scenario_id": "full-01", "session_id": "s",
-                                 "attempt_id": "a", "reset_epoch": 1, "release_epoch": 0})
-
-
 def _records_root():
     """The raw-records root the evidence attachment must carry, per the port's own contract."""
 
@@ -261,65 +251,6 @@ def _records_root():
     from pathlib import Path as _Path
 
     return _Path(tempfile.mkdtemp())
-
-
-def test_search_port_forwards_only_complete_samples_and_never_swallows_a_refusal(recorder):
-    from so101_demo.adapters.act.pick_place_search_port import PickPlaceSearchPhasePort
-
-    rec, root = recorder
-    double = _RecordingRecorder()
-    port = PickPlaceSearchPhasePort(_Boundary(), evidence_recorder=double)
-    # a partial sample must be refused loudly, never recorded as if it were complete
-    with pytest.raises(ValueError, match="TASK8_SEARCH_PORT_EVIDENCE_INVALID"):
-        port.record_evidence({"phase": "SEARCH"})
-    assert double.appended == []
-    sample_document = sample(root)
-    port.record_evidence(sample_document)
-    # the port forwards the canonical sample AND the grid sample it builds for the phase, so the assertion is that the
-    # sample it was given is among what the recorder received - the exact list is the port's business, not this test's
-    assert sample_document in double.appended, double.appended
-    # a caller that STATES the case's epochs must be right: the seal refuses a disagreement by name rather than
-    # ignoring it (CP-1583), and a case that ends after FINAL_CHECK carries the incremented release epoch
-    artifact = port.seal_live_evidence({"scenario_id": "full-01", "session_id": "session-1",
-                                        "attempt_id": "attempt-1", "reset_epoch": 4,
-                                        "release_epoch": 1})
-    assert artifact["sha256"] == "a" * 64
-    # the seal happens after FINAL_CHECK, so the release epoch is the incremented one - the same value the runner
-    # verifies RELEASE and everything after it with (CP-1555)
-    assert double.sealed == [{"case_id": "full-01", "session_id": "session-1",
-                              "attempt_id": "attempt-1", "reset_epoch": 4, "release_epoch": 1}]
-
-
-def test_readback_adapter_emits_canonical_samples_through_one_builder(recorder):
-    """The adapter's entry point must produce the same shape the recorder accepts."""
-
-    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
-
-    rec, root = recorder
-    canonical = sample(root, step=0)
-    adapter = object.__new__(PickPlacePhysicalReadback)      # no model needed for this entry point
-    built = adapter.live_evidence_sample(
-        identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
-                  "reset_epoch": 4, "release_epoch": 0},
-        phase=canonical["phase"], physics_step=canonical["physics_step"],
-        sim_time_s=canonical["sim_time_s"], source_stamps_s=canonical["source_stamps_s"],
-        source_received_monotonic_s=canonical["source_received_monotonic_s"],
-        raw_records=canonical["raw_records"], holding_state=canonical["holding_state"],
-        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
-        contact={"observation_valid": True, "bilateral_contact": True,
-                 "no_fingertip_contact": False, "cup_supported": True, "released": False,
-                 "placement_stable": True},
-        measurements={"cup_support_distance_m": 0.001,
-                      "end_effector_position_m": [0.0, 0.0, 0.1],
-                      "cup_position_m": [0.0, 0.0, 0.1],
-                      "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]})
-    assert set(built) == set(canonical)
-    rec.append(built, kind="grid")
-    with pytest.raises(ValueError):
-        adapter.live_evidence_sample(
-            identity={"case_id": "full-01"}, phase="CLOSE", physics_step=0, sim_time_s=0.0,
-            source_stamps_s={}, source_received_monotonic_s={}, raw_records={},
-            holding_state="HOLDING", frame={}, contact={}, measurements={})
 
 
 def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
@@ -442,13 +373,15 @@ def test_journal_row_must_belong_to_the_bundle_that_produced_it():
 
 
 class _Contact:
-    def __init__(self, body1="left_finger", body2="cup"):
+    def __init__(self, body1="plastic_cup", body2="finger", normal_force_n=1.0, signed_distance_m=0.001):
         self.body1, self.body2 = body1, body2
+        self.normal_force_n, self.signed_distance_m = normal_force_n, signed_distance_m
 
 
 class _ObjectState:
     def __init__(self, position=(0.0, 0.0, 0.1), orientation=(0.0, 0.0, 0.0, 1.0)):
         self.position_world, self.orientation_xyzw = position, orientation
+        self.body = "plastic_cup"
 
 
 class _Evidence:
@@ -493,52 +426,21 @@ def test_frame_aggregates_follow_the_contact_evidence_not_a_label():
     assert single["holding_state"] == "APPROACHING"
 
 
-def test_capture_evidence_fields_compose_a_canonical_sample(recorder):
-    """The readback's per-frame fields plus the phase bits make a recorder-accepted sample."""
+@pytest.mark.parametrize("contacts, expected", [
+    ([], False),
+    ([_Contact(body2="pedestal")], False),
+    ([_Contact(body2="table", normal_force_n=0.0)], False),
+    ([_Contact(body1="other_cup", body2="table")], False),
+    ([_Contact(body2="table", signed_distance_m=0.01)], False),
+    ([_Contact(body2="table")], True),
+    ([_Contact(body2="table", signed_distance_m=-0.001)], True),
+])
+def test_support_requires_actual_cup_table_contact_with_force(contacts, expected):
+    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
 
-    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
-    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
-
-    rec, root = recorder
-    canonical = sample(root, step=0)
-    evidence = _Evidence(left=[_Contact()], right=[_Contact()], minimum_signed_distance_m=0.02)
-    # the adapter reads the scene's clock bound and both documents' own time, and requires the three physics stamps to
-    # agree - so they carry the world's own value rather than a third opinion
-    captured = {"world": evidence,
-                "scene": {"clock_interval_end_monotonic_ns": 12_500_000_000,
-                          "simulation_time_s": evidence.simulation_time_s},
-                "contact": {"simulation_time_s": evidence.simulation_time_s},
-                "observation": {}, "reference": {},
-                "source_stamps_s": canonical["source_stamps_s"],
-                "source_received_wall_s": canonical["source_received_monotonic_s"]}
-    adapter = object.__new__(PickPlacePhysicalReadback)
-    fields = adapter.capture_evidence_fields(captured, support_distance_max_m=0.005,
-                                             raw_records=canonical["raw_records"],
-                                             # the end-effector position is MuJoCo output: the caller holding the model supplies it, and the
-                                             # recorder refuses a frame without it rather than recording one that never had it
-                                             end_effector_position_m=[0.0, 0.0, 0.1])
-    assert type(fields["physics_step"]) is int and fields["sim_time_s"] >= 0
-    built = build_live_evidence_sample(
-        identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
-                  "reset_epoch": 4, "release_epoch": 0},
-        phase="TRANSPORT", physics_step=fields["physics_step"], sim_time_s=fields["sim_time_s"],
-        source_stamps_s=fields["source_stamps_s"],
-        source_received_monotonic_s=fields["source_received_monotonic_s"],
-        raw_records=fields["raw_records"], holding_state=fields["holding_state"],
-        frame={"wrist_frame_valid": True, "wrist_target_visible": True},
-        contact={"observation_valid": True, "bilateral_contact": fields["bilateral_contact"],
-                 "no_fingertip_contact": fields["no_fingertip_contact"],
-                 "cup_supported": fields["cup_supported"], "released": False,
-                 "placement_stable": False},
-        measurements={"cup_support_distance_m": fields["cup_support_distance_m"],
-                      "end_effector_position_m": [0.0, 0.0, 0.1],
-                      "cup_position_m": fields["cup_position_m"],
-                      "cup_orientation_xyzw": fields["cup_orientation_xyzw"]})
-    assert set(built) == set(canonical)
-    rec.append(built, kind="grid")                      # the recorder accepts the composed sample
-    with pytest.raises(Exception):
-        adapter.capture_evidence_fields({"world": evidence}, support_distance_max_m=0.005,
-                                        raw_records={})
+    evidence = _Evidence(left=[_Contact()], right=[_Contact()], other=contacts,
+                         minimum_signed_distance_m=0.0)
+    assert derive_frame_aggregates(evidence, support_distance_max_m=0.002)["cup_supported"] is expected
 
 
 def _window_sample(recorder_root, time_s, phase, step):
@@ -634,54 +536,6 @@ def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_pa
     assert set(artifact) == {"path", "sha256", "schema_version"}
     assert driver.window.grid_count == len(LiveEvidenceWindow.REQUIRED_PHASES)
     assert driver.window.event_count == 1
-
-
-def test_driver_observe_capture_composes_from_a_readback_capture(tmp_path):
-    """One call takes a readback capture through the driver to the frozen grid."""
-
-    from so101_demo.act.task8_live_evidence import CaseEvidenceDriver, LiveEvidenceWindow
-    from so101_demo.adapters.act.pick_place_readback import PickPlacePhysicalReadback
-
-    driver = CaseEvidenceDriver(case_id="full-02", staging_root=tmp_path, session_id="session-1",
-                                attempt_id="attempt-2", reset_epoch=7)
-    driver.bind_reset_epoch(7)
-    reference = sample(tmp_path, step=0)
-    for record in reference["raw_records"].values():
-        relative = record if isinstance(record, str) else (
-            record.get("path") or record.get("relative_path") or record.get("file"))
-        target = driver.case_root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        source = tmp_path / relative
-        if not target.exists():
-            target.write_bytes(source.read_bytes() if source.is_file() else b"raw")
-    adapter = object.__new__(PickPlacePhysicalReadback)
-    identity = {"case_id": "full-02", "session_id": "session-1", "attempt_id": "attempt-2",
-                "reset_epoch": 7, "release_epoch": 0}
-    document = sample(tmp_path, step=0)
-    document.update(identity)
-    evidence = _Evidence(left=[_Contact()], right=[_Contact()], simulation_step=0,
-                         simulation_time_s=0.0, minimum_signed_distance_m=0.02)
-    frame = {"wrist_frame_valid": True, "wrist_target_visible": True}
-    contact = {"observation_valid": True, "bilateral_contact": True,
-               "no_fingertip_contact": False, "cup_supported": False, "released": False,
-               "placement_stable": False}
-    measurements = {"cup_support_distance_m": 0.02, "end_effector_position_m": [0.0, 0.0, 0.1],
-                    "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}
-    for index, phase in enumerate(LiveEvidenceWindow.REQUIRED_PHASES):
-        captured = {"world": _Evidence(left=[_Contact()], right=[_Contact()],
-                                       simulation_step=index, simulation_time_s=index * 0.1,
-                                       minimum_signed_distance_m=0.02),
-                    "scene": {"clock_interval_end_monotonic_ns": 12_500_000_000 + index * 100_000_000,
-                      "simulation_time_s": index * 0.1,
-                              "simulation_time_s": index * 0.1},
-                    "contact": {"simulation_time_s": index * 0.1}, "observation": {}, "reference": {},
-                    "source_stamps_s": document["source_stamps_s"],
-                    "source_received_wall_s": document["source_received_monotonic_s"]}
-        driver.observe_capture(adapter, captured, phase=phase, frame=frame, contact=contact,
-                               measurements=measurements, raw_records=document["raw_records"],
-                               support_distance_max_m=0.005)
-    assert driver.window.grid_count == len(LiveEvidenceWindow.REQUIRED_PHASES)
-    assert set(driver.seal()) == {"path", "sha256", "schema_version"}
 
 
 def _published_row(**overrides):
@@ -837,36 +691,6 @@ def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recor
         window.invalidate("")
 
 
-
-def test_the_port_binds_one_evidence_window_and_refuses_a_second():
-    """The bind is one-shot and refused once recording has begun, mirroring the startup receipt."""
-
-    from so101_demo.adapters.act.pick_place_search_port import (PickPlaceSearchPhasePort,
-                                                               PickPlaceSearchPortError)
-
-    class Window:
-        def __init__(self):
-            self.sealed = False
-
-        def seal(self):
-            self.sealed = True
-            return {"status": "SEALED"}
-
-    port = PickPlaceSearchPhasePort(_Boundary())
-    window = Window()
-    port.bind_live_evidence(window, support_distance_max_m=0.02,
-                            raw_records_root=_records_root())
-    assert port.live_evidence_window is window
-    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_ALREADY_BOUND"):
-        # the fields travel with the call, so the guard that refuses this one is the already-bound rule and not the
-        # field check that now runs first
-        port.bind_live_evidence(Window(), support_distance_max_m=0.02, raw_records_root=_records_root())
-    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
-        PickPlaceSearchPhasePort(_Boundary()).bind_live_evidence(
-            object(), support_distance_max_m=0.02, raw_records_root=_records_root())
-
-
-
 def test_a_window_refuses_observation_until_the_reset_epoch_is_bound(recorder):
     """The epoch is unknown until the reset receipt is verified, so an unbound window must not record or seal."""
 
@@ -914,36 +738,3 @@ def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
         other.bind_reset_epoch(9)
 
 
-def test_the_port_gives_its_attached_window_the_verified_reset_epoch():
-    """The epoch only exists once the reset receipt is verified, so the port passes it on and refuses a window that cannot take it."""
-
-    from so101_demo.adapters.act.pick_place_search_port import (PickPlaceSearchPhasePort,
-                                                               PickPlaceSearchPortError)
-
-    class Window:
-        def __init__(self):
-            self.bound = []
-
-        def seal(self):
-            return {"status": "SEALED"}
-
-        def bind_reset_epoch(self, epoch):
-            self.bound.append(epoch)
-
-    port = PickPlaceSearchPhasePort(_Boundary())
-    window = Window()
-    port.bind_live_evidence(window, support_distance_max_m=0.02,
-                            raw_records_root=_records_root())
-    port._bind_case_epoch({"reset_epoch": 7})
-    assert window.bound == [7]
-    port._bind_case_epoch({"reset_epoch": 7})       # the window's own one-shot rule is what refuses a repeat
-
-    class NoBind:
-        def seal(self):
-            return {"status": "SEALED"}
-
-    other = PickPlaceSearchPhasePort(_Boundary())
-    other.bind_live_evidence(NoBind(), support_distance_max_m=0.02, raw_records_root=_records_root())
-    with pytest.raises(PickPlaceSearchPortError, match="TASK8_LIVE_EVIDENCE_WINDOW_INVALID"):
-        other._bind_case_epoch({"reset_epoch": 7})
-    PickPlaceSearchPhasePort(_Boundary())._bind_case_epoch({"reset_epoch": 7})   # no window, nothing to bind

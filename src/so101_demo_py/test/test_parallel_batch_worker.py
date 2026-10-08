@@ -1,6 +1,7 @@
 """Behavioral contract for the fenced parallel Worker state machine."""
 
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
 import threading
 import time
@@ -21,7 +22,6 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.worker import ParallelWorker
-from so101_demo.act.collection import ActCollectionWorkload
 
 
 CONFIG = load_parallel_runtime_config(
@@ -521,24 +521,64 @@ def event_names(fake):
     return [entry[0] for entry in fake.coordinator.calls if entry[0] != "HEARTBEAT"]
 
 
-def test_act_workload_uses_existing_worker_lease_seal_and_commit_path():
+def test_a_committed_status_that_differs_from_the_teacher_decision_is_refused_not_adopted():
+    """The old contract let an authoritative failing QC turn the worker's PASSED into FAILED (a `qc_downgrade`).
+
+    The committed status is the Teacher's own; a commit that disagrees with the sealed decision is a protocol fault.
+    """
+    fake=Fake()
+    original=fake.coordinator.commit_result
+    def committed_failure(lease,location,*,request_key):
+        reply=original(lease,location,request_key=request_key)
+        reply['status']=AttemptStatus.FAILED
+        return reply
+    fake.coordinator.commit_result=committed_failure
+    result=ParallelWorker(fake.ports()).run_one()
+    assert fake.coordinator.sealed_statuses==[AttemptStatus.PASSED]
+    assert result.terminal_status is None and result.stopped_reason=='TERMINAL_ACK_FAILED'
+    assert result.recovered is False
+
+
+def test_the_worker_has_no_qc_downgrade_path_left():
+    import inspect
+    from so101_demo.parallel_batch import worker as worker_module
+    assert 'qc_downgrade' not in inspect.getsource(worker_module)
+
+
+@pytest.mark.parametrize('claim,committed',[(AttemptStatus.FAILED,AttemptStatus.PASSED),
+    (AttemptStatus.PASSED,AttemptStatus.INVALID),(AttemptStatus.INDETERMINATE,AttemptStatus.FAILED)])
+def test_a_commit_ack_that_disagrees_with_the_sealed_decision_is_never_accepted(claim,committed):
+    fake=Fake()
+    fake.runtime.execute_decision=Decision(claim)
+    original=fake.coordinator.commit_result
+    def wrong_reply(lease,location,*,request_key):
+        reply=original(lease,location,request_key=request_key);reply['status']=committed
+        return reply
+    fake.coordinator.commit_result=wrong_reply
+    result=ParallelWorker(fake.ports()).run_one()
+    assert result.terminal_status is None and result.stopped_reason=='TERMINAL_ACK_FAILED'
+
+
+@pytest.mark.parametrize('prior_execution_failure', [False, True])
+def test_terminal_seal_failure_preserves_first_bounded_original_refusal(prior_execution_failure):
     fake = Fake()
-
-    def collect(lease, *, broker, boundary, start_event_id, start_event_type, reset_epoch):
-        fake.runtime.calls.append("collect_authorized_scenario")
-        assert broker is fake.broker
-        assert start_event_type == "ATTEMPT_STARTED"
-        assert reset_epoch == "reset-1"
-        return boundary(lambda current: Decision(AttemptStatus.FAILED, "search_failed"))
-
-    fake.runtime.collect_authorized_scenario = collect
-    ports = fake.ports()
-    ports["workload"] = ActCollectionWorkload()
-    result = ParallelWorker(ports).run_one()
-    assert result.terminal_status is AttemptStatus.FAILED
-    assert "collect_authorized_scenario" in fake.runtime.calls
-    assert not any(call[0] == "request_model" for call in fake.broker.calls)
-    assert "RESULT_COMMITTED" in event_names(fake)
+    if prior_execution_failure:
+        fake.broker.raise_request = PermissionError('first request rejected\n' + 'é' * 600)
+    def broken_seal(lease, decision):
+        fake.results.calls.append(('seal_attempt', decision.status, decision.reason))
+        raise OSError('terminal seal rejected\n' + 'é' * 600)
+    fake.results.seal_attempt = broken_seal
+    worker = ParallelWorker(fake.ports())
+    result = worker.run_one()
+    assert result.terminal_status is None and result.stopped_reason == 'TERMINAL_ACK_FAILED'
+    assert result.recovered is False and worker._quarantined is True
+    assert result.failure_boundary == ('request_model' if prior_execution_failure else 'seal_and_commit')
+    assert result.failure_type == ('PermissionError' if prior_execution_failure else 'OSError')
+    assert result.failure_message.startswith('first request rejected ' if prior_execution_failure
+        else 'terminal seal rejected ')
+    assert len(result.failure_message.encode('utf-8')) <= 512 and '\n' not in result.failure_message
+    assert fake.results.calls[0][0] == 'seal_attempt' and fake.coordinator.recovery == []
+    assert 'RESULT_COMMITTED' not in event_names(fake)
 
 
 def test_worker_rejects_unregistered_workload_object():
@@ -877,27 +917,20 @@ def test_missing_heartbeat_ack_uses_frozen_bound_and_stops_after_block():
     assert ("cancel_generation", "w1", 1) in fake.broker.calls
 
 
-def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
-    """A revoked lease must stop physical work without waiting for execute_expert."""
-
-    fake = Fake(RunMode.EXECUTE)
-    entered = threading.Event()
-    release = threading.Event()
+def _expert_blocked_with_a_lost_coordinator(fake):
+    """An EXECUTE run whose Teacher child is blocked inside execute_expert while the Coordinator goes silent."""
+    entered, release = threading.Event(), threading.Event()
     original_execute = fake.runtime.execute_expert
     original_heartbeat = fake.coordinator.heartbeat
 
     def blocked_execute(*args, **kwargs):
         entered.set()
-        assert release.wait(3.0)
+        assert release.wait(5.0)
         return original_execute(*args, **kwargs)
 
     def lose_watchdog_heartbeat(lease):
-        if (
-            threading.current_thread().name.startswith(
-                "parallel-worker-heartbeat-rpc-"
-            )
-            and entered.is_set()
-        ):
+        if (threading.current_thread().name.startswith("parallel-worker-heartbeat-rpc-")
+                and entered.is_set()):
             raise RuntimeError("coordinator lost during expert execution")
         return original_heartbeat(lease)
 
@@ -905,56 +938,210 @@ def test_watchdog_loss_cancels_and_confirms_while_expert_is_still_blocked():
     fake.coordinator.heartbeat = lose_watchdog_heartbeat
     worker = ParallelWorker(fake.ports())
     result = []
-    run_thread = threading.Thread(target=lambda: result.append(worker.run_one()))
-    run_thread.start()
+    thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    thread.start()
     assert entered.wait(1.0)
+    return worker, thread, result, release
 
+
+def _wait_for_watchdog_fault(worker):
     deadline = time.monotonic() + CONFIG.heartbeat_interval_s + 1.0
+    while worker._watchdog is None or not worker._watchdog.faulted:
+        assert time.monotonic() < deadline, "the watchdog never noticed the lost Coordinator"
+        time.sleep(0.01)
+
+
+def test_coordinator_loss_during_the_teacher_run_does_not_cancel_it_and_its_result_stays_local():
+    """A lost Coordinator is a coordination problem: the Teacher child finishes under its own deadline."""
+
+    fake = Fake(RunMode.EXECUTE)
+    worker, thread, result, release = _expert_blocked_with_a_lost_coordinator(fake)
+    _wait_for_watchdog_fault(worker)
+    time.sleep(0.2)
+    assert thread.is_alive(), "expert execution was released before the Teacher finished"
+    # Nothing cancelled, fenced or audited as a revocation while the Teacher is within its deadline.
+    assert "cancel_motion" not in fake.runtime.calls and "confirm_no_controller_goal" not in fake.runtime.calls
+    assert not [call for call in fake.broker.calls if call[0] == "cancel_generation"]
+    assert not [call for call in fake.runtime.calls if isinstance(call, tuple) and call[0] == "revocation"]
+    assert not worker._stop_requested.is_set()
+
+    release.set()
+    thread.join(3.0)
+    assert not thread.is_alive()
+    outcome = result[0]
+    # The Teacher's own decision is sealed locally, unchanged; the commit never happens and is reported as a
+    # coordination problem, with the Teacher status carried in the bounded failure message.
+    assert [call[:2] for call in fake.results.calls if call[0] == "seal_attempt"] == [
+        ("seal_attempt", AttemptStatus.PASSED)]
+    assert "RESULT_COMMITTED" not in event_names(fake) and "FINALIZING_STARTED" not in event_names(fake)
+    assert outcome.stopped_reason == "COORDINATOR_LOST_RESULT_UNCOMMITTED"
+    assert outcome.terminal_status is None and outcome.recovered is False
+    assert outcome.failure_boundary == "result_commit"
+    assert "teacher_status=PASSED" in outcome.failure_message and "COORDINATOR_LOST" in outcome.failure_message
+    # The worker stops scheduling: it takes no further lease.
+    assert sum(call[0] == "LEASE_REQUEST" for call in fake.coordinator.calls) == 1
+    assert worker.run_one().stopped_reason == "WORKER_NOT_READY"
+
+
+def _expert_blocked_with_a_fenced_teacher_channel(fake, *, code="TEACHER_CHANNEL_FENCED", repeat=True):
+    """An EXECUTE run whose Teacher child is blocked in execute_expert while the broker fences its channel.
+
+    The Coordinator keeps answering; only the Teacher lifecycle's renewal hook refuses, as the live run's did."""
+    from so101_demo.parallel_batch.contracts import TeacherChannelTerminal
+
+    entered, release, hooks = threading.Event(), threading.Event(), []
+    original_execute = fake.runtime.execute_expert
+
+    def blocked_execute(*args, **kwargs):
+        entered.set()
+        assert release.wait(5.0)
+        return original_execute(*args, **kwargs)
+
+    def heartbeat_acknowledged(lease):
+        hooks.append(lease)
+        if entered.is_set():
+            raise TeacherChannelTerminal(code)
+
+    fake.runtime.execute_expert = blocked_execute
+    fake.runtime.heartbeat_acknowledged = heartbeat_acknowledged
+    worker = ParallelWorker(fake.ports())
+    result = []
+    thread = threading.Thread(target=lambda: result.append(worker.run_one()))
+    thread.start()
+    assert entered.wait(1.0)
+    return worker, thread, result, release, hooks
+
+
+@pytest.mark.parametrize("status, reason", [(AttemptStatus.FAILED, "TEACHER_TASK_FAIL:FINAL_XY_OUT_OF_TOLERANCE"),
+                                            (AttemptStatus.INDETERMINATE, "DYNAMIC_EXECUTION_FAILED")])
+def test_a_fenced_teacher_channel_is_the_teachers_terminal_event_and_its_attempt_is_still_committed(status, reason):
+    """A5: the broker fenced the Teacher's channel (its phase proof refused). The Worker stops renewing on that channel,
+    lets the child finish and commits the Teacher's decision through the normal path; it is not COORDINATOR_LOST."""
+    fake = Fake(RunMode.EXECUTE)
+    fake.runtime.execute_decision = Decision(status, reason, physical_action_proven_absent=False)
+    worker, thread, result, release, hooks = _expert_blocked_with_a_fenced_teacher_channel(fake)
+    deadline = time.monotonic() + CONFIG.heartbeat_interval_s + 1.0
+    while worker._teacher_channel_terminal is None:
+        assert time.monotonic() < deadline, "the fenced channel was never noticed"
+        time.sleep(0.01)
+    assert not worker._watchdog.faulted, "a fenced Teacher channel is not a lost Coordinator"
+    assert worker._coordinator_loss is None and not worker._stop_requested.is_set()
+    seen = len(hooks)
+    time.sleep(CONFIG.heartbeat_interval_s * 3)
+    assert len(hooks) == seen, "no renewal is attempted on the fenced channel again"
+    assert sum(call[0] == "HEARTBEAT" for call in fake.coordinator.calls) >= 3, "the Coordinator lease keeps being renewed"
+    release.set()
+    thread.join(3.0)
+    assert not thread.is_alive()
+    outcome = result[0]
+    assert outcome.stopped_reason != "COORDINATOR_LOST_RESULT_UNCOMMITTED" and outcome.failure_boundary is None
+    assert outcome.terminal_status is status
+    assert [call[:2] for call in fake.results.calls if call[0] == "seal_attempt"] == [("seal_attempt", status)]
+    names = event_names(fake)
+    assert "FINALIZING_STARTED" in names and "RESULT_COMMITTED" in names, "the started attempt is committed"
+
+
+def test_a_fence_noticed_only_at_the_finalizing_acknowledgement_is_tolerated_too():
+    from so101_demo.parallel_batch.contracts import TeacherChannelTerminal
+
+    fake = Fake(RunMode.EXECUTE)
+    fake.runtime.execute_decision = Decision(AttemptStatus.INDETERMINATE, "DYNAMIC_EXECUTION_FAILED",
+                                             physical_action_proven_absent=False)
+    fake.runtime.finalizing_acknowledged = lambda lease: (_ for _ in ()).throw(
+        TeacherChannelTerminal("TEACHER_FENCE_CONTEXT_INVALID"))
+    outcome = ParallelWorker(fake.ports()).run_one()
+    assert outcome.terminal_status is AttemptStatus.INDETERMINATE and "RESULT_COMMITTED" in event_names(fake)
+
+
+def test_a_teacher_lifecycle_failure_that_is_not_a_terminal_channel_still_fails_closed():
+    """Only the broker's own channel-terminal refusals are the Teacher's event; any other hook failure is unchanged."""
+    fake = Fake(RunMode.EXECUTE)
+    entered, gate = threading.Event(), threading.Event()
+    original = fake.runtime.execute_expert
+    fake.runtime.execute_expert = lambda *a, **k: (entered.set(), gate.wait(5.0), original(*a, **k))[2]
+
+    def refuse(lease):
+        if entered.is_set():
+            raise PermissionError("TEACHER_WORKER_HEARTBEAT_CHANGED")
+
+    fake.runtime.heartbeat_acknowledged = refuse
+    worker = ParallelWorker(fake.ports())
+    outcome = []
+    thread = threading.Thread(target=lambda: outcome.append(worker.run_one()))
+    thread.start()
+    assert entered.wait(1.0)
+    _wait_for_watchdog_fault(worker)
+    assert worker._teacher_channel_terminal is None
+    gate.set()
+    thread.join(3.0)
+    assert outcome[0].stopped_reason == "COORDINATOR_LOST_RESULT_UNCOMMITTED", (
+        "a lifecycle failure that is not a fenced channel keeps the A3b behaviour")
+
+
+def test_a_user_stop_still_cancels_a_teacher_that_lost_its_coordinator():
+    fake = Fake(RunMode.EXECUTE)
+    worker, thread, result, release = _expert_blocked_with_a_lost_coordinator(fake)
+    _wait_for_watchdog_fault(worker)
+    assert "cancel_motion" not in fake.runtime.calls
+    worker.request_stop()
+    deadline = time.monotonic() + 2.0
     while "confirm_no_controller_goal" not in fake.runtime.calls:
         assert time.monotonic() < deadline
         time.sleep(0.01)
-
-    assert run_thread.is_alive(), "expert execution was released before cancellation"
+    assert thread.is_alive(), "expert execution was released before cancellation"
     assert "cancel_motion" in fake.runtime.calls
     assert ("cancel_generation", "w1", 1) in fake.broker.calls
-    receipts = [call for call in fake.runtime.calls if isinstance(call, tuple)
-                and call[0] == "revocation"]
-    assert [call[1] for call in receipts] == [
-        "WATCHDOG_REVOKED", "CANCEL_REQUESTED",
-        "CONTROLLER_CANCEL_RESULT", "CANCEL_RESULT",
-    ]
-    assert all(call[2] == "p1-lease-1" for call in receipts)
-    timestamps = []
-    details = []
-    for call in receipts:
-        current = dict(call[3])
-        timestamps.append((
-            current.pop("recorded_wall_time_ns"),
-            current.pop("recorded_monotonic_ns"),
-        ))
-        details.append(current)
-    assert all(
-        type(value) is int and value > 0
-        for pair in timestamps for value in pair
-    )
-    assert [pair[1] for pair in timestamps] == sorted(
-        pair[1] for pair in timestamps
-    )
-    assert details[0] == {"reason": "COORDINATOR_LOST"}
-    assert details[-2] == {
-        "motion_stopped": True,
-        "controllers_confirmed": True,
-    }
-    assert details[-1] == {
-        "broker_fenced": True,
-        "motion_stopped": True,
-        "controllers_confirmed": True,
-    }
-
     release.set()
-    run_thread.join(2.0)
-    assert not run_thread.is_alive()
+    thread.join(3.0)
+    assert not thread.is_alive()
     assert result[0].terminal_status is None
+
+
+def test_the_frozen_teacher_deadline_still_cancels_after_the_coordinator_is_lost():
+    fake = Fake(RunMode.EXECUTE)
+    worker, thread, result, release = _expert_blocked_with_a_lost_coordinator(fake)
+    _wait_for_watchdog_fault(worker)
+    time.sleep(0.1)
+    assert "cancel_motion" not in fake.runtime.calls
+    # The attempt's deadline is the frozen executing hard timeout counted from the start of the Teacher run.
+    fake.clock.now += CONFIG.executing_hard_timeout_s - 1.0
+    time.sleep(0.1)
+    assert "cancel_motion" not in fake.runtime.calls, "cancelled before the deadline"
+    fake.clock.now += 1.0
+    deadline = time.monotonic() + 2.0
+    while "confirm_no_controller_goal" not in fake.runtime.calls:
+        assert time.monotonic() < deadline, "the deadline never cancelled the Teacher"
+        time.sleep(0.01)
+    assert thread.is_alive(), "expert execution was released before cancellation"
+    assert "cancel_motion" in fake.runtime.calls
+    assert ("cancel_generation", "w1", 1) in fake.broker.calls
+    receipts = [call for call in fake.runtime.calls if isinstance(call, tuple) and call[0] == "revocation"]
+    assert receipts[0][1] == "WATCHDOG_REVOKED" and dict(receipts[0][3])["reason"] == "TEACHER_EXECUTION_DEADLINE"
+    release.set()
+    thread.join(3.0)
+    assert not thread.is_alive()
+
+
+def test_coordinator_loss_before_the_teacher_run_still_revokes_in_execute_mode():
+    """Outside the Teacher run no child moves, and the earlier watchdog behaviour is unchanged."""
+
+    fake = Fake(RunMode.EXECUTE)
+    release_model, release_heartbeat = threading.Event(), threading.Event()
+    fake.broker.block = release_model
+    fake.coordinator.block_watchdog_heartbeat = release_heartbeat
+    worker = ParallelWorker(fake.ports())
+    thread = threading.Thread(target=worker.run_one)
+    thread.start()
+    assert fake.broker.entered.wait(1)
+    assert fake.coordinator.heartbeat_entered.wait(1)
+    fake.clock.now += CONFIG.heartbeat_timeout_s
+    time.sleep(0.05)
+    release_model.set()
+    release_heartbeat.set()
+    thread.join(2)
+    assert not thread.is_alive()
+    assert "submit_motion" not in fake.runtime.calls
+    assert ("cancel_generation", "w1", 1) in fake.broker.calls
 
 
 def test_revocation_does_not_wait_for_blocked_broker_fence_before_motion_cancel():
@@ -1718,7 +1905,8 @@ def test_coordinator_loss_after_authorization_still_seals_local_terminal(lost_at
     seals = [call for call in fake.results.calls if call[0] == "seal_attempt"]
     assert len(seals) == 1
     if lost_at == "post-action-heartbeat":
-        assert seals[0][1] is AttemptStatus.INDETERMINATE
+        # The Teacher's own PASSED decision survives a Coordinator lost right after the run.
+        assert seals[0][1] is AttemptStatus.PASSED
     assert fake.coordinator.recovery == []
 
 
@@ -1855,3 +2043,315 @@ def test_missing_malformed_stale_or_mismatched_recovery_deadline_fails_closed(re
     assert result.recovered is False
     assert not any(call == ("register_worker", "w1", 2)
                    for call in fake.coordinator.calls)
+
+
+@pytest.mark.parametrize("heartbeat_source", ["foreground", "watchdog"])
+@pytest.mark.parametrize("stop_during_rpc", [False, True])
+def test_original_heartbeat_acceptance_precedes_start_transition_without_blocking_stop(
+        heartbeat_source, stop_during_rpc):
+    """Actual Worker threads; explicit Coordinator/OWNER port doubles only."""
+    fake = Fake(RunMode.EXECUTE)
+    fake.runtime.requires_ordered_coordinator_receipts = True
+    worker = ParallelWorker(fake.ports())
+    lease = fake.coordinator.grant_lease("w1", generation=1, request_key="ordering")
+    worker._active_lease = lease
+    heartbeat_entered, release_heartbeat, start_entered = (
+        threading.Event(), threading.Event(), threading.Event())
+    accepted, errors = [], []
+
+    def heartbeat(current):
+        heartbeat_entered.set()
+        assert release_heartbeat.wait(2)
+        return current
+
+    def start():
+        start_entered.set()
+        return Ack(WorkerState.EXECUTING, 1, lease)
+
+    def invoke(call):
+        try:
+            call()
+        except Exception as error:
+            errors.append(error)
+
+    fake.coordinator.heartbeat = heartbeat
+    fake.runtime.heartbeat_acknowledged = lambda current: accepted.append("INITIALIZING_HEARTBEAT")
+    fake.runtime.attempt_started_acknowledged = lambda current: accepted.append("ATTEMPT_STARTED")
+    heartbeat_thread = None
+    start_thread = threading.Thread(target=lambda: invoke(lambda: worker._request_ack(
+        start, lease, WorkerState.EXECUTING, 5, fake.clock())), daemon=True)
+    try:
+        if heartbeat_source == "watchdog":
+            worker._start_watchdog(lease)
+        else:
+            heartbeat_thread = threading.Thread(target=lambda: invoke(worker._current), daemon=True)
+            heartbeat_thread.start()
+        assert heartbeat_entered.wait(1)
+        start_thread.start()
+        if stop_during_rpc:
+            began = time.monotonic()
+            worker.request_stop()
+            assert time.monotonic() - began < .1
+            assert worker._stop_requested.is_set()
+        assert not start_entered.wait(.1), "start RPC overtook an unaccepted original heartbeat"
+    finally:
+        release_heartbeat.set()
+        start_thread.join(2)
+        if heartbeat_thread is not None:
+            heartbeat_thread.join(2)
+        worker._stop_watchdog()
+    assert not start_thread.is_alive()
+    if stop_during_rpc:
+        assert not start_entered.is_set()
+        assert accepted == []
+        assert errors
+    else:
+        assert start_entered.is_set()
+        assert accepted[:2] == ["INITIALIZING_HEARTBEAT", "ATTEMPT_STARTED"]
+        assert errors == []
+
+
+def test_late_ordered_owner_hook_cannot_publish_a_phase_ack_after_its_original_deadline():
+    from so101_demo.parallel_batch.worker import WorkerError
+    fake=Fake(RunMode.EXECUTE)
+    fake.runtime.requires_ordered_coordinator_receipts=True
+    worker=ParallelWorker(fake.ports())
+    lease=fake.coordinator.grant_lease("w1",generation=1,request_key="late-owner")
+    worker._active_lease=lease
+    updated=replace(lease,lease_deadline_monotonic_s=lease.lease_deadline_monotonic_s+1)
+    def late_hook(current):
+        fake.clock.now+=5
+    fake.runtime.attempt_started_acknowledged=late_hook
+    with pytest.raises(WorkerError,match="ACK_TIMEOUT"):
+        worker._request_ack(lambda:Ack(WorkerState.EXECUTING,1,updated),lease,WorkerState.EXECUTING,5,fake.clock())
+    assert worker._active_lease is lease
+
+
+def _diagnostic_lines(captured, tag):
+    return [json.loads(line[len(tag) + 1:]) for line in captured.splitlines()
+            if line.startswith(tag + " ")]
+
+
+def _watchdog_lease():
+    return LeaseIdentity("batch-a", 1, "w1", 1, "p1", "p1-lease-1", 1, 10.0, 310.0)
+
+
+def _watchdog_owner(revoked, **overrides):
+    values = dict(
+        _stop_requested=threading.Event(),
+        _now=time.monotonic,
+        _config=SimpleNamespace(heartbeat_timeout_s=0.05, heartbeat_interval_s=1.0),
+        _ordered_receipts=False,
+        _worker_id="w1",
+        _heartbeat_transaction=lambda lease, deadline: lease,
+        _accept_heartbeat=lambda ack, lease: True,
+        _watchdog_revoked=lambda lease, reason: revoked.append(reason),
+    )
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _run_watchdog(owner):
+    from so101_demo.parallel_batch.worker import _HeartbeatWatchdog
+
+    watchdog = _HeartbeatWatchdog(owner, _watchdog_lease())
+    watchdog.start()
+    watchdog._thread.join(2)
+    assert not watchdog._thread.is_alive()
+    return watchdog
+
+
+def test_watchdog_exception_line_is_emitted_and_reason_is_unchanged(capfd):
+    revoked = []
+
+    def raising_acknowledged(ack, lease):
+        raise PermissionError("X")
+
+    owner = _watchdog_owner(revoked, _accept_heartbeat=raising_acknowledged)
+    watchdog = _run_watchdog(owner)
+    assert revoked == ["COORDINATOR_LOST"]
+    assert watchdog.reason == "COORDINATOR_LOST"
+    lines = _diagnostic_lines(capfd.readouterr().err, "WORKER_WATCHDOG_EXCEPTION")
+    assert len(lines) == 1
+    line = lines[0]
+    assert line["reason"] == "COORDINATOR_LOST"
+    assert line["worker_id"] == "w1"
+    assert line["error_type"] == "PermissionError"
+    assert line["error_message"] == "X"
+    assert any(frame.endswith(":raising_acknowledged") for frame in line["frames"])
+    assert len(line["frames"]) <= 12
+    assert line["elapsed_s"] >= 0
+    assert "now_s" in line
+
+
+def test_watchdog_exception_line_uses_heartbeat_thread_traceback_and_bounds_message(capfd):
+    revoked = []
+
+    def failing_transaction(lease, deadline):
+        raise RuntimeError("Y" * 1000)
+
+    owner = _watchdog_owner(revoked, _heartbeat_transaction=failing_transaction)
+    _run_watchdog(owner)
+    assert revoked == ["COORDINATOR_LOST"]
+    err = capfd.readouterr().err
+    (line,) = _diagnostic_lines(err, "WORKER_WATCHDOG_EXCEPTION")
+    assert line["error_type"] == "RuntimeError"
+    assert line["error_message"] == "Y" * 300
+    assert any(frame.endswith(":failing_transaction") for frame in line["frames"])
+    assert all(len(row) < 4096 for row in err.splitlines())
+
+
+def test_watchdog_timeout_line_is_emitted_without_frames(capfd):
+    revoked = []
+    release = threading.Event()
+
+    def blocked(lease, deadline):
+        release.wait(2)
+        return lease
+
+    owner = _watchdog_owner(revoked, _heartbeat_transaction=blocked)
+    try:
+        _run_watchdog(owner)
+    finally:
+        release.set()
+    assert revoked == ["HEARTBEAT_ACK_TIMEOUT"]
+    (line,) = _diagnostic_lines(capfd.readouterr().err, "WORKER_WATCHDOG_EXCEPTION")
+    assert line["reason"] == "HEARTBEAT_ACK_TIMEOUT"
+    assert line["worker_id"] == "w1"
+    assert "frames" not in line
+    assert line["elapsed_s"] >= 0.05
+
+
+def test_watchdog_invalid_ack_line_is_emitted_without_frames(capfd):
+    revoked = []
+    owner = _watchdog_owner(revoked, _accept_heartbeat=lambda ack, lease: False)
+    _run_watchdog(owner)
+    assert revoked == ["HEARTBEAT_ACK_INVALID"]
+    (line,) = _diagnostic_lines(capfd.readouterr().err, "WORKER_WATCHDOG_EXCEPTION")
+    assert line["reason"] == "HEARTBEAT_ACK_INVALID"
+    assert "frames" not in line
+
+
+def test_watchdog_diagnostic_never_raises_when_stderr_is_broken(monkeypatch):
+    class Broken:
+        def write(self, text):
+            raise OSError("closed")
+
+        def flush(self):
+            raise OSError("closed")
+
+    monkeypatch.setattr("sys.stderr", Broken())
+    revoked = []
+
+    def raising_acknowledged(ack, lease):
+        raise PermissionError("X")
+
+    _run_watchdog(_watchdog_owner(revoked, _accept_heartbeat=raising_acknowledged))
+    assert revoked == ["COORDINATOR_LOST"]
+
+
+def test_current_heartbeat_exception_emits_one_line_and_reraises_same_object(capfd):
+    fake = Fake()
+    error = RuntimeError("coordinator down")
+    fake.coordinator.heartbeat_reply = error
+    worker = ParallelWorker(fake.ports())
+    worker._active_lease = _watchdog_lease()
+    with pytest.raises(RuntimeError) as raised:
+        worker._current()
+    assert raised.value is error
+    (line,) = _diagnostic_lines(capfd.readouterr().err, "WORKER_CURRENT_HEARTBEAT_EXCEPTION")
+    assert line["worker_id"] == "w1"
+    assert line["error_type"] == "RuntimeError"
+    assert line["error_message"] == "coordinator down"
+    assert line["frames"]
+    assert "elapsed_s" in line and "now_s" in line
+
+
+def test_current_heartbeat_exception_lines_are_bounded_per_worker(capfd):
+    fake = Fake()
+    fake.coordinator.heartbeat_reply = RuntimeError("down")
+    worker = ParallelWorker(fake.ports())
+    worker._active_lease = _watchdog_lease()
+    for _ in range(25):
+        with pytest.raises(RuntimeError):
+            worker._current()
+    lines = _diagnostic_lines(capfd.readouterr().err, "WORKER_CURRENT_HEARTBEAT_EXCEPTION")
+    assert len(lines) == 20
+
+
+# ---- D8f: a fence or terminal enable failure after the start ACK and before motion is a started attempt ----
+
+def _capture_sealed_decisions(fake):
+    sealed = []
+    original = fake.results.seal_attempt
+    def seal(lease, decision):
+        sealed.append(decision)
+        return original(lease, decision)
+    fake.results.seal_attempt = seal
+    return sealed
+
+
+def test_a_pre_motion_teacher_refusal_after_the_start_ack_is_committed_as_a_teacher_attempt_that_did_not_pass():
+    from so101_demo.parallel_batch.contracts import TeacherPreMotionRefused
+    from so101_demo.parallel_batch.dynamic_manifest import teacher_attempt_status
+    fake = Fake(RunMode.EXECUTE)
+    sealed = _capture_sealed_decisions(fake)
+    diagnostics = {"start_acknowledged": True, "broker_motion_enabled": False, "goal_dispatched": False}
+    def refuse(lease, chain):
+        raise TeacherPreMotionRefused("TEACHER_RESET_BINDING_SOURCE_INVALID", diagnostics)
+    fake.runtime.admit_pose = refuse
+    result = ParallelWorker(fake.ports()).run_one()
+    assert result.stopped_reason == "POINT_TERMINAL" and result.failure_boundary == "admit_pose"
+    (decision,) = sealed
+    assert decision.status is AttemptStatus.INDETERMINATE
+    assert (decision.teacher_execution_status, decision.teacher_task_result) == ("INDETERMINATE", "UNCONFIRMED")
+    assert teacher_attempt_status(decision.teacher_execution_status, decision.teacher_task_result) is decision.status
+    assert decision.act_data_status == "INVALID"
+    assert decision.reason.startswith("TEACHER_FENCED_BEFORE_MOTION:TEACHER_RESET_BINDING_SOURCE_INVALID")
+    assert decision.act_data_reason == decision.reason
+    assert result.terminal_status is AttemptStatus.INDETERMINATE
+    names = event_names(fake)
+    assert "ATTEMPT_STARTED" in names or any("START" in name for name in names)
+    assert "FINALIZING_STARTED" in names and "RESULT_COMMITTED" in names, "committed through the normal path"
+    assert "submit_motion" not in fake.runtime.calls, "no motion was ever submitted"
+
+
+def test_started_non_pass_outcomes_count_in_the_teacher_attempt_denominator_and_invalid_does_not():
+    from so101_demo.parallel_batch import contracts
+    assert AttemptStatus.INDETERMINATE in contracts._TEACHER_STARTED and AttemptStatus.FAILED in contracts._TEACHER_STARTED
+    assert AttemptStatus.INVALID not in contracts._TEACHER_STARTED
+
+
+def test_the_pre_motion_result_is_exactly_the_manifest_free_contract_the_result_store_already_accepts(tmp_path):
+    from so101_demo.act.result_store import _check_teacher_manifest, _teacher_claim
+    claim = _teacher_claim({"execution_status": "INDETERMINATE", "task_result": "UNCONFIRMED",
+                            "data_status": "INVALID", "data_reason": "TEACHER_FENCED_BEFORE_MOTION:X"})
+    # an INDETERMINATE/UNCONFIRMED claim asserts nothing positive and needs no Teacher manifest
+    assert _check_teacher_manifest(tmp_path / "dynamic" / "dynamic-execute-manifest.json", claim) is None
+
+
+@pytest.mark.parametrize("boundary,patch", [("reset_point", "reset_point"), ("point_initial_gate", "point_initial_gate")])
+def test_a_failure_before_the_start_ack_stays_invalid_even_for_a_teacher_refusal(boundary, patch):
+    from so101_demo.parallel_batch.contracts import TeacherPreMotionRefused
+    fake = Fake(RunMode.EXECUTE)
+    sealed = _capture_sealed_decisions(fake)
+    def refuse(*args, **kwargs):
+        raise TeacherPreMotionRefused("TEACHER_CHANNEL_FENCED")
+    setattr(fake.runtime, patch, refuse)
+    result = ParallelWorker(fake.ports()).run_one()
+    assert result.stopped_reason == "INITIAL_GATE_FAILED" and result.failure_boundary == boundary
+    (decision,) = sealed
+    assert decision.status is AttemptStatus.INVALID
+    assert not hasattr(decision, "teacher_execution_status")
+    assert "submit_motion" not in fake.runtime.calls
+
+
+def test_an_ordinary_pose_admission_failure_keeps_its_invalid_path():
+    fake = Fake(RunMode.EXECUTE)
+    sealed = _capture_sealed_decisions(fake)
+    def refuse(lease, chain):
+        raise RuntimeError("TEACHER_CONSUMER_START_AUTHORITY_UNAVAILABLE")
+    fake.runtime.admit_pose = refuse
+    ParallelWorker(fake.ports()).run_one()
+    (decision,) = sealed
+    assert decision.status is AttemptStatus.INVALID and not hasattr(decision, "teacher_task_result")

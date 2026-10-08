@@ -10,11 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
+import os
+import sys
 import threading
 import time
 from typing import Mapping
 
 from .contracts import (
+    teacher_execution_bound_s,
     ParallelRuntimeConfigV3,
     ParallelRuntimeConfigV2,
     AttemptStatus,
@@ -22,6 +25,8 @@ from .contracts import (
     LeaseIdentity,
     ParallelRuntimeConfig,
     RunMode,
+    TeacherChannelTerminal,
+    TeacherPreMotionRefused,
     ValidationStatus,
     WorkerState,
 )
@@ -33,6 +38,18 @@ class WorkerError(RuntimeError):
 
 class LeaseGrantPaused(WorkerError):
     """The shared Broker is recovering; the Worker slot must remain alive."""
+
+
+class CoordinatorLostResultUncommitted(WorkerError):
+    """The Coordinator was lost while the Teacher ran; its result is sealed locally and cannot be committed."""
+
+    def __init__(self, message, *, teacher_status, location):
+        super().__init__(message)
+        self.teacher_status = teacher_status
+        self.location = location
+
+# The watchdog reasons that mean "the Coordinator is gone" (as opposed to a lease or stop decision).
+_COORDINATOR_LOSS_REASONS = frozenset({"HEARTBEAT_ACK_TIMEOUT", "COORDINATOR_LOST", "HEARTBEAT_ACK_INVALID"})
 
 
 class FaultInjectionAbort(BaseException):
@@ -71,6 +88,7 @@ def adaptive_result_is_infrastructure(result: WorkerRunResult) -> bool:
         "LEASE_ACK_FAILED",
         "START_ACK_FAILED",
         "TERMINAL_ACK_FAILED",
+        "COORDINATOR_LOST_RESULT_UNCOMMITTED",
         "PORT_FAILURE",
         "REENTRANT_CALL_REJECTED",
     }:
@@ -93,6 +111,34 @@ def _bounded_failure_message(error: Exception) -> str:
         except UnicodeDecodeError:
             payload = payload[:-1]
     return ""
+
+
+def _emit_diagnostic(tag, fields, error=None):
+    """Write one bounded observation-only stderr line; never raise."""
+
+    try:
+        payload = dict(fields)
+        if error is not None:
+            payload["error_type"] = type(error).__name__
+            try:
+                message = " ".join(str(error).splitlines())
+            except Exception:
+                message = "<unprintable>"
+            payload["error_message"] = message[:300]
+            import traceback
+
+            payload["frames"] = [
+                f"{os.path.basename(frame.filename)}:{frame.lineno}:{frame.name}"[:160]
+                for frame in traceback.extract_tb(error.__traceback__)[-12:]
+            ]
+        line = f"{tag} {json.dumps(payload, sort_keys=True)}"
+        if len(line) >= 4000:
+            payload.pop("frames", None)
+            line = f"{tag} {json.dumps(payload, sort_keys=True)}"[:3999]
+        sys.stderr.write(line + "\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
 
 
 def _lease_key(lease: LeaseIdentity) -> tuple:
@@ -144,16 +190,33 @@ class _HeartbeatWatchdog:
             self._fault.set()
             self._owner._watchdog_revoked(self._lease, reason)
 
+    def _diagnose(self, reason, started, error=None) -> None:
+        try:
+            try:
+                now = self._owner._now()
+            except Exception:
+                now = None
+            _emit_diagnostic("WORKER_WATCHDOG_EXCEPTION", {
+                "reason": reason,
+                "worker_id": self._lease.worker_id,
+                "elapsed_s": None if started is None or now is None else now - started,
+                "now_s": now,
+            }, error)
+        except Exception:
+            pass
+
     def _run(self) -> None:
         while not self._stop.is_set():
             if self._owner._stop_requested.is_set():
                 return
+            started = None
             completed = threading.Event()
             response = {}
 
             def send_heartbeat():
                 try:
-                    response["ack"] = self._owner._coordinator.heartbeat(self._lease)
+                    response["ack"] = self._owner._heartbeat_transaction(
+                        self._lease, started + self._owner._config.heartbeat_timeout_s)
                 except Exception as error:
                     response["error"] = error
                 finally:
@@ -170,20 +233,24 @@ class _HeartbeatWatchdog:
                     if self._stop.is_set():
                         return
                     if self._owner._now() - started >= self._owner._config.heartbeat_timeout_s:
+                        self._diagnose("HEARTBEAT_ACK_TIMEOUT", started)
                         self._fail("HEARTBEAT_ACK_TIMEOUT")
                         return
                 if "error" in response:
                     raise response["error"]
                 finished = self._owner._now()
                 if finished - started >= self._owner._config.heartbeat_timeout_s:
+                    self._diagnose("HEARTBEAT_ACK_TIMEOUT", started)
                     self._fail("HEARTBEAT_ACK_TIMEOUT")
                     return
                 ack = response.get("ack")
-                if not self._owner._accept_heartbeat(ack, self._lease):
+                if not self._owner._ordered_receipts and not self._owner._accept_heartbeat(ack, self._lease):
+                    self._diagnose("HEARTBEAT_ACK_INVALID", started)
                     self._fail("HEARTBEAT_ACK_INVALID")
                     return
                 self._lease = ack
-            except Exception:
+            except Exception as error:
+                self._diagnose("COORDINATOR_LOST", started, error)
                 self._fail("COORDINATOR_LOST")
                 return
             if self._stop.wait(self._owner._config.heartbeat_interval_s):
@@ -234,22 +301,26 @@ class ParallelWorker:
             raise WorkerError("RUN_MODE_REQUIRED")
         self._workload = ports.get("workload")
         if self._workload is not None:
-            from so101_demo.act.collection import ActCollectionWorkload
             from so101_demo.act.parallel_collection import ActFixedCollectionWorkload
 
-            # exact types only: an ACT workload is either the single-scenario port or the fixed
-            # collection port, and either way it may run only in EXECUTE mode
-            accepted = (ActCollectionWorkload, ActFixedCollectionWorkload)
-            if type(self._workload) not in accepted or self._mode is not RunMode.EXECUTE:
+            # exact type only: an ACT workload is the fixed collection port, and it may run only in EXECUTE mode
+            if type(self._workload) is not ActFixedCollectionWorkload or self._mode is not RunMode.EXECUTE:
                 raise WorkerError("WORKLOAD_PORT_INVALID")
         self._run_lock = threading.Lock()
         self._execution_lock = threading.RLock()
         self._stop_requested = threading.Event()
         self._clock_lock = threading.Lock()
         self._lease_lock = threading.Lock()
+        # Original Coordinator frames must reach OWNER before another phase
+        # transition may be requested. Stop/revocation never takes this lock.
+        self._coordinator_update_lock = threading.Lock()
+        self._ordered_receipts = getattr(self._runtime, "requires_ordered_coordinator_receipts", False)
+        if type(self._ordered_receipts) is not bool or self._ordered_receipts and self._mode is not RunMode.EXECUTE:
+            raise WorkerError("COORDINATOR_RECEIPT_ORDERING_INVALID")
         self._last_clock = None
         self._active_lease = None
         self._watchdog = None
+        self._current_diagnostics = 0
         self._registered = False
         self._prepared_for_start = False
         self._runtime_started = False
@@ -259,6 +330,15 @@ class ParallelWorker:
         self._lease_request_sequence = 0
         self._revocation_lock = threading.Lock()
         self._revocations = {}
+        # The Teacher window: from the start of expert execution until its result is sealed locally. The first
+        # element is the exact lease key; the second is when the Teacher run started (Worker clock).
+        self._teacher_lock = threading.Lock()
+        self._teacher_window = None
+        self._teacher_child_running = False
+        self._teacher_deadline_stop = None
+        self._coordinator_loss = None
+        # The Teacher's channel was fenced or retired by the broker: (lease key, code). Not a Coordinator problem.
+        self._teacher_channel_terminal = None
 
     def _fault(self, boundary, phase):
         if self._fault_hook is not None:
@@ -291,13 +371,71 @@ class ParallelWorker:
         self._stop_watchdog()
 
     def _watchdog_revoked(self, lease, _reason) -> None:
-        """Fence first, then stop an exact in-flight lease off the execution lock."""
+        """Fence first, then stop an exact in-flight lease off the execution lock.
+
+        A lost Coordinator is a coordination problem, not a reason to cancel a Teacher child that is still within
+        its frozen execution deadline: while the Teacher window is open the loss is only recorded, no new attempt
+        is scheduled, and the deadline guard (not the heartbeat) bounds the child. Outside that window, and for
+        every other watchdog reason, the earlier fence-and-cancel behaviour is unchanged.
+        """
         with self._lease_lock:
             current = self._active_lease
         if current is None or _lease_key(current) != _lease_key(lease):
             return
+        with self._teacher_lock:
+            window = self._teacher_window
+            protected = (window is not None and window[0] == _lease_key(lease)
+                         and _reason in _COORDINATOR_LOSS_REASONS and not self._stop_requested.is_set())
+            if protected:
+                self._coordinator_loss = _reason
+                child_running = self._teacher_child_running
+        if protected:
+            _emit_diagnostic("WORKER_COORDINATOR_LOSS_TEACHER_CONTINUES", {
+                "reason": _reason, "worker_id": self._worker_id, "attempt_id": lease.attempt_id,
+                "child_running": child_running})
+            if child_running:
+                self._arm_teacher_deadline(lease)
+            return
         self._stop_requested.set()
         self._start_revocation(lease, watchdog_reason=_reason)
+
+    def _open_teacher_window(self, lease) -> None:
+        with self._teacher_lock:
+            self._teacher_window = (_lease_key(lease), self._now())
+            self._teacher_child_running = True
+
+    def _close_teacher_child(self) -> None:
+        with self._teacher_lock:
+            self._teacher_child_running = False
+            stop, self._teacher_deadline_stop = self._teacher_deadline_stop, None
+        if stop is not None:
+            stop.set()
+
+    def _clear_teacher_window(self) -> None:
+        self._close_teacher_child()
+        with self._teacher_lock:
+            self._teacher_window = None
+
+    def _arm_teacher_deadline(self, lease) -> None:
+        """Bound the Teacher child by its frozen execution deadline once the Coordinator can no longer do it."""
+        with self._teacher_lock:
+            if self._teacher_deadline_stop is not None or self._teacher_window is None:
+                return
+            deadline = self._teacher_window[1] + teacher_execution_bound_s(self._config)
+            stop = self._teacher_deadline_stop = threading.Event()
+
+        def guard():
+            while not stop.wait(0.01):
+                try:
+                    expired = self._now() >= deadline
+                except Exception:
+                    expired = True
+                if expired:
+                    self._start_revocation(lease, watchdog_reason="TEACHER_EXECUTION_DEADLINE")
+                    return
+
+        threading.Thread(target=guard, name=f"parallel-worker-teacher-deadline-{lease.worker_id}",
+                         daemon=True).start()
 
     def _record_revocation(self, lease, phase, **details) -> None:
         """Persist audit evidence without ever delaying the safety path on failure."""
@@ -399,15 +537,64 @@ class ParallelWorker:
         if self._stop_requested.is_set():
             raise WorkerError("STOP_REQUESTED")
 
-    def _accept_heartbeat(self, ack, expected: LeaseIdentity) -> bool:
+    def _accept_heartbeat(self, ack, expected: LeaseIdentity, *, deadline=None) -> bool:
+        self._assert_running()
         if not isinstance(ack, LeaseIdentity) or _lease_key(ack) != _lease_key(expected):
             return False
         with self._lease_lock:
             current = self._active_lease
             if current is None or _lease_key(current) != _lease_key(expected):
                 return False
+        accepted = getattr(self._runtime, "heartbeat_acknowledged", None)
+        if accepted is not None and not self._channel_is_terminal(ack):
+            self._run_teacher_hook(accepted, ack)
+            self._assert_running()
+        if deadline is not None and self._now()>=deadline:
+            raise WorkerError("HEARTBEAT_ACK_TIMEOUT")
+        with self._lease_lock:
+            current = self._active_lease
+            if current is None or _lease_key(current) != _lease_key(expected):
+                return False
             self._active_lease = ack
         return True
+
+    def _channel_is_terminal(self, lease) -> bool:
+        with self._teacher_lock:
+            terminal = self._teacher_channel_terminal
+        return terminal is not None and terminal[0] == _lease_key(lease)
+
+    def _run_teacher_hook(self, hook, lease) -> None:
+        """Run one Teacher-lifecycle acknowledgement hook.
+
+        A renewal that reaches a channel the broker already fenced is the Teacher's own terminal event. It is recorded, the
+        Worker stops renewing on that channel, and the Coordinator heartbeat that carried it stands: the lease stays alive so
+        the Teacher's decision can be sealed and committed. Any other failure of the hook keeps failing closed.
+        """
+        try:
+            hook(lease)
+        except TeacherChannelTerminal as terminal:
+            with self._teacher_lock:
+                first = self._teacher_channel_terminal is None
+                self._teacher_channel_terminal = (_lease_key(lease), terminal.code)
+            if first:
+                _emit_diagnostic("WORKER_TEACHER_CHANNEL_TERMINAL", {
+                    "code": terminal.code, "worker_id": self._worker_id, "attempt_id": lease.attempt_id,
+                    "committed_by": "teacher_decision"}, terminal)
+
+    def _heartbeat_transaction(self, lease, deadline):
+        if not self._ordered_receipts:
+            return self._coordinator.heartbeat(lease)
+        with self._coordinator_update_lock:
+            self._assert_running()
+            if self._now() >= deadline:
+                raise WorkerError("HEARTBEAT_ACK_TIMEOUT")
+            ack = self._coordinator.heartbeat(lease)
+            self._assert_running()
+            if self._now() >= deadline:
+                raise WorkerError("HEARTBEAT_ACK_TIMEOUT")
+            if not self._accept_heartbeat(ack, lease, deadline=deadline):
+                raise WorkerError("LEASE_FENCED")
+            return ack
 
     @staticmethod
     def _ack_matches(ack, lease: LeaseIdentity, state: WorkerState) -> bool:
@@ -449,13 +636,66 @@ class ParallelWorker:
         return response.get("value")
 
     def _request_ack(self, call, lease, state, timeout, started):
-        ack = self._call_before(call, started + timeout, "ACK_TIMEOUT")
-        self._assert_running()
-        if not self._ack_matches(ack, lease, state):
-            raise WorkerError("ACK_MISSING_OR_STALE")
-        with self._lease_lock:
-            self._active_lease = ack.lease
-        return ack.lease
+        deadline = started + timeout
+
+        def accept(ack):
+            self._assert_running()
+            if not self._ack_matches(ack, lease, state):
+                raise WorkerError("ACK_MISSING_OR_STALE")
+            if state is WorkerState.INITIALIZING:
+                hook = getattr(self._runtime, "initializing_acknowledged", None)
+            elif state is WorkerState.EXECUTING and self._mode is RunMode.EXECUTE:
+                hook = getattr(self._runtime, "attempt_started_acknowledged", None)
+            elif state is WorkerState.FINALIZING and self._mode is RunMode.EXECUTE:
+                hook = getattr(self._runtime, "finalizing_acknowledged", None)
+            else:
+                hook = None
+            if hook is not None and not self._channel_is_terminal(ack.lease):
+                self._run_teacher_hook(hook, ack.lease)
+                self._assert_running()
+            if self._ordered_receipts and self._now()>=deadline:
+                raise WorkerError("ACK_TIMEOUT")
+            with self._lease_lock:
+                self._active_lease = ack.lease
+            return ack.lease
+
+        if not self._ordered_receipts:
+            return accept(self._call_before(call, deadline, "ACK_TIMEOUT"))
+
+        def transaction():
+            with self._coordinator_update_lock:
+                self._assert_running()
+                if self._now() >= deadline:
+                    raise WorkerError("ACK_TIMEOUT")
+                ack = call()
+                self._assert_running()
+                if self._now() >= deadline:
+                    raise WorkerError("ACK_TIMEOUT")
+                accepted = accept(ack)
+                self._assert_running()
+                if self._now() >= deadline:
+                    raise WorkerError("ACK_TIMEOUT")
+                return accepted
+
+        return self._call_before(transaction, deadline, "ACK_TIMEOUT")
+
+    def _diagnose_current(self, error, started) -> None:
+        try:
+            if self._current_diagnostics >= 20:
+                return
+            self._current_diagnostics += 1
+            try:
+                now = self._now()
+            except Exception:
+                now = None
+            _emit_diagnostic("WORKER_CURRENT_HEARTBEAT_EXCEPTION", {
+                "reason": "CURRENT_HEARTBEAT_EXCEPTION",
+                "worker_id": self._worker_id,
+                "elapsed_s": None if now is None else now - started,
+                "now_s": now,
+            }, error)
+        except Exception:
+            pass
 
     def _current(self) -> LeaseIdentity:
         self._assert_running()
@@ -473,16 +713,20 @@ class ParallelWorker:
             now + self._config.heartbeat_timeout_s,
             lease.lease_deadline_monotonic_s,
         )
-        ack = self._call_before(
-            lambda: self._coordinator.heartbeat(lease),
-            deadline,
-            "HEARTBEAT_ACK_TIMEOUT",
-        )
-        self._assert_running()
-        if watchdog is not None and watchdog.faulted:
-            raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
-        if not self._accept_heartbeat(ack, lease):
-            raise WorkerError("LEASE_FENCED")
+        try:
+            ack = self._call_before(
+                lambda: self._heartbeat_transaction(lease, deadline),
+                deadline,
+                "HEARTBEAT_ACK_TIMEOUT",
+            )
+            self._assert_running()
+            if watchdog is not None and watchdog.faulted:
+                raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
+            if not self._ordered_receipts and not self._accept_heartbeat(ack, lease):
+                raise WorkerError("LEASE_FENCED")
+        except Exception as error:
+            self._diagnose_current(error, now)
+            raise
         if watchdog is not None and watchdog.faulted:
             raise WorkerError(watchdog.reason or "WATCHDOG_FAILED")
         return ack
@@ -494,6 +738,36 @@ class ParallelWorker:
             result = call(lease)
             self._assert_running()
             self._current()
+            return result
+
+    def _teacher_boundary(self, call):
+        """The boundary around the Teacher's expert execution.
+
+        The lease is checked before the run exactly as at every boundary. After it, a lost Coordinator cannot
+        replace the Teacher's own decision: the loss is recorded and the decision is returned. A user stop still
+        fences the result.
+        """
+        with self._execution_lock:
+            self._assert_running()
+            lease = self._current()
+            self._open_teacher_window(lease)
+            # CP-3457: the runtime closes the Teacher-child window itself the moment the Teacher exits, before any data work
+            # (the offline processing) runs inside this boundary; the `finally` below stays the backstop.
+            bind = getattr(self._runtime, "bind_teacher_exit", None)
+            if bind is not None:
+                bind(self._close_teacher_child)
+            try:
+                result = call(lease)
+            finally:
+                self._close_teacher_child()
+            self._assert_running()
+            if self._coordinator_loss is None:
+                try:
+                    self._current()
+                except Exception as error:
+                    self._assert_running()
+                    with self._teacher_lock:
+                        self._coordinator_loss = _bounded_failure_message(error) or type(error).__name__
             return result
 
     def _register(self) -> bool:
@@ -635,6 +909,23 @@ class ParallelWorker:
         decision.physical_action_proven_absent = absent
         return decision
 
+    def _pre_motion_decision(self, error, stopped):
+        """Teacher result for an attempt fenced after the start ACK and before motion.
+
+        Fields: status INDETERMINATE (from `teacher_attempt_status`), teacher_execution_status
+        INDETERMINATE, teacher_task_result UNCONFIRMED (the contract's manifest-free form: the Teacher
+        produced no observation and no motion), act_data_status INVALID, act_data_reason carrying the
+        bounded fence reason. `physical_action_proven_absent` follows the safe-stop evidence.
+        """
+        reason = "TEACHER_FENCED_BEFORE_MOTION:" + (_bounded_failure_message(error) or error.reason)[:160]
+        decision = self._decision(AttemptStatus.INDETERMINATE, reason,
+                                  absent=stopped.physical_action_proven_absent is True)
+        decision.teacher_execution_status = "INDETERMINATE"
+        decision.teacher_task_result = "UNCONFIRMED"
+        decision.act_data_status = "INVALID"
+        decision.act_data_reason = reason
+        return decision
+
     def _safe_stop(self, lease, *, action_may_have_started):
         record = self._start_revocation(lease)
         record["event"].wait(self._config.heartbeat_timeout_s)
@@ -674,6 +965,14 @@ class ParallelWorker:
             try:
                 lease = self._current()
             except Exception:
+                with self._teacher_lock:
+                    loss = self._coordinator_loss
+                    window = self._teacher_window
+                if (loss is not None and window is not None and window[0] == _lease_key(lease)
+                        and not self._stop_requested.is_set()):
+                    # The Coordinator is gone but the Teacher finished: keep its decision, seal it locally and
+                    # report the missing commit as a coordination problem.
+                    return self._seal_locally_after_coordinator_loss(lease, decision, loss)
                 decision, _, _, _ = self._safe_stop(
                     lease, action_may_have_started=self._mode is RunMode.EXECUTE)
                 authorization_lost = True
@@ -719,7 +1018,10 @@ class ParallelWorker:
         )
         if not isinstance(ack, dict):
             raise WorkerError("RESULT_ACK_TIMEOUT")
-        if ack.get("status") is not decision.status or ack.get("location") != location:
+        # The committed status is the Teacher's own and must equal the decision this Worker sealed: no later
+        # verdict (QC included) may change it.
+        committed_status = ack.get('status')
+        if committed_status is not decision.status or ack.get("location") != location:
             raise WorkerError("RESULT_ACK_MISMATCH")
         recovery_deadline = ack.get("recovery_deadline_monotonic_s")
         if (isinstance(recovery_deadline, bool)
@@ -730,7 +1032,23 @@ class ParallelWorker:
         recovery_deadline = float(recovery_deadline)
         with self._lease_lock:
             self._active_lease = None
-        return lease, decision.status, recovery_deadline
+        return lease, committed_status, recovery_deadline
+
+    def _seal_locally_after_coordinator_loss(self, lease, decision, loss):
+        key = _lease_key(lease)
+        if key in self._local_seals:
+            prior_status, location = self._local_seals[key]
+            if prior_status is not decision.status:
+                raise WorkerError("LOCAL_TERMINAL_ALREADY_SEALED")
+        else:
+            self._fault("RESULT_SEAL", "before")
+            location = self._results.seal_attempt(lease, decision)
+            self._local_seals[key] = (decision.status, location)
+            self._fault("RESULT_SEAL", "after")
+        status = getattr(decision.status, "value", str(decision.status))
+        raise CoordinatorLostResultUncommitted(
+            f"COORDINATOR_LOST: {loss}; teacher_status={status}; local_result={location}",
+            teacher_status=decision.status, location=location)
 
     def _recover(
         self,
@@ -945,7 +1263,7 @@ class ParallelWorker:
                 if self._mode is RunMode.EXECUTE:
                     action_may_have_started = True
                     failure_boundary = "execute_expert"
-                    decision = self._boundary(
+                    decision = self._teacher_boundary(
                         lambda current: self._runtime.execute_expert(current, admitted))
                 else:
                     failure_boundary = "plan_expert"
@@ -957,6 +1275,11 @@ class ParallelWorker:
         except Exception as error:
             decision, _, _, _ = self._safe_stop(
                 lease, action_may_have_started=action_may_have_started)
+            if (self._mode is RunMode.EXECUTE and isinstance(error, TeacherPreMotionRefused)
+                    and not action_may_have_started):
+                # D8f: the start ACK exists and the Teacher was fenced (or its enable failed terminally)
+                # before any motion. That is a started Teacher attempt that did not pass, not INVALID.
+                decision = self._pre_motion_decision(error, decision)
             return decision, action_may_have_started, {
                 "failure_boundary": failure_boundary,
                 "failure_type": type(error).__name__[:128],
@@ -972,8 +1295,14 @@ class ParallelWorker:
             if self._stop_requested.is_set():
                 return WorkerRunResult(None, None, False, "STOP_REQUESTED")
             if self._quarantined or not self._register() or not self._ready():
+                reason = getattr(self._runtime, "ready_failure", lambda: None)()
+                if isinstance(reason, str) and reason:
+                    # the readiness probe's own reason travels in the result instead of staying in a log
+                    return WorkerRunResult(None, None, False, "WORKER_NOT_READY", "ready_probe",
+                                           "ReadyProbeFailed", reason[:300])
                 return WorkerRunResult(None, None, False, "WORKER_NOT_READY")
             lease_wait_started = self._now()
+            failure_boundary = "lease_grant"
             try:
                 self._lease_request_sequence += 1
                 lease = self._call_before(
@@ -998,6 +1327,7 @@ class ParallelWorker:
                     raise WorkerError("LEASE_ACK_STALE")
                 with self._lease_lock:
                     self._active_lease = lease
+                failure_boundary = "lease_initializing_ack"
                 lease = self._request_ack(
                     lambda: self._coordinator.ack_lease(
                         lease, request_key=f"lease-ack-{lease.attempt_id}"),
@@ -1012,12 +1342,14 @@ class ParallelWorker:
                 return WorkerRunResult(
                     None, None, False, "LEASE_GRANT_PAUSED"
                 )
-            except Exception:
+            except Exception as error:
                 with self._lease_lock:
                     self._active_lease = None
                 self._quarantined = True
                 return WorkerRunResult(
-                    getattr(lease, "point_id", None), None, False, "LEASE_ACK_FAILED")
+                    getattr(lease, "point_id", None), None, False, "LEASE_ACK_FAILED",
+                    failure_boundary=failure_boundary,failure_type=type(error).__name__[:128],
+                    failure_message=_bounded_failure_message(error))
 
             self._start_watchdog(lease)
             authorized = False
@@ -1106,12 +1438,31 @@ class ParallelWorker:
             try:
                 lease, status, recovery_deadline = self._seal_and_commit(
                     lease, decision, authorized=authorized)
-            except Exception:
+            except CoordinatorLostResultUncommitted as error:
+                # The Teacher result is sealed locally and unchanged; only the commit is lost. Cancel whatever may
+                # still hold the controllers (nothing is expected), then stop scheduling.
+                self._safe_stop(
+                    lease, action_may_have_started=self._mode is RunMode.EXECUTE)
+                self._quarantined = True
+                self._clear_teacher_window()
+                self._stop_watchdog()
+                return WorkerRunResult(lease.point_id, None, False, "COORDINATOR_LOST_RESULT_UNCOMMITTED",
+                    failure_boundary="result_commit", failure_type=type(error).__name__[:128],
+                    failure_message=_bounded_failure_message(error))
+            except Exception as error:
+                # A failed seal/ACK must not erase an earlier execution refusal.
+                # Keep the existing closed result fields and bounded first cause.
+                first_failure = failure if failure is not None else {
+                    "failure_boundary": "seal_and_commit",
+                    "failure_type": type(error).__name__[:128],
+                    "failure_message": _bounded_failure_message(error),
+                }
                 self._safe_stop(
                     lease, action_may_have_started=self._mode is RunMode.EXECUTE)
                 self._quarantined = True
                 self._stop_watchdog()
-                return WorkerRunResult(lease.point_id, None, False, "TERMINAL_ACK_FAILED")
+                return WorkerRunResult(lease.point_id, None, False, "TERMINAL_ACK_FAILED",
+                    **first_failure)
             return WorkerRunResult(
                 lease.point_id, status,
                 self._recover(
@@ -1133,6 +1484,7 @@ class ParallelWorker:
             return WorkerRunResult(
                 getattr(lease, "point_id", None), None, False, "PORT_FAILURE")
         finally:
+            self._clear_teacher_window()
             self._run_lock.release()
 
     def run(self) -> tuple[WorkerRunResult, ...]:

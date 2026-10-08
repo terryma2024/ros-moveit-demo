@@ -941,6 +941,10 @@ Grounded SAM 和 YOLO-Seg 还要检查实际 device、CPU fallback、candidate c
 | `MOVEIT_EXECUTION_FAILED` | plan、execute、joint readback 和 recovery | 不要只看 action 返回文本 |
 | `E2E_MUJOCO_FINAL_INVALID` | 杯子 Pose、速度、桌面和 fingertip contact | 不要用 Planning Scene 成功替代物理事实 |
 | `E2E_PLANNING_SCENE_INVALID` | attached object、world object 和 MuJoCo Pose 差 | 不要只看 RViz 画面 |
+| `E2E_TEACHER_TASK_NOT_PASSED` | `teacher_task_result.result` and `teacher_execution_status` in the v2 dynamic manifest | Do not read a Teacher FAIL or UNCONFIRMED as a data or collection failure |
+| `E2E_TEACHER_RESULT_MISSING` | whether `teacher_task_result` exists with a known result | Do not infer a result from process quality or the exit code |
+| `E2E_LEGACY_MANIFEST_READ_ONLY` | `schema` of the dynamic manifest (`so101-dynamic-mujoco-execute-v1`) | Do not count a v1 manifest as a new-run success |
+| `E2E_PROCESS_*` | audit-only diagnostics: the same checks as the old `E2E_*` process codes, renamed `E2E_PROCESS_<name>` | They never fail a v2 run by themselves; read them beside the Teacher result |
 
 定位时先找 `primary_failure`，再看它所属阶段的证据。`secondary_failures` 常常是清理时出现的问题，不应遮住真正的首错。
 

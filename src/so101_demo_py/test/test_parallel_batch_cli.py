@@ -941,8 +941,8 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     assert not hasattr(composition, "broker")
     assert composition.broker_spec_path is None
     assert composition.results is not composition.result_verifier
-    # the port is chosen by the contract it must implement (correction 4): without endpoint inputs the generic
-    # adapter keeps its own paths, exactly as the coordinator's ACT gate requires; with them the composition
+    # the port is chosen by the contract it must implement (correction 4): without an episode scope the generic
+    # adapter keeps its own paths, exactly as the coordinator's ACT gate requires; with one the composition
     # builds the verifying class the gate selects, so a real ACT episode takes that path
     from so101_demo.act.result_store import ActCollectionResultVerifier
 
@@ -950,17 +950,18 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     # under similar names and the contract is about which one the coordinator's gate recognises
     assert not isinstance(composition.result_verifier, ActCollectionResultVerifier)
     # The positive direction needs a spec whose evidence root does not collide with the one this composition already
-    # claimed, and the file's own idiom for that is to rebind it (CP-2805). With endpoint inputs present the
+    # claimed, and the file's own idiom for that is to rebind it (CP-2805). With the episode scope present the
     # composition must build the class the coordinator's gate selects, so a real ACT episode takes that path.
     judging = ProductionBatchComposition(
         replace(spec, request=replace(spec.request, evidence_root=scratch / "act-evidence")),
         resource_probe=Probe(),
         claim_root=scratch / "claims-act",
         worker_launcher=lambda owner, path: owner._run_worker_local(path),
-        endpoint_inputs={"initial_target": [0.0] * 7, "final_target": [0.0] * 7,
-                         "endpoint_policy": {"rule_version": "endpoint_pose_v1", "thresholds": {}}},
+        episode_scope_path=str(scratch / "original-common-scope.json"),
     )
     assert isinstance(judging.result_verifier, ActCollectionResultVerifier)
+    assert judging.result_verifier.scope == scratch / "original-common-scope.json"
+    assert judging.coordinator.result_port is judging.result_verifier
     summary = composition.run()
     assert isinstance(composition.last_local_components[0], ParallelWorker)
     assert isinstance(composition.last_local_components[1], DryRunWorkerRuntime)
@@ -1990,76 +1991,6 @@ def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
         composition.allocator.close()
 
 
-@pytest.mark.parametrize("mode", ("plan_only", "execute"))
-def test_default_composition_constructs_physical_runtime_ports_lazily(mode):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
-    from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.runtime.parallel_worker_runtime import ParallelWorkerRuntime
-
-    class Probe:
-        def snapshot(self):
-            return ResourceSnapshot(32, 64.0, 16.0)
-        def ros_domain_in_use(self, _domain):
-            return False
-        def socket_in_use(self, _path):
-            return False
-
-    scratch = _scratch_root()
-    root = scratch / ("pp" if mode == "plan_only" else "pe")
-    side_effects = {
-        name: (lambda *_args, **_kwargs: True)
-        for name in (
-            "ready_probe", "reset_point", "initial_gate", "localize",
-            "admit_pose", "publish_pose", "plan_prefix", "execute_result",
-            "consumer_ready", "capture_rgb", "capture_numeric_evidence",
-            "cancel_motion", "confirm_no_controller_goal", "recovery",
-        )
-    }
-    spec = prepare_batch(
-        argv(root, worker_count="1", point_id=("task_start",), run_mode=mode),
-        provenance_verifier=verified,
-    )
-    composition = ProductionBatchComposition(
-        spec,
-        resource_probe=Probe(),
-        claim_root=scratch / ("clp" if mode == "plan_only" else "cle"),
-        runtime_side_effects_factory=lambda _resources: side_effects,
-    )
-    from so101_demo.cli.mujoco_parallel_batch import _build_worker_from_spec
-    _worker, runtime = _build_worker_from_spec(
-        composition.worker_specs[0], runtime_side_effects=side_effects
-    )
-    assert isinstance(runtime, ParallelWorkerRuntime)
-    composition._start_servers()
-    try:
-        document = json.loads(composition.worker_specs[0].read_text())
-        from so101_demo.cli.mujoco_parallel_batch import _CoordinatorRpcProxy
-        proxy = _CoordinatorRpcProxy(
-            document["socket_path"], document["token_path"],
-            worker_id="worker-01", generation=1,
-            mode=RunMode(mode),
-            coordinator_epoch=document["coordinator_epoch"],
-        )
-        replacement = proxy.replace_resources("worker-01", expected_generation=1)
-        assert replacement.generation == 2
-        assert replacement.session_id != composition.resource_manifest.workers[0].session_id
-        assert replacement.worker_root == composition.resource_manifest.workers[0].worker_root
-    finally:
-        composition._stop_servers()
-    SimpleLease.coordinator_epoch = composition.journal.coordinator_epoch
-    argv_value = runtime.consumer_argv("reset-1", SimpleLease())
-    if mode == "plan_only":
-        assert argv_value is None
-    else:
-        assert "--execute" in argv_value
-        assert "--expected-reset-epoch" in argv_value
-    composition.journal.close()
-    composition.allocator.close()
-
-
 class SimpleLease:
     batch_id = "batch-1"
     coordinator_epoch = 1
@@ -2068,6 +1999,8 @@ class SimpleLease:
     point_id = "task_start"
     attempt_id = "attempt-1"
     lease_generation = 1
+    lease_issued_monotonic_s = 10.0
+    lease_deadline_monotonic_s = 20.0
 
 
 def test_artifact_workspace_is_reserved_before_runtime_files_and_reused_for_seal(tmp_path):

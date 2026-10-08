@@ -80,7 +80,18 @@ class FakePort:
         if phase == "RELEASE" or phase in self._RELEASED:
             # the runner increments release_epoch before verifying RELEASE, and the retreat and final check carry it on
             evidence["release_epoch"] = self.release_epoch + 1
+        evidence["physical_observation"] = self._physical_observation(phase)
         return evidence
+
+    def _physical_observation(self, phase):
+        """The same controlled I/O measurements supplied to the recorder."""
+        return {"simulation_time_s": self.grid_step * PERIOD_S,
+                "physics_step": self.step,
+                "cup_position_m": [0.0, 0.0, 0.1],
+                "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                "end_effector_position_m": [0.0, 0.0, 0.1],
+                "cup_support_distance_m": 0.01,
+                "released": phase in self._RELEASED}
 
     def run_phase(self, phase, request):
         self.phases.append(phase)
@@ -103,7 +114,8 @@ class FakePort:
         # the gripper is open, the cup is supported and no fingertip is touching it
         released = phase in ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
         sample = build_live_evidence_sample(
-            identity=_identity(), phase=phase, physics_step=self.grid_step, sim_time_s=sim_time,
+            identity={**_identity(), "release_epoch": self.release_epoch + int(released)},
+            phase=phase, physics_step=self.grid_step, sim_time_s=sim_time,
             source_stamps_s={name: sim_time for name in READBACK_SOURCES},
             source_received_monotonic_s={name: sim_time for name in READBACK_SOURCES},
             raw_records=_raw_records(self.evidence_root, sim_time),
@@ -123,6 +135,7 @@ class FakePort:
         self._record("RADIAL_RETREAT")
         # the retreat runs after the release, so it reports the released set with the holding vocabulary
         return dict(self._identity(request), phase="RADIAL_RETREAT", holding_state="EMPTY",
+                    physical_observation=self._physical_observation("RADIAL_RETREAT"),
                     release_epoch=self.release_epoch + 1,
                     cup_supported=True, planning_ok=True, planning_scene_ok=True,
                     controller_reference_ok=True, joint_feedback_ok=True, contact_ok=True, released=True,
@@ -145,7 +158,7 @@ class FakePort:
         self.step += 1
         # the preflight runs before the detach, so the planning side is still attached and the cup still held
         return dict(self._identity(request), holding_state="HOLDING", cup_supported=True, fresh=True,
-                    planning_attached=True)
+                    bilateral_contact=True, planning_attached=True)
 
     def detach_moveit(self, request):
         self.calls.append("detach_moveit")
@@ -180,7 +193,8 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
     window.bind_reset_epoch(_identity()["reset_epoch"])
     port = FakePort(recorder)
-    port.reset_epoch, port.release_epoch = _identity()["reset_epoch"], _identity()["release_epoch"]
+    port.reset_epoch = _identity()["reset_epoch"]
+    port.release_epoch = _identity()["release_epoch"] - 1
     port.bind_live_evidence(window)
     port.evidence_root = evidence_root
     result = PickPlaceRunner(port).run(_request())

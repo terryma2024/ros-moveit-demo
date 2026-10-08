@@ -24,6 +24,49 @@ MOTION_STATES = {
 }
 
 
+SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+START_TARGET = {"position": [-0.02, -0.28, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
+END_TARGET = {"position": [-0.08, -0.25, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
+TRUSTED_FINAL = [-0.08, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0]
+
+
+def observation(position, time_s, *, quaternion=(0.0, 0.0, 0.0, 1.0)) -> dict[str, object]:
+    return {
+        "position": list(position),
+        "orientation": dict(zip("xyzw", quaternion)),
+        "simulation_time_s": time_s,
+        "frame_id": "world", "object_id": "plastic_cup", "session_id": "s", "reset_epoch": 17,
+    }
+
+
+def teacher_result(result: str = "PASS", reasons=(), *, end: bool = True) -> dict[str, object]:
+    start_observation = observation([-0.02, -0.28, 0.165], 1.0)
+    end_observation = observation([-0.08, -0.25, 0.165], 9.0) if end else None
+    return {
+        "rule_version": "teacher_endpoint_v2",
+        "policy_sha256": "a" * 64,
+        "result": result,
+        "reasons": list(reasons),
+        "measured": {},
+        "start_target": START_TARGET,
+        "end_target": END_TARGET,
+        "start_observation": start_observation,
+        "end_observation": end_observation,
+    }
+
+
+def teacher_fields(execution: str, result: dict[str, object]) -> dict[str, object]:
+    return {
+        "schema": SCHEMA_V2,
+        "teacher_execution_status": execution,
+        "teacher_task_result": result,
+        "teacher_start_observation": result["start_observation"],
+        "teacher_end_observation": result["end_observation"],
+        "act_data_status": "DISABLED",
+        "process_diagnostics": [],
+    }
+
+
 def sample(sequence: int, *, reset_epoch: int = 17) -> dict[str, object]:
     return {
         "reset_epoch": reset_epoch,
@@ -83,6 +126,9 @@ def manifest(trace: list[str] | None = None, *, status: str = "DONE") -> dict[st
     terminal = sample(1000)
     failure = None if status == "DONE" else "INJECTED_BUSINESS_FAILURE"
     document: dict[str, object] = {
+        **(teacher_fields("COMPLETED", teacher_result()) if status == "DONE"
+           else teacher_fields("FAILED", teacher_result("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: x"],
+                                                        end=False))),
         "status": status,
         "current_state": status,
         "failure": failure,
@@ -113,13 +159,14 @@ def manifest(trace: list[str] | None = None, *, status: str = "DONE") -> dict[st
     return document
 
 
-def validate(document: dict[str, object], expected_status: str) -> None:
+def validate(document: dict[str, object], expected_status: str, *, trusted=None):
     from so101_demo.parallel_batch.dynamic_manifest import validate_dynamic_manifest_semantics
 
-    validate_dynamic_manifest_semantics(
+    return validate_dynamic_manifest_semantics(
         document,
         expected_status=expected_status,
         expected_reset_epoch=17,
+        expected_final_cup_pose_world=trusted,
     )
 
 
@@ -133,10 +180,12 @@ def test_valid_complete_done_manifest_is_accepted():
         (lambda value: value.update(state_trace=["IDLE", "MOVE_ABOVE_OBJECT", "DONE"], transition_count=2), "TRACE"),
         (lambda value: value["state_events"].pop(), "STATE_EVENTS"),
         (lambda value: value["planning_attempts"].__setitem__(0, {**value["planning_attempts"][0], "accepted": False}), "PLANNING"),
-        (lambda value: value["final_samples"][0].update(publisher_sequence=800), "RELEASE_ORDER"),
-        (lambda value: value["final_samples"][0].update(table_contact=False), "FINAL_PHYSICAL"),
-        (lambda value: value["final_samples"][0].update(cup_position_world_m=[0.2, 0.2, 0.1648]), "FINAL_PHYSICAL"),
-        (lambda value: value["planning_scene_readback"]["world_primitive_counts"].update(plastic_cup=1), "SCENE"),
+        (lambda value: value["teacher_task_result"].update(result="PASS", reasons=["FINAL_XY_OUT_OF_TOLERANCE"]),
+         "TEACHER_RESULT"),
+        (lambda value: value.update(teacher_execution_status="FAILED"), "TEACHER_STATUS"),
+        (lambda value: value["teacher_task_result"]["end_observation"]["orientation"].update(w=0.0),
+         "TEACHER_RESULT"),
+        (lambda value: value.pop("teacher_task_result"), "TEACHER_RESULT"),
     ],
 )
 def test_done_manifest_rejects_semantic_omissions_and_contradictions(mutation, error):
@@ -225,4 +274,148 @@ def test_failure_trace_wrong_policy_transition_is_rejected():
         ["IDLE", "PREPARE_OPEN_GRIPPER", "DESCEND", "ERROR"], status="ERROR"
     )
     with pytest.raises(ValueError, match="TRACE"):
+        validate(document, "ERROR")
+
+
+# ---- manifest v2: the Teacher outcome comes from the Teacher fields (Phase A1b) ---------------------------------
+
+def v2_done(result: str, reasons=()) -> dict[str, object]:
+    document = manifest()
+    document.update(teacher_fields("COMPLETED", teacher_result(result, reasons, end=result != "UNCONFIRMED")))
+    return document
+
+
+def v2_error(execution: str) -> dict[str, object]:
+    document = manifest(
+        ["IDLE", "PREPARE_OPEN_GRIPPER", "MOVE_ABOVE_OBJECT", "RECOVER_RETREAT", "ERROR"], status="ERROR")
+    document.update(teacher_fields(execution, teacher_result("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: x"],
+                                                              end=False)))
+    return document
+
+
+def test_v2_completed_pass_is_the_only_passed_outcome():
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    assert validate(v2_done("PASS"), "DONE") is AttemptStatus.PASSED
+
+
+def test_v2_completed_task_fail_is_failed():
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    document = v2_done("FAIL", ["FINAL_XY_OUT_OF_TOLERANCE"])
+    assert validate(document, "DONE") is AttemptStatus.FAILED
+
+
+def test_v2_completed_unconfirmed_is_indeterminate():
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    document = v2_done("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"])
+    assert validate(document, "DONE") is AttemptStatus.INDETERMINATE
+
+
+@pytest.mark.parametrize("execution", ["FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE"])
+def test_v2_failed_and_stopped_executions_are_failed(execution):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    assert validate(v2_error(execution), "ERROR") is AttemptStatus.FAILED
+
+
+def test_v2_indeterminate_execution_is_indeterminate():
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    assert validate(v2_error("INDETERMINATE"), "ERROR") is AttemptStatus.INDETERMINATE
+
+
+def test_v2_process_quality_contradictions_no_longer_decide_a_done_run():
+    """REPLACED_BY: the old DONE contract (velocity, table/fingertip contact, release order, scene) is audit-only."""
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    document = v2_done("PASS")
+    final = document["final_samples"][0]
+    final.update(table_contact=False, left_contact_count=2, publisher_sequence=800,
+                 cup_linear_velocity_world_m_s=[0.5, 0.0, 0.0])
+    document["final_samples"].append(dict(final))
+    document["planning_scene_readback"]["world_primitive_counts"]["plastic_cup"] = 1
+    assert validate(document, "DONE") is AttemptStatus.PASSED
+
+
+def test_v2_pass_requires_a_completed_execution():
+    error = v2_error("FAILED")
+    error["teacher_task_result"]["result"] = "PASS"
+    with pytest.raises(ValueError, match="TEACHER_RESULT|TEACHER_STATUS"):
+        validate(error, "ERROR")
+
+
+@pytest.mark.parametrize("schema", [None, "so101-dynamic-mujoco-execute-v3", "so101-dynamic-mujoco-execute-v0", 2])
+def test_unknown_or_missing_manifest_versions_are_rejected(schema):
+    document = v2_done("PASS")
+    if schema is None:
+        document.pop("schema")
+    else:
+        document["schema"] = schema
+    with pytest.raises(ValueError, match="SCHEMA"):
+        validate(document, "DONE")
+
+
+def test_legacy_v1_manifest_is_read_only_and_never_passes():
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    legacy = manifest()
+    legacy["schema"] = "so101-dynamic-mujoco-execute-v1"
+    for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
+                "teacher_end_observation", "act_data_status", "process_diagnostics"):
+        legacy.pop(key)
+    assert validate(legacy, "DONE") is AttemptStatus.INDETERMINATE
+
+
+def test_v2_trusted_final_target_must_match_the_frozen_end_target():
+    validate(v2_done("PASS"), "DONE", trusted=TRUSTED_FINAL)
+    with pytest.raises(ValueError, match="TRUSTED_FINAL_TARGET"):
+        validate(v2_done("PASS"), "DONE", trusted=[0.5, 0.5, 0.165, 0.0, 0.0, 0.0, 1.0])
+    with pytest.raises(ValueError, match="TRUSTED_FINAL_TARGET"):
+        validate(v2_done("PASS"), "DONE", trusted=[0.0] * 7)
+
+
+# ---- C2: a terminal stop goes straight to ERROR from any state (R9.2) ----------------------------------------------
+
+def terminal_stop(failure="DYNAMIC_CUP_COMPRESSION_EXCEEDED", boundary="MOVE_ABOVE_PLACE"):
+    trace = DONE_TRACE[:DONE_TRACE.index(boundary) + 1] + ["ERROR"]
+    document = manifest(trace, status="ERROR")
+    document["failure"] = failure
+    document["failure_evidence"]["failure_boundary_state"] = boundary
+    failed = event(boundary, 500)
+    failed["validation_failure"] = failure
+    document["state_events"].append(failed)
+    return document
+
+
+def test_terminal_stop_direct_edge_to_error_is_accepted_with_its_boundary():
+    validate(terminal_stop(), "ERROR")
+
+
+def test_non_terminal_failure_with_a_direct_edge_to_error_is_still_rejected():
+    with pytest.raises(ValueError, match="TRACE"):
+        validate(terminal_stop("INJECTED_BUSINESS_FAILURE"), "ERROR")
+
+
+def test_terminal_stop_boundary_must_be_the_last_state_before_error():
+    document = terminal_stop()
+    document["failure_evidence"]["failure_boundary_state"] = "LIFT"
+    with pytest.raises(ValueError, match="FAILURE_EVIDENCE"):
+        validate(document, "ERROR")
+
+
+def test_terminal_stop_may_leave_the_cup_attached_in_the_moveit_scene():
+    document = terminal_stop()
+    document["failure_evidence"]["planning_scene_readback"] = {
+        "attached_object_ids": ["plastic_cup"], "world_primitive_counts": {"table": 1, "pedestal": 1}}
+    validate(document, "ERROR")
+
+
+def test_attached_cup_scene_is_refused_without_a_terminal_stop():
+    document = manifest(["IDLE", "PREPARE_OPEN_GRIPPER", "MOVE_ABOVE_OBJECT", "RECOVER_RETREAT", "ERROR"],
+                        status="ERROR")
+    document["failure_evidence"]["planning_scene_readback"] = {
+        "attached_object_ids": ["plastic_cup"], "world_primitive_counts": {"table": 1}}
+    with pytest.raises(ValueError, match="FAILURE_EVIDENCE"):
         validate(document, "ERROR")

@@ -72,6 +72,34 @@ def populated(root, **kwargs):
     return result
 
 
+def teacher_v2_fields(*, execution='COMPLETED', result='PASS', end=True):
+    """The Teacher-owned manifest v2 fields (the Teacher outcome is read from them, not recomputed)."""
+
+    def observation(position, time_s):
+        return {
+            'position': position, 'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+            'simulation_time_s': time_s, 'frame_id': 'world', 'object_id': 'plastic_cup',
+            'session_id': 'session-worker-01', 'reset_epoch': 7,
+        }
+
+    start = observation([-0.02, -0.28, 0.165], 1.0)
+    final = observation([-0.08, -0.25, 0.1648], 9.0) if end else None
+    task = {
+        'rule_version': 'teacher_endpoint_v2', 'policy_sha256': 'c' * 64, 'result': result,
+        'reasons': [] if result == 'PASS' else ['END_OBSERVATION_UNCONFIRMED: observation is missing'],
+        'measured': {},
+        'start_target': {'position': [-0.02, -0.28, 0.165], 'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}},
+        'end_target': {'position': [-0.08, -0.25, 0.1648], 'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}},
+        'start_observation': start, 'end_observation': final,
+    }
+    return {
+        'schema': 'so101-dynamic-mujoco-execute-v2',
+        'teacher_execution_status': execution, 'teacher_task_result': task,
+        'teacher_start_observation': start, 'teacher_end_observation': final,
+        'act_data_status': 'DISABLED', 'process_diagnostics': [],
+    }
+
+
 def valid_dynamic_manifest(who, session):
     trace = [State.IDLE]
     while trace[-1] not in SO101_WORKFLOW.terminal_states:
@@ -119,6 +147,7 @@ def valid_dynamic_manifest(who, session):
             )
         events.append(item)
     return {
+        **teacher_v2_fields(),
         'parallel_lease_identity': asdict(who),
         'simulation_session_id': session,
         'expected_reset_epoch': 7,
@@ -228,6 +257,9 @@ def complete_error_execute(root, *, status, physical_action_proven_absent):
     detached_scene = manifest['planning_scene_readback']
     boundary = 'IDLE' if physical_action_proven_absent else 'PREPARE_OPEN_GRIPPER'
     manifest.update(
+        **teacher_v2_fields(
+            execution='FAILED' if physical_action_proven_absent else 'INDETERMINATE',
+            result='UNCONFIRMED', end=False),
         status='ERROR',
         current_state='ERROR',
         failure='GRIPPER_GOAL_TIMEOUT',
@@ -464,7 +496,9 @@ def test_seal_rejects_zero_norm_final_orientation(tmp_path):
     work = complete_execute(tmp_path)
     path = work.path / 'dynamic/dynamic-execute-manifest.json'
     document = json.loads(path.read_text(encoding='utf-8'))
-    document['final_samples'][0]['cup_orientation_world_xyzw'] = [0.0] * 4
+    document['teacher_task_result']['end_observation']['orientation'] = {
+        'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 0.0}
+    document['teacher_end_observation'] = document['teacher_task_result']['end_observation']
     path.write_text(json.dumps(document), encoding='utf-8')
 
     with pytest.raises(api.ArtifactError, match='DYNAMIC_EVIDENCE'):
@@ -476,12 +510,10 @@ def test_coordinator_rejects_producer_defined_final_placement_target(tmp_path):
     work = complete_execute(root)
     path = work.path / 'dynamic/dynamic-execute-manifest.json'
     document = json.loads(path.read_text(encoding='utf-8'))
-    document['final_samples'][0]['cup_position_world_m'][:2] = [9.0, 9.0]
-    validation = next(
-        item for item in document['state_events']
-        if item['state'] == 'VALIDATE_FINAL_PLACEMENT'
-    )
-    validation['expected_cup_pose_world'][:2] = [9.0, 9.0]
+    task = document['teacher_task_result']
+    task['end_target']['position'][:2] = [9.0, 9.0]
+    task['end_observation']['position'][:2] = [9.0, 9.0]
+    document['teacher_end_observation'] = task['end_observation']
     path.write_text(json.dumps(document), encoding='utf-8')
     sealed = work.seal(required=('attempt-result.json',))
     adapter = api.SealedResultAdapter(

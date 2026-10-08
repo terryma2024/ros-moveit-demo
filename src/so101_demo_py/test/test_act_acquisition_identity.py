@@ -160,9 +160,13 @@ class _Node:
 class _Capture:
     def __init__(self):
         self.frames = []
+        self.started = self.active = False
 
     def on_acquisition(self, frame, pixels):
         self.frames.append((frame, pixels))
+
+    def reject_source(self, reason):
+        raise ValueError(reason)
 
 
 def _image_message(stamp_s, pixels):
@@ -194,6 +198,7 @@ def test_the_production_adapter_mints_identity_from_the_published_frame():
     adapter = RosObservationAdapter(
         _Node(), RgbObservationSynchronizer(max_age_s=0.1, max_skew_s=0.1), capture=capture)
     adapter.reset("s", source_floor_s=0.0, reset_epoch=1)
+    capture.started = capture.active = True
     pixels = np.arange(480 * 640 * 3, dtype=np.uint8).reshape((480, 640, 3))
 
     adapter._image_locked("head", _image_message(1.0, pixels), received_monotonic_s=5.0)

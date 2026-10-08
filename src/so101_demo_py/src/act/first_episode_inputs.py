@@ -32,6 +32,9 @@ from .contracts import ContractError, fields, finite, integer, sha256, vector
 CANDIDATES_KIND = "ACT_FIRST_EPISODE_INPUT_CANDIDATES"
 MANIFEST_KIND = "ACT_FIRST_EPISODE_INPUTS"
 SCHEMA_VERSION = 1
+#: The manifest schema. Version 2 dropped the broker stop policy and the bound-timing roles (design 10-06: no broker); a
+#: version 1 manifest - or any manifest still carrying those roles - is refused, never accepted silently.
+MANIFEST_SCHEMA_VERSION = 2
 
 # every role the milestone must freeze; a missing one is an exact blocker, not a default
 INPUT_ROLES = (
@@ -54,13 +57,24 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
                                 "config_sha256", "evidence_root", "roles", "inputs_sha256"})
 #: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
 #: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
-_MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy"})
+_MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy", "execution_snapshot",
+                                "teacher_endpoint_v2", "teacher_execution_policy_v1", "episode_recorder_v1"})
+#: The three policy bindings that replaced the endpoint_pose_v1 `endpoint_policy` (Phase A4c): binding name -> the file
+#: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
+POLICY_BINDINGS = {
+    "teacher_endpoint_v2": ("teacher_endpoint_v2.yaml", "config/act/teacher_endpoint_v2.yaml"),
+    "teacher_execution_policy_v1": ("teacher_execution_policy_v1.yaml", "config/act/teacher_execution_policy_v1.yaml"),
+    "episode_recorder_v1": ("episode_recorder_v1.yaml", "config/act/episode_recorder_v1.yaml"),
+}
+_POLICY_BINDING_FIELDS = frozenset({"path", "file_sha256", "bytes", "policy_sha256", "values"})
 _MANIFEST_FIELDS = _MANIFEST_REQUIRED | _MANIFEST_OPTIONAL
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
-_APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation",
+_APPROVALS = frozenset({"source_controlled", "disabled_proposal", "user_activation", "spot_check_candidate",
                         "nonhead_calibration", "user_empirical_default"})
 _ROLE_APPROVAL = {"contact_proposal": "disabled_proposal",
-                  "contact_activation": "user_activation",
+                  # a spot_check_candidate receipt is a plan-signed candidate (D4), not a user activation; the freeze
+                  # refuses it unless the input set is a preselected_target_diagnostic one
+                  "contact_activation": ("user_activation", "spot_check_candidate"),
                   # the amendment replaces the calibration report these three used to demand with the values the
                   # user authorized this round; both kinds are accepted so an old record keeps its reading and a
                   # new candidate carries the authorized provenance
@@ -78,6 +92,74 @@ _HEX40 = re.compile(r"[0-9a-f]{40}\Z")
 def _canonical(value) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                       allow_nan=False).encode()
+
+
+def execution_snapshot_binding(snapshot, root):
+    """Bind verified compiled dimensions into the immutable input digest for raw readback."""
+    import yaml
+    relative = "config/mujoco/act/mujoco_plugins.yaml"
+    payload = (Path(root) / relative).read_bytes()
+    config_sha = hashlib.sha256(payload).hexdigest()
+    if config_sha != snapshot["files"][relative]["sha256"]:
+        raise ValueError("INPUTS_EXECUTION_PRODUCER_BYTES_INVALID")
+    params = yaml.safe_load(payload)["/**"]["ros__parameters"]
+    chunk_size, buffer_size, contacts = (params[key] for key in (
+        "physics_step_chunk_size", "physics_step_buffer_capacity", "max_contacts"))
+    if (type(chunk_size) is not int or chunk_size < 1 or type(buffer_size) is not int
+            or buffer_size < chunk_size or type(contacts) is not int or contacts < 0):
+        raise ValueError("INPUTS_EXECUTION_PRODUCER_CONFIG_INVALID")
+    return {"kind": "ACT_EXECUTION_SNAPSHOT_BINDING", "schema_version": 2,
+            "path": "execution", "sha256": snapshot["snapshot_sha256"],
+            "model_identity": {key: snapshot[key] for key in ("model_sha256", "nq", "nv", "mujoco_version")},
+            "physics_chunks": {"max_samples": chunk_size, "max_contacts": contacts, "config_sha256": config_sha}}
+
+
+def validate_execution_snapshot_binding(binding, *, require_model=False):
+    keys = {"kind", "schema_version", "path", "sha256"}
+    if isinstance(binding, dict) and type(binding.get("schema_version")) is int and binding["schema_version"] == 2:
+        keys.update({"model_identity", "physics_chunks"})
+    if (not isinstance(binding, dict) or set(binding) != keys
+            or binding["kind"] != "ACT_EXECUTION_SNAPSHOT_BINDING"
+            or type(binding["schema_version"]) is not int or binding["schema_version"] not in (1, 2)
+            or binding["path"] != "execution" or not isinstance(binding["sha256"], str)
+            or not _HEX64.fullmatch(binding["sha256"])):
+        raise ValueError("INPUTS_EXECUTION_SNAPSHOT_INVALID")
+    if binding["schema_version"] == 1:
+        if require_model:
+            raise ValueError("INPUTS_EXECUTION_MODEL_BINDING_REQUIRED")
+        return None
+    model = binding["model_identity"]
+    if (not isinstance(model, dict) or set(model) != {"model_sha256", "nq", "nv", "mujoco_version"}
+            or not isinstance(model["model_sha256"], str) or not _HEX64.fullmatch(model["model_sha256"])
+            or type(model["nq"]) is not int or model["nq"] < 1
+            or type(model["nv"]) is not int or model["nv"] < 1
+            or not isinstance(model["mujoco_version"], str) or not model["mujoco_version"]):
+        raise ValueError("INPUTS_EXECUTION_SNAPSHOT_INVALID")
+    chunks = binding["physics_chunks"]
+    if (not isinstance(chunks, dict) or set(chunks) != {"max_samples", "max_contacts", "config_sha256"}
+            or type(chunks["max_samples"]) is not int or chunks["max_samples"] < 1
+            or type(chunks["max_contacts"]) is not int or chunks["max_contacts"] < 0
+            or not isinstance(chunks["config_sha256"], str) or not _HEX64.fullmatch(chunks["config_sha256"])):
+        raise ValueError("INPUTS_EXECUTION_PRODUCER_CONFIG_INVALID")
+    return model
+
+
+def audit_execution_model_identity(inputs):
+    """Authenticate copied frozen model metadata against the input binding digest."""
+    binding = inputs.get("execution_snapshot")
+    if binding is None:
+        return None
+    model = validate_execution_snapshot_binding(binding, require_model=True)
+    roles = inputs.get("roles")
+    extra = {key: inputs[key] for key in _MANIFEST_OPTIONAL if key in inputs}
+    if (not isinstance(roles, dict) or set(roles) != set(INPUT_ROLES)
+            or hashlib.sha256(_canonical({**roles, **extra})).hexdigest() != inputs.get("inputs_sha256")):
+        raise ValueError("INPUTS_MANIFEST_INVALID")
+    scene = roles["scene_model"].get("identity")
+    if (not isinstance(scene, dict) or scene.get("model_sha256") != model["model_sha256"]
+            or scene.get("mujoco_version") != model["mujoco_version"]):
+        raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
+    return model
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +301,7 @@ def read_inputs_manifest(path: Path) -> dict:
     if (not isinstance(document, dict) or not _MANIFEST_REQUIRED <= set(document)
             or not set(document) <= _MANIFEST_FIELDS):
         raise ValueError("INPUTS_MANIFEST_INVALID")
-    if document["kind"] != MANIFEST_KIND or document["schema_version"] != SCHEMA_VERSION:
+    if document["kind"] != MANIFEST_KIND or document["schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["source_commit"], str) or not _HEX40.fullmatch(document["source_commit"]):
         raise ValueError("INPUTS_MANIFEST_INVALID")
@@ -242,7 +324,7 @@ def read_inputs_manifest(path: Path) -> dict:
             raise ValueError("INPUTS_MANIFEST_INVALID")
     # the writer folds the amendment's three bindings into the same digest the design requires them to be part of,
     # so the reader hashes what was written rather than only the role table (CP-2416)
-    extra = {key: document[key] for key in ("mode", "endpoint_policy", "runtime_policy") if key in document}
+    extra = {key: document[key] for key in _MANIFEST_OPTIONAL if key in document}
     if hashlib.sha256(_canonical({**roles, **extra})).hexdigest() != document["inputs_sha256"]:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     return document
@@ -251,6 +333,68 @@ def read_inputs_manifest(path: Path) -> dict:
 # only these roles carry a JSON contract this module must read; the rest are frozen as bytes
 _JSON_ROLES = frozenset({"contact_proposal", "contact_activation", "path_policy", "placement_qc",
                          "rgb_skew"})
+
+
+def _policy_loader(name: str):
+    """The closed loader of one frozen policy; every refusal is a ValueError."""
+
+    if name == "teacher_endpoint_v2":
+        from .teacher_endpoint import load_teacher_endpoint_policy as loader
+    elif name == "teacher_execution_policy_v1":
+        from .teacher_endpoint import load_teacher_execution_policy as loader
+    else:
+        from .episode_recorder_process import load_recorder_policy as loader
+    return loader
+
+
+def policy_binding(name: str, payload: bytes) -> dict:
+    """The manifest binding of one policy file: its bytes, its sha256 and every effective value (policy_sha256 apart)."""
+
+    policy = _policy_loader(name)(payload)
+    return {"path": "policies/" + POLICY_BINDINGS[name][0], "file_sha256": hashlib.sha256(payload).hexdigest(),
+            "bytes": len(payload), "policy_sha256": policy["policy_sha256"],
+            "values": {key: value for key, value in policy.items() if key != "policy_sha256"}}
+
+
+def verify_policy_bindings(document: dict, manifest_path: Path, snapshot: dict | None = None) -> dict:
+    """Re-read each frozen policy file, re-load it through its closed loader and compare every bound value.
+
+    Returns the loaded policies by binding name. A binding whose file, digest, size, values or policy digest disagree is
+    refused, and so is one whose bytes differ from the copy the execution snapshot froze from the same source tree.
+    """
+
+    root = Path(manifest_path).parent.resolve()
+    loaded = {}
+    for name, (filename, config_path) in POLICY_BINDINGS.items():
+        if name not in document:
+            continue
+        code = "INPUTS_POLICY_BINDING_INVALID: " + name
+        binding = document[name]
+        if not isinstance(binding, dict) or set(binding) != _POLICY_BINDING_FIELDS:
+            raise ValueError(code)
+        path = root / binding["path"]
+        if (binding["path"] != "policies/" + filename or path.is_symlink() or not path.is_file()
+                or not path.resolve().is_relative_to(root)):
+            raise ValueError(code)
+        try:
+            payload = path.read_bytes()
+        except OSError as error:
+            raise ValueError(code) from error
+        if len(payload) != binding["bytes"] or hashlib.sha256(payload).hexdigest() != binding["file_sha256"]:
+            raise ValueError(code)
+        try:
+            policy = _policy_loader(name)(payload)
+        except ValueError as error:
+            raise ValueError(code + ": " + str(error)) from error
+        if (policy["policy_sha256"] != binding["policy_sha256"]
+                or {key: value for key, value in policy.items() if key != "policy_sha256"} != binding["values"]):
+            raise ValueError(code + ": values")
+        if snapshot is not None:
+            frozen_copy = snapshot["files"].get(config_path)
+            if frozen_copy is not None and frozen_copy["sha256"] != binding["file_sha256"]:
+                raise ValueError(code + ": execution snapshot copy differs")
+        loaded[name] = policy
+    return loaded
 
 
 def verify_frozen_inputs(manifest_path: Path) -> dict:
@@ -264,6 +408,24 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
     manifest_path = Path(manifest_path)
     document = read_inputs_manifest(manifest_path)
     root = manifest_path.parent.resolve()
+    from .endpoint_pose_acceptance import validate_endpoint_policy, validate_development_runtime
+    if "endpoint_policy" in document:
+        binding = document["endpoint_policy"]
+        if not isinstance(binding, dict) or set(binding) != {"sha256", "rule_version", "thresholds"}:
+            raise ValueError("INPUTS_ENDPOINT_POLICY_INVALID")
+        policy = validate_endpoint_policy({"kind": "ACT_ENDPOINT_POSE_POLICY", "schema_version": 1,
+                                            "rule_version": binding["rule_version"],
+                                            "thresholds": binding["thresholds"]})
+        if hashlib.sha256(_canonical(policy)).hexdigest() != binding["sha256"]:
+            raise ValueError("INPUTS_ENDPOINT_POLICY_INVALID")
+    if "runtime_policy" in document:
+        binding = document["runtime_policy"]
+        if not isinstance(binding, dict) or set(binding) != {"sha256", "path_policy", "rgb_sync", "safety_release", "hard_stops"}:
+            raise ValueError("INPUTS_RUNTIME_POLICY_INVALID")
+        policy = validate_development_runtime({"kind": "ACT_ENDPOINT_DEVELOPMENT_RUNTIME", "schema_version": 1,
+                                               **{key: value for key, value in binding.items() if key != "sha256"}})
+        if hashlib.sha256(_canonical(policy)).hexdigest() != binding["sha256"]:
+            raise ValueError("INPUTS_RUNTIME_POLICY_INVALID")
     for role, item in document["roles"].items():
         path = manifest_path.parent / item["path"]
         try:
@@ -277,6 +439,22 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
             raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}") from error
         if len(payload) != item["bytes"] or hashlib.sha256(payload).hexdigest() != item["sha256"]:
             raise ValueError(f"INPUTS_FROZEN_BYTES_INVALID: {role}")
+    if "execution_snapshot" in document:
+        from .execution_snapshot import verify_execution_snapshot
+        binding = document["execution_snapshot"]
+        model_identity = validate_execution_snapshot_binding(binding)
+        snapshot = verify_execution_snapshot(root / binding["path"], expected_sha256=binding["sha256"])
+        if model_identity is not None and any(snapshot[key] != value for key, value in model_identity.items()):
+            raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
+        if model_identity is not None and binding != execution_snapshot_binding(snapshot, root / binding["path"]):
+            raise ValueError("INPUTS_EXECUTION_PRODUCER_CONFIG_INVALID")
+        identity = document["roles"]["scene_model"]["identity"]
+        if (not isinstance(identity, dict) or snapshot["model_sha256"] != identity.get("model_sha256")
+                or snapshot["mujoco_version"] != identity.get("mujoco_version")
+                or snapshot["files"][snapshot["scene_path"]]["sha256"] != identity.get("scene_sha256")
+                or document["roles"]["scene_model"]["sha256"] != identity.get("scene_sha256")):
+            raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
+    verify_policy_bindings(document, manifest_path, snapshot if "execution_snapshot" in document else None)
     return document
 
 
@@ -302,7 +480,21 @@ def _parse_json(payload: bytes) -> dict:
     return document
 
 
-def _verify_roles(registry: dict) -> dict:
+def verify_contact_activation(payload: dict, receipt: dict, identity: dict, *, mode) -> None:
+    """The freeze-side activation check. A spot_check_candidate receipt passes only for a diagnostic freeze."""
+
+    from .contact_policy import spot_check_receipt_allowed, verify_activation
+
+    try:
+        verify_activation(payload, receipt, expected_model_sha256=identity["model_sha256"],
+                          expected_scene_sha256=identity["scene_sha256"],
+                          expected_mujoco_version=identity["mujoco_version"],
+                          allow_spot_check_candidate=spot_check_receipt_allowed(mode))
+    except ValueError as error:
+        raise ValueError("INPUT_ACTIVATION_STALE") from error
+
+
+def _verify_roles(registry: dict, *, mode=None) -> dict:
     """Resolve one approved candidate per role, run the semantic cross-checks, return the bytes.
 
     The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
@@ -311,6 +503,8 @@ def _verify_roles(registry: dict) -> dict:
     Per the owner amendment recorded in CP-1928 the registry's `source_commit` and `config_sha256`
     are recorded provenance, not a claim about the tree that happens to be running now.
     """
+
+    from .contact_policy import spot_check_receipt_allowed
 
     for role in INPUT_ROLES:
         item = registry["roles"].get(role)
@@ -327,6 +521,8 @@ def _verify_roles(registry: dict) -> dict:
             raise ValueError("INPUT_NOT_APPROVED")
         required = _ROLE_APPROVAL.get(role, "source_controlled")
         if entry["approval"] not in (required if isinstance(required, tuple) else (required,)):
+            raise ValueError("INPUT_NOT_APPROVED")
+        if entry["approval"] == "spot_check_candidate" and not spot_check_receipt_allowed(mode):
             raise ValueError("INPUT_NOT_APPROVED")
         if entry["approval"] == "source_controlled":
             if not Path(entry["path"]).is_relative_to(Path(registry["source_root"])):
@@ -359,10 +555,11 @@ def _verify_roles(registry: dict) -> dict:
             asserted_resource.get(key) != value for key, value in derived_resource.items()):
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
-    from .contact_calibration import verify_disabled_proposal
+    from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
 
     try:
-        verify_disabled_proposal(documents["contact_proposal"])
+        verify_disabled_proposal(documents["contact_proposal"],
+                                 validation_mode=proposal_validation_mode(documents["contact_proposal"]))
     except ValueError as error:
         raise ValueError("INPUT_NOT_APPROVED") from error
     identity = registry["roles"]["scene_model"]["identity"]
@@ -376,15 +573,7 @@ def _verify_roles(registry: dict) -> dict:
         # the policy was activated for a different scene or model; it does not apply here
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
-    from .contact_policy import verify_activation
-
-    try:
-        verify_activation(payload, documents["contact_activation"],
-                          expected_model_sha256=identity["model_sha256"],
-                          expected_scene_sha256=identity["scene_sha256"],
-                          expected_mujoco_version=identity["mujoco_version"])
-    except ValueError as error:
-        raise ValueError("INPUT_ACTIVATION_STALE") from error
+    verify_contact_activation(payload, documents["contact_activation"], identity, mode=mode)
     if documents["contact_activation"]["evidence_root"] != registry["evidence_root"]:
         raise ValueError("INPUT_ACTIVATION_STALE")
     for role in INPUT_ROLES:
@@ -397,7 +586,9 @@ def _verify_roles(registry: dict) -> dict:
 
 
 def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = None,
-                  endpoint_policy: Path | None = None, runtime_policy: Path | None = None) -> Path:
+                  runtime_policy: Path | None = None,
+                  execution_inputs: bool = False, teacher_endpoint: Path | None = None,
+                  teacher_execution_policy: Path | None = None, episode_recorder_policy: Path | None = None) -> Path:
     """Copy the uniquely verified candidates into a new directory and bind their bytes.
 
     The output directory must not exist: a freeze is a new immutable input set, never a merge into
@@ -414,21 +605,24 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
     target = Path(output)
     if target.exists():
         raise ValueError("INPUT_OUTPUT_EXISTS")
-    payloads = _verify_roles(registry)
+    payloads = _verify_roles(registry, mode=mode)
     roles = {}
     extra = {}
     if mode is not None:
         if mode not in ("formal", "preselected_target_diagnostic"):
             raise ValueError("INPUT_MODE_INVALID")
         extra["mode"] = mode
-    if endpoint_policy is not None:
-        from .endpoint_pose_acceptance import load_endpoint_policy
-        document = load_endpoint_policy(Path(endpoint_policy))
-        extra["endpoint_policy"] = {
-            "rule_version": document["rule_version"],
-            "thresholds": document["thresholds"],
-            "sha256": hashlib.sha256(_canonical(document)).hexdigest(),
-        }
+    policy_payloads = {}
+    for name, source in (("teacher_endpoint_v2", teacher_endpoint),
+                         ("teacher_execution_policy_v1", teacher_execution_policy),
+                         ("episode_recorder_v1", episode_recorder_policy)):
+        if source is None:
+            continue
+        path = Path(source)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("INPUTS_POLICY_BINDING_INVALID: " + name)
+        policy_payloads[name] = path.read_bytes()
+        extra[name] = policy_binding(name, policy_payloads[name])
     if runtime_policy is not None:
         from .endpoint_pose_acceptance import load_development_runtime
         document = load_development_runtime(Path(runtime_policy))
@@ -439,6 +633,13 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         }
     try:
         target.mkdir(parents=True)
+        for name, payload in policy_payloads.items():
+            destination = target / extra[name]["path"]
+            destination.parent.mkdir(exist_ok=True)
+            with open(destination, "xb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
         for role in INPUT_ROLES:
             entry = registry["roles"][role]["selected"]
             relative = Path(role) / Path(entry["path"]).name
@@ -454,7 +655,11 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
                            "sha256": hashlib.sha256(payload).hexdigest(),
                            "bytes": len(payload), "approval": entry["approval"],
                            "identity": registry["roles"][role]["identity"]}
-        manifest = {"kind": MANIFEST_KIND, "schema_version": SCHEMA_VERSION,
+        if execution_inputs:
+            from .execution_snapshot import freeze_execution_snapshot
+            snapshot = freeze_execution_snapshot(Path(registry["source_root"]), target / "execution")
+            extra["execution_snapshot"] = execution_snapshot_binding(snapshot, target / "execution")
+        manifest = {"kind": MANIFEST_KIND, "schema_version": MANIFEST_SCHEMA_VERSION,
                     "source_root": registry["source_root"],
                     "source_commit": registry["source_commit"],
                     "config_sha256": registry["config_sha256"],
@@ -472,7 +677,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             os.close(descriptor)
     except OSError as error:
         raise ValueError("INPUT_FREEZE_UNWRITABLE") from error
-    read_inputs_manifest(manifest_path)
+    verify_frozen_inputs(manifest_path)
     return manifest_path
 
 
@@ -487,10 +692,10 @@ ANCHOR_FILE = "src/so101_demo_py/config/act/task8-live-anchors.yaml"
 ANCHOR_APPROVAL_FILE = "src/so101_demo_py/config/act/task8-calibration-search-candidate-v1.json"
 SCENE_FILE = "src/so101_demo_py/assets/mujoco/act/scene.xml"
 COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection_v3.yaml"
-RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_v3_act_offline.yaml"   # CP-3456: stage bounds long enough for offline processing
 #: the design's section 5.1 document, which declares the two resource hard stops
 DEVELOPMENT_RUNTIME_FILE = "src/so101_demo_py/config/act/endpoint_pose_development_runtime_v1.yaml"
-RESET_RECIPE_FILE = "src/so101_demo_py/src/adapters/act/pick_place_reset.py"
+RESET_RECIPE_FILE = "src/so101_demo_py/src/backends/mujoco/reset.py"
 REFERENCE_FILE = "src/so101_demo_py/src/act/expert.py"
 
 # which measurements each value group needs; the report that carries them is the same artifact

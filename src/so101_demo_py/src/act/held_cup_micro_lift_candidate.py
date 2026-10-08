@@ -17,10 +17,10 @@ from so101_demo.adapters.act.physics import model_sha256
 from so101_demo.adapters.act.phase_contact_allowlist import PhaseContactAllowlist
 
 
-_PROFILE_SHA = "c950784be2827025cf8ce203d63a09adf6085f36b7a20cd9f6752837d93462b0"
+_PROFILE_SHA = "6b626287cdfefc8e210385a32abc76eb2800f23ff985783a055b3c84dd0ed437"
 _SOURCE_RESULT_SHA = "ae9450fe5216eaca3484d70834d6a76f673ccbd83479f8788c9a187cecfae0cf"
-_SCENE_SHA = "4db48e35df9e91fc6868d303725badd0237fb10754d1e298637f5b0e1e55ed4f"
-_MODEL_SHA = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+_SCENE_SHA = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
+_MODEL_SHA = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
 _POLICY_FINGERPRINT = "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11"
 _BASE_KIND = {
     "default": "ACT_TASK6_FULL_CONTACT_DIAGNOSTIC",

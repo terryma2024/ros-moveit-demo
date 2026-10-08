@@ -294,8 +294,12 @@ def create_process_layout(
     # placed three levels below its own root: ``root/scratch/<unique-run-id>/tmp``. The id is derived from the same
     # identity as ``physical_name``, so one process cannot collide with another's scratch, and every directory is created
     # explicitly with mode 0700 on a previously nonexistent path.
-    scratch_id = hashlib.sha256(identity_input + b"\0scratch").hexdigest()[:12]
-    scratch_root = root / "scratch"
+    # the scratch path shares the 107-byte AF_UNIX budget with every socket a shard binds under TMPDIR, and this task's
+    # evidence root is already 63 characters - so the layout is deliberately minimal: a one-character directory and a
+    # four-hex id. The id only has to disambiguate within one run root, and ``physical_name`` already carries the process
+    # identity in the same hash input, so shortening it costs no collision safety between processes.
+    scratch_id = hashlib.sha256(identity_input + b"\0scratch").hexdigest()[:4]
+    scratch_root = root / "s"
     scratch_run = scratch_root / scratch_id
     tmp_dir = scratch_run / "tmp"
     ros_home = root / "ros-home"

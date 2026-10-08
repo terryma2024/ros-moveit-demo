@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import sys
 import time
 
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
-from .client import FreeJointResetOverride, MujocoRosClient
+from .client import FreeJointResetOverride, JointResetOverride, MujocoRosClient
+from ...act.joints import ACT_JOINTS
 from .observer import EvidenceStale, MujocoWorldObserver
 from .reset import MujocoResetClient
 from ...core.simulation.types import ResetReceipt
@@ -29,7 +32,55 @@ class TransactionalResetEvidence:
         return getattr(self.receipt, name)
 
 
+def _log_pause_snapshot_failure(reason, observer, started_s, timeout_s, requests_sent,
+                                response_received, pause_accepted, stale_reads, non_paused_reads):
+    """Emit one observation-only stderr line; never raises."""
+    try:
+        def read(name, default=None):
+            try:
+                return getattr(observer, name)
+            except Exception:
+                return default
+
+        latest = None
+        try:
+            retained = observer.retained_with_receipts()
+            if retained:
+                record = retained[-1]
+                evidence = record.evidence
+                latest = {
+                    "paused": evidence.paused,
+                    "simulation_step": evidence.simulation_step,
+                    "simulation_time_s": evidence.simulation_time_s,
+                    "receipt_age_s": time.monotonic() - record.received_monotonic_s,
+                    "session_id": evidence.simulation_session_id,
+                    "reset_epoch": evidence.reset_epoch,
+                    "publisher_sequence": evidence.publisher_sequence,
+                }
+        except Exception:
+            latest = None
+        payload = {
+            "reason": reason,
+            "elapsed_s": time.monotonic() - started_s,
+            "timeout_s": timeout_s,
+            "requests_sent": requests_sent,
+            "response_received": response_received,
+            "pause_accepted": pause_accepted,
+            "publisher_count": read("publisher_count"),
+            "callback_count": read("callback_count"),
+            "rejected_count": read("rejected_count"),
+            "last_rejection": str(read("last_rejection", ""))[:200],
+            "latest": latest,
+            "stale_reads": stale_reads,
+            "non_paused_reads": non_paused_reads,
+        }
+        print("PAUSE_SNAPSHOT_FAILURE " + json.dumps(payload, default=str), file=sys.stderr, flush=True)
+    except Exception:
+        pass
+
+
 def _pause_snapshot(node, observer, timeout_s: float):
+    started_s = time.monotonic()
     client = node.create_client(SetPause, "/mujoco_ros2_control_node/set_pause")
     if not client.wait_for_service(timeout_sec=timeout_s):
         raise RuntimeError("pause service unavailable")
@@ -48,9 +99,13 @@ def _pause_snapshot(node, observer, timeout_s: float):
     future = None
     pause_accepted = False
     response_received = False
+    requests_sent = 0
+    stale_reads = 0
+    non_paused_reads = 0
     while rclpy.ok() and time.monotonic() <= deadline:
         now = time.monotonic()
         if future is None and now >= next_request_s:
+            requests_sent += 1
             future = client.call_async(request)
             next_request_s = now + retry_period_s
         rclpy.spin_once(node, timeout_sec=0.01)
@@ -64,14 +119,17 @@ def _pause_snapshot(node, observer, timeout_s: float):
         try:
             evidence = observer.snapshot()
         except EvidenceStale:
+            stale_reads += 1
             continue
         if evidence.paused:
             return evidence
-    if not response_received:
-        raise RuntimeError("pause snapshot request timed out")
-    if not pause_accepted:
-        raise RuntimeError("pause snapshot request failed")
-    raise RuntimeError("fresh paused atomic MuJoCo evidence unavailable")
+        non_paused_reads += 1
+    reason = ("pause snapshot request timed out" if not response_received
+              else "pause snapshot request failed" if not pause_accepted
+              else "fresh paused atomic MuJoCo evidence unavailable")
+    _log_pause_snapshot_failure(reason, observer, started_s, timeout_s, requests_sent,
+                                response_received, pause_accepted, stale_reads, non_paused_reads)
+    raise RuntimeError(reason)
 
 
 def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
@@ -97,9 +155,15 @@ def transactional_reset(
     expected_object_position=CUP_START,
     free_joint_overrides: tuple[FreeJointResetOverride, ...] = (),
     timeout_s: float = 10.0,
+    act_profile: bool = False,
 ):
-    """Run the qualified controller/pause/reset/epoch transaction."""
+    """Run the qualified controller/pause/reset/epoch transaction.
 
+    `act_profile=True` is the ACT station: the neck controller is switched with the arm and gripper and the seven ACT
+    joints are written and verified (with the paused scalar snapshot). It carries no broker, lease or reservation.
+    """
+
+    teacher = act_profile is True
     rclpy.init()
     service_node = rclpy.create_node("so101_teleop_mujoco_reset_services")
     joint_node = rclpy.create_node("so101_teleop_mujoco_reset_joints")
@@ -115,14 +179,16 @@ def transactional_reset(
         services,
         observer,
         simulation_session_id=simulation_session_id,
-        controller_names=CONTROLLERS,
-        expected_joint_positions=RESET_JOINTS,
+        controller_names=(*CONTROLLERS,"neck_controller") if teacher else CONTROLLERS,
+        expected_joint_positions=(0.,)*7 if teacher else RESET_JOINTS,
         expected_object_position=expected_object_position,
         timeout_s=timeout_s,
         progress=progress,
+        **({"expected_joint_names":ACT_JOINTS} if teacher else {}),
     )
     try:
-        receipt = resetter.reset(keyframe, free_joint_overrides)
+        reset_kwargs={"joint_overrides":tuple(JointResetOverride(name,0.) for name in ACT_JOINTS)} if teacher else {}
+        receipt = resetter.reset(keyframe, free_joint_overrides,**reset_kwargs)
         return TransactionalResetEvidence(receipt, services.latest_joint_positions())
     finally:
         observer_node.destroy_node()

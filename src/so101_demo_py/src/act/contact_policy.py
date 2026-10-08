@@ -40,6 +40,30 @@ _RECEIPT_KEYS = frozenset(
 )
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 
+#: The user's recorded rule deviation (CP-3389): fit offline, validate with Teacher spot-checks instead of the live cohort.
+VALIDATION_OFFLINE_SPOT_CHECK = "offline_fit_teacher_spot_check"
+VALIDATION_DECISION = "CP-3389"
+VALIDATION_MODES = (VALIDATION_OFFLINE_SPOT_CHECK,)
+#: A receipt kind that may only be used by a preselected_target_diagnostic freeze (never by default, never installed).
+SPOT_CHECK_CANDIDATE = "spot_check_candidate"
+SPOT_CHECK_FREEZE_MODE = "preselected_target_diagnostic"
+_CANDIDATE_APPROVER = re.compile(r"(plan|agent):[A-Za-z0-9_.:/-][A-Za-z0-9_.:/ -]*\Z")
+
+
+def validation_descriptor_sha256(mode: str = VALIDATION_OFFLINE_SPOT_CHECK) -> str:
+    """The value `live_collector_sha256` carries in a spot-check proposal: the mode is inside the fingerprint."""
+
+    if mode not in VALIDATION_MODES:
+        raise ValueError("unknown validation mode")
+    return hashlib.sha256(json.dumps({"validation_mode": mode, "decision": VALIDATION_DECISION}, sort_keys=True,
+                                     separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+
+
+def spot_check_receipt_allowed(frozen_mode) -> bool:
+    """Only a frozen preselected_target_diagnostic input set may carry a spot_check_candidate receipt."""
+
+    return frozen_mode == SPOT_CHECK_FREEZE_MODE
+
 
 def _exact(value: Any, fields: frozenset[str], name: str) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != fields:
@@ -119,12 +143,25 @@ def verify_activation(
     expected_model_sha256: str | None = None,
     expected_scene_sha256: str | None = None,
     expected_mujoco_version: str | None = None,
+    allow_spot_check_candidate: bool = False,
 ) -> None:
-    """Fail closed unless a distinct receipt approves this exact applicable payload."""
+    """Fail closed unless a distinct receipt approves this exact applicable payload.
+
+    A receipt of kind `spot_check_candidate` is refused unless the caller opts in (only a frozen
+    preselected_target_diagnostic input set does); it must name a plan or agent, never the user, and apply to a payload
+    bound to the offline_fit_teacher_spot_check validation mode.
+    """
 
     try:
         fingerprint = policy_fingerprint(payload)
-        approved = _exact(receipt, _RECEIPT_KEYS, "activation receipt")
+        keyed = isinstance(receipt, dict) and "receipt_kind" in receipt
+        approved = _exact(receipt, _RECEIPT_KEYS | ({"receipt_kind"} if keyed else set()), "activation receipt")
+        if keyed:
+            if (not allow_spot_check_candidate or approved["receipt_kind"] != SPOT_CHECK_CANDIDATE
+                    or payload["live_collector_sha256"] != validation_descriptor_sha256()
+                    or not isinstance(approved["approved_by"], str)
+                    or _CANDIDATE_APPROVER.fullmatch(approved["approved_by"]) is None):
+                raise ValueError("spot-check candidate receipt not allowed")
         if _sha(approved["policy_fingerprint"], "policy_fingerprint") != fingerprint:
             raise ValueError("fingerprint mismatch")
         if _sha(approved["source_evidence_sha256"], "source_evidence_sha256") != payload["source_evidence_sha256"]:

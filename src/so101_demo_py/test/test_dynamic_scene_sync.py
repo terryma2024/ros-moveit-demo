@@ -558,6 +558,75 @@ def _options(tmp_path: Path):
     )
 
 
+@pytest.mark.parametrize("faults", [frozenset(), frozenset({"runner.run"}), frozenset({"execution.close"})])
+def test_the_teacher_runtime_retains_cleanup_on_failure_and_holds_no_recorder(tmp_path, faults):
+    """The Teacher child records nothing (Phase A4c): its exit code is 0 when it completed and 1 otherwise."""
+    import inspect
+
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    assert "episode_recorder" not in inspect.signature(run_dynamic_execute).parameters
+    events = []
+    observations = tuple(replace(_observation(simulator_x=-0.03, moveit_x=-0.03),
+                                 simulation_time_s=2.0 + index * 0.1,
+                                 simulation_step=10 + index, publisher_sequence=20 + index,
+                                 cup_body="plastic_cup") for index in range(4))
+    runtime = _runtime(events, observations=observations, scene=RecordingTaskScenePort(), faults=faults)
+    code = run_dynamic_execute(_options(tmp_path), _runtime=runtime)
+    assert code == (1 if faults else 0)
+    assert "truth.observe" not in events[events.index("runner.run"):], "no terminal source read: that was data-side work"
+    assert events.count("execution.close") == events.count("node.close") == events.count("ros.shutdown") == 1
+
+
+@pytest.mark.parametrize("flag", [True, False, None])
+def test_the_final_stop_proof_is_enabled_only_by_the_collection_flag(tmp_path, flag):
+    """`--collection on` reaches the Teacher as `--final-stop-proof`; nothing else turns the extra stop request on."""
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events = []
+    runtime = _runtime(events, observations=(_observation(simulator_x=-.03, moveit_x=.02),
+                                             _observation(simulator_x=-.03), _observation(simulator_x=-.03)),
+                       scene=RecordingTaskScenePort())
+    built = []
+    make_execution = runtime.execution
+
+    def execution(*args, **kwargs):
+        built.append(make_execution(*args, **kwargs))
+        return built[-1]
+
+    runtime.execution = execution
+    options = _options(tmp_path)
+    if flag is not None:
+        options.final_stop_proof = flag
+    assert run_dynamic_execute(options, _runtime=runtime) == 0
+    assert getattr(built[0], "final_stop_proof_enabled", False) is (flag is True)
+
+
+def test_the_runner_reads_the_teachers_own_observer_and_no_data_side_is_armed(tmp_path):
+    """No wrapper copies the Teacher's observations (A4a) and nothing is armed for a capture (A4c)."""
+    from so101_demo.ros.dynamic_runtime import run_dynamic_execute
+
+    events = []
+    runtime = _runtime(events, observations=(_observation(simulator_x=-.03, moveit_x=.02),
+                                             _observation(simulator_x=-.03), _observation(simulator_x=-.03)),
+                       scene=RecordingTaskScenePort())
+    built, captured = [], []
+    make_execution, make_runner = runtime.execution, runtime.runner
+
+    def execution(*args, **kwargs):
+        built.append(make_execution(*args, **kwargs))
+        return built[-1]
+
+    def runner(actions, **kwargs):
+        captured.append(kwargs)
+        return make_runner(actions, **kwargs)
+
+    runtime.execution, runtime.runner = execution, runner
+    assert run_dynamic_execute(_options(tmp_path), _runtime=runtime) == 0
+    assert captured[0]["world_observer"] is built[0].observer
+    assert not hasattr(built[0], "episode_recorder") and not hasattr(built[0], "_data_start_step")
+
+
 def test_run_dynamic_execute_orders_scene_convergence_before_motion_construction(
     tmp_path,
     capsys,

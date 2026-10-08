@@ -557,6 +557,7 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     ipc_root.mkdir()
     owner.authority = SimpleNamespace(ipc_root=ipc_root)
     owner.broker_generation = 0
+    owner._uses_production_broker_container = False
     owner.adaptive_context = SimpleNamespace(
         request=SimpleNamespace(worker_count=worker_count),
         options=SimpleNamespace(yolo_executor_count=2),
@@ -579,6 +580,7 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     owner._prepare_broker_generation(1)
 
     document = json.loads(owner.broker_spec_path.read_text(encoding="utf-8"))
+    assert document["config_path"] == str(owner.broker_spec_path.parent / "runtime-config.yaml")
     expected_deadline = max(
         config.yolo_queue_timeout_s + config.yolo_inference_timeout_s,
         config.grounded_sam_queue_timeout_s

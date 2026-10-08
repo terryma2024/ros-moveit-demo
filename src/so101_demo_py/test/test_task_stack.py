@@ -329,3 +329,52 @@ def test_a_stack_role_outside_the_owner_vocabulary_is_not_recorded(tmp_path: Pat
     stack.shutdown()
 
     assert not (tmp_path / "owner-tree").exists()
+
+
+def test_owned_consumer_explicitly_inherits_only_command_even_when_owner_fd_is_inheritable(tmp_path):
+    import os
+    import socket
+    import subprocess
+    import sys
+    from so101_demo.runtime.task_stack import OwnedProcessGroup, StackProcessSpec
+    command, peer=socket.socketpair()
+    owner, owner_peer=socket.socketpair()
+    os.set_inheritable(owner.fileno(),True)
+    owner_identity=os.fstat(owner.fileno())
+    output=tmp_path/"actual-consumer-fds.json"
+    program='''import json,os,socket,sys
+command_fd,owner_fd,owner_dev,owner_ino=map(int,sys.argv[1:])
+command=socket.socket(fileno=command_fd)
+command.sendall(b"ready")
+assert command.recv(1)==b"x"
+try:
+    info=os.fstat(owner_fd)
+    owner_visible=(info.st_dev,info.st_ino)==(owner_dev,owner_ino)
+except OSError:
+    owner_visible=False
+print(json.dumps({"command_visible":True,"owner_visible":owner_visible}))
+'''
+    with output.open("w") as sink:
+        def launched(argv,**kwargs):
+            child=subprocess.Popen(argv,stdout=sink,**kwargs)
+            try:
+                # Actual child readiness makes /proc's post-exec identity
+                # available; retain the strict complete identity assertions.
+                peer.settimeout(3)
+                assert peer.recv(5,socket.MSG_PEEK)==b"ready"
+                return child
+            except BaseException:
+                child.terminate();child.wait(timeout=3)
+                raise
+        group=OwnedProcessGroup(popen=launched,owner_environment={})
+        try:
+            group.start(StackProcessSpec("dynamic-consumer",(sys.executable,"-c",program,str(command.fileno()),
+                str(owner.fileno()),str(owner_identity.st_dev),str(owner_identity.st_ino))),pass_fds=(command.fileno(),))
+            peer.settimeout(3)
+            assert peer.recv(5)==b"ready"
+            peer.sendall(b"x")
+            assert group._children[0][1].wait(timeout=3)==0
+        finally:
+            group.shutdown()
+            command.close();peer.close();owner.close();owner_peer.close()
+    assert json.loads(output.read_text())=={"command_visible":True,"owner_visible":False}

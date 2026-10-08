@@ -1076,8 +1076,8 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
         "attached_object_ids": [],
         "world_primitive_counts": {"plastic_cup": 13},
     }
-    return {
-        "schema": "so101-dynamic-mujoco-execute-v1",
+    document = {
+        "schema": "so101-dynamic-mujoco-execute-v2",
         "parallel_lease_identity": {
             "batch_id": lease.batch_id,
             "coordinator_epoch": lease.coordinator_epoch,
@@ -1109,6 +1109,40 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
             "capture_errors": [],
         } if failed else None),
     }
+    document.update(_teacher_v2_fields(failed))
+    return document
+
+
+def _teacher_v2_observation(position, time_s):
+    return {
+        "position": list(position),
+        "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        "simulation_time_s": time_s, "frame_id": "world", "object_id": "plastic_cup",
+        "session_id": "session-1", "reset_epoch": 17,
+    }
+
+
+def _teacher_v2_fields(failed, *, result="PASS", reasons=(), execution=None):
+    """The Teacher-owned v2 fields: a clean DONE run passes; a pre-motion ERROR is a FAILED execution."""
+
+    start = _teacher_v2_observation([-0.02, -0.28, 0.165], 1.0)
+    end = None if failed or result == "UNCONFIRMED" else _teacher_v2_observation([-0.08, -0.25, 0.1648], 9.0)
+    task = {
+        "rule_version": "teacher_endpoint_v2", "policy_sha256": "b" * 64,
+        "result": "UNCONFIRMED" if failed else result, "reasons": ["END_OBSERVATION_UNCONFIRMED: x"] if failed
+        else list(reasons), "measured": {},
+        "start_target": {"position": [-0.02, -0.28, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+        "end_target": {"position": [-0.08, -0.25, 0.1648], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},
+        "start_observation": start, "end_observation": end,
+    }
+    return {
+        "teacher_execution_status": execution or ("FAILED" if failed else "COMPLETED"),
+        "teacher_task_result": task,
+        "teacher_start_observation": start, "teacher_end_observation": end,
+        "act_data_status": "DISABLED", "process_diagnostics": [],
+    }
+
+
 def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     from so101_demo.application.object_pose import LocalizationError
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
@@ -1961,6 +1995,8 @@ def test_post_submission_error_without_controller_settlement_is_indeterminate(
             "planning_scene_readback": scene,
             "capture_errors": [],
         },
+        # the controller never settled after the submission, so the Teacher itself reports INDETERMINATE
+        teacher_execution_status="INDETERMINATE",
     )
     manifest_path.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 256))
@@ -2044,15 +2080,14 @@ def test_runtime_rejects_untrusted_final_pose_claims(
     document = _dynamic_execute_manifest(
         lease, session_id="session-1", policy_path=policy
     )
+    task = document["teacher_task_result"]
     if corruption == "producer_target":
-        document["final_samples"][0]["cup_position_world_m"][:2] = [9.0, 9.0]
-        validation = next(
-            item for item in document["state_events"]
-            if item["state"] == "VALIDATE_FINAL_PLACEMENT"
-        )
-        validation["expected_cup_pose_world"][:2] = [9.0, 9.0]
+        task["end_target"]["position"][:2] = [9.0, 9.0]
+        task["end_observation"]["position"][:2] = [9.0, 9.0]
+        document["teacher_end_observation"] = task["end_observation"]
     else:
-        document["final_samples"][0]["cup_orientation_world_xyzw"] = [0.0] * 4
+        task["end_observation"]["orientation"] = {"x": 0.0, "y": 0.0, "z": 0.0, "w": 0.0}
+        document["teacher_end_observation"] = task["end_observation"]
     manifest_path.write_text(json.dumps(document), encoding="utf-8")
     monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 0))
     ports = ParallelRosRuntimePorts(
@@ -2073,4 +2108,227 @@ def test_runtime_rejects_untrusted_final_pose_claims(
     )
 
     assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+def _execute_with_manifest(tmp_path, monkeypatch, document_factory, *, wait_status=0):
+    return _execute_with_ports(tmp_path, monkeypatch, document_factory, wait_status=wait_status)[1]
+
+
+def _execute_with_ports(tmp_path, monkeypatch, document_factory, *, wait_status=0):
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    lease = _lease()
+    worker_root = tmp_path / "worker-01"
+    manifest = (
+        worker_root / "attempts" / lease.point_id / lease.attempt_id
+        / "working" / "dynamic" / "dynamic-execute-manifest.json"
+    )
+    manifest.parent.mkdir(parents=True)
+    policy = tmp_path / "mujoco.yaml"
+    policy.write_bytes(b"policy\n")
+    manifest.write_text(json.dumps(document_factory(lease, policy)), encoding="utf-8")
+    monkeypatch.setattr(os, "waitpid", lambda *_args: (417, wait_status))
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"),
+        catalog={},
+        dependencies={
+            "dynamic_policy_identity": lambda: (
+                str(policy), hashlib.sha256(policy.read_bytes()).hexdigest()
+            ),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
+        },
+    )
+    return ports, ports.execute_result(
+        lease, SimpleNamespace(reset_epoch="reset-17"), SimpleNamespace(pid=417)), lease
+
+
+@pytest.mark.parametrize(
+    "result,reasons,expected_status",
+    [
+        ("PASS", [], "PASSED"),
+        ("FAIL", ["FINAL_XY_OUT_OF_TOLERANCE"], "FAILED"),
+        ("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"], "INDETERMINATE"),
+    ],
+)
+def test_v2_worker_classifies_the_teacher_task_result(
+        tmp_path, monkeypatch, result, reasons, expected_status):
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
+        document.update(_teacher_v2_fields(False, result=result, reasons=reasons))
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
+
+    assert receipt.decision.status.value == expected_status
+    if result != "PASS":
+        assert receipt.decision.reason.startswith("TEACHER_TASK_")
+        assert reasons[0].split(":")[0] in receipt.decision.reason
+
+
+@pytest.mark.parametrize("schema", ["so101-dynamic-mujoco-execute-v3", "so101-dynamic-mujoco-execute-v0", None])
+def test_worker_rejects_unknown_manifest_versions(tmp_path, monkeypatch, schema):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
+        if schema is None:
+            document.pop("schema")
+        else:
+            document["schema"] = schema
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+def test_worker_treats_a_v1_manifest_as_read_only_legacy_and_never_passes(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
+        document["schema"] = "so101-dynamic-mujoco-execute-v1"
+        for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
+                    "teacher_end_observation", "act_data_status", "process_diagnostics"):
+            document.pop(key)
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY"
+
+
+def test_v2_worker_rejects_a_pass_whose_execution_did_not_complete(tmp_path, monkeypatch):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status="ERROR")
+        document["teacher_task_result"]["result"] = "PASS"
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build, wait_status=256)
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+def test_a_done_run_with_audit_only_process_diagnostics_still_passes(tmp_path, monkeypatch):
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
+        document["process_diagnostics"] = [{"code": "DYNAMIC_EARLY_TABLE_CONTACT", "state": "LIFT",
+                                            "audit_only": True, "count": 3}]
+        return document
+
+    receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
+
+    assert receipt.decision.status.value == "PASSED"
+    assert receipt.decision.reason == "OK"
+
+
+# ---- A4c: the Teacher child exits 0 (COMPLETED) or 1; the data verdict is the Recorder's, never the exit code -------
+
+RC_DATA_INVALID = 3 << 8   # the retired "Teacher COMPLETED, data INVALID" code: no process returns it any more
+
+
+def _v2_with(data_status, *, result="PASS", reasons=(), status="DONE"):
+    def build(lease, policy):
+        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status=status)
+        document.update(_teacher_v2_fields(status != "DONE", result=result, reasons=reasons))
+        document["act_data_status"] = data_status
+        return document
+    return build
+
+
+def test_a_done_run_with_the_retired_data_invalid_exit_code_is_unverifiable(tmp_path, monkeypatch):
+    """REPLACED_BY the Recorder verdict: exit 3 used to say 'Teacher COMPLETED, data INVALID'; the Teacher has no data
+    side now, so a DONE manifest ending with anything but exit 0 is an inconsistent receipt and claims nothing."""
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _v2_with("DISABLED"), wait_status=RC_DATA_INVALID)
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+    assert receipt.decision.act_data_status == "INVALID"
+
+
+def test_done_with_exit_0_carries_the_teacher_fields_and_the_constant_disabled_data_status(tmp_path, monkeypatch):
+    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _v2_with("DISABLED"))
+
+    assert receipt.decision.status.value == "PASSED"
+    assert (receipt.decision.teacher_execution_status, receipt.decision.teacher_task_result) == ("COMPLETED", "PASS")
+    assert receipt.decision.act_data_status == "DISABLED", "the Recorder's verdict replaces it afterwards"
+    assert not hasattr(ports, "act_data_status"), "the per-attempt side table is replaced by the decision fields"
+
+
+def test_a_teacher_task_fail_with_exit_0_is_a_fail_with_disabled_data(tmp_path, monkeypatch):
+    ports, receipt, lease = _execute_with_ports(
+        tmp_path, monkeypatch, _v2_with("DISABLED", result="FAIL", reasons=["FINAL_XY_OUT_OF_TOLERANCE"]))
+
+    assert receipt.decision.status.value == "FAILED"
+    assert receipt.decision.reason == "TEACHER_TASK_FAIL:FINAL_XY_OUT_OF_TOLERANCE"
+    assert (receipt.decision.teacher_execution_status, receipt.decision.teacher_task_result) == ("COMPLETED", "FAIL")
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["exit3_disabled", "exit3_v1", "exit1_done"],
+)
+def test_inconsistent_exit_code_and_manifest_never_classify(tmp_path, monkeypatch, case):
+    from so101_demo.parallel_batch.contracts import AttemptStatus
+
+    def build(lease, policy):
+        document = _v2_with("DISABLED")(lease, policy)
+        if case == "exit3_v1":
+            document["schema"] = "so101-dynamic-mujoco-execute-v1"
+            for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
+                        "teacher_end_observation", "act_data_status", "process_diagnostics"):
+                document.pop(key)
+        return document
+
+    wait_status = {"exit1_done": 1 << 8}.get(case, RC_DATA_INVALID)
+    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, build, wait_status=wait_status)
+
+    assert receipt.decision.status is AttemptStatus.INDETERMINATE
+    assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+    # an unverifiable receipt claims nothing positive: INDETERMINATE/UNCONFIRMED with the data marked INVALID
+    assert (receipt.decision.teacher_execution_status, receipt.decision.teacher_task_result) == (
+        "INDETERMINATE", "UNCONFIRMED")
+    assert receipt.decision.act_data_status == "INVALID"
+
+
+# ---- C4: the Teacher of a frozen run records the frozen snapshot's policy path, not the worker's installed one -----
+
+def _frozen_policy_receipt(tmp_path, monkeypatch, *, frozen_bytes):
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+
+    lease = _lease()
+    worker_root = tmp_path / "worker-01"
+    manifest = (worker_root / "attempts" / lease.point_id / lease.attempt_id
+                / "working" / "dynamic" / "dynamic-execute-manifest.json")
+    manifest.parent.mkdir(parents=True)
+    installed = tmp_path / "installed" / "mujoco.yaml"
+    frozen = tmp_path / "frozen-snapshot" / "mujoco.yaml"
+    for path, data in ((installed, b"policy\n"), (frozen, frozen_bytes)):
+        path.parent.mkdir()
+        path.write_bytes(data)
+    document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=frozen)
+    manifest.write_text(json.dumps(document), encoding="utf-8")
+    monkeypatch.setattr(os, "waitpid", lambda *_args: (417, 0))
+    ports = ParallelRosRuntimePorts(
+        SimpleNamespace(worker_root=worker_root, session_id="session-1"), catalog={},
+        dependencies={
+            "dynamic_policy_identity": lambda: (str(installed), hashlib.sha256(installed.read_bytes()).hexdigest()),
+            "expected_final_cup_pose_world": lambda: EXPECTED_FINAL_CUP_POSE_WORLD,
+        })
+    return ports.execute_result(lease, SimpleNamespace(reset_epoch="reset-17"), SimpleNamespace(pid=417))
+
+
+def test_c4_a_frozen_snapshot_policy_with_the_same_bytes_is_the_trusted_policy(tmp_path, monkeypatch):
+    receipt = _frozen_policy_receipt(tmp_path, monkeypatch, frozen_bytes=b"policy\n")
+    assert receipt.decision.reason != "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
+
+
+def test_c4_a_policy_with_other_bytes_is_still_refused(tmp_path, monkeypatch):
+    receipt = _frozen_policy_receipt(tmp_path, monkeypatch, frozen_bytes=b"other\n")
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"

@@ -1,5 +1,6 @@
 """Physical diagnostic motions are frozen before any live command authority."""
 
+from act_identity import ACT_MODEL_SHA256
 from pathlib import Path
 import hashlib
 import json
@@ -41,7 +42,7 @@ def test_diagnostic_regimes_freeze_real_model_and_controller_grid(regime, rows):
     assert manifest["eligible_for_collection"] is False
     assert manifest["backend"] == "mujoco"
     assert manifest["mujoco_version"] == "3.12.0"
-    assert manifest["model_sha256"] == "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+    assert manifest["model_sha256"] == ACT_MODEL_SHA256
     assert manifest["path_step_s"] == .02
     assert manifest["path_clearance_m"] == .002
     assert manifest["velocity_limit_rad_s"] == [.5] * 6

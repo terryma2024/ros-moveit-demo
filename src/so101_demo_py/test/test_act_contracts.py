@@ -73,6 +73,46 @@ def test_prefix_explicit_first_target_delay_is_closed():
             validate_action_prefix(dict(prefix, **changes))
 
 
+def test_explicit_physics_grid_accepts_dense_held_motion_without_changing_legacy():
+    prefix = dict(
+        session_id="s", attempt_id="a", sequence=0,
+        observation_time_s=1., first_target_delay_s=.1,
+        target_interval_s=.002,
+        target_times_s=[1.1 + .002 * index for index in range(1, 601)],
+        positions=[[0.] * 6 for _ in range(600)],
+    )
+    checked = validate_action_prefix(prefix)
+    assert checked["target_interval_s"] == .002
+    assert len(checked["positions"]) == 600
+    legacy = {key: value for key, value in prefix.items()
+              if key not in ("target_interval_s", "target_times_s", "positions")}
+    legacy.update(target_times_s=[1.2, 1.3], positions=[[0.] * 6] * 2)
+    assert validate_action_prefix(legacy)["target_times_s"] == (1.2, 1.3)
+
+
+def test_physics_grid_rejects_missing_delay_mixed_ticks_and_overlong_goal():
+    prefix = dict(
+        session_id="s", attempt_id="a", sequence=0,
+        observation_time_s=1., first_target_delay_s=.1,
+        target_interval_s=.002,
+        target_times_s=[1.102, 1.104],
+        positions=[[0.] * 6, [0.] * 6],
+    )
+    for changed in (
+        {"first_target_delay_s": None},
+        {"target_interval_s": .1},
+        {"target_interval_s": True},
+        {"target_times_s": [1.102, 1.105]},
+        {"target_times_s": [1.102] * 601,
+         "positions": [[0.] * 6 for _ in range(601)]},
+    ):
+        forged = dict(prefix, **changed)
+        if forged.get("first_target_delay_s") is None:
+            del forged["first_target_delay_s"]
+        with pytest.raises(ContractError):
+            validate_action_prefix(forged)
+
+
 def test_fixed_deadline_rejects_bad_and_backwards_time():
     budget = Deadline(started_wall_s=10.)
     assert not budget.expired(129.999)

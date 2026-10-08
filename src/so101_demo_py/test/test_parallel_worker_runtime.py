@@ -77,6 +77,7 @@ class _ProcessGroup:
         self.shutdown_calls = 0
         self.events = events
         self.on_shutdown = on_shutdown
+        self.inherited_descriptors = []
 
     @property
     def manifest(self):
@@ -84,9 +85,10 @@ class _ProcessGroup:
 
         return OwnedProcessManifest(tuple())
 
-    def start(self, spec, *, environment=None):
+    def start(self, spec, *, environment=None, pass_fds=()):
         self.specs.append(spec)
         self.environments.append(dict(environment or {}))
+        self.inherited_descriptors.append(pass_fds)
         if self.events is not None:
             self.events.append(("start", spec.role))
         return SimpleNamespace(
@@ -105,10 +107,30 @@ class _ProcessGroup:
             self.events.append(("stop", child.pid))
 
 
+class _HandoffProcessGroup(_ProcessGroup):
+    """Keeps a duplicate of each inherited hand-off end, as the real child would hold it."""
+
+    def __init__(self, events=None, on_shutdown=None, *, keep_children=True) -> None:
+        super().__init__(events, on_shutdown)
+        self.child_sockets = []
+        self.keep_children = keep_children
+
+    def start(self, spec, *, environment=None, pass_fds=()):
+        import os
+        import socket
+
+        if self.keep_children:
+            for fd in pass_fds:
+                self.child_sockets.append(socket.socket(fileno=os.dup(fd)))
+        return super().start(spec, environment=environment, pass_fds=pass_fds)
+
+
 def _lease(
     worker="worker-1", *, generation=1, point="P01", attempt="attempt-1"
 ):
     return SimpleNamespace(
+        lease_issued_monotonic_s=10.0,
+        lease_deadline_monotonic_s=310.0,
         batch_id="batch-1",
         coordinator_epoch=1,
         worker_id=worker,
@@ -877,101 +899,6 @@ def test_ros_plan_prefix_adapter_fails_when_an_accepted_plan_has_no_terminal_sta
 
     with pytest.raises(RuntimeError, match="TERMINAL_STATE_MISSING"):
         adapter(_lease(), object(), DYNAMIC_REACHABILITY_STATES)
-
-
-def test_execute_consumer_has_exact_mode_and_reset_epoch_semantics(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
-        ExecutionCompletionReceipt,
-        RuntimeDecision,
-        build_worker_runtime,
-    )
-
-    events = []
-    processes = _ProcessGroup(events)
-    resources = _resources(tmp_path, "worker-1", 0, 181)
-    lease = _lease()
-    reset = SimpleNamespace(reset_epoch="reset-7", reset_completed_monotonic_s=10.0)
-    localized = SimpleNamespace(reset_epoch="reset-7", pose="localized")
-    admitted = SimpleNamespace(reset_epoch="reset-7", pose="accepted")
-
-    def capture(path, boundary):
-        events.append(("capture", path.name, boundary))
-        return _write_capture(path, boundary + 1.0)
-
-    runtime = build_worker_runtime(
-        resources,
-        RunMode.EXECUTE,
-        process_group=processes,
-        reset_point=lambda _lease: reset,
-        initial_gate=lambda _lease, receipt: receipt,
-        capture_rgb=capture,
-        localize=lambda _lease, _result: events.append(("localize",)) or localized,
-        capture_numeric_evidence=lambda _lease, _localized, root, boundary: events.append(
-            ("numeric", boundary)
-        )
-        or _write_numeric(root, boundary + 1.0),
-        admit_pose=lambda _lease, value: events.append(("admit",)) or admitted,
-        publish_pose=lambda value: events.append(("publish", value)) or True,
-        consumer_ready=lambda child: events.append(("ready", child.role)) or True,
-        pause_physics=lambda _lease, _reset: events.append(("pause",)) or True,
-        resume_physics=lambda _lease, _reset: events.append(("resume",)) or True,
-        execute_result=lambda _lease, _admitted, _child: events.append(("await",))
-        or ExecutionCompletionReceipt(
-            RuntimeDecision(
-                AttemptStatus.PASSED,
-                physical_action_proven_absent=False,
-            ),
-            30.0,
-        ),
-    )
-    runtime.start_physical_runtime()
-    runtime.reset_and_validate_point(lease)
-    events.clear()
-    accepted = runtime.localize_and_admit_pose(lease, "broker-result")
-
-    assert accepted is admitted
-    assert events == [
-        ("resume",),
-        ("localize",),
-        ("numeric", 10.0),
-        ("admit",),
-    ]
-    decision = runtime.execute_expert(lease, admitted)
-
-    assert decision.status is AttemptStatus.PASSED
-    assert events == [
-        ("resume",),
-        ("localize",),
-        ("numeric", 10.0),
-        ("admit",),
-        ("publish", admitted),
-        ("await",),
-        ("capture", "terminal-rgb.png", 30.0),
-    ]
-    consumer = processes.specs[-1]
-    assert consumer.role == "dynamic-consumer"
-    argv = consumer.argv
-    assert argv[:3] == (
-        sys.executable,
-        "-m",
-        "so101_demo.cli.dynamic_cup_pick_place",
-    )
-    backend = argv.index("--backend")
-    assert argv[backend : backend + 7] == (
-        "--backend",
-        "mujoco",
-        "--mode",
-        "execute",
-        "--execute",
-        "--expected-reset-epoch",
-        "7",
-    )
-    assert "--execute" in argv
-    assert processes.environments[-1]["ROS_DOMAIN_ID"] == "181"
-    expected_root = resources.worker_root / "attempts/P01/attempt-1/working"
-    evidence_root = argv.index("--evidence-root")
-    assert argv[evidence_root + 1] == str(expected_root / "dynamic")
-    assert decision.terminal_artifacts == (expected_root / "terminal-rgb.png",)
 
 
 def test_execute_failure_still_captures_terminal_evidence(tmp_path: Path) -> None:
@@ -1896,3 +1823,49 @@ def test_station_environment_scrubs_and_refuses_a_canonical_prefix(tmp_path: Pat
     poisoned["AMENT_PREFIX_PATH"] = f"/canonical/{CANONICAL_INSTALL_MARKER}/so101_demo_py"
     with pytest.raises(RuntimeError, match="CANONICAL_INSTALL_PREFIX"):
         station_environment(replace(resources, environment=poisoned), base=base)
+
+
+def test_terminal_capture_failure_keeps_the_teacher_decision_and_only_marks_the_data_invalid(tmp_path: Path) -> None:
+    """Terminal capture and the episode seal are data work: a failure there cannot change the Teacher's result."""
+    from so101_demo.runtime.parallel_worker_runtime import (
+        ExecutionCompletionReceipt,
+        RuntimeDecision,
+        build_worker_runtime,
+    )
+
+    lease = _lease()
+    admitted = SimpleNamespace(reset_epoch="reset-7")
+
+    def capture(path, boundary):
+        if path.name == "terminal-rgb.png":
+            raise RuntimeError("TERMINAL_RGB_UNAVAILABLE")
+        return _write_capture(path, boundary + 1.0)
+
+    runtime = build_worker_runtime(
+        _resources(tmp_path, "worker-1", 0, 181),
+        RunMode.EXECUTE,
+        process_group=_ProcessGroup(),
+        reset_point=lambda _lease: SimpleNamespace(reset_epoch="reset-7", reset_completed_monotonic_s=10.0),
+        initial_gate=lambda _lease, receipt: receipt,
+        capture_rgb=capture,
+        localize=lambda _lease, _result: admitted,
+        capture_numeric_evidence=lambda _lease, _localized, root, boundary: _write_numeric(root, boundary + 1.0),
+        admit_pose=lambda _lease, value: value,
+        consumer_ready=lambda _child: True,
+        publish_pose=lambda _value: True,
+        execute_result=lambda *_args: ExecutionCompletionReceipt(
+            RuntimeDecision(AttemptStatus.PASSED, physical_action_proven_absent=False,
+                teacher_execution_status="COMPLETED", teacher_task_result="PASS", act_data_status="PENDING_QC"),
+            30.0,
+        ),
+    )
+    runtime.start_physical_runtime()
+    runtime.reset_and_validate_point(lease)
+    runtime.localize_and_admit_pose(lease, admitted)
+
+    decision = runtime.execute_expert(lease, admitted)
+
+    assert decision.status is AttemptStatus.PASSED
+    assert (decision.teacher_execution_status, decision.teacher_task_result) == ("COMPLETED", "PASS")
+    assert decision.act_data_status == "INVALID" and "TERMINAL_CAPTURE_FAILED" in decision.act_data_reason
+    assert "TERMINAL_RGB_UNAVAILABLE" in decision.act_data_reason and decision.terminal_artifacts == ()

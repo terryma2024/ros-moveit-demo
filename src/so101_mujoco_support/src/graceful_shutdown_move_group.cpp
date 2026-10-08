@@ -347,6 +347,16 @@ int main(int argc, char** argv)
 
     move_group::MoveGroupExe mge(moveit_cpp, default_planning_pipeline, debug);
 
+    // MoveItCpp starts publishing the maintained planning scene whatever the flags say. A publishing monitor keeps its scene as a diff of
+    // a parent scene and loses the colour of an attached object when its publishing thread pushes and clears that diff (pilot 429dbf50
+    // still lost it with the launch flags false). When the launch does not want the publication, stop it again.
+    bool publish_planning_scene = false;
+    if (!nh->get_parameter("publish_planning_scene", publish_planning_scene) || !publish_planning_scene)
+    {
+      RCLCPP_INFO(nh->get_logger(), "publish_planning_scene is off: the maintained planning scene is not published");
+      planning_scene_monitor->stopPublishingPlanningScene();
+    }
+
     bool monitor_dynamics;
     if (nh->get_parameter("monitor_dynamics", monitor_dynamics) && monitor_dynamics)
     {

@@ -1,5 +1,7 @@
 # SO-101 ACT Task 8 MuJoCo measurement protocol 补充设计
 
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+
 **日期：** 2026-09-29  
 **状态：** 独立 GPT-6 Astra / High 三轮审查通过  
 **适用范围：** ai-station、MuJoCo-only、Task 8L 首轮校准与 `TASK8_READY` 生成  

@@ -6,8 +6,10 @@ import copy
 import json
 import math
 import os
+import sys
 import time
 from pathlib import Path
+from dataclasses import asdict, replace
 from typing import Any
 
 from ..application.e2e_acceptance import (
@@ -28,15 +30,16 @@ from ..control.moveit.deterministic_horizon import (
     validate_cartesian_corridor,
 )
 from ..control.moveit.planning import JointPlanRequest, MoveItPlanningClient
-from ..control.moveit.underactuated_ik import UnderactuatedPoseIk
+from ..control.moveit.pose_ik import create_pose_ik, describe_pose_ik
 from ..control.planning_scene.acm import set_collision_allowed
-from ..control.planning_scene.cup import make_cup_collision_object
 from ..control.trajectory.executor import (
     MoveItExecutionClient,
     SustainedConditionGuard,
     make_execute_goal,
 )
+from ..application.staged_approach import maximum_joint_error
 from ..core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
+from ..core.workflow import TERMINAL_STOP_CODES
 from ..core.dynamic_pick import (
     DynamicPickTemplate,
     ResolvedMotionTargets,
@@ -44,6 +47,69 @@ from ..core.dynamic_pick import (
     inverse_pose,
 )
 from ..ports.evidence import PoseEvidence
+from .task_reachability import _compute_while_progressing
+from .teacher_safety import evaluate_cup_contacts
+from .teacher_stop import TeacherStop
+
+
+MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
+# Controller stop confirmation for the Teacher end observation: the existing driver stop baseline (D5).
+_TEACHER_STOP_VELOCITY_RAD_S = 0.002
+# Bounded wait for the stream's publisher thread to drain at close; a stuck publisher is abandoned, never waited for.
+_STREAM_FLUSH_S = 1.0
+# Execution errors that mean "the controller outcome was never settled" rather than "the execution failed".
+_CONTROLLER_UNSETTLED_CODES = frozenset({
+    "GRIPPER_GOAL_TIMEOUT", "GRIPPER_RESULT_TIMEOUT", "MOVEIT_EXECUTION_GOAL_TIMEOUT", "MOVEIT_EXECUTION_TIMEOUT",
+    "TEACHER_CANCEL_UNSETTLED",
+})
+# Plan start drift: the plan's first point against the latest measured arm joints (same bound as `qualified_phases`).
+_PLAN_START_DRIFT_MAX_RAD = 0.01
+# Defaults for a partially constructed adapter only; the frozen `teacher_execution_policy_v1.yaml` is always used when
+# it is loaded, and the Teacher refuses to start without it.
+_DEFAULT_STATE_MAX_AGE_S = 0.5
+_DEFAULT_STATE_UNAVAILABLE_STOP_S = 1.0
+
+
+class _ExecutionFailed(RuntimeError):
+    """A non-stop failure of one trajectory execution; carries the `ActionResult` for the terminal-pose reconciliation."""
+
+    def __init__(self, message: str, result: ActionResult) -> None:
+        super().__init__(message)
+        self.result = result
+
+
+def _mark_phase(name):
+    """D30, observation only: mark the active phase timer if any; never raises."""
+    try:
+        from .dynamic_runtime import _mark_active_phase
+        _mark_active_phase(name)
+    except Exception:
+        pass
+
+
+# Burst-spin budget (S3). `rclpy.spin_once` runs at most one callback, while evidence, scene, joint-state, chunk and
+# camera callbacks arrive at hundreds per second in total (scenes alone at 100 Hz), so one spin per progress call left
+# the depth-256 queues seconds behind. A zero-timeout spin costs well under 0.2 ms when a callback is ready, so 10 ms
+# drains dozens of queued callbacks per call and keeps the added latency of one progress call at about 10 ms.
+_SPIN_BURST_BUDGET_S = 0.010
+# Characters kept of an error text recorded in the manifest.
+_DATA_REASON_MAX_CHARS = 300
+
+
+def _spin_burst(node, first_timeout_s=0.01, budget_s=_SPIN_BURST_BUDGET_S, spin=None):
+    """One `spin_once(timeout_sec=first_timeout_s)`, then zero-timeout spins until `budget_s` has elapsed.
+
+    Scheduling only: every callback runs exactly as before, just sooner and in larger batches. Exceptions from
+    `spin` propagate unchanged. `spin` defaults to `rclpy.spin_once`.
+    """
+    if spin is None:
+        import rclpy
+        spin = rclpy.spin_once
+    began = time.monotonic()
+    spin(node, timeout_sec=first_timeout_s)
+    while time.monotonic() - began < budget_s:
+        spin(node, timeout_sec=0.0)
+
 
 
 class RosDynamicMujocoExecution:
@@ -51,7 +117,7 @@ class RosDynamicMujocoExecution:
 
     _ARM_JOINTS = ("1", "2", "3", "4", "5")
     _PREOPEN_Q6 = 0.465038
-    _CLOSE_Q6 = -0.0485
+    _CLOSE_Q6 = -0.0485   # the plain dynamic_cup_pick_place close; the ACT Teacher's is the frozen policy value
     _RELEASE_Q6 = 0.75
     _MAX_FORCE_N = 11.60
 
@@ -105,11 +171,13 @@ class RosDynamicMujocoExecution:
         workflow_id: str | None = None,
         request_id: str | None = None,
         parallel_lease_identity: dict[str, object] | None = None,
+        event_stream=None,
+        ik_backend: str | None = None,
     ) -> None:
         from control_msgs.action import FollowJointTrajectory
         from moveit_msgs.action import ExecuteTrajectory
         from moveit_msgs.srv import ApplyPlanningScene, GetMotionPlan, GetPlanningScene
-        from so101_demo.adapters.act.leased_action_client import make_action_client as ActionClient
+        from rclpy.action import ActionClient
         from rclpy.qos import qos_profile_sensor_data
         from sensor_msgs.msg import JointState
 
@@ -125,18 +193,16 @@ class RosDynamicMujocoExecution:
         self._session_id = session_id
         self._expected_reset_epoch = expected_reset_epoch
         self._evidence_file = evidence_file
-        self._ik = UnderactuatedPoseIk.from_urdf(
+        self._ik = create_pose_ik(
             urdf_path,
             template.arm_joint_names,
             template.planning_frame,
             template.tcp_link,
+            backend=ik_backend,
         )
         self._positions: dict[str, float] = {}
         self._joint_state_generation = 0
         self._joint_state_source_stamp_ns: int | None = None
-        # where this execution's per-state evidence is offered to the episode being recorded (CP-2862). Optional:
-        # an execution that records nothing behaves exactly as before, and the caller sets this when it has one.
-        self.episode_recorder = None
         self._joint_state_received_monotonic_s: float | None = None
         self._state_events: list[dict[str, object]] = []
         self._planning_attempts: list[dict[str, object]] = []
@@ -147,6 +213,38 @@ class RosDynamicMujocoExecution:
         self._initial = None
         self._before_micro_lift = None
         self._scene_readback: dict[str, object] | None = None
+        self._task_geometry = None
+        self._last_scene_response = None
+        self._release_authorization = None
+        self._release_scene_geometry = None
+        self._scene_source_observer = None
+        self._monotonic = time.monotonic
+        from ..act.endpoint_pose_acceptance import load_development_runtime
+
+        runtime_policy_path = urdf_path.parents[2] / "config/act/endpoint_pose_development_runtime_v1.yaml"
+        self._release_runtime_policy = load_development_runtime(runtime_policy_path)
+        # The release scope is (session, reset epoch, attempt). There is no lease: nothing here asks for one.
+        lease = parallel_identity.get("parallel_lease_identity")
+        self._attempt_id = (lease["attempt_id"] if lease is not None else (request_id or workflow_id or "standalone"))
+        # Stop and safety ports, set by the entry (`run_dynamic_execute`); None means the original pick-place behaviour.
+        self._stop_flags = None
+        self._safety_limits = None
+        self._collision_watch = None
+        self._physics_hazard_watch = None
+        self._stop_suspended = False
+        self._unavailable_since = None
+        self._last_arm_result = None
+        self._safety_state = None
+        from ..act.teacher_event_stream import StreamEventSink
+        # One-way, bounded and non-blocking: the Teacher publishes its execution facts to the /so101/teacher/events
+        # stream for the independent Recorder process. The Teacher holds no data side: there is nothing here that reads
+        # the Recorder, a capture or an episode.
+        self._event_sink = StreamEventSink(None)
+        self._event_stream = None
+        self._event_stream_error = None
+        # `event_stream` is the one the entry started before the first scene call (so the setup scene is on it too).
+        self._start_event_stream(node, session_id, expected_reset_epoch,
+                                 parallel_identity.get("parallel_lease_identity"), request_id, existing=event_stream)
         self._touch_collision_allowed = False
         self._joint_subscription = node.create_subscription(
             JointState,
@@ -154,10 +252,13 @@ class RosDynamicMujocoExecution:
             self._on_joint_state,
             qos_profile_sensor_data,
         )
-        self.observer = MujocoWorldObserver(node, session_id, max_age_s=0.5)
+        self.observer = MujocoWorldObserver(
+            node, session_id, max_age_s=0.5, subscription_depth=256,
+            # Buffer capacity (about 40 s at 50 Hz), not a threshold: originals must outlive slow off-thread admission.
+            history_capacity=2048)
         self._planning = MoveItPlanningClient(
             node.create_client(GetMotionPlan, "/plan_kinematic_path"),
-            progress=self._progress,
+            progress=self._wait_progress,  # no goal is active while MoveIt plans: a stop flag may end this wait
         )
         self._trajectory = MoveItExecutionClient(
             ActionClient(node, ExecuteTrajectory, "/execute_trajectory"),
@@ -174,13 +275,16 @@ class RosDynamicMujocoExecution:
         )
         self._apply_scene = node.create_client(ApplyPlanningScene, "/apply_planning_scene")
         self._get_scene = node.create_client(GetPlanningScene, "/get_planning_scene")
+        self._scene_service_calls: list[dict] = []
+        self._load_teacher_policies(urdf_path)
         self._document: dict[str, object] = {
-            "schema": "so101-dynamic-mujoco-execute-v1",
+            "schema": MANIFEST_SCHEMA,
             "status": "RUNNING",
             "simulation_session_id": session_id,
             "expected_reset_epoch": expected_reset_epoch,
             "policy_path": str(policy_path),
             "policy_sha256": policy_sha256,
+            "ik_solver": describe_pose_ik(self._ik),
             "input_cup_pose_world": list(targets.input_pose.pose_world.values),
             "input_frame_id": targets.input_pose.frame_id,
             "input_source_stamp_ns": targets.input_pose.source_stamp_ns,
@@ -191,7 +295,14 @@ class RosDynamicMujocoExecution:
             "state_events": self._state_events,
             "planning_attempts": self._planning_attempts,
             "final_samples": self._final_samples,
+            "scene_service_calls": self._scene_service_calls,
+            "process_diagnostics": [],
+            "teacher_policies": self._teacher_policy_files,
         }
+        if self._teacher_config_error is not None:
+            self._document["teacher_config_error"] = self._teacher_config_error
+        if self._event_stream_error is not None:
+            self._document["teacher_event_stream"] = {"error": self._event_stream_error}
         self._document.update(workflow_identity)
         self._document.update(parallel_identity)
         self._write()
@@ -209,13 +320,398 @@ class RosDynamicMujocoExecution:
         )
         os.replace(temporary, self._evidence_file)
 
+    # ---- Teacher event stream (Phase A4a): /so101/teacher/events for the independent Recorder process --------------------
+    # The Teacher thread only offers events to a bounded queue (never waits, never raises). A publisher thread drains it.
+
+    def _start_event_stream(self, node, session_id, reset_epoch, lease_identity, request_id, *, existing=None) -> None:
+        """Use (or create) the ROS publisher and the stream. Any failure leaves the Teacher without a stream, never
+        without a run."""
+        from ..act.teacher_event_stream import StreamEventSink
+
+        if existing is not None:
+            self._event_stream = existing
+            self._event_sink = StreamEventSink(existing)
+            return
+        from ..adapters.act.ros_teacher_event_stream import start_teacher_event_stream
+
+        stream, close, error = start_teacher_event_stream(node, session_id, reset_epoch, lease_identity, request_id)
+        if stream is None:
+            self._event_stream, self._event_stream_error = None, error
+            return
+        stream.close_publisher = close
+        self._event_stream = stream
+        self._event_sink = StreamEventSink(stream)
+
+    def _stream_emit(self, event_type, payload) -> None:
+        """Offer one Teacher fact to the stream. Never blocks, never raises into control."""
+        try:
+            stream = getattr(self, "_event_stream", None)
+            if stream is not None:
+                stream.offer(event_type, payload)
+        except Exception:
+            pass
+
+    def _stream_manifest_block(self) -> None:
+        """Record the drop counter and last published seq in the manifest (best effort, never raises)."""
+        try:
+            stream = getattr(self, "_event_stream", None)
+            if stream is not None:
+                self._document["teacher_event_stream"] = stream.snapshot()
+        except Exception:
+            pass
+
+    def _close_event_stream(self) -> None:
+        """Flush the stream (bounded), publish the final counters and release the ROS publisher. Never raises."""
+        try:
+            stream = getattr(self, "_event_stream", None)
+            if stream is None:
+                return
+            stream.close(flush_timeout_s=_STREAM_FLUSH_S)
+            self._stream_manifest_block()
+            try:
+                self._write()
+            except Exception:
+                pass
+            closer = getattr(stream, "close_publisher", None)
+            if callable(closer):
+                closer()
+        except Exception:
+            pass
+
+    # ---- Teacher result (Phase A1b): start/end observation, endpoint verdict, audit-only diagnostics -----------------
+    # The Teacher decides its own task result from the cup's start and end pose in the executed world. Nothing here
+    # reads the episode recorder, the capture or the phase port, so a Teacher without a recorder runs unchanged.
+
+    def _load_teacher_policies(self, urdf_path) -> None:
+        """Load both frozen Teacher policy documents from the installed share config dir the runtime already uses."""
+
+        import hashlib
+
+        from ..act.teacher_endpoint import load_teacher_endpoint_policy, load_teacher_execution_policy
+
+        self._teacher_config_error = None
+        self._teacher_policy_files = {}
+        self._teacher_endpoint_policy = None
+        self._teacher_execution_policy = None
+        try:
+            config_dir = Path(urdf_path).parents[2] / "config/act"
+            endpoint_path = config_dir / "teacher_endpoint_v2.yaml"
+            execution_path = config_dir / "teacher_execution_policy_v1.yaml"
+            endpoint_bytes, execution_bytes = endpoint_path.read_bytes(), execution_path.read_bytes()
+        except (OSError, IndexError) as error:
+            self._teacher_config_error = f"TEACHER_POLICY_UNAVAILABLE: {error}"
+            return
+        try:
+            self._teacher_endpoint_policy = load_teacher_endpoint_policy(endpoint_bytes)
+            self._teacher_execution_policy = load_teacher_execution_policy(execution_bytes)
+        except ValueError as error:
+            self._teacher_config_error = str(error)
+            return
+        self._teacher_policy_files = {
+            "endpoint": {"path": str(endpoint_path), "file_sha256": hashlib.sha256(endpoint_bytes).hexdigest(),
+                         "policy_sha256": self._teacher_endpoint_policy["policy_sha256"]},
+            "execution": {"path": str(execution_path), "file_sha256": hashlib.sha256(execution_bytes).hexdigest(),
+                          "policy_sha256": self._teacher_execution_policy["policy_sha256"]},
+        }
+
+    @staticmethod
+    def _teacher_pose_document(values) -> dict[str, object]:
+        x, y, z, qx, qy, qz, qw = (float(item) for item in values)
+        norm = math.sqrt(qx * qx + qy * qy + qz * qz + qw * qw)
+        if not norm > 0.0:
+            norm = 1.0
+        return {"position": [x, y, z],
+                "orientation": {"x": qx / norm, "y": qy / norm, "z": qz / norm, "w": qw / norm}}
+
+    def _teacher_targets(self) -> tuple[dict[str, object], dict[str, object]]:
+        """(start_target, end_target), both frozen before the first motion.
+
+        The start target is the input cup pose this run was resolved from. The end target is the place pose today's
+        VALIDATE_FINAL_PLACEMENT frozen (XY and attitude of the expected cup pose); its height is the input cup's
+        resting height, because that expected pose is a TCP-derived geometric pose, not a table-resting height.
+        """
+
+        start_values = tuple(self._targets.input_pose.pose_world.values)
+        expected = compose_pose(self._template.place_tcp_world, inverse_pose(self._template.cup_to_tcp_grasp))
+        end_values = (expected.values[0], expected.values[1], start_values[2], *expected.values[3:7])
+        return self._teacher_pose_document(start_values), self._teacher_pose_document(end_values)
+
+    @staticmethod
+    def _teacher_observation(value) -> dict[str, object]:
+        x, y, z, w = value.object_state.orientation_xyzw
+        return {
+            "position": list(value.object_state.position_world),
+            "orientation": {"x": x, "y": y, "z": z, "w": w},
+            "simulation_time_s": value.simulation_time_s,
+            "frame_id": value.frame_id,
+            "object_id": value.object_state.body,
+            "session_id": value.simulation_session_id,
+            "reset_epoch": value.reset_epoch,
+            "publisher_sequence": value.publisher_sequence,
+            "simulation_step": value.simulation_step,
+        }
+
+    def _capture_teacher_start(self):
+        """Refuse an invalid config, then read the one start observation before any arm or gripper motion.
+
+        Returns the snapshot, or None when the object was built without the Teacher policies (legacy partial
+        construction). The pre-motion config checks are the only reason this raises.
+        """
+
+        error = getattr(self, "_teacher_config_error", None)
+        if error is not None:
+            self._document["teacher_config_error"] = error
+            raise RuntimeError(error)
+        policy = getattr(self, "_teacher_endpoint_policy", None)
+        if policy is None:
+            return None
+        from ..act.teacher_endpoint import validate_task_targets
+
+        start_target, end_target = self._teacher_targets()
+        try:
+            validate_task_targets(policy, start_target, end_target)
+        except ValueError as invalid:
+            self._document["teacher_config_error"] = str(invalid)
+            self._write()
+            raise RuntimeError(str(invalid)) from invalid
+        self._document["teacher_targets"] = {"start_target": start_target, "end_target": end_target}
+        snapshot = self._snapshot()
+        self._document["teacher_start_observation"] = self._teacher_observation(snapshot)
+        self._write()
+        observation = self._document["teacher_start_observation"]
+        boundary = self._verified_reset_boundary() or observation
+        self._stream_emit("reset_complete", {
+            "session_id": boundary["session_id"], "reset_epoch": boundary["reset_epoch"],
+            "simulation_time_s": boundary["simulation_time_s"],
+            "simulation_step": boundary["simulation_step"],
+            "publisher_sequence": boundary["publisher_sequence"],
+            # the receipt of that first evidence on the monotonic clock, for the Recorder's causal ordering
+            "received_monotonic_ns": boundary.get("received_monotonic_ns", time.monotonic_ns())})
+        self._stream_emit("teacher_start_observation", {"observation": copy.deepcopy(observation)})
+        return snapshot
+
+    def _verified_reset_boundary(self):
+        """The first retained `SimulationEvidence` of this session and the expected reset epoch, or None.
+
+        This is the reset boundary the Teacher announces as `reset_complete`: the first sample the Teacher's own
+        observer saw after the reset, not a later snapshot, and independent of whoever ran the reset.
+        """
+        try:
+            retained = self.observer.retained_with_receipts()
+        except Exception:
+            return None
+        for record in retained:
+            value = record.evidence
+            if value.simulation_session_id == self._session_id and value.reset_epoch == self._expected_reset_epoch:
+                return {**self._teacher_observation(value),
+                        "received_monotonic_ns": round(record.received_monotonic_s * 1e9)}
+        return None
+
+    def _controllers_stopped_at(self, execution_policy):
+        """Receipt time (the observer's monotonic clock) of the fresh joint state that showed every arm and gripper
+        joint below the stop velocity, or None.
+
+        Bounded by the execution policy's state_unavailable_stop_s; missing, stale or undersized velocity data
+        never counts as stopped. A stop flag ends the wait.
+        """
+
+        clock = getattr(self, "_monotonic", time.monotonic)
+        deadline = clock() + execution_policy["state_unavailable_stop_s"]
+        while True:
+            received = getattr(self, "_joint_state_received_monotonic_s", None)
+            velocities = getattr(self, "_joint_velocities", {})
+            fresh = received is not None and 0.0 <= clock() - received <= execution_policy["state_max_age_s"]
+            if fresh and all(
+                    isinstance(velocities.get(name), (int, float)) and math.isfinite(velocities[name])
+                    and abs(velocities[name]) <= _TEACHER_STOP_VELOCITY_RAD_S
+                    for name in (*self._ARM_JOINTS, "6")):
+                return received
+            if clock() >= deadline:
+                return None
+            self._wait_progress()
+
+    def _controllers_stopped(self, execution_policy) -> bool:
+        """True once fresh joint states show every arm and gripper joint below the stop velocity."""
+        return self._controllers_stopped_at(execution_policy) is not None
+
+    def _settled_snapshot(self, settle_s: float, stall_s: float):
+        """One world snapshot taken settle_s of simulation time after the first fresh one.
+
+        The clock is the MuJoCo publisher's simulation time carried by the world snapshots, so the wait is in
+        simulation time whatever the node clock is. It fails if simulation time stops advancing for stall_s.
+        """
+
+        clock = getattr(self, "_monotonic", time.monotonic)
+        latest = self._snapshot()
+        target_s = latest.simulation_time_s + settle_s
+        advanced_at = clock()
+        while latest.simulation_time_s < target_s:
+            if clock() - advanced_at > stall_s:
+                raise RuntimeError("TEACHER_END_SETTLE_CLOCK_STALLED")
+            candidate = self._snapshot()
+            if candidate.simulation_time_s > latest.simulation_time_s:
+                latest, advanced_at = candidate, clock()
+        return latest
+
+    def _take_teacher_end_observation(self):
+        """(observation or None, problem or None): stop check first, then settle_s, then ONE snapshot."""
+
+        policy = getattr(self, "_teacher_endpoint_policy", None)
+        execution_policy = getattr(self, "_teacher_execution_policy", None)
+        if policy is None or execution_policy is None:
+            return None, "TEACHER_ENDPOINT_POLICY_UNAVAILABLE"
+        try:
+            if not self._controllers_stopped(execution_policy):
+                return None, "TEACHER_END_CONTROLLER_STOP_UNCONFIRMED"
+            snapshot = self._settled_snapshot(policy["tolerances"]["settle_s"],
+                                              execution_policy["state_unavailable_stop_s"])
+        except Exception as error:
+            return None, f"TEACHER_END_OBSERVATION_UNAVAILABLE: {error}"
+        return self._teacher_observation(snapshot), None
+
+    @staticmethod
+    def _teacher_execution_status(result, failure_evidence) -> str:
+        if result.status.value == "DONE":
+            return "COMPLETED"
+        code = "" if result.failure is None else result.failure.code
+        config_code = code.startswith(("TEACHER_ENDPOINT_", "TEACHER_POLICY_", "TEACHER_EXECUTION_POLICY_"))
+        if code in ("TEACHER_USER_STOP", "TEACHER_PARENT_DIED"):
+            return "STOPPED_USER"
+        if code == "TEACHER_DEADLINE":
+            return "DEADLINE"
+        if not config_code and code != "TEACHER_CANCEL_UNSETTLED" and (code in TERMINAL_STOP_CODES or code.startswith(
+                ("DYNAMIC_RELEASE_", "DYNAMIC_NORMAL_STOP_", "TEACHER_"))):
+            return "STOPPED_SAFETY"
+        action_absent = bool((failure_evidence or {}).get("physical_action_proven_absent"))
+        if code in _CONTROLLER_UNSETTLED_CODES and not action_absent:
+            return "INDETERMINATE"
+        return "FAILED"
+
+    def _teacher_manifest_fields(self, result, failure_evidence, end_observation, end_problem) -> dict[str, object]:
+        """The v2 Teacher fields. PASS only for a COMPLETED execution whose endpoint judgement is PASS."""
+
+        from ..act.teacher_endpoint import RULE_VERSION, evaluate_teacher_endpoint
+
+        execution = self._teacher_execution_status(result, failure_evidence)
+        start_observation = self._document.get("teacher_start_observation")
+        targets = self._document.get("teacher_targets") or {}
+        policy = getattr(self, "_teacher_endpoint_policy", None)
+        reasons: list[str] = []
+        try:
+            if policy is None or not targets:
+                raise ValueError(self._document.get("teacher_config_error") or getattr(
+                    self, "_teacher_config_error", None) or "TEACHER_ENDPOINT_TARGETS_UNAVAILABLE")
+            task = evaluate_teacher_endpoint(
+                policy, start_target=targets["start_target"], end_target=targets["end_target"],
+                start_observation=start_observation, end_observation=end_observation)
+        except Exception as error:
+            reasons.append(str(error))
+            task = {
+                "rule_version": RULE_VERSION, "policy_sha256": None if policy is None else policy["policy_sha256"],
+                "result": "UNCONFIRMED", "reasons": reasons, "measured": None,
+                "start_target": targets.get("start_target"), "end_target": targets.get("end_target"),
+                "start_observation": start_observation, "end_observation": end_observation,
+            }
+        if end_problem is not None:
+            task["reasons"] = [end_problem, *task["reasons"]]
+        if execution != "COMPLETED" and task["result"] == "PASS":
+            task["result"] = "UNCONFIRMED"
+            task["reasons"] = ["TEACHER_EXECUTION_NOT_COMPLETED", *task["reasons"]]
+        return {
+            "schema": MANIFEST_SCHEMA,
+            "teacher_execution_status": execution,
+            "teacher_task_result": task,
+            "teacher_start_observation": start_observation,
+            "teacher_end_observation": end_observation,
+            # The Teacher holds no data side. The data status of an attempt is the independent Recorder's
+            # (`recorder-result.json`), mapped by the orchestrator; this field only says the Teacher recorded nothing.
+            "act_data_status": "DISABLED",
+            "process_diagnostics": self._document.setdefault("process_diagnostics", []),
+            "teacher_policies": getattr(self, "_teacher_policy_files", {}),
+        }
+
+    @staticmethod
+    def _contact_documents(items) -> list[dict[str, object]]:
+        return [
+            {
+                "geom1": getattr(item, "geom1", None),
+                "geom2": getattr(item, "geom2", None),
+                "position_world_m": (None if getattr(item, "position_world", None) is None
+                                     else list(item.position_world)),
+                "signed_distance_m": getattr(item, "signed_distance_m", None),
+                "normal_force_n": getattr(item, "normal_force_n", None),
+            }
+            for item in items
+        ]
+
+    def _record_process_diagnostic(self, code: str, state, *, sample=None, facts=None, **details) -> None:
+        """Record one audit-only process-quality observation. Never raises into, cancels or fails the state.
+
+        The first occurrence of a code in a state is written with its sample and contacts; repeats only count.
+        """
+
+        try:
+            key = (code, None if state is None else state.value)
+            index = self.__dict__.setdefault("_process_diagnostic_index", {})
+            if key in index:
+                index[key]["count"] += 1
+                return
+            entry: dict[str, object] = {
+                "code": code, "state": key[1], "audit_only": True, "count": 1,
+                "monotonic_s": getattr(self, "_monotonic", time.monotonic)(), **details,
+            }
+            if facts is not None:
+                entry["facts"] = facts
+            if sample is not None:
+                entry["sample"] = self._evidence(sample)
+                entry["contacts"] = {
+                    "left": self._contact_documents(sample.left_fingertip_contacts),
+                    "right": self._contact_documents(sample.right_fingertip_contacts),
+                    "other": self._contact_documents(sample.other_object_contacts),
+                }
+            index[key] = entry
+            self._document.setdefault("process_diagnostics", []).append(entry)
+            self._write()
+        except Exception as error:
+            print(f"DYNAMIC_PROCESS_DIAGNOSTIC_FAILED {code} {error}", file=sys.stderr, flush=True)
+
+    # Set by the entry that starts an external Recorder (`--collection on`). Off by default: a Teacher with no Recorder
+    # issues no extra stop request.
+    final_stop_proof_enabled = False
+
+    def _publish_final_normal_stop(self) -> None:
+        """Publish the confirmed normal-stop proof after the sequence closed, for the Recorder's final boundary.
+
+        Teacher side, after its own sequence: the owner's stop baseline is the one the release preflight already uses.
+        A failure is recorded in the manifest and never changes the Teacher result.
+        """
+        if not self.final_stop_proof_enabled:
+            return
+        try:
+            proof = self._normal_stop_proof()
+            self._publish_teacher_event("normal_stop", {"proof": proof})
+        except Exception as error:
+            self._document["teacher_final_stop_error"] = str(error)[:_DATA_REASON_MAX_CHARS]
+
     def finish(self, result) -> None:
+        # After a stop the flags stay set: the failure evidence, the end observation and the manifest are still taken.
+        self._stop_suspended = True
         failure_evidence = None
-        if result.status.value != "DONE":
+        done = result.status.value == "DONE"
+        if done:
+            self._publish_final_normal_stop()
+        if not done:
             failure_evidence = self._capture_failure_evidence(result)
+        end_observation = end_problem = None
+        if done:
+            end_observation, end_problem = self._take_teacher_end_observation()
+        self._document.update(self._teacher_manifest_fields(result, failure_evidence, end_observation, end_problem))
+        self._stream_emit("teacher_end_observation", {
+            "observation": copy.deepcopy(end_observation),
+            "problem": end_problem})
         self._document.update(
             {
-                "status": "DONE" if result.status.value == "DONE" else "ERROR",
+                "status": "DONE" if done else "ERROR",
                 "current_state": result.current_state.value,
                 "transition_count": result.transition_count,
                 "state_trace": [state.value for state in result.state_trace],
@@ -225,20 +721,27 @@ class RosDynamicMujocoExecution:
                 "failure_evidence": failure_evidence,
             }
         )
+        self._stream_emit("terminal", {
+            "status": self._document["status"],
+            "teacher_execution_status": self._document["teacher_execution_status"],
+            "teacher_task_result": self._document["teacher_task_result"]["result"],
+            "failure": self._document["failure"]})
+        self._stream_manifest_block()
         self._write()
 
     @staticmethod
-    def _failure_boundary(state_trace) -> State | None:
+    def _failure_boundary(state_trace, failure=None) -> State | None:
         from ..core.workflow import SO101_WORKFLOW
 
+        terminal = failure is not None and failure.code in TERMINAL_STOP_CODES
         for current, following in zip(state_trace, state_trace[1:]):
             transition = SO101_WORKFLOW.transitions.get(current)
-            if transition is not None and following is transition[1]:
+            if transition is not None and (following is transition[1] or terminal and following is State.ERROR):
                 return current
         return None
 
     def _capture_failure_evidence(self, result) -> dict[str, object]:
-        boundary = self._failure_boundary(result.state_trace)
+        boundary = self._failure_boundary(result.state_trace, result.failure)
         no_action = (
             tuple(result.state_trace) == (State.IDLE, State.ERROR)
             and not self._state_events
@@ -290,7 +793,55 @@ class RosDynamicMujocoExecution:
     def _progress(self) -> None:
         import rclpy
 
-        rclpy.spin_once(self._node, timeout_sec=0.01)
+        # Observation only (D12): time each sub-step so one slow call is explained by its parts.
+        began = time.monotonic()
+        lap = began
+        substeps = {}
+
+        def tick(name):
+            nonlocal lap
+            now = time.monotonic()
+            substeps[name] = round((now - lap) * 1e3, 3)
+            lap = now
+
+        try:
+            # Control needs exactly one thing here: its own callbacks (world observer, joint states, controller
+            # results). A failure of those is an execution error and propagates.
+            _spin_burst(self._node, spin=rclpy.spin_once)
+            tick("spin_once")
+        finally:
+            self._report_slow_progress(began, substeps)
+
+    def _report_slow_progress(self, began, substeps):
+        """Emit a bounded fact line for one slow `_progress` call; never raises."""
+        try:
+            total_ms = (time.monotonic() - began) * 1e3
+            emitted = getattr(self, "_progress_slow_lines", 0)
+            if total_ms <= 50.0 or emitted >= 20:
+                return
+            self._progress_slow_lines = emitted + 1
+            substeps.setdefault("spin_once", 0.0)
+            document = {"total_ms": round(total_ms, 3), "substeps_ms": substeps}
+            line = "DYNAMIC_PROGRESS_SLOW " + json.dumps(document, sort_keys=True, separators=(",", ":"))
+            print(line.encode()[:2000].decode(errors="ignore"), file=sys.stderr, flush=True)
+        except Exception:
+            pass
+
+    # ---- stop flags (user stop, parent death, attempt deadline) -------------------------------------------------------
+    # A flag is raised only where a cancel (or no goal at all) follows: the trajectory monitor and the gripper hook
+    # while a goal is active, and the wait loops, the state-machine entry and the next-goal sites while none is. It is
+    # never raised from `_progress`, which `executor.execute` and `GripperClient.command` call before their monitor:
+    # a raise there would leave the active goal running.
+
+    def _check_stop(self) -> None:
+        flags = getattr(self, "_stop_flags", None)
+        if flags is not None and not getattr(self, "_stop_suspended", False):
+            flags.raise_if_stopped()
+
+    def _wait_progress(self) -> None:
+        """`_progress` plus the stop check, for waits that have no active goal."""
+        self._progress()
+        self._check_stop()
 
     def _on_joint_state(self, message: Any) -> None:
         if len(message.name) == len(message.position):
@@ -299,6 +850,12 @@ class RosDynamicMujocoExecution:
                 for name, position in zip(message.name, message.position, strict=True)
             )
             self._positions.update(positions)
+            velocity = getattr(message, "velocity", None)
+            if velocity is not None and len(velocity) == len(message.name):
+                if not hasattr(self, "_joint_velocities"):
+                    self._joint_velocities = {}
+                self._joint_velocities.update(
+                    (name, float(item)) for name, item in zip(message.name, velocity, strict=True))
             if all(name in positions for name in self._ARM_JOINTS):
                 stamp = getattr(getattr(message, "header", None), "stamp", None)
                 self._joint_state_source_stamp_ns = (
@@ -319,7 +876,7 @@ class RosDynamicMujocoExecution:
         ):
             if time.monotonic() >= deadline:
                 raise RuntimeError("JOINT_STATE_TIMEOUT")
-            self._progress()
+            self._wait_progress()
         return tuple(self._positions[name] for name in self._ARM_JOINTS)
 
     def _snapshot(self):
@@ -327,7 +884,7 @@ class RosDynamicMujocoExecution:
 
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline:
-            self._progress()
+            self._wait_progress()
             try:
                 value = self.observer.snapshot()
             except EvidenceStale:
@@ -391,34 +948,6 @@ class RosDynamicMujocoExecution:
         self._document.setdefault("monitor_violations", []).append(violation)
 
     def _record(self, state: State, before, after, **details: object) -> None:
-        # Every state the episode passes through is offered to the episode being recorded, from here, because this is
-        # the one place that knows which state is running (CP-2862). The row's facts are all in this object already:
-        # the per-state evidence, the joint-state receipt, the planning-scene readback and attachment, and the input
-        # pose. A layer with no camera stamps says so by passing an empty map rather than inventing times - the
-        # distinction between "this layer has no such fact" and "I assume it is this value" is the one this task keeps
-        # insisting on.
-        # getattr rather than the attribute: some construction paths skip __init__, and a recorder that is absent
-        # because of how the object was built is the same as one that was never set
-        if getattr(self, "episode_recorder", None) is not None:
-            from ..act.episode_assembly import physical_audit_from_execution
-            # the epoch is not defaulted: a row placed in the wrong reset epoch is as misleading as an invented one, so
-            # an absent epoch stops the recording here and names what is missing (the form the default took for one
-            # round, replaced as promised)
-            _reset_epoch = getattr(self._targets, "reset_epoch", None)
-            if _reset_epoch is None:
-                raise RuntimeError("EPISODE_RESET_EPOCH_MISSING: the resolved targets do not state the reset epoch")
-            self.episode_recorder.set_physical_audit(physical_audit_from_execution(
-                phase=state.value, reset_epoch=int(_reset_epoch),
-                release_epoch=int(details.get("release_epoch", 1)),
-                release_event=bool(details.get("release_event", False)),
-                release_time_s=float(details.get("release_time_s", 0.0)),
-                evidence=after if after is not None else before,
-                contacts=list(details.get("contacts", ())),
-                joint_state_source_stamp_ns=self._joint_state_source_stamp_ns,
-                joint_state_received_monotonic_s=self._joint_state_received_monotonic_s,
-                joint_state_generation=self._joint_state_generation,
-                attached=bool(self._attached), scene_readback=self._scene_readback,
-                input_pose=self._targets.input_pose, source_stamps_s={}))
         self._state_events.append(
             {
                 "state": state.value,
@@ -510,6 +1039,7 @@ class RosDynamicMujocoExecution:
             if value.publisher_sequence == last_sequence:
                 continue
             last_sequence = value.publisher_sequence
+            self._enforce_safety(getattr(self, "_safety_state", None), value)
             healthy = bool(predicate(value)) and value.maximum_normal_force_n <= self._MAX_FORCE_N
             now = time.monotonic()
             started = started if healthy and started is not None else (now if healthy else None)
@@ -548,10 +1078,9 @@ class RosDynamicMujocoExecution:
             above = self._targets.for_state(State.MOVE_ABOVE_OBJECT)
             descend = self._targets.for_state(State.DESCEND)
             waypoints = list(
-                interpolated_move_above_waypoints(
-                    self._ik,
-                    current,
-                    above,
+                _compute_while_progressing(
+                    lambda: interpolated_move_above_waypoints(self._ik, current, above),
+                    self._progress,
                 )
             )
             waypoints.extend(
@@ -577,13 +1106,16 @@ class RosDynamicMujocoExecution:
                 HorizonWaypoint(state, index, target) for index, target in enumerate(motion_targets)
             ]
 
-        result = solve_horizon(
-            self._ik,
-            tuple(waypoints),
-            current,
-            position_tolerance_m=self._template.position_tolerance_m,
-            orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
-            beam_width=3,
+        result = _compute_while_progressing(
+            lambda: solve_horizon(
+                self._ik,
+                tuple(waypoints),
+                current,
+                position_tolerance_m=self._template.position_tolerance_m,
+                orientation_tolerance_rad=max(self._template.orientation_tolerance_rad),
+                beam_width=3,
+            ),
+            self._progress,
         )
         if state in pick_prefix and has_full_target_set:
             horizon_document = result.to_document()
@@ -623,14 +1155,15 @@ class RosDynamicMujocoExecution:
         candidates = []
         corridor_receipts: list[dict[str, object]] = []
         last_failure = "CUP_POSE_PLAN_FAILED"
+        scaling = self._planning_scaling(state)
         for candidate_index in range(candidate_count):
             planned = self._planning.plan_joint_path(
                 JointPlanRequest(
                     joint_names=self._ARM_JOINTS,
                     current_positions=current,
                     target_positions=joint_target,
-                    velocity_scaling=self._template.velocity_scaling,
-                    acceleration_scaling=self._template.acceleration_scaling,
+                    velocity_scaling=scaling[0],
+                    acceleration_scaling=scaling[1],
                     planning_time_s=self._template.planning_timeout_s,
                     planning_group=self._template.planning_group,
                     tcp_link=self._template.tcp_link,
@@ -743,15 +1276,110 @@ class RosDynamicMujocoExecution:
             )
         return selected, corridor_receipts
 
-    def _motion(self, state: State, target: PoseEvidence) -> None:
-        before = self._snapshot()
-        current = self._joint_state()
-        motion_targets = [target]
-        if state in {State.DESCEND, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE}:
-            start_pose = self._ik.forward(current)
-            motion_targets = [
-                self._interpolate_pose(start_pose, target, step / 6.0) for step in range(1, 7)
-            ]
+    def _motion_planning_start(self):
+        return self._joint_state()
+
+    def _monitor_sample(self):
+        """The latest world sample for the monitor, read without blocking, or None while the state is unavailable.
+
+        Unlike `_snapshot` this never waits and never spins: `executor.execute` has just called `progress()`. The
+        safety checks that need the sample count as unavailable when the newest evidence or joint state is older than
+        `state_max_age_s` (or the evidence is truncated). Unavailability longer than `state_unavailable_stop_s` is a
+        stop. The identity checks of `_snapshot` (session, pause, reset epoch) apply to the latest sample.
+        """
+        from ..backends.mujoco.observer import EvidenceStale
+
+        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        max_age = policy.get("state_max_age_s", _DEFAULT_STATE_MAX_AGE_S)
+        stop_after = policy.get("state_unavailable_stop_s", _DEFAULT_STATE_UNAVAILABLE_STOP_S)
+        now = self._monotonic()
+        try:
+            value = self.observer.snapshot_with_receipt().evidence
+        except EvidenceStale:
+            value = None
+        joint_received = getattr(self, "_joint_state_received_monotonic_s", None)
+        joint_fresh = joint_received is not None and 0.0 <= now - joint_received <= max_age
+        if value is None or value.truncated or not joint_fresh:
+            since = getattr(self, "_unavailable_since", None)
+            if since is None:
+                since = self._unavailable_since = now
+            if now - since > stop_after:
+                raise TeacherStop(
+                    "DYNAMIC_STATE_UNAVAILABLE_STOP",
+                    f"necessary state unavailable for {now - since:.3f}s (limit {stop_after}s)")
+            return None
+        self._unavailable_since = None
+        if value.simulation_session_id != self._session_id:
+            raise TeacherStop("DYNAMIC_SESSION_MISMATCH")
+        if value.reset_epoch != self._expected_reset_epoch or value.paused:
+            raise TeacherStop("DYNAMIC_RESET_EPOCH_MISMATCH")
+        return value
+
+    def _enforce_safety(self, state, value) -> None:
+        """The execution protections that stop the robot, on one fresh sample: raises `TeacherStop`.
+
+        1. the original maximum single-contact force (11.60 N);
+        2. with the frozen contact policy: summed cup force and fingertip compression (same limits as the broker);
+        3. with the robot contact watch: a collision pair outside the cup process pairs.
+        Everything else the broker checked about the process (hold, stability, contact timing) stays audit-only.
+        """
+        if value.maximum_normal_force_n > self._MAX_FORCE_N:
+            self._record_monitor_violation(state or State.IDLE, "DYNAMIC_FORCE_LIMIT_EXCEEDED", value)
+            raise TeacherStop("DYNAMIC_FORCE_LIMIT_EXCEEDED")
+        limits = getattr(self, "_safety_limits", None)
+        plugin = getattr(self, "_physics_hazard_watch", None)
+        if plugin is not None and plugin.limit_code is not None:
+            self._enforce_step_limit(state, plugin)
+        if limits is not None:
+            verdict = evaluate_cup_contacts(value, limits)
+            if verdict.code is not None:
+                self._record_monitor_violation(state or State.IDLE, verdict.code, value)
+                raise TeacherStop(
+                    verdict.code,
+                    f"summed force {verdict.summed_force_n:.6f} N (limit {limits.maximum_safe_force_n:.6f}), "
+                    f"compression {verdict.compression_m:.9f} m (limit {limits.maximum_compression_distance_m:.9f})")
+        watch = getattr(self, "_collision_watch", None)
+        if watch is not None and watch.hazard is not None:
+            raise TeacherStop(watch.hazard, watch.detail)
+        if plugin is not None and plugin.hazard is not None:
+            raise TeacherStop(plugin.hazard, plugin.detail)
+
+    def _enforce_step_limit(self, state, plugin) -> None:
+        """The same frozen rule evaluated on every 500 Hz physics step of the chunk stream (C3a)."""
+        self._record_per_step_violation(state or State.IDLE, plugin)
+        raise TeacherStop(plugin.limit_code, plugin.limit_detail)
+
+    def _record_per_step_violation(self, state: State, plugin) -> None:
+        self._document.setdefault("monitor_violation", {
+            "state": state.value, "reason": plugin.limit_code, "sample": None,
+            "per_step": {"step": plugin.limit_step, "state": plugin.limit_state, "value": plugin.limit_value,
+                         "limit": plugin.limit_limit, "kind": plugin.limit_kind},
+            "last_joint_positions_rad": {
+                name: self._positions.get(name) for name in (*self._ARM_JOINTS, "6")},
+            "last_joint_state_received_monotonic_s": self._joint_state_received_monotonic_s,
+        })
+
+    def _step_evidence_available(self, plugin, baseline_gaps: int) -> None:
+        """P4/P9 for the per-step stream: a gap since the goal began, or silence beyond the bound, is a stop."""
+
+        if plugin is None or plugin.limits is None:
+            return
+        if plugin.gaps > baseline_gaps:
+            raise TeacherStop("DYNAMIC_STATE_UNAVAILABLE_STOP", "per-step physics evidence gap: " + plugin.gap_detail)
+        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        now = self._monotonic()
+        last = plugin.last_chunk_monotonic_s
+        if last is None:
+            last = plugin.armed_monotonic_s
+        silent = 0.0 if last is None else now - last
+        if silent > policy.get("state_unavailable_stop_s", _DEFAULT_STATE_UNAVAILABLE_STOP_S):
+            raise TeacherStop(
+                "DYNAMIC_STATE_UNAVAILABLE_STOP", f"per-step physics evidence silent for {silent:.3f}s")
+
+    def _motion_monitor(self, state: State):
+        """Per-trajectory monitor, also the gripper's. It raises (and the client cancels the goal) for: a stop flag,
+        state unavailable too long, an identity change, the force limits and a collision. Every process check is
+        audit-only (D3)."""
 
         carried = state in {
             State.MICRO_LIFT,
@@ -762,25 +1390,110 @@ class RosDynamicMujocoExecution:
             State.RECOVER_MOVE_ABOVE_PICK,
             State.RECOVER_DESCEND_TO_PICK,
         }
-        guard = SustainedConditionGuard(0.08)
+        guard = SustainedConditionGuard(0.08, clock=getattr(self, "_monotonic", time.monotonic))
+        step_watch = getattr(self, "_physics_hazard_watch", None)
+        goal_gaps = []   # the gap count when the goal's first monitor call runs (after its first spin drained any backlog)
 
         def monitor() -> None:
-            value = self._snapshot()
-            if value.maximum_normal_force_n > self._MAX_FORCE_N:
-                self._record_monitor_violation(state, "DYNAMIC_FORCE_LIMIT_EXCEEDED", value)
-                raise RuntimeError("DYNAMIC_FORCE_LIMIT_EXCEEDED")
+            self._check_stop()
+            if step_watch is not None:
+                if not goal_gaps:
+                    goal_gaps.append(step_watch.gaps)
+                if step_watch.limit_code is not None:
+                    self._enforce_step_limit(state, step_watch)
+                self._step_evidence_available(step_watch, goal_gaps[0])
+            value = self._monitor_sample()
+            if value is None:
+                return
+            self._enforce_safety(state, value)
             if carried:
-                guard.require(self._bilateral(value), "dynamic carry lost bilateral contact")
+                try:
+                    guard.require(self._bilateral(value), "dynamic carry lost bilateral contact")
+                except RuntimeError as lost:
+                    self._record_process_diagnostic(
+                        "DYNAMIC_CARRY_BILATERAL_LOST", state, sample=value, message=str(lost))
                 if self._reject_carried_table_contact(state, self._table_contact(value)):
-                    self._record_monitor_violation(state, "DYNAMIC_EARLY_TABLE_CONTACT", value)
-                    raise RuntimeError("DYNAMIC_EARLY_TABLE_CONTACT")
+                    self._record_process_diagnostic("DYNAMIC_EARLY_TABLE_CONTACT", state, sample=value)
             elif state in {State.MOVE_ABOVE_OBJECT, State.DESCEND} and self._initial is not None:
                 displacement = math.dist(
                     value.object_state.position_world,
                     self._initial.object_state.position_world,
                 )
                 if displacement > 0.005:
-                    raise RuntimeError("DYNAMIC_PRECLOSE_CUP_MOVED")
+                    self._record_process_diagnostic(
+                        "DYNAMIC_PRECLOSE_CUP_MOVED", state, sample=value, displacement_m=displacement)
+
+        return monitor
+
+    def _unsettled_cancel(self, reason: str, goal: str, state) -> TeacherStop:
+        """A cancel that did not settle within its bound ends the run; the worker then confirms and cancels every
+        goal (`cancel_and_confirm_parallel_goals`)."""
+        self._document["cancel_unsettled"] = {
+            "reason": reason, "goal": goal, "state": None if state is None else state.value}
+        try:
+            self._write()
+        except Exception:
+            pass
+        return TeacherStop("TEACHER_CANCEL_UNSETTLED", reason)
+
+    def _refuse_plan_start_drift(self, trajectory) -> None:
+        """Refuse a plan whose first point is more than 0.01 rad from the measured arm joints (no goal is sent)."""
+        try:
+            names = list(trajectory.joint_trajectory.joint_names)
+            first = dict(zip(names, trajectory.joint_trajectory.points[0].positions, strict=True))
+            start = tuple(float(first[name]) for name in self._ARM_JOINTS)
+            handoff = tuple(float(self._positions[name]) for name in self._ARM_JOINTS)
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("DYNAMIC_PLAN_START_DRIFT: start state unavailable") from error
+        drift = maximum_joint_error(handoff, start)
+        if drift > _PLAN_START_DRIFT_MAX_RAD:
+            raise RuntimeError(
+                f"DYNAMIC_PLAN_START_DRIFT: {drift:.6f} rad exceeds {_PLAN_START_DRIFT_MAX_RAD} rad")
+
+    def _execute_planned(self, trajectory, state: State, monitor) -> ActionResult:
+        """One `ExecuteTrajectory` goal through `MoveItExecutionClient`.
+
+        Returns on SUCCEEDED. Otherwise raises: `TeacherStop` for a monitor stop (its own code) or a cancel that did
+        not settle, `_ExecutionFailed` for a controller-originated failure (reject, abort result, timeout whose
+        cancel settled), which keeps the original RECOVER_* route.
+        """
+        self._check_stop()
+        self._refuse_plan_start_drift(trajectory)
+        self._last_arm_result = None
+        self._emit_phase_begin("arm")
+        executed = self._trajectory.execute(
+            trajectory, getattr(self, "_execute_timeout_s", 45.0), monitor=monitor)
+        if executed.status is ActionStatus.SUCCEEDED:
+            self._last_arm_result = "SUCCEEDED"
+            return executed
+        failure = executed.failure
+        code = failure.code if failure is not None else "DYNAMIC_EXECUTION_FAILED"
+        message = "" if failure is None else failure.message
+        settled = None if failure is None else failure.metrics.get("cancel_settled")
+        if code == "MOVEIT_EXECUTION_MONITOR_ABORTED":
+            self._last_arm_result = "MONITOR_ABORTED"
+            reason = message.split(":", 1)[0] or code
+            if settled == 0.0:
+                raise self._unsettled_cancel(reason, "arm", state)
+            raise RuntimeError(message or code)  # the monitor's own coded reason, e.g. DYNAMIC_CUP_FORCE_EXCEEDED
+        if code == "MOVEIT_EXECUTION_TIMEOUT" and settled == 0.0:
+            self._last_arm_result = "TIMED_OUT"
+            raise self._unsettled_cancel(code, "arm", state)
+        self._last_arm_result = ("CONTROLLER_FAILED" if code in (
+            "MOVEIT_EXECUTION_FAILED", "MOVEIT_EXECUTION_REJECTED", "MOVEIT_EXECUTION_UNAVAILABLE") else "TIMED_OUT")
+        raise _ExecutionFailed(f"{code}: {message}", executed)
+
+    def _motion(self, state: State, target: PoseEvidence) -> None:
+        before = self._snapshot()
+        current = self._motion_planning_start()
+        motion_targets = [target]
+        if state in {State.DESCEND, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE}:
+            start_pose = self._ik.forward(current)
+            motion_targets = [
+                self._interpolate_pose(start_pose, target, step / 6.0) for step in range(1, 7)
+            ]
+
+        monitor = self._motion_monitor(state)
 
         trajectory_points = 0
         segment_joint_targets: list[list[float]] = []
@@ -790,6 +1503,7 @@ class RosDynamicMujocoExecution:
         resolved_pose = self._ik.forward(current)
         horizon_steps = self._motion_horizon(state, motion_targets, current)
         for segment_index, step in enumerate(horizon_steps):
+            self._check_stop()  # no new goal is planned or sent after a stop
             motion_target = step.waypoint.target
             joint_target = step.receipt.joint_positions_rad
             if joint_target is None:
@@ -809,17 +1523,14 @@ class RosDynamicMujocoExecution:
             )
             cartesian_corridor_receipts.extend(candidate_corridors)
             execution_generation = self._joint_state_generation
-            executed = self._trajectory.execute(
-                planned.trajectory,
-                45.0,
-                monitor=monitor,
-            )
-            if executed.status is not ActionStatus.SUCCEEDED:
+            try:
+                self._execute_planned(planned.trajectory, state, monitor)
+            except _ExecutionFailed as failed:
                 # The trajectory client has already cancelled and settled the goal. Persist the
                 # triggering atomic sample before recovery can replace it with a later snapshot.
                 if "monitor_violation" in self._document:
                     self._write()
-                if self._is_reconcilable_control_failure(executed):
+                if self._is_reconcilable_control_failure(failed.result):
                     current = self._joint_state(after_generation=execution_generation)
                     reconciliation = self._terminal_pose_reconciliation(
                         self._ik.forward(current),
@@ -834,13 +1545,11 @@ class RosDynamicMujocoExecution:
                         trajectory_points += len(planned.trajectory.joint_trajectory.points)
                         segment_joint_targets.append(list(joint_target))
                         continue
-                code = (
-                    executed.failure.code
-                    if executed.failure is not None
-                    else "DYNAMIC_EXECUTION_FAILED"
-                )
-                message = "" if executed.failure is None else executed.failure.message
-                raise RuntimeError(f"{code}: {message}")
+                raise
+            except RuntimeError:
+                if "monitor_violation" in self._document:
+                    self._write()
+                raise
             trajectory_points += len(planned.trajectory.joint_trajectory.points)
             segment_joint_targets.append(list(joint_target))
             current = self._joint_state(after_generation=execution_generation)
@@ -872,45 +1581,335 @@ class RosDynamicMujocoExecution:
             "execution_reconciliations": execution_reconciliations,
             "cartesian_corridor_receipts": cartesian_corridor_receipts,
         }
-        validation_failure = None
         if state is State.MICRO_LIFT:
             self._before_micro_lift = before
             lift = after.object_state.position_world[2] - before.object_state.position_world[2]
-            if (
-                not 0.001 <= lift <= 0.010
-                or not self._bilateral(after)
-                or self._table_contact(after)
-            ):
-                validation_failure = "DYNAMIC_MICRO_LIFT_NOT_PROVED"
+            bilateral = self._bilateral(after)
+            table_contact = self._table_contact(after)
+            if not 0.001 <= lift <= 0.010 or not bilateral or table_contact:
+                # Audit-only (D3): micro-lift verification is process quality; the endpoint decides the task result.
+                self._record_process_diagnostic(
+                    "DYNAMIC_MICRO_LIFT_NOT_PROVED", state, sample=after,
+                    facts={"physical_cup_lift_m": lift, "bilateral_contact": bilateral,
+                           "table_contact": table_contact})
             details.update(
                 physical_cup_lift_m=lift,
-                physical_bilateral_contact=self._bilateral(after),
-                physical_table_contact=self._table_contact(after),
-                validation_failure=validation_failure,
+                physical_bilateral_contact=bilateral,
+                physical_table_contact=table_contact,
+                validation_failure=None,
             )
         self._record(state, before, after, **details)
-        if validation_failure is not None:
-            raise RuntimeError(validation_failure)
 
-    def _command_gripper(self, state: State, target: float) -> None:
-        before = self._snapshot()
-        result = self._gripper.command(target, 2.0, 15.0)
+    def _command_gripper(self, state: State, target: float, *, before=None) -> None:
+        self._check_stop()  # no new goal after a stop
+        if before is None:
+            before = self._snapshot()
+        timeout_s = getattr(self, "_gripper_timeout_s", 15.0)
+        # The gripper goal has the arm goal's stop path: the same monitor, a raise cancels the goal.
+        monitor = self._motion_monitor(state)
+        if state in (State.OPEN_GRIPPER, State.RECOVER_OPEN_GRIPPER):
+            def before_dispatch():
+                self._check_selected_release_freshness(before)
+                self._emit_phase_begin("gripper")
+
+            result = self._gripper.command(target, 2.0, timeout_s, before_dispatch=before_dispatch, monitor=monitor)
+        else:
+            result = self._gripper.command(
+                target, 2.0, timeout_s, before_dispatch=lambda: self._emit_phase_begin("gripper"), monitor=monitor)
         if result.status is not ActionStatus.SUCCEEDED:
-            code = result.failure.code if result.failure is not None else "GRIPPER_COMMAND_FAILED"
+            failure = result.failure
+            code = failure.code if failure is not None else "GRIPPER_COMMAND_FAILED"
+            settled = None if failure is None else failure.metrics.get("cancel_settled")
+            if code == "GRIPPER_MONITOR_ABORTED":
+                reason = failure.message.split(":", 1)[0] or code
+                if settled == 0.0:
+                    raise self._unsettled_cancel(reason, "gripper", state)
+                raise RuntimeError(failure.message or code)  # the monitor's own coded reason
+            if code == "GRIPPER_RESULT_TIMEOUT" and settled == 0.0:
+                raise self._unsettled_cancel(code, "gripper", state)
             raise RuntimeError(code)
         after = self._snapshot()
         self._record(state, before, after, target_q6_rad=target)
 
-    def _call(self, client, request, timeout_s: float, code: str):
+    def _release_bounds(self):
+        """(state age bound, support distance bound) for the release preflight.
+
+        The age is the Teacher execution policy's `state_max_age_s`, not the ACT RGB-synchronisation age: the
+        support-before-open check is execution protection and keeps no dependence on the 100 ms data contract.
+        """
+        from ..act.contracts import finite
+
+        try:
+            age = finite(self._teacher_execution_policy["state_max_age_s"])
+            distance = finite(self._release_runtime_policy["safety_release"]["support_distance_max_m"])
+            if age <= 0 or distance <= 0:
+                raise ValueError("release bounds")
+            return age, distance
+        except (AttributeError, KeyError, TypeError, ValueError) as error:
+            raise RuntimeError("DYNAMIC_RELEASE_POLICY_INVALID") from error
+
+    def _release_scope(self):
+        """(session, reset epoch, attempt): the scope of one release. There is no lease token."""
+        attempt = getattr(self, "_attempt_id", None)
+        if (not isinstance(self._session_id, str) or not self._session_id
+                or type(self._expected_reset_epoch) is not int
+                or not isinstance(attempt, str) or not attempt):
+            raise RuntimeError("DYNAMIC_RELEASE_SCOPE_REQUIRED")
+        return (self._session_id, self._expected_reset_epoch, attempt)
+
+    def _publish_teacher_event(self, kind, payload) -> None:
+        """Offer one Teacher fact to the stream. Bounded, non-blocking, never raises into control."""
+        try:
+            self._event_sink.publish(kind, payload)
+        except Exception:
+            pass
+
+    def _normal_stop_proof(self):
+        """The proof that the arm is stopped: a terminal `ExecuteTrajectory` result (SUCCEEDED, or a controller
+        failure that left the arm held) followed by fresh `/joint_states` below the stop velocity.
+
+        `stop_confirmed_wall_s` is the receipt time of the confirming joint state on the same monotonic clock as the
+        observer receipts, which `_first_source_after_stop` uses to choose the first post-stop source.
+        """
+        from ..backends.mujoco.observer import EvidenceStale
+
+        age, _ = self._release_bounds()
+        scope = self._release_scope()
+        result = getattr(self, "_last_arm_result", None)
+        if result not in ("SUCCEEDED", "CONTROLLER_FAILED"):
+            raise RuntimeError("DYNAMIC_NORMAL_STOP_UNCONFIRMED")
+        confirmed = self._controllers_stopped_at(self._teacher_execution_policy)
+        if confirmed is None:
+            raise RuntimeError("DYNAMIC_NORMAL_STOP_UNCONFIRMED")
+        if not 0 <= self._monotonic() - confirmed <= age:
+            raise RuntimeError("DYNAMIC_NORMAL_STOP_SOURCE_INVALID")
+        try:
+            record = self.observer.snapshot_with_receipt()
+        except EvidenceStale as error:
+            raise RuntimeError("DYNAMIC_NORMAL_STOP_UNCONFIRMED") from error
+        world = record.evidence
+        if (world.simulation_session_id, world.reset_epoch) != (scope[0], scope[1]):
+            raise RuntimeError("DYNAMIC_NORMAL_STOP_SOURCE_INVALID")
+        names = (*self._ARM_JOINTS, "6")
+        # One instant on both clocks: the monotonic time now (never before the world receipt or the stop confirmation)
+        # and the simulation clock read at that instant, after the node's queued `/clock` callbacks ran. The older world
+        # record's own time alone would sit behind this instant by the steps simulated since it was received.
+        self._refresh_node_clock()
+        instant_ns = max(round(self._monotonic() * 1e9), round(record.received_monotonic_s * 1e9),
+                         round(confirmed * 1e9))
+        sim_ns = round(world.simulation_time_s * 1e9)
+        try:
+            sim_ns = max(sim_ns, int(self._node.get_clock().now().nanoseconds))
+        except Exception:
+            pass
+        stop_clock = {"sim_time_ns": sim_ns, "begin_monotonic_ns": instant_ns, "end_monotonic_ns": instant_ns}
+        proof = {
+            "kind": "TEACHER_NORMAL_STOP",
+            "scope": {"session_id": scope[0], "reset_epoch": scope[1], "attempt_id": scope[2]},
+            "epoch": {"session_id": scope[0], "reset_epoch": scope[1]},
+            "trajectory_result": result,
+            "stop_confirmed_wall_s": float(confirmed),
+            "joint_positions": {name: float(self._positions[name]) for name in names},
+            "joint_velocities": {name: float(self._joint_velocities[name]) for name in names},
+            "sim_stamp_s": world.simulation_time_s,
+            "simulation_step": world.simulation_step,
+            # the world sample this stop is anchored to, for the Recorder's own copy of the same evidence
+            "publisher_sequence": world.publisher_sequence,
+            "received_wall_s": float(record.received_monotonic_s),
+            "source_clock": stop_clock,
+        }
+        self._document.setdefault("normal_stop_proofs", []).append(proof)
+        return proof
+
+    def _first_source_after_stop(self, proof, *, previous_step, previous_sequence):
+        from ..adapters.act.scene_state import SceneStateObserver
+
+        age, _ = self._release_bounds()
+        scene_observer = getattr(self, "_scene_source_observer", None)
+        if not isinstance(scene_observer, SceneStateObserver):
+            raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_REQUIRED")
+        deadline = self._monotonic() + age
+        # The owner may read its epoch after confirming stop. That later observation
+        # cannot move FIRST past a source already generated after stop confirmation.
+        minimum_step = previous_step
+        pending_source = None
+        while self._monotonic() <= deadline:
+            now = self._monotonic()
+            current = self.observer.recent_with_receipts()
+            if pending_source is not None and not 0 <= now - pending_source.received_monotonic_s <= age:
+                raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
+            for received in ((pending_source,) if pending_source is not None else current):
+                source = received.evidence
+                if (source.simulation_session_id, source.reset_epoch) != (
+                        self._session_id, self._expected_reset_epoch):
+                    raise RuntimeError("DYNAMIC_RELEASE_SOURCE_SCOPE_INVALID")
+                if source.paused or source.truncated:
+                    raise RuntimeError("DYNAMIC_RELEASE_SOURCE_INVALID")
+                if (source.simulation_step > minimum_step and source.publisher_sequence > previous_sequence
+                        and received.received_monotonic_s >= proof["stop_confirmed_wall_s"]
+                        and 0 <= now - received.received_monotonic_s <= age):
+                    pending_source = received
+                    try:
+                        scenes = scene_observer.recent_frames_with_receipts()
+                    except ValueError as error:
+                        if str(error) in ("SCENE_STATE_UNAVAILABLE", "SCENE_STATE_STALE"):
+                            break  # wait for this candidate's association, never skip to a later source
+                        raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID") from error
+                    matched = [(frame, receipt) for frame, receipt in scenes if
+                        (frame["simulation_session_id"], frame["reset_epoch"], frame["simulation_step"])
+                        == (source.simulation_session_id, source.reset_epoch, source.simulation_step)]
+                    if not matched:
+                        break
+                    if len(matched) != 1:
+                        raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID")
+                    scene, scene_receipt = matched[0]
+                    begin, end = (scene["clock_interval_begin_monotonic_ns"],
+                                  scene["clock_interval_end_monotonic_ns"])
+                    if (scene["paused"] or scene["model_sha256"] != scene_observer.model_sha256
+                            or round(scene["simulation_time_s"] * 1e9) != round(source.simulation_time_s * 1e9)
+                            or not 0 < begin <= end <= round(scene_receipt * 1e9)
+                            or begin > round(received.received_monotonic_s * 1e9)):
+                        raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID")
+                    if begin < round(proof["stop_confirmed_wall_s"] * 1e9):
+                        pending_source = None
+                        continue  # actually generated before stop; a later receipt cannot change that
+                    if not 0 <= now - end * 1e-9 <= age:
+                        raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID")
+                    # Selection is independent of support/pose quality. A bad first eligible source
+                    # is refused by the next gate, never skipped for a later good sample.
+                    self._document.setdefault("post_stop_sources", []).append({
+                        "source_physics": asdict(source),
+                        "received_monotonic_s": received.received_monotonic_s,
+                        "source_scene": scene,
+                        "scene_received_monotonic_s": scene_receipt,
+                        "stop_confirmed_wall_s": proof["stop_confirmed_wall_s"]})
+                    self._selected_release_source = received
+                    self._selected_release_source_clock = (begin, end, scene_receipt)
+                    self._selected_release_source_scene = (copy.deepcopy(scene), scene_receipt)
+                    self._selected_release_stop_proof = copy.deepcopy(proof)
+                    return source
+            self._wait_progress()
+        raise RuntimeError("DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE")
+
+    def _check_selected_release_freshness(self, source):
+        age, _ = self._release_bounds()
+        selected = getattr(self, "_selected_release_source", None)
+        if (selected is None or selected.evidence != source
+                or not 0 <= self._monotonic() - selected.received_monotonic_s <= age):
+            raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
+        clock = getattr(self, "_selected_release_source_clock", None)
+        if clock is not None and (not 0 <= self._monotonic() - clock[1] * 1e-9 <= age
+                                  or not 0 <= self._monotonic() - clock[2] <= age):
+            raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
+
+    def _require_supported_bilateral(self, source):
+        from ..act.task8_live_evidence import actual_table_support
+
+        _, distance = self._release_bounds()
+        if (not actual_table_support(source, support_distance_max_m=distance)
+                or not source.left_fingertip_contacts or not source.right_fingertip_contacts):
+            raise RuntimeError("DYNAMIC_RELEASE_SUPPORT_NOT_PROVED")
+
+    def _supported_release_preflight(self):
+        self._release_authorization = None
+        self._release_bounds()
+        scope = self._release_scope()
+        if self._attached is not True:
+            raise RuntimeError("DYNAMIC_RELEASE_ATTACHMENT_NOT_PROVED")
+        baseline = self._snapshot()
+        proof = self._normal_stop_proof()
+        source = self._first_source_after_stop(proof, previous_step=baseline.simulation_step,
+                                              previous_sequence=baseline.publisher_sequence)
+        self._require_supported_bilateral(source)
+        self._release_authorization = (*scope, source.simulation_step, source.publisher_sequence)
+        return source
+
+    def _confirm_detached_shadow(self):
+        from ..control.planning_scene.task_scene import verify_task_scene
+
+        if self._attached is not False or self._release_scene_geometry is None:
+            return False
+        self._scene_membership()
+        return verify_task_scene(self._last_scene_response, self._release_scene_geometry).success
+
+    def _open_supported_gripper(self, state):
+        self._release_bounds()
+        scope = self._release_scope()
+        if state is State.RECOVER_OPEN_GRIPPER:
+            # Recovery has no forward preflight, but it opens only on the same proofs: arm stopped, a first post-stop
+            # source, and the cup force-bearing on the table with both fingertip sides in contact. Without them it
+            # does not open: the gripper holds and the run ends in ERROR.
+            self._release_authorization = None
+            baseline = self._snapshot()
+            previous_step, previous_sequence = baseline.simulation_step, baseline.publisher_sequence
+        else:
+            authorization = self._release_authorization
+            self._release_authorization = None
+            if authorization is None or authorization[:3] != scope:
+                raise RuntimeError("DYNAMIC_RELEASE_PREFLIGHT_REQUIRED")
+            if self._attached is not False or self._confirm_detached_shadow() is not True:
+                raise RuntimeError("DYNAMIC_RELEASE_DETACH_NOT_PROVED")
+            previous_step, previous_sequence = authorization[3], authorization[4]
+        proof = self._normal_stop_proof()
+        source = self._first_source_after_stop(proof, previous_step=previous_step,
+                                              previous_sequence=previous_sequence)
+        self._require_supported_bilateral(source)
+        self._release_marker_sequence = source.publisher_sequence
+        self._write()
+        self._check_selected_release_freshness(source)
+        self._command_gripper(state, self._RELEASE_Q6, before=source)
+
+    def _call(self, client, request, timeout_s: float, code: str, *, before_dispatch=None):
+        self._check_stop()
         if not client.wait_for_service(timeout_sec=timeout_s):
             raise RuntimeError(f"{code}_UNAVAILABLE")
-        future = client.call_async(request)
-        deadline = time.monotonic() + timeout_s
-        while not future.done() and time.monotonic() < deadline:
-            self._progress()
-        if not future.done() or future.result() is None:
-            raise RuntimeError(f"{code}_TIMEOUT")
-        return future.result()
+
+        def invoke():
+            if before_dispatch is not None:
+                before_dispatch()
+            future = client.call_async(request)
+            deadline = time.monotonic() + timeout_s
+            while not future.done() and time.monotonic() < deadline:
+                self._wait_progress()  # a service wait has no active goal: a stop flag ends it
+            response = future.result() if future.done() else None
+            if response is None:
+                raise RuntimeError(f"{code}_TIMEOUT")
+            return response
+
+        from ..control.planning_scene.task_scene import record_scene_service_call
+
+        return record_scene_service_call(
+            request=request, phase=code,
+            service=("/apply_planning_scene" if client is self._apply_scene
+                     else "/get_planning_scene"),
+            invoke=invoke, records=self._scene_service_calls,
+            ros_clock=(self._node.get_clock() if hasattr(self._node, "get_clock") else None),
+            clock_refresh=self._refresh_node_clock, clock_floor=self._world_sim_floor_ns,
+            on_record=self._scene_operation_hook())
+
+    def _refresh_node_clock(self) -> None:
+        """Drain the node's queued callbacks so its simulation clock is current (stamps only; never raises)."""
+        try:
+            _spin_burst(self._node, first_timeout_s=0.0)
+        except Exception:
+            pass
+
+    def _world_sim_floor_ns(self):
+        """Simulation time (ns) of the newest world sample already received, or None. A clock stamp is never older."""
+        try:
+            return round(self.observer.snapshot_with_receipt().evidence.simulation_time_s * 1e9)
+        except Exception:
+            return None
+
+    def _scene_operation_hook(self):
+        """Offer every Teacher scene call to the event stream (non-blocking); None when there is no stream."""
+        stream = getattr(self, "_event_stream", None)
+        if stream is None:
+            return None
+        from ..act.scene_operation import make_scene_operation_hook
+
+        return make_scene_operation_hook(stream, state=lambda: getattr(self, "_scene_state_value", None),
+                                         source=lambda: getattr(self, "_scene_op_source", None))
 
     def _scene_membership(self) -> tuple[list[str], dict[str, int]]:
         from moveit_msgs.msg import PlanningSceneComponents
@@ -921,8 +1920,10 @@ class RosDynamicMujocoExecution:
             PlanningSceneComponents.WORLD_OBJECT_NAMES
             | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
             | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+            | PlanningSceneComponents.OBJECT_COLORS
         )
         response = self._call(self._get_scene, request, 5.0, "DYNAMIC_SCENE_READBACK")
+        self._last_scene_response = response.scene
         attached = [
             item.object.id for item in response.scene.robot_state.attached_collision_objects
         ]
@@ -941,6 +1942,9 @@ class RosDynamicMujocoExecution:
         set_collision_allowed(matrix, "gripper", "plastic_cup", allowed)
         scene = PlanningScene()
         scene.is_diff = True
+        # MoveIt replaces the robot state (and re-creates its attached bodies, losing the attached cup's colour) when the
+        # message's robot_state is not a diff; every other apply here already sets it.
+        scene.robot_state.is_diff = True
         scene.allowed_collision_matrix = matrix
         applied = self._call(
             self._apply_scene,
@@ -952,26 +1956,25 @@ class RosDynamicMujocoExecution:
             raise RuntimeError("DYNAMIC_ACM_APPLY_FAILED")
         self._touch_collision_allowed = allowed
 
-    def _attach(self, state: State) -> None:
-        from moveit_msgs.msg import AttachedCollisionObject, CollisionObject, PlanningScene
-        from moveit_msgs.srv import ApplyPlanningScene
+    def _transaction_scene_membership(self, transaction):
+        start = len(getattr(self, "_scene_service_calls", ()))
+        try:
+            return self._scene_membership()
+        finally:
+            calls = getattr(self, "_scene_service_calls", ())
+            if len(calls) > start:
+                transaction["query_call_id"] = calls[start]["call_id"]
+                self._write()
 
+    def _attach(self, state: State) -> None:
+        from moveit_msgs.srv import ApplyPlanningScene
+        from ..control.planning_scene.task_scene import make_plain_attach_scene
+
+        # One request form: the plain attach. The independent Recorder derives its scene association from the
+        # `scene_operation` events of this apply and read-back; nothing here depends on it.
         before = self._snapshot()
-        attached = AttachedCollisionObject()
-        attached.link_name = "gripper"
-        attached.object.id = "plastic_cup"
-        attached.object.operation = CollisionObject.ADD
-        attached.touch_links = ["gripper", "jaw"]
-        scene = PlanningScene()
-        scene.is_diff = True
-        scene.robot_state.is_diff = True
-        scene.robot_state.attached_collision_objects = [attached]
-        response = self._call(
-            self._apply_scene,
-            ApplyPlanningScene.Request(scene=scene),
-            5.0,
-            "DYNAMIC_ATTACH",
-        )
+        response = self._call(self._apply_scene, ApplyPlanningScene.Request(scene=make_plain_attach_scene()),
+                              5.0, "DYNAMIC_ATTACH")
         if not response.success:
             raise RuntimeError("DYNAMIC_ATTACH_FAILED")
         attached_ids, world = self._scene_membership()
@@ -985,8 +1988,32 @@ class RosDynamicMujocoExecution:
     def _detach_or_sync(self, state: State) -> None:
         from moveit_msgs.msg import AttachedCollisionObject, CollisionObject, PlanningScene
         from moveit_msgs.srv import ApplyPlanningScene
+        from ..core.simulation.types import SimulationEvidence
+        from ..core.task_geometry import TaskGeometry
+        from ..act.scene_association import source_geometry
+        from ..control.planning_scene.task_scene import _collision_object, verify_task_scene
 
-        before = self._snapshot()
+        before = (self._supported_release_preflight()
+                  if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) else self._snapshot())
+        if (not isinstance(self._task_geometry, TaskGeometry)
+                or not isinstance(before, SimulationEvidence)
+                or before.simulation_session_id != self._session_id
+                or before.reset_epoch != self._expected_reset_epoch
+                or before.paused or before.truncated or before.object_state.body != "plastic_cup"):
+            raise RuntimeError("DYNAMIC_DETACH_SYNC_SOURCE_INVALID")
+        expected_geometry = source_geometry(self._task_geometry, before)
+        cup = expected_geometry.object("plastic_cup")
+        # The apply's exact source survives refusal/timeout; a later failure snapshot cannot
+        # replace the sample from which this requested scene was derived.
+        import uuid
+
+        transaction = {
+            "schema_version": 1, "transaction_id": str(uuid.uuid4()), "phase": state.value,
+            "source_physics": asdict(before), "expected_geometry": asdict(expected_geometry),
+            "apply_call_id": None, "query_call_id": None, "geometry_verification": None,
+        }
+        self._document.setdefault("scene_transactions", []).append(transaction)
+        self._write()
         remove = AttachedCollisionObject()
         remove.object.id = "plastic_cup"
         remove.object.operation = CollisionObject.REMOVE
@@ -995,26 +2022,45 @@ class RosDynamicMujocoExecution:
         scene.robot_state.is_diff = True
         scene.robot_state.attached_collision_objects = [remove]
         scene.world.collision_objects = [
-            make_cup_collision_object(
-                tuple(before.object_state.position_world),
-                tuple(before.object_state.orientation_xyzw),
-            )
+            _collision_object(cup, expected_geometry.frame_id)
         ]
-        response = self._call(
-            self._apply_scene,
-            ApplyPlanningScene.Request(scene=scene),
-            5.0,
-            "DYNAMIC_DETACH_SYNC",
-        )
+        def before_dispatch():
+            if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT):
+                self._check_selected_release_freshness(before)
+        start = len(getattr(self, "_scene_service_calls", ()))
+        # The physics snapshot this request's cup pose was derived from, named on the scene_operation event so an
+        # independent consumer joins the same original step.
+        self._scene_op_source = {"simulation_step": before.simulation_step,
+                                 "publisher_sequence": before.publisher_sequence,
+                                 "simulation_time_s": before.simulation_time_s}
+        try:
+            response = self._call(
+                self._apply_scene, ApplyPlanningScene.Request(scene=scene), 5.0,
+                "DYNAMIC_DETACH_SYNC", before_dispatch=before_dispatch)
+        finally:
+            self._scene_op_source = None
+            calls = getattr(self, "_scene_service_calls", ())
+            if len(calls) > start:
+                transaction["apply_call_id"] = calls[start]["call_id"]
+                self._write()
+        calls = getattr(self, "_scene_service_calls", ())
         if not response.success:
             raise RuntimeError("DYNAMIC_DETACH_SYNC_FAILED")
-        attached_ids, world = self._scene_membership()
+        attached_ids, world = self._transaction_scene_membership(transaction)
         if "plastic_cup" in attached_ids or world.get("plastic_cup") != 13:
             raise RuntimeError("DYNAMIC_DETACH_SYNC_READBACK_MISMATCH")
+        verification = verify_task_scene(self._last_scene_response, expected_geometry)
+        transaction["geometry_verification"] = verification.evidence
+        self._write()
+        if not verification.success:
+            raise RuntimeError("DYNAMIC_DETACH_SYNC_GEOMETRY_MISMATCH")
         self._attached = False
+        self._release_scene_geometry = expected_geometry
         self._scene_readback = {
             "attached_object_ids": attached_ids,
             "world_primitive_counts": world,
+            "source_physics": asdict(before),
+            "geometry_verification": verification.evidence,
         }
         if self._touch_collision_allowed:
             self._set_touch_collision(False)
@@ -1034,7 +2080,16 @@ class RosDynamicMujocoExecution:
                 and angular <= FINAL_MAX_ANGULAR_SPEED_RAD_S
             )
 
-        after = self._wait_stable(released, 0.20, 4.0)
+        try:
+            after = self._wait_stable(released, 0.20, 4.0)
+        except RuntimeError as error:
+            if str(error) != "DYNAMIC_STABLE_STATE_TIMEOUT":
+                raise
+            # The stability window is an observation now (D3); the task result is the endpoint pose.
+            after = self._snapshot()
+            self._record_process_diagnostic(
+                "DYNAMIC_SETTLE_WINDOW_NOT_MET", state, sample=after,
+                facts={"window_s": 0.20, "timeout_s": 4.0})
         self._final_samples.append(self._evidence(after))
         self._record(state, before, after)
 
@@ -1060,7 +2115,13 @@ class RosDynamicMujocoExecution:
             or before.left_fingertip_contacts
             or before.right_fingertip_contacts
         ):
-            raise RuntimeError("DYNAMIC_FINAL_PLACEMENT_NOT_PROVED")
+            # Audit-only (D3): the pass/fail verdict is the Teacher endpoint rule applied at the end of the run.
+            self._record_process_diagnostic(
+                "DYNAMIC_FINAL_PLACEMENT_NOT_PROVED", state, sample=before,
+                facts={"xy_error_m": xy_error, "height_m": actual.position_world[2], "upright_tilt_rad": upright,
+                       "table_contact": self._table_contact(before),
+                       "left_contact_count": len(before.left_fingertip_contacts),
+                       "right_contact_count": len(before.right_fingertip_contacts)})
         self._record(
             state,
             before,
@@ -1070,8 +2131,112 @@ class RosDynamicMujocoExecution:
             final_upright_tilt_rad=upright,
         )
 
-    def perform(self, state: State, target: PoseEvidence | None) -> ActionResult:
+    # ---- phase events (SO101_TEACHER_EVENT_V2) ------------------------------------------------------------------------
+    # One `phase_begin` and one `phase_finish` per state, each with the sim stamp read at that instant. A state that
+    # sends a goal begins at the goal send (after any pre-dispatch check), so the stamp is the one at which the Teacher
+    # sent its first command; the Recorder takes its first-command clock from the first such event.
+
+    _GOAL_STATES = frozenset({
+        State.PREPARE_OPEN_GRIPPER, State.CLOSE_GRIPPER, State.OPEN_GRIPPER, State.RECOVER_OPEN_GRIPPER})
+
+    def _sim_time_ns(self):
         try:
+            return int(self._node.get_clock().now().nanoseconds)
+        except Exception:
+            return None
+
+    def _phase_open(self, state: State, target) -> None:
+        self._phase_state, self._phase_begun = state, False
+        if target is None and state not in self._GOAL_STATES:
+            self._emit_phase_begin(None)
+
+    def _emit_phase_begin(self, goal_kind) -> None:
+        """Publish the pending `phase_begin`, once per state. Never raises."""
+        try:
+            state = getattr(self, "_phase_state", None)
+            if state is None or getattr(self, "_phase_begun", True):
+                return
+            self._phase_begun = True
+            self._stream_emit("phase_begin", {
+                "state": state.value, "sim_time_ns": self._sim_time_ns(), "monotonic_ns": time.monotonic_ns(),
+                "goal_sent": goal_kind is not None, "goal_kind": goal_kind})
+        except Exception:
+            pass
+
+    def _phase_finish(self, status: str, code=None) -> None:
+        try:
+            state = getattr(self, "_phase_state", None)
+            if state is None:
+                return
+            self._emit_phase_begin(None)  # a state that never sent a goal still begins before it finishes
+            self._stream_emit("phase_finish", {
+                "state": state.value, "sim_time_ns": self._sim_time_ns(), "monotonic_ns": time.monotonic_ns(),
+                "status": status, "code": code})
+        except Exception:
+            pass
+        finally:
+            self._phase_state = None
+
+    def perform(self, state: State, target: PoseEvidence | None) -> ActionResult:
+        if getattr(self, '_first_state_marked', False):
+            return self._perform_state(state, target)
+        self._first_state_marked = True
+        _mark_phase('runner.first_state.begin')
+        try:
+            return self._perform_state(state, target)
+        finally:
+            _mark_phase('runner.first_state.end')
+
+    #: the states that move the held cup (after ATTACH_MOVEIT); only MOVE_ABOVE_PLACE moves it laterally
+    _CARRY_STATES = frozenset({State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE})
+
+    def _place_target(self, state: State, target):
+        """The DESCEND_TO_PLACE target, lowered by the frozen ACT offset; every other target and run is untouched."""
+
+        if state is not State.DESCEND_TO_PLACE or target is None or getattr(self, "_execution_snapshot_root", None) is None:
+            return target
+        policy = getattr(self, "_teacher_execution_policy", None)
+        if policy is None or "place_descend_offset_m" not in policy:
+            raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: place_descend_offset_m")
+        x, y, z = target.position_m
+        return PoseEvidence((x, y, z + float(policy["place_descend_offset_m"])), target.orientation_xyzw)
+
+    def _planning_scaling(self, state: State) -> tuple[float, float]:
+        """(velocity, acceleration) MoveIt scaling: the frozen carry values for the carry states with frozen inputs."""
+
+        template = (self._template.velocity_scaling, self._template.acceleration_scaling)
+        if getattr(self, "_execution_snapshot_root", None) is None or state not in self._CARRY_STATES:
+            return template
+        policy = getattr(self, "_teacher_execution_policy", None)
+        if (policy is None or "carry_max_velocity_scaling" not in policy
+                or "carry_max_acceleration_scaling" not in policy):
+            raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")
+        return float(policy["carry_max_velocity_scaling"]), float(policy["carry_max_acceleration_scaling"])
+
+    def _close_target_q6(self) -> float:
+        """The CLOSE_GRIPPER target: the frozen Teacher policy value with frozen inputs, else the original constant."""
+
+        if getattr(self, "_execution_snapshot_root", None) is None:
+            return self._CLOSE_Q6
+        policy = getattr(self, "_teacher_execution_policy", None)
+        if policy is None or "gripper_close_target_rad" not in policy:
+            raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: gripper_close_target_rad")
+        return float(policy["gripper_close_target_rad"])
+
+    def _perform_state(self, state: State, target: PoseEvidence | None) -> ActionResult:
+        try:
+            self._check_stop()  # the state machine never starts a new state, hence a new goal, after a stop
+            self._safety_state = state
+            target = self._place_target(state, target)
+            if getattr(self, "_initial", None) is None and not getattr(self, "_teacher_start_attempted", False):
+                # The Teacher's own start observation: read from its world observer after reset and before the first
+                # arm or gripper command, independent of the recorder, the capture and the data side.
+                self._teacher_start_attempted = True
+                started = self._capture_teacher_start()
+                if started is not None:
+                    self._initial = started
+            self._scene_state_value = state.value
+            self._phase_open(state, target)
             if self._initial is None:
                 self._initial = self._snapshot()
             if state is State.DESCEND:
@@ -1095,10 +2260,19 @@ class RosDynamicMujocoExecution:
             elif state is State.PREPARE_OPEN_GRIPPER:
                 self._command_gripper(state, self._PREOPEN_Q6)
             elif state is State.CLOSE_GRIPPER:
-                self._command_gripper(state, self._CLOSE_Q6)
+                self._command_gripper(state, self._close_target_q6())
             elif state is State.WAIT_GRASP_STABLE:
                 before = self._snapshot()
-                after = self._wait_stable(self._bilateral, 0.25, 6.0)
+                try:
+                    after = self._wait_stable(self._bilateral, 0.25, 6.0)
+                except RuntimeError as error:
+                    if str(error) != "DYNAMIC_STABLE_STATE_TIMEOUT":
+                        raise
+                    # Audit-only (D3): an unstable grasp is a diagnostic, the endpoint decides the task result.
+                    after = self._snapshot()
+                    self._record_process_diagnostic(
+                        "DYNAMIC_STABLE_STATE_TIMEOUT", state, sample=after,
+                        facts={"window_s": 0.25, "timeout_s": 6.0})
                 self._record(state, before, after)
             elif state is State.VERIFY_PHYSICAL_GRASP:
                 before = self._snapshot()
@@ -1109,21 +2283,26 @@ class RosDynamicMujocoExecution:
                     < 0.001
                     or not self._bilateral(before)
                 ):
-                    raise RuntimeError("DYNAMIC_PHYSICAL_GRASP_NOT_PROVED")
+                    # Audit-only (D3): the transition proceeds to ATTACH_MOVEIT.
+                    lift = (None if self._before_micro_lift is None else
+                            before.object_state.position_world[2]
+                            - self._before_micro_lift.object_state.position_world[2])
+                    self._record_process_diagnostic(
+                        "DYNAMIC_PHYSICAL_GRASP_NOT_PROVED", state, sample=before,
+                        facts={"physical_cup_lift_m": lift, "bilateral_contact": self._bilateral(before)})
                 self._record(state, before, before)
             elif state is State.ATTACH_MOVEIT:
                 self._attach(state)
             elif state in {State.DETACH_MOVEIT, State.SYNC_WORLD_OBJECT}:
                 self._detach_or_sync(state)
             elif state is State.OPEN_GRIPPER:
-                self._release_marker_sequence = self._snapshot().publisher_sequence
-                self._command_gripper(state, self._RELEASE_Q6)
+                self._open_supported_gripper(state)
             elif state is State.WAIT_RELEASE_SETTLE:
                 self._wait_release(state)
             elif state is State.VALIDATE_FINAL_PLACEMENT:
                 self._validate_final(state)
             elif state is State.RECOVER_OPEN_GRIPPER:
-                self._command_gripper(state, self._RELEASE_Q6)
+                self._open_supported_gripper(state)
             elif state in {State.RECOVER_DETACH_MOVEIT, State.RECOVER_SYNC_WORLD_OBJECT}:
                 self._detach_or_sync(state)
             elif state is State.RECOVER_DETACH_GAZEBO:
@@ -1132,10 +2311,12 @@ class RosDynamicMujocoExecution:
             else:
                 value = self._snapshot()
                 self._record(state, value, value)
+            self._phase_finish("SUCCEEDED")
             return ActionResult(ActionStatus.SUCCEEDED)
         except Exception as error:
             code = str(error).split(":", 1)[0] or "DYNAMIC_EXECUTION_FAILED"
             self._document["last_error"] = str(error)
+            self._phase_finish("FAILED", code)
             self._write()
             return ActionResult(
                 ActionStatus.FAILED,
@@ -1143,4 +2324,5 @@ class RosDynamicMujocoExecution:
             )
 
     def close(self) -> None:
+        self._close_event_stream()
         self._node.destroy_subscription(self._joint_subscription)

@@ -49,8 +49,39 @@ def _motion_event(state: str, before, after) -> dict[str, object]:
     }
 
 
+def _teacher_fields() -> dict[str, object]:
+    observation = {
+        "position": [0.02, -0.28, 0.165],
+        "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
+        "simulation_time_s": 1.0,
+        "frame_id": "world",
+        "object_id": "plastic_cup",
+        "session_id": "session-001",
+        "reset_epoch": 7,
+        "publisher_sequence": 10,
+        "simulation_step": 10,
+    }
+    return {
+        "teacher_execution_status": "COMPLETED",
+        "teacher_task_result": {"rule_version": "teacher_endpoint_v2", "result": "PASS", "reasons": [],
+                                "start_observation": observation, "end_observation": observation},
+        "teacher_start_observation": observation,
+        "teacher_end_observation": observation,
+    }
+
+
 @pytest.fixture
-def accepted_document() -> dict[str, object]:
+def accepted_document(legacy_v1_document) -> dict[str, object]:
+    """A new-run (manifest v2) document: the Teacher passed and every process fact also looks good."""
+    document = copy.deepcopy(legacy_v1_document)
+    document["dynamic"]["schema"] = "so101-dynamic-mujoco-execute-v2"
+    document["dynamic"].update(_teacher_fields())
+    return document
+
+
+@pytest.fixture
+def legacy_v1_document() -> dict[str, object]:
+    """The superseded manifest v1 evidence shape: read-only legacy, never accepted as new-run success."""
     pick = {
         "publisher_sequence": 20,
         "reset_epoch": 7,
@@ -242,6 +273,8 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
     report = validate_e2e_evidence(accepted_document)
     assert report.accepted is True
     assert report.failures == ()
+    assert report.manifest_schema == "so101-dynamic-mujoco-execute-v2"
+    assert report.teacher_task_result == "PASS" and report.process_diagnostics == ()
     assert report.physical_outcome["stable"] is True
     assert report.planning_scene_outcome["pose_matches_mujoco"] is True
 
@@ -252,31 +285,26 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
         (("dynamic", "workflow_id"), "other", "E2E_IDENTITY_MISMATCH"),
         (("perception", "request_id"), "other", "E2E_IDENTITY_MISMATCH"),
         (("mujoco_final", "reset_epoch"), 8, "E2E_IDENTITY_MISMATCH"),
+        # genuine protection / execution outcome: the run did not finish normally
         (("dynamic", "status"), "RUNNING", "E2E_DYNAMIC_EVIDENCE_INVALID"),
-        (("dynamic", "state_trace"), SUCCESS_TRACE[:-1], "E2E_DYNAMIC_EVIDENCE_INVALID"),
-        (("dynamic", "release_marker_sequence"), 70, "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "current_state"), "RETREAT", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "failure"), "DYNAMIC_FORCE_LIMIT_EXCEEDED", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        # evidence correlation contract (input and perception binding), unchanged
         (("dynamic", "input_frame_id"), "task_camera_frame", "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("dynamic", "input_source_stamp_ns"), 99, "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("perception", "source_frame_id"), "", "E2E_DYNAMIC_EVIDENCE_INVALID"),
-        (("mujoco_final", "table_contact"), False, "E2E_MUJOCO_FINAL_INVALID"),
-        (
-            ("mujoco_final", "left_fingertip_contact_count"),
-            1,
-            "E2E_MUJOCO_FINAL_INVALID",
-        ),
-        (
-            ("planning_scene_final", "attached_object_ids"),
-            ["plastic_cup"],
-            "E2E_PLANNING_SCENE_INVALID",
-        ),
+        (("dynamic", "release_marker_sequence"), "x", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        # configuration provenance, unchanged
         (
             ("policy", "qualification_status"),
             "CALIBRATION_REQUIRED",
             "E2E_DYNAMIC_EVIDENCE_INVALID",
         ),
+        (("policy", "sha256"), "b" * 64, "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "schema"), "so101-dynamic-mujoco-execute-v3", "E2E_DYNAMIC_EVIDENCE_INVALID"),
     ],
 )
-def test_each_invalid_fact_is_rejected(
+def test_contract_and_protection_facts_still_reject_a_teacher_pass(
     accepted_document,
     path: tuple[str, str],
     replacement,
@@ -292,41 +320,152 @@ def test_each_invalid_fact_is_rejected(
     assert failure in report.failures
 
 
-def test_controller_feedback_and_micro_lift_are_required(accepted_document) -> None:
+def _event(document, state):
+    return next(item for item in document["dynamic"]["state_events"] if item["state"] == state)
+
+
+def _break_process_fact(document, name):
+    dynamic = document["dynamic"]
+    if name == "trace_truncated":
+        dynamic["state_trace"] = SUCCESS_TRACE[:-1]
+    if name == "release_marker_late":
+        dynamic["release_marker_sequence"] = 70
+    if name == "terminal_error":
+        _event(document, "LIFT")["terminal_position_error_m"] = 0.2
+    if name == "controller_feedback_generation":
+        _event(document, "LIFT")["terminal_joint_state_generation"] = 0
+    if name == "micro_lift_missing":
+        _event(document, "MICRO_LIFT")["physical_cup_lift_m"] = 0.0
+    if name == "carry_bilateral_lost":
+        _event(document, "MICRO_LIFT")["physical_bilateral_contact"] = False
+    if name == "final_samples_not_table_supported":
+        dynamic["final_samples"][-1]["table_contact"] = False
+    if name == "attached_after_release":
+        dynamic["planning_scene_readback"]["attached_object_ids"] = ["plastic_cup"]
+    if name == "mujoco_table_contact":
+        document["mujoco_final"]["table_contact"] = False
+    if name == "mujoco_fingertip_contact":
+        document["mujoco_final"]["left_fingertip_contact_count"] = 1
+    if name == "mujoco_not_still":
+        document["mujoco_final"]["cup_linear_velocity_world_m_s"] = [0.5, 0.0, 0.0]
+    if name == "mujoco_height":
+        document["mujoco_final"]["cup_pose_world"][2] = 0.5
+        document["planning_scene_final"]["world_objects"]["plastic_cup"]["pose_xyz_xyzw"][2] = 0.5
+    if name == "scene_pose_mismatch":
+        document["planning_scene_final"]["world_objects"]["plastic_cup"]["pose_xyz_xyzw"][0] += 0.1
+    if name == "scene_stale":
+        document["planning_scene_final"]["readback_monotonic_ns"] += 2_000_000_000
+    if name == "scene_time_backwards":
+        document["planning_scene_final"]["readback_monotonic_ns"] = document["mujoco_final"]["readback_monotonic_ns"] - 1
+    if name == "mujoco_clock_domain":
+        document["mujoco_final"]["clock_domain"] = "system_wall"
+    if name == "scene_clock_domain":
+        document["planning_scene_final"]["clock_domain"] = "mujoco_sim"
+
+
+_PROCESS_FACTS = {
+    "trace_truncated": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "release_marker_late": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "terminal_error": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "controller_feedback_generation": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "micro_lift_missing": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "carry_bilateral_lost": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "final_samples_not_table_supported": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "attached_after_release": "E2E_PROCESS_DYNAMIC_EVIDENCE_INVALID",
+    "mujoco_table_contact": "E2E_PROCESS_MUJOCO_FINAL_INVALID",
+    "mujoco_fingertip_contact": "E2E_PROCESS_MUJOCO_FINAL_INVALID",
+    "mujoco_not_still": "E2E_PROCESS_MUJOCO_FINAL_INVALID",
+    "mujoco_height": "E2E_PROCESS_MUJOCO_FINAL_INVALID",
+    "mujoco_clock_domain": "E2E_PROCESS_MUJOCO_FINAL_INVALID",
+    "scene_pose_mismatch": "E2E_PROCESS_PLANNING_SCENE_INVALID",
+    "scene_stale": "E2E_PROCESS_PLANNING_SCENE_INVALID",
+    "scene_time_backwards": "E2E_PROCESS_PLANNING_SCENE_INVALID",
+    "scene_clock_domain": "E2E_PROCESS_PLANNING_SCENE_INVALID",
+}
+
+
+@pytest.mark.parametrize("fact", sorted(_PROCESS_FACTS))
+def test_process_facts_are_audit_only_diagnostics_for_a_teacher_pass(accepted_document, fact) -> None:
     from so101_demo.application.e2e_acceptance import validate_e2e_evidence
 
-    for state, field, value in (
-        ("LIFT", "terminal_joint_state_generation", 0),
-        ("LIFT", "terminal_position_error_m", 0.2),
-        ("MICRO_LIFT", "physical_cup_lift_m", 0.0),
-    ):
-        document = copy.deepcopy(accepted_document)
-        event = next(
-            item
-            for item in document["dynamic"]["state_events"]
-            if item["state"] == state
-        )
-        event[field] = value
-        report = validate_e2e_evidence(document)
-        assert "E2E_DYNAMIC_EVIDENCE_INVALID" in report.failures
+    document = copy.deepcopy(accepted_document)
+    _break_process_fact(document, fact)
+    report = validate_e2e_evidence(document)
+
+    assert report.accepted is True and report.failures == (), report.failures
+    assert _PROCESS_FACTS[fact] in report.process_diagnostics
+    assert report.to_document()["process_diagnostics"] == list(report.process_diagnostics)
+    json.dumps(report.to_document(), allow_nan=False)
 
 
-def test_final_pose_and_same_domain_readback_times_must_agree(
-    accepted_document,
+def test_a_teacher_pass_with_every_process_fact_broken_is_still_accepted(accepted_document) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    document = copy.deepcopy(accepted_document)
+    for fact in _PROCESS_FACTS:
+        _break_process_fact(document, fact)
+    report = validate_e2e_evidence(document)
+    assert report.accepted is True and report.failures == ()
+    assert set(_PROCESS_FACTS.values()) <= set(report.process_diagnostics)
+
+
+@pytest.mark.parametrize(
+    ("execution", "result"),
+    [("COMPLETED", "FAIL"), ("COMPLETED", "UNCONFIRMED"), ("STOPPED_SAFETY", "PASS"),
+     ("FAILED", "UNCONFIRMED"), ("DEADLINE", "UNCONFIRMED"), ("INDETERMINATE", "UNCONFIRMED")],
+)
+def test_acceptance_follows_the_teacher_task_result_not_the_process_facts(
+    accepted_document, execution, result
 ) -> None:
     from so101_demo.application.e2e_acceptance import validate_e2e_evidence
 
-    pose_mismatch = copy.deepcopy(accepted_document)
-    pose_mismatch["planning_scene_final"]["world_objects"]["plastic_cup"][
-        "pose_xyz_xyzw"
-    ][0] += 0.1
-    report = validate_e2e_evidence(pose_mismatch)
-    assert "E2E_PLANNING_SCENE_INVALID" in report.failures
+    document = copy.deepcopy(accepted_document)    # every process fact still looks perfect
+    document["dynamic"]["teacher_execution_status"] = execution
+    document["dynamic"]["teacher_task_result"]["result"] = result
+    report = validate_e2e_evidence(document)
+    assert report.accepted is False
+    assert "E2E_TEACHER_TASK_NOT_PASSED" in report.failures
+    assert report.teacher_task_result == result and report.process_diagnostics == ()
 
-    stale = copy.deepcopy(accepted_document)
-    stale["planning_scene_final"]["readback_monotonic_ns"] += 2_000_000_000
-    report = validate_e2e_evidence(stale)
-    assert "E2E_PLANNING_SCENE_INVALID" in report.failures
+
+@pytest.mark.parametrize("change", ["absent", "not_a_mapping", "no_result", "unknown_result"])
+def test_a_v2_manifest_without_a_usable_teacher_result_is_rejected(accepted_document, change) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    document = copy.deepcopy(accepted_document)
+    if change == "absent":
+        del document["dynamic"]["teacher_task_result"]
+    if change == "not_a_mapping":
+        document["dynamic"]["teacher_task_result"] = "PASS"
+    if change == "no_result":
+        document["dynamic"]["teacher_task_result"] = {}
+    if change == "unknown_result":
+        document["dynamic"]["teacher_task_result"]["result"] = "MAYBE"
+    report = validate_e2e_evidence(document)
+    assert report.accepted is False
+    assert "E2E_TEACHER_RESULT_MISSING" in report.failures
+
+
+def test_a_manifest_v1_is_read_only_legacy_and_never_accepted(legacy_v1_document) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    # the old document is complete and every strict process fact holds, and it is still not new-run success
+    report = validate_e2e_evidence(legacy_v1_document)
+    assert report.accepted is False
+    assert report.failures == ("E2E_LEGACY_MANIFEST_READ_ONLY",)
+    assert report.manifest_schema == "so101-dynamic-mujoco-execute-v1"
+    assert report.physical_outcome["stable"] is True
+    json.dumps(report.to_document(), allow_nan=False)
+
+
+def test_a_manifest_v1_keeps_reporting_its_old_strict_findings_for_audit(legacy_v1_document) -> None:
+    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
+
+    legacy_v1_document["mujoco_final"]["table_contact"] = False
+    report = validate_e2e_evidence(legacy_v1_document)
+    assert report.accepted is False
+    assert report.failures[0] == "E2E_LEGACY_MANIFEST_READ_ONLY"
+    assert "E2E_MUJOCO_FINAL_INVALID" in report.legacy_findings
 
 
 def test_cross_domain_source_timestamps_are_not_compared(accepted_document) -> None:
@@ -335,41 +474,7 @@ def test_cross_domain_source_timestamps_are_not_compared(accepted_document) -> N
     report = validate_e2e_evidence(accepted_document)
 
     assert report.accepted is True
-
-
-def test_readback_monotonic_order_cannot_run_backwards(accepted_document) -> None:
-    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
-
-    document = copy.deepcopy(accepted_document)
-    document["planning_scene_final"]["readback_monotonic_ns"] = (
-        document["mujoco_final"]["readback_monotonic_ns"] - 1
-    )
-
-    report = validate_e2e_evidence(document)
-
-    assert "E2E_PLANNING_SCENE_INVALID" in report.failures
-
-
-@pytest.mark.parametrize(
-    ("document_name", "field", "replacement", "failure"),
-    [
-        ("mujoco_final", "clock_domain", "system_wall", "E2E_MUJOCO_FINAL_INVALID"),
-        ("planning_scene_final", "clock_domain", "mujoco_sim", "E2E_PLANNING_SCENE_INVALID"),
-        ("mujoco_final", "readback_monotonic_ns", -1, "E2E_MUJOCO_FINAL_INVALID"),
-        ("planning_scene_final", "readback_monotonic_ns", -1, "E2E_PLANNING_SCENE_INVALID"),
-    ],
-)
-def test_final_readback_clock_provenance_is_required(
-    accepted_document, document_name: str, field: str, replacement, failure: str
-) -> None:
-    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
-
-    document = copy.deepcopy(accepted_document)
-    document[document_name][field] = replacement
-
-    report = validate_e2e_evidence(document)
-
-    assert failure in report.failures
+    assert report.process_diagnostics == ()
 
 
 def test_readback_documents_preserve_atomic_simulation_and_scene_facts() -> None:
@@ -639,19 +744,10 @@ def test_acceptance_cli_persists_readback_and_emits_terminal_event(
     ).is_file()
 
 
-def test_acceptance_cli_emits_rejection_for_invalid_final_readback(
-    tmp_path, accepted_document, capsys
-) -> None:
+def _run_cli(tmp_path, readback):
     from so101_demo.cli import e2e_acceptance
 
-    _write_cli_inputs(tmp_path, accepted_document)
-    readback = {
-        "mujoco_final": copy.deepcopy(accepted_document["mujoco_final"]),
-        "planning_scene_final": accepted_document["planning_scene_final"],
-    }
-    readback["mujoco_final"]["table_contact"] = False
-
-    result = e2e_acceptance.main(
+    return e2e_acceptance.main(
         [
             "--run-root",
             str(tmp_path / "run"),
@@ -668,7 +764,52 @@ def test_acceptance_cli_emits_rejection_for_invalid_final_readback(
         _collect=lambda **_kwargs: copy.deepcopy(readback),
     )
 
+
+def test_acceptance_cli_accepts_a_teacher_pass_whose_final_readback_has_process_findings(
+    tmp_path, accepted_document, capsys
+) -> None:
+    _write_cli_inputs(tmp_path, accepted_document)
+    readback = {
+        "mujoco_final": copy.deepcopy(accepted_document["mujoco_final"]),
+        "planning_scene_final": accepted_document["planning_scene_final"],
+    }
+    readback["mujoco_final"]["table_contact"] = False
+
+    assert _run_cli(tmp_path, readback) == 0
+
     captured = capsys.readouterr()
-    assert result == 1
+    assert '"event":"E2E_ACCEPTED"' in captured.out
+    result = json.loads((tmp_path / "run" / "acceptance" / "result.json").read_text())
+    assert result["accepted"] is True
+    assert "E2E_PROCESS_MUJOCO_FINAL_INVALID" in result["process_diagnostics"]
+
+
+def test_acceptance_cli_rejects_a_teacher_fail_even_with_a_perfect_final_readback(
+    tmp_path, accepted_document, capsys
+) -> None:
+    accepted_document["dynamic"]["teacher_task_result"]["result"] = "FAIL"
+    _write_cli_inputs(tmp_path, accepted_document)
+    readback = {
+        "mujoco_final": accepted_document["mujoco_final"],
+        "planning_scene_final": accepted_document["planning_scene_final"],
+    }
+
+    assert _run_cli(tmp_path, readback) == 1
+
+    captured = capsys.readouterr()
     assert '"event":"E2E_REJECTED"' in captured.out
-    assert "E2E_MUJOCO_FINAL_INVALID" in captured.err
+    assert '"failure_code":"E2E_TEACHER_TASK_NOT_PASSED"' in captured.out
+    assert "E2E_TEACHER_TASK_NOT_PASSED" in captured.err
+
+
+def test_acceptance_cli_rejects_a_legacy_v1_manifest(tmp_path, legacy_v1_document, capsys) -> None:
+    _write_cli_inputs(tmp_path, legacy_v1_document)
+    readback = {
+        "mujoco_final": legacy_v1_document["mujoco_final"],
+        "planning_scene_final": legacy_v1_document["planning_scene_final"],
+    }
+
+    assert _run_cli(tmp_path, readback) == 1
+
+    captured = capsys.readouterr()
+    assert '"failure_code":"E2E_LEGACY_MANIFEST_READ_ONLY"' in captured.out

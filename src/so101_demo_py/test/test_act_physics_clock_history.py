@@ -437,3 +437,230 @@ def test_history_validates_and_retains_the_owned_snapshot(monkeypatch):
     retained = history.step_at(1)
     assert tuple(retained["sample"].model_qpos) == (.1, .2)
     assert retained["sample"].physics_step == 1
+
+
+# ---- R6: recent_steps() is the copy-free twin of recent_with_receipts() ----
+
+def _readback_outcome(history, call):
+    try:
+        result, error = call(history), None
+    except ValueError as exc:
+        result, error = None, str(exc)
+    return (result, error, history.hazard, history.version,
+            (history.last_refusal_facts or {}).get("reason"))
+
+
+def _steps_of(entries):
+    return tuple(entry["sample"].physics_step for entry in entries)
+
+
+def _parity_history(case):
+    now = [NOW_NS]
+    history = _history(now)
+    if case == "unavailable":
+        return history
+    history.accept_chunk(_chunk(0, *(_sample(step) for step in range(1, 11))))
+    if case == "hazard":
+        with pytest.raises(ValueError):
+            history.accept_chunk(_chunk(5, _sample(11)))
+    elif case == "partially_stale":
+        now[0] += 115_000_000
+    elif case == "all_stale":
+        now[0] += 300_000_000
+    elif case == "confirm_stale":
+        last_end_ns = history._last_source_end_ns
+        history.clock_ns = _jumping_clock(last_end_ns + 190_000_000,
+                                          last_end_ns + 250_000_000)
+    return history
+
+
+@pytest.mark.parametrize("case", [
+    "fresh", "partially_stale", "all_stale", "hazard", "unavailable", "confirm_stale"])
+def test_recent_steps_matches_recent_with_receipts_including_side_effects(case):
+    full = _readback_outcome(_parity_history(case),
+                             lambda h: _steps_of(h.recent_with_receipts()))
+    steps = _readback_outcome(_parity_history(case), lambda h: h.recent_steps())
+    assert steps == full, (case, steps, full)
+    if case == "fresh":
+        assert steps[0] == tuple(range(1, 11))
+    if case == "partially_stale":
+        assert 0 < len(steps[0]) < 10
+    if case in ("all_stale", "confirm_stale"):
+        assert steps[1] == "PHYSICS_CLOCK_STALE" and steps[2] == "PHYSICS_CLOCK_STALE"
+    if case == "unavailable":
+        assert steps[1] == "PHYSICS_CLOCK_UNAVAILABLE"
+
+
+def test_recent_steps_makes_no_deepcopy(monkeypatch):
+    import copy
+    history = _parity_history("fresh")
+    calls = []
+    real = copy.deepcopy
+    monkeypatch.setattr(copy, "deepcopy", lambda *a, **k: calls.append(1) or real(*a, **k))
+    assert history.recent_steps() == tuple(range(1, 11))
+    assert calls == []
+    assert len(history.recent_with_receipts()) == 10 and calls
+
+
+# ---- A2a: the Teacher's own history audits raw-stream completeness instead of latching it ----
+
+def _audit_history(now, **kwargs):
+    history = PhysicsClockHistory(
+        "clock-session", nq=2, nv=1, max_age_s=.2, max_source_step_gap_ns=3_000_000,
+        clock_ns=lambda: now[0], audit_integrity=True, **kwargs)
+    history.arm(1, source_floor_s=0.0)
+    return history
+
+
+def _steps(history):
+    return [entry["sample"].physics_step for entry in history.recent_with_receipts()]
+
+
+def test_audit_history_keeps_the_stream_through_a_lost_chunk_and_records_the_gap():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    assert history.accept_chunk(_chunk(0, *(_sample(step) for step in range(1, 6)))) is True
+    # chunk 1 (steps 6-8) was lost: sequence, step, sim-time and source-clock gaps
+    assert history.accept_chunk(_chunk(2, *(_sample(step) for step in range(9, 14)))) is True
+    assert history.hazard is None and history.evidence_ready
+    assert _steps(history) == [1, 2, 3, 4, 5, 9, 10, 11, 12, 13]
+    audit = history.integrity_audit()
+    assert audit["count"] >= 2
+    assert {"PHYSICS_CHUNK_SCOPE_OR_LOSS", "PHYSICS_CHUNK_STEP_GAP"} <= set(audit["reasons"])
+    assert history.accept_chunk(_chunk(3, *(_sample(step) for step in range(14, 16)))) is True
+    assert history.hazard is None
+    receipt = history.commit_receipt(expected_version=None, expected_incarnation=history.incarnation,
+                                     expected_epoch=1, step=12, max_age_ns=history.max_age_ns)
+    assert receipt["step"] == 12
+
+
+def test_audit_history_accepts_truncated_and_hazard_marked_samples_without_latching():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    truncated, breached = _sample(1), _sample(2)
+    truncated.truncated = True
+    breached.diagnostic_hazard_breached = True
+    assert history.accept_chunk(_chunk(0, truncated, breached)) is True
+    assert history.hazard is None and _steps(history) == [1, 2]
+    reasons = history.integrity_audit()["reasons"]
+    assert "PHYSICS_SAMPLE_TRUNCATED" in reasons and "PHYSICS_SAMPLE_HAZARD_MARKED" in reasons
+    # the retained original keeps its markers for the force supervision and the selection
+    assert history.step_at(1)["sample"].truncated is True
+
+
+def test_audit_history_skips_a_malformed_chunk_without_latching_and_recovers():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    assert history.accept_chunk(_chunk(0, _sample(1), _sample(2))) is True
+    bad = _sample(3)
+    bad.model_qpos = [.1]  # wrong model width
+    assert history.accept_chunk(_chunk(1, bad)) is False
+    assert history.hazard is None and _steps(history) == [1, 2]
+    assert history.integrity_audit()["reasons"].get("PHYSICS_SAMPLE_INVALID") == 1
+    assert history.accept_chunk(_chunk(2, _sample(4), _sample(5))) is True
+    assert _steps(history) == [1, 2, 4, 5]
+
+
+def test_audit_history_never_accepts_a_duplicate_or_backward_step():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    assert history.accept_chunk(_chunk(0, *(_sample(step) for step in range(1, 6)))) is True
+    assert history.accept_chunk(_chunk(1, *(_sample(step) for step in range(3, 8)))) is False
+    assert history.hazard is None and _steps(history) == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.parametrize("fault", ["session", "epoch"])
+def test_audit_history_still_latches_a_session_or_epoch_identity_fault(fault):
+    now = [NOW_NS]
+    history = _audit_history(now)
+    chunk = _chunk(0, _sample(1))
+    if fault == "session":
+        chunk.simulation_session_id = "foreign-session"
+    else:
+        chunk.reset_epoch = 2
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_HISTORY_INVALID"):
+        history.accept_chunk(chunk)
+    assert history.hazard == "PHYSICS_CHUNK_SCOPE_OR_LOSS"
+
+
+def test_audit_history_staleness_is_transient_and_a_fresh_chunk_recovers_it():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    assert history.accept_chunk(_chunk(0, _sample(1), _sample(2))) is True
+    version = history.version
+    now[0] = NOW_NS + 300_000_000
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.recent_with_receipts()
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.step_at(1)
+    assert history.hazard is None and history.version == version
+    late = _sample(3)
+    late.clock_interval_begin_monotonic_ns = now[0] - 1_000_000
+    late.clock_interval_end_monotonic_ns = now[0] - 800_000
+    assert history.accept_chunk(_chunk(1, late)) is True
+    assert _steps(history) == [3]
+    assert history.integrity_audit()["reasons"].get("PHYSICS_CLOCK_STALE", 0) >= 1
+
+
+def test_audit_history_silence_and_first_chunk_deadlines_do_not_latch():
+    now = [NOW_NS]
+    history = _audit_history(now, max_silence_s=.3, first_chunk_timeout_s=.4)
+    now[0] = NOW_NS + 500_000_000
+    assert history.check_health() is True and history.hazard is None
+    assert history.integrity_audit()["reasons"].get("PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT") == 1
+    assert history.check_health() is True
+    assert history.integrity_audit()["reasons"].get("PHYSICS_CLOCK_FIRST_CHUNK_TIMEOUT") == 1
+
+
+def test_audit_history_classifies_external_latch_requests():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    for reason in ("PHYSICS_CHUNK_CALLBACK_INVALID", "PHYSICS_CHUNK_PREARM_LOSS"):
+        history.latch(reason)
+        assert history.hazard is None
+    assert history.integrity_audit()["count"] == 2
+    history.latch("PHYSICS_SOURCE_SUPERVISION_FAILED")
+    assert history.hazard == "PHYSICS_SOURCE_SUPERVISION_FAILED"
+    strict = _history([NOW_NS])
+    strict.latch("PHYSICS_CHUNK_PREARM_LOSS")
+    assert strict.hazard == "PHYSICS_CHUNK_PREARM_LOSS"
+
+
+def test_commit_receipt_ignores_the_version_only_when_none_is_given():
+    now = [NOW_NS]
+    history = _audit_history(now)
+    assert history.accept_chunk(_chunk(0, _sample(1), _sample(2))) is True
+    version = history.version
+    assert history.accept_chunk(_chunk(1, _sample(3))) is True
+    kwargs = dict(expected_incarnation=history.incarnation, expected_epoch=1, step=2,
+                  max_age_ns=history.max_age_ns)
+    assert history.commit_receipt(expected_version=None, **kwargs)["version"] == history.version
+    with pytest.raises(ValueError, match="PHYSICS_COMMIT_VERSION_CHANGED"):
+        history.commit_receipt(expected_version=version, **kwargs)
+    with pytest.raises(ValueError, match="PHYSICS_COMMIT_INCARNATION_CHANGED"):
+        history.commit_receipt(expected_version=None, **{**kwargs, "expected_incarnation": "other"})
+    with pytest.raises(ValueError, match="PHYSICS_COMMIT_INCARNATION_CHANGED"):
+        history.commit_receipt(expected_version=None, **{**kwargs, "expected_epoch": 2})
+
+
+def test_step_at_accepts_an_explicit_longer_freshness_bound_and_keeps_the_default():
+    # A2b: the Teacher proofs read a step with the Teacher state age; the default stays the history age.
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    now[0] += 150_000_000  # the sample is about 248 ms old; the history age is 200 ms
+    assert history.step_at(1, max_age_ns=500_000_000)["sample"].physics_step == 1
+    assert history.hazard is None
+    with pytest.raises(ValueError, match="PHYSICS_CLOCK_STALE"):
+        history.step_at(1)
+    assert history.hazard == "PHYSICS_CLOCK_STALE"
+
+
+@pytest.mark.parametrize("bound", [0, -1, 1.5, True, "x"])
+def test_step_at_rejects_an_invalid_explicit_freshness_bound(bound):
+    now = [NOW_NS]
+    history = _history(now)
+    history.accept_chunk(_chunk(0, _sample(1)))
+    with pytest.raises(ValueError, match="max_age_ns invalid"):
+        history.step_at(1, max_age_ns=bound)
+    assert history.hazard is None

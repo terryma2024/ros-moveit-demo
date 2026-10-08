@@ -69,6 +69,18 @@ def test_recent_scene_receipts_preserve_exact_steps_and_freshness():
             port.recent_frames_with_receipts()]==[10]
 
 
+def test_original_scene_records_remain_auditable_after_source_age_expires():
+    port,now=observer()
+    assert port.accept(frame())
+    now[0]+=1.
+    original=port.original_frames_with_receipts()
+    assert original==((frame(),10.),)
+    original[0][0]['qpos'][-1]=999.
+    assert port.original_frames_with_receipts()[0][0]['qpos'][-1]==.2
+    with pytest.raises(ValueError,match='SCENE_STATE_STALE'):
+        port.recent_frames_with_receipts()
+
+
 @pytest.mark.parametrize('changes',[
     {'model_sha256':'2'*64},{'simulation_session_id':'foreign'}, {'reset_epoch':3},
     {'qpos':[.2]*13},{'qvel':[.3]*11},{'qpos':[float('nan')]*14},
@@ -205,3 +217,43 @@ def test_cached_reset_scene_cannot_arm_against_a_different_atomic_reset_floor():
     ros.arm(SimpleNamespace(simulation_session_id='s',reset_epoch=3,simulation_time_s=1.025,
         simulation_step=0,paused=True))
     assert len(events)==1 and port.hazard=='SCENE_RESET_FLOOR_INVALID'
+
+
+# ---- R6: recent_steps() is the copy-free twin of recent_frames_with_receipts() ----
+
+def _scene_outcome(port,call):
+    try:return call(port),None,port.hazard
+    except ValueError as error:return None,str(error),port.hazard
+
+
+def _scene_for(case):
+    port,now=observer()
+    if case=='unavailable':return port
+    assert port.accept(frame())
+    if case=='hazard':
+        port.hazard='SCENE_STATE_REORDERED'
+        return port
+    now[0]+=.05
+    assert port.accept(dict(frame(),simulation_step=10,simulation_time_s=1.02))
+    if case=='partially_stale':now[0]+=.11
+    if case=='all_stale':now[0]+=1.
+    return port
+
+
+@pytest.mark.parametrize('case',['fresh','partially_stale','all_stale','hazard','unavailable'])
+def test_scene_recent_steps_matches_recent_frames_with_receipts(case):
+    full=_scene_outcome(_scene_for(case),
+        lambda port:tuple(item['simulation_step'] for item,_ in port.recent_frames_with_receipts()))
+    steps=_scene_outcome(_scene_for(case),lambda port:port.recent_steps())
+    assert steps==full,(case,steps,full)
+    if case=='fresh':assert steps[0]==(5,10)
+    if case=='partially_stale':assert steps[0]==(10,)
+
+
+def test_scene_recent_steps_makes_no_deepcopy(monkeypatch):
+    port=_scene_for('fresh')
+    calls=[]
+    real=copy.deepcopy
+    monkeypatch.setattr(copy,'deepcopy',lambda *a,**k:calls.append(1) or real(*a,**k))
+    assert port.recent_steps()==(5,10)
+    assert calls==[]

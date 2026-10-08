@@ -20,10 +20,11 @@ def test_directory_seal_without_coordinator_commit_is_rejected(tmp_path):
     ) == ()
 
 
-def test_only_verified_committed_episodes_resolve(tmp_path):
+def test_only_verified_committed_episodes_resolve(tmp_path,monkeypatch):
+    from act_export_fixture import complete_export_entries
+    entry=complete_export_entries(tmp_path,monkeypatch,('001',))[0]
     index = tmp_path / "campaign-index.json"
-    index.write_text(json.dumps({"schema_version": 1, "committed_episodes": [
-        {"scene_id": "001", "journal_sha256": "a" * 64, "verifier_sha256": "a" * 64}]}))
+    index.write_text(json.dumps({"schema_version": 2, "committed_episodes": [entry]}))
     manifest = {"episodes": [{"scene_id": "001", "status": "PASSED"},
                              {"scene_id": "002", "status": "PASSED"},        # no commit
                              {"scene_id": "003", "status": "FAILED"}]}       # business failure
@@ -46,15 +47,17 @@ def test_only_verified_committed_episodes_resolve(tmp_path):
         resolve_committed_episodes(manifest=manifest, campaign_index=index)
 
 
-def test_conflicting_receipts_and_unverifiable_entries_are_refused(tmp_path):
+def test_conflicting_receipts_and_unverifiable_entries_are_refused(tmp_path,monkeypatch):
+    from act_export_fixture import complete_export_entries
+    entry=complete_export_entries(tmp_path,monkeypatch,('001',))[0]
     manifest = {"episodes": [{"scene_id": "001", "status": "PASSED"}]}
     index = tmp_path / "campaign-index.json"
-    index.write_text(json.dumps({"committed_episodes": [
-        {"scene_id": "001", "journal_sha256": "a" * 64, "verifier_sha256": "b" * 64}]}))
+    entry['journal_sha256']='b'*64
+    index.write_text(json.dumps({"schema_version":2,"committed_episodes": [entry]}))
     with pytest.raises(ValueError, match="EPISODE_RECEIPT_CONFLICT"):
         resolve_committed_episodes(manifest=manifest, campaign_index=index)
-    index.write_text(json.dumps({"committed_episodes": [
-        {"scene_id": "001", "journal_sha256": "a" * 64, "verifier_sha256": "short"}]}))
+    entry['verifier_sha256']='short'
+    index.write_text(json.dumps({"schema_version":2,"committed_episodes": [entry]}))
     with pytest.raises(ValueError, match="EPISODE_RECEIPT_INVALID"):
         resolve_committed_episodes(manifest=manifest, campaign_index=index)
 
@@ -145,20 +148,22 @@ def test_the_policy_interface_is_required_before_a_runner_may_use_it(tmp_path):
         load_policy(path, loader=None)
 
 
-def _committed(scene_ids=("act-1", "act-2"), *, split="train", status="PASSED", dataset_id=None):
-    return tuple({"scene_id": scene_id, "split": split, "status": status,
+def _committed(scene_ids=("act-1", "act-2"), *, split="train", status="PASSED", dataset_id=None,fixtures=None):
+    return tuple({**({} if fixtures is None else fixtures.get(scene_id,{})),"scene_id": scene_id, "split": split, "status": status,
                   "content": {"frames": 1, "state": [0.0] * 8},
                   **({} if dataset_id is None else {"dataset_id": dataset_id})}
                  for scene_id in scene_ids)
 
 
-def test_the_export_is_written_once_in_the_resolved_order(tmp_path):
+def test_the_export_is_written_once_in_the_resolved_order(tmp_path,monkeypatch):
     import hashlib
 
     from so101_demo.act.bundle import EXPORT_KEYS, export_dataset
+    from act_export_fixture import complete_export_entries
+    fixtures={entry['scene_id']:entry for entry in complete_export_entries(tmp_path,monkeypatch)}
 
     output = tmp_path / "dataset"
-    document = export_dataset(_committed(), output, source_manifest_sha256="a" * 64,
+    document = export_dataset(_committed(fixtures=fixtures), output, source_manifest_sha256="a" * 64,
                               campaign_index_sha256="b" * 64)
     assert set(document) == set(EXPORT_KEYS) | {"manifest_path", "export_sha256"}
     assert document["scene_count"] == 2
@@ -171,12 +176,14 @@ def test_the_export_is_written_once_in_the_resolved_order(tmp_path):
     assert not list(output.rglob("*.partial"))
     # a second export must not append into the first: the dataset cannot grow under a training run
     with pytest.raises(ValueError, match="EXPORT_OUTPUT_EXISTS"):
-        export_dataset(_committed(), output, source_manifest_sha256="a" * 64,
+        export_dataset(_committed(fixtures=fixtures), output, source_manifest_sha256="a" * 64,
                        campaign_index_sha256="b" * 64)
 
 
-def test_the_export_refuses_what_must_not_enter_training(tmp_path):
+def test_the_export_refuses_what_must_not_enter_training(tmp_path,monkeypatch):
     from so101_demo.act.bundle import export_dataset
+    from act_export_fixture import complete_export_entries
+    fixtures={entry['scene_id']:entry for entry in complete_export_entries(tmp_path,monkeypatch)}
 
     cases = ((_committed(()), "a" * 64, "b" * 64, "EXPORT_EMPTY"),
              (_committed(("act-0917a-1",)), "a" * 64, "b" * 64, "EXPORT_STALE_DATASET_ID"),
@@ -184,7 +191,7 @@ def test_the_export_refuses_what_must_not_enter_training(tmp_path):
              (_committed(split="rollout_test"), "a" * 64, "b" * 64, "EXPORT_SPLIT_FORBIDDEN"),
              (_committed(split="functional"), "a" * 64, "b" * 64, "EXPORT_SPLIT_FORBIDDEN"),
              (_committed(status="FAILED"), "a" * 64, "b" * 64, "EXPORT_EPISODE_NOT_PASSED"),
-             (_committed(("act-1", "act-1")), "a" * 64, "b" * 64, "EXPORT_DUPLICATE_SCENE"),
+             (_committed(("act-1", "act-1"),fixtures=fixtures), "a" * 64, "b" * 64, "EXPORT_DUPLICATE_SCENE"),
              (({"scene_id": "act-1", "content": {}},), "short", "b" * 64,
               "EXPORT_SOURCE_DIGEST_INVALID"),
              ((({"scene_id": "act-1"},)), "a" * 64, "b" * 64,
@@ -196,3 +203,21 @@ def test_the_export_refuses_what_must_not_enter_training(tmp_path):
             export_dataset(committed, target, source_manifest_sha256=source,
                            campaign_index_sha256=index_digest)
         assert not target.exists()            # a refused export leaves nothing behind
+
+
+@pytest.mark.parametrize("override,code", [
+    (dict(result_status="FAILED", teacher_task_result="FAIL"), "EXPORT_EPISODE_NOT_PASSED"),      # Teacher FAIL
+    (dict(act_data_qc="FAIL", export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),       # Teacher PASS, data FAIL
+    (dict(act_data_qc="NOT_RUN", export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
+    (dict(export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
+    (dict(result_schema_version=2), "EXPORT_EPISODE_LEGACY_RESULT"),                              # read-only legacy
+    (dict(result_schema_version=None), "EXPORT_EPISODE_LEGACY_RESULT")])
+def test_export_needs_a_teacher_pass_and_a_passing_data_qc_on_a_schema_3_result(tmp_path, monkeypatch, override, code):
+    from act_export_fixture import complete_export_entries
+    scene = "001"
+    entry = complete_export_entries(tmp_path, monkeypatch, (scene,), proof_overrides={scene: override})[0]
+    index = tmp_path / "campaign-index.json"
+    index.write_text(json.dumps({"schema_version": 2, "committed_episodes": [entry]}))
+    with pytest.raises(ValueError, match=code):
+        resolve_committed_episodes(manifest={"episodes": [{"scene_id": scene, "status": "PASSED"}]},
+                                   campaign_index=index)

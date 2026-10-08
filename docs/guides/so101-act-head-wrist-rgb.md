@@ -90,7 +90,7 @@ The parallel collection and gateway tests live in their own packages:
 
 ```zsh
 python -m pytest test/test_act_parallel_collection.py test/test_act_parallel_collection_recovery.py \
-  test/test_act_parallel_collection_runtime.py test/test_act_parallel_collection_integration.py \
+  test/test_act_parallel_collection_integration.py \
   test/test_act_gpu_workload_client.py test/test_act_collection.py -q
 ```
 

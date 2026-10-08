@@ -253,6 +253,22 @@ msg::SimulationEvidence EvidenceBuilder::build(
   output.object_body = object_body_name_;
   const mjtNum * position = data->xpos + 3 * object_body_id_;
   const mjtNum * quaternion = data->xquat + 4 * object_body_id_;
+  const int object_joint = model->body_jntadr[object_body_id_];
+  if (model->body_jntnum[object_body_id_] == 1 && object_joint >= 0 &&
+    model->jnt_type[object_joint] == mjJNT_FREE)
+  {
+    // mj_step updates qpos after xpos/xquat. The free body's world pose must
+    // describe the same current configuration as SceneState and raw steps.
+    const int address = model->jnt_qposadr[object_joint];
+    position = data->qpos + address;
+    quaternion = data->qpos + address + 3;
+  }
+  if (!std::all_of(position, position + 3, [](double value) {return std::isfinite(value);}) ||
+    !std::all_of(quaternion, quaternion + 4, [](double value) {return std::isfinite(value);}))
+  {
+    output.truncated = true;
+    return output;
+  }
   output.object_pose_world.position.x = position[0];
   output.object_pose_world.position.y = position[1];
   output.object_pose_world.position.z = position[2];
@@ -261,7 +277,26 @@ msg::SimulationEvidence EvidenceBuilder::build(
   output.object_pose_world.orientation.z = quaternion[3];
   output.object_pose_world.orientation.w = quaternion[0];
   mjtNum velocity[6]{};
-  mj_objectVelocity(model, data, mjOBJ_BODY, object_body_id_, velocity, 0);
+  if (model->body_jntnum[object_body_id_] == 1 && object_joint >= 0 &&
+    model->jnt_type[object_joint] == mjJNT_FREE)
+  {
+    const mjtNum * joint_velocity = data->qvel + model->jnt_dofadr[object_joint];
+    // Free-joint translation is world-oriented; angular velocity is local.
+    // Preserve mjOBJ_BODY's inertial-origin semantics without reading cvel
+    // from the previous integration configuration or modifying live mjData.
+    mju_rotVecQuat(velocity, joint_velocity + 3, quaternion);
+    mjtNum inertial_offset[3]{};
+    mjtNum rotational_velocity[3]{};
+    mju_rotVecQuat(inertial_offset, model->body_ipos + 3 * object_body_id_, quaternion);
+    mju_cross(rotational_velocity, velocity, inertial_offset);
+    mju_add3(velocity + 3, joint_velocity, rotational_velocity);
+  } else {
+    mj_objectVelocity(model, data, mjOBJ_BODY, object_body_id_, velocity, 0);
+  }
+  if (!std::all_of(velocity, velocity + 6, [](double value) {return std::isfinite(value);})) {
+    output.truncated = true;
+    return output;
+  }
   output.object_twist_world.angular.x = velocity[0];
   output.object_twist_world.angular.y = velocity[1];
   output.object_twist_world.angular.z = velocity[2];
@@ -426,16 +461,6 @@ msg::PhysicsStepEvidence EvidenceBuilder::build_step(
   {
     throw std::invalid_argument("physics-step object must have a free joint");
   }
-  const int address = model->jnt_qposadr[joint];
-  // mj_step integrates qpos after updating xpos/xquat. Publish the object pose from
-  // the same post-integration state as model_qpos, without changing live mjData.
-  output.object_pose_world.position.x = output.model_qpos[address];
-  output.object_pose_world.position.y = output.model_qpos[address + 1];
-  output.object_pose_world.position.z = output.model_qpos[address + 2];
-  output.object_pose_world.orientation.w = output.model_qpos[address + 3];
-  output.object_pose_world.orientation.x = output.model_qpos[address + 4];
-  output.object_pose_world.orientation.y = output.model_qpos[address + 5];
-  output.object_pose_world.orientation.z = output.model_qpos[address + 6];
   return output;
 }
 
@@ -498,6 +523,7 @@ msg::PhysicsStepEvidenceChunk PhysicsStepEvidenceBuffer::prepare_chunk() const
   msg::PhysicsStepEvidenceChunk chunk;
   chunk.chunk_sequence = chunk_sequence_;
   chunk.failed_publish_attempts = failed_publish_attempts_;
+  chunk.publish_deferrals_total = publish_deferrals_total_;
   chunk.evidence_loss = evidence_loss_;
   if (samples_.empty()) {
     if (last_observed_.has_value()) {
@@ -519,6 +545,7 @@ msg::PhysicsStepEvidenceChunk PhysicsStepEvidenceBuffer::prepare_chunk() const
 void PhysicsStepEvidenceBuffer::mark_publish_failed()
 {
   ++failed_publish_attempts_;
+  ++publish_deferrals_total_;
 }
 
 void PhysicsStepEvidenceBuffer::mark_published()
@@ -543,6 +570,7 @@ void PhysicsStepEvidenceBuffer::reset()
   samples_.clear();
   chunk_sequence_ = 0;
   failed_publish_attempts_ = 0;
+  publish_deferrals_total_ = 0;
   evidence_loss_ = false;
   last_observed_.reset();
   hazard_latch_.reset();
@@ -664,6 +692,123 @@ void RobotContactBuffer::reset(uint64_t epoch)
   samples_.clear();last_.reset();epoch_ = epoch;loss_ = false;
 }
 
+std::size_t RobotContactBuffer::size() const {return samples_.size();}
+
+void RobotContactBuffer::note_loss() {loss_ = true;}
+
+RobotContactPublisher::RobotContactPublisher(
+  std::size_t capacity, Sink sink, Log log, std::chrono::milliseconds stats_period)
+: buffer_(capacity), sink_(std::move(sink)), log_(std::move(log)), stats_period_(stats_period)
+{
+  if (!sink_) {throw std::invalid_argument("invalid robot contact sink");}
+  thread_ = std::thread([this]() {run();});
+}
+
+RobotContactPublisher::~RobotContactPublisher() {stop();}
+
+bool RobotContactPublisher::push(const msg::RobotContactEvidence & sample)
+{
+  bool accepted;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    accepted = buffer_.append(sample);
+    ++stats_.pushed;
+    if (!accepted) {++stats_.dropped;}
+    stats_.depth = buffer_.size();
+    stats_.high_water = std::max(stats_.high_water, stats_.depth);
+  }
+  wake_.notify_one();
+  return accepted;
+}
+
+void RobotContactPublisher::reset(uint64_t epoch)
+{
+  std::unique_lock<std::mutex> lock(mutex_);
+  ++generation_;  // a batch the thread already took is dropped before its next message
+  buffer_.reset(epoch);
+  stats_.depth = 0;
+  // At most one sink call can still be in flight; wait for it (bounded) so it cannot follow the new epoch.
+  idle_.wait_for(lock, std::chrono::milliseconds(50), [this]() {return !inflight_;});
+}
+
+void RobotContactPublisher::stop()
+{
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stop_ = true;
+  }
+  wake_.notify_all();
+  if (thread_.joinable() && thread_.get_id() != std::this_thread::get_id()) {thread_.join();}
+}
+
+RobotContactPublisher::Stats RobotContactPublisher::stats() const
+{
+  std::lock_guard<std::mutex> lock(mutex_);
+  return stats_;
+}
+
+void RobotContactPublisher::run()
+{
+  std::vector<msg::RobotContactEvidence> batch;
+  batch.reserve(kBatch);
+  auto window_begin = std::chrono::steady_clock::now();
+  uint64_t window_published = 0, window_dropped = 0;
+  std::size_t window_high_water = 0;
+  while (true) {
+    uint64_t generation;
+    {
+      std::unique_lock<std::mutex> lock(mutex_);
+      wake_.wait(lock, [this]() {return stop_ || !buffer_.empty();});
+      if (stop_) {break;}
+      generation = generation_;
+      window_high_water = std::max(window_high_water, buffer_.size());
+      while (!buffer_.empty() && batch.size() < kBatch) {
+        batch.push_back(buffer_.front());  // carries the persistent loss flag, as before
+        buffer_.pop_published();
+      }
+      stats_.depth = buffer_.size();
+      inflight_ = true;
+    }
+    uint64_t sent = 0, failed = 0;
+    for (const auto & sample : batch) {
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (stop_ || generation != generation_) {break;}
+      }
+      try {
+        sink_(sample);
+        ++sent;
+      } catch (...) {
+        ++failed;
+        std::lock_guard<std::mutex> lock(mutex_);
+        buffer_.note_loss();  // a message that never left is lost evidence: later messages say so
+      }
+    }
+    batch.clear();
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      inflight_ = false;
+      stats_.published += sent;
+      stats_.sink_errors += failed;
+      window_dropped = stats_.dropped;
+    }
+    idle_.notify_all();
+    window_published += sent;
+    const auto now = std::chrono::steady_clock::now();
+    if (log_ && now - window_begin >= stats_period_) {
+      const double seconds = std::chrono::duration<double>(now - window_begin).count();
+      const auto snapshot = stats();
+      log_("robot_contacts publisher: " + std::to_string(window_published / seconds) + " msg/s, queue high-water " +
+        std::to_string(window_high_water) + ", dropped(total) " + std::to_string(window_dropped) +
+        ", sink_errors(total) " + std::to_string(snapshot.sink_errors) + ", published(total) " +
+        std::to_string(snapshot.published));
+      window_begin = now;
+      window_published = 0;
+      window_high_water = 0;
+    }
+  }
+}
+
 bool SimulationEvidencePlugin::init(
   rclcpp::Node::SharedPtr node, const mjModel * model,
   mjData * data)
@@ -741,11 +886,17 @@ bool SimulationEvidencePlugin::init(
     if (!robot_roots.empty()) {
       const auto capacity = parameter<int64_t>(node_, "robot_contact_buffer_capacity", 5000);
       if (capacity <= 0 || !robot_builder_.configure(model, robot_roots, max_contacts)) {return false;}
-      robot_buffer_ = std::make_unique<RobotContactBuffer>(static_cast<std::size_t>(capacity));
-      robot_buffer_->reset(0);
       robot_publisher_ = node_->create_publisher<msg::RobotContactEvidence>(
         "/so101/simulation/robot_contacts", rclcpp::QoS(rclcpp::KeepLast(10000)).reliable());
-      realtime_robot_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::RobotContactEvidence>>(robot_publisher_);
+      // Plan A21: a dedicated non-real-time thread publishes every queued message per wake, in order, so the
+      // contact stream is never capped to one message per realtime-publisher cycle. Same type, topic and QoS.
+      const auto publisher = robot_publisher_;
+      const auto logger = node_->get_logger();
+      robot_contacts_ = std::make_unique<RobotContactPublisher>(
+        static_cast<std::size_t>(capacity),
+        [publisher](const msg::RobotContactEvidence & sample) {publisher->publish(sample);},
+        [logger](const std::string & text) {RCLCPP_INFO(logger, "%s", text.c_str());});
+      robot_contacts_->reset(0);
       if (!scene_builder_.configure(model)) {return false;}
       scene_publisher_ = node_->create_publisher<msg::SceneStateEvidence>(
         "/so101/simulation/scene_state", evidence_qos);
@@ -759,8 +910,7 @@ bool SimulationEvidencePlugin::init(
     realtime_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<Evidence>>(publisher_);
     const auto chunk_qos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable();
     chunk_publisher_ = node_->create_publisher<EvidenceChunk>(chunk_topic, chunk_qos);
-    realtime_chunk_publisher_ =
-      std::make_unique<realtime_tools::RealtimePublisher<EvidenceChunk>>(chunk_publisher_);
+    chunk_stamping_publisher_ = std::make_unique<StampingChunkPublisher>(chunk_publisher_);
     hazard_publisher_ = node_->create_publisher<msg::PhysicsHazardLatch>(
       hazard_topic, rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local());
     const auto cancellation_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
@@ -822,7 +972,7 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
 
 void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjData * data)
 {
-  if (!realtime_chunk_publisher_ || !physics_step_buffer_ || model == nullptr || data == nullptr ||
+  if (!chunk_stamping_publisher_ || !physics_step_buffer_ || model == nullptr || data == nullptr ||
     !std::isfinite(data->time))
   {
     return;
@@ -845,10 +995,9 @@ void SimulationEvidencePlugin::on_physics_step(const mjModel * model, const mjDa
   current_simulation_time_s_.store(step.simulation_time_s, std::memory_order_release);
   const bool recorded = physics_step_buffer_->append(step);
   const auto clock_end_ns = steady_nanoseconds();
-  if (robot_buffer_) {
-    robot_buffer_->append(robot_builder_.build(model, data, step.simulation_session_id,
+  if (robot_contacts_) {
+    robot_contacts_->push(robot_builder_.build(model, data, step.simulation_session_id,
       step.reset_epoch, step.physics_step));
-    try_publish_robot_contacts();
   }
   publish_hazard_if_needed();
   if (recorded && !physics_step_buffer_->evidence_loss_latched() &&
@@ -898,38 +1047,75 @@ void SimulationEvidencePlugin::try_publish_snapshot(
   }
 }
 
-void SimulationEvidencePlugin::try_publish_robot_contacts()
-{
-  if (!robot_buffer_ || !realtime_robot_publisher_) {return;}
-  while (!robot_buffer_->empty()) {
-    if (!realtime_robot_publisher_->trylock()) {return;}
-    try {
-      realtime_robot_publisher_->msg_ = robot_buffer_->front();
-      realtime_robot_publisher_->unlockAndPublish();
-      robot_buffer_->pop_published();
-    } catch (...) {
-      realtime_robot_publisher_->unlock();
-      return;
-    }
-  }
-}
-
 void SimulationEvidencePlugin::try_publish_chunk()
 {
-  if (!physics_step_buffer_ || !realtime_chunk_publisher_) {
-    return;
-  }
-  if (!realtime_chunk_publisher_->trylock()) {
-    physics_step_buffer_->mark_publish_failed();
+  if (!physics_step_buffer_ || !chunk_stamping_publisher_) {
     return;
   }
   try {
-    realtime_chunk_publisher_->msg_ = physics_step_buffer_->prepare_chunk();
-    realtime_chunk_publisher_->unlockAndPublish();
+    auto chunk = physics_step_buffer_->prepare_chunk();
+    chunk.handoff_monotonic_ns = static_cast<uint64_t>(steady_nanoseconds());
+    if (!chunk_stamping_publisher_->try_post(chunk)) {
+      physics_step_buffer_->mark_publish_failed();
+      return;
+    }
     physics_step_buffer_->mark_published();
   } catch (...) {
-    realtime_chunk_publisher_->unlock();
     physics_step_buffer_->mark_publish_failed();
+  }
+}
+
+StampingChunkPublisher::StampingChunkPublisher(rclcpp::Publisher<Chunk>::SharedPtr publisher)
+: publisher_(std::move(publisher))
+{
+  thread_ = std::thread(&StampingChunkPublisher::loop, this);
+}
+
+StampingChunkPublisher::~StampingChunkPublisher()
+{
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stop_ = true;
+  }
+  condition_.notify_one();
+  if (thread_.joinable()) {
+    thread_.join();
+  }
+}
+
+bool StampingChunkPublisher::try_post(const Chunk & chunk)
+{
+  {
+    std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || full_) {
+      return false;
+    }
+    slot_ = chunk;
+    full_ = true;
+  }
+  condition_.notify_one();
+  return true;
+}
+
+void StampingChunkPublisher::loop()
+{
+  for (;;) {
+    Chunk chunk;
+    {
+      std::unique_lock<std::mutex> lock(mutex_);
+      condition_.wait(lock, [this] {return full_ || stop_;});
+      if (!full_) {
+        return;          // stopped with nothing pending
+      }
+      chunk = std::move(slot_);
+      full_ = false;
+    }
+    chunk.publish_monotonic_ns = static_cast<uint64_t>(steady_nanoseconds());
+    try {
+      publisher_->publish(chunk);
+    } catch (...) {
+      // A failed publish is visible to the consumer as a sequence gap (continuity), never hidden here.
+    }
   }
 }
 
@@ -1000,7 +1186,7 @@ void SimulationEvidencePlugin::on_state_snapshot(
     if (physics_step_buffer_) {
       physics_step_buffer_->reset();
     }
-    if (robot_buffer_) {robot_buffer_->reset(generation);}
+    if (robot_contacts_) {robot_contacts_->reset(generation);}
     current_reset_epoch_.store(generation, std::memory_order_release);
     current_physics_step_.store(0, std::memory_order_release);
     current_simulation_time_s_.store(data->time, std::memory_order_release);
@@ -1014,8 +1200,7 @@ void SimulationEvidencePlugin::cleanup()
   realtime_scene_publisher_.reset();
   scene_publisher_.reset();
   scene_builder_ = SceneStateBuilder{};
-  robot_buffer_.reset();
-  realtime_robot_publisher_.reset();
+  robot_contacts_.reset();  // joins the publishing thread before the publisher goes away
   robot_publisher_.reset();
   scalar_joint_publisher_.reset();
   scalar_joint_names_.clear();
@@ -1026,7 +1211,7 @@ void SimulationEvidencePlugin::cleanup()
   step_fence_.configure_session("");
   cancellation_request_subscription_.reset();
   cancellation_ack_publisher_.reset();
-  realtime_chunk_publisher_.reset();
+  chunk_stamping_publisher_.reset();
   chunk_publisher_.reset();
   hazard_publisher_.reset();
   realtime_publisher_.reset();

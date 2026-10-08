@@ -756,7 +756,7 @@ def _render_mujoco_robot_description(
     return description
 
 
-def _moveit_parameters(share: Path, robot_description: str) -> dict:
+def _moveit_parameters(share: Path, robot_description: str, *, publish_planning_scene: bool = True) -> dict:
     config = share / "config/mujoco"
     controllers = yaml.safe_load((config / "moveit_controllers.yaml").read_bytes())
     return {
@@ -771,10 +771,12 @@ def _moveit_parameters(share: Path, robot_description: str) -> dict:
         "moveit_manage_controllers": True,
         "publish_robot_description": True,
         "publish_robot_description_semantic": True,
-        "publish_planning_scene": True,
-        "publish_geometry_updates": True,
-        "publish_state_updates": True,
-        "publish_transforms_updates": True,
+        # A monitor that publishes /monitored_planning_scene keeps its scene as a diff of a parent scene and loses the colour of an
+        # attached object when the publishing thread pushes and clears that diff; the ACT stack reads no monitored scene.
+        "publish_planning_scene": publish_planning_scene,
+        "publish_geometry_updates": publish_planning_scene,
+        "publish_state_updates": publish_planning_scene,
+        "publish_transforms_updates": publish_planning_scene,
         "trajectory_execution.allowed_execution_duration_scaling": 1.5,
         "trajectory_execution.allowed_goal_duration_margin": 1.0,
     }
@@ -871,7 +873,8 @@ def _mujoco_stack_actions(
     move_group = Node(
         package="so101_mujoco_support",
         executable="graceful_shutdown_move_group",
-        parameters=[_moveit_parameters(share, robot_description), {"use_sim_time": True}],
+        parameters=[_moveit_parameters(share, robot_description, publish_planning_scene=not act_profile),
+                    {"use_sim_time": True}],
         output="both",
     )
     scene_setup = Node(
@@ -2324,166 +2327,48 @@ def _configured_task_station_actions(context):
         if include_teleop == "true":
             raise RuntimeError("headless task station requires include_teleop=false")
     act_profile = context.launch_configurations.get("act_profile", "false") == "true"
-    broker_options = []
     environment_actions = []
-    contact_path = ""
-    route_path = ""
-    transition_path = ""
-    visible_approach_path = ""
-    grasp_transition_path = ""
-    held_cup_path = ""
     if act_profile:
-        from ..adapters.act.command_broker import endpoint_bytes
-        endpoint = LaunchConfiguration("act_broker_socket").perform(context)
-        endpoint_bytes(endpoint)
-        mode = LaunchConfiguration("act_calibration_mode").perform(context)
-        if mode not in {"true", "false"}:raise ValueError("ACT_CALIBRATION_MODE_INVALID")
-        broker_options = ["--socket", endpoint, "--session-id", session_id,
-                          "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30"]
-        if mode == "true":
-            speed = LaunchConfiguration("act_stop_velocity_rad_s").perform(context)
-            age = LaunchConfiguration("act_max_age_s").perform(context)
-            if not speed or not age:raise ValueError("EXPLICIT_CALIBRATION_PARAMETERS_REQUIRED")
-            if not isfinite(float(speed)) or float(speed)<0 or not isfinite(float(age)) or float(age)<=0:
-                raise ValueError("STOP_CONFIG_INVALID")
-            broker_options += ["--calibration-mode", "--stop-velocity-rad-s", speed, "--max-age-s", age]
-        else:
-            report = Path(LaunchConfiguration("act_calibration_report").perform(context))
-            from ..act.calibration import require_qualified
-            require_qualified(json.loads(report.read_text()))
-            broker_options += ["--calibration-report", str(report)]
-            context_path = LaunchConfiguration("act_calibration_context").perform(context)
-            if context_path:
-                # the entry-bound calibration context travels to the launched broker, which binds the plan hash
-                broker_options += ["--calibration-context", str(context_path)]
-        timing_keys=("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")
-        timing=[LaunchConfiguration(key).perform(context) for key in timing_keys]
-        if any(timing):
-            if not all(timing):raise ValueError("PAIRED_TIMING_PARAMETERS_REQUIRED")
-            if mode!="true":raise ValueError("FULL_SUPERVISOR_REQUIRED")
-            if not 0 < float(timing[1]) < float(timing[0]):
-                raise ValueError("EXECUTION_TIMING_INVALID")
-            for key,value in zip(timing_keys,timing,strict=True):
-                if not isfinite(float(value)) or float(value)<=0:raise ValueError("EXECUTION_TIMING_INVALID")
-                broker_options += ["--"+key.removeprefix("act_").replace("_","-"),value]
-        motion_path=context.launch_configurations.get("act_motion_calibration_manifest", "")
-        contact_path=context.launch_configurations.get("act_contact_diagnostic_manifest", "")
-        visible_approach_path=context.launch_configurations.get("act_visible_approach_manifest", "")
-        legacy_route_path=context.launch_configurations.get("act_task6_route_manifest", "")
-        grasp_transition_path=context.launch_configurations.get("act_grasp_contact_transition_manifest", "")
-        legacy_transition_path=context.launch_configurations.get("act_task6_contact_transition_manifest", "")
-        if visible_approach_path and legacy_route_path or grasp_transition_path and legacy_transition_path:
-            raise ValueError("DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE")
-        route_path=visible_approach_path or legacy_route_path
-        transition_path=grasp_transition_path or legacy_transition_path
-        held_cup_path=context.launch_configurations.get("act_held_cup_micro_lift_manifest", "")
-        if sum(bool(path) for path in (motion_path,contact_path,route_path,transition_path,held_cup_path))>1:
-            raise ValueError("DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE")
-        if motion_path:
-            from ..adapters.act.calibration_motion import require_motion_manifest
-            if mode!="true" or not all(timing):raise ValueError("MOTION_CALIBRATION_MODE_REQUIRED")
-            motion=require_motion_manifest(json.loads(Path(motion_path).read_text()))
-            if motion["session_id"]!=session_id or motion["submit_lead_s"]!=float(timing[0]) or motion["stop_velocity_rad_s"]!=float(speed):
-                raise ValueError("MOTION_CALIBRATION_CONFIG_MISMATCH")
-            broker_options += ["--motion-calibration-manifest",motion_path]
-        if contact_path:
+        # The ACT profile is the same station with the frozen first-episode inputs checked before anything starts.
+        # There is no command broker and no reservation: the Teacher drives plain JointTrajectoryControllers.
+        first_inputs = context.launch_configurations.get("act_first_episode_inputs", "")
+        first_pin = context.launch_configurations.get("act_expected_inputs_sha256", "")
+        if bool(first_inputs) != bool(first_pin):
+            raise ValueError("EPISODE_INPUTS_IDENTITY_REQUIRED")
+        if first_inputs:
+            from ..act.first_episode_inputs import verify_frozen_inputs, validate_execution_snapshot_binding
+            frozen = verify_frozen_inputs(Path(first_inputs))
+            if frozen["inputs_sha256"] != first_pin:
+                raise ValueError("EPISODE_INPUTS_IDENTITY_MISMATCH")
+            if frozen.get("mode") != "preselected_target_diagnostic":
+                raise ValueError("EPISODE_INPUTS_DIAGNOSTIC_REQUIRED")
+            binding = frozen.get("execution_snapshot")
+            if binding is None:
+                raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
+            validate_execution_snapshot_binding(binding, require_model=True)
+            from ..act.execution_snapshot import verify_execution_snapshot, verify_installed_station_assets
             import hashlib
-            from ..adapters.act.calibration_motion import diagnostic_motion_configuration
-            if mode!="true" or not all(timing):raise ValueError("CONTACT_DIAGNOSTIC_MODE_REQUIRED")
-            contact=json.loads(Path(contact_path).read_text())
-            diagnostic=diagnostic_motion_configuration(contact)
-            if (diagnostic["session_id"]!=session_id or
-                diagnostic["submit_lead_s"]!=float(timing[0]) or
-                diagnostic["stop_velocity_rad_s"]!=float(speed) or
-                diagnostic["max_age_s"]!=float(age) or
-                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(contact["scene_path"]).resolve()):
-                raise ValueError("CONTACT_DIAGNOSTIC_CONFIG_MISMATCH")
-            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
-                               "config/mujoco/act/mujoco_plugins.yaml")
-            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=contact["plugin_sha256"]:
-                raise ValueError("CONTACT_DIAGNOSTIC_PLUGIN_DRIFT")
-            broker_options += ["--contact-diagnostic-manifest",contact_path]
-        if route_path:
-            import hashlib
-            from ..adapters.act.calibration_motion import route_motion_configuration
-            if mode!="true" or not all(timing):
-                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_MODE_REQUIRED")
-            route=json.loads(Path(route_path).read_text())
-            diagnostic=route_motion_configuration(route)
-            if (diagnostic["session_id"]!=session_id or
-                diagnostic["submit_lead_s"]!=float(timing[0]) or
-                diagnostic["stop_velocity_rad_s"]!=float(speed) or
-                diagnostic["stop_max_age_s"]!=float(age) or
-                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(route["scene_path"]).resolve()):
-                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH")
-            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
-                               ("config/mujoco/act/act_diagnostic_plugins.yaml" if visible_approach_path
-                                else "config/mujoco/act/task6_route_plugins.yaml"))
-            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=route["plugin_sha256"]:
-                raise ValueError("TASK6_ROUTE_DIAGNOSTIC_PLUGIN_DRIFT")
-            broker_options += ["--visible-approach-manifest" if visible_approach_path else
-                               "--task6-route-manifest",route_path]
-        if transition_path:
-            import hashlib
-            from ..adapters.act.calibration_motion import transition_motion_configuration
-            if mode!="true" or not all(timing):
-                raise ValueError("TASK6_CONTACT_TRANSITION_MODE_REQUIRED")
-            transition=json.loads(Path(transition_path).read_text())
-            diagnostic=transition_motion_configuration(transition)
-            if (diagnostic["session_id"]!=session_id or
-                diagnostic["submit_lead_s"]!=float(timing[0]) or
-                diagnostic["stop_velocity_rad_s"]!=float(speed) or
-                diagnostic["stop_max_age_s"]!=float(age) or
-                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(transition["scene_path"]).resolve()):
-                raise ValueError("TASK6_CONTACT_TRANSITION_CONFIG_MISMATCH")
-            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
-                               ("config/mujoco/act/act_diagnostic_plugins.yaml" if grasp_transition_path
-                                else "config/mujoco/act/task6_route_plugins.yaml"))
-            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=transition["plugin_sha256"]:
-                raise ValueError("TASK6_CONTACT_TRANSITION_PLUGIN_DRIFT")
-            broker_options += ["--grasp-contact-transition-manifest" if grasp_transition_path else
-                               "--task6-contact-transition-manifest",transition_path]
-        if held_cup_path:
-            import hashlib
-            from ..adapters.act.calibration_motion import held_cup_motion_configuration
-            if mode!="true" or not all(timing):
-                raise ValueError("HELD_CUP_MICRO_LIFT_MODE_REQUIRED")
-            held_cup=json.loads(Path(held_cup_path).read_text())
-            diagnostic=held_cup_motion_configuration(held_cup)
-            if (diagnostic["session_id"]!=session_id or
-                diagnostic["submit_lead_s"]!=float(timing[0]) or
-                diagnostic["stop_velocity_rad_s"]!=float(speed) or
-                diagnostic["stop_max_age_s"]!=float(age) or
-                Path(LaunchConfiguration("mujoco_scene").perform(context)).resolve()!=Path(held_cup["scene_path"]).resolve()):
-                raise ValueError("HELD_CUP_MICRO_LIFT_CONFIG_MISMATCH")
-            installed_plugins=(Path(get_package_share_directory("so101_demo_py")) /
-                               "config/mujoco/act/task6_route_plugins.yaml")
-            if hashlib.sha256(installed_plugins.read_bytes()).hexdigest()!=held_cup["plugin_sha256"]:
-                raise ValueError("HELD_CUP_MICRO_LIFT_PLUGIN_DRIFT")
-            broker_options += ["--held-cup-micro-lift-manifest",held_cup_path]
-        from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
-        reservation_dir = controller_reservation_directory(evidence_root, session_id)
+            snapshot_root = Path(first_inputs).parent / binding["path"]
+            snapshot = verify_execution_snapshot(snapshot_root, expected_sha256=binding["sha256"])
+            verify_installed_station_assets(Path(get_package_share_directory("so101_demo_py")), snapshot)
+            selected_scene = Path(LaunchConfiguration("mujoco_scene").perform(context))
+            frozen_scene = snapshot_root / snapshot["scene_path"]
+            if (selected_scene != frozen_scene or selected_scene.is_symlink()
+                    or hashlib.sha256(selected_scene.read_bytes()).hexdigest()
+                    != snapshot["files"][snapshot["scene_path"]]["sha256"]):
+                raise ValueError("EPISODE_FROZEN_SCENE_MISMATCH")
+            if (LaunchConfiguration("mujoco_initial_keyframe").perform(context)
+                    != snapshot["targets"]["reset_keyframe"]):
+                raise ValueError("EPISODE_FROZEN_RESET_KEYFRAME_MISMATCH")
         environment_actions = [SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
-                               SetEnvironmentVariable("SO101_ACT_BROKER_SOCKET", endpoint),
-                               SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
-                               SetEnvironmentVariable("SO101_ACT_RESERVATION_ROOT", str(evidence_root)),
-                               SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir))]
+                               SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id)]
     share = Path(get_package_share_directory("so101_demo_py"))
     stack = _mujoco_stack_actions(
         context, share, session_id,
-        sim_speed_factor=0.60 if contact_path else 0.25 if route_path or transition_path or held_cup_path else 1.0 if act_profile else -1.0,
-        plugin_config_filename=("act_diagnostic_plugins.yaml" if visible_approach_path or grasp_transition_path
-                                else "task6_route_plugins.yaml" if route_path or transition_path or held_cup_path
-                                else "mujoco_plugins.yaml"),
+        sim_speed_factor=1.0 if act_profile else -1.0,
+        plugin_config_filename="mujoco_plugins.yaml",
     )
     teleop_actions = []
-    if act_profile:
-        broker = Node(package="so101_demo_py", executable="act_command_broker",
-                      arguments=broker_options, output="screen")
-        teleop_actions += [RegisterEventHandler(OnProcessStart(target_action=stack.simulator,
-                                                               on_start=[broker])),
-                           RegisterEventHandler(OnProcessExit(target_action=broker,
-                               on_exit=[Shutdown(reason="ACT command broker exited")]))]
     if include_teleop == "true":
         teleop_share = Path(get_package_share_directory("so101_teleop"))
         teleop_actions.append(
@@ -2581,20 +2466,8 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                 choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
             ),
             *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
-               DeclareLaunchArgument("act_broker_socket", default_value=[LaunchConfiguration("task_evidence_root"), "/ipc/a"]),
-               DeclareLaunchArgument("act_calibration_mode", default_value="true", choices=("true", "false")),
-               DeclareLaunchArgument("act_calibration_report", default_value=""),
-               DeclareLaunchArgument("act_calibration_context", default_value=""),
-               DeclareLaunchArgument("act_motion_calibration_manifest", default_value=""),
-               DeclareLaunchArgument("act_contact_diagnostic_manifest", default_value=""),
-               DeclareLaunchArgument("act_visible_approach_manifest", default_value=""),
-               DeclareLaunchArgument("act_grasp_contact_transition_manifest", default_value=""),
-               DeclareLaunchArgument("act_task6_route_manifest", default_value=""),
-               DeclareLaunchArgument("act_task6_contact_transition_manifest", default_value=""),
-               DeclareLaunchArgument("act_held_cup_micro_lift_manifest", default_value=""),
-               DeclareLaunchArgument("act_stop_velocity_rad_s", default_value=""),
-               DeclareLaunchArgument("act_max_age_s", default_value=""),
-               *[DeclareLaunchArgument(key,default_value="") for key in ("act_submit_lead_s","act_accept_timeout_s","act_stop_timeout_s","act_permit_ttl_s")]]
+               DeclareLaunchArgument("act_first_episode_inputs", default_value=""),
+               DeclareLaunchArgument("act_expected_inputs_sha256", default_value="")]
               if act_profile else []),
             OpaqueFunction(function=_configured_task_station_actions),
         ]
@@ -2619,29 +2492,11 @@ def _configured_act_execution_stack_actions(context):
     if not scene.is_absolute() or not scene.is_file():
         raise RuntimeError("ACT_STACK_SCENE_INVALID")
     share = Path(get_package_share_directory("so101_demo_py"))
-    from so101_teleop.unified.controller_reservation_paths import (
-        controller_reservation_directory, controller_reservation_root,
-    )
-    reservation_environment = context.environment
-    inherited_root = reservation_environment.get("SO101_ACT_RESERVATION_ROOT")
-    inherited_dir = reservation_environment.get("SO101_ACT_CONTROLLER_RESERVATION_DIR")
-    if bool(inherited_root) != bool(inherited_dir):
-        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID")
-    try:
-        reservation_root = controller_reservation_root(
-            evidence_root, reservation_environment if inherited_root else {})
-        reservation_dir = controller_reservation_directory(reservation_root, session_id)
-    except ValueError as error:
-        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID") from error
-    if inherited_dir and inherited_dir != str(reservation_dir):
-        raise RuntimeError("ACT_STACK_RESERVATION_SCOPE_INVALID")
     stack = _mujoco_stack_actions(context, share, session_id, sim_speed_factor=1.0)
     return [
         SetEnvironmentVariable("SO101_ACT_PROFILE", "1"),
         SetEnvironmentVariable("SO101_TASK_EVIDENCE_ROOT", str(evidence_root)),
         SetEnvironmentVariable("SO101_SIMULATION_SESSION_ID", session_id),
-        SetEnvironmentVariable("SO101_ACT_RESERVATION_ROOT", str(reservation_root)),
-        SetEnvironmentVariable("SO101_ACT_CONTROLLER_RESERVATION_DIR", str(reservation_dir)),
         *camera_static_transform_nodes(),
         *stack.actions,
         RegisterEventHandler(OnProcessExit(

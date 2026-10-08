@@ -205,7 +205,7 @@ def campaign_config_from(collection_config: dict, *, qualification: bool) -> dic
 class ActFixedCollectionWorkload:
     """The port the existing parallel worker dispatches to for a fixed ACT collection wave.
 
-    It follows the same shape as `ActCollectionWorkload`: the worker sees a `kind` and a
+    It has the same shape as the retired single-scenario port: the worker sees a `kind` and a
     `run_authorized` call, and every decision about *what* to collect stays inside the campaign, so the
     worker cannot widen a wave or re-collect a sealed scene.
     """

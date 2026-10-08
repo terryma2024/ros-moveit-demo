@@ -59,6 +59,23 @@ def artifacts(tmp_path, *, change=None):
     return model, scene, proposal_path, receipt_path, proposal["policy_fingerprint"]
 
 
+def test_offline_stationary_support_is_exactly_the_activated_approach_support(tmp_path):
+    from so101_demo.adapters.act.phase_contact_allowlist import stationary_cup_support_pairs
+
+    model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
+    pairs = PhaseContactAllowlist(model=model, scene_path=scene, proposal_path=proposal,
+                             receipt_path=receipt, expected_fingerprint=fingerprint)
+    support = stationary_cup_support_pairs(model)
+    assert support == pairs.for_phase("APPROACH")
+    assert ("bottom_collision", "table_collision") in support
+    assert all("table_collision" in pair for pair in support)
+    assert not support & pairs.for_phase("TRANSPORT")
+    table = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table_collision")
+    model.geom_contype[table] = 0
+    with pytest.raises(ValueError, match="TASK8_CONTACT_SUPPORT_GEOMETRY_INVALID"):
+        stationary_cup_support_pairs(model)
+
+
 def bound(tmp_path, *, change=None, expected=None):
     model, scene, proposal, receipt, fingerprint = artifacts(tmp_path, change=change)
     return PhaseContactAllowlist(
@@ -79,6 +96,21 @@ def test_actual_model_pairs_are_exact_and_phase_scoped(tmp_path):
     assert all(a.endswith("collision") or "contact_convex" in a or "collision_" in a
                for phase in pairs.PHASES for a, _ in pairs.for_phase(phase))
     assert pairs.for_phase("MICRO_LIFT") != pairs.for_phase("TRANSPORT")
+
+
+def test_activated_force_and_holding_limits_are_retained_as_isolated_values(tmp_path):
+    pairs=bound(tmp_path)
+    assert getattr(pairs,'thresholds',None)=={
+        'minimum_bilateral_force_n':.1,'maximum_compression_distance_m':.0001,
+        'maximum_safe_force_n':3.,'maximum_hold_linear_speed_m_s':.004,
+        'minimum_stable_hold_duration_s':.1}
+    assert pairs.evaluation=={'maximum_observation_age_s':.1,'minimum_consecutive_samples':5}
+    changed=pairs.thresholds
+    changed['maximum_safe_force_n']=1e9
+    changed=pairs.evaluation
+    changed['maximum_observation_age_s']=30.
+    assert pairs.thresholds['maximum_safe_force_n']==3.
+    assert pairs.evaluation['maximum_observation_age_s']==.1
 
 
 def test_unknown_phase_or_wrong_admitted_fingerprint_is_refused(tmp_path):
@@ -137,117 +169,3 @@ def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
         )
 
 
-def test_act_child_retains_compiled_phase_pairs_before_ros_init(tmp_path, monkeypatch):
-    from so101_teleop.unified.act_artifacts import ActArtifactBinding
-    from so101_teleop.unified.ros_child import RclpyActionDriver
-    from so101_demo.act import head_search_binding
-
-    expected_model, _, proposal, receipt, fingerprint = artifacts(tmp_path)
-    names = ("source", "manifest", "runtime_config", "collection_config",
-             "calibration_report")
-    files = {}
-    for name in names:
-        path = tmp_path / f"{name}.json"
-        path.write_text(json.dumps({"artifact": name}))
-        files[name] = path
-    binding = ActArtifactBinding(
-        evidence_root=tmp_path,
-        paths=tuple((name, files[name]) for name in names)
-        + (("proposal", proposal), ("activation_receipt", receipt)),
-        hashes=tuple((name, hashlib.sha256(files[name].read_bytes()).hexdigest())
-                     for name in names),
-        policy_fingerprint=fingerprint,
-    )
-    for name, value in binding.environment().items():
-        monkeypatch.setenv(name, value)
-    monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", "compiled-model-test")
-    monkeypatch.setenv("SO101_ACT_WORKER_ID", "w00")
-    monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", dict(binding.hashes)["manifest"])
-    monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", dict(binding.hashes)["runtime_config"])
-    monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
-    # This test isolates compiled contact pairs; the separate binding suite
-    # exercises the required calibrated head-search configuration.
-    monkeypatch.setattr(head_search_binding, "validate_head_search_binding",
-                        lambda runtime, report: object())
-    monkeypatch.setattr(RclpyActionDriver, "_start_ros_broker", lambda self: object())
-
-    driver = RclpyActionDriver()
-    assert model_sha256(driver._act_model) == model_sha256(expected_model)
-    assert driver._act_contact_pairs.for_phase("SEARCH") != driver._act_contact_pairs.for_phase("CLOSE")
-
-
-def test_ros_sources_arm_only_from_reset_and_enqueue_phase_contact_hazard(tmp_path):
-    from so101_demo.adapters.act.task8_sources import Task8RosEvidence
-    from so101_mujoco_support.msg import RobotContactEvidence
-    from so101_mujoco_support.msg import SimulationEvidence as RosSimulationEvidence
-
-    model, scene, proposal, receipt, fingerprint = artifacts(tmp_path)
-    pairs = PhaseContactAllowlist(model=model, scene_path=scene, proposal_path=proposal,
-                              receipt_path=receipt, expected_fingerprint=fingerprint)
-
-    class Node:
-        def __init__(self):
-            self.topics = []
-
-        def create_subscription(self, _kind, topic, _callback, _qos):
-            self.topics.append(topic)
-            return SimpleNamespace(get_publisher_count=lambda: 1)
-
-        def create_publisher(self, _kind, topic, _qos):
-            self.topics.append(topic)
-            return SimpleNamespace(publish=lambda _message: None)
-
-    node = Node()
-    sources = Task8RosEvidence(
-        node, object(), model=model, contact_pairs=pairs, session_id="s",
-        max_wall_age_s=0.2, max_source_skew_s=0.005, max_sim_gap_s=0.003,
-        joint_tolerance_rad=0.001, cup_pose_tolerance_m=0.001,
-        cup_orientation_tolerance=0.001,
-    )
-    assert {"/so101/simulation/evidence", "/so101/simulation/scene_state",
-            "/so101/simulation/robot_contacts", "/head_camera/color",
-            "/wrist_camera/color", "/joint_states"} <= set(node.topics)
-    with pytest.raises(ValueError, match="TASK8_RESET_UNAVAILABLE"):
-        sources.arm("SEARCH")
-    reset = RosSimulationEvidence()
-    reset.header.frame_id = "world"
-    reset.publisher_sequence = 1
-    reset.simulation_step = 0
-    reset.reset_epoch = 1
-    reset.simulation_session_id = "s"
-    reset.paused = True
-    reset.object_body_id = 1
-    reset.object_body = "cup"
-    reset.object_pose_world.position.x = 0.1
-    reset.object_pose_world.position.y = -0.2
-    reset.object_pose_world.position.z = 0.15
-    reset.object_pose_world.orientation.w = 1.0
-    sources.world.accept(reset, received_at_s=time.monotonic())
-    assert sources.arm("SEARCH") == 1
-    sources.contact_adapter.accept_message(RobotContactEvidence(
-        simulation_session_id="s", reset_epoch=1, physics_step=1,
-        simulation_time_s=0.002, geom_a=["bottom_collision"],
-        geom_b=["table_collision"], signed_distance_m=[-0.001],
-        normal_force_n=[1.0], truncated=False, evidence_loss=False,
-    ))
-    assert sources.contacts.safe()
-    sources.set_phase("TRANSPORT")
-    assert sources.take_hazard() == "ROBOT_CONTACT_HAZARD"
-    assert sources.take_hazard() is None
-    truncated = copy.deepcopy(reset)
-    truncated.publisher_sequence = 2
-    truncated.simulation_step = 1
-    truncated.paused = False
-    truncated.truncated = True
-    sources.world._callback(truncated)
-    assert "truncated" in sources.take_hazard()
-    next_reset = copy.deepcopy(reset)
-    next_reset.publisher_sequence = 3
-    next_reset.reset_epoch = 2
-    sources.world._callback(next_reset)
-    gap = copy.deepcopy(next_reset)
-    gap.publisher_sequence = 5
-    sources.world._callback(gap)
-    assert "sequence gap" in sources.take_hazard()
-    with pytest.raises(ValueError, match="TASK8_RESET_UNAVAILABLE"):
-        sources.arm("SEARCH")

@@ -6,6 +6,9 @@ import hashlib
 import json
 import os
 import sys
+import threading
+import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,6 +36,181 @@ from .cup_scene_observer import RosCupSceneObserver
 from .dynamic_planner import RosDynamicPlanner
 
 
+_PHASE_TIMING_PREFIX = "DYNAMIC_EXECUTE_PHASE_TIMING "
+_PHASE_TIMING_MAX_BYTES = 8000
+_CENSUS_MAX_TOPICS = 32
+_STALL_PREFIX = "DYNAMIC_MAIN_STALL "
+_STALL_THRESHOLD_NS = 300_000_000
+_STALL_POLL_S = 0.05
+_STALL_MAX_LINES = 10
+_STALL_MAX_FRAMES = 15
+# Observation-only: the timer of the run_dynamic_execute call in progress, if any, so that helpers
+# below it (the reachability preflight) can mark phases without a signature change.
+_ACTIVE_PHASE_TIMER = None
+
+
+class _PhaseTimer:
+    """Bounded monotonic phase marks plus an optional callback census; never raises."""
+
+    def __init__(self):
+        self.start_ns = time.monotonic_ns()
+        self.phases = []
+        self.census = None
+        self.node = None
+        self.last_progress_ns = self.start_ns
+        self.stall_threshold_ns = _STALL_THRESHOLD_NS
+        self.stall_poll_s = _STALL_POLL_S
+        self.stall_max_lines = _STALL_MAX_LINES
+        self._stall_stop = threading.Event()
+        self._stall_thread = None
+
+    def mark(self, name):
+        try:
+            now = time.monotonic_ns()
+            self.last_progress_ns = now
+            if len(self.phases) < 256:
+                self.phases.append([name, now - self.start_ns])
+        except Exception:
+            pass
+
+    def start_stall_sampler(self, main_thread_ident):
+        """D15, observation only: report where the main thread is while nothing makes progress."""
+        try:
+            if self._stall_thread is not None:
+                return
+            self._stall_thread = threading.Thread(target=self._sample_stalls, args=(main_thread_ident,),
+                                                  daemon=True, name="dynamic-main-stall-sampler")
+            self._stall_thread.start()
+        except Exception:
+            pass
+
+    def stop_stall_sampler(self):
+        try:
+            self._stall_stop.set()
+            thread = self._stall_thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(1.0)
+        except Exception:
+            pass
+
+    def _progress_ns(self):
+        latest = self.last_progress_ns
+        for entry in list((self.census or {}).values()):
+            receipt = entry.get("last_receipt_monotonic_ns")
+            if isinstance(receipt, int) and receipt > latest:
+                latest = receipt
+        return latest
+
+    def _sample_stalls(self, main_thread_ident):
+        try:
+            lines, armed = 0, True
+            while not self._stall_stop.wait(self.stall_poll_s):
+                stalled_ns = time.monotonic_ns() - self._progress_ns()
+                if stalled_ns <= self.stall_threshold_ns:
+                    armed = True
+                    continue
+                if not armed or lines >= self.stall_max_lines:
+                    continue
+                armed = False
+                lines += 1
+                frame = sys._current_frames().get(main_thread_ident)
+                frames = [] if frame is None else [
+                    f"{item.filename}:{item.lineno}:{item.name}"
+                    for item in traceback.extract_stack(frame)[-_STALL_MAX_FRAMES:]]
+                phases = self.phases
+                document = {"last_phase": phases[-1][0] if phases else None,
+                            "stall_ms": stalled_ns / 1e6, "frames": frames}
+                print(_STALL_PREFIX + json.dumps(document, sort_keys=True, separators=(",", ":")),
+                      file=sys.stderr, flush=True)
+        except BaseException:
+            pass
+
+    def emit(self, outcome):
+        self.stop_stall_sampler()
+        try:
+            clock_ns = None
+            try:
+                clock_ns = int(self.node.get_clock().now().nanoseconds)
+            except Exception:
+                pass
+            document = {"phases": list(self.phases), "outcome": str(outcome)[:200],
+                        "census": self.census, "ros_clock_ns": clock_ns}
+            line = json.dumps(document, sort_keys=True, separators=(",", ":"))
+            while len(line) > _PHASE_TIMING_MAX_BYTES and document["phases"]:
+                del document["phases"][len(document["phases"]) // 2:]
+                document["truncated"] = True
+                line = json.dumps(document, sort_keys=True, separators=(",", ":"))
+            print(_PHASE_TIMING_PREFIX + line, file=sys.stderr, flush=True)
+        except Exception:
+            pass
+
+
+def _mark_active_phase(name):
+    timer = _ACTIVE_PHASE_TIMER
+    if timer is not None:
+        timer.mark(name)
+
+
+def _record_callback_lag(node, entry, callback_args):
+    """D14, observation only: sim-time backlog lag of a header-stamped message at callback time.
+
+    Keeps `max_lag_s` and `last_lag_s` in the census entry. Messages without a `header.stamp` are skipped;
+    never raises.
+    """
+    try:
+        stamp = callback_args[0].header.stamp
+        lag_s = (int(node.get_clock().now().nanoseconds)
+                 - (int(stamp.sec) * 1_000_000_000 + int(stamp.nanosec))) / 1e9
+        entry["last_lag_s"] = lag_s
+        if entry.get("max_lag_s") is None or lag_s > entry["max_lag_s"]:
+            entry["max_lag_s"] = lag_s
+    except Exception:
+        pass
+
+
+def _install_callback_census(node):
+    """Count invocations per subscribed topic by wrapping `node.create_subscription`.
+
+    Observation only: callbacks run unchanged. Returns the live census mapping, or None when the node
+    has no subscription factory or cannot be wrapped.
+    """
+    try:
+        create = getattr(node, "create_subscription", None)
+        if not callable(create):
+            return None
+        census = {}
+
+        def counted_create_subscription(*args, **kwargs):
+            try:
+                topic = str(args[1] if len(args) > 1 else kwargs["topic"])
+                if len(args) > 2:
+                    callback, location = args[2], 2
+                else:
+                    callback, location = kwargs["callback"], None
+                if callable(callback) and (topic in census or len(census) < _CENSUS_MAX_TOPICS):
+                    entry = census.setdefault(
+                        topic, {"count": 0, "last_receipt_monotonic_ns": None})
+
+                    def counted_callback(*callback_args, **callback_kwargs):
+                        entry["count"] += 1
+                        entry["last_receipt_monotonic_ns"] = time.monotonic_ns()
+                        _record_callback_lag(node, entry, callback_args)
+                        return callback(*callback_args, **callback_kwargs)
+
+                    if location is None:
+                        kwargs["callback"] = counted_callback
+                    else:
+                        args = args[:location] + (counted_callback,) + args[location + 1:]
+            except Exception:
+                pass
+            return create(*args, **kwargs)
+
+        node.create_subscription = counted_create_subscription
+        return census
+    except Exception:
+        return None
+
+
 def _write_consumer_ready_receipt(path: Path, document: dict[str, object]) -> None:
     """Exclusively publish one fsync-backed child READY boundary."""
 
@@ -42,21 +220,32 @@ def _write_consumer_ready_receipt(path: Path, document: dict[str, object]) -> No
         json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False)
         + "\n"
     ).encode("utf-8")
+    # The final name appears only with its complete, durable content: the parent polls this path and must never read an
+    # empty or partial receipt (it failed the point gate on one, under slow fsync). The temporary name is hard-linked
+    # to the final one, which stays exclusive (FileExistsError) and atomic.
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     descriptor = os.open(
-        path,
+        temporary,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
         0o600,
     )
     try:
-        offset = 0
-        while offset < len(payload):
-            written = os.write(descriptor, payload[offset:])
-            if written <= 0:
-                raise OSError("consumer READY receipt write made no progress")
-            offset += written
-        os.fsync(descriptor)
+        try:
+            offset = 0
+            while offset < len(payload):
+                written = os.write(descriptor, payload[offset:])
+                if written <= 0:
+                    raise OSError("consumer READY receipt write made no progress")
+                offset += written
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        os.link(temporary, path)
     finally:
-        os.close(descriptor)
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
     directory = os.open(
         path.parent,
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
@@ -196,12 +385,13 @@ def run_dynamic_plan_only(options) -> int:
             rclpy.shutdown()
 
 
-def _dynamic_execute_runtime():
+def _dynamic_execute_runtime(ik_backend: str | None = None):
     """Load ROS adapters lazily and expose a narrow orchestration test seam."""
 
     import rclpy
     from ament_index_python.packages import get_package_share_directory
     from rclpy.parameter import Parameter
+    from rclpy.signals import SignalHandlerOptions
 
     from ..application.dynamic_execute import build_dynamic_actions
     from ..application.task_reachability import check_task_reachability
@@ -209,32 +399,46 @@ def _dynamic_execute_runtime():
     from ..core.task_geometry import load_task_geometry
     from ..core.task_points import TaskPoint
     from .cup_scene_observer import RosMujocoCupSceneObserver
+    from .data_source_binding import bind_data_sources
     from .dynamic_mujoco_execution import RosDynamicMujocoExecution
     from .task_reachability import RosJointStateReader, RosMoveGroupReachabilityPlanner
 
-    def reachability_preflight(node, sample, template, scene_revision):
+    def reachability_preflight(node, sample, template, scene_revision, progress=None):
         point = TaskPoint(
             id="perceived_cup",
             label="Perceived cup",
             cup_position_world_m=tuple(sample.pose_world.values[:3]),
         )
-        planner = RosMoveGroupReachabilityPlanner(node, template)
+        # `progress=None` keeps the planner's own bare spin; only a caller that owns a drainable source passes one.
+        planner_options = {} if ik_backend is None else {"ik_backend": ik_backend}
+        if progress is not None:
+            planner_options["progress"] = progress
+        planner = RosMoveGroupReachabilityPlanner(node, template, **planner_options)
         reader = RosJointStateReader(node, template.arm_joint_names)
         try:
+            _mark_active_phase("reachability.read.begin")
             start = reader.read(template.planning_timeout_s)
-            return check_task_reachability(
-                point,
-                template,
-                start,
-                planner,
-                scene_revision=scene_revision,
-            )
+            _mark_active_phase("reachability.read.end")
+            _mark_active_phase("check_task_reachability.begin")
+            try:
+                return check_task_reachability(
+                    point,
+                    template,
+                    start,
+                    planner,
+                    scene_revision=scene_revision,
+                )
+            finally:
+                _mark_active_phase("check_task_reachability.end")
         finally:
             reader.close()
             planner.close()
 
     return SimpleNamespace(
         rclpy=rclpy,
+        # `rclpy.init` must not install its own SIGINT/SIGTERM handler: it shuts the context down before any cancel
+        # could be sent. The Teacher installs a handler that only sets a stop flag.
+        signal_handler_options_no=SignalHandlerOptions.NO,
         parameter=Parameter,
         get_package_share_directory=get_package_share_directory,
         load_policy=load_dynamic_policy_variant,
@@ -248,14 +452,20 @@ def _dynamic_execute_runtime():
         execution=RosDynamicMujocoExecution,
         build_actions=build_dynamic_actions,
         runner=StateMachineRunner,
+        bind_scene_source=bind_data_sources,
     )
 
 
-def _write_reachability_evidence(path: Path, session_id: str, report: Any) -> None:
+
+
+def _write_reachability_evidence(
+    path: Path, session_id: str, report: Any, *, ik_backend: str = "native"
+) -> None:
     from ..cli.task_reachability import result_document
 
     document = result_document((report,))
     document["session_id"] = session_id
+    document["ik_backend"] = ik_backend
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n")
@@ -285,6 +495,7 @@ def _cleanup_dynamic_execute(
     execution: Any | None,
     task_scene: Any | None,
     truth_observer: Any | None,
+    scene_source_binding: Any | None = None,
 ) -> _CleanupOutcome:
     """Attempt every owned cleanup operation and retain all failures."""
 
@@ -302,6 +513,8 @@ def _cleanup_dynamic_execute(
         attempt("task_scene", lambda: runtime.cleanup_task_scene(task_scene))
     if truth_observer is not None:
         attempt("truth_observer", truth_observer.close)
+    if scene_source_binding is not None:
+        attempt("scene_source", scene_source_binding.close)
     if node is not None:
         attempt("node", node.destroy_node)
     if initialized_here:
@@ -320,32 +533,42 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
+def _teacher_state_max_age_s(share_dir):
+    """The frozen Teacher execution policy's state age, or None when it cannot be read.
+
+    An unreadable policy is refused where the execution loads it (no motion without it); this only sizes the
+    scene observer the release preflight joins against.
+    """
+    from ..act.teacher_endpoint import load_teacher_execution_policy
+
+    try:
+        return load_teacher_execution_policy(
+            Path(share_dir) / "config/act/teacher_execution_policy_v1.yaml")["state_max_age_s"]
+    except (OSError, ValueError):
+        return None
+
+
 def run_dynamic_execute(
     options,
     *,
     profiler: SemanticProfiler | None = None,
     event_emitter: EventEmitter | None = None,
-    episode_recorder=None,
     _runtime=None,
 ) -> int:
     """Run the MuJoCo dynamic strategy through the shared state machine.
 
-    `episode_recorder` is where this episode is recorded. It belongs here rather than in the process that spawned this
-    one (CP-2861): the physical facts the audit's thirteen names need - the simulator's pose beside MoveIt's, the
-    attachment, the contacts, the stamps, the phase - are all reachable in this process and none of them cross the
-    boundary intact. Optional, so a run that records nothing is unchanged.
+    The Teacher records nothing and holds no data side (Phase A4c). The independent `act_episode_recorder` process
+    observes the Teacher's event stream and the shared sources; whatever it does cannot reach this function. Returned
+    codes: 0 = the Teacher COMPLETED; 1 = it did not (or one of its own resources failed to clean up). The data verdict
+    is the Recorder's, never this process's.
+
+    When `options.frozen_inputs_manifest` is given the Teacher loads its execution snapshot and its frozen policies from
+    that manifest and refuses a mismatch before any motion.
     """
 
+    global _ACTIVE_PHASE_TIMER
     status_stream = sys.stderr if event_emitter is not None else sys.stdout
     terminal_emitted = False
-    # bound before the try so the finally block can consult them on every exit path, including the early refusals
-    # that never reach the reset - the same trap as primary_failure, checked this time before the tests found it
-    episode_start_s = None
-    episode_last_receipt = None
-    # the observations the wrapped observer saw, newest last: the row's own facts live beside them in
-    # RosDynamicMujocoExecution.perform, which composes the audit
-    episode_observations: list = []
-    episode_sealed = False
 
     def emit_failure(candidate: object) -> None:
         nonlocal terminal_emitted
@@ -370,14 +593,22 @@ def run_dynamic_execute(
         )
         return 1
 
-    from ..act.episode_assembly import RecordingWorldObserver, begin_episode, end_episode
     from ..application.cup_pose_preflight import (
         validate_cup_scene,
         validate_mujoco_scene_identity,
     )
     from ..application.dynamic_scene_sync import prepare_dynamic_cup_scene
 
-    runtime = _dynamic_execute_runtime() if _runtime is None else _runtime
+    from ..control.moveit.pose_ik import resolve_ik_backend
+
+    try:
+        ik_backend = resolve_ik_backend(getattr(options, "ik_backend", None))
+    except ValueError as error:
+        emit_failure("IK_BACKEND_UNSUPPORTED")
+        print(status_line("ERROR", failure="IK_BACKEND_UNSUPPORTED", message=error),
+              file=status_stream)
+        return 1
+    runtime = _dynamic_execute_runtime(ik_backend) if _runtime is None else _runtime
     setup_token = (
         profiler.start_span("runtime.setup", {"backend": "mujoco"})
         if profiler is not None
@@ -396,6 +627,19 @@ def run_dynamic_execute(
         setup_finished = True
 
     share_dir = Path(runtime.get_package_share_directory("so101_demo_py"))
+    execution_inputs = None
+    frozen = None
+    manifest_option = getattr(options, "frozen_inputs_manifest", None)
+    if manifest_option is not None:
+        from ..act.frozen_runtime_inputs import load_teacher_frozen_inputs
+        try:
+            frozen, execution_inputs, share_dir = load_teacher_frozen_inputs(Path(manifest_option))
+        except Exception as error:
+            failure_code = _failure_code(error)
+            finish_setup("rejected", failure_code)
+            emit_failure(failure_code)
+            print(status_line("ERROR", failure=failure_code, message=error), file=status_stream)
+            return 1
     try:
         loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
@@ -431,7 +675,10 @@ def run_dynamic_execute(
 
     initialized_here = False
     node = None
+    event_stream = None
+    event_stream_close = None
     truth_observer = None
+    scene_source_binding = None
     task_scene = None
     execution = None
     result = None
@@ -456,15 +703,45 @@ def run_dynamic_execute(
         parallel_lease_identity = lease_values
     else:
         parallel_lease_identity = None
+    phase_timer = _PhaseTimer()
+    _ACTIVE_PHASE_TIMER = phase_timer
+    mark = phase_timer.mark
+    stop_flags = None
+    restore_signals = None
+    watchdog = None
     try:
-        runtime.rclpy.init()
+        # Stop flags exist before rclpy does, so a SIGINT/SIGTERM during setup is already a flag. Handlers are
+        # installed on the main thread only (`signal.signal` refuses elsewhere).
+        from .teacher_stop import DeadlineWatchdog, StopFlags
+        stop_flags = StopFlags()
+        if threading.current_thread() is threading.main_thread():
+            restore_signals = stop_flags.install_signal_handlers()
+        init_options = getattr(runtime, "signal_handler_options_no", None)
+        runtime.rclpy.init(**({} if init_options is None else {"signal_handler_options": init_options}))
         initialized_here = True
         node = runtime.rclpy.create_node(
             "so101_dynamic_cup_pick_place",
             parameter_overrides=[runtime.parameter("use_sim_time", value=True)],
         )
+        phase_timer.node = node
+        # The Teacher's event stream exists before its first scene call, so the setup scene is on it too. A node that
+        # cannot publish leaves the Teacher without a stream, never without a run.
+        from ..adapters.act.ros_teacher_event_stream import start_teacher_event_stream
+        event_stream, event_stream_close, _stream_error = start_teacher_event_stream(
+            node, options.session_id, options.expected_reset_epoch, parallel_lease_identity,
+            getattr(options, "request_id", None))
+        if event_stream is not None:
+            event_stream.close_publisher = event_stream_close
+        phase_timer.census = _install_callback_census(node)
+        phase_timer.start_stall_sampler(threading.get_ident())
         source = runtime.cup_pose_source(node, loaded.template)
+        # A stop request (SIGINT/SIGTERM, parent death, deadline) ends the pose wait; without it the wait ran to its
+        # own timeout and the owner's bounded shutdown found the process alive.
+        source.stop_check = stop_flags.raise_if_stopped
+        mark("source.arm.begin")
         ready_boundary = source.arm(min(5.0, options.cup_pose_timeout_s))
+        mark("source.arm.end")
+        stop_flags.raise_if_stopped()
         if parallel_lease_identity is not None:
             ready_receipt = getattr(options, "ready_receipt", None)
             expected_ready_receipt = Path(options.evidence_root) / "consumer-ready.json"
@@ -500,7 +777,11 @@ def run_dynamic_execute(
             flush=True,
             file=status_stream,
         )
+        mark("ready")
+        mark("get_one.begin")
         sample = source.get_one(options.cup_pose_timeout_s)
+        mark("get_one.end")
+        stop_flags.raise_if_stopped()
         print(
             f"status=POSE_ACCEPTED source_stamp_ns={sample.source_stamp_ns} "
             f"session_id={options.session_id} reset_epoch={options.expected_reset_epoch}",
@@ -512,24 +793,38 @@ def run_dynamic_execute(
             options.session_id,
             options.expected_reset_epoch,
         )
+        mark("truth.observe_initial.begin")
         initial = truth_observer.observe(5.0)
+        mark("truth.observe_initial.end")
         validate_mujoco_scene_identity(
             initial,
             expected_session_id=options.session_id,
             expected_reset_epoch=options.expected_reset_epoch,
         )
-        # The episode begins here, and deliberately not earlier: the reset has just been validated against the run's
-        # own session and epoch, so `initial` is a state the run accepts and its receipt time is the instant the
-        # episode started at. Opening the episode before that validation would mean creating one for a reset that is
-        # about to be rejected - an abandoned episode root, and a seal over a run that never began (CP-2862).
-        if begin_episode(episode_recorder, options, start_s=initial.simulator_received_monotonic_s):
-            episode_start_s = float(initial.simulator_received_monotonic_s)
-        episode_last_receipt = float(initial.simulator_received_monotonic_s)
+        mark("bind_scene_source.begin")
+        binder = getattr(runtime, "bind_scene_source", None)
+        if binder is not None:
+            model_path = (share_dir / execution_inputs["scene_path"] if execution_inputs is not None
+                          else share_dir / "assets/mujoco/scene.xml")
+            scene_age = _teacher_state_max_age_s(share_dir)
+            scene_source_binding = binder(node, session_id=options.session_id,
+                reset_epoch=options.expected_reset_epoch, model_path=model_path,
+                expected_model=execution_inputs, max_age_s=.1,
+                **({} if scene_age is None else {"scene_max_age_s": scene_age}))
+        elif execution_inputs is not None:
+            raise RuntimeError("DYNAMIC_SOURCE_CLOCK_BINDING_REQUIRED")
+        mark("bind_scene_source.end")
+        mark("task_scene_port.begin")
         task_scene = runtime.task_scene_port(
             node,
             "mujoco",
             loaded.template.planning_timeout_s,
         )
+        if event_stream is not None and hasattr(task_scene, "on_service_call"):
+            from ..act.scene_operation import make_scene_operation_hook
+            task_scene.on_service_call = make_scene_operation_hook(event_stream, state=lambda: "SETUP")
+        mark("task_scene_port.end")
+        mark("prepare_dynamic_cup_scene.begin")
         prepare_dynamic_cup_scene(
             sample,
             initial,
@@ -537,24 +832,42 @@ def run_dynamic_execute(
             geometry,
             task_scene,
         )
-        validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
-        validate_cup_scene(sample, truth_observer.observe(5.0), loaded.template)
+        mark("prepare_dynamic_cup_scene.end")
+        mark("validate_cup_scene.1.observe.begin")
+        observed = truth_observer.observe(5.0)
+        mark("validate_cup_scene.1.observe.end")
+        mark("validate_cup_scene.1.check.begin")
+        validate_cup_scene(sample, observed, loaded.template)
+        mark("validate_cup_scene.1.check.end")
+        mark("validate_cup_scene.2.observe.begin")
+        observed = truth_observer.observe(5.0)
+        mark("validate_cup_scene.2.observe.end")
+        mark("validate_cup_scene.2.check.begin")
+        validate_cup_scene(sample, observed, loaded.template)
+        mark("validate_cup_scene.2.check.end")
+        mark("resolve_motion_targets.begin")
         targets = runtime.resolve_motion_targets(sample, loaded.template)
+        mark("resolve_motion_targets.end")
+        mark("reachability_preflight.begin")
         reachability = runtime.reachability_preflight(
             node,
             sample,
             loaded.template,
             getattr(initial, "reset_epoch", None),
         )
+        mark("reachability_preflight.end")
+        stop_flags.raise_if_stopped()
         _write_reachability_evidence(
             reachability_file,
             options.session_id,
             reachability,
+            ik_backend=ik_backend,
         )
         if reachability.status.value == "UNREACHABLE":
             raise RuntimeError("DYNAMIC_TARGET_UNREACHABLE")
         if reachability.status.value != "REACHABLE":
             raise RuntimeError("DYNAMIC_TARGET_REACHABILITY_UNKNOWN")
+        mark("execution.construct.begin")
         execution = runtime.execution(
 
             node,
@@ -569,26 +882,62 @@ def run_dynamic_execute(
             workflow_id=getattr(options, "workflow_id", None),
             request_id=getattr(options, "request_id", None),
             parallel_lease_identity=parallel_lease_identity,
+            ik_backend=ik_backend,
+            **({} if event_stream is None else {"event_stream": event_stream}),
         )
-        # the recorder the CLI handed in reaches the object whose _record publishes each state's row: without
-        # this the hook reads an attribute that is always None, which is the quietest way for a whole recording
-        # path to be present and inert at once (CP-2866's concern, found by looking rather than by running)
-        execution.episode_recorder = episode_recorder
+        mark("execution.construct.end")
+        execution._task_geometry = geometry
+        if getattr(options, "final_stop_proof", False) is True:
+            execution.final_stop_proof_enabled = True
+        if execution_inputs is not None:
+            execution._execution_snapshot_root = share_dir
+        if scene_source_binding is not None:
+            execution._scene_source_observer = scene_source_binding.observer
+            execution._scene_source_binding = scene_source_binding
+        if execution_inputs is not None:
+            execution._release_runtime_policy = {"kind": "ACT_ENDPOINT_DEVELOPMENT_RUNTIME", "schema_version": 1,
+                **{key: value for key, value in frozen["runtime_policy"].items() if key != "sha256"}}
+            # The activated contact policy's cup force/compression limits and the collision geometry, from the same
+            # frozen inputs the broker-era Teacher read. A mismatch refuses before any motion.
+            from . import teacher_safety
+            safety = teacher_safety.load_frozen_safety(Path(manifest_option))
+            execution._safety_limits = safety.limits
+            watch = teacher_safety.CollisionWatch(
+                process_pairs=safety.process_pairs, known_geoms=safety.known_geoms,
+                session_id=options.session_id, reset_epoch=options.expected_reset_epoch)
+            watch.attach(node)
+            execution._collision_watch = watch
+            hazards = teacher_safety.PhysicsHazardWatch(
+                session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=safety.limits,
+                state_getter=lambda: execution._safety_state, clock=execution._monotonic)
+            hazards.attach(node)
+            hazards.arm()
+            execution._physics_hazard_watch = hazards
+        execution._stop_flags = stop_flags
+        mark("build_actions.begin")
         actions = profile_actions(
             runtime.build_actions(execution, targets),
             profiler,
         )
+        mark("build_actions.end")
         runner = runtime.runner(
             actions,
             session_id=options.session_id,
             policy_bundle_sha256=loaded.sha256,
-            # the observer is wrapped so that every instant the state machine acts on is seen (CP-2862 step 2),
-            # and what it keeps is the latest observation - the phase and the rest of the row come from
-            # RosDynamicMujocoExecution.perform, which is the only place that knows which state is running
-            world_observer=RecordingWorldObserver(execution.observer,
-                                                 record=lambda observation: episode_observations.append(observation)),
+            # The runner reads the Teacher's own observer directly. It used to be wrapped by a recorder that appended every
+            # observation to a list nothing ever read (an unbounded Teacher-side data copy with no consumer, removed in A4a).
+            world_observer=execution.observer,
         )
         finish_setup("accepted")
+        # The attempt deadline is frozen here, from the frozen execution policy. The watchdog thread only sets a flag:
+        # the monitor, the gripper hook and the state machine read it on the executing thread.
+        deadline_s = (getattr(execution, "_teacher_execution_policy", None) or {}).get("execution_deadline_s")
+        if deadline_s is not None:
+            stop_flags.arm_deadline(deadline_s)
+            watchdog = DeadlineWatchdog(stop_flags)
+            watchdog.start()
+        stop_flags.raise_if_stopped()
+        mark("runner.run.begin")
         result = runner.run(RunRequest(mode=RunMode.EXECUTE))
     except Exception as error:
         finish_setup("rejected", _failure_code(error))
@@ -613,19 +962,26 @@ def run_dynamic_execute(
             if result.failure is not None and result.failure.code:
                 primary_failure = result.failure.code
     finally:
-        # A failed run must leave an episode too: sealing only on success would make every failure invisible in the
-        # evidence, which is the opposite of what this task is for. The verdict stays the run's own - `primary_failure`
-        # is None when nothing failed. The end is the last receipt on the observer's clock, so the window is comparable
-        # with its start; `episode_sealed` keeps a run that already succeeded from being sealed twice, which would
-        # rewrite a document the verifier may already have read.
-        if episode_start_s is not None and not episode_sealed:
-            end_episode(episode_recorder, end_s=episode_last_receipt, start_s=episode_start_s,
-                        outcome={"status": "FAILED", "reason": primary_failure or "none", "task8_success": False})
+        _ACTIVE_PHASE_TIMER = None
+        if watchdog is not None:
+            watchdog.stop()
+        if restore_signals is not None:
+            restore_signals()
+        phase_timer.stop_stall_sampler()
+        phase_timer.emit("ok" if primary_failure is None else primary_failure)
         cleanup_token = (
             profiler.start_span("runtime.cleanup")
             if profiler is not None
             else None
         )
+        if execution is None and event_stream is not None:
+            # No execution took the stream over (the run failed before it was constructed): retire it here, bounded.
+            try:
+                event_stream.close(flush_timeout_s=1.0)
+                if event_stream_close is not None:
+                    event_stream_close()
+            except Exception:
+                pass
         cleanup = _cleanup_dynamic_execute(
             runtime=runtime,
             initialized_here=initialized_here,
@@ -633,6 +989,7 @@ def run_dynamic_execute(
             execution=execution,
             task_scene=task_scene,
             truth_observer=truth_observer,
+            scene_source_binding=scene_source_binding,
         )
         if cleanup_token is not None:
             profiler.finish_span(
@@ -640,6 +997,8 @@ def run_dynamic_execute(
                 outcome="ok" if not cleanup.failures else "error",
                 attributes={"failure_count": len(cleanup.failures)},
             )
+
+        teacher_cleanup_failures = tuple(cleanup.failures)
 
     if primary_failure is not None:
         emit_failure(primary_failure)
@@ -654,25 +1013,25 @@ def run_dynamic_execute(
                 status_line("ERROR", failure=failure, message=error, secondary=True),
                 file=status_stream,
             )
-        if cleanup.failures:
+        if teacher_cleanup_failures:
             print(
                 status_line(
                     "ERROR",
                     failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
-                    message=cleanup.message,
+                    message=_CleanupOutcome(teacher_cleanup_failures).message,
                     secondary=True,
                 ),
                 file=status_stream,
             )
         return 1
 
-    if cleanup.failures:
+    if teacher_cleanup_failures:
         emit_failure("DYNAMIC_EXECUTION_CLEANUP_FAILED")
         print(
             status_line(
                 "ERROR",
                 failure="DYNAMIC_EXECUTION_CLEANUP_FAILED",
-                message=cleanup.message,
+                message=_CleanupOutcome(teacher_cleanup_failures).message,
                 workflow_status="DONE",
             ),
             file=status_stream,
@@ -694,19 +1053,4 @@ def run_dynamic_execute(
         ),
         file=status_stream,
     )
-    # The episode is sealed here, with the verdict the run itself computed rather than one composed for the occasion:
-    # `result.status` is the run's own outcome and `result.failure.code` its own reason. Only fields that are actually
-    # derived are filled - a field the run never stated is left out, so the recorder's own check refuses the document
-    # instead of receiving a plausible invention, which is the failure mode this whole task exists to prevent.
-    if episode_start_s is not None:
-        # The end instant is read from the same observer the start came from, not from a fresh clock reading:
-        # the window's two ends have to be comparable, and only one of these two guarantees that.
-        _terminal = truth_observer.observe(5.0)
-        end_episode(episode_recorder, end_s=float(_terminal.simulator_received_monotonic_s),
-                    start_s=episode_start_s,
-                    outcome={"status": "PASSED" if result.status.value == "DONE" else "FAILED",
-                             "reason": (result.failure.code if getattr(result, "failure", None) is not None
-                                        and getattr(result.failure, "code", None) else "none"),
-                             "task8_success": result.status.value == "DONE"})
-        episode_sealed = True
     return 0

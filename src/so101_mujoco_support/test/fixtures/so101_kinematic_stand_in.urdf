@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- Kinematic stand-in for the SO-101 arm: the link and joint names the Teacher's planning-scene messages use; no meshes. -->
+<robot name="so101">
+  <link name="world"/>
+  <joint name="base_joint" type="fixed"><parent link="world"/><child link="base"/></joint>
+  <link name="base"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="shoulder"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="upper_arm"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="lower_arm"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="wrist"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="gripper"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <link name="jaw"><collision><geometry><box size="0.04 0.04 0.04"/></geometry></collision></link>
+  <joint name="1" type="revolute"><parent link="base"/><child link="shoulder"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+  <joint name="2" type="revolute"><parent link="shoulder"/><child link="upper_arm"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+  <joint name="3" type="revolute"><parent link="upper_arm"/><child link="lower_arm"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+  <joint name="4" type="revolute"><parent link="lower_arm"/><child link="wrist"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+  <joint name="5" type="revolute"><parent link="wrist"/><child link="gripper"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+  <joint name="6" type="revolute"><parent link="gripper"/><child link="jaw"/><origin xyz="0 0 0.1"/><axis xyz="0 1 0"/><limit lower="-3" upper="3" effort="1" velocity="1"/></joint>
+</robot>

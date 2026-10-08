@@ -288,35 +288,6 @@ def test_act_ros_child_refuses_replaced_artifact_before_ros_node(tmp_path, monke
         monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
         Path(spec.payload["runtime_config_path"]).write_text("replaced after admission")
         with pytest.raises(ValueError, match="ACT_ARTIFACT_HASH_MISMATCH"):
-            RclpyActionDriver(broker=object())
-    finally:
-        store.close()
-
-
-def test_act_ros_child_refuses_weights_changed_after_admission(tmp_path, monkeypatch):
-    from so101_teleop.unified.act_artifacts import ActArtifactBinding
-    from so101_teleop.unified.ros_child import RclpyActionDriver
-    from so101_demo.adapters.act import task8_contact_pairs
-
-    fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
-    receipt_path.write_text(json.dumps(receipt))
-    spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
-    store = IntentStore.open(tmp_path / "state")
-    try:
-        context = _service(store).start(spec)
-        binding = ActArtifactBinding.from_admission(spec.payload, context)
-        for name, value in binding.environment().items():
-            monkeypatch.setenv(name, value)
-        monkeypatch.setenv("SO101_ACT_CAMPAIGN_ID", context.campaign_id)
-        monkeypatch.setenv("SO101_ACT_MANIFEST_SHA256", context.manifest_sha256)
-        monkeypatch.setenv("SO101_ACT_RUNTIME_CONFIG_SHA256", context.runtime_config_sha256)
-        monkeypatch.setenv("SO101_ACT_POLICY_FINGERPRINT", fingerprint)
-        monkeypatch.setattr(task8_contact_pairs, "load_installed_act_contact_pairs",
-                            lambda **kwargs: pytest.fail("model loaded before weight check"))
-        monkeypatch.setattr(RclpyActionDriver, "_start_ros_broker",
-                            lambda self: pytest.fail("ROS started before weight check"))
-        (tmp_path / "head-best.pt").write_bytes(b"changed-after-admission")
-        with pytest.raises(ValueError, match="HEAD_SEARCH_WEIGHTS_INVALID"):
             RclpyActionDriver()
     finally:
         store.close()

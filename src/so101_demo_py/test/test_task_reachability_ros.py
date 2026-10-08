@@ -1,4 +1,8 @@
+import threading
+import time
 from types import SimpleNamespace
+
+import pytest
 
 from so101_demo.core.domain import State
 from so101_demo.core.dynamic_pick import DynamicPickTemplate
@@ -9,6 +13,47 @@ from so101_demo.ros.task_reachability import (
     RosMoveGroupReachabilityPlanner,
     make_move_group_goal,
 )
+
+
+def test_prepare_horizon_reuses_real_requests_only_within_one_call(monkeypatch) -> None:
+    from collections import Counter
+    from pathlib import Path
+
+    from so101_demo.control.moveit.underactuated_ik import UnderactuatedPoseIk
+    from so101_demo.core.dynamic_pick import CupPoseSample, resolve_motion_targets
+    from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
+
+    package = Path(__file__).parents[1]
+    template = load_dynamic_pick_template(
+        package / "config/policies/dynamic_cup_pick/v1/mujoco.yaml", expected_backend="mujoco"
+    )
+    ik = UnderactuatedPoseIk.from_urdf(
+        package / "assets/mujoco/so101.urdf", template.arm_joint_names, "world", "so101_tcp"
+    )
+    targets = resolve_motion_targets(
+        CupPoseSample("world", 1, 0.0, Pose7((0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0))), template
+    )
+    requests = Counter()
+    real_solve = ik.solve
+
+    def counted(target, seed, **kwargs):
+        requests[(target, seed, tuple(kwargs.items()))] += 1
+        return real_solve(target, seed, **kwargs)
+
+    monkeypatch.setattr(ik, "solve", counted)
+    planner = RosMoveGroupReachabilityPlanner(
+        object(), template, action_client=object(), ik=ik, progress=lambda: None
+    )
+    planner.prepare_horizon(targets, _start())
+    first = planner._prepared_receipts
+    steps = planner._prepared_steps.copy()
+    assert sum(map(len, steps.values())) == 14
+    assert max(requests.values()) == 1
+    assert len(first) > sum(requests.values())
+    planner.prepare_horizon(targets, _start())
+    assert planner._prepared_receipts == first
+    assert planner._prepared_steps == steps
+    assert set(requests.values()) == {2}
 
 
 def _template() -> DynamicPickTemplate:
@@ -176,7 +221,8 @@ def _result(*, code: int = 1, with_point: bool = True, points=None):
 def test_accepted_action_returns_final_trajectory_point() -> None:
     action = _ActionClient(_result())
     planner = RosMoveGroupReachabilityPlanner(
-        object(), _template(), action_client=action, ik=_TargetIk(), monotonic=lambda: 1.0
+        object(), _template(), action_client=action, ik=_TargetIk(), monotonic=lambda: 1.0,
+        progress=lambda: None,
     )
 
     receipt = planner.plan(State.MOVE_ABOVE_OBJECT, _target(), _start(), _cup(), 5.0)
@@ -210,7 +256,8 @@ def test_reachability_scores_a_bounded_plan_set_and_selects_a_safe_corridor() ->
     )
     action = _ActionClient([bad, direct, direct, direct])
     planner = RosMoveGroupReachabilityPlanner(
-        object(), _template(), action_client=action, ik=_TargetIk(), monotonic=lambda: 1.0
+        object(), _template(), action_client=action, ik=_TargetIk(), monotonic=lambda: 1.0,
+        progress=lambda: None,
     )
 
     receipt = planner.plan(State.MOVE_ABOVE_OBJECT, _target(), _start(), _cup(), 5.0)
@@ -229,7 +276,8 @@ def test_reachability_scores_a_bounded_plan_set_and_selects_a_safe_corridor() ->
 
 def test_rejected_action_preserves_moveit_error_code() -> None:
     planner = RosMoveGroupReachabilityPlanner(
-        object(), _template(), action_client=_ActionClient(_result(code=-31)), ik=_TargetIk()
+        object(), _template(), action_client=_ActionClient(_result(code=-31)), ik=_TargetIk(),
+        progress=lambda: None,
     )
 
     receipt = planner.plan(State.DESCEND, _target(), _start(), _cup(), 5.0)
@@ -241,7 +289,8 @@ def test_rejected_action_preserves_moveit_error_code() -> None:
 
 def test_unavailable_action_is_unknown_and_no_execution_client_exists() -> None:
     planner = RosMoveGroupReachabilityPlanner(
-        object(), _template(), action_client=_ActionClient(_result(), server=False), ik=_TargetIk()
+        object(), _template(), action_client=_ActionClient(_result(), server=False), ik=_TargetIk(),
+        progress=lambda: None,
     )
 
     receipt = planner.plan(State.DESCEND, _target(), _start(), _cup(), 5.0)
@@ -250,3 +299,151 @@ def test_unavailable_action_is_unknown_and_no_execution_client_exists() -> None:
     assert receipt.failure_code == "PLANNER_UNAVAILABLE"
     assert not hasattr(planner, "execute")
     assert not hasattr(planner, "_execute_client")
+
+
+class _SlowIk(_TargetIk):
+    """Pure-Python stand-in whose solve costs real wall time on the caller's thread."""
+
+    def __init__(self, delay_s: float) -> None:
+        self.delay_s = delay_s
+        self.solve_threads = set()
+
+    def solve(self, target, seed, **kwargs):
+        self.solve_threads.add(threading.get_ident())
+        time.sleep(self.delay_s)
+        return super().solve(target, seed, **kwargs)
+
+
+class _Targets:
+    def __init__(self) -> None:
+        self._poses = {
+            State.MOVE_ABOVE_OBJECT: PoseEvidence((0.02, -0.28, 0.28), (0.0, 0.0, 0.0, 1.0)),
+            State.DESCEND: PoseEvidence((0.02, -0.28, 0.16), (0.0, 0.0, 0.0, 1.0)),
+            State.MICRO_LIFT: PoseEvidence((0.02, -0.28, 0.17), (0.0, 0.0, 0.0, 1.0)),
+            State.LIFT: PoseEvidence((0.02, -0.28, 0.25), (0.0, 0.0, 0.0, 1.0)),
+        }
+
+    def for_state(self, state: State) -> PoseEvidence:
+        return self._poses[state]
+
+
+def test_prepare_horizon_keeps_progressing_while_the_ik_computes() -> None:
+    ik = _SlowIk(0.01)
+    ticks = []
+    planner = RosMoveGroupReachabilityPlanner(
+        object(), _template(), action_client=_ActionClient(_result()), ik=ik,
+        progress=lambda: ticks.append(threading.get_ident()),
+    )
+    reference = RosMoveGroupReachabilityPlanner(
+        object(), _template(), action_client=_ActionClient(_result()), ik=_TargetIk(),
+        progress=lambda: None,
+    )
+
+    started = time.monotonic()
+    planner.prepare_horizon(_Targets(), _start())
+    elapsed = time.monotonic() - started
+    reference.prepare_horizon(_Targets(), _start())
+
+    assert elapsed > 0.1
+    assert len(ticks) > 5
+    assert set(ticks) == {threading.get_ident()}
+    assert ik.solve_threads and threading.get_ident() not in ik.solve_threads
+    assert planner._prepared_steps and planner._prepared_steps == reference._prepared_steps
+    assert planner._prepared_receipts == reference._prepared_receipts
+
+
+def test_unprepared_state_horizon_keeps_progressing_while_the_ik_computes() -> None:
+    ik = _SlowIk(0.01)
+    ticks = []
+    planner = RosMoveGroupReachabilityPlanner(
+        object(), _template(), action_client=_ActionClient(_result()), ik=ik,
+        progress=lambda: ticks.append(1), monotonic=lambda: 1.0,
+    )
+
+    receipt = planner.plan(State.MOVE_ABOVE_OBJECT, _target(), _start(), _cup(), 5.0)
+
+    assert receipt.accepted is True
+    assert len(ticks) > 0
+    assert threading.get_ident() not in ik.solve_threads
+
+
+def test_compute_while_progressing_returns_value_and_reraises_the_same_error() -> None:
+    from so101_demo.ros.task_reachability import _compute_while_progressing
+
+    ticks = []
+    assert _compute_while_progressing(lambda: (time.sleep(0.05), 7)[1], lambda: ticks.append(1)) == 7
+    assert ticks
+
+    error = RuntimeError("ik failed")
+
+    def fail():
+        raise error
+
+    with pytest.raises(RuntimeError) as caught:
+        _compute_while_progressing(fail, lambda: None)
+    assert caught.value is error
+
+
+def test_compute_while_progressing_joins_the_worker_before_reraising_a_progress_error() -> None:
+    from so101_demo.ros.task_reachability import _compute_while_progressing
+
+    finished = threading.Event()
+    boom = RuntimeError("progress failed")
+
+    def work():
+        time.sleep(0.1)
+        finished.set()
+
+    def progress():
+        raise boom
+
+    started = time.monotonic()
+    with pytest.raises(RuntimeError) as caught:
+        _compute_while_progressing(work, progress)
+    assert caught.value is boom
+    assert finished.is_set()
+    assert time.monotonic() - started < 2.0
+
+
+def test_compute_while_progressing_runs_scheduled_callbacks_during_the_computation() -> None:
+    from so101_demo.ros.task_reachability import _compute_while_progressing
+
+    pending = []
+    handled_at = []
+    done = threading.Event()
+
+    def work():
+        pending.append("chunk")
+        time.sleep(0.2)
+        done.set()
+
+    def progress():
+        while pending:
+            pending.pop()
+            handled_at.append(done.is_set())
+
+    _compute_while_progressing(work, progress)
+
+    assert handled_at == [False]
+
+
+def test_consumer_motion_horizon_keeps_progressing_while_the_ik_computes() -> None:
+    from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+
+    ik = _SlowIk(0.01)
+    ticks = []
+    runtime = RosDynamicMujocoExecution.__new__(RosDynamicMujocoExecution)
+    runtime._ik = ik
+    runtime._template = _template()
+    runtime._targets = _Targets()
+    runtime._pick_horizon_steps = {}
+    runtime._document = {}
+    runtime._write = lambda: None
+    runtime._progress = lambda: ticks.append(threading.get_ident())
+
+    steps = runtime._motion_horizon(State.MOVE_ABOVE_OBJECT, [_target()], _start().positions_rad[:5])
+
+    assert steps
+    assert len(ticks) > 5
+    assert set(ticks) == {threading.get_ident()}
+    assert threading.get_ident() not in ik.solve_threads

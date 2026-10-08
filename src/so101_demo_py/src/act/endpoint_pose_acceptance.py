@@ -48,9 +48,15 @@ def load_endpoint_policy(path: Path) -> dict:
     """
 
     document = yaml.safe_load(Path(path).read_text())
+    return validate_endpoint_policy(document)
+
+
+def validate_endpoint_policy(document: dict) -> dict:
+    """Validate the same closed policy when it comes from a byte-bound manifest."""
     if not isinstance(document, dict) or set(document) != POLICY_FIELDS:
         raise ValueError("ENDPOINT_POLICY_INVALID: not the closed policy document")
-    if (document["kind"] != POLICY_KIND or document["schema_version"] != POLICY_SCHEMA_VERSION
+    if (document["kind"] != POLICY_KIND or type(document["schema_version"]) is not int
+            or document["schema_version"] != POLICY_SCHEMA_VERSION
             or document["rule_version"] != RULE_VERSION):
         raise ValueError("ENDPOINT_POLICY_INVALID: unknown kind, schema version or rule version")
     thresholds = document["thresholds"]
@@ -144,9 +150,15 @@ def load_development_runtime(path: Path) -> dict:
     """
 
     document = yaml.safe_load(Path(path).read_text())
+    return validate_development_runtime(document)
+
+
+def validate_development_runtime(document: dict) -> dict:
+    """Validate the same runtime settings when read from the frozen input manifest."""
     if not isinstance(document, dict) or set(document) != RUNTIME_FIELDS:
         raise ValueError("DEVELOPMENT_RUNTIME_INVALID: not the closed runtime document")
-    if document["kind"] != RUNTIME_KIND or document["schema_version"] != RUNTIME_SCHEMA_VERSION:
+    if (document["kind"] != RUNTIME_KIND or type(document["schema_version"]) is not int
+            or document["schema_version"] != RUNTIME_SCHEMA_VERSION):
         raise ValueError("DEVELOPMENT_RUNTIME_INVALID: unknown kind or schema version")
     loaded = {"kind": RUNTIME_KIND, "schema_version": RUNTIME_SCHEMA_VERSION}
     for section, keys in RUNTIME_SECTIONS.items():

@@ -1,5 +1,7 @@
 # SO-101 ACT 容器化采集 campaign 设计
 
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+
 日期：2026-09-30
 状态：用户已确认方案边界；独立 Astra/High 设计审查通过，等待用户书面审阅。本文不授权实施、启动采集或执行真实 SO-101 动作。
 

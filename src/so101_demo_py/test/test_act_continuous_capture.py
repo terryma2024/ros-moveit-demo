@@ -334,6 +334,63 @@ def test_the_motion_budget_cannot_be_extended_or_made_unbounded():
             build(deadline_s=bad)
 
 
+def test_original_dispatch_clock_starts_deadline_before_delayed_reply():
+    capture,_=build(clock=lambda:121.)
+    capture.start('s','attempt-1',1,1.)
+    with pytest.raises(ValueError,match='CAPTURE_DEADLINE_EXCEEDED'):
+        capture.on_event({'kind':'first_command','sim_time_s':1.,'source_clock':{
+            'sim_time_ns':1_000_000_000,'begin_monotonic_ns':1,'end_monotonic_ns':2}})
+
+
+@pytest.mark.parametrize('bad',[{'sim_time_ns':1,'begin_monotonic_ns':True,'end_monotonic_ns':2},
+    {'sim_time_ns':1_000_000_000,'begin_monotonic_ns':11_000_000_000,'end_monotonic_ns':11_000_000_001},
+    {'sim_time_ns':2_000_000_000,'begin_monotonic_ns':1,'end_monotonic_ns':2}])
+def test_first_command_refuses_invalid_original_dispatch_clock(bad):
+    capture,_=build(clock=lambda:10.)
+    capture.start('s','attempt-1',1,1.)
+    with pytest.raises(ValueError,match='CAPTURE_DISPATCH_CLOCK_INVALID'):
+        capture.on_event({'kind':'first_command','sim_time_s':1.,'source_clock':bad})
+
+
+def test_normal_motion_end_keeps_original_tail_but_prohibits_future_action_labels():
+    ticks={'now':0.}
+    capture,minter=build(clock=lambda:ticks['now'])
+    start(capture)
+    frames_at(capture,minter,[1.,1.1,1.2])
+    for target in (1.1,1.2):capture.on_reference(reference(target))
+    assert capture.drain()==1
+    boundary={'sim_time_ns':1_250_000_000,'begin_monotonic_ns':1,'end_monotonic_ns':2}
+    ticks['now']=.01
+    mark=getattr(capture,'on_normal_motion_end',None)
+    assert callable(mark),'confirmed normal motion end cannot retain a causal endpoint tail'
+    mark(boundary)
+    ticks['now']=200.
+    frames_at(capture,minter,[1.3,1.4])
+    assert capture.drain()==1
+    assert capture.reference_requests(1.4)==()
+    assert capture.window['physics_end_s']==1.25 and capture.window['collection_end_s']==1.4
+    assert [row['observation']['sim_time_s'] for row in capture.recorder.rows]==[1.,1.1]
+    summary=capture.finish(1.25)
+    assert summary.sample_count==2 and len(capture.unlabelled_rows)==1
+
+
+@pytest.mark.parametrize('fault',['duplicate','future','pre_label','changed_end'])
+def test_normal_end_cannot_refresh_extend_or_revoke_already_written_labels(fault):
+    capture,minter=build(clock=lambda:10.)
+    start(capture);frames_at(capture,minter,[1.,1.1,1.2])
+    for target in (1.1,1.2):capture.on_reference(reference(target))
+    assert capture.drain()==1
+    mark=getattr(capture,'on_normal_motion_end',None)
+    assert callable(mark),'no exact one-shot normal end boundary exists'
+    clock={'sim_time_ns':1_250_000_000,'begin_monotonic_ns':1,'end_monotonic_ns':2}
+    if fault=='future':clock['end_monotonic_ns']=11_000_000_000
+    if fault=='pre_label':clock['sim_time_ns']=1_100_000_000
+    if fault in ('duplicate','changed_end'):mark(clock)
+    with pytest.raises(ValueError,match='CAPTURE_NORMAL_END|CAPTURE_LABEL_REVOKED'):
+        if fault=='changed_end':capture.finish(1.3)
+        else:mark(clock)
+
+
 def test_stop_ends_capture_and_the_deadline_is_fixed():
     ticks = {"now": 0.0}
     capture, minter = build(deadline_s=120.0, clock=lambda: ticks["now"])
@@ -558,6 +615,12 @@ class ReferenceAudit:
         assert kind == "references"
         self.references.append(record)
 
+    def append_acquisition(self, frame):
+        pass
+
+    def bind_row(self, *values):
+        pass
+
 
 def test_the_audit_keeps_the_raw_reference_history_including_revocations():
     audit = ReferenceAudit()
@@ -568,6 +631,8 @@ def test_the_audit_keeps_the_raw_reference_history_including_revocations():
     capture.on_reference(reference(1.1))
     capture.on_reference(reference(1.1, accepted=False))
     capture.on_reference(reference(1.2))
+    assert audit.references == []
+    capture.drain()
     assert [row["accepted"] for row in audit.references] == [True, False, True]
     assert [row["reference_time_s"] for row in audit.references] == [1.1, 1.1, 1.2]
     assert all(row["source"] == "CONTROLLER_REFERENCE" for row in audit.references)
@@ -625,6 +690,12 @@ class RawReferenceAudit:
         assert kind == "references"
         self.references.append(record)
 
+    def append_acquisition(self, frame):
+        pass
+
+    def bind_row(self, *values):
+        pass
+
 
 def test_the_observer_raw_frame_reaches_the_audit_when_it_is_supplied():
     """A reference message carrying the observer's raw frame must not lose it (T3-F1)."""
@@ -638,6 +709,8 @@ def test_the_observer_raw_frame_reaches_the_audit_when_it_is_supplied():
            "received_monotonic_ns": 900000, "velocities": [0.0, 0.0]}
     capture.on_reference({**reference(1.1), **raw})
     capture.on_reference(reference(1.2))
+    assert audit.references == []
+    capture.drain()
     assert audit.references[0]["joint_names"] == raw["joint_names"]
     assert audit.references[0]["sim_stamp_ns"] == raw["sim_stamp_ns"]
     assert "joint_names" not in audit.references[1]
@@ -705,6 +778,8 @@ def test_the_capture_forwards_the_ratified_packed_reference_shape():
     start(capture)
     frames_at(capture, minter, [1.0])
     capture.on_reference({**reference(1.1), **_ratified_reference()})
+    assert audit.references == []
+    capture.drain()
     recorded = audit.references[0]
     assert set(recorded["frames"]) == {"arm", "gripper"}
     assert recorded["frames"]["gripper"]["observer_sequence"] == 7
@@ -729,9 +804,8 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-    from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
     from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
-    from so101_demo.act.episode_qc import endpoint_qc_document
+    from so101_demo.act import episode_qc
     from so101_demo.act.recorder import EpisodeRecorder
     from test_act_recorder import PROVENANCE
 
@@ -769,9 +843,11 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     assert sealed, "the capture must seal the audit it was given"
     manifest_path = Path(sealed[0])
     assert verify_audit_manifest(manifest_path)["kind"] == "ACT_EPISODE_AUDIT"
-    document = endpoint_qc_document(manifest_path.parent, {
-        "initial_target": [0.0] * 7, "final_target": [0.0] * 7,
-        "endpoint_policy": load_endpoint_policy(Path(__file__).resolve().parents[1]
-                                                / "config/act/endpoint_pose_acceptance_v1.yaml")})
-    print("EPISODE QC:", document["status"], "| checks:", sorted(document["checks"]))
-    assert document["rule_version"] == "endpoint_pose_v1" and "endpoint_pose" in document["checks"]
+    # QC no longer carries an endpoint_pose_v1 document; the sealed audit is checked for data integrity and, with no
+    # Teacher manifest beside it, the Teacher-reference cross-check names that absence instead of passing
+    manifest = verify_audit_manifest(manifest_path)
+    check = episode_qc.verify_teacher_references(None, identity=manifest["identity"], window=manifest["window"],
+                                                 physics_steps=[])
+    print("EPISODE QC reference check:", check["status"], check["reason"])
+    assert check["status"] == "FAIL" and check["reason"] == "TEACHER_REFERENCE_MANIFEST_MISSING"
+    assert not hasattr(episode_qc, "endpoint_qc_document")

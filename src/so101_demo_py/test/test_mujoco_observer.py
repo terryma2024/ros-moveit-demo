@@ -69,3 +69,123 @@ def test_lossless_recorder_can_request_bounded_atomic_receive_queue(monkeypatch)
     world.accept(skipped, received_at_s=10.)
     with pytest.raises(world_module.EvidenceRejected, match="sequence gap"):
         world.recent_with_receipts()
+
+
+def test_original_source_history_retention_has_no_age_filter_and_refuses_lost_prefix(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
+    clock = [10.]
+    node = SimpleNamespace(create_subscription=lambda *args: object())
+    world = world_module.MujocoWorldObserver(node, "session", subscription_depth=256,
+        monotonic=lambda: clock[0])
+    monkeypatch.setattr(world_module, "convert_message", lambda value: value)
+    first = SimulationEvidence(simulation_time_s=1., frame_id="world", publisher_sequence=1,
+        simulation_step=1, reset_epoch=1, simulation_session_id="session", paused=False,
+        object_state=ObjectState(body_id=1, body="plastic_cup", position_world=(0., 0., 0.),
+            orientation_xyzw=(0., 0., 0., 1.), linear_velocity_world=(0., 0., 0.), angular_velocity_world=(0., 0., 0.)),
+        has_contact=False, minimum_signed_distance_m=0., maximum_normal_force_n=0., truncated=False,
+        left_fingertip_contacts=(), right_fingertip_contacts=(), other_object_contacts=())
+    world.accept(first, received_at_s=10.)
+    world.accept(replace(first, publisher_sequence=2, simulation_step=2, simulation_time_s=1.01), received_at_s=10.)
+    clock[0] = 11.
+    retained = world.original_records_after(0)
+    assert [record.evidence.publisher_sequence for record in retained] == [1, 2]
+    assert [record.received_monotonic_s for record in retained] == [10., 10.]
+    assert world.original_records_after(2) == ()
+    for sequence in range(3, 260):
+        world.accept(replace(first, publisher_sequence=sequence, simulation_step=sequence,
+            simulation_time_s=1. + sequence * .01), received_at_s=11.)
+    with pytest.raises(world_module.EvidenceRejected, match="retention prefix"):
+        world.original_records_after(2)
+    assert world.original_records_after(258)[0].evidence.publisher_sequence == 259
+
+
+def test_retained_with_receipts_is_unfiltered_and_ignores_hazard_and_age(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
+    clock = [10.]
+    node = SimpleNamespace(create_subscription=lambda *args: object())
+    world = world_module.MujocoWorldObserver(node, "session", subscription_depth=256,
+        monotonic=lambda: clock[0])
+    assert world.retained_with_receipts() == ()
+    monkeypatch.setattr(world_module, "convert_message", lambda value: value)
+    first = SimulationEvidence(simulation_time_s=1., frame_id="world", publisher_sequence=1,
+        simulation_step=1, reset_epoch=1, simulation_session_id="session", paused=False,
+        object_state=ObjectState(body_id=1, body="plastic_cup", position_world=(0., 0., 0.),
+            orientation_xyzw=(0., 0., 0., 1.), linear_velocity_world=(0., 0., 0.), angular_velocity_world=(0., 0., 0.)),
+        has_contact=False, minimum_signed_distance_m=0., maximum_normal_force_n=0., truncated=False,
+        left_fingertip_contacts=(), right_fingertip_contacts=(), other_object_contacts=())
+    world.accept(first, received_at_s=10.)
+    world.accept(replace(first, publisher_sequence=3, simulation_step=2, simulation_time_s=1.01), received_at_s=10.)
+    clock[0] = 99.
+    with pytest.raises(world_module.EvidenceRejected, match="sequence gap"):
+        world.recent_with_receipts()
+    retained = world.retained_with_receipts()
+    assert type(retained) is tuple
+    assert [record.evidence.publisher_sequence for record in retained] == [1, 3]
+    assert [record.received_monotonic_s for record in retained] == [10., 10.]
+
+
+def _world_pair(world_module, monkeypatch, **observer_kwargs):
+    from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
+    monkeypatch.setattr(world_module, "convert_message", lambda message: message)
+    node = SimpleNamespace(create_subscription=lambda *args: object())
+    world = world_module.MujocoWorldObserver(node, "session-1", monotonic=lambda: 10., **observer_kwargs)
+    first = SimulationEvidence(
+        simulation_time_s=1., frame_id="world", publisher_sequence=1,
+        simulation_step=1, reset_epoch=1, simulation_session_id="session-1",
+        paused=False, object_state=ObjectState(
+            body_id=1, body="cup", position_world=(0., 0., 0.),
+            orientation_xyzw=(0., 0., 0., 1.),
+            linear_velocity_world=(0., 0., 0.),
+            angular_velocity_world=(0., 0., 0.)),
+        has_contact=False, minimum_signed_distance_m=0.,
+        maximum_normal_force_n=0., truncated=False,
+        left_fingertip_contacts=(), right_fingertip_contacts=(),
+        other_object_contacts=(),
+    )
+    return world, first
+
+
+def test_a_world_sequence_gap_is_audited_without_a_hazard_when_the_audit_port_is_given(monkeypatch):
+    # RED on the unchanged source: the constructor has no on_sequence_gap port.
+    from so101_demo.backends.mujoco import observer as world_module
+    gaps, hazards = [], []
+    world, first = _world_pair(world_module, monkeypatch, on_sequence_gap=lambda *args: gaps.append(args),
+                               on_hazard=hazards.append)
+    skipped = replace(first, simulation_time_s=1.01, publisher_sequence=3, simulation_step=2)
+    world.accept(first, received_at_s=10.)
+    world.accept(skipped, received_at_s=10.)
+    assert gaps == [(1, 3)] and hazards == []
+    assert len(world.recent_with_receipts()) == 2
+    assert world.snapshot().publisher_sequence == 3
+    world.accept(replace(skipped, simulation_time_s=1.02, publisher_sequence=4, simulation_step=3), received_at_s=10.)
+    assert gaps == [(1, 3)]
+
+
+@pytest.mark.parametrize("problem", ["foreign_session", "sequence_backwards", "truncated", "epoch_backwards", "step_backwards"])
+def test_world_audit_port_does_not_soften_inconsistent_or_foreign_evidence(problem, monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    gaps = []
+    world, first = _world_pair(world_module, monkeypatch, on_sequence_gap=lambda *args: gaps.append(args))
+    world.accept(first, received_at_s=10.)
+    bad = {"foreign_session": dict(simulation_session_id="other", publisher_sequence=2),
+           "sequence_backwards": dict(publisher_sequence=1, simulation_step=2),
+           "truncated": dict(publisher_sequence=2, simulation_step=2, truncated=True),
+           "epoch_backwards": dict(publisher_sequence=2, reset_epoch=0),
+           "step_backwards": dict(publisher_sequence=2, simulation_step=0)}[problem]
+    with pytest.raises(world_module.EvidenceRejected):
+        world.accept(replace(first, **bad), received_at_s=10.)
+    assert gaps == []
+
+
+def test_world_sequence_gap_is_still_a_hazard_without_the_audit_port(monkeypatch):
+    # Keep-test: the default (execution-child) observer keeps its strict gap hazard.
+    from so101_demo.backends.mujoco import observer as world_module
+    hazards = []
+    world, first = _world_pair(world_module, monkeypatch, on_hazard=hazards.append)
+    skipped = replace(first, simulation_time_s=1.01, publisher_sequence=3, simulation_step=2)
+    world.accept(first, received_at_s=10.)
+    world.accept(skipped, received_at_s=10.)
+    with pytest.raises(world_module.EvidenceRejected, match="sequence gap"):
+        world.recent_with_receipts()

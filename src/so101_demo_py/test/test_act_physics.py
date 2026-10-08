@@ -122,6 +122,34 @@ def test_missing_bridge_is_not_proof_of_a_safe_current_to_future_path(scene):
     assert port.last_check['reason']=='PATH_INPUT_INVALID'
 
 
+def test_explicit_checker_subclass_can_validate_longer_prefix_without_opening_default(scene):
+    port=checker(scene);prefix,snapshot=inputs(port)
+    endpoint=snapshot['controller_start_positions']
+    prefix.update(first_target_delay_s=.1,target_interval_s=.002,
+                  target_times_s=[1.1+.002*i for i in range(1,651)],
+                  positions=[endpoint for _ in range(650)])
+    assert not port.check_path(prefix,snapshot)
+    assert port.last_check['reason']=='PATH_INPUT_INVALID'
+    assert 'PREFIX_SAMPLE_BUDGET' in port.last_check['error']
+
+    class ExplicitValidatorChecker(MujocoPathChecker):
+        def _validate_prefix(self, candidate):
+            assert candidate is prefix
+            return dict(candidate,
+                        target_times_s=tuple(candidate['target_times_s']),
+                        positions=tuple(tuple(q) for q in candidate['positions']))
+
+    extended=ExplicitValidatorChecker(
+        scene,protected_roots=('base',),cup_joint='cup_free_joint',
+        gripper_body='gripper',path_step_s=.002,path_clearance_m=.002,
+        velocity_limit_rad_s=(100.,)*6,
+        acceleration_limit_rad_s2=(1e6,)*6,allowed_pairs_by_phase={},
+    )
+    snapshot['model_sha256']=extended.model_sha256
+    assert extended.check_path(prefix,snapshot),extended.last_check
+    assert extended.last_check['samples']==701
+
+
 @pytest.mark.parametrize('holding,allowed',[(False,{}),(False,{'CONTACT':{('arm','obstacle')}}),(True,{})])
 def test_position_stage_collision_decisions_match_full_forward_dynamics(scene,holding,allowed,monkeypatch):
     port=checker(scene,allowed);p,s=inputs(port,holding=holding)

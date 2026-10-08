@@ -1,5 +1,7 @@
 # SO-101 ACT 首条非 Head Search 采集闭环设计
 
+> **2026-10-05 修订（优先）**：Teacher/Recorder/QC 耦合、过程质量成功条件和数据故障停机条款已被 [`2026-10-05-so101-teacher-act-decoupling-amendment.md`](2026-10-05-so101-teacher-act-decoupling-amendment.md) 替代；冲突时以该修订为准，执行见 [`../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md`](../plans/2026-10-05-so101-teacher-act-decoupling-implementation.md)。本文其余仍适用要求保留。
+
 日期：2026-09-30
 状态：讨论边界已获用户确认，独立 Astra/High 复审通过，等待用户审阅本文。本文不授权实现或启动采集。
 

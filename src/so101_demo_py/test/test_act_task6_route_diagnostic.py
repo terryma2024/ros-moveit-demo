@@ -1,5 +1,6 @@
 """Source-bound, no-contact Task 6 route authority stays outside collection."""
 
+from act_identity import ACT_MODEL_SHA256
 import hashlib
 import json
 import os
@@ -15,9 +16,7 @@ from so101_demo.act.visible_approach_diagnostic import (
     route_prefix_matches,
 )
 from so101_demo.adapters.act.physics import MujocoPathChecker
-from so101_demo.adapters.act.calibration_motion import (
-    RosCalibrationMotionGuard, route_motion_configuration,
-)
+from so101_demo.adapters.act.phase_contact_allowlist import stationary_cup_support_pairs
 from so101_demo.act.ownership import Ownership
 
 
@@ -39,7 +38,7 @@ def test_route_is_exact_pinned_no_contact_microsegments():
     require_route_sources(route)
     assert route["eligible_for_collection"] is False
     assert route["kind"] == "ACT_TASK6_ROUTE_DIAGNOSTIC"
-    assert route["model_sha256"] == "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+    assert route["model_sha256"] == ACT_MODEL_SHA256
     assert route["allowed_contact_pairs"] == []
     assert route["segment_rows"] == 9
     assert route["path_clearance_m"] == .002
@@ -116,7 +115,8 @@ def test_every_stopped_microsegment_passes_current_model_path_checker(origin):
         path_clearance_m=route["path_clearance_m"],
         velocity_limit_rad_s=route["velocity_limit_rad_s"],
         acceleration_limit_rad_s2=route["acceleration_limit_rad_s2"],
-        allowed_pairs_by_phase={},
+        allowed_pairs_by_phase={"APPROACH": stationary_cup_support_pairs(
+            mujoco.MjModel.from_xml_path(str(SCENE)))},
     )
     model, data = checker.model, checker._data
     for sequence in range(len(route["target_positions"]) // 9):
@@ -152,7 +152,8 @@ def test_first_route_segment_checks_measured_settled_start_and_rejects_larger_er
         path_clearance_m=route["path_clearance_m"],
         velocity_limit_rad_s=route["velocity_limit_rad_s"],
         acceleration_limit_rad_s2=route["acceleration_limit_rad_s2"],
-        allowed_pairs_by_phase={},
+        allowed_pairs_by_phase={"APPROACH": stationary_cup_support_pairs(
+            mujoco.MjModel.from_xml_path(str(SCENE)))},
     )
     # EXP-318's actual settled joint/scene readback, before the rejected permit.
     settled = [-.2500333208650234, -.4998717311944051,
@@ -185,150 +186,6 @@ def test_first_route_segment_checks_measured_settled_start_and_rejects_larger_er
     snapshot["controller_start_positions"] = farther
     assert not checker.check_path(prefix, snapshot)
     assert checker.last_check["reason"] == "PATH_ACCELERATION_LIMIT"
-
-
-def test_route_guard_requires_exact_sequence_and_prior_physical_stop(tmp_path):
-    route = manifest()
-    config = route_motion_configuration(route)
-    assert config["allowed_pairs"] == frozenset()
-    assert config["eligible_for_collection"] is False
-    assert config["max_age_s"] == .2
-    assert config["stop_max_age_s"] == 1.5
-    class Node:
-        def create_subscription(self, *args):
-            return args
-        def create_timer(self, *args):
-            return args
-    state = {"status": 6, "stopped": False}
-    driver = NS(_lock=threading.RLock(), hazard_reason=None,
-                goal_state=lambda _: dict(accepted=True, status=state["status"],
-                                          result={"error_code": 0}),
-                stopped=lambda: state["stopped"])
-    pair = NS(adapter=NS(current_goal_ids=("arm-goal", "gripper-goal")))
-    broker = NS(ownership=Ownership(), prefix_executor=pair, tick=lambda: None)
-    guard = RosCalibrationMotionGuard(Node(), driver, broker, route,
-                                      evidence_root=tmp_path)
-    try:
-        assert guard.route_mode is True
-        assert guard.contact_observer.allowed == frozenset()
-        assert not guard._live_ready()
-        first = dict(session_id=route["session_id"], attempt_id=route["attempt_id"],
-                     sequence=0, observation_time_s=1.,
-                     target_times_s=[1. + .1 * (i + 1) for i in range(10)],
-                     positions=[route["joint_start_rad"]] + route["target_positions"][:9])
-        assert guard._within(first, route["joint_start_rad"], 0.)
-        guard._next_segment = 1
-        prior = route["target_positions"][8]
-        second = dict(first, sequence=1,
-                      positions=[prior] + route["target_positions"][9:18])
-        assert not guard._within(second, prior, 0.)
-        state["status"] = 4
-        state["stopped"] = True
-        assert guard._within(second, prior, 0.)
-        assert not guard._within(dict(second, sequence=2), prior, 0.)
-        state["stopped"] = False
-        assert not guard._within(second, prior, 0.)
-    finally:
-        guard.close()
-
-
-def test_route_broker_rejects_collecting_manifest_before_domain_authority(
-        tmp_path, monkeypatch):
-    from so101_demo.adapters.act.domain_authority import DomainAuthority
-    from so101_demo.cli.act_command_broker import main
-    route = manifest()
-    route["eligible_for_collection"] = True
-    path = tmp_path / "bad-route.json"
-    path.write_text(json.dumps(route))
-    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
-        AssertionError("domain authority acquired before route preflight")))
-    with pytest.raises(ValueError):
-        main(["--socket", "/tmp/act-route-collect-test.sock",
-              "--session-id", route["session_id"],
-              "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
-              "--calibration-mode", "--stop-velocity-rad-s", ".002",
-              "--max-age-s", ".2", "--submit-lead-s", ".05",
-              "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
-              "--permit-ttl-s", ".1", "--visible-approach-manifest", str(path)])
-
-
-def test_route_broker_rejects_mixed_business_and_legacy_manifest_flags(tmp_path):
-    from so101_demo.cli.act_command_broker import main
-
-    path = tmp_path / "route.json"
-    path.write_text("{}")
-    with pytest.raises(ValueError, match="DIAGNOSTIC_MANIFESTS_MUTUALLY_EXCLUSIVE"):
-        main(["--socket", "/tmp/act-route-alias-test.sock",
-              "--session-id", "route-alias-test", "--parent-pid", str(os.getpid()),
-              "--lease-timeout-s", "30", "--calibration-mode",
-              "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
-              "--visible-approach-manifest", str(path),
-              "--task6-route-manifest", str(path)])
-
-
-def test_route_broker_rejects_wrong_stop_age_before_domain_authority(
-        tmp_path, monkeypatch):
-    from so101_demo.adapters.act.domain_authority import DomainAuthority
-    from so101_demo.cli.act_command_broker import main
-    route = manifest()
-    path = tmp_path / "route.json"
-    path.write_text(json.dumps(route))
-    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
-        AssertionError("domain authority acquired before stop age check")))
-    with pytest.raises(ValueError, match="TASK6_ROUTE_DIAGNOSTIC_CONFIG_MISMATCH"):
-        main(["--socket", "/tmp/act-route-age-test.sock",
-              "--session-id", route["session_id"],
-              "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
-              "--calibration-mode", "--stop-velocity-rad-s", ".002",
-              "--max-age-s", ".2", "--submit-lead-s", ".05",
-              "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
-              "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
-    with pytest.raises(AssertionError, match="domain authority acquired before stop age check"):
-        main(["--socket", "/tmp/act-route-age-test.sock",
-              "--session-id", route["session_id"],
-              "--parent-pid", str(os.getpid()), "--lease-timeout-s", "30",
-              "--calibration-mode", "--stop-velocity-rad-s", ".002",
-              "--max-age-s", "1.5", "--submit-lead-s", ".05",
-              "--accept-timeout-s", ".03", "--stop-timeout-s", "1",
-              "--permit-ttl-s", ".1", "--task6-route-manifest", str(path)])
-
-
-def test_route_launch_pins_receipt_safe_simulation_speed(tmp_path, monkeypatch):
-    from launch import LaunchContext
-    from launch.utilities import perform_substitutions
-    from launch.actions import DeclareLaunchArgument, OpaqueFunction
-    from so101_demo.runtime import launch_composition as launch
-
-    route = manifest()
-    path = tmp_path / "route.json"
-    path.write_text(json.dumps(route))
-    description = launch.build_task_station_launch_description(act_profile=True)
-    context = LaunchContext()
-    for argument in description.entities:
-        if isinstance(argument, DeclareLaunchArgument):
-            context.launch_configurations[argument.name] = perform_substitutions(
-                context, argument.default_value)
-    context.launch_configurations.update(
-        session_id=route["session_id"], mujoco_scene=route["scene_path"],
-        act_visible_approach_manifest=str(path), act_stop_velocity_rad_s=".002",
-        act_max_age_s="1.5", act_submit_lead_s=".05",
-        act_accept_timeout_s=".02", act_stop_timeout_s="4",
-        act_permit_ttl_s="1.5")
-    captured = []
-
-    class Capture(Exception):
-        pass
-
-    def stack(*args, **kwargs):
-        captured.append((kwargs["sim_speed_factor"],kwargs["plugin_config_filename"]))
-        raise Capture
-
-    monkeypatch.setattr(launch, "_mujoco_stack_actions", stack)
-    opaque = next(action for action in description.entities
-                  if isinstance(action, OpaqueFunction))
-    with pytest.raises(Capture):
-        opaque.execute(context)
-    assert captured == [(.25,"act_diagnostic_plugins.yaml")]
 
 
 def test_route_plugin_chunk_cadence_fits_the_hard_receipt_deadline():

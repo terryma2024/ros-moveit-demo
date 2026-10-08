@@ -1,0 +1,7 @@
+include CMakeLists.txt package.xml pyproject.toml
+recursive-include config *.json
+recursive-include cmake *.cmake *.in
+recursive-include include *.h
+recursive-include src *.cpp
+recursive-include third_party *
+recursive-include test *.py *.cpp

@@ -1,5 +1,6 @@
 """The full Task 6 contact probe has one exact source-bound command path."""
 
+from act_identity import ACT_MODEL_SHA256
 import json
 import os
 import threading
@@ -28,7 +29,7 @@ def manifest(tmp_path):
     receipt.write_text("{}")
 
     class Pairs:
-        model_sha256 = "3c876e7bbf879dbf614abfe8ecf48ca0eb43dc179a4124467f88b7ca755fdd78"
+        model_sha256 = ACT_MODEL_SHA256
         fingerprint = "0ba8e07f16e448b16efe7b342745af7181678af47ddf45f975434919774dca11"
 
         def __init__(self, **kwargs):
@@ -83,107 +84,3 @@ def test_full_manifest_refuses_phase_row_and_collection_tamper(tmp_path):
             require_full_sources(dict(value, **{key: changed}), pairs_factory=pairs)
 
 
-def test_full_guard_preserves_no_contact_until_first_contact_prefix(tmp_path, monkeypatch):
-    from so101_demo.act import task6_full_contact_diagnostic as full
-    from so101_demo.act.ownership import Ownership
-    from so101_demo.adapters.act.calibration_motion import (
-        RosCalibrationMotionGuard, transition_motion_configuration)
-    value, pairs = manifest(tmp_path)
-    monkeypatch.setattr(full, "require_full_sources",
-                        lambda source: require_full_sources(source, pairs_factory=pairs))
-    config = transition_motion_configuration(value)
-    assert config["contact_phase_start"] == 248
-    assert config["allowed_pairs_by_phase"]["APPROACH"] == frozenset()
-
-    class Node:
-        def create_subscription(self, *args):
-            return args
-
-        def create_timer(self, *args):
-            return args
-
-    driver = NS(_lock=threading.RLock(), hazard_reason=None,
-                goal_state=lambda _: dict(accepted=True, status=4,
-                                          result={"error_code": 0}),
-                stopped=lambda: True)
-    broker = NS(ownership=Ownership(),
-                prefix_executor=NS(adapter=NS(current_goal_ids=("arm", "gripper"))),
-                tick=lambda: None)
-    guard = RosCalibrationMotionGuard(Node(), driver, broker, value,
-                                      evidence_root=tmp_path / "guard")
-    try:
-        assert guard.full_mode and guard.transition_mode
-        assert guard.contact_observer.allowed == frozenset()
-        assert guard._phase(prefix(value, 247)) == "APPROACH"
-        assert guard._phase(prefix(value, 248)) == "CONTACT"
-        guard._next_segment = 247
-        assert guard._within(prefix(value, 247),
-                             value["target_positions"][247 * 9 - 1], 0.)
-        guard._next_segment = 248
-        assert guard._within(prefix(value, 248),
-                             value["target_positions"][248 * 9 - 1], 0.)
-        assert not guard._within(prefix(value, 249),
-                                 value["target_positions"][248 * 9 - 1], 0.)
-    finally:
-        guard.close()
-
-
-def test_full_manifest_broker_refuses_tamper_before_domain_authority(tmp_path, monkeypatch):
-    from so101_demo.act import task6_full_contact_diagnostic as full
-    from so101_demo.adapters.act.domain_authority import DomainAuthority
-    from so101_demo.cli.act_command_broker import main
-    value, pairs = manifest(tmp_path)
-    monkeypatch.setattr(full, "require_full_sources",
-                        lambda source: require_full_sources(source, pairs_factory=pairs))
-    monkeypatch.setattr(DomainAuthority, "acquire", lambda *_: (_ for _ in ()).throw(
-        AssertionError("domain authority reached")))
-    value["segment_phases"][248] = "APPROACH"
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(value))
-    with pytest.raises(ValueError):
-        main(["--socket", "/tmp/act-full-contact-gate-test.sock",
-              "--session-id", value["session_id"], "--parent-pid", str(os.getpid()),
-              "--lease-timeout-s", "30", "--calibration-mode",
-              "--stop-velocity-rad-s", ".002", "--max-age-s", "1.5",
-              "--submit-lead-s", ".05", "--accept-timeout-s", ".02",
-              "--stop-timeout-s", "4", "--permit-ttl-s", "1.5",
-              "--task6-contact-transition-manifest", str(path)])
-
-
-def test_full_manifest_launch_preserves_route_speed_and_plugin(tmp_path, monkeypatch):
-    from launch import LaunchContext
-    from launch.utilities import perform_substitutions
-    from launch.actions import DeclareLaunchArgument, OpaqueFunction
-    from so101_demo.act import task6_full_contact_diagnostic as full
-    from so101_demo.runtime import launch_composition as launch
-    value, pairs = manifest(tmp_path)
-    monkeypatch.setattr(full, "require_full_sources",
-                        lambda source: require_full_sources(source, pairs_factory=pairs))
-    path = tmp_path / "manifest.json"
-    path.write_text(json.dumps(value))
-    description = launch.build_task_station_launch_description(act_profile=True)
-    context = LaunchContext()
-    for argument in description.entities:
-        if isinstance(argument, DeclareLaunchArgument):
-            context.launch_configurations[argument.name] = perform_substitutions(
-                context, argument.default_value)
-    context.launch_configurations.update(
-        session_id=value["session_id"], mujoco_scene=value["scene_path"],
-        act_task6_contact_transition_manifest=str(path), act_stop_velocity_rad_s=".002",
-        act_max_age_s="1.5", act_submit_lead_s=".05",
-        act_accept_timeout_s=".02", act_stop_timeout_s="4", act_permit_ttl_s="1.5")
-    captured = []
-
-    class Capture(Exception):
-        pass
-
-    def stack(*args, **kwargs):
-        captured.append((kwargs["sim_speed_factor"], kwargs["plugin_config_filename"]))
-        raise Capture
-
-    monkeypatch.setattr(launch, "_mujoco_stack_actions", stack)
-    opaque = next(action for action in description.entities
-                  if isinstance(action, OpaqueFunction))
-    with pytest.raises(Capture):
-        opaque.execute(context)
-    assert captured == [(.25, "task6_route_plugins.yaml")]

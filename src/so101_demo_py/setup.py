@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 
-from setuptools import find_packages, setup
+from setuptools import Extension, find_packages, setup
 from setuptools.command.install import install as _install
 
 
@@ -39,6 +39,21 @@ package_name = "so101_demo_py"
 python_package = "so101_demo"
 package_root = Path(__file__).resolve().parent
 subpackages = find_packages(where="src")
+ik_requirements = [
+    line.strip()
+    for line in (package_root / "config/ik/requirements.lock").read_text(
+        encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
+
+extensions = [Extension(
+    f"{python_package}.control.moveit._ik_numeric",
+    ["src/control/moveit/_ik_numeric.c"],
+    extra_compile_args=[
+        "-O3", "-fno-fast-math", "-ffp-contract=off",
+        "-fno-builtin-sin", "-fno-builtin-cos",
+    ],
+)]
 
 
 def installed_resources() -> list[tuple[str, list[str]]]:
@@ -62,6 +77,8 @@ setup(
     packages=[python_package]
     + [f"{python_package}.{subpackage}" for subpackage in subpackages],
     package_dir={python_package: "src"},
+    ext_modules=extensions,
+    package_data={f"{python_package}.control.moveit": ["_ik_numeric.pyx"]},
     data_files=[
         (
             "share/ament_index/resource_index/packages",
@@ -75,8 +92,8 @@ setup(
     ]
     + installed_resources(),
     cmdclass={"install": DebugProvenanceInstall},
-    install_requires=["PyYAML==6.0.2", "setuptools", "typing_extensions"],
-    zip_safe=True,
+    install_requires=["so101-quik==0.1.0", "PyYAML==6.0.2", "setuptools", "typing_extensions"] + ik_requirements,
+    zip_safe=False,
     maintainer="SO-101 maintainers",
     maintainer_email="zjumty@gmail.com",
     description="Unified SO-101 MuJoCo and Gazebo pick-place demonstration.",
@@ -91,8 +108,9 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "act_command_broker = so101_demo.cli.act_command_broker:main",
             "act_first_episode = so101_demo.cli.act_first_episode:main",
+            "act_episode_recorder = so101_demo.cli.act_episode_recorder:main",
+            "act_offline_episode = so101_demo.cli.act_offline_episode:main",
             "act_preflight = so101_demo.cli.act_preflight:main",
             "act_resolve_training_requirements = so101_demo.cli.act_resolve_training_requirements:main",
             "act_capture_synchronized_rgb = so101_demo.cli.act_capture_synchronized_rgb:main",

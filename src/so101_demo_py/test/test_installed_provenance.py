@@ -12,6 +12,7 @@ from ament_index_python.packages import get_package_prefix, get_package_share_di
 from so101_demo.runtime.provenance import installed_bundle
 
 EXPECTED_EXECUTABLES = {
+    "act_episode_recorder",
     "camera_preset",
     "dynamic_cup_pick_place",
     "e2e_acceptance",

@@ -25,6 +25,39 @@ class ContractError(ValueError):
         self.code = code
 
 
+#: Broker refusals that end the Teacher's channel: the Teacher side's own terminal event, never a Coordinator problem.
+TEACHER_CHANNEL_TERMINAL_CODES = frozenset({
+    "TEACHER_CHANNEL_FENCED", "TEACHER_EPISODE_EXPIRED", "TEACHER_FENCE_CONTEXT_INVALID"})
+
+
+class TeacherChannelTerminal(PermissionError):
+    """The command broker fenced or retired the Teacher's channel (its phase proof refused, or its episode ended).
+
+    Raised by the Teacher lifecycle when a renewal reaches a channel that is already terminal. The Worker treats it as the
+    Teacher's own terminal event: it stops renewing on that channel, lets the child finish and seals the Teacher's
+    decision. It is not a lost Coordinator.
+    """
+
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+class TeacherPreMotionRefused(RuntimeError):
+    """The Teacher's channel was fenced, or its motion enable failed terminally, after the actual start ACK and
+    before any motion (before `execute_expert`).
+
+    Raised by the Teacher lifecycle only after its start-ACK authority check passed, so the attempt did start. The
+    Worker commits it as a Teacher attempt that did not pass (never as INVALID, which is not an attempt). `reason`
+    is the bounded refusal that ended it; `diagnostics` holds only facts the Worker itself knows.
+    """
+
+    def __init__(self, reason: str, diagnostics: dict | None = None):
+        super().__init__(reason)
+        self.reason = reason
+        self.diagnostics = dict(diagnostics or {})
+
+
 class RunMode(StrEnum):
     DRY_RUN = "dry_run"
     PLAN_ONLY = "plan_only"
@@ -614,6 +647,9 @@ class BatchRequest:
         validate_capacity(self.worker_count, self.max_points_per_worker, len(point_ids))
 
 
+_TEACHER_STARTED = frozenset({PointStatus.PASSED, PointStatus.FAILED, PointStatus.INDETERMINATE})
+
+
 @dataclass(frozen=True, slots=True)
 class BatchSummary:
     run_mode: RunMode
@@ -622,6 +658,8 @@ class BatchSummary:
     validation_statuses: Mapping[str, ValidationStatus] = field(default_factory=dict)
     batch_cleanup_complete: bool = False
     terminal_reason: str | None = None
+    #: per committed ACT point: its data verdict, kept apart from the Teacher status in `point_statuses`
+    act_results: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _require_enum("run_mode", self.run_mode, RunMode)
@@ -657,8 +695,45 @@ class BatchSummary:
                 status is not PointStatus.UNRUN for status in points.values()
             ):
                 raise ContractError("VALIDATION_PHYSICAL_UNRUN")
+        if not isinstance(self.act_results, Mapping) or not set(self.act_results).issubset(points):
+            raise ContractError("ACT_RESULTS")
         object.__setattr__(self, "point_statuses", MappingProxyType(points))
         object.__setattr__(self, "validation_statuses", MappingProxyType(validations))
+        object.__setattr__(self, "act_results", MappingProxyType(dict(self.act_results)))
+
+    @property
+    def teacher_attempts_started(self) -> int:
+        """Started, legal Teacher attempts: every point with a recorded Teacher outcome.
+
+        PASSED, FAILED and INDETERMINATE all started a Teacher attempt, whatever happened to their data. INVALID
+        (no valid attempt) and UNRUN are not attempts. This is the denominator of the Teacher success rate: it never
+        shrinks to the data-QC subset.
+        """
+        return sum(status in _TEACHER_STARTED for status in self.point_statuses.values())
+
+    @property
+    def teacher_passed(self) -> int:
+        return sum(status is PointStatus.PASSED for status in self.point_statuses.values())
+
+    @property
+    def teacher_success_rate(self) -> float | None:
+        started = self.teacher_attempts_started
+        return None if started == 0 else self.teacher_passed / started
+
+    @property
+    def act_data_qc_passed(self) -> int:
+        """Committed ACT points whose independent data QC passed (a Teacher failure may still be among them)."""
+        return sum(record.get("act_data_qc") == "PASS" for record in self.act_results.values())
+
+    @property
+    def act_data_pass_rate(self) -> float | None:
+        """Data QC passes over the committed ACT results, reported apart from the Teacher success rate."""
+        return None if not self.act_results else self.act_data_qc_passed / len(self.act_results)
+
+    @property
+    def committable_episodes(self) -> int:
+        """Episodes exportable for training: Teacher PASS and data QC PASS."""
+        return sum(record.get("export_eligible") is True for record in self.act_results.values())
 
     @property
     def coverage_complete(self) -> bool:
@@ -1477,8 +1552,11 @@ class ParallelRuntimeConfigV3:
             raise ContractError("GPU_DEVICE_SELECTOR")
         if not isinstance(self.start_guard, StartGuardPolicy):
             raise ContractError("START_GUARD_POLICY")
-        for name, expected in _FROZEN_RUNTIME_VALUES_V3.items():
+        for name, expected in _EXACT_RUNTIME_VALUES_V3.items():
             if getattr(self, name) != expected:
+                raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
+        for name, floor in _MINIMUM_RUNTIME_VALUES_V3.items():
+            if getattr(self, name) < floor:
                 raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
         if len(domains) != self.max_worker_count or len(set(domains)) != len(domains):
             raise ContractError("ROS_DOMAIN_IDS")
@@ -1499,6 +1577,13 @@ _FROZEN_RUNTIME_VALUES_V3 = {
     },
     "schema_version": 3,
 }
+
+#: CP-3456: version three only. Two stage bounds are floors, not pins: a data pipeline with offline processing after the Teacher
+#: needs the stage and the lease to last longer than the original values (the Teacher's own execution deadline is a separate,
+#: unchanged policy). The original values stay valid. Versions four to six keep the exact pins above.
+_MINIMUM_RUNTIME_VALUES_V3 = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0}
+_EXACT_RUNTIME_VALUES_V3 = {name: value for name, value in _FROZEN_RUNTIME_VALUES_V3.items()
+                            if name not in _MINIMUM_RUNTIME_VALUES_V3}
 
 START_GUARD_FIELDS = frozenset({"timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
                                 "ram_minimum_fraction", "gpu_minimum_bytes"})
@@ -1536,6 +1621,19 @@ def load_parallel_runtime_config_v3(path: Path) -> ParallelRuntimeConfigV3:
     """Load the closed version-three YAML document; any drift or legacy key is refused."""
 
     return parse_parallel_runtime_config_v3(_load_closed_yaml(path))
+
+
+#: CP-3457: the bound on one Teacher execution (the wait for the Teacher child, the Worker's `TEACHER_EXECUTION_DEADLINE` guard, the
+#: perception broker's RPC deadlines, the pose wait). It is the frozen value of the original coupling and it is not a stage bound:
+#: raising `executing_hard_timeout_s` (the Coordinator's stage) for offline processing must not raise it.
+TEACHER_EXECUTION_BOUND_S = 240.0
+
+
+def teacher_execution_bound_s(config, default: float = 180.0) -> float:
+    """The Teacher's execution bound for `config`: its stage bound `executing_hard_timeout_s`, never more than the frozen 240 s
+    (every configuration that keeps the original coupling is unchanged; a smaller bound is honoured; `default` if it has none)."""
+
+    return min(float(getattr(config, "executing_hard_timeout_s", default)), TEACHER_EXECUTION_BOUND_S)
 
 
 def require_v3_execution(request_version: int, config_version: int) -> None:
