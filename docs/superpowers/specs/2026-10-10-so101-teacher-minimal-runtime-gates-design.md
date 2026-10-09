@@ -1,15 +1,19 @@
 # SO-101 Teacher: minimal runtime gates, end-to-end verdict (design)
 
 Date: 2026-10-10
-Status: DRAFT for independent review. Not implemented.
-Ledger: CP-3501.
+Status: REVISION 2 (review 1: PASS-WITH-CHANGES, all 10 changes applied; §12 maps them). Not implemented.
+Ledger: CP-3501 (draft), CP-3502 (review and this revision).
 Supersedes, for the current sim version, `2026-10-10-so101-teacher-real-observable-safety-gates-design.md` (revision 3). That document stays as the reference for the later real-cell phase.
 
 ## 1. User direction (2026-10-10)
 
 > 先不做这个，先从仿真取真值。后续把head camera换成rgb-d做位姿估计（这版先先不做） 中间过程减少判断，用最终的杯子位姿判断端到端成功。过程中的碰撞、感知数据用调整摘取策略，而不用于运行期安全门。
 
-1. **No wrist in-hand estimator.** The cup pose comes from simulator truth, as today. An RGB-D head-camera pose estimator is a later version, out of scope here.
+1. **No wrist in-hand estimator. The Teacher's cup pose comes from simulator truth.**
+   - **Today's source is perception, not truth.** The live runtime feeds `/cup_pose` from the broker's YOLO mask + depth (`RgbdLocalizer`, `parallel_ros_runtime.py`, `rgbd_cup_pose`).
+   - **v3 source.** v3 switches the Teacher's input pose to the MuJoCo truth bridge (`mujoco_cup_pose_bridge`, promoted from test-only to a v3 runtime source). It publishes the same message with frame, stamp and identity.
+   - **The broker in v3.** It is not in the v3 run path by default. An optional *perception shadow* (policy flag, default OFF) runs the broker and records its pose for the perception-error telemetry; it never gates. Perception accuracy is tuned offline with the existing ACT-scene perception benchmark gate.
+   - **Later.** An RGB-D head-camera pose estimator is a later version, out of scope here.
 2. **Minimal intermediate judgement.** Success is decided end-to-end by the final cup pose (`teacher_endpoint_v2`, unchanged).
 3. **Process data is for strategy tuning, not runtime gates.** Collision, contact, force and perception data observed during the run are recorded and analysed to tune the pick strategy. They never stop, refuse or branch the Teacher.
 
@@ -22,10 +26,13 @@ Only the checks needed to execute the motion sequence at all, plus operator/infr
 | Input integrity before motion: cup pose present, fresh and in the world frame; workspace; task targets; policy files; MoveIt scene prepared; reachability | S01–S03, S06, S07, S10, S11 | Without them nothing can be planned |
 | Planning and execution failures: IK horizon, MoveIt plan, corridor, plan-start drift, controller reject/abort/timeout, gripper action transport | B01–B06 | The motion cannot be executed |
 | MoveIt scene housekeeping: attach, detach, ACM, scene sync service failures | B17, B18, P08, P17 (scene part), P18 | Planning needs a consistent scene |
-| Control-input availability: joint states fresh (≤0.5 s, stop after 1.0 s) | B07 (joint part) | Cannot command the arm blind |
+| Control-input availability: joint states fresh (≤0.5 s; unavailable >1.0 s → `TEACHER_JOINT_STATE_UNAVAILABLE`) | B07 joint part (split out of `DYNAMIC_STATE_UNAVAILABLE_STOP`) | Cannot command the arm blind |
 | Operator and watchdog: user stop, parent died, 180 s deadline, cancel unsettled | S14, `TEACHER_CANCEL_UNSETTLED` | Operator safety |
-| Simulation integrity: session/epoch mismatch, non-finite state, evidence stream unavailable >1.0 s | S04, S08, S13, B08, B07 (evidence part), B12 | The simulator itself is broken. Status `SIM_INTEGRITY_ABORT`, not a safety stop |
+| Simulation integrity: session/epoch mismatch, non-finite state, world-evidence stream silent >1.0 s (`SIM_INTEGRITY_EVIDENCE_UNAVAILABLE`) | S04, S08, S13, B08, B07 evidence-silence part | The simulator itself is broken. It does **not** include `truncated` (contact-list overflow, B07) or physics-chunk gaps (B12): those are telemetry completeness, never an abort |
+| Place-geometry binding loaded before motion | S12 | A scene-hash mismatch selects the place fallback (§4); it never refuses |
+| Activated contact policy (r10b) loaded | S09 | Non-gating: it is needed only for the telemetry margins. Load failure marks the summary incomplete |
 | End observation and verdict: controllers stopped, settle, final snapshot, `teacher_endpoint_v2` | E01, E02 | The end-to-end verdict |
+| Final `normal_stop` event (D5) | P14 path inside `_publish_final_normal_stop` | Required by the data side (§8). Kept, with its age bound from the execution policy instead of the release policy |
 
 ## 3. What leaves runtime (recorded as process telemetry)
 
@@ -37,27 +44,63 @@ Only the checks needed to execute the motion sequence at all, plus operator/infr
 | Grasp-stable wait, micro-lift and VERIFY proofs, carry bilateral, early table contact, pre-close cup moved | P04, P05, P07, B14, B15, B16 | Telemetry (they were audit-only already; the waits become fixed dwells) |
 | Release settle window, final-placement proof | P20, P21 | Telemetry; the verdict is E02 |
 | Place-height refusals (tilt unstable/out of range, height out of bounds, measurement failed) | P10, P11 refusals | See §4 (strategy with a fallback, no refusal) |
-| Normal-stop proof before release | P14 (release use) | Kept only inside the end observation E01 |
+| Normal-stop proof as a *release authorization* | P14 (release use) | Replaced by a bounded wait for the arm to stop, an execution precondition (§5a). The proof itself stays for the final `normal_stop` event (§2) |
+| Cup-pose divergence against simulator truth | S05 | Telemetry (perception error, when the shadow is on). Never refuses |
+| Contact-list `truncated` flag and physics-chunk gaps | B07 (truncated), B12 | Telemetry completeness flags |
+| Release preflight bookkeeping | P17 (`RELEASE_PREFLIGHT_REQUIRED`, `DETACH_NOT_PROVED`) | Replaced by the v3 release sequence (§5a) |
 
-The workflow keeps its motion sequence (approach, descend, close, micro-lift, lift, move, place descent, open, retreat). States that only judged become fixed dwells or are removed: WAIT_GRASP_STABLE and WAIT_RELEASE_SETTLE become fixed dwells of 0.25 s and 0.5 s; VERIFY_PHYSICAL_GRASP and VALIDATE_FINAL_PLACEMENT are removed.
+The workflow keeps its motion sequence and its **forward state names**, so the success trace stays identical to v1/v2 (`e2e_acceptance.SUCCESS_STATE_TRACE`):
+- WAIT_GRASP_STABLE becomes a fixed 0.25 s dwell;
+- WAIT_RELEASE_SETTLE becomes a fixed 0.5 s dwell;
+- VERIFY_PHYSICAL_GRASP and VALIDATE_FINAL_PLACEMENT become **record-only pass-through** states. They snapshot and record telemetry, and never fail.
+
+v3 is a **separate `WorkflowDefinition`** (`SO101_WORKFLOW_V3`) with its own stop-code set, chosen by the frozen Teacher execution policy version. The v1/v2 workflow, `TERMINAL_STOP_CODES`, `DYNAMIC_MOTION_STATES` and `SUCCESS_STATE_TRACE` stay unchanged.
 
 ## 4. Place strategy (no refusal)
 
 The v2 tilt-compensated place target is a strategy, not a gate. It reads the cup pose from simulator truth.
 
-- Measure the tilt as the mean over the samples of a 0.2 s dwell at the hover, using the existing cadence-tolerant code path.
-- If a target cannot be computed (no samples, or tilt outside 3.0–5.5°, or target more than 2 mm from the v1 target), use the v1 fixed target. Record `place_height.mode = fallback_v1` with the reason.
-- Record the target, tilt, k and mode in the manifest.
-- The guard g = 0.7 mm is unchanged.
+- **Measurement.** Use the existing cadence-tolerant v2 measurement unchanged: a ≥100 ms window with a tilt range under 0.05° within 1 s, from sim-truth evidence. Its refusal paths become fallback reasons.
+- **Fallback.** Use the v1 fixed target if any of these hold. The reasons form a closed enum:
+  - `TILT_UNSTABLE` (no window in 1 s);
+  - `TILT_OUT_OF_RANGE` (outside 3.0–5.5°);
+  - `K_OUT_OF_BAND` (k outside 0.037454 ± 0.0003 m);
+  - `TARGET_DEVIATION` (more than 2 mm from the v1 target);
+  - `JOINT_STATE_STALE` (older than `state_max_age_s`);
+  - `SCENE_HASH_MISMATCH` (S12);
+  - `MEASUREMENT_FAILED` (geometry or timeout).
+- **The v1 target is a different demonstration.** It overtravels ≈0.94 mm after first contact against ≈0.73 mm for v2 (CP-3494).
+- **Record.** A v3 `place_height` record (schema `teacher_place_height_v3`) holds `mode` ∈ {`tilt_compensated`, `fallback_v1`}, a `fallback_reason` (enum, or null), the inputs measured so far, and the target used. The v3 validator recomputes the formula only for `tilt_compensated` and checks that the target equals the v1 target for `fallback_v1`. `place_height.validate_document` for v2 is unchanged.
+- **Guard.** g = 0.7 mm is unchanged.
 
 ## 5. Failure handling: no recovery chain
 
 Each attempt runs in a freshly reset simulation (`lifecycle=FULL_RESTART`), so recovery motions add risk and code without benefit.
 
-- Any execution failure (§2 planning, execution or scene housekeeping): cancel the active goal, hold position, end the attempt. Execution status `FAILED` with the failure code. The task verdict is FAIL or UNCONFIRMED by E02.
-- Operator/watchdog stops: as today (`STOPPED_SAFETY`, with the `TEACHER_*` codes).
-- Simulation integrity: `SIM_INTEGRITY_ABORT`, the episode is INVALID.
-- All `RECOVER_*` states and their edges are removed from the v3 workflow. `TERMINAL_STOP_CODES` loses every force, compression, collision, hazard, release-support and place-height code.
+- Any execution failure (§2 planning, execution or scene housekeeping): cancel the active goal, hold position, end the attempt by going **straight to ERROR from any state**, with the cup attached or detached in MoveIt. The task verdict is FAIL or UNCONFIRMED by E02.
+- The v3 workflow has no `RECOVER_*` states. The v3 stop-code set contains only the operator/watchdog codes, `TEACHER_JOINT_STATE_UNAVAILABLE` and the `SIM_INTEGRITY_*` codes. Every other failure is non-terminal, and in v3 a non-terminal failure also goes to ERROR.
+- The manifest validator's v3 branch accepts ERROR from any state, with the cup attached or detached. It does not require the v1/v2 recovery evidence.
+
+### 5a. v3 release sequence (no release proof)
+
+At the end of DESCEND_TO_PLACE:
+1. Wait, bounded at 1.0 s, for the arm to stop (all joint velocities ≤ 0.002 rad/s on a fresh joint state). This is an execution precondition, not a safety proof. A timeout ends the attempt with `TEACHER_ARM_NOT_STOPPED` → status `FAILED`.
+2. Take a fresh `_snapshot()` and use its cup pose for detach and sync (replaces the pose `_detach_or_sync` took from the release preflight).
+3. DETACH_MOVEIT: detach and sync, with the scene readbacks as today.
+4. OPEN_GRIPPER: open, and record `release_marker_sequence` from the evidence sample at the open, as `dynamic_manifest._error_contract` and `e2e_acceptance` require.
+No support, bilateral or post-stop-source checks.
+
+### 5b. v3 status mapping
+
+| Outcome | Teacher execution status | Teacher task result | Attempt / data |
+|---|---|---|---|
+| DONE, end observation OK | COMPLETED | PASS or FAIL by E02 | data per QC |
+| Execution failure (plan, controller, gripper transport, scene, `TEACHER_ARM_NOT_STOPPED`) | FAILED | UNCONFIRMED (no end observation) or FAIL | data INVALID (non-PASS Teacher) |
+| Operator/watchdog (`TEACHER_USER_STOP`, `TEACHER_PARENT_DIED`, `TEACHER_DEADLINE`), `TEACHER_JOINT_STATE_UNAVAILABLE` | STOPPED_SAFETY | UNCONFIRMED | data INVALID |
+| `TEACHER_CANCEL_UNSETTLED` or a controller left unconfirmed | INDETERMINATE (as today) | UNCONFIRMED | data INVALID |
+| `SIM_INTEGRITY_*` | FAILED, with `failure_class = sim_integrity` | UNCONFIRMED | data INVALID; the attempt is counted as infrastructure, not a Teacher failure |
+
+No new Teacher execution status value is introduced; `SIM_INTEGRITY` is a `failure_class` field. `EXECUTION_STATUSES`, the result store, the worker and e2e_acceptance keep their status sets.
 
 ## 6. End-to-end verdict
 
@@ -65,7 +108,20 @@ Each attempt runs in a freshly reset simulation (`lifecycle=FULL_RESTART`), so r
 
 ## 7. Process telemetry (for pick-strategy tuning)
 
-A per-episode `teacher_process_summary` in the manifest, computed from the existing streams (physics chunks, robot contacts, evidence). Per phase it records:
+A per-episode `teacher_process_summary` (schema `teacher_process_summary_v1`) in the manifest, computed from the existing streams **off the control thread**.
+
+Definitions:
+- **Phase:** a Teacher state, bounded by its `phase_begin` / `phase_finish` events.
+- **Units:** N, µm, mm, deg, s, and physics step numbers.
+- **Force and compression:** from the 500 Hz physics chunks. "First exceedance" is the first step over the r10b threshold, with a strict `>` (no filter).
+- **Collision pairs:** from `/robot_contacts`, i.e. pairs outside the cup process pairs, with depth and step.
+- **Bilateral contact lost:** an interval of ≥ 80 ms without contact on both fingertips (100 Hz evidence).
+- **Slip:** the cup pose in the TCP frame by FK, at the end of WAIT_GRASP_STABLE versus just before OPEN_GRIPPER (mm, deg).
+- **Settle time:** time from the OPEN_GRIPPER finish until P20's predicate first holds (≤ 1 mm/s, ≤ 0.05 rad/s, 0.2 s).
+- **Release displacement:** cup pose at the OPEN_GRIPPER start versus the end observation.
+- **Completeness:** a lost chunk, a lost contact frame or `truncated` marks the summary `complete = false` with a reason. It never aborts.
+
+Per phase it records:
 - peak summed force and compression, plus margins to the r10b thresholds, and the first exceedance step;
 - collision pairs, with depth and step;
 - the bilateral-contact-lost intervals;
@@ -74,7 +130,7 @@ A per-episode `teacher_process_summary` in the manifest, computed from the exist
 - table support and contacts at release, and the release displacement;
 - settle time;
 - the place-height mode;
-- cup-pose perception error, i.e. the perceived input pose against sim truth.
+- the cup-pose perception error, only when the perception shadow is on: broker pose versus sim truth at the start.
 
 The data side copies it into the episode metadata. A tuning report aggregates it across runs: distributions, the worst cases, and correlation with the verdict.
 
@@ -84,31 +140,52 @@ The data side copies it into the episode metadata. A tuning report aggregates it
 
 - The ACT episode validity rules (raw-log offline processor, QC, readback) are unchanged.
 - The Teacher event stream keeps `normal_stop` and `terminal` semantics, since the processor's window depends on them. A failed attempt emits `terminal` with status FAILED, and the episode is INVALID as today for a non-PASS Teacher.
-- The manifest validator gains a v3 branch: no recovery states, a `place_height.mode` of `v2` or `fallback_v1`, and a required `teacher_process_summary`.
+- The manifest validator gains a v3 branch, selected by the frozen Teacher execution policy version (manifest schema `dynamic_execute_manifest_v3`). It requires no recovery states, a `teacher_place_height_v3` record, and a `teacher_process_summary_v1`. e2e_acceptance likewise accepts v1, v2 and v3 by schema.
+- The final `normal_stop` event: emitted on DONE with its payload unchanged (`source_clock`, `publisher_sequence`, `sim_stamp_s`). A failed or stopped attempt emits no `normal_stop`, as today, and its data is INVALID.
 
 ## 9. Versioning
 
 - Teacher execution policy v3: minimal gates, no recovery, the place strategy with fallback, the dwell durations. v1 and v2 stay byte-identical and loadable.
 - A freeze binds exactly one Teacher execution policy.
-- ACT datasets are partitioned by Teacher policy version.
+- ACT datasets are partitioned by Teacher policy version. The episode metadata records the Teacher policy version, the cup-pose source (`sim_truth`) and the `teacher_process_summary` schema version.
 
 ## 10. Validation
 
 1. Unit tests:
    - removed gates no longer raise;
    - kept gates still raise;
-   - an execution failure ends the attempt without recovery motion;
-   - the place fallback triggers on its three conditions;
-   - the telemetry is computed on synthetic and replayed streams;
-   - the manifest validator handles the v3 branch.
-2. Offline: replay the retained live bags through the telemetry computation and compare with the known facts. Examples: the CP-3480 force stop run (1.94 N) and the CP-3493 compression stop (139 µm).
-3. Live (sim stack), 20 runs at the default point with collection on. Acceptance:
+   - an execution failure ends the attempt without recovery motion, with a v3 ERROR manifest that validates;
+   - the release sequence of §5a records the marker;
+   - the final `normal_stop` is emitted on DONE;
+   - the place fallback triggers on each enum reason;
+   - the telemetry is computed on synthetic and replayed streams, including when it is incomplete;
+   - the v1 and v2 workflows and validators are unchanged (their existing tests pass untouched).
+2. Offline telemetry replays against known facts, with tolerances:
+   - CP-3480 run 392e7925: peak summed force 1.940 N ± 0.005 at step 41943 ± 1;
+   - CP-3493 run 008b058f: left compression 139.0 µm ± 0.5. That run has no bag, so the manifest evidence replay is used.
+3. Live (sim stack): 20 runs at the default point with collection on, plus the 5 data-fault cases. Acceptance:
    - end-to-end PASS ≥ 19/20;
-   - no `SIM_INTEGRITY_ABORT`;
-   - VALID ≥ 17/20, the p8 baseline;
-   - the telemetry report produced.
-   The telemetry report is an output, not an acceptance criterion; it feeds strategy tuning.
+   - no `SIM_INTEGRITY_*`;
+   - VALID ≥ 18/20 (the p8 baseline was 17/20, including 2 camera-pair failures since fixed; p9 was 6/6);
+   - zero `RECOVER_*` states in any trace;
+   - every run accepted by the manifest validator, e2e_acceptance and the offline processor;
+   - one injected execution failure whose ERROR manifest validates;
+   - the 5 faults rc 3 with readback PASS;
+   - the telemetry report produced. The report is an output that feeds strategy tuning, not an acceptance criterion.
 4. Independent review of this design, then of the code before freeze.
+
+## 12. Changes from draft 1 (review: PASS-WITH-CHANGES)
+
+1. Final `normal_stop` path kept, age bound from the execution policy, payload unchanged (§2, §8).
+2. v3 release sequence: bounded arm-stop wait, fresh snapshot for detach/sync, release marker recorded (§5a).
+3. Separate `SO101_WORKFLOW_V3` and stop-code set. VERIFY/VALIDATE are kept as record-only pass-throughs, so the success trace is unchanged (§3).
+4. The v3 manifest branch accepts ERROR from any state, with the cup attached or detached (§5).
+5. Status mapping table. `SIM_INTEGRITY` is a `failure_class`, not a new status (§5b).
+6. B07 is split: the `truncated` flag and chunk gaps become telemetry completeness. S05 becomes telemetry (§2, §3).
+7. S09 is non-gating, S12 selects the fallback, P17 is replaced. The cup-pose source is named (truth bridge, optional perception shadow) (§1, §2, §3).
+8. The place measurement is the existing window method. Fallback reasons are a closed enum, the v3 record has its own validation, and the 0.94 vs 0.73 mm overtravel is noted (§4).
+9. Telemetry definitions: phases, units, streams, durations, completeness, off the control thread (§7).
+10. Acceptance: VALID ≥ 18/20, faults, trace, validators, injected failure, replay tolerances. Versioning: manifest schema v3 and metadata (§9, §10).
 
 ## 11. Decisions taken (CP-3394; the user may override)
 
@@ -116,3 +193,4 @@ The data side copies it into the episode metadata. A tuning report aggregates it
 2. The v2 place target is a strategy with a v1 fallback, never a refusal.
 3. Overload and collision episodes are flagged, not filtered at collection time.
 4. The only non-operator runtime abort is simulation integrity. The force/collision `SIM_ORACLE_ABORT` of the superseded design is dropped.
+5. The Teacher's cup pose comes from the MuJoCo truth bridge. The perception broker is off by default in v3. An optional shadow records the perception error and never gates.

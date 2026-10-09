@@ -69,11 +69,37 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3501
+latest_checkpoint: CP-3502
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3502 — minimal-gates design: review PASS-WITH-CHANGES; revision 2 applied (all 10); implementation dispatched
+
+- Review findings:
+  - the final normal_stop (D5) calls _normal_stop_proof → _release_bounds (reads release policy/scope) → deleting the release path would make every episode INVALID (RECORDER_NORMAL_STOP_MISSING);
+  - detach/sync took its pose from the release preflight, and open requires _release_authorization/release_marker_sequence (manifest RELEASE_ORDER, e2e_acceptance);
+  - workflow/TERMINAL_STOP_CODES/DYNAMIC_MOTION_STATES/SUCCESS_STATE_TRACE are shared with v1/v2 → a separate v3 definition is needed;
+  - _error_contract rejects an attached cup on a non-terminal edge;
+  - SIM_INTEGRITY_ABORT is not a known status; B07 truncated and S05 still gated on contact/perception;
+  - the live cup pose comes from RgbdLocalizer (perception), not sim truth;
+  - the place-measurement method was contradictory and the v2 validator rejects new modes;
+  - telemetry definitions were missing;
+  - the baseline/acceptance needed tightening.
+- Revision 2 (same file docs/superpowers/specs/2026-10-10-so101-teacher-minimal-runtime-gates-design.md):
+  - the final normal_stop path is kept (age bound from the execution policy);
+  - §5a v3 release sequence: bounded arm-stop wait (TEACHER_ARM_NOT_STOPPED → FAILED) → fresh snapshot → detach/sync → open + marker;
+  - SO101_WORKFLOW_V3 + its own stop-code set; VERIFY/VALIDATE are record-only pass-throughs, so the success trace is unchanged; the v1/v2 artifacts are unchanged;
+  - the v3 manifest accepts ERROR from any state;
+  - §5b status table (SIM_INTEGRITY as failure_class, no new status);
+  - B07 split (TEACHER_JOINT_STATE_UNAVAILABLE; SIM_INTEGRITY_EVIDENCE_UNAVAILABLE); truncated and chunk gaps are telemetry completeness; S05 is telemetry; S09 non-gating; S12 selects the fallback;
+  - cup pose from the MuJoCo truth bridge, with an optional perception shadow (default OFF);
+  - place: the existing window method, a closed fallback enum, the teacher_place_height_v3 record;
+  - telemetry definitions (teacher_process_summary_v1, off the control thread);
+  - acceptance: PASS ≥ 19/20, VALID ≥ 18/20, 0 RECOVER, all validators, an injected failure, 5 faults, replay tolerances;
+  - manifest schema dynamic_execute_manifest_v3.
+- Decision (CP-3394): the truth bridge as the v3 cup-pose source; the perception shadow default OFF.
 
 ## CP-3501 — user redirect: sim truth for the cup pose, minimal runtime gates, end-to-end verdict by the final cup pose; process data for strategy tuning only; minimal-gates design drafted
 
