@@ -367,6 +367,55 @@ def test_unfresh_input_cannot_start_inference(tmp_path, boundary):
     assert h.policy.decision.next_model == 'yolo'
 
 
+@pytest.mark.parametrize(('reason', 'values'), [
+    ('FUTURE_STAMP', dict(now=100.5)),                                   # the stamp is later than the source clock
+    ('AGE', dict(now=102.1)),                                            # older than max_frame_age_s (1.0)
+    ('SKEW', dict(depth=100.9)),                                         # RGB and depth stamps differ by more than 0.05
+    ('RESET_WATERMARK', dict(rgb=100.0, depth=100.0)),                   # not newer than the reset watermark
+])
+def test_a_stale_rgbd_names_its_reason_and_the_values(tmp_path, reason, values):
+    """CP-3512: the outcome is unchanged (still STALE_RGBD); only the report names the failed condition, now, the stamps and limits."""
+    from so101_demo.parallel_batch.perception import PerceptionError
+    h = harness(tmp_path)
+    h.control.now = values.get('now', h.control.now)
+    rgb, depth = values.get('rgb', 101.0), values.get('depth', values.get('rgb', 101.0))
+    with pytest.raises(PerceptionError) as caught:
+        h.policy.start_request(replace(h.req, image_timestamp_s=rgb), depth_timestamp_s=depth, depth_sha256='b' * 64)
+    message = str(caught.value)
+    assert message.startswith('STALE_RGBD: ' + reason + ' '), message
+    for token in ('now=', 'rgb=', 'depth=', 'reset=', 'max_age=', 'max_skew='):
+        assert token in message, message
+
+
+def test_a_source_clock_regression_is_named(tmp_path):
+    from so101_demo.parallel_batch.perception import PerceptionError
+    h = harness(tmp_path)
+    start(h)                                                              # now = 101.1 is remembered
+    h.control.now = 101.0
+    with pytest.raises(PerceptionError) as caught:
+        h.latch.expect(h.req, depth_timestamp_s=101.0, depth_sha256='b' * 64)
+    assert str(caught.value).startswith('STALE_RGBD: CLOCK_REGRESSION '), str(caught.value)
+    assert 'previous=' in str(caught.value)
+
+
+def test_a_tf_stamp_failure_is_named_and_the_candidate_path_keeps_its_prefix(tmp_path):
+    h = harness(tmp_path)
+    assert h.latch._fresh(101.0, 101.0, tf_stamp=100.0) is False          # the TF stamp is not newer than the reset watermark
+    assert h.latch.stale_detail.startswith('TF ') and 'tf=' in h.latch.stale_detail and 'max_tf_skew=' in h.latch.stale_detail
+    start(h)
+    h.latch._geometry_gate = lambda req, value: (setattr(h.control, 'now', 103.0) or True)
+    result(h, h.req, 'POSE')
+    assert not h.latch.accepted
+    assert h.latch.rejection_reason.startswith('STALE_RGBD_OR_TF: AGE '), h.latch.rejection_reason
+
+
+def test_the_named_reason_reaches_the_worker_failure_message():
+    from so101_demo.parallel_batch.perception import PerceptionError
+    from so101_demo.parallel_batch.worker import _bounded_failure_message
+    text = 'STALE_RGBD: FUTURE_STAMP now=7.7 rgb=7.8 depth=7.8 reset=3.24 max_age=5.0 max_skew=0.0'
+    assert _bounded_failure_message(PerceptionError(text)) == text
+
+
 @pytest.mark.parametrize('change', ['lease', 'source_time'])
 def test_blocking_validator_rechecks_authorization_and_freshness(tmp_path, change):
     h = harness(tmp_path)

@@ -129,6 +129,7 @@ class PoseAdmissionLatch:
         self._cancelled = set()
         self._fenced = False
         self.rejection_reason = None
+        self.stale_detail = None
         if (workspace.path / 'pose_accepted.json').exists():
             raise PerceptionError('POSE_ACCEPTED_REQUIRES_ADJUDICATION')
 
@@ -187,25 +188,43 @@ class PoseAdmissionLatch:
             _require_finite('depth_timestamp_s', depth_timestamp_s)
             _require_sha256('depth_sha256', depth_sha256)
             if not self._fresh(request.image_timestamp_s, depth_timestamp_s):
-                raise PerceptionError('STALE_RGBD')
+                raise PerceptionError(f'STALE_RGBD: {self.stale_detail}')
             self._expected = request
             self._depth_timestamp_s, self._depth_sha256 = depth_timestamp_s, depth_sha256
 
     def _fresh(self, rgb_stamp, depth_stamp, tf_stamp=None):
+        """The freshness policy (unchanged); on a failure `stale_detail` names the first failed condition from the closed set
+        CLOCK_REGRESSION, RESET_WATERMARK, FUTURE_STAMP, AGE, SKEW, TF, with now, the stamps and the limits (CP-3512)."""
         context = self.context
         now = _require_finite('source_clock', self._clock())
+        values = (f'now={now!r} rgb={rgb_stamp!r} depth={depth_stamp!r}'
+                  + ('' if tf_stamp is None else f' tf={tf_stamp!r}')
+                  + f' reset={context.reset_completed_timestamp_s!r} max_age={context.max_frame_age_s!r}'
+                  + f' max_skew={context.max_rgbd_skew_s!r}'
+                  + ('' if tf_stamp is None else f' max_tf_skew={context.max_tf_skew_s!r}'))
         if self._last_source_clock is not None and now < self._last_source_clock:
             self._fenced = True
+            self.stale_detail = f'CLOCK_REGRESSION previous={self._last_source_clock!r} {values}'
             return False
         self._last_source_clock = now
         stamps = (rgb_stamp, depth_stamp)
-        if (any(stamp <= context.reset_completed_timestamp_s or stamp > now
-                or now - stamp > context.max_frame_age_s for stamp in stamps)
-                or abs(rgb_stamp - depth_stamp) > context.max_rgbd_skew_s):
-            return False
-        return (tf_stamp is None or (
-            context.reset_completed_timestamp_s < tf_stamp <= now
-            and all(abs(tf_stamp - stamp) <= context.max_tf_skew_s for stamp in stamps)))
+        if any(stamp <= context.reset_completed_timestamp_s for stamp in stamps):
+            reason = 'RESET_WATERMARK'
+        elif any(stamp > now for stamp in stamps):
+            reason = 'FUTURE_STAMP'
+        elif any(now - stamp > context.max_frame_age_s for stamp in stamps):
+            reason = 'AGE'
+        elif abs(rgb_stamp - depth_stamp) > context.max_rgbd_skew_s:
+            reason = 'SKEW'
+        elif not (tf_stamp is None or (
+                context.reset_completed_timestamp_s < tf_stamp <= now
+                and all(abs(tf_stamp - stamp) <= context.max_tf_skew_s for stamp in stamps))):
+            reason = 'TF'
+        else:
+            self.stale_detail = None
+            return True
+        self.stale_detail = f'{reason} {values}'
+        return False
 
     def _candidate_current(self, request, value, context):
         if not self.check_result(request, value.broker_generation):
@@ -229,7 +248,7 @@ class PoseAdmissionLatch:
                 or value.source_frame != context.source_frame
                 or value.target_frame != context.target_frame):
             return self._reject('SOURCE_OR_TF_IDENTITY_MISMATCH')
-        return fresh or self._reject('STALE_RGBD_OR_TF')
+        return fresh or self._reject(f'STALE_RGBD_OR_TF: {self.stale_detail}')
 
     def _require_adjudication(self):
         self._adjudication_required = True
