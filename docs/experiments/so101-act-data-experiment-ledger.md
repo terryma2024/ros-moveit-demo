@@ -69,11 +69,164 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3502
+latest_checkpoint: CP-3517
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3517 — p11-claude-1010d step C: injected LIFT failure ends in a validating v3 ERROR manifest; T01–T06 6/6 PASS/VALID; v3 live acceptance items all met; follow-up batch dispatched
+
+- Injected case f6bc2e3d (3SxS0GQW, collection on, 151 s; root readback of the sealed manifest and result.json agrees):
+  - Trace IDLE … ATTACH_MOVEIT, LIFT, ERROR; no RECOVER. Status ERROR, TEACHER_INJECTED_EXECUTION_FAILURE, execution FAILED, failure_class null.
+  - Cup held at stop: MoveIt attached; contacts 2 left / 8 right; 0.39 N; cup 5.9 cm above its start height.
+  - teacher_end_observation null → task UNCONFIRMED (END_OBSERVATION_UNCONFIRMED).
+  - validate_dynamic_manifest_semantics(expected ERROR) → AttemptStatus.FAILED (accepted). e2e._validate_teacher_result → "UNCONFIRMED", failures ["E2E_TEACHER_TASK_NOT_PASSED"]. Process summary complete.
+  - Data INVALID (DYNAMIC_NORMAL_END_BINDING_INVALID; RECORDER_NORMAL_STOP_MISSING); QC NOT_RUN (TEACHER_TASK_NOT_PASSED).
+  - act_first_episode rc 1.
+- Tooling gap: the live wrapper treats only rc 0/3 as readback-eligible, so the injected run (rc 1) got no independent readback. Not patched mid-round.
+- T01–T06: 618b1a82, 12238f8e, 104aa181, f02ed8bd, 64ad9415, d902b92b. All rc 0, Teacher DONE, VALID, QC PASS, readback rc 0, end-to-end PASS (xy 4.9–5.0 mm, z 0.15 mm), 374–378 s. No STALE_RGBD and no RAW_BAG_CLOSE_TIMEOUT in any p11 live root.
+- Design §11 live acceptance status:
+  - end-to-end PASS 19/20 (p10);
+  - VALID 19/20 (p10);
+  - 0 RECOVER;
+  - no SIM_INTEGRITY;
+  - validators accept all sealed manifests;
+  - injected execution failure ERROR manifest validates (p11);
+  - 5 faults rc 3 with readback rc 0 (p10);
+  - replay tolerances met (CP-3506);
+  - telemetry reports produced.
+  All met. Cumulative v3 default-point record (p10 + p11): Teacher end-to-end PASS 25/26, VALID 25/26; the single miss is T20, a pre-motion STALE_RGBD worker refusal.
+- Open items, in order: (1) tighten the hook test's e2e assertion to the live value; (2) RawRecorder.stop SIGINT re-send/escalation + log tail (CP-3516); (3) live wrapper: run the independent readback for an ERROR manifest (rc 1) as well; (4) STALE_RGBD and other worker input refusals surface as TEACHER_USER_STOP with no manifest (CP-3512); (5) trainer side: missing train_act_bundle; head_png/wrist_png vs head/wrist (CP-3510); (6) systematic 5 mm final-xy offset unexplained; (7) export_eligible needs formal collection mode (diagnostic runs are not exportable by design).
+- Decision (CP-3394, recommended): dispatch items 1–3 as one batch (source, tests and tooling; gates; commit; no live round). Items 4–7 are left for the user to prioritise.
+
+## CP-3516 — demo-gate recorder failures are not from the new commits; cause = `ros2 bag record` ignoring an early SIGINT in a time-clustered window; step C released on 3SxS0GQW
+
+- B 3SxS0GQW: 10 installed demo gates, 6 clean, 4 with recorder failures. All 4 failures fall between 00:58 and 01:27; every run from 01:29 on is clean (bqSEEpKL, QU5bIfU6, jRvnMoUX, eCXcyUuy, ivB6JhJ1). A, the p10 code (b4175bf3a in a detached checkout, scratch/ab-worktree-b4175bf3a): the gate is not a valid pass/fail baseline under that path (EXECUTION_SNAPSHOT_PATH_INVALID ×~50 + setup errors), but run sToc3Cv5 (01:37) shows the same rec13 16 s pair. Load 0.1–1.1 at each start; zero leftover recorder/ROS processes after each run.
+- OBSERVED: RawRecorder.stop (act/offline/raw_recorder.py:346-362) sends one SIGINT and waits 15 s (:359), then SIGKILL → RAW_BAG_CLOSE_TIMEOUT. In the failing recorder log the last line is "Topics discovery started", with no "Recording stopped": the child never acted on the SIGINT sent ~1 s after start. INFERRED: the signal was lost or ignored early in startup, not delayed. HYPOTHESIS: a startup signal-handling race in `ros2 bag record` that a host condition in the window made more likely; the condition was not identified.
+- rec12b CAPTURE_LABEL_REVOKED (continuous_capture.py:233/264/492): a stop, end or revoke arriving at or before a labelled time in the real-rate replay. Consistent with a timing slip; not proven.
+- H3 refuted (the new test files use no rclpy, domains, subprocesses or threads). H2 not excluded for rec12b but cannot explain rec13 on the p10 code. H1 (host timing) + the startup race is the remaining explanation.
+- Live relevance: production recordings run ~6 min before the stop, and p10's 19/19 bags closed, so the race is exposed mainly by short test recordings. Recorded as a data-path robustness item.
+- Decision (CP-3394, recommended): the p11 cycle gate requirement is satisfied by the clean installed demo gates on the same freeze 3SxS0GQW after the window, with KyVViy0F/WznGLjAJ/zeDdbaUL/xtNibcNe recorded as the startup-race flake class. Step C released: injected LIFT case + T01–T06. Follow-up after the round (it changes the freeze): RawRecorder.stop re-sends SIGINT every 2 s, SIGTERM at 8 s, SIGKILL at 15 s, records the signals and the log tail; RED with a fake child that ignores the first SIGINT.
+- Deletion candidates: detached worktree scratch/ab-worktree-b4175bf3a (git-registered) and the A/B scratch dirs. Nothing removed.
+
+## CP-3515 — second demo rerun on 3SxS0GQW also rc 1 (different test: rec12b CAPTURE_LABEL_REVOKED); not classified as a flake; A/B diagnosis dispatched
+
+- WznGLjAJ: rc 1, 1 of 8344 failed, test_rec12b_capturing::test_a_real_rate_replay_with_the_teacher_starting_after_the_capture_seals_valid_and_reads_back[2] (5.02 s; RECORDER_EVENT_RETENTION_FAILED / RECORDER_SEAL_FAILED: CAPTURE_LABEL_REVOKED → rc 3 instead of 0). Both rec13 tests passed in 1.2 s. Load 2.9 on 32 CPUs, no concurrent executor work, no stray ROS processes (root pgrep).
+- Root ruling: two consecutive real-rate recorder-test failures, in different tests, after 32 clean demo gates (including p10 tYzeFiaX Pnt6CnYr and rGLbF6Hi), is a behavior change. Both rec13 failures took about 16.0 s, which points to a fixed timeout rather than load. Not classified as a flake; step C held.
+- Hypotheses:
+  - H1: host timing.
+  - H2: the 23 new tests shift test order or the per-worker isolated_ros_domain counter (conftest.py:41-57; it wraps every 8 fixtures), so a domain is reused while an earlier child process is still alive.
+  - H3: a new test leaks a process or ROS context.
+- Experiment: install demo gate A/B, tYzeFiaX vs 3SxS0GQW, ×3 each, alternating, with load snapshots and leftover-process counts; locate the 16 s and CAPTURE_LABEL_REVOKED sources. Read-only with respect to source.
+
+## CP-3514 — hook dbc03749e (gate GREEN 8083/0/178); p11-claude-1010d cycle stopped at the second demo gate (2 rec13 timing failures); one recorded rerun decided
+
+- Hook (root review of the diff): it fires in `_execute_planned` right after a SUCCEEDED `_trajectory.execute` at LIFT, under v3 only and once. It replaces the result with `ActionResult(FAILED, EXECUTION, TEACHER_INJECTED_EXECUTION_FAILURE)`, so the existing failure branch raises `_ExecutionFailed` and v3 goes to ERROR with the cup attached. Because no goal is active at that point, it exercises hold, not cancel.
+  - Refusals by name: TEACHER_INJECTION_REQUIRES_DIAGNOSTIC_MODE, …_COLLECTION_ON, …_STATE_UNSUPPORTED, …_POLICY_V3, COLLECTION_SPEC_INVALID.
+  - Evidence: `<run>/injected-failure.json` and run.log. The episode-scope schema is closed, so it is not recorded there.
+  - Minor gap: `collection_from_document` does not re-check run mode; the entry point carries that check.
+  - RED sonnet-red-inject.i3NqQGcC (12 failed) → GREEN sonnet-green-inject2.1FY6vtKj (16). Full gate sonnet-full-inject.IooGnjZ6 rc 0.
+  - The test's e2e_acceptance assertion is loose (accepts UNCONFIRMED, FAIL or None) and must be tightened after the live result.
+- Cycle p11-claude-1010d: freeze 3SxS0GQW. Demo JxU5kjUl, support and teleop were rc 0. The second demo, KyVViy0F, was rc 1: 2 of 8344 tests failed, both in test_rec13_raw_recorder. One asserted the bag was closed (it was not); in the other, a bounded wait took ~16 s against a 6 s bound.
+  - Root JUnit history: 0 rec13 failures in the 32 earlier installed demo gates (10-08..10-10). This is a first occurrence, not systematic.
+- Decision (CP-3394, recommended): one recorded rerun of the second demo gate on the same freeze, with a host-load snapshot. If rc 0, classify KyVViy0F as a timing flake and continue with step C (injected LIFT case + T01–T06). If rec13 fails again, stop and diagnose.
+
+## CP-3513 — STALE_RGBD now names its reason (d5abf9753, gate GREEN); no sanctioned live execution-failure injection exists → minimal diagnostic-only hook approved
+
+- d5abf9753 (perception.py and its test only): `_fresh` keeps the same comparisons and result and records `stale_detail` = first failed reason from CLOCK_REGRESSION, RESET_WATERMARK, FUTURE_STAMP, AGE, SKEW, TF, plus values. Messages are `STALE_RGBD: <detail>` / `STALE_RGBD_OR_TF: <detail>` (prefixes kept; the one prefix consumer, test_parallel_ros_runtime.py:797, passes). RED sonnet-red-stale.4q1SaSR0 (6 failed) → GREEN sonnet-green-stale.L8nmHbuq (219 passed). Full gate sonnet-full-stale.d4JjSPyS rc 0, 8067/0/178. The live worker pass-through is not yet observed end to end.
+- Injection audit: `fail_at` (core/runner.py:861-869) is dry-run only; COLLECTION_FAULTS are data-side; scripts/inject_so101_parallel_fault.py kills processes and is allow-listed to other evidence roots. No live Teacher execution-failure injection exists.
+- Decision (CP-3394, recommended): build the executor's minimal hook, with constraints. Default off. Accepted only in preselected_target_diagnostic and refused in formal or production composition. The value is recorded in the episode scope. It fires at the motion-execution boundary of one named state after motion has begun (LIFT, cup held), as a failure result of the same type a real execution failure produces, so the real v3 cancel → hold → ERROR path runs. It must not be a bare exception from outside that path. RED: v3 run ends ERROR with the injected code, and the manifest passes validate_dynamic_manifest and e2e_acceptance; unset is a no-op; formal mode is refused. Then gates, commit, cycle p11-claude-1010d, one injected live case, and T01–T06 confirmation.
+
+## CP-3512 — T20 diagnosed: worker perception refused STALE_RGBD before any broker request; next = name the stale reason, then the injected execution failure
+
+- OBSERVED (root readback of worker-run-results.json): failure_boundary=request_model, PerceptionError STALE_RGBD, stopped_reason TERMINAL_ACK_FAILED. The worker's _safe_stop (worker.py:1275 → CANCEL_REQUESTED) produced the launch SIGINT and the Teacher's TEACHER_USER_STOP. /cup_pose count 0 is a consequence: the broker was never called. DYNAMIC_MAIN_STALL is a symptom (main thread idle in spin_once, 301 ms).
+- perception.py:_fresh (194-) folds five conditions into one string, and expect() keeps no values: stamp ≤ reset watermark; stamp > source-clock now; age > max_frame_age_s 5.0; |rgb−depth| > max_rgbd_skew_s 0.0; source-clock regression. HYPOTHESES: H-A (leading) stamp > now (sim paused at 7.8 s = last /clock = last head colour stamp, about 0.56 s after Teacher ready); H-B rgb/depth stamp mismatch; H-C age; H-D watermark. The evidence cannot separate them (depth is not in the bag; T20 retained only rgb.npy).
+- The same Teacher-side signature (/cup_pose 0 + TEACHER_USER_STOP) appeared in three 2026-10-08 plan roots with other worker causes (BROKER_CANDIDATE_AMBIGUOUS ×2, RUNNING_EVIDENCE_UNAVAILABLE); none in p8/p9. Rate on the current line ≈ 1 in 46 default-point runs (p8 + p9 + p10).
+- Status mapping gap (design §1/§3): an input-availability refusal at the worker surfaces only as TEACHER_USER_STOP + RESULT_RUN_CONTEXT_INVALID, with no manifest and no readback. Recorded; not changed in this step.
+- Acceptance bookkeeping: the replay tolerances were met at CP-3506 (392e7925 1.940 N at step 41943; 008b058f 139.0 µm). The only remaining live criterion is "one injected execution failure whose ERROR manifest validates".
+- Decision (CP-3394, recommended), single variable: make STALE_RGBD name its reason and values (FUTURE_STAMP / AGE / SKEW / RESET / CLOCK_REGRESSION), propagated into worker-run-results.json; no freshness-policy change. RED→GREEN, then gates, commit, a new freeze, then the injected execution failure run plus a short confirmation round. Dispatched to the Sonnet executor.
+
+## CP-3511 — p10-claude-1010c (b4175bf3a, policy v3): T01–T19 PASS/VALID, T20 ERROR before motion; faults 5/5 as designed; two acceptance items not yet run
+
+- Commit b4175bf3a (47 files under src/so101_demo_py and docs/superpowers/specs; not pushed; AGENTS.md and this ledger excluded after the executor reset its own first commit, which had swept in AGENTS.md). The r8env gate covered this content.
+- Cycle (executor wrapper cycle-r7 = cycle-r6 + prepare-r6 binding v3, no demo retry): freeze nonhead-installed-freeze.tYzeFiaX; demo, support, teleop and second demo all rc 0 on the first try.
+- Live T01–T20 (collection on, default point, ~375 s each): T01–T19 rc 0, Teacher COMPLETED, end-to-end PASS, data VALID, QC PASS, readback rc 0. Root readback T01–T14: endpoint measured from the sim-truth end snapshot (controller stop → settle_s 0.5 → one snapshot): final_xy 4.9–5.0 mm (tol 20), final_z 0.15 mm (tol 10), tilt ~1e-5 rad (tol 0.15). Cup centre 7.6 mm from the red ring centre (-0.08,-0.25; inner radius 50 mm). The 5 mm xy offset is systematic and unexplained.
+- T20 61782bd9: rc 4 at 50 s. OBSERVED: Teacher READY on /cup_pose, census /cup_pose count 0 at sim 7.8 s, DYNAMIC_MAIN_STALL logged, then launch SIGINT ("user interrupted") → TEACHER_USER_STOP → RESULT_RUN_CONTEXT_INVALID; no sealed episode, no readback. HYPOTHESIS: the broker published no /cup_pose and a parent deadline converted the wait into a user stop. That contradicts the design's input-availability refusal mapping. Not diagnosed; not retried.
+- Totals: end-to-end PASS 19/20 (≥19 met, zero margin); VALID 19/20 (≥18 met); 0 RECOVER; no SIM_INTEGRITY; all 24 sealed manifests validate.
+- NOT RUN: the design's injected execution failure (ERROR manifest validates); replay tolerances not reported. Acceptance is therefore NOT complete.
+- Faults: recorder_absent, recorder_late, queue_overflow, source_gap and output_write_failure all rc 3, Teacher PASS, data INVALID with the injected reason, readback rc 0.
+- Telemetry (tooling/runs/p10-telemetry-report.md): all summaries complete; no ORACLE_COLLISION; peak force 1.712 N (LIFT); one ORACLE_CUP_OVERLOAD (recorder_absent: 2.013 N, 181.5 µm in DESCEND_TO_PLACE). It is flagged, not stopped, as v3 intends, and that run would be excluded from training. place mode tilt_compensated ×24.
+- The executor questioned cup_pose_source broker_rgbd. Root ruling: correct. User instruction CP-3504 superseded the CP-3502 truth-bridge decision.
+- No leftover processes (root pgrep confirms). Nothing deleted.
+
+## CP-3510 — full ordinary gate GREEN on the v3 tree in the reconstructed p2-mg3e environment; freeze + live round dispatched
+
+- Gate sonnet-full-r8env.ZCTTQZmI: rc 0, 8060 passed / 0 failed / 178 skipped, 158 s, -n 8 on 32 CPUs, under the CP-3507 ignore set, without benchmark_test, with the tempfile proof in-dir. All 9 tests that failed in CP-3509 pass. Versus CP-3507 (8050/186): +2 new fix-3 cases, +8 previously skipped tests now run (not traced; INFERRED to be environment-gated skips that the freeze's python-deps satisfy).
+- Environment (reconstructed, no recorded runner for p2-*): /opt/ros/jazzy + experiments/nonhead-installed-freeze.qmtGo5Uj/qualified-install; PYTHONPATH python-src first (pydantic 2.13.5 from the freeze python-deps). Runner: /tmp/so101-debug-act-data-66c42e4c/run_gate_r8env.zsh.
+- The CP-3509 INVALID_ENV runs (sonnet-full.* except r8env, sonnet-msgbuild.*) are deletion candidates; nothing deleted.
+- Decision (CP-3394, recommended): the two trainer-side items (missing train_act_bundle; head_png/wrist_png vs head/wrist) stay OPEN, outside this takeover's collection-loop milestone; they block training, not collection. Next per CP-3501/3502 acceptance: commit the v3 line (the task's convention since CP-3492), cycle (freeze/install/gates) binding v3 via prepare-qualified-inputs-20261010-r6.zsh, then a live round of 20 plus 5 faults. Dispatched to the Sonnet executor.
+
+## CP-3509 — executor report on the 7 fixes: all present; fix 3 completed; full gate rc 1 traced to the runner environment, rerun dispatched
+
+- Executor audit (Sonnet 5.5): fixes 1, 2, 4, 5, 6 and 7 were already DONE in the working tree with tests. Fix 3 was PARTIAL: non-finite truth poses were not caught (a NaN cosine clamped to -1 and read as a 180° tilt). Change: cup_pose_preflight.perception_error raises PERCEPTION_ERROR_NON_FINITE, and v3 records PERCEPTION_ERROR_UNAVAILABLE. Genuine RED (scratch/sonnet-red-perc.4IjFjWND, rc 1, 2 "DID NOT RAISE") → GREEN (sonnet-green-perc.faus51Po, rc 0, 22 passed). Targeted sonnet-targeted.xuN3XUgU: rc 0, 147 passed / 1 skipped.
+- Trainer audit (fix 5): the trainer does not read audit.release_* (lerobot.py:138-165 reads only action semantics and the export-manifest digest). Two items are OPEN: act_train._trainer imports adapters.act.lerobot.train_act_bundle, which does not exist (fails closed with TRAINING_ADAPTER_UNAVAILABLE); and the whitelist keeps head_png/wrist_png while lerobot._OBSERVATION_KEYS expects head/wrist.
+- Full gate sonnet-full.lN2ez4gV: rc 1, 8043 passed / 9 failed / 186 skipped. OBSERVED (root JUnit diff): all 9 failures passed in the CP-3507 gate p2-mg3e-kJjdLZwn (same test-venv, rc 0, 8050/0/186). The failure is ImportError field_validator, because the executor's runner put overlay so101_teleop on PYTHONPATH against system pydantic 1.10.14. Classified as INVALID_ENV, not a source regression. Earlier executor full runs (zfekMsB3, DDg9d0CE, 9hZhKanj, teASnBlW, DSdNRA2S, mTkgLu1S) are INVALID_ENV as well. The executor's proposal to install pydantic v2 was rejected. Rerun dispatched in the reconstructed p2-mg3e environment.
+- Changed files this round: src/application/cup_pose_preflight.py, test/test_teacher_runtime_v3.py. AGENTS.md (main checkout and this worktree) gained the user's rule: a Claude coordinator executes plans with Sonnet 5.5 subagents instead of dst.
+
+## CP-3508 — session resume (2026-10-09 21:22 CST, ai-station): CP-3507 fixes partly landed; one Sonnet executor re-dispatched to audit and finish them
+
+- Readback: no pytest/colcon/ROS/MuJoCo process running; the earlier executor is gone. Files changed after CP-3507 was written (19:53): observer.py (accept_truncated), process_summary.py (half-open windows, locked build), bundle.py (whitelist, TRAINING_ROWS_INVALID), training.py. Fixes 2 (silent/absent streams), 3 (PERCEPTION_ERROR_UNAVAILABLE) and 6 (whitelist loader in train_act) are not visibly present — unconfirmed until the executor's audit.
+- Dispatched one Sonnet 5.5 executor (sole writer; root keeps ledger and review): per-fix DONE/PARTIAL/MISSING audit, RED→GREEN for each gap, targeted files, then the full so101_demo_py gate under the CP-3507 ignore set; report the trainer's audit.release_* need with file:line evidence. No commit, push, live or deletion. Model split per the user's Opus-plans/Sonnet-executes override; root review of the result is self_review, not independent.
+
+## CP-3507 — v3 gate clean (8,028/0/186); independent code review PASS-WITH-CHANGES; fixes dispatched
+
+- Gate under the standard ignore set (test_installed_provenance, test_text_agent_execution_provenance, test_text_pick_agent_cli): 8,028 pass / 0 fail / 186 skip, rc 0. The earlier 13 git failures were all in those ignored files; the test_b3 failure was v3-caused (the export check needs a Teacher manifest) → fixed in the test setup; the check stays fail-closed.
+- Code review (fresh Opus): v1/v2 isolation OK; data side OK (final normal_stop unchanged, release marker at open, v3 ERROR branch, QC/result-store/e2e/processor metadata). Breach: sustained truncated evidence still aborts in v3 (observer rejects truncated → stale → SIM_INTEGRITY_EVIDENCE_UNAVAILABLE / DYNAMIC_EVIDENCE_TIMEOUT). Fail-open: silent/absent chunk or robot_contacts streams leave the summary complete=true with no flags → exportable. Also: unlocked iteration in build(); perception_error unguarded; inclusive phase windows double-count boundary samples; export drops audit.release_* (trainer need unconfirmed); content without rows passes; training.load_training_samples is not called by train_act.
+- Decisions (CP-3394), all dispatched: (1) v3 accepts truncated samples for freshness → summary incomplete; (2) fail closed on silent/absent streams; (3) perception_error guarded → PERCEPTION_ERROR_UNAVAILABLE; (4) build() snapshots under lock; (5) export refuses content without rows/observation+action, and the trainer's need for audit.release_* is to be confirmed in writing; (6) REQUIRED (upgraded): wire the whitelist loader into train_act so the rule "碰撞和受力数据不进入训练" is enforced at training; (7) half-open phase windows, dead branch removed.
+
+## CP-3506 — Teacher policy v3 implemented (uncommitted); decisions on the schema name and status mapping; gate re-verification + independent code review dispatched
+
+- Writer report:
+  - policy teacher_execution_policy_v3.yaml (a freeze binds exactly one of v1/v2/v3); SO101_WORKFLOW_V3 (no RECOVER, every failure → ERROR); removed gates; fixed dwells; §5a release sequence; place fallback (closed enum); core/process_summary.py;
+  - data side: manifest validator, e2e acceptance, QC, result store, resolver and export_dataset handle v3; processor writes teacher-process-metadata.json for v3;
+  - export whitelist: frames/rows/state/observation/action, observation keys sim_time_s/state/head_png/wrist_png; act/training.py load_training_samples re-checks digests through the same whitelist;
+  - oracle exclusion fails closed (EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE/_UNBOUND); BETWEEN_PHASES telemetry bucket for samples between phases (the place-height measurement gap);
+  - S05 → perception-error telemetry every run; broker input unchanged;
+  - tooling prepare-qualified-inputs-20261010-r6.zsh binds v3.
+  - Offline replays: 392e7925 peak 1.940 N at step 41943; 008b058f left compression 139.0 µm.
+  - Tests: new tests fail to collect against HEAD (core/process_summary absent); steps 10–11 20/26 RED → GREEN; scratch install 397 pass.
+  - Full gate: 8,097 pass / 14 fail / 186 skip — 13 git rev-parse exit-128 (non-git cwd) + test_b3 (fixed after, file 38 pass); not rerun → re-verification under the standard ignore set dispatched.
+  - Backup mg3-base.tar.gz.
+- Decisions (CP-3394): the manifest schema name so101-dynamic-mujoco-execute-v3 (consistent with v1/v2); keep the v2 status mapping for user/parent/deadline stops (STOPPED_USER/DEADLINE) — spec §5b corrected.
+- The writer also reported a read-only redundancy audit of dynamic_mujoco_execution.py (≈50 lines of true duplicates; no action).
+- An independent code review was dispatched in parallel.
+
+## CP-3505 — user: exclude collision/overload episodes from training now; later detect collisions + time intervals from execution-time vision
+
+- User (2026-10-10): "先剔除。后续通过执行过程中的视觉数据判定是否发生碰撞以及时间区间。"
+- Design §7:
+  - an episode with ORACLE_CUP_OVERLOAD or ORACLE_COLLISION in any phase, or an incomplete teacher_process_summary, is not training-eligible;
+  - enforced at export/training-set build (resolver + export_dataset refuse with EXPORT_EPISODE_ORACLE_EXCLUDED + flag/phase); the episode stays sealed/committed for analysis;
+  - an offline data-selection rule, not a runtime gate.
+- Future work recorded: vision-based collision detection with time intervals replacing the sim-oracle flags.
+
+## CP-3504 — user: pre-grasp cup pose stays the broker inference; the post-action success verdict uses MuJoCo truth
+
+- User (2026-10-10): "抓取钱杯子位姿估计还是走现在borker推理方案。 动作完成后的成功用MuJoCo 真值桥读取。"
+- Design updated (minimal-gates §1, §3, §7, §9, §11):
+  - the Teacher input = /cup_pose from the broker (YOLO + R6 + z-clip; RgbdLocalizer);
+  - a broker failure is an input-availability refusal (cannot execute), not a safety gate;
+  - the verdict start/end observations come from sim truth (as teacher_endpoint_v2 does today);
+  - S05 is telemetry every run (perception error = broker pose vs truth);
+  - no truth bridge into the Teacher input, no perception shadow;
+  - metadata: cup-pose source broker_rgbd, verdict source sim_truth.
+- The writer was told to drop the truth-bridge item.
+
+## CP-3503 — user: "碰撞和受力数据不进入训练" — training-input whitelist added to the v3 design
+
+- Interpretation applied: collision/contact/force data are never training inputs. Exported training samples and the training loader use a whitelist, observation (head/wrist images, joint state) + action only; the per-record audit (contact lists/forces), teacher_process_summary, oracle flags and any contact/force/collision field are excluded. They stay in the sealed episode/metadata for QC and pick-strategy tuning. A test asserts no such field in an exported training sample and a whitelist-only loader. Whether whole episodes with overload/collision flags are excluded remains a dataset-builder decision (asked to the user).
+- Added to the minimal-gates design §7 and dispatched to the writer as part of the v3 implementation.
 
 ## CP-3502 — minimal-gates design: review PASS-WITH-CHANGES; revision 2 applied (all 10); implementation dispatched
 
