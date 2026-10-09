@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3523
+latest_checkpoint: CP-3524
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3524 — U2 signing draft written (unsigned); cleanup side effect found and restored; input chain verified
+
+- U2 draft: handoffs/formal-signoff-draft-20261010/ (contact-activation-draft.json, reauthorization-list.md, anchor-approval-note.md, README.md).
+  - The draft is the unsigned six-key user_activation body. policy_fingerprint 131c2bdc… is recomputed and matches; source_evidence_sha256 is cf9f0202…. approved_by, approval_reference and approved_at are left for the user. Signing needs a new freeze.
+  - Re-authorisation list: path_step_s 0.002, path_clearance_m 0.002, support_distance_max_m 0.002, rgb_skew max_age_s 0.1 / max_skew_s 0.1, plus rtf_min 0.90 and disk_free_min_bytes 50 GiB. All were authorised at CP-2366 (2026-10-01) for development.
+  - Flagged for the user: the CP-3389 validation deviation; the endpoint tolerances labelled "development"; the batch freshness limits 5.0/0.0 against rgb_skew 0.1/0.1.
+  - Anchor: no formal anchor approval kind exists. The CP-1005 approval document has no signer or date, and its 17 search values are null.
+- OBSERVED weakness: the code accepts the current `user-standing-authorization:CP-3394` signer for formal too (only a non-empty signer is checked), so the user's personal signature is procedural, not enforced. Recommendation for the Head Search redesign: formal mode must require a personal user signer.
+- Cleanup side effect (CP-3521): experiments/nonhead-first-episode-plan.hKhvkON3/nonhead-empirical-authorization-policy.json (ledger-named 13×) had been deleted. The root restored it from the byte-identical copy at nonhead-qualified-inputs.KyCNpvpj/inputs/path_policy/ (sha256 61f7b1850dab6162…, verified after the copy).
+- Read-only `inspect` on freeze 3SxS0GQW (output in /tmp/so101-debug-act-data-66c42e4c/inspect-check-075224/), rc 0. Plus the cycle helper d4-make-candidates (calibration r10b): all 12 roles READY, identical role by role to the p11 freeze's own inspect, and 21/21 candidate paths present with matching sha256.
+- Other deleted ledger-named JSON with an inspect-relevant name (exp213 activation-receipt, exp426 calibration-comparison, task12 venv-a-report): none of them is a candidate in any kept freeze or plan root. Not restored.
 
 ## CP-3523 — Phase A committed (fd94bf81f, gate 8133/0/178); user: U1 = wait for Head Search, U2 = prepare an unsigned draft; Phase C next
 
