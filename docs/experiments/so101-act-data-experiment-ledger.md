@@ -69,11 +69,34 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3499
-next_experiment: user priority — Teacher place-stop (slower final approach / grasp geometry) or formal-collection design (randomized domain, reachability, carry-tilt sim, formal mode).
+latest_checkpoint: CP-3500
+next_experiment: user go-ahead for implementing the real-observable gate design (revision 3); then sweeps (τ_grip, carry tilt, drop), gates, oracle, live.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3500 — real-observable gate design: review 2 PASS-WITH-CHANGES; revision 3 applied (all 7 changes); awaiting user go-ahead for implementation
+
+- Review 2: changes 2/3/5/6 of review 1 RESOLVED; 1/4/7/8 PARTIAL. New points:
+  A. Wedge vs torque limit: in MuJoCo the jaw back-drives only above τ_grip + frictionloss 0.052 N·m (≈ half the 0.08–0.12 N·m wedge budget); on the real STS3215 (gear ≈1:345) the jaw is effectively non-back-drivable → Torque_Limit does NOT cap the passive wedge;
+  B. back-drive would trip "q6 unchanged" gates;
+  C. the pick anchor is exact only in z/tilt; FK error pick vs place doesn't cancel on the real arm (b_FK); the wrist bias is view-dependent; the MJCF wrist camera is RGB-only and no in-hand estimator exists;
+  D. h_rel arithmetic ignored AR(1) correlation and the tilt term (≈3.2 mm, not 2);
+  E. end state C could drop a held cup; precedence undefined; A could press a slipped cup;
+  F. oracle stream/filter, abort action and the r10b re-binding unspecified;
+  G. missing numeric targets.
+- Revision 3 (same file):
+  - R2 restated: the torque limit caps the driven force only; the wedge is bounded by τ_grip-dependent geometry with an oracle LIFT-peak acceptance;
+  - τ_grip is swept against frictionloss (carry 500/500, peak ≤ 85%);
+  - q6 is re-referenced after VERIFY (t_q6 from the sweep);
+  - C requires an empty jaw; precedence D > B > C > A; A lowers to pick height + slip;
+  - h_rel = h_min + b_z + b_FK + 3σ_z,mean + 3rσ_θ,mean with N_eff from AR(1) ≈ 3.2 mm in sim; h_min = two encoder counts at the TCP;
+  - the pick anchor is exact in z/tilt only; the wrist in-hand estimator is a new component with an accuracy gate (z p95 ≤ b_z, tilt p95 ≤ 0.5°);
+  - the oracle uses the 500 Hz chunks with no filter; the abort cancels and holds; r10b is deliberately re-bound as oracle thresholds to the v3 model hash;
+  - targets added (wrong-width/offset 0/500, release false-refusal ≤ 2%, θ refusal ≤ 2%, VALID ≥ 17/20 baseline); collision injection N/A for gates;
+  - the real cell has no collision stop until a servo model exists (must not run unattended);
+  - the dataset metadata records τ_grip / torque-limit config / model hash.
+- Scope note: implementation is a multi-part project (localizer emulator, new wrist in-hand RGB estimator, versioned ACT model with a torque-limited gripper, gate rewrite + end states, oracle QC + abort, policy v3 + manifest/QC versioning, sweeps, live). Paused for the user's go-ahead and inputs (hover-release drop acceptability; real localizer/camera specs).
 
 ## CP-3499 — real-observable gate design: review 1 FAIL (grasp premise wrong, sub-resolution gates); revision 2 written → re-review
 
