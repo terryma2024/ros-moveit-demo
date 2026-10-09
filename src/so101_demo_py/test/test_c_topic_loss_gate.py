@@ -72,6 +72,29 @@ def test_planning_scene_reads_fewer_in_the_bag_than_the_sidecar_made_are_a_topic
     assert any(r.startswith("OFFLINE_TOPIC_LOSS:/so101/raw/planning_scene_reads") for r in report["reasons"])
 
 
+def test_scene_reads_made_before_the_window_are_recorded_but_do_not_count(tmp_path):
+    """CP-3489: the sidecar can start reading before the bag recorder has matched its subscription (T03, T06 of the first v2 round:
+    the first 5 and 3 reads, at sim time 0, are in the sidecar and not in the bag). Reads before the window are never used by a row."""
+    bag = build_bag(tmp_path / "raw")
+    bag_read_ns = 950_000_000
+    old = scan_bag(bag, transport_lost=0, scene_reads_expected=4)                                    # the count rule alone
+    assert any(r.startswith("OFFLINE_TOPIC_LOSS:/so101/raw/planning_scene_reads") for r in old["reasons"])
+    window_begin = old["timeline"]["window_begin_sim_ns"] if "window_begin_sim_ns" in old.get("timeline", {}) else None
+    report = scan_bag(bag, transport_lost=0, scene_reads_expected=4, scene_read_sidecar_stamps=[0, 0, 0, bag_read_ns])
+    item = report["topic_loss"]["topics"]["/so101/raw/planning_scene_reads"]
+    if bag_read_ns < report["topic_loss"]["window"]["begin_sim_ns"]:
+        assert loss_reasons(report) == [], report["reasons"]
+        assert item["missing_in_window"] == 0 and item["missing_outside_window"] == 3
+        assert "inside the window" in item["rule"]
+    # a read missing from the bag INSIDE the window is still a loss, whatever happened before it
+    inside = report["topic_loss"]["window"]["begin_sim_ns"] + 10_000_000
+    lost = scan_bag(bag, transport_lost=0, scene_reads_expected=5, scene_read_sidecar_stamps=[0, 0, 0, bag_read_ns, inside])
+    assert any(r.startswith("OFFLINE_TOPIC_LOSS:/so101/raw/planning_scene_reads missing=1") for r in lost["reasons"]), lost["reasons"]
+    # a sidecar list that does not match the sidecar's own count is not trusted: the whole-bag count rule applies
+    mismatch = scan_bag(bag, transport_lost=0, scene_reads_expected=4, scene_read_sidecar_stamps=[0])
+    assert any(r.startswith("OFFLINE_TOPIC_LOSS:/so101/raw/planning_scene_reads") for r in mismatch["reasons"])
+
+
 def test_a_loss_outside_the_window_is_recorded_not_fatal(tmp_path):
     report = scan(tmp_path, drop=[(JOINT, BEFORE_WINDOW), (SCENE, 1)], transport_lost=2)
     assert loss_reasons(report) == [], report["reasons"]
@@ -137,7 +160,8 @@ def test_the_loss_facts_come_from_the_stats_or_from_the_recorders_log(tmp_path):
     stats.write_text(json.dumps({"transport_lost": 7, "scene_reads": {"count": 5, "errors": 0}}))
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats) == {"transport_lost": 7, "scene_reads_expected": 5,
                                                                                    "transport_lost_by_topic": None,
-                                                                                   "transport_lost_events": None}
+                                                                                   "transport_lost_events": None,
+                                                                                   "scene_read_sidecar_stamps": None}
     stats.write_text(json.dumps({"scene_reads": {"count": 5, "errors": 0}}))
     assert load_loss_facts(tmp_path / "raw" / "bag", stats_file=stats)["transport_lost"] is None
     (tmp_path / "raw" / "bag-record.log").write_text(

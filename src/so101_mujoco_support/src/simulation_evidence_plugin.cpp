@@ -809,6 +809,20 @@ void RobotContactPublisher::run()
   }
 }
 
+int64_t publish_grid_index(double time_s, int64_t period_ns)
+{
+  // llround(time * 1e9) is exact for every multiple of 1 ns the accumulated step sum can drift to (one ulp at 128 s is 1.4e-5 ns)
+  const int64_t time_ns = static_cast<int64_t>(std::llround(time_s * 1.0e9));
+  int64_t index = time_ns / period_ns;
+  if (time_ns % period_ns < 0) {--index;}        // floor for a (never expected) negative time
+  return index;
+}
+
+bool publish_grid_valid(int64_t period_ns, int64_t step_ns)
+{
+  return period_ns > 0 && step_ns > 0 && period_ns % step_ns == 0;
+}
+
 bool SimulationEvidencePlugin::init(
   rclcpp::Node::SharedPtr node, const mjModel * model,
   mjData * data)
@@ -937,8 +951,19 @@ bool SimulationEvidencePlugin::init(
     physics_step_buffer_ = std::make_unique<PhysicsStepEvidenceBuffer>(
       static_cast<std::size_t>(physics_step_buffer_capacity),
       static_cast<std::size_t>(physics_step_chunk_size), diagnostic_hard_stop_force_n_);
-    publish_period_s_ = 1.0 / rate;
-    last_publish_time_s_ = data->time;
+    // The integer grid (CP-3488): refuse a rate whose period is not a whole number of physics steps.
+    if (!std::isfinite(rate) || rate <= 0.0 || !std::isfinite(model->opt.timestep) || model->opt.timestep <= 0.0) {
+      cleanup();
+      return false;
+    }
+    const int64_t period_ns = static_cast<int64_t>(std::llround(1.0e9 / rate));
+    const int64_t step_ns = static_cast<int64_t>(std::llround(model->opt.timestep * 1.0e9));
+    if (!publish_grid_valid(period_ns, step_ns)) {
+      cleanup();
+      return false;
+    }
+    publish_period_ns_ = period_ns;
+    last_publish_grid_ = publish_grid_index(data->time, publish_period_ns_);
     return true;
   } catch (const std::exception &) {
     cleanup();
@@ -963,9 +988,7 @@ void SimulationEvidencePlugin::update(const mjModel * model, mjData * data)
     }
     return;
   }
-  if (!published_ || data->time < last_publish_time_s_ ||
-    data->time - last_publish_time_s_ >= publish_period_s_)
-  {
+  if (!published_ || publish_grid_index(data->time, publish_period_ns_) != last_publish_grid_) {
     try_publish_snapshot(model, data, paused, reset_generation, true);
   }
 }
@@ -1040,7 +1063,7 @@ void SimulationEvidencePlugin::try_publish_snapshot(
         realtime_scene_publisher_->unlock();
       }
     }
-    last_publish_time_s_ = data->time;
+    last_publish_grid_ = publish_grid_index(data->time, publish_period_ns_);
     published_ = true;
   } catch (...) {
     realtime_publisher_->unlock();
@@ -1219,8 +1242,8 @@ void SimulationEvidencePlugin::cleanup()
   node_.reset();
   state_ = EvidenceState{};
   physics_state_ = EvidenceState{};
-  publish_period_s_ = 0.01;
-  last_publish_time_s_ = 0.0;
+  publish_period_ns_ = 10000000;
+  last_publish_grid_ = 0;
   static_shadow_force_n_ = 1.1579004532160448;
   diagnostic_hard_stop_force_n_ = 11.60;
   current_reset_epoch_.store(0, std::memory_order_release);

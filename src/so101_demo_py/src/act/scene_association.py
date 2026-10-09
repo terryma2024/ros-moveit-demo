@@ -106,6 +106,27 @@ def association_anchor(document):
     return document["query"]["record"] if apply is None else apply["record"]
 
 
+def read_overlaps_apply(read, apply_record):
+    """A `/get_planning_scene` call ran concurrently with a Teacher `/apply_planning_scene` call: the apply was requested before the
+    read finished and finished after the read began (both on the one monotonic clock)."""
+    return (apply_record["request_ros_clock"]["begin_monotonic_ns"] <= read["response_ros_clock"]["end_monotonic_ns"]
+            and apply_record["response_ros_clock"]["end_monotonic_ns"] >= read["request_ros_clock"]["begin_monotonic_ns"])
+
+
+def concurrent_apply_geometry_matches(read, read_geometry, governing_id, associations):
+    """CP-3489: a read that ran concurrently with an association's apply may legitimately show either the old or the new scene.
+
+    True when `read` overlaps the apply of an association other than `governing_id` and `read_geometry` (canonical normalized
+    geometry) is EXACTLY that association's receipt geometry. Anything else is still a mismatch."""
+    for other in associations:
+        if other["association_id"] == governing_id or other["apply"] is None:
+            continue
+        if (read_overlaps_apply(read, association_anchor(other))
+                and canonical(other["receipt"]["geometry"]) == read_geometry):
+            return True
+    return False
+
+
 def validate_scene_association(document):
     """Check the closed transport and all unique associations without trusting digests."""
     fields(document, _FIELDS)

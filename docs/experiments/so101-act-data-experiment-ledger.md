@@ -69,11 +69,70 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3487
+latest_checkpoint: CP-3492
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3492 — data-side fixes + evidence integer-ns cadence implemented; offline re-run of T01–T14: 11/14 VALID (was 5/14); committed; full live round (cycle-r6 + live-r9) started
+
+- (1) A scene read overlapping another association's apply passes if its geometry exactly equals the governing or the overlapping association (same rule in the sealed readback); a mismatch waits 50 ms of replay time for the apply's Teacher event (longer would turn a genuine mismatch into INPUT_STALE).
+- (2) planning_scene_reads missing counts only reads inside the gate's window (earlier = missing_outside_window); the window start was chosen over the bag-ready anchor (the gate's own window, no clock mapping); a bag without a consistent sidecar keeps the whole-bag count.
+- (3) Sidecar fsync on its own thread; topic publishing starts once the bag node is a subscriber (reads are still written to the file); stats scene_reads.published. T09 = the same mechanism as T01 (gaps ≤ 958 ms right after every 20th read = fsync).
+- (4) DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE carries post_stop_source_unavailable loop facts (manifest + message); behaviour unchanged.
+- T08/T13/T14 defect (native_endpoints.py:305): _capture_native_initial_step waited for every received world source to have its chunk; a source on the first step of the next chunk arrives before that chunk (e.g. T08 step 2801 vs chunk 2751–2800) → capture one chunk late, 158 ms > the 100 ms rule (phase between the evidence grid and the chunk boundary; ≈3/14). Fix: select on the covered prefix (same pattern as the CP-3476 final-boundary fix); in-window gaps still fail; expiry unchanged.
+- Cadence (CP-3488 a): SimulationEvidencePlugin::update() gates on an integer-ns grid; init refuses a non-commensurate period; C++ tests over the 4–8/16–32/32–64/64–128 s binades + reset/time-restore (the first message after a time jump is off-phase, then exactly 5 steps).
+- Offline re-run, final code (table copied to teacher-force-stop-20261009/q2live/final-table.txt): VALID/QC PASS T02, T03, T04, T05, T07, T08, T10, T11, T12, T13, T14; INVALID INPUT_STALE T01, T09 (the bags really lack reads; prevented at source by (3)); INVALID Teacher failure T06. Golden 8: verdicts unchanged (fault-late's secondary reason changes per (2): 475 pre-window reads no longer count; its 6 losses → OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED).
+- Gates: test/ 7,691 pass / 186 skip / rc 0; scratch install 231 pass; so101_mujoco_support C++ colcon test 3/3; RED: 11 tests fail against HEAD. Backup p6-base.tar.gz (484a5d19…). Doc 2026-10-09-v2-live-round-recorder-findings.md.
+- Started: tmp/final-e7.zsh = cycle-r6 p8-claude-1010a + second demo gate + T01–T20 (collection on, live-r9/r12) + L3–L7, early abort if T01–T03 all fail.
+
+## CP-3491 — user: drop the prestart rule "worktree must equal the freeze source manifest"; r12 wrapper records it instead
+
+- User (2026-10-10): "prestart 要求 worktree 和冻结时的源码完全一致 这个规则去掉吧".
+- Done (tooling, outside the worktree): run-qualified-live-20261010-r12.zsh = r11 with the prestart assert `all(sha256(worktree/n) == manifest)` replaced by a recorded comparison (worktree_matches_freeze, worktree_mismatch_count, worktree_mismatch[:200] in prestart-resource-provenance.json); tooling/live-r9.zsh uses r12. Provenance unchanged: prestart still asserts so101_demo/so101_teleop import from <freeze>/qualified-install (r12 L57), and the run executes the frozen install.
+- Not changed (user named prestart only): run-qualified-gate-20261006-r8.zsh still compares the worktree with the source manifest during the gates.
+
+## CP-3490 — v2 live round final tally (p7-claude-1009c): Teacher 13/14 PASS; data VALID 5/14; T15–T20 + faults not run (prestart refused: worktree edited during the batch)
+
+- T12 1efeaa75 VALID. T13 34a6d196 and T14 659e87a0: rc 3 ENDPOINT_INITIAL_CAPTURE_INVALID → AUDIT_WINDOW_INVALID (as T08).
+- Tally T01–T14: VALID 5 (T02, T05, T07, T11, T12); INPUT_STALE 2 (T01, T09); scene apply race 3 (T03, T04, T10); endpoint-initial capture 3 (T08, T13, T14); Teacher release failure 1 (T06, DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE). The v2 place-height measurement succeeded in every run reaching DESCEND_TO_PLACE.
+- T15–T20 and the faults: rc 81 at prestart — the prestart asserts the worktree equals the freeze source manifest, and the writer was implementing CP-3489 fixes in the worktree. Main-agent scheduling error: no worktree edits while a live batch from that freeze is running. They will run in the next round.
+- Data-side robustness under live conditions is the blocking issue (5/14 VALID): all three INVALID families + the endpoint-initial mode are being fixed/diagnosed together with the evidence-cadence change; next: freeze + full round (T01–T20 + faults).
+
+## CP-3489 — v2 live-round failures diagnosed: none caused by v2; decisions on 5 items; T08–T11 results; fixes dispatched
+
+- Diagnosis (writer): the place-height measurement worked in all runs (the pre-descent dwell adds ≈0.17 s: 0.51 vs 0.34 s).
+  - T01 INPUT_STALE (continuous_capture.py:573 via _fail :456): the raw scene-read sidecar stalled 336/360/338 ms at sim 43.3–43.5 s (+150 ms periodic gaps) → a 348 ms hole in /get_planning_scene reads (raw_recorder.py:131-206); worst gap on v1 runs ≈52 ms; T01 also lost ≈143 /clock/controller messages at sim 8.2–8.5 s; 2 of 6 long gaps follow the sidecar's 1 Hz fsync (I/O contention likely, unproven); the sim stayed real-time.
+  - T03/T04 LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID (live_physical_audit.py:71 _verify_scene): a race between the 20 Hz scene read and a Teacher apply (the read began 7.9/8.3 ms into ATTACH/SYNC_WORLD_OBJECT; it saw the new scene while the governing association was old). The apply takes effect ≈8 ms into its window → ≈5% hazard per geometry-changing apply; also present in v1 runs (straddles passed at other offsets).
+  - T03/T06 planning_scene_reads missing=5/3 (scan.py:400-409, no time filter): the first sidecar reads at sim 0 were published before the bag subscribed (in passing runs the first read blocked ≈1 s waiting for move_group).
+  - T06 DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE (dynamic_mujoco_execution.py:1848, _first_source_after_stop, 0.5 s window in the DETACH_MOVEIT preflight): the bag has the first eligible frame +11.8 ms after the stop (like v1's +14 ms); first-source latency was 2–17 ms in 17 other observations; the Teacher process log is not retained; no v2 mechanism; cause unproven.
+  - Demo gate tries 1–2: the SingleThreadedExecutor text is a harmless rclpy __del__ warning; the real failures were the timing tests test_an_idle_consumer_sustains_at_least_1000_hz (971 Hz) and test_rec12b_capturing real_rate_replay[5] (CAPTURE_LABEL_REVOKED) under host load.
+- Decisions (CP-3394):
+  (1) accept: a scene read overlapping a geometry-changing apply may match the old or the new association exactly;
+  (2) accept: planning_scene_reads missing counts only reads at/after the bag-ready anchor or window start;
+  (3) accept: an asynchronous sidecar fsync + hold sidecar publishing until the bag has matched;
+  (4) accept: Teacher diagnostics on SOURCE_UNAVAILABLE (code unchanged);
+  (5) not now: no Teacher retry at n=1 with an unproven cause.
+  The evidence-cadence integer-ns gating (CP-3488) is bundled into the same round.
+- Batch, continued:
+  - T08 37a216e7: rc 3, NEW ENDPOINT_INITIAL_CAPTURE_INVALID → AUDIT_WINDOW_INVALID (diagnosis dispatched);
+  - T09 ebb1ce6a: rc 3, INPUT_STALE;
+  - T10 64c5b87a: rc 3, scene geometry race;
+  - T11 0b5177be: VALID.
+  Running tally: 4 VALID / 11; the Teacher passed 10/11.
+
+## CP-3488 — evidence cadence explained (float accumulation of mjData time; 10/12 ms by binade); decision: integer-ns grid gating (after this live round); v2 live round partial: T01–T07 3 VALID, 3 INVALID (new modes), 1 Teacher release failure
+
+- Evidence cadence (handoffs/.../evidence-cadence-20261009/report.md): the publisher is SimulationEvidencePlugin::update() (src/so101_mujoco_support/src/simulation_evidence_plugin.cpp ≈L949-971; an earlier statement naming free_joint_state_publisher_plugin was wrong). Gate: data->time − last ≥ 1.0/100.0 on the double mjData time accumulated by 0.002/step; within each binade the rounding direction is constant, so the interval is 6 steps in [4,8), [16,32), [64,128) s and 5 steps in [8,16), [32,64) s (all 4 bags; a pure-Python replay of the gate reproduces the run lengths). Mean 10.7–11.2 ms (≈90 Hz), never 7 steps; the same before lock-step (147cb073); scene_state identical (same call). joint_states 10 ms, cameras 100 ms, chunks 50 steps — all exact (integer ns). update() runs exactly once per step (the physics waits for its ack). Impact: scan/QC/endpoint/place-height rules are cadence-agnostic; Teacher per-step limits run on the 500 Hz chunks; sample-based checks are ≈83 Hz in 12 ms stretches (≤ 2 ms extra latency, no gap); association: world records often miss the 100 ms camera / 10 ms joint stamps in 12 ms stretches.
+- Decision (CP-3394, recommended option a): integer-ns gating on the absolute sim-time grid (period_ns = llround(1e9/rate), step_ns = llround(timestep·1e9), refuse at init unless commensurate, publish when floor(time_ns/period_ns) advances) → an exact 100 Hz. Requalification: a C++ test over the 16–32 s and 64–128 s binades and the reset/time-restore path; offline re-run of the old bags; a live pilot. Queued after the current live round.
+- Live round, freeze p7-claude-1009c (cycle-r6; the demo gate failed tries 1–2 with "AttributeError: 'SingleThreadedExecutor' ob…" and passed on try 3; support/teleop/second demo rc 0):
+  - T02 d0a72d7b, T05 ad6d1715, T07 ecf3847f: VALID rc 0;
+  - T01 7d53da87: rc 3, INPUT_STALE;
+  - T03 df2befdb: rc 3, planning_scene_reads missing=5 + LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID;
+  - T04 f443198f: rc 3, LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID;
+  - T06 f372735e: rc 1, Teacher STOPPED_SAFETY DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE (+ data: scene reads missing=3, DYNAMIC_NORMAL_END_BINDING_INVALID, RECORDER_NORMAL_STOP_MISSING).
+  All place-height measurements succeeded (target_tcp_z ≈ 0.2046 m). None of these modes appeared in the v1 round (Jqw0P7hW) → v2 (pre-descent dwell, release height/timing, new paths) or load is suspected. Diagnosis dispatched (writer); the batch continues for frequency data.
 
 ## CP-3487 — v2 tilt-window defect fixed (12 ms evidence cadence never closed a 100 ms window); committed; re-freeze + T01–T20 + faults restarted
 

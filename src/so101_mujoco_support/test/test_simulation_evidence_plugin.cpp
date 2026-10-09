@@ -1060,6 +1060,159 @@ TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHoo
   rclcpp::shutdown();
 }
 
+// ---- CP-3488: the publish gate is an integer-nanosecond grid ----------------------------------------------------------------------
+
+namespace
+{
+// The simulation time as MuJoCo accumulates it: one 2 ms addition per step, rounded in the binade the sum is in.
+std::vector<int> publish_gaps_in_steps(double start_time, int steps, bool old_rule)
+{
+  const double period = 1.0 / 100.0;
+  double time = start_time;
+  double last_time = start_time;
+  int64_t last_grid = so101_mujoco_support::publish_grid_index(start_time, 10000000);
+  int last_step = 0;
+  std::vector<int> gaps;
+  for (int step = 1; step <= steps; ++step) {
+    time += 0.002;
+    const bool publish = old_rule ? (time - last_time >= period) :
+      (so101_mujoco_support::publish_grid_index(time, 10000000) != last_grid);
+    if (publish) {
+      gaps.push_back(step - last_step);
+      last_step = step;
+      last_time = time;
+      last_grid = so101_mujoco_support::publish_grid_index(time, 10000000);
+    }
+  }
+  return gaps;
+}
+}  // namespace
+
+TEST(PublishGridTest, EveryBinadePublishesEveryFiveStepsWhileTheOldGateDid_5_Or_6)
+{
+  // [4,8) [8,16) [16,32) [32,64) [64,128) s, each from an offset that is not a multiple of the period (a reset restores the time)
+  for (const double start : {4.002, 9.0, 16.0, 17.3, 31.0, 33.0, 64.0, 70.7, 100.0, 127.0 - 0.004}) {
+    for (const int steps : {5000, 20000}) {
+      const auto gaps = publish_gaps_in_steps(start, steps, false);
+      ASSERT_GT(gaps.size(), 100U);
+      for (std::size_t i = 1; i < gaps.size(); ++i) {
+        EXPECT_EQ(gaps[i], 5) << "start " << start << " message " << i;      // the first gap depends on the phase of the start
+      }
+      EXPECT_LE(gaps.front(), 5);
+    }
+  }
+  // the defect the integer grid replaces: in the [16,32) and [64,128) binades the accumulated double falls just under 10 ms
+  // after five steps, so the old gate waited for a sixth (12 ms, 83 Hz)
+  int sixes = 0;
+  for (const double start : {16.0, 64.0}) {
+    for (const int gap : publish_gaps_in_steps(start, 20000, true)) {sixes += gap == 6;}
+  }
+  EXPECT_GT(sixes, 100);
+}
+
+TEST(PublishGridTest, GridIndexIsAFloorAndExactAtTheBoundaries)
+{
+  using so101_mujoco_support::publish_grid_index;
+  EXPECT_EQ(publish_grid_index(0.0, 10000000), 0);
+  EXPECT_EQ(publish_grid_index(0.0099999, 10000000), 0);
+  EXPECT_EQ(publish_grid_index(0.01, 10000000), 1);
+  EXPECT_EQ(publish_grid_index(16.0, 10000000), 1600);
+  EXPECT_EQ(publish_grid_index(16.0 - 1e-12, 10000000), 1600) << "below the boundary by less than a nanosecond rounds onto it";
+  EXPECT_EQ(publish_grid_index(127.99, 10000000), 12799);
+  EXPECT_EQ(publish_grid_index(-0.001, 10000000), -1) << "floor, not truncation";
+}
+
+TEST(PublishGridTest, ThePeriodMustBeAWholeNumberOfPhysicsSteps)
+{
+  using so101_mujoco_support::publish_grid_valid;
+  EXPECT_TRUE(publish_grid_valid(10000000, 2000000));
+  EXPECT_TRUE(publish_grid_valid(10000000, 1000000));
+  EXPECT_FALSE(publish_grid_valid(10000000, 3000000));
+  EXPECT_FALSE(publish_grid_valid(3333333, 2000000));
+  EXPECT_FALSE(publish_grid_valid(0, 2000000));
+  EXPECT_FALSE(publish_grid_valid(10000000, 0));
+}
+
+TEST_F(AtomicEvidenceTest, PluginRefusesAPublishRateThatIsNotAWholeNumberOfStepsAndKeepsTheGridAcrossBinadesAndReset)
+{
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+  }
+  model_->opt.timestep = 0.002;
+  const auto make_options = [](double rate, const std::string & topic) {
+      return rclcpp::NodeOptions().parameter_overrides({
+          rclcpp::Parameter("object_body", "cup"),
+          rclcpp::Parameter("left_fingertip_geoms", std::vector<std::string>{"left_tip"}),
+          rclcpp::Parameter("right_fingertip_geoms", std::vector<std::string>{"right_tip"}),
+          rclcpp::Parameter("other_contact_geoms", std::vector<std::string>{"table"}),
+          rclcpp::Parameter("simulation_session_id", "grid-test"),
+          rclcpp::Parameter("publish_rate", rate),
+          rclcpp::Parameter("topic", topic),
+      });
+    };
+  {
+    // 300 Hz is a 3.333 ms period: not a whole number of 2 ms steps
+    auto node = std::make_shared<rclcpp::Node>("grid_refused_plugin", make_options(300.0, "/test/so101/grid_refused"));
+    SimulationEvidencePlugin refused;
+    EXPECT_FALSE(refused.init(node, model_.get(), data_.get()));
+  }
+  auto node = std::make_shared<rclcpp::Node>("grid_plugin", make_options(100.0, "/test/so101/grid"));
+  SimulationEvidencePlugin plugin;
+  ASSERT_TRUE(plugin.init(node, model_.get(), data_.get()));
+  EXPECT_EQ(plugin.publish_period_ns_, 10000000);
+
+  const auto free_publisher = [&plugin]() {
+      const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+      while (std::chrono::steady_clock::now() < deadline) {
+        if (plugin.realtime_publisher_->trylock()) {
+          plugin.realtime_publisher_->unlock();
+          return;
+        }
+        std::this_thread::sleep_for(std::chrono::microseconds(50));
+      }
+    };
+  // run 600 steps of 2 ms from `start`; returns the steps (from the start) at which a message was published
+  const auto run = [&](double start, int steps) {
+      data_->time = start;
+      std::vector<int> published_at;
+      int64_t seen = plugin.last_publish_grid_;
+      for (int step = 1; step <= steps; ++step) {
+        data_->time += 0.002;
+        free_publisher();
+        plugin.update(model_.get(), data_.get());
+        if (plugin.last_publish_grid_ != seen) {
+          seen = plugin.last_publish_grid_;
+          published_at.push_back(step);
+        }
+      }
+      return published_at;
+    };
+  const auto expect_every_five = [](const std::vector<int> & at, const char * what) {
+      ASSERT_GT(at.size(), 50U) << what;
+      for (std::size_t i = 2; i < at.size(); ++i) {       // the first message after a jump of the time is off the grid phase
+        EXPECT_EQ(at[i] - at[i - 1], 5) << what << " message " << i;
+      }
+    };
+  plugin.update(model_.get(), data_.get());                               // the first message (time 0)
+  expect_every_five(run(16.0, 600), "16-32 s binade");
+  expect_every_five(run(64.0, 600), "64-128 s binade");
+  expect_every_five(run(32.0, 600), "32-64 s binade");
+
+  // reset and the restored time: the pending reset is consumed by the paused snapshot (which publishes, bypassing the gate), the
+  // time restored lower than before; the grid resumes at once and stays every five steps
+  plugin.on_pause(true);
+  plugin.on_reset();
+  data_->time = 3.5;
+  free_publisher();
+  plugin.on_state_snapshot(model_.get(), data_.get(), true);
+  plugin.on_pause(false);
+  const auto after_reset = run(3.5, 600);
+  expect_every_five(after_reset, "after the reset");
+  EXPECT_LE(after_reset.front(), 5) << "the first message after a time restore comes within one period";
+  plugin.cleanup();
+  rclcpp::shutdown();
+}
+
 TEST_F(AtomicEvidenceTest, ControllerUpdatesDoNotInventPhysicsStepEvidence)
 {
   if (!rclcpp::ok()) {

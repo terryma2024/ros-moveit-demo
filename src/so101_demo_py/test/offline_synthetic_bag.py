@@ -168,7 +168,8 @@ def messages(*, paused_worlds=()):
         RobotContactEvidence(simulation_session_id=SESSION, reset_epoch=EPOCH, physics_step=475))
     mono = mono_of(0.95)
     add(SCENE_READS_TOPIC, "std_msgs/msg/String", 0.95, "other",
-        String(data=json.dumps({"recorded_monotonic_ns": mono, "recorded_system_ns": system_of(mono), "payload": {}})))
+        String(data=json.dumps({"recorded_monotonic_ns": mono, "recorded_system_ns": system_of(mono),
+                                         "payload": {"response_ros_clock": {"sim_time_ns": 950_000_000}}})))
     for sim_s, text in scripted_events():
         add(EVENTS_TOPIC, "std_msgs/msg/String", sim_s, "event", String(data=text))
     return out

@@ -142,15 +142,38 @@ class SceneReadSidecar:
         self._thread = None
         self.count = 0
         self.errors = 0
+        #: CP-3489: reads are written to the sidecar file from the first one, but only published on the topic once the bag recorder has
+        #: matched its subscription (a read published earlier is not in the bag, which the bag/sidecar count would show as a loss)
+        self._publish_ready = threading.Event()
+        self.published = 0
+        self._fsync_wanted = threading.Event()
+        self._fsync_thread = None
 
     def start(self):
         self._thread = threading.Thread(target=self._loop, name="so101-raw-scene-reads", daemon=True)
         self._thread.start()
 
+    def enable_publishing(self) -> None:
+        """The bag recorder subscribes to the topic: reads from now on are also published."""
+        self._publish_ready.set()
+
     def stop(self):
         self._stop.set()
         if self._thread is not None:
             self._thread.join(3.0)
+
+    def _fsync_loop(self, descriptor: int) -> None:
+        """Makes the sidecar durable off the read loop: an `fsync` on a busy filesystem takes up to hundreds of milliseconds, and the
+        read loop (about 20 Hz, and the Recorder's causal join needs every read) must not wait for it (CP-3489)."""
+        while True:
+            self._fsync_wanted.wait()
+            self._fsync_wanted.clear()
+            try:
+                os.fsync(descriptor)
+            except OSError:
+                pass
+            if self._stop.is_set():
+                return
 
     def _loop(self):
         from collections import deque
@@ -170,16 +193,22 @@ class SceneReadSidecar:
                                          | PlanningSceneComponents.OBJECT_COLORS)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._path, "ab") as stream:
+            self._fsync_thread = threading.Thread(target=self._fsync_loop, args=(stream.fileno(),),
+                                                  name="so101-raw-scene-reads-fsync", daemon=True)
+            self._fsync_thread.start()
+
             def write(record, call_request, response):
                 payload = scene_operation_payload(record, call_request, response, state="RAW_READ")
                 line = json.dumps({"recorded_monotonic_ns": time.monotonic_ns(), "recorded_system_ns": time.time_ns(),
                                    "payload": payload}, sort_keys=True, allow_nan=False)
                 stream.write(line.encode() + b"\n")
-                self._publisher.publish(String(data=line))
+                if self._publish_ready.is_set():
+                    self._publisher.publish(String(data=line))
+                    self.published += 1
                 self.count += 1
                 if self.count % 20 == 0:
                     stream.flush()
-                    os.fsync(stream.fileno())
+                    self._fsync_wanted.set()        # the durable write happens on its own thread
 
             def invoke():
                 if not client.wait_for_service(timeout_sec=1.0):
@@ -202,6 +231,8 @@ class SceneReadSidecar:
                     self.errors += 1
                 self._stop.wait(max(0.0, self.PERIOD_S - (time.monotonic() - began)))
             stream.flush()
+            self._fsync_wanted.set()
+            self._fsync_thread.join(5.0)
             os.fsync(stream.fileno())
 
 
@@ -280,6 +311,8 @@ class RawRecorder:
                 self._subscriptions[topic] = self._probe.create_subscription(get_message(infos[0].topic_type), topic,
                                                                             received, profile, raw=True)
             recording = any(info.node_name == self.node_name for info in self._probe.get_subscriptions_info_by_topic(topic))
+            if recording and topic == SCENE_READS_TOPIC and self._sidecar is not None:
+                self._sidecar.enable_publishing()       # the bag has matched: reads are published from now on (CP-3489)
             count = self._received.get(topic, 0)
             if recording and topic not in self._matched_counts:
                 self._matched_counts[topic] = count
@@ -349,7 +382,8 @@ class RawRecorder:
         stats["recording_ready"] = self._recording_ready
         stats["anchor_start"], stats["anchor_end"] = self.anchor_start, self.anchor_end
         if self._sidecar is not None:
-            stats["scene_reads"] = {"count": self._sidecar.count, "errors": self._sidecar.errors}
+            stats["scene_reads"] = {"count": self._sidecar.count, "errors": self._sidecar.errors,
+                                    "published": self._sidecar.published}
         return stats
 
     def verify_closed(self) -> dict:

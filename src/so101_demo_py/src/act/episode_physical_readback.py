@@ -6,8 +6,8 @@ from pathlib import Path
 from .contracts import finite, integer, vector
 from .qc_session import load_model
 from .joints import ACT_JOINTS, ARM_JOINTS, ordered_positions
-from .scene_association import (association_anchor, canonical, claim_scene_records, decode_ros, _call,
-                                verify_scene_association)
+from .scene_association import (association_anchor, canonical, claim_scene_records, concurrent_apply_geometry_matches,
+                                decode_ros, _call, verify_scene_association)
 
 
 def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
@@ -124,7 +124,11 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
                 return (read_request.components.components & required == required
                         and apply["response_ros_clock"]["end_monotonic_ns"] <= read["request_ros_clock"]["begin_monotonic_ns"]
                         and apply["response_ros_clock"]["sim_time_ns"] <= read["request_ros_clock"]["sim_time_ns"]
-                        and canonical(normalized_scene_geometry(read_response.scene)) == geometry)
+                        and (canonical(normalized_scene_geometry(read_response.scene)) == geometry
+                             # CP-3489: a read concurrent with another association's apply may show that association's scene
+                             or concurrent_apply_geometry_matches(
+                                 read, canonical(normalized_scene_geometry(read_response.scene)),
+                                 association["association_id"], scenes.values())))
 
             if query["call_id"] != planning["query_id"] or (not apply_form and not causal_read(query)):
                 raise ValueError("scene contents or apply-before-query causality mismatch")

@@ -1789,9 +1789,17 @@ class RosDynamicMujocoExecution:
         # cannot move FIRST past a source already generated after stop confirmation.
         minimum_step = previous_step
         pending_source = None
+        facts = {"iterations": 0, "last_scene_error": None, "scene_steps_held": [], "waiting_for_scene_frame": 0,
+                 "skipped_before_stop": 0, "pending_step": None, "pending_sequence": None, "newest_evidence_step": None,
+                 "newest_evidence_sequence": None, "previous_step": previous_step, "previous_sequence": previous_sequence,
+                 "stop_confirmed_wall_s": proof["stop_confirmed_wall_s"]}
         while self._monotonic() <= deadline:
             now = self._monotonic()
+            facts["iterations"] += 1
             current = self.observer.recent_with_receipts()
+            if current:
+                facts["newest_evidence_step"] = current[-1].evidence.simulation_step
+                facts["newest_evidence_sequence"] = current[-1].evidence.publisher_sequence
             if pending_source is not None and not 0 <= now - pending_source.received_monotonic_s <= age:
                 raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
             for received in ((pending_source,) if pending_source is not None else current):
@@ -1805,16 +1813,20 @@ class RosDynamicMujocoExecution:
                         and received.received_monotonic_s >= proof["stop_confirmed_wall_s"]
                         and 0 <= now - received.received_monotonic_s <= age):
                     pending_source = received
+                    facts["pending_step"], facts["pending_sequence"] = source.simulation_step, source.publisher_sequence
                     try:
                         scenes = scene_observer.recent_frames_with_receipts()
                     except ValueError as error:
                         if str(error) in ("SCENE_STATE_UNAVAILABLE", "SCENE_STATE_STALE"):
+                            facts["last_scene_error"] = str(error)
                             break  # wait for this candidate's association, never skip to a later source
                         raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID") from error
+                    facts["scene_steps_held"] = [frame["simulation_step"] for frame, _ in scenes][-8:]
                     matched = [(frame, receipt) for frame, receipt in scenes if
                         (frame["simulation_session_id"], frame["reset_epoch"], frame["simulation_step"])
                         == (source.simulation_session_id, source.reset_epoch, source.simulation_step)]
                     if not matched:
+                        facts["waiting_for_scene_frame"] += 1
                         break
                     if len(matched) != 1:
                         raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID")
@@ -1827,6 +1839,7 @@ class RosDynamicMujocoExecution:
                             or begin > round(received.received_monotonic_s * 1e9)):
                         raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID")
                     if begin < round(proof["stop_confirmed_wall_s"] * 1e9):
+                        facts["skipped_before_stop"] += 1
                         pending_source = None
                         continue  # actually generated before stop; a later receipt cannot change that
                     if not 0 <= now - end * 1e-9 <= age:
@@ -1845,7 +1858,10 @@ class RosDynamicMujocoExecution:
                     self._selected_release_stop_proof = copy.deepcopy(proof)
                     return source
             self._wait_progress()
-        raise RuntimeError("DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE")
+        # the code stays DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE (what follows the colon is detail only); the facts say what the
+        # loop was waiting for, so that the next occurrence can be explained (CP-3489)
+        self._document["post_stop_source_unavailable"] = facts
+        raise RuntimeError("DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE: " + json.dumps(facts, sort_keys=True, default=str))
 
     def _check_selected_release_freshness(self, source):
         age, _ = self._release_bounds()

@@ -12,7 +12,8 @@ from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns
 
 class LivePhysicalAuditProvider:
     def __init__(self, *, identity, inputs, scene_association_source, physics_source,
-                 planning_source, controller_source, lifecycle_source, physics_awaiting=None, planning_next_source=None):
+                 planning_source, controller_source, lifecycle_source, physics_awaiting=None, planning_next_source=None,
+                 concurrent_apply_source=None):
         if not _identity_ok(identity, formal=True):
             raise ValueError("LIVE_PHYSICAL_IDENTITY_INVALID")
         integer(identity["reset_epoch"], minimum=1)
@@ -28,6 +29,9 @@ class LivePhysicalAuditProvider:
         #: optional `at_s -> read record | None`: the first planning-scene read AFTER `at_s`, offered only when the read the
         #: planning source returned is older than the age rule allows and the source has established the bracket (CP-3440 B)
         self.planning_next_source = planning_next_source
+        #: optional `read -> (admitted association documents whose apply overlaps the read, an overlapping apply is not admitted yet)`
+        #: (CP-3489): a read concurrent with an apply may show the scene before or after it
+        self.concurrent_apply_source = concurrent_apply_source
         self._release_epoch = identity["release_epoch"]
         self._release_time_s = None
         self._validated_associations = {}
@@ -54,7 +58,7 @@ class LivePhysicalAuditProvider:
 
     def _verify_scene(self, planning, response, at_s):
         from ..control.planning_scene.task_scene import normalized_scene_geometry
-        from .scene_association import canonical
+        from .scene_association import canonical, concurrent_apply_geometry_matches
         bound = self.scene_association_source(at_s)
         if bound is None:
             return False
@@ -66,9 +70,19 @@ class LivePhysicalAuditProvider:
         applied = association_anchor(document)
         if (applied["response_ros_clock"]["end_monotonic_ns"]
                 > planning["request_ros_clock"]["begin_monotonic_ns"]
-                or applied["response_ros_clock"]["sim_time_ns"] > planning["request_ros_clock"]["sim_time_ns"]
-                or canonical(normalized_scene_geometry(response.scene)) != canonical(document["receipt"]["geometry"])):
+                or applied["response_ros_clock"]["sim_time_ns"] > planning["request_ros_clock"]["sim_time_ns"]):
             raise ValueError("LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID")
+        observed = canonical(normalized_scene_geometry(response.scene))
+        if observed != canonical(document["receipt"]["geometry"]):
+            # CP-3489: a read concurrent with the NEXT apply may already show its scene; exactly that geometry is accepted
+            hook = self.concurrent_apply_source
+            if hook is None:
+                raise ValueError("LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID")
+            associations, pending = hook(planning)
+            if not concurrent_apply_geometry_matches(planning, observed, document["association_id"], associations):
+                if pending:
+                    return False        # the overlapping apply's association is not built yet: the row waits
+                raise ValueError("LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID")
         return document["association_id"]
 
     def _verify_apply_anchor(self, planning, at_s):

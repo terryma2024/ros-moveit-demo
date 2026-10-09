@@ -155,3 +155,115 @@ def test_committed_release_time_cannot_drift_within_one_epoch(frozen_scene):
     values["lifecycle"]["release_time_s"] = at_s + .0005
     with pytest.raises(ValueError, match="LIVE_PHYSICAL_RELEASE_INVALID"):
         source.ready(at_s + .004)
+
+
+# ---- CP-3489: a read concurrent with an apply may show the scene before or after it ----------------------------------------------
+
+def _concurrent_next(values, geometry, *, begin_offset_ns=-8_000_000, end_offset_ns=12_000_000):
+    """A synthetic admitted association whose apply overlaps the row's planning read (only the fields the rule reads)."""
+    read = values["planning"]
+    begin, end = read["request_ros_clock"]["begin_monotonic_ns"], read["response_ros_clock"]["end_monotonic_ns"]
+    record = {"request_ros_clock": {"begin_monotonic_ns": begin + begin_offset_ns},
+              "response_ros_clock": {"end_monotonic_ns": end + end_offset_ns}}
+    return {"association_id": "next-association", "apply": {"record": record}, "receipt": {"geometry": geometry}}
+
+
+def _changed_read_geometry(values):
+    from moveit_msgs.srv import GetPlanningScene
+    from so101_demo.act.scene_association import canonical, decode_ros
+    from so101_demo.control.planning_scene.task_scene import normalized_scene_geometry
+
+    values["planning"]["response"]["scene"]["world"]["collision_objects"][0]["primitives"][0]["dimensions"][0] += .01
+    response = decode_ros(GetPlanningScene.Response, values["planning"]["response"])
+    return normalized_scene_geometry(response.scene), canonical(normalized_scene_geometry(response.scene))
+
+
+def test_a_read_concurrent_with_the_next_apply_may_show_exactly_the_next_scene(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    geometry, _ = _changed_read_geometry(values)
+    governing = source.scene_association_source(at_s)["association"]["association_id"]
+    source.concurrent_apply_source = lambda read: ([_concurrent_next(values, geometry)], False)
+    assert source.ready(at_s) is True
+    assert source(at_s)["planning_scene"]["association_id"] == governing, "the row stays bound to the governing association"
+
+
+def test_a_concurrent_read_with_any_other_geometry_still_fails(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    _changed_read_geometry(values)
+    wrong = _concurrent_next(values, {"not": "the read's scene"})
+    source.concurrent_apply_source = lambda read: ([wrong], False)
+    with pytest.raises(ValueError, match="LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID"):
+        source.ready(at_s)
+
+
+def test_a_read_that_did_not_overlap_the_apply_still_fails_even_with_the_matching_geometry(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    geometry, _ = _changed_read_geometry(values)
+    # the apply finished 1 ms before the read began, so the read must already show it as the governing scene: it is no race
+    before = _concurrent_next(values, geometry, begin_offset_ns=-30_000_000, end_offset_ns=-(
+        values["planning"]["response_ros_clock"]["end_monotonic_ns"] - values["planning"]["request_ros_clock"]["begin_monotonic_ns"]) - 1_000_000)
+    source.concurrent_apply_source = lambda read: ([before], False)
+    with pytest.raises(ValueError, match="LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID"):
+        source.ready(at_s)
+
+
+def test_a_concurrent_apply_whose_association_is_not_built_yet_makes_the_row_wait(frozen_scene):
+    source, values, at_s = provider(frozen_scene)
+    _changed_read_geometry(values)
+    source.concurrent_apply_source = lambda read: ([], True)
+    assert source.ready(at_s) is False
+    source.concurrent_apply_source = lambda read: ([], False)
+    with pytest.raises(ValueError, match="LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID"):
+        source.ready(at_s)
+
+
+def test_the_concurrency_rule_itself():
+    from so101_demo.act.scene_association import canonical, concurrent_apply_geometry_matches, read_overlaps_apply
+
+    def call(begin, end):
+        return {"request_ros_clock": {"begin_monotonic_ns": begin}, "response_ros_clock": {"end_monotonic_ns": end}}
+
+    apply = call(1000, 2000)
+    assert read_overlaps_apply(call(1500, 1600), apply) and read_overlaps_apply(call(1900, 2500), apply)
+    assert read_overlaps_apply(call(500, 1000), apply) and read_overlaps_apply(call(2000, 2100), apply)   # touching counts
+    assert not read_overlaps_apply(call(2001, 2100), apply) and not read_overlaps_apply(call(500, 999), apply)
+    next_association = {"association_id": "b", "apply": {"record": apply}, "receipt": {"geometry": {"x": 1}}}
+    initial = {"association_id": "a", "apply": None, "receipt": {"geometry": {"x": 0}}}
+    read = call(1500, 1600)
+    assert concurrent_apply_geometry_matches(read, canonical({"x": 1}), "a", [initial, next_association])
+    assert not concurrent_apply_geometry_matches(read, canonical({"x": 2}), "a", [initial, next_association])
+    assert not concurrent_apply_geometry_matches(read, canonical({"x": 1}), "b", [initial, next_association]), "not itself"
+    assert not concurrent_apply_geometry_matches(call(3000, 3100), canonical({"x": 1}), "a", [initial, next_association])
+
+
+def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker():
+    """CP-3489: the Teacher's applies are in the scene-operation tracker, not among the Recorder's own reads; an overlapping apply with
+    an admitted association is offered, one without is `pending`, a failed or disjoint one is ignored."""
+    from types import SimpleNamespace
+
+    from so101_demo.act.offline import sources
+
+    cls = next(value for value in vars(sources).values() if isinstance(value, type) and hasattr(value, "_concurrent_apply_for"))
+    host = object.__new__(cls)
+
+    def call(identifier, begin, end, *, success=True, service="/apply_planning_scene"):
+        return {"call_id": identifier, "service": service, "request_ros_clock": {"begin_monotonic_ns": begin},
+                "response_ros_clock": {"end_monotonic_ns": end}, "response": {"success": success}}
+
+    admitted = call("apply-a", 1000, 2000)
+    host.tracker = SimpleNamespace(records=[admitted, call("apply-b", 1500, 2500), call("failed", 1000, 2000, success=False),
+                                            call("later", 9000, 9500), call("read", 1000, 2000, service="/get_planning_scene")])
+    host.associations = SimpleNamespace(history=[{"association": {"association_id": "A", "apply": {"record": admitted}}}])
+    read = {"request_ros_clock": {"begin_monotonic_ns": 1900}, "response_ros_clock": {"end_monotonic_ns": 1950}}
+    documents, pending = host._concurrent_apply_for(read)
+    assert [document["association_id"] for document in documents] == ["A"] and pending is True, "apply-b has no association yet"
+    disjoint = {"request_ros_clock": {"begin_monotonic_ns": 3000}, "response_ros_clock": {"end_monotonic_ns": 3100}}
+    assert host._concurrent_apply_for(disjoint) == ([], False)
+    # the Teacher event of an apply concurrent with the read is replayed after the read: until the replay is a settle time past
+    # the read, "no overlapping apply" is not yet proof
+    import time as time_module
+    base = time_module.monotonic_ns()
+    young = {"request_ros_clock": {"begin_monotonic_ns": base - 1000}, "response_ros_clock": {"end_monotonic_ns": base - 500}}
+    assert host._concurrent_apply_for(young) == ([], True)
+    old = {"request_ros_clock": {"begin_monotonic_ns": base - 10**9}, "response_ros_clock": {"end_monotonic_ns": base - 10**9 + 1}}
+    assert host._concurrent_apply_for(old) == ([], False)

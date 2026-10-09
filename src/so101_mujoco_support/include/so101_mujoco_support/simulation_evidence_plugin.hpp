@@ -243,6 +243,12 @@ private:
   std::thread thread_;
 };
 
+/// Index of the publish grid cell containing `time_s`: floor(llround(time_s * 1e9) / period_ns) (CP-3488).
+int64_t publish_grid_index(double time_s, int64_t period_ns);
+
+/// A publish period is usable when it is a whole, positive number of physics steps.
+bool publish_grid_valid(int64_t period_ns, int64_t step_ns);
+
 class SimulationEvidencePlugin final
   : public mujoco_ros2_control_plugins::MuJoCoROS2ControlPluginBase,
     public mujoco_ros2_control_plugins::MuJoCoROS2ControlSimulationObserver
@@ -291,8 +297,11 @@ private:
   EvidenceState state_;
   EvidenceState physics_state_;
   std::unique_ptr<PhysicsStepEvidenceBuffer> physics_step_buffer_;
-  double publish_period_s_{0.01};
-  double last_publish_time_s_{0.0};
+  // Publication is gated on an integer-nanosecond grid (CP-3488): the simulation time is an accumulated double, and gating on
+  // `time - last >= period` rounded differently in each binade (5 or 6 steps of 2 ms per message, 10 or 12 ms). A message is
+  // published when floor(time_ns / period_ns) differs from that of the last one; period_ns is a multiple of the step in ns.
+  int64_t publish_period_ns_{10000000};
+  int64_t last_publish_grid_{0};
   double static_shadow_force_n_{1.1579004532160448};
   double diagnostic_hard_stop_force_n_{11.60};
   bool published_{false};

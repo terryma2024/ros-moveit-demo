@@ -189,10 +189,17 @@ class RecorderDataSide:
         if any(raw and source['physics']['simulation_step'] <= max(steps) for source in missing):
             self._endpoint_source_facts('initial', sources, raw, missing)
             raise ValueError('ENDPOINT_NATIVE_SOURCE_INVALID')
-        if not sources or missing:
+        # CP-3489 (T08, T13, T14 of the first v2 round): a world source newer than the newest retained raw chunk has no native step
+        # yet - its chunk is published 100 ms later. The selection needs raw steps only for the sources it examines, so it runs on
+        # the covered prefix; waiting for the newer sources to be covered too made the capture land a whole chunk late, more than
+        # 100 ms after the first eligible source whenever a world source fell on the first step of the next chunk.
+        covered = [source for source in sources if source['physics']['simulation_step'] in steps]
+        if not covered:
             if self._native_sources_expired('initial', sources, raw, missing, now):
                 raise RuntimeError('DYNAMIC_INITIAL_NATIVE_SOURCE_EXPIRED')
             return None
+        waiting_for = missing
+        sources = covered
         if not getattr(self, '_data_initial_selectable_marked', False):
             _mark_phase('initial.first_selectable')
             self._data_initial_selectable_marked = True
@@ -215,6 +222,8 @@ class RecorderDataSide:
                 raise
             if str(error) != 'ENDPOINT_INITIAL_SOURCE_UNAVAILABLE':
                 raise
+            if waiting_for and self._native_sources_expired('initial', sources, raw, waiting_for, now):
+                raise RuntimeError('DYNAMIC_INITIAL_NATIVE_SOURCE_EXPIRED')
             return None
         clock = validate_source_clock(dict(provisional, end_monotonic_ns=time.monotonic_ns()))
         first_dispatch = getattr(self, '_data_first_dispatch_begin_ns', None)

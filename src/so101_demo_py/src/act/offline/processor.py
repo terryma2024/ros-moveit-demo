@@ -66,6 +66,7 @@ def load_loss_facts(bag, *, stats_file=None) -> dict:
 
     stats_path = Path(stats_file) if stats_file is not None else Path(bag).parent / "record-stats.json"
     lost, reads, by_topic, events = None, None, None, None
+    stamps = None
     if stats_path.is_file():
         document = json.loads(stats_path.read_bytes())
         if type(document.get("transport_lost")) is int:
@@ -77,13 +78,28 @@ def load_loss_facts(bag, *, stats_file=None) -> dict:
                                   stats_path.parent / "bag-record.log")
         if isinstance(document.get("scene_reads"), dict) and type(document["scene_reads"].get("count")) is int:
             reads = document["scene_reads"]["count"]
+        sidecar = stats_path.parent / "scene-reads.jsonl"
+        if reads is not None and sidecar.is_file():
+            stamps = _sidecar_read_stamps(sidecar)
         log = stats_path.parent / "bag-record.log"
         if lost is None and log.is_file():
             text = log.read_text(errors="replace")
             if "Recording stopped" in text:
                 lost = transport_lost_from_log(text)
     return {"transport_lost": lost, "scene_reads_expected": reads, "transport_lost_by_topic": by_topic,
-            "transport_lost_events": events}
+            "transport_lost_events": events, "scene_read_sidecar_stamps": stamps}
+
+
+def _sidecar_read_stamps(path):
+    """The simulation time (ns) at which each sidecar read answered, in file order; None when the file cannot be read as such."""
+    stamps = []
+    try:
+        for line in Path(path).read_text().splitlines():
+            if line:
+                stamps.append(int(json.loads(line)["payload"]["response_ros_clock"]["sim_time_ns"]))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return stamps
 
 
 def _loss_events(recorded, by_topic, log_path):

@@ -265,3 +265,45 @@ def test_release_preflight_still_requires_the_source_to_be_generated_after_the_s
     assert commands == [] and value._release_authorization is None
 
 
+
+
+def _unavailable_value(clear_frames=True):
+    value, selected, commands = boundary()
+    clock = value._monotonic
+    # live receipts follow the clock: the candidate was received after the search began, so the search deadline comes first
+    value.observer.recent_with_receipts = lambda: (ReceivedSimulationEvidence(selected, clock() - 0.001),)
+    if clear_frames:
+        scene = value._scene_source_observer
+        with scene._lock:
+            scene._history.clear()      # the frame of the candidate never reached this observer
+    return value, commands
+
+
+def test_an_unavailable_post_stop_source_explains_what_it_was_waiting_for():
+    """CP-3489 (T06 of the first v2 round): the code is unchanged, the facts say what the loop waited for; the decision is not."""
+    import json
+
+    value, commands = _unavailable_value()
+    with pytest.raises(RuntimeError) as unavailable:
+        value._supported_release_preflight()
+    message = str(unavailable.value)
+    assert message.split(":")[0] == "DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE"
+    facts = value._document["post_stop_source_unavailable"]
+    assert json.loads(message.split(": ", 1)[1]) == json.loads(json.dumps(facts, sort_keys=True, default=str))
+    assert set(facts) >= {"iterations", "last_scene_error", "scene_steps_held", "waiting_for_scene_frame", "skipped_before_stop",
+                          "pending_step", "pending_sequence", "newest_evidence_step", "newest_evidence_sequence",
+                          "previous_step", "previous_sequence", "stop_confirmed_wall_s"}
+    assert facts["iterations"] > 1 and facts["pending_step"] == 501 and facts["pending_sequence"] == 6
+    assert facts["waiting_for_scene_frame"] > 1 and facts["scene_steps_held"] in ([], None) or facts["last_scene_error"]
+    assert commands == [] and value._release_authorization is None
+
+
+def test_a_stale_scene_state_is_named_in_the_facts():
+    value, commands = _unavailable_value(clear_frames=False)
+    def stale():
+        raise ValueError("SCENE_STATE_STALE")
+    value._scene_source_observer.recent_frames_with_receipts = stale
+    with pytest.raises(RuntimeError, match="DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE"):
+        value._supported_release_preflight()
+    assert value._document["post_stop_source_unavailable"]["last_scene_error"] == "SCENE_STATE_STALE"
+    assert commands == []

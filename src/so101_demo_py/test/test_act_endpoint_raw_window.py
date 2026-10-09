@@ -183,6 +183,33 @@ def test_initial_gap_inside_window_still_refuses_and_prints_one_facts_line(froze
     assert 'raw_count=3' in lines[0] and f'missing_steps_first10=[{step}]' in lines[0]
 
 
+def test_initial_capture_does_not_wait_for_world_sources_newer_than_the_newest_raw_chunk(frozen_scene, monkeypatch):
+    """CP-3489 (T08, T13, T14 of the first v2 round): a world source whose native chunk has not been published yet (here 20 steps past
+    the newest raw step) must not hold back the selection of the first eligible source, which IS covered. Waiting for it landed the
+    capture a whole chunk (100 ms) late, past the rule that the capture is at most 100 ms after the selected source."""
+    sources, boundary, capture, raw = final_boundary(frozen_scene)
+    newer = shifted(sources[-1], 20)
+    assert newer['physics']['simulation_step'] > max(sample['physics_step'] for sample in raw)
+    runtime, retained = initial_runtime(frozen_scene, monkeypatch, older(sources[0]) + sources + [newer], raw, boundary, capture)
+    selected = runtime._capture_native_initial_step()
+    assert selected is not None and selected['world_source'] == sources[1], "selected at the first attempt, not a chunk later"
+    assert len(retained) == 1
+
+
+def test_initial_newer_uncovered_source_does_not_hide_a_gap_before_the_newest_raw_step(frozen_scene, monkeypatch):
+    sources, boundary, capture, raw = final_boundary(frozen_scene)
+    newer = shifted(sources[-1], 20)
+    gap = shifted(sources[1], 2)
+    runtime, retained = initial_runtime(frozen_scene, monkeypatch, older(sources[0]) + sources + [gap, newer], raw, boundary,
+                                        capture)
+    tail = copy.deepcopy(raw[-1])
+    tail['physics_step'] += 4
+    raw.append(tail)
+    with pytest.raises(ValueError, match='ENDPOINT_NATIVE_SOURCE_INVALID'):
+        runtime._capture_native_initial_step()
+    assert retained == []
+
+
 def test_initial_predecessor_before_window_still_refuses(frozen_scene, monkeypatch):
     sources, boundary, capture, raw = final_boundary(frozen_scene)
     runtime, retained = initial_runtime(frozen_scene, monkeypatch, older(sources[0]) + sources, raw[1:], boundary, capture)

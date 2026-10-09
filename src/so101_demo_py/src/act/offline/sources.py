@@ -299,7 +299,8 @@ class OfflineRosSources:
             identity=self.episode.identity, inputs=audit.inputs, scene_association_source=self._association_at,
             physics_source=self.binding.physics_adapter.source_at, planning_source=self._planning_source_at,
             controller_source=self._controller_source_at, lifecycle_source=self._lifecycle_source_at,
-            physics_awaiting=self._physics_awaiting, planning_next_source=self._planning_next_source_at)
+            physics_awaiting=self._physics_awaiting, planning_next_source=self._planning_next_source_at,
+            concurrent_apply_source=self._concurrent_apply_for)
 
     def _physics_awaiting(self, at_s):
         """The newest physics sample received is older than this grid instant: its chunk is in flight (CP-3410)."""
@@ -318,6 +319,29 @@ class OfflineRosSources:
 
     def _association_at(self, at_s):
         return self.associations.at(at_s, self.tracker, self._unbuilt_job_sim_times())
+
+    #: how long after a read the replay waits for the Teacher event of an apply that may have been concurrent with it (an apply
+    #: takes 20 ms and its event follows within a few ms; this stays under the 100 ms age rule so that a true mismatch is still reported as such)
+    APPLY_SETTLE_NS = 50_000_000
+
+    def _concurrent_apply_for(self, read):
+        """(admitted association documents whose apply overlapped `read`, True when an overlapping apply has no admitted
+        association yet): a read concurrent with an apply may show the scene before or after it (CP-3489)."""
+        from ...act.scene_association import association_anchor, read_overlaps_apply
+
+        # the Teacher's own applies, in the tracker (the planning calls hold the Recorder's reads only)
+        overlapping = {call["call_id"] for call in list(self.tracker.records)
+                       if call["service"] == "/apply_planning_scene" and call.get("request_ros_clock") is not None
+                       and call.get("response_ros_clock") is not None
+                       and isinstance(call.get("response"), dict) and call["response"].get("success") is True
+                       and read_overlaps_apply(read, call)}
+        documents = [bound["association"] for bound in self.associations.history
+                     if association_anchor(bound["association"])["call_id"] in overlapping]
+        known = {association_anchor(document)["call_id"] for document in documents}
+        # An apply concurrent with this read is only known once its Teacher event has been replayed (the event is published when
+        # the apply returns, after the read did): until the replay has moved a settle time past the read, no overlap is not yet proof.
+        unseen = time.monotonic_ns() < read["response_ros_clock"]["end_monotonic_ns"] + self.APPLY_SETTLE_NS
+        return documents, bool(overlapping - known) or (not overlapping and unseen)
 
     def _planning_source_at(self, at_s):
         """The Recorder's own read-only scene query that joins the grid instant, after the governing association.

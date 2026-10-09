@@ -33,11 +33,12 @@ CLOCK_TOPIC = "/clock"
 JOINT_STATES_TOPIC = "/joint_states"
 SCENE_STATE_TOPIC = "/so101/simulation/scene_state"
 CONTACTS_TOPIC = "/so101/simulation/robot_contacts"
+SCENE_READS_TOPIC = "/so101/raw/planning_scene_reads"
 COLOR_TOPICS = {"/head_camera/color": "/head_camera/camera_info", "/wrist_camera/color": "/wrist_camera/camera_info"}
 CLOCK_PERIOD_NS = 2_000_000
 JOINT_STATES_PERIOD_NS = 10_000_000
 _DECODED = (EVENTS_TOPIC, CHUNK_TOPIC, WORLD_TOPIC, *CONTROLLER_STATE_TOPICS, *CAMERA_INFO_TOPICS, CLOCK_TOPIC,
-            JOINT_STATES_TOPIC, SCENE_STATE_TOPIC, *COLOR_TOPICS)
+            JOINT_STATES_TOPIC, SCENE_STATE_TOPIC, SCENE_READS_TOPIC, *COLOR_TOPICS)
 _NS = 1_000_000_000
 
 
@@ -100,13 +101,14 @@ def _overlaps(gap, intervals) -> bool:
 
 
 def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, transport_lost_by_topic=None,
-             transport_lost_events=None) -> dict:
+             transport_lost_events=None, scene_read_sidecar_stamps=None) -> dict:
     """{"reasons": [...], "timeline": {...}, "continuity": {...}, "counts": {...}, "topic_loss": {...}} for the bag at `bag`.
 
     `transport_lost` is the number of messages the recorder reported lost on the transport layer (None when unknown, which fails
     closed), `scene_reads_expected` the number of planning-scene reads the sidecar made (its own count), `transport_lost_by_topic`
     the recorder's per-topic breakdown of that total ({} when it ran with debug logging and lost nothing; None for a bag recorded
-    without the breakdown, which keeps the aggregate rule), `transport_lost_events` its per-event log times (see `_with_breakdown`)."""
+    without the breakdown, which keeps the aggregate rule), `transport_lost_events` its per-event log times (see `_with_breakdown`), `scene_read_sidecar_stamps` the simulation time (ns) of
+    every read the sidecar made (None when its file is not there: the count rule then applies to the whole bag)."""
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
 
@@ -120,6 +122,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     clock_stamps, joint_stamps, scene_states, color_stamps = [], [], [], defaultdict(list)
     clock_marks = []        # (simulation ns, bag stamp ns) of every /clock message: the map between the two clocks
     read_counts: dict = defaultdict(int)
+    read_stamps: list = []  # simulation time (ns) of every planning-scene read in the bag (None for one that cannot be read)
     for topic, type_name, bag_stamp, data in read_messages(bag, topics=[t for t in _DECODED if t in counts]):
         read_counts[topic] += 1
         if type_name not in types:
@@ -140,6 +143,8 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
             scene_states.append((int(message.reset_epoch), int(message.simulation_step), _stamp_ns(message.header.stamp)))
         elif topic in COLOR_TOPICS:
             color_stamps[topic].append(_stamp_ns(message.header.stamp))
+        elif topic == SCENE_READS_TOPIC:
+            read_stamps.append(_read_sim_ns(message.data))
         elif topic == CHUNK_TOPIC:
             chunks.append((int(message.chunk_sequence), int(message.first_physics_step), int(message.last_physics_step),
                            round(message.first_simulation_time_s * _NS), round(message.last_simulation_time_s * _NS),
@@ -247,6 +252,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
         chunks=chunks, worlds=worlds, cameras=cameras, clock_stamps=clock_stamps, joint_stamps=joint_stamps,
         scene_states=scene_states, color_stamps=color_stamps, transport_lost=transport_lost,
         scene_reads_expected=scene_reads_expected, start_sim=start_sim, transport_lost_by_topic=transport_lost_by_topic,
+        scene_read_stamps=read_stamps, scene_read_sidecar_stamps=scene_read_sidecar_stamps,
         contact_missing=contact_missing, event_sequence=sequence, transport_lost_events=transport_lost_events,
         clock_marks=clock_marks)
     return report
@@ -270,6 +276,15 @@ def _contact_step_gaps(bag) -> int:
     return missing
 
 
+def _read_sim_ns(text):
+    """The simulation time (ns) at which a planning-scene read answered, from its sidecar line; None when the line is unreadable."""
+    try:
+        value = json.loads(text)["payload"]["response_ros_clock"]["sim_time_ns"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return value if type(value) is int else None
+
+
 def _sequence_missing(values) -> int:
     """How many numbers are absent between consecutive values of an increasing publisher sequence."""
     return sum(max(b - a - 1, 0) for a, b in zip(values, values[1:]))
@@ -278,7 +293,7 @@ def _sequence_missing(values) -> int:
 def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns, epoch, states, chunks, worlds, cameras,
                 clock_stamps, joint_stamps, scene_states, color_stamps, transport_lost, scene_reads_expected, start_sim,
                 transport_lost_by_topic=None, contact_missing=None, event_sequence=(), transport_lost_events=None,
-                clock_marks=()) -> dict:
+                clock_marks=(), scene_read_stamps=(), scene_read_sidecar_stamps=None) -> dict:
     """Phase C: every topic the episode uses is judged on its own continuity over the window, and the recorder's aggregate
     transport loss is reconciled with what the topics show. Adds reasons to `reasons`; returns the facts for the gate document.
 
@@ -398,10 +413,23 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
                          "stalls": 0, "missing_in_window": 0, "missing_outside_window": 0, "diagnostic_in_window": 0,
                          "first_missing": []}
     reads = counts.get("/so101/raw/planning_scene_reads", 0)
-    short = 0 if scene_reads_expected is None else max(scene_reads_expected - reads, 0)
+    total_short = 0 if scene_reads_expected is None else max(scene_reads_expected - reads, 0)
+    short = total_short
+    before_window = 0
+    rule = "bag count equals the sidecar's own count of reads"
+    if (scene_read_sidecar_stamps is not None and scene_reads_expected is not None
+            and len(scene_read_sidecar_stamps) == scene_reads_expected and len(scene_read_stamps) == reads
+            and all(type(t) is int for t in (*scene_read_sidecar_stamps, *scene_read_stamps))):
+        # CP-3489: the reads made before the window starts (the bag recorder may not have matched its subscription yet; sim time 0)
+        # are recorded in the sidecar but no row uses them, so only the reads inside [begin, end] are counted, on both sides
+        wanted = sum(1 for t in scene_read_sidecar_stamps if lo <= t <= end)
+        found = sum(1 for t in scene_read_stamps if lo <= t <= end)
+        short = max(wanted - found, 0)
+        before_window = max(total_short - short, 0)
+        rule = "bag count equals the sidecar's own count of reads inside the window (earlier reads are recorded, not counted)"
     topics["/so101/raw/planning_scene_reads"] = {
-        "rule": "bag count equals the sidecar's own count of reads", "used": True, "messages": reads, "gaps": short, "stalls": 0,
-        "missing_in_window": short, "missing_outside_window": 0, "diagnostic_in_window": 0, "first_missing": [],
+        "rule": rule, "used": True, "messages": reads, "gaps": short, "stalls": 0,
+        "missing_in_window": short, "missing_outside_window": before_window, "diagnostic_in_window": 0, "first_missing": [],
         "sidecar_count": scene_reads_expected}
     attributed += short
     detected["/so101/raw/planning_scene_reads"] = short
