@@ -70,6 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
                               "output_write_failure"),
                      help="sandbox fault injection (preselected_target_diagnostic mode only, outputs under "
                           "<run>/fault-sandbox/)")
+    run.add_argument("--teacher-inject-failure-at", default=None,
+                     help="CP-3513, diagnostic only (preselected_target_diagnostic mode, collection on, policy v3): inject one "
+                          "Teacher execution failure at the execute boundary of this state (LIFT). Off by default; refused by name "
+                          "otherwise. Recorded in <run>/injected-failure.json and run.log")
     run.add_argument("--final-cup-pose",
                      help="seven numbers: the frozen final cup pose as xyz plus an xyzw quaternion")
 
@@ -589,7 +593,8 @@ def _run(arguments) -> int:
     try:
         collection = validate_collection_request(arguments.collection, arguments.collection_fault,
                                                  run_mode=arguments.mode, run_root=Path(arguments.root).resolve(),
-                                                 raw_pilot=None if getattr(arguments, "raw_pilot", None) is None else arguments.raw_pilot == "on")
+                                                 raw_pilot=None if getattr(arguments, "raw_pilot", None) is None else arguments.raw_pilot == "on",
+                                                 inject_failure_at=getattr(arguments, "teacher_inject_failure_at", None))
         from ..act.frozen_runtime_inputs import load_recorder_frozen_policy, load_teacher_frozen_inputs
         load_teacher_frozen_inputs(inputs / "inputs-manifest.json")
         if collection.enabled:
@@ -654,8 +659,15 @@ def _run(arguments) -> int:
                      f"config={type(config).__name__}\ncomposition=ProductionBatchComposition\n"
                      f"points={points_path}\nprovenance={sorted(provenance_paths)}\n"
                      f"broker_image={BROKER_IMAGE} (reused, per the coordinator's decision CP-2760)\n")
+        if collection.inject_failure_at is not None:
+            stream.write(f"teacher_injected_failure_at={collection.inject_failure_at} (diagnostic injection, CP-3513)\n")
         stream.flush()
         os.fsync(stream.fileno())
+    if collection.inject_failure_at is not None:
+        # the evidence that this was an injected run, beside (not inside) the closed episode-scope document
+        (root / "injected-failure.json").write_text(json.dumps(
+            {"kind": "teacher_injected_failure", "schema_version": 1, "state": collection.inject_failure_at,
+             "mode": arguments.mode, "code": "TEACHER_INJECTED_EXECUTION_FAILURE", "batch_id": batch_id}, sort_keys=True) + "\n")
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, PreparedBatch
     from so101_demo.parallel_batch.start_guard import StartGuardPolicy
     from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard

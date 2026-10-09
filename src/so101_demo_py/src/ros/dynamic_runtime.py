@@ -642,6 +642,16 @@ def run_dynamic_execute(
             return 1
     # Teacher execution policy v3 (the minimal runtime gates): the simulator comparison of the perceived cup pose (S05) is telemetry
     v3_policy = frozen is not None and frozen_execution_policy_name(frozen).endswith("_v3")
+    inject_failure_at = getattr(options, "inject_failure_at", None)
+    if inject_failure_at is not None:
+        # CP-3513: the diagnostic injection is refused by name, before any motion, unless the freeze is policy v3 and the state is LIFT
+        refusal = None if v3_policy and inject_failure_at == "LIFT" else (
+            "TEACHER_INJECTION_REQUIRES_POLICY_V3" if not v3_policy else f"TEACHER_INJECTION_STATE_UNSUPPORTED: {inject_failure_at}")
+        if refusal is not None:
+            finish_setup("rejected", refusal.split(":")[0])
+            emit_failure(refusal.split(":")[0])
+            print(status_line("ERROR", failure=refusal.split(":")[0], message=refusal), file=status_stream)
+            return 1
     try:
         loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
@@ -902,6 +912,8 @@ def run_dynamic_execute(
         execution._task_geometry = geometry
         if getattr(options, "final_stop_proof", False) is True:
             execution.final_stop_proof_enabled = True
+        if inject_failure_at is not None:
+            execution.inject_failure_at = State(inject_failure_at)
         if execution_inputs is not None:
             execution._execution_snapshot_root = share_dir
             # the freeze names the execution policy (v1 constant place offset, v2 tilt-compensated place height)

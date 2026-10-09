@@ -84,7 +84,9 @@ _DEFAULT_STATE_UNAVAILABLE_STOP_S = 1.0
 #: v3: how long `finish` waits for the off-thread process summary before it records a failed one
 _SUMMARY_JOIN_S = 5.0
 #: v3: the failure codes that are not from the Teacher's own motion (they are the attempt's `failure_class = sim_integrity` or operator stops)
-_V3_FAILED_CODES = frozenset({"TEACHER_ARM_NOT_STOPPED", "TEACHER_DWELL_TIMEOUT"})
+_V3_FAILED_CODES = frozenset({"TEACHER_ARM_NOT_STOPPED", "TEACHER_DWELL_TIMEOUT", "TEACHER_INJECTED_EXECUTION_FAILURE"})
+#: CP-3513: the failure code of the diagnostic-only injected execution failure (an execution failure, status FAILED)
+INJECTED_EXECUTION_FAILURE = "TEACHER_INJECTED_EXECUTION_FAILURE"
 
 
 def _evidence_is_finite(value) -> bool:
@@ -807,6 +809,8 @@ class RosDynamicMujocoExecution:
     # Set by the entry that starts an external Recorder (`--collection on`). Off by default: a Teacher with no Recorder
     # issues no extra stop request.
     final_stop_proof_enabled = False
+    #: CP-3513, diagnostic only: the State at whose execute boundary one execution failure is injected (None: off)
+    inject_failure_at = None
 
     def _publish_final_normal_stop(self) -> None:
         """Publish the confirmed normal-stop proof after the sequence closed, for the Recorder's final boundary.
@@ -1653,6 +1657,14 @@ class RosDynamicMujocoExecution:
         self._emit_phase_begin("arm")
         executed = self._trajectory.execute(
             trajectory, getattr(self, "_execute_timeout_s", 45.0), monitor=monitor)
+        if (executed.status is ActionStatus.SUCCEEDED and self._v3() and getattr(self, "inject_failure_at", None) is state
+                and not getattr(self, "_injected_failure_fired", False)):
+            # CP-3513, diagnostic only: the execute really succeeded (the arm moved, the cup is held); report it as the failed result a
+            # failed execute returns, once, so everything after this line is the real v3 failure path
+            self._injected_failure_fired = True
+            executed = ActionResult(ActionStatus.FAILED, Failure(
+                FailureCategory.EXECUTION, INJECTED_EXECUTION_FAILURE,
+                f"diagnostic injection at {state.value} (CP-3513): the execution result was replaced by a failure"))
         if executed.status is ActionStatus.SUCCEEDED:
             self._last_arm_result = "SUCCEEDED"
             return executed
@@ -1670,7 +1682,8 @@ class RosDynamicMujocoExecution:
             self._last_arm_result = "TIMED_OUT"
             raise self._unsettled_cancel(code, "arm", state)
         self._last_arm_result = ("CONTROLLER_FAILED" if code in (
-            "MOVEIT_EXECUTION_FAILED", "MOVEIT_EXECUTION_REJECTED", "MOVEIT_EXECUTION_UNAVAILABLE") else "TIMED_OUT")
+            "MOVEIT_EXECUTION_FAILED", "MOVEIT_EXECUTION_REJECTED", "MOVEIT_EXECUTION_UNAVAILABLE",
+            INJECTED_EXECUTION_FAILURE) else "TIMED_OUT")
         raise _ExecutionFailed(f"{code}: {message}", executed)
 
     def _motion(self, state: State, target: PoseEvidence) -> None:

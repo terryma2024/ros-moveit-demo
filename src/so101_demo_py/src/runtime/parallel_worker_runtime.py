@@ -1436,6 +1436,9 @@ class ParallelWorkerRuntime:
         if self._collection is not None and self._collection.enabled:
             # the only Teacher-side difference collection makes: the confirmed final normal-stop proof
             argv = argv + ("--final-stop-proof",)
+        if self._collection is not None and getattr(self._collection, "inject_failure_at", None) is not None:
+            # CP-3513, diagnostic only (validated when the request was made): the Teacher injects one execution failure there
+            argv = argv + ("--inject-failure-at", self._collection.inject_failure_at)
         return argv
 
     # ---- the data side: a record-only bag during the run, the offline processor after it (CP-3456) ------------------

@@ -31,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     # Set by the orchestrator when an independent Recorder is collecting (`--collection on`): the Teacher then publishes
     # its confirmed final normal-stop proof. It changes nothing else about the run.
     parser.add_argument("--final-stop-proof", action="store_true")
+    # CP-3513, diagnostic only: inject one execution failure at the execute boundary of this state (policy v3 only; default off)
+    parser.add_argument("--inject-failure-at", default=None)
     parser.add_argument("--batch-id")
     parser.add_argument("--coordinator-epoch", type=int)
     parser.add_argument("--worker-id")
