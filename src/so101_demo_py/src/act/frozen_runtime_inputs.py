@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 TEACHER_ENDPOINT_BINDING = "teacher_endpoint_v2"
-EXECUTION_POLICY_BINDINGS = ("teacher_execution_policy_v1", "teacher_execution_policy_v2")
+EXECUTION_POLICY_BINDINGS = ("teacher_execution_policy_v1", "teacher_execution_policy_v2", "teacher_execution_policy_v3")
 TEACHER_POLICY_BINDINGS = (TEACHER_ENDPOINT_BINDING, "teacher_execution_policy_v1")   # the v1 pair, kept for importers
 
 
@@ -44,7 +44,8 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     for name in (TEACHER_ENDPOINT_BINDING, execution_name):
         config_path = {"teacher_endpoint_v2": "config/act/teacher_endpoint_v2.yaml",
                        "teacher_execution_policy_v1": "config/act/teacher_execution_policy_v1.yaml",
-                       "teacher_execution_policy_v2": "config/act/teacher_execution_policy_v2.yaml"}[name]
+                       "teacher_execution_policy_v2": "config/act/teacher_execution_policy_v2.yaml",
+                       "teacher_execution_policy_v3": "config/act/teacher_execution_policy_v3.yaml"}[name]
         copy = snapshot["files"].get(config_path)
         if copy is None or copy["sha256"] != frozen[name]["file_sha256"]:
             raise ValueError("INPUTS_TEACHER_POLICY_MISMATCH: " + name)

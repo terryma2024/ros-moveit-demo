@@ -1775,13 +1775,13 @@ class ParallelRosRuntimePorts:
         }
         if type(document) is not dict or not required.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
-        # Exactly two versions are known: v2 carries the Teacher result, v1 is read-only legacy. Anything else
-        # is rejected rather than silently read with the old coupled meaning.
+        # Exactly three versions are known: v2 and v3 (Teacher policy v3, minimal runtime gates) carry the Teacher result, v1 is
+        # read-only legacy. Anything else is rejected rather than silently read with the old coupled meaning.
         schema = document["schema"]
         if type(schema) is not str or schema not in {
-                "so101-dynamic-mujoco-execute-v1", "so101-dynamic-mujoco-execute-v2"}:
+                "so101-dynamic-mujoco-execute-v1", "so101-dynamic-mujoco-execute-v2", "so101-dynamic-mujoco-execute-v3"}:
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
-        if schema.endswith("-v2") and not {
+        if schema.endswith(("-v2", "-v3")) and not {
                 "teacher_execution_status", "teacher_task_result", "act_data_status", "process_diagnostics",
                 "teacher_start_observation", "teacher_end_observation"}.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")

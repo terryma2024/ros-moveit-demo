@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from act_export_fixture import ROW_CONTENT
 from so101_demo.act.bundle import resolve_committed_episodes, training_rows
 
 
@@ -150,7 +151,7 @@ def test_the_policy_interface_is_required_before_a_runner_may_use_it(tmp_path):
 
 def _committed(scene_ids=("act-1", "act-2"), *, split="train", status="PASSED", dataset_id=None,fixtures=None):
     return tuple({**({} if fixtures is None else fixtures.get(scene_id,{})),"scene_id": scene_id, "split": split, "status": status,
-                  "content": {"frames": 1, "state": [0.0] * 8},
+                  "content": ROW_CONTENT,
                   **({} if dataset_id is None else {"dataset_id": dataset_id})}
                  for scene_id in scene_ids)
 

@@ -51,7 +51,7 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
     sources = {"teacher_endpoint_v2": POLICY_FILES["teacher_endpoint"],
                "teacher_execution_policy_v1": POLICY_FILES["teacher_execution_policy"],
                "episode_recorder_v1": POLICY_FILES["episode_recorder_policy"]}
-    assert set(POLICY_BINDINGS) == set(loaders) | {"teacher_execution_policy_v2"}      # v2 is frozen instead of v1, never beside it
+    assert set(POLICY_BINDINGS) == set(loaders) | {"teacher_execution_policy_v2", "teacher_execution_policy_v3"}   # v2/v3 are frozen instead of v1, never beside it
     for name, loader in loaders.items():
         binding, payload = document[name], sources[name].read_bytes()
         effective = loader(payload)
@@ -183,7 +183,7 @@ def test_the_teacher_loads_its_snapshot_and_policies_from_the_frozen_manifest(tm
     frozen, loaded, root = load_teacher_frozen_inputs(manifest_path)
     assert frozen == document and loaded == snapshot and root == manifest_path.parent / "execution"
     policies = verify_policy_bindings(frozen, manifest_path, loaded)
-    assert set(policies) == set(POLICY_BINDINGS) - {"teacher_execution_policy_v2"}
+    assert set(policies) == set(POLICY_BINDINGS) - {"teacher_execution_policy_v2", "teacher_execution_policy_v3"}
     # the policy file the Teacher's own loader reads is the snapshot's copy of exactly the bound bytes
     for name, (_, config_path) in POLICY_BINDINGS.items():
         if name not in frozen:

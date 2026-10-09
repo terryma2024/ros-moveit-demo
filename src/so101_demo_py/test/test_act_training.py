@@ -46,7 +46,8 @@ def test_a_run_passes_the_gates_trains_and_records_completion(tmp_path,monkeypat
     assert outcome["status"] == "COMPLETED" and outcome["episode_count"] == 2
     state = json.loads((tmp_path / "bundle.json.state.json").read_text())
     assert state["status"] == "COMPLETED" and state["error"] is None
-    assert seen["dataset"] == dataset
+    # the trainer is given the training view (the export manifest and the whitelisted samples), never the export itself
+    assert seen["dataset"] == tmp_path / "bundle.json.training-view" and seen["dataset"] != dataset
     assert not list(tmp_path.glob("*.partial"))
 
 

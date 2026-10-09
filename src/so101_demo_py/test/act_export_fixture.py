@@ -10,7 +10,12 @@ from test_act_qc_report_publication import report
 from test_act_seal_and_downgrade import lease
 
 
-def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),proof_overrides=None):
+#: the content of a committed episode as the trainer may read it: rows of an observation (joint state, two images) and an action
+ROW_CONTENT=dict(frames=1,rows=[dict(observation=dict(sim_time_s=0.,state=[0.]*8,head_png='frames/000000-head.png',wrist_png='frames/000000-wrist.png'),
+    action=[0.]*6)])
+
+
+def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),proof_overrides=None,teacher_manifests=None,content=None):
     from so101_demo.act import result_store
     records=[];proofs={}
     for index,scene_id in enumerate(scene_ids):
@@ -21,6 +26,12 @@ def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),pro
         inputs.write_text(json.dumps(dict(mode='formal',inputs_sha256='a'*64)))
         location=root/'sealed';location.mkdir()
         qc=report();qc['identity'].update(mode='formal',scene_id=scene_id)
+        # the Teacher manifest of the sealed result, bound by the QC reference check (default: a policy v2 manifest, which has no summary)
+        teacher_manifest=(teacher_manifests or {}).get(scene_id,{'schema':'so101-dynamic-mujoco-execute-v2'})
+        (location/'dynamic').mkdir()
+        (location/'dynamic'/'dynamic-execute-manifest.json').write_text(json.dumps(teacher_manifest,sort_keys=True))
+        qc['checks']['teacher_reference_consistency']['details']['teacher_manifest_sha256']=hashlib.sha256(
+            (location/'dynamic'/'dynamic-execute-manifest.json').read_bytes()).hexdigest()
         qc.update(scope_sha256=hashlib.sha256(scope.read_bytes()).hexdigest(),inputs_sha256='a'*64)
         write_qc_report(qc,location/'qc-report.json')
         qc_hash=hashlib.sha256((location/'qc-report.json').read_bytes()).hexdigest()
@@ -38,10 +49,10 @@ def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),pro
             commit_sequence=7,commit_frame_sha256='d'*64,journal_terminal_sha256='e'*64,aggregate_sha256='f'*64)
         proof.update((proof_overrides or {}).get(scene_id,{}))
         coordinator=root/'coordinator';coordinator.mkdir()
-        content=dict(frames=2,state=[0.]*8)
-        content_path=root/'content.json';content_path.write_text(json.dumps(content))
+        episode_content=copy.deepcopy(ROW_CONTENT) if content is None else copy.deepcopy(content)
+        content_path=root/'content.json';content_path.write_text(json.dumps(episode_content))
         record=dict(kind='ACT_COMMITTED_EPISODE',schema_version=2,scene_id=scene_id,status='PASSED',split='train',
-            journal_sha256='d'*64,verifier_sha256='c'*64,content=content,
+            journal_sha256='d'*64,verifier_sha256='c'*64,content=episode_content,
             content_path=str(content_path),content_sha256=hashlib.sha256(content_path.read_bytes()).hexdigest(),
             collection_evidence=dict(coordinator_root=str(coordinator),result_location=str(location),
                 scope_path=str(scope),inputs_manifest=str(inputs),receipt=receipt))

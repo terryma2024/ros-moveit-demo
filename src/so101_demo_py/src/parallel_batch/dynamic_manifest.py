@@ -8,11 +8,14 @@ from collections.abc import Mapping
 
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
-from ..core.workflow import SO101_WORKFLOW, TERMINAL_STOP_CODES
+from ..core.workflow import SIM_INTEGRITY_CODES, SO101_WORKFLOW, SO101_WORKFLOW_V3, TERMINAL_STOP_CODES
 from .contracts import AttemptStatus
 
 SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
 SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+#: Teacher policy v3 (minimal runtime gates, design 2026-10-10): no recovery states, a `teacher_place_height_v3` record and a
+#: `teacher_process_summary_v1`. Chosen by the frozen Teacher execution policy version.
+SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 EXECUTION_STATUSES = frozenset({
     "COMPLETED", "FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE", "INDETERMINATE",
 })
@@ -127,7 +130,7 @@ def _terminal_stop_edge(document: Mapping[str, object], current: State, followin
     )
 
 
-def _trace_contract(document: Mapping[str, object], expected_status: str):
+def _trace_contract(document: Mapping[str, object], expected_status: str, workflow=SO101_WORKFLOW):
     trace = document.get("state_trace")
     if (
         type(trace) is not list
@@ -142,15 +145,15 @@ def _trace_contract(document: Mapping[str, object], expected_status: str):
     except (TypeError, ValueError):
         _fail("TRACE")
     for current, following in zip(states, states[1:]):
-        if current not in SO101_WORKFLOW.transitions:
+        if current not in workflow.transitions:
             _fail("TRACE")
-        if following not in SO101_WORKFLOW.transitions[current] and not _terminal_stop_edge(
+        if following not in workflow.transitions[current] and not _terminal_stop_edge(
                 document, current, following):
             _fail("TRACE")
     failure_boundaries = [
         current
         for current, following in zip(states, states[1:])
-        if following == SO101_WORKFLOW.transitions[current][1]
+        if following == workflow.transitions[current][1]
         or _terminal_stop_edge(document, current, following)
     ]
     if expected_status == "ERROR" and not failure_boundaries:
@@ -160,27 +163,27 @@ def _trace_contract(document: Mapping[str, object], expected_status: str):
     return states, failure_boundaries
 
 
-def _successful_action_states(states: list[State]) -> list[State]:
+def _successful_action_states(states: list[State], workflow=SO101_WORKFLOW) -> list[State]:
     return [
         current
         for current, following in zip(states, states[1:])
-        if current in SO101_WORKFLOW.action_states
-        and following == SO101_WORKFLOW.transitions[current][0]
+        if current in workflow.action_states
+        and following == workflow.transitions[current][0]
     ]
 
 
-def _event_contract(document: Mapping[str, object], states: list[State], boundary: State | None):
+def _event_contract(document: Mapping[str, object], states: list[State], boundary: State | None, workflow=SO101_WORKFLOW):
     events = document.get("state_events")
     if type(events) is not list or any(type(item) is not dict for item in events):
         _fail("STATE_EVENTS")
-    expected = [state.value for state in _successful_action_states(states)]
+    expected = [state.value for state in _successful_action_states(states, workflow)]
     observed = [item.get("state") for item in events]
     if observed != expected:
         expected_with_failed = []
         failed_index = None
         for current, following in zip(states, states[1:]):
-            success, failure = SO101_WORKFLOW.transitions[current]
-            if current in SO101_WORKFLOW.action_states and following == success:
+            success, failure = workflow.transitions[current]
+            if current in workflow.action_states and following == success:
                 expected_with_failed.append(current.value)
             elif boundary is current and (following == failure or _terminal_stop_edge(document, current, following)):
                 failed_index = len(expected_with_failed)
@@ -195,7 +198,7 @@ def _event_contract(document: Mapping[str, object], states: list[State], boundar
         if not allowed_failed_record:
             _fail("STATE_EVENTS")
     by_state = {item["state"]: item for item in events}
-    for state in _successful_action_states(states):
+    for state in _successful_action_states(states, workflow):
         if state not in DYNAMIC_MOTION_STATES:
             continue
         event = by_state[state.value]
@@ -209,11 +212,11 @@ def _event_contract(document: Mapping[str, object], states: list[State], boundar
     return events
 
 
-def _planning_contract(document: Mapping[str, object], states: list[State]) -> None:
+def _planning_contract(document: Mapping[str, object], states: list[State], workflow=SO101_WORKFLOW) -> None:
     planning = document.get("planning_attempts")
     if type(planning) is not list or any(type(item) is not dict for item in planning):
         _fail("PLANNING")
-    for state in _successful_action_states(states):
+    for state in _successful_action_states(states, workflow):
         if state in DYNAMIC_MOTION_STATES and not any(
             item.get("state") == state.value and item.get("accepted") is True
             for item in planning
@@ -279,10 +282,66 @@ def _place_height_contract(
         _fail("PLACE_HEIGHT")
 
 
+def _place_height_contract_v3(
+    document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
+) -> None:
+    """v3: a finished run carries a `teacher_place_height_v3` record (tilt_compensated or fallback_v1); an ERROR run may stop before the
+    measurement, so its record is optional but still bound when present. With the frozen policy the record is checked against it."""
+
+    from ..core.place_height import PlaceHeightPolicy, validate_document_v3
+
+    if "place_height" not in document:
+        if expected_status == "DONE":
+            _fail("PLACE_HEIGHT")
+        return
+    try:
+        policy = None if frozen_execution_policy is None else PlaceHeightPolicy.from_document(frozen_execution_policy)
+        validate_document_v3(document["place_height"], policy)
+    except (ValueError, KeyError, TypeError):
+        _fail("PLACE_HEIGHT")
+
+
+def _process_summary_contract(document: Mapping[str, object], frozen_execution_policy: Mapping[str, object] | None) -> None:
+    """v3: the `teacher_process_summary_v1` is present and coherent, names the provenance and agrees with the place record."""
+
+    from ..core.process_summary import validate_summary
+
+    summary = document.get("teacher_process_summary")
+    try:
+        validate_summary(summary)
+    except ValueError:
+        _fail("PROCESS_SUMMARY")
+    policy = summary.get("policy")
+    if type(policy) is not dict:
+        _fail("PROCESS_SUMMARY")
+    expected = {"cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
+    if frozen_execution_policy is not None:
+        expected = {key: frozen_execution_policy.get(key) for key in expected}
+    if any(policy.get(key) != value for key, value in expected.items()):
+        _fail("PROCESS_SUMMARY")
+    record = document.get("place_height")
+    if type(record) is dict and (summary.get("place_height_mode") != record.get("mode")
+                                 or summary.get("place_fallback_reason") != record.get("fallback_reason")):
+        _fail("PROCESS_SUMMARY")
+
+
+def _failure_class_contract(document: Mapping[str, object], execution: object) -> None:
+    """v3: `failure_class = sim_integrity` exactly for a FAILED attempt whose failure is a SIM_INTEGRITY code (design 5b)."""
+
+    failure = document.get("failure")
+    code = failure.split(":", 1)[0] if isinstance(failure, str) else None
+    sim = code in SIM_INTEGRITY_CODES
+    if "failure_class" not in document or document["failure_class"] != ("sim_integrity" if sim else None):
+        _fail("FAILURE_CLASS")
+    if sim and execution != "FAILED":
+        _fail("FAILURE_CLASS")
+
+
 def _teacher_contract(
     document: Mapping[str, object], expected_status: str, reset_epoch: int,
     expected_final_cup_pose_world: object,
     frozen_execution_policy: Mapping[str, object] | None = None,
+    schema: str = SCHEMA_V2,
 ) -> AttemptStatus:
     """Structural integrity of the v2 Teacher fields, then the Teacher outcome they declare.
 
@@ -309,7 +368,12 @@ def _teacher_contract(
         _fail("TEACHER_RESULT")
     if (execution == "COMPLETED") != (expected_status == "DONE"):
         _fail("TEACHER_STATUS")
-    _place_height_contract(document, expected_status, frozen_execution_policy)
+    if schema == SCHEMA_V3:
+        _place_height_contract_v3(document, expected_status, frozen_execution_policy)
+        _process_summary_contract(document, frozen_execution_policy)
+        _failure_class_contract(document, execution)
+    else:
+        _place_height_contract(document, expected_status, frozen_execution_policy)
     if result in {"PASS", "FAIL"}:
         if (
             execution != "COMPLETED"
@@ -348,15 +412,21 @@ def _error_contract(
     reset_epoch: int,
     events: list[dict[str, object]],
     boundary: State,
+    schema: str = SCHEMA_V2,
 ) -> None:
     if not isinstance(document.get("failure"), str) or not document["failure"]:
         _fail("ERROR")
     evidence = document.get("failure_evidence")
+    v3 = schema == SCHEMA_V3
+    # v3: a simulation-integrity failure is a broken simulator, so its evidence capture may fail; it is then recorded, not hidden
+    sim_integrity = v3 and document["failure"].split(":", 1)[0] in SIM_INTEGRITY_CODES
     if (
         type(evidence) is not dict
         or evidence.get("failure_boundary_state") != boundary.value
         or type(evidence.get("physical_action_proven_absent")) is not bool
-        or evidence.get("capture_errors") != []
+        or type(evidence.get("capture_errors")) is not list
+        or (evidence["capture_errors"] != [] and not sim_integrity)
+        or any(not isinstance(item, str) for item in evidence["capture_errors"])
     ):
         _fail("FAILURE_EVIDENCE")
     no_action = evidence["physical_action_proven_absent"]
@@ -364,10 +434,13 @@ def _error_contract(
         if boundary is not State.IDLE or events or document.get("planning_attempts") != []:
             _fail("FAILURE_EVIDENCE")
         return
+    if sim_integrity and evidence["capture_errors"]:
+        return
     sample = evidence.get("terminal_sample")
     scene = evidence.get("planning_scene_readback")
-    # A terminal stop skips the RECOVER_* chain, so the cup may still be attached to the MoveIt scene.
-    stopped_in_place = any(
+    # A terminal stop skips the RECOVER_* chain, so the cup may still be attached to the MoveIt scene. In v3 every failure ends in
+    # ERROR from the state it happened in, with the cup attached or detached in MoveIt.
+    stopped_in_place = v3 or any(
         _terminal_stop_edge(document, State(current), State(following))
         for current, following in zip(document["state_trace"], document["state_trace"][1:])
     )
@@ -395,7 +468,7 @@ def validate_dynamic_manifest_semantics(
 ) -> AttemptStatus:
     """Reject structurally incoherent manifests and return the Teacher outcome they declare.
 
-    Only the exact v2 schema carries a Teacher outcome. A v1 manifest is read-only legacy evidence of the old
+    Only the exact v2 and v3 schemas carry a Teacher outcome (v3: Teacher policy v3, no recovery states, a v3 place record and a process summary). A v1 manifest is read-only legacy evidence of the old
     process-quality contract: it is structurally checked and never classified PASSED or FAILED. Any other schema,
     or none, is rejected. Process-quality observations (contacts, velocities, release order, scene shadow) are
     audit-only and never decide the outcome.
@@ -412,15 +485,18 @@ def validate_dynamic_manifest_semantics(
     ):
         _fail("STATUS")
     schema = document.get("schema")
-    if type(schema) is not str or schema not in {SCHEMA_V1, SCHEMA_V2}:
+    if type(schema) is not str or schema not in {SCHEMA_V1, SCHEMA_V2, SCHEMA_V3}:
         _fail("SCHEMA")
-    states, boundaries = _trace_contract(document, expected_status)
+    if frozen_execution_policy is not None and (frozen_execution_policy.get("schema_version") == 3) != (schema == SCHEMA_V3):
+        _fail("SCHEMA")      # the manifest schema follows the frozen Teacher execution policy version
+    workflow = SO101_WORKFLOW_V3 if schema == SCHEMA_V3 else SO101_WORKFLOW
+    states, boundaries = _trace_contract(document, expected_status, workflow)
     boundary = boundaries[0] if boundaries else None
-    events = _event_contract(document, states, boundary)
-    _planning_contract(document, states)
+    events = _event_contract(document, states, boundary, workflow)
+    _planning_contract(document, states, workflow)
     if expected_status == "ERROR":
-        _error_contract(document, expected_reset_epoch, events, boundary)
+        _error_contract(document, expected_reset_epoch, events, boundary, schema)
     if schema == SCHEMA_V1:
         return AttemptStatus.INDETERMINATE
     return _teacher_contract(
-        document, expected_status, expected_reset_epoch, expected_final_cup_pose_world, frozen_execution_policy)
+        document, expected_status, expected_reset_epoch, expected_final_cup_pose_world, frozen_execution_policy, schema)

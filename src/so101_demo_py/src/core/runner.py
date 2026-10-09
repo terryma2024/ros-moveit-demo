@@ -23,7 +23,7 @@ from .domain import (
 )
 from .simulation.protocols import WorldObserver
 from .simulation.types import SimulationEvidence
-from .workflow import SO101_WORKFLOW, resolve_transition
+from .workflow import SO101_WORKFLOW, WorkflowDefinition, resolve_transition
 
 
 @dataclass(frozen=True, slots=True)
@@ -496,7 +496,9 @@ class StateMachineRunner:
         resume_orientation_tolerance_rad: float = 0.07,
         resume_stationary_velocity_tolerance: float = 0.001,
         resume_joint_tolerance_rad: float = 0.002,
+        workflow: WorkflowDefinition = SO101_WORKFLOW,
     ) -> None:
+        self.workflow = workflow
         self.actions = dict(actions)
         self.checkpoint_store = checkpoint_store
         self.session_id = session_id
@@ -620,7 +622,7 @@ class StateMachineRunner:
             )
         if request.mode is RunMode.PLAN_ONLY:
             state = request.plan_only_state
-            if state not in SO101_WORKFLOW.plan_only_states:
+            if state not in self.workflow.plan_only_states:
                 return self._error(
                     "PLAN_ONLY_STATE_UNSUPPORTED",
                     [State.IDLE],
@@ -797,7 +799,7 @@ class StateMachineRunner:
             current = State.PREPARE_OPEN_GRIPPER
             count = 1
             original_failure = None
-        while current not in SO101_WORKFLOW.terminal_states:
+        while current not in self.workflow.terminal_states:
             if count >= request.max_state_transitions:
                 return self._error("MAX_STATE_TRANSITIONS_EXCEEDED", trace, count)
             action = self.actions.get(current)
@@ -809,7 +811,8 @@ class StateMachineRunner:
                 original_failure = action_result.failure or Failure(
                     FailureCategory.INTERNAL, "ACTION_FAILED"
                 )
-            next_state = resolve_transition(current, action_result.status, action_result.failure)
+            next_state = resolve_transition(
+                current, action_result.status, action_result.failure, workflow=self.workflow)
             commit_failure = self._commit(request, current, next_state, count, original_failure)
             if commit_failure is not None:
                 return RunResult(

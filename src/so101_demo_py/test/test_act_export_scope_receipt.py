@@ -1,6 +1,9 @@
 """Common resolver/direct exporter must trace original scope and actual durable commits."""
+import copy
 import hashlib
 import json
+
+from act_export_fixture import ROW_CONTENT
 
 import pytest
 
@@ -14,7 +17,7 @@ def committed_diagnostic(tmp_path,monkeypatch):
         journal_sha256=proof['commit_frame_sha256'],verifier_sha256=proof['result_sha256'],
         collection_evidence=dict(coordinator_root=str(run/'coordinator'),result_location=str(location),
             scope_path=str(scope),inputs_manifest=str(inputs),receipt=receipt),
-        content=dict(frames=2,state=[0.]*8))
+        content=copy.deepcopy(ROW_CONTENT))
     index=tmp_path/'campaign-index.json'
     index.write_text(json.dumps(dict(schema_version=2,committed_episodes=[entry])))
     return entry,index
@@ -39,7 +42,7 @@ def test_actual_diagnostic_commit_cannot_enter_either_common_export_boundary(tmp
 def test_legacy_matching_hash_claims_without_mode_and_current_receipt_are_refused(tmp_path,direct):
     from so101_demo.act.bundle import resolve_committed_episodes,export_dataset
     entry=dict(scene_id='default',status='PASSED',split='train',journal_sha256='a'*64,verifier_sha256='a'*64,
-        content=dict(frames=2,state=[0.]*8))
+        content=copy.deepcopy(ROW_CONTENT))
     index=tmp_path/'campaign-index.json';index.write_text(json.dumps(dict(committed_episodes=[entry])))
     with pytest.raises(ValueError,match='EPISODE_COLLECTION_EVIDENCE_REQUIRED'):
         if direct:export_dataset((entry,),tmp_path/'dataset',source_manifest_sha256='a'*64,campaign_index_sha256='b'*64)

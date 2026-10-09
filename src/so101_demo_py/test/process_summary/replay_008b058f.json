@@ -1,0 +1,78 @@
+{
+ "source": "CP-3493 recorder_absent run 008b058f (DYNAMIC_CUP_COMPRESSION_EXCEEDED): the manifest's monitor_violation evidence",
+ "monitor_violation": {
+  "contacts": {
+   "left": [
+    {
+     "geom1": "wall_near_collision",
+     "geom2": "fixed_fingertip_pad_collision_006",
+     "normal_force_n": 0.38922779339439023,
+     "position_world_m": [
+      -0.0631826997180919,
+      -0.2100090458165585,
+      0.18529586087850214
+     ],
+     "signed_distance_m": -0.00013898884025715643
+    },
+    {
+     "geom1": "wall_near_collision",
+     "geom2": "fixed_fingertip_pad_collision_006",
+     "normal_force_n": 0.38514086945885595,
+     "position_world_m": [
+      -0.06586771001909361,
+      -0.20891327301598667,
+      0.18529456176179282
+     ],
+     "signed_distance_m": -0.0001379917068002434
+    }
+   ],
+   "other": [],
+   "right": []
+  },
+  "last_joint_positions_rad": {
+   "1": 0.426780626521994,
+   "2": 0.41494433146478343,
+   "3": 0.2620870459194816,
+   "4": 0.9050785873717264,
+   "5": 0.03912785296433803,
+   "6": -0.04754972319242686
+  },
+  "last_joint_state_received_monotonic_s": 1021745.139774,
+  "reason": "DYNAMIC_CUP_COMPRESSION_EXCEEDED",
+  "sample": {
+   "cup_angular_velocity_world_rad_s": [
+    0.20196789257816625,
+    -0.052148574961982344,
+    -0.004407431529046143
+   ],
+   "cup_linear_velocity_world_m_s": [
+    -0.011386317071746907,
+    -0.024319784317133067,
+    -0.012408968334688804
+   ],
+   "cup_orientation_world_xyzw": [
+    0.028261237232054415,
+    -0.019655877757795193,
+    -0.19275044420615534,
+    0.9806437758931705
+   ],
+   "cup_position_world_m": [
+    -0.079130876552532,
+    -0.2455786375272596,
+    0.16766722911185059
+   ],
+   "left_contact_count": 2,
+   "maximum_normal_force_n": 0.38922779339439023,
+   "publisher_sequence": 8114,
+   "reset_epoch": 1,
+   "right_contact_count": 0,
+   "simulation_step": 38587,
+   "table_contact": false
+  },
+  "state": "DESCEND_TO_PLACE"
+ },
+ "limits": {
+  "maximum_safe_force_n": 1.8916304473471774,
+  "maximum_compression_distance_m": 0.00011928116711427007
+ }
+}

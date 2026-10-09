@@ -126,6 +126,7 @@ def _preflight(arguments) -> int:
         "teacher_endpoint_v2": manifest.get("teacher_endpoint_v2"),
         "teacher_execution_policy_v1": manifest.get("teacher_execution_policy_v1"),
         "teacher_execution_policy_v2": manifest.get("teacher_execution_policy_v2"),
+        "teacher_execution_policy_v3": manifest.get("teacher_execution_policy_v3"),
         "episode_recorder_v1": manifest.get("episode_recorder_v1"),
         "runtime_policy": manifest.get("runtime_policy"),
         "roles": sorted(manifest["roles"]),

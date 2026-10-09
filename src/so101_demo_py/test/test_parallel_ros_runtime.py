@@ -2291,7 +2291,7 @@ def test_v2_worker_classifies_the_teacher_task_result(
         assert reasons[0].split(":")[0] in receipt.decision.reason
 
 
-@pytest.mark.parametrize("schema", ["so101-dynamic-mujoco-execute-v3", "so101-dynamic-mujoco-execute-v0", None])
+@pytest.mark.parametrize("schema", ["so101-dynamic-mujoco-execute-v4", "so101-dynamic-mujoco-execute-v0", None])
 def test_worker_rejects_unknown_manifest_versions(tmp_path, monkeypatch, schema):
     from so101_demo.parallel_batch.contracts import AttemptStatus
 

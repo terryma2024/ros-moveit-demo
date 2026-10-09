@@ -9,11 +9,11 @@ Supersedes, for the current sim version, `2026-10-10-so101-teacher-real-observab
 
 > 先不做这个，先从仿真取真值。后续把head camera换成rgb-d做位姿估计（这版先先不做） 中间过程减少判断，用最终的杯子位姿判断端到端成功。过程中的碰撞、感知数据用调整摘取策略，而不用于运行期安全门。
 
-1. **No wrist in-hand estimator. The Teacher's cup pose comes from simulator truth.**
-   - **Today's source is perception, not truth.** The live runtime feeds `/cup_pose` from the broker's YOLO mask + depth (`RgbdLocalizer`, `parallel_ros_runtime.py`, `rgbd_cup_pose`).
-   - **v3 source.** v3 switches the Teacher's input pose to the MuJoCo truth bridge (`mujoco_cup_pose_bridge`, promoted from test-only to a v3 runtime source). It publishes the same message with frame, stamp and identity.
-   - **The broker in v3.** It is not in the v3 run path by default. An optional *perception shadow* (policy flag, default OFF) runs the broker and records its pose for the perception-error telemetry; it never gates. Perception accuracy is tuned offline with the existing ACT-scene perception benchmark gate.
-   - **Later.** An RGB-D head-camera pose estimator is a later version, out of scope here.
+1. **No wrist in-hand estimator. Pre-grasp cup pose: the current broker inference. Post-action success: MuJoCo truth.** (User, 2026-10-10: "抓取前杯子位姿估计还是走现在broker推理方案。动作完成后的成功用MuJoCo 真值桥读取。")
+   - The Teacher's input pose stays as today: `/cup_pose` from the broker's YOLO + R6 + z-clip localization (`RgbdLocalizer`). A broker failure (no or ambiguous candidate, localization rejected) leaves the Teacher no input to plan from. It is an input-availability refusal ("cannot execute"), not a safety gate.
+   - The end-to-end verdict reads the cup's start and end observations from simulator truth (the Teacher observer's world evidence, i.e. the MuJoCo truth path), as `teacher_endpoint_v2` does today.
+   - The perceived-vs-truth difference (S05) is never a refusal. It is recorded every run as the perception-error telemetry (§7) and feeds strategy and perception tuning.
+   - An RGB-D head-camera pose estimator is a later version, out of scope here.
 2. **Minimal intermediate judgement.** Success is decided end-to-end by the final cup pose (`teacher_endpoint_v2`, unchanged).
 3. **Process data is for strategy tuning, not runtime gates.** Collision, contact, force and perception data observed during the run are recorded and analysed to tune the pick strategy. They never stop, refuse or branch the Teacher.
 
@@ -45,7 +45,7 @@ Only the checks needed to execute the motion sequence at all, plus operator/infr
 | Release settle window, final-placement proof | P20, P21 | Telemetry; the verdict is E02 |
 | Place-height refusals (tilt unstable/out of range, height out of bounds, measurement failed) | P10, P11 refusals | See §4 (strategy with a fallback, no refusal) |
 | Normal-stop proof as a *release authorization* | P14 (release use) | Replaced by a bounded wait for the arm to stop, an execution precondition (§5a). The proof itself stays for the final `normal_stop` event (§2) |
-| Cup-pose divergence against simulator truth | S05 | Telemetry (perception error, when the shadow is on). Never refuses |
+| Cup-pose divergence against simulator truth | S05 | Telemetry (perception error, every run). Never refuses |
 | Contact-list `truncated` flag and physics-chunk gaps | B07 (truncated), B12 | Telemetry completeness flags |
 | Release preflight bookkeeping | P17 (`RELEASE_PREFLIGHT_REQUIRED`, `DETACH_NOT_PROVED`) | Replaced by the v3 release sequence (§5a) |
 
@@ -96,7 +96,7 @@ No support, bilateral or post-stop-source checks.
 |---|---|---|---|
 | DONE, end observation OK | COMPLETED | PASS or FAIL by E02 | data per QC |
 | Execution failure (plan, controller, gripper transport, scene, `TEACHER_ARM_NOT_STOPPED`) | FAILED | UNCONFIRMED (no end observation) or FAIL | data INVALID (non-PASS Teacher) |
-| Operator/watchdog (`TEACHER_USER_STOP`, `TEACHER_PARENT_DIED`, `TEACHER_DEADLINE`), `TEACHER_JOINT_STATE_UNAVAILABLE` | STOPPED_SAFETY | UNCONFIRMED | data INVALID |
+| Operator/watchdog: `TEACHER_USER_STOP` and `TEACHER_PARENT_DIED` → STOPPED_USER, `TEACHER_DEADLINE` → DEADLINE (the v2 mapping, kept, CP-3506); `TEACHER_JOINT_STATE_UNAVAILABLE` → STOPPED_SAFETY | as stated | UNCONFIRMED | data INVALID |
 | `TEACHER_CANCEL_UNSETTLED` or a controller left unconfirmed | INDETERMINATE (as today) | UNCONFIRMED | data INVALID |
 | `SIM_INTEGRITY_*` | FAILED, with `failure_class = sim_integrity` | UNCONFIRMED | data INVALID; the attempt is counted as infrastructure, not a Teacher failure |
 
@@ -130,24 +130,34 @@ Per phase it records:
 - table support and contacts at release, and the release displacement;
 - settle time;
 - the place-height mode;
-- the cup-pose perception error, only when the perception shadow is on: broker pose versus sim truth at the start.
+- the cup-pose perception error, recorded every run: broker input pose versus sim truth at the start (xy, z, yaw-free tilt).
 
 The data side copies it into the episode metadata. A tuning report aggregates it across runs: distributions, the worst cases, and correlation with the verdict.
 
-**Dataset use.** Whether episodes with overload or collision flags are excluded from training is a dataset-builder decision, made when the formal dataset is built. Recommended default when that happens: exclude overload and collision. This design only records the flags.
+**Training inputs (user, 2026-10-10: "碰撞和受力数据不进入训练").** Collision, contact and force data never enter training.
+- **What training sees.** The exported training samples and the training loader use a whitelist, `observation` (head/wrist images, joint state) and `action` only. The per-record `audit` (contact lists, normal forces), `teacher_process_summary`, oracle flags and any contact/force/collision field are excluded from training samples.
+- **Where the excluded data stays.** It remains in the sealed episode and its metadata, for data QC and pick-strategy tuning.
+- **Test.** A test asserts that an exported training sample contains no contact/force/collision field, and that the loader reads only whitelisted keys.
+
+**Episode exclusion (user, 2026-10-10: "先剔除。后续通过执行过程中的视觉数据判定是否发生碰撞以及时间区间。").**
+- **Rule.** An episode whose `teacher_process_summary` has `ORACLE_CUP_OVERLOAD` (summed force or compression above the r10b oracle thresholds, 500 Hz, strict `>`) or `ORACLE_COLLISION` (a robot contact pair outside the cup process pairs) in any phase is **not training-eligible**.
+- **Where it is enforced.** At export / training-set build: the resolver and `export_dataset` refuse it with `EXPORT_EPISODE_ORACLE_EXCLUDED` plus the flag and phase. The episode stays sealed and committed, with its data verdict unchanged, for analysis.
+- **Incomplete telemetry.** An episode with an incomplete summary (`complete = false`) is also not training-eligible, because the flags cannot be ruled out.
+- **Not a runtime gate.** This is an offline data-selection rule.
+- **Later (out of scope).** Collision detection and its time interval from execution-time vision data, replacing the sim-oracle flags for this rule.
 
 ## 8. Data side
 
 - The ACT episode validity rules (raw-log offline processor, QC, readback) are unchanged.
 - The Teacher event stream keeps `normal_stop` and `terminal` semantics, since the processor's window depends on them. A failed attempt emits `terminal` with status FAILED, and the episode is INVALID as today for a non-PASS Teacher.
-- The manifest validator gains a v3 branch, selected by the frozen Teacher execution policy version (manifest schema `dynamic_execute_manifest_v3`). It requires no recovery states, a `teacher_place_height_v3` record, and a `teacher_process_summary_v1`. e2e_acceptance likewise accepts v1, v2 and v3 by schema.
+- The manifest validator gains a v3 branch, selected by the frozen Teacher execution policy version (manifest schema `so101-dynamic-mujoco-execute-v3`, CP-3506). It requires no recovery states, a `teacher_place_height_v3` record, and a `teacher_process_summary_v1`. e2e_acceptance likewise accepts v1, v2 and v3 by schema.
 - The final `normal_stop` event: emitted on DONE with its payload unchanged (`source_clock`, `publisher_sequence`, `sim_stamp_s`). A failed or stopped attempt emits no `normal_stop`, as today, and its data is INVALID.
 
 ## 9. Versioning
 
 - Teacher execution policy v3: minimal gates, no recovery, the place strategy with fallback, the dwell durations. v1 and v2 stay byte-identical and loadable.
 - A freeze binds exactly one Teacher execution policy.
-- ACT datasets are partitioned by Teacher policy version. The episode metadata records the Teacher policy version, the cup-pose source (`sim_truth`) and the `teacher_process_summary` schema version.
+- ACT datasets are partitioned by Teacher policy version. The episode metadata records the Teacher policy version, the cup-pose source (`broker_rgbd`), the verdict source (`sim_truth`) and the `teacher_process_summary` schema version.
 
 ## 10. Validation
 
@@ -182,7 +192,7 @@ The data side copies it into the episode metadata. A tuning report aggregates it
 4. The v3 manifest branch accepts ERROR from any state, with the cup attached or detached (§5).
 5. Status mapping table. `SIM_INTEGRITY` is a `failure_class`, not a new status (§5b).
 6. B07 is split: the `truncated` flag and chunk gaps become telemetry completeness. S05 becomes telemetry (§2, §3).
-7. S09 is non-gating, S12 selects the fallback, P17 is replaced. The cup-pose source is named (truth bridge, optional perception shadow) (§1, §2, §3).
+7. S09 is non-gating, S12 selects the fallback, P17 is replaced. The cup-pose source is named (later changed by the user, CP-3504: broker input, truth verdict) (§1, §2, §3).
 8. The place measurement is the existing window method. Fallback reasons are a closed enum, the v3 record has its own validation, and the 0.94 vs 0.73 mm overtravel is noted (§4).
 9. Telemetry definitions: phases, units, streams, durations, completeness, off the control thread (§7).
 10. Acceptance: VALID ≥ 18/20, faults, trace, validators, injected failure, replay tolerances. Versioning: manifest schema v3 and metadata (§9, §10).
@@ -193,4 +203,4 @@ The data side copies it into the episode metadata. A tuning report aggregates it
 2. The v2 place target is a strategy with a v1 fallback, never a refusal.
 3. Overload and collision episodes are flagged, not filtered at collection time.
 4. The only non-operator runtime abort is simulation integrity. The force/collision `SIM_ORACLE_ABORT` of the superseded design is dropped.
-5. The Teacher's cup pose comes from the MuJoCo truth bridge. The perception broker is off by default in v3. An optional shadow records the perception error and never gates.
+5. Superseded by the user (CP-3504): the Teacher's input pose stays the broker inference. The success verdict uses MuJoCo truth. S05 is telemetry. There is no truth bridge into the Teacher input and no perception shadow.

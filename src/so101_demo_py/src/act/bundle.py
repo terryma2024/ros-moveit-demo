@@ -55,7 +55,102 @@ def _verify_collection_for_export(episode):
     if proof.get('act_data_qc')!='PASS' or proof.get('export_eligible') is not True:
         # the Teacher passed, but only an independent data QC PASS makes the episode training data
         raise ValueError('EXPORT_EPISODE_DATA_QC_NOT_PASSED')
+    exclusion=_teacher_oracle_exclusion(evidence)
+    if exclusion is not None:
+        # design 2026-10-10 section 7: an offline data-selection rule. The episode stays sealed and committed with its data verdict.
+        raise ValueError(f'EXPORT_EPISODE_ORACLE_EXCLUDED: {exclusion[0]} {exclusion[1]}')
     return scope['mode']
+
+
+def _teacher_oracle_exclusion(evidence):
+    """(flag, phase) when the Teacher manifest of the sealed result makes the episode not training-eligible, else None.
+
+    The manifest is the one the QC bound (its sha256 is in the QC reference check), so neither a replaced manifest nor a summary
+    edited to hide a flag reaches this rule. A Teacher manifest without a process summary (policy v1/v2) is not judged here."""
+    import hashlib
+
+    from .episode_qc import REFERENCE_CHECK, read_qc_report
+    from .result_store import _read_regular, _safe
+    from .teacher_process import exclusion_of_manifest
+    try:
+        location=_safe(Path(evidence['result_location']))
+        bound=read_qc_report(location/'qc-report.json')['checks'][REFERENCE_CHECK]['details']['teacher_manifest_sha256']
+        raw=_read_regular(location/'dynamic'/'dynamic-execute-manifest.json')
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNREADABLE') from error
+    if hashlib.sha256(raw).hexdigest()!=bound:
+        raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND')
+    return exclusion_of_manifest(raw)
+
+
+#: What a training sample may contain (user, 2026-10-10: collision and force data do not enter training): the observation (joint state,
+#: head and wrist image) and the action. The per-record audit (contact lists, normal forces), the Teacher process summary, the
+#: oracle flags and every other contact, force or collision field stay in the sealed episode and its metadata.
+TRAINING_OBSERVATION_KEYS=('sim_time_s','state','head_png','wrist_png')
+TRAINING_CONTENT_KEYS=('frames','rows','state','observation','action')
+
+
+def _numbers(value):
+    import math
+    if (not isinstance(value,(list,tuple)) or not value
+            or any(isinstance(item,bool) or not isinstance(item,(int,float)) or not math.isfinite(item) for item in value)):
+        raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+    return list(value)
+
+
+def _training_observation(observation):
+    if not isinstance(observation,dict):
+        raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+    kept={}
+    for key in TRAINING_OBSERVATION_KEYS:
+        if key not in observation:
+            continue
+        value=observation[key]
+        if key=='state':
+            kept[key]=_numbers(value)
+        elif key=='sim_time_s':
+            kept[key]=_numbers([value])[0]
+        elif not isinstance(value,str):
+            raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+        else:
+            kept[key]=value
+    return kept
+
+
+def training_content(content) -> dict:
+    """The whitelisted view of an episode's content: only ``rows`` of ``observation`` and ``action`` (or a single ``observation`` and
+    ``action``), plus the plain ``frames``/``state`` counters, survive; everything else, however it is named, is dropped. A row without an observation and a numeric action, or
+    a value that hides a mapping in a numeric field, is refused."""
+    if not isinstance(content,dict):
+        raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+    kept={}
+    for key in TRAINING_CONTENT_KEYS:
+        if key not in content:
+            continue
+        value=content[key]
+        if key=='frames':
+            if type(value) is not int:
+                raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+            kept[key]=value
+        elif key in ('state','action'):
+            kept[key]=_numbers(value)
+        elif key=='observation':
+            kept[key]=_training_observation(value)
+        else:
+            if not isinstance(value,list):
+                raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+            rows=[]
+            for row in value:
+                if not isinstance(row,dict) or 'observation' not in row or 'action' not in row:
+                    raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+                rows.append({'observation':_training_observation(row['observation']),'action':_numbers(row['action'])})
+            kept[key]=rows
+    if not kept:
+        raise ValueError('EXPORT_EPISODE_CONTENT_MISSING')
+    if 'rows' not in kept and not ('observation' in kept and 'action' in kept):
+        # a content with neither rows nor an observation and an action holds nothing a trainer may learn from
+        raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+    return kept
 
 
 def training_rows(rows) -> list:
@@ -271,6 +366,7 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
         content = episode.get("content")
         if not isinstance(content, dict) or not content:
             raise ValueError("EXPORT_EPISODE_CONTENT_MISSING")
+        content = training_content(content)
         if episode.get('kind')!='ACT_COMMITTED_EPISODE':
             _verify_collection_for_export(episode)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE

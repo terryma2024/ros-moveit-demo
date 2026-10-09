@@ -19,7 +19,7 @@ import uuid
 from .recorder import verify_episode_seal
 from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
 from so101_demo.parallel_batch.dynamic_manifest import (
-    DATA_STATUSES, EXECUTION_STATUSES, SCHEMA_V2, TASK_RESULTS, teacher_attempt_status)
+    DATA_STATUSES, EXECUTION_STATUSES, SCHEMA_V2, SCHEMA_V3, TASK_RESULTS, teacher_attempt_status)
 
 
 class ResultInfraError(RuntimeError):
@@ -165,7 +165,7 @@ def _check_teacher_manifest(path, claim) -> None:
     except (OSError, UnicodeError, ValueError) as error:
         raise ValueError("RESULT_TEACHER_MANIFEST_REQUIRED") from error
     task = document.get("teacher_task_result") if type(document) is dict else None
-    if (type(document) is not dict or document.get("schema") != SCHEMA_V2
+    if (type(document) is not dict or document.get("schema") not in (SCHEMA_V2, SCHEMA_V3)
             or document.get("teacher_execution_status") != claim["execution_status"]
             or type(task) is not dict or task.get("result") != claim["task_result"]
             or document.get("act_data_status") not in DATA_STATUSES):

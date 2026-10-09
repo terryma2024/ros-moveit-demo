@@ -446,6 +446,8 @@ TEACHER_REFERENCE_CODES = frozenset({
 _REFERENCE_FIELDS = frozenset({"session_id", "reset_epoch", "simulation_step", "simulation_time_s",
                                "publisher_sequence"})
 _TEACHER_MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
+#: Teacher policy v3 (minimal runtime gates) writes the same start/end references under its own schema
+_TEACHER_MANIFEST_SCHEMAS = frozenset({_TEACHER_MANIFEST_SCHEMA, "so101-dynamic-mujoco-execute-v3"})
 _TIME_TOLERANCE_S = 1e-6
 
 
@@ -495,7 +497,7 @@ def verify_teacher_references(document, *, identity, window, physics_steps) -> d
     def result(code):
         return {"status": "FAIL" if code else "PASS", "reason": code or "", "details": details}
 
-    if (type(document) is not dict or document.get("schema") != _TEACHER_MANIFEST_SCHEMA):
+    if (type(document) is not dict or document.get("schema") not in _TEACHER_MANIFEST_SCHEMAS):
         return result("TEACHER_REFERENCE_MANIFEST_MISSING")
     start = _reference(document.get("teacher_start_observation"))
     end = _reference(document.get("teacher_end_observation"))

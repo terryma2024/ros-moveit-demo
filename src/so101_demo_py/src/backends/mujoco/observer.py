@@ -119,6 +119,7 @@ class MujocoWorldObserver:
         on_hazard: Callable[[str], None] | None = None,
         history_capacity: int = 256,
         on_sequence_gap: Callable[[int, int], None] | None = None,
+        accept_truncated: bool = False,
     ) -> None:
         if not simulation_session_id:
             raise ValueError("simulation_session_id must be non-empty")
@@ -140,6 +141,9 @@ class MujocoWorldObserver:
         # When given, a publisher sequence gap is data completeness: it is reported to this port
         # as (previous, current) and is not a strict hazard. Without it the gap stays a hazard.
         self._on_sequence_gap = on_sequence_gap
+        # Teacher policy v3: a sample whose contact list was truncated still carries the cup state, so it keeps the control evidence
+        # fresh; it is counted (and offered to the taps, which mark the telemetry incomplete) instead of rejected. Default: rejected.
+        self._accept_truncated = accept_truncated
         self._lock = threading.Lock()
         self._latest: SimulationEvidence | None = None
         self._received_at_s: float | None = None
@@ -149,7 +153,10 @@ class MujocoWorldObserver:
         self._rejection_log: deque = deque(maxlen=16)
         self._callback_count = 0
         self._rejected_count = 0
+        self._truncated_count = 0
         self._last_rejection = ""
+        # Observation-only taps (Teacher policy v3 process telemetry): called with (evidence, receipt) after a message is accepted
+        self._taps: list[Callable[[SimulationEvidence, float], None]] = []
         qos = ATOMIC_EVIDENCE_QOS if subscription_depth == 1 else QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=subscription_depth,
@@ -184,6 +191,16 @@ class MujocoWorldObserver:
         with self._lock:
             return self._callback_count
 
+    def add_tap(self, tap: Callable[[SimulationEvidence, float], None]) -> None:
+        """Offer every accepted evidence message to `tap` (observation only: a tap that raises is ignored)."""
+        self._taps.append(tap)
+
+    @property
+    def truncated_count(self) -> int:
+        """How many messages arrived with a truncated contact list (rejected, or accepted when `accept_truncated` is set)."""
+        with self._lock:
+            return self._truncated_count
+
     @property
     def rejected_count(self) -> int:
         with self._lock:
@@ -205,7 +222,10 @@ class MujocoWorldObserver:
                 f"session mismatch: expected {self._session_id}, got {evidence.simulation_session_id}"
             )
         if evidence.truncated:
-            raise EvidenceRejected("truncated atomic evidence")
+            with self._lock:
+                self._truncated_count += 1
+            if not self._accept_truncated:
+                raise EvidenceRejected("truncated atomic evidence")
         receipt = self._monotonic() if received_at_s is None else received_at_s
         if not math.isfinite(receipt) or receipt < 0.0:
             raise EvidenceRejected("receipt time must be finite and non-negative")
@@ -243,6 +263,11 @@ class MujocoWorldObserver:
                     "sim_time_s": evidence.simulation_time_s, "callback_count": self._callback_count,
                     "received_monotonic_s": receipt})
             self._history.append(ReceivedSimulationEvidence(evidence, receipt))
+        for tap in self._taps:
+            try:
+                tap(evidence, receipt)
+            except Exception:
+                pass  # a telemetry tap can never turn an accepted message into a rejection
         if gap is not None:
             try:
                 self._on_sequence_gap(*gap)

@@ -301,7 +301,7 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
             "E2E_DYNAMIC_EVIDENCE_INVALID",
         ),
         (("policy", "sha256"), "b" * 64, "E2E_DYNAMIC_EVIDENCE_INVALID"),
-        (("dynamic", "schema"), "so101-dynamic-mujoco-execute-v3", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "schema"), "so101-dynamic-mujoco-execute-v4", "E2E_DYNAMIC_EVIDENCE_INVALID"),
     ],
 )
 def test_contract_and_protection_facts_still_reject_a_teacher_pass(

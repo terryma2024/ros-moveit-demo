@@ -640,6 +640,8 @@ def run_dynamic_execute(
             emit_failure(failure_code)
             print(status_line("ERROR", failure=failure_code, message=error), file=status_stream)
             return 1
+    # Teacher execution policy v3 (the minimal runtime gates): the simulator comparison of the perceived cup pose (S05) is telemetry
+    v3_policy = frozen is not None and frozen_execution_policy_name(frozen).endswith("_v3")
     try:
         loaded = runtime.load_policy(share_dir, backend="mujoco")
     except Exception as error:
@@ -826,25 +828,35 @@ def run_dynamic_execute(
             task_scene.on_service_call = make_scene_operation_hook(event_stream, state=lambda: "SETUP")
         mark("task_scene_port.end")
         mark("prepare_dynamic_cup_scene.begin")
+        perception_error = None
+        perception_error_failed = False
+        if v3_policy:
+            # telemetry only: a pose that cannot be compared (degenerate quaternion, missing truth) never refuses the run
+            try:
+                from ..application.cup_pose_preflight import perception_error as measure_perception_error
+                perception_error = measure_perception_error(sample, initial)
+            except Exception:  # noqa: BLE001
+                perception_error, perception_error_failed = None, True
         prepare_dynamic_cup_scene(
             sample,
             initial,
             loaded.template,
             geometry,
             task_scene,
+            **({"perception_gate": False} if v3_policy else {}),
         )
         mark("prepare_dynamic_cup_scene.end")
         mark("validate_cup_scene.1.observe.begin")
         observed = truth_observer.observe(5.0)
         mark("validate_cup_scene.1.observe.end")
         mark("validate_cup_scene.1.check.begin")
-        validate_cup_scene(sample, observed, loaded.template)
+        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if v3_policy else {}))
         mark("validate_cup_scene.1.check.end")
         mark("validate_cup_scene.2.observe.begin")
         observed = truth_observer.observe(5.0)
         mark("validate_cup_scene.2.observe.end")
         mark("validate_cup_scene.2.check.begin")
-        validate_cup_scene(sample, observed, loaded.template)
+        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if v3_policy else {}))
         mark("validate_cup_scene.2.check.end")
         mark("resolve_motion_targets.begin")
         targets = runtime.resolve_motion_targets(sample, loaded.template)
@@ -903,23 +915,57 @@ def run_dynamic_execute(
             # The activated contact policy's cup force/compression limits and the collision geometry, from the same
             # frozen inputs the broker-era Teacher read. A mismatch refuses before any motion.
             from . import teacher_safety
-            safety = teacher_safety.load_frozen_safety(Path(manifest_option))
-            execution._safety_limits = safety.limits
-            watch = teacher_safety.CollisionWatch(
-                process_pairs=safety.process_pairs, known_geoms=safety.known_geoms,
-                session_id=options.session_id, reset_epoch=options.expected_reset_epoch)
-            watch.attach(node)
-            execution._collision_watch = watch
-            hazards = teacher_safety.PhysicsHazardWatch(
-                session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=safety.limits,
-                state_getter=lambda: execution._safety_state, clock=execution._monotonic)
-            hazards.attach(node)
-            hazards.arm()
-            execution._physics_hazard_watch = hazards
+            if v3_policy:
+                # v3: the r10b limits and the collision geometry are only the thresholds and the pair filter of the telemetry. The watches
+                # subscribe but record (never latch); a failed load marks the summary incomplete and refuses nothing (design 2, S09).
+                summary = execution._process_summary
+                execution._perception_error = perception_error
+                if perception_error_failed:
+                    summary.note_incomplete("PERCEPTION_ERROR_UNAVAILABLE")
+                try:
+                    safety = teacher_safety.load_frozen_safety(Path(manifest_option))
+                except Exception as error:  # noqa: BLE001 - non-gating in v3
+                    safety = None
+                    execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(error)}"
+                if safety is not None:
+                    execution._safety_limits = summary.limits = safety.limits
+                    watch = teacher_safety.CollisionWatch(
+                        process_pairs=safety.process_pairs, known_geoms=safety.known_geoms, session_id=options.session_id,
+                        reset_epoch=options.expected_reset_epoch, record_only=True, tap=summary,
+                        clock=execution._monotonic)
+                    watch.attach(node)
+                    execution._collision_watch = watch
+                else:
+                    summary.note_incomplete("COLLISION_GEOMETRY_UNAVAILABLE")
+                hazards = teacher_safety.PhysicsHazardWatch(
+                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=None,
+                    state_getter=lambda: execution._safety_state, clock=execution._monotonic, record_only=True, tap=summary)
+                hazards.attach(node)
+                hazards.arm()
+                execution._physics_hazard_watch = hazards
+            else:
+                safety = teacher_safety.load_frozen_safety(Path(manifest_option))
+                execution._safety_limits = safety.limits
+                watch = teacher_safety.CollisionWatch(
+                    process_pairs=safety.process_pairs, known_geoms=safety.known_geoms,
+                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch)
+                watch.attach(node)
+                execution._collision_watch = watch
+                hazards = teacher_safety.PhysicsHazardWatch(
+                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=safety.limits,
+                    state_getter=lambda: execution._safety_state, clock=execution._monotonic)
+                hazards.attach(node)
+                hazards.arm()
+                execution._physics_hazard_watch = hazards
         execution._stop_flags = stop_flags
+        # Policy v3 (the minimal runtime gates) runs its own workflow definition: the same forward states, no RECOVER_* chain.
+        workflow_options = {}
+        if (getattr(execution, "_teacher_execution_policy", None) or {}).get("schema_version") == 3:
+            from ..core.workflow import SO101_WORKFLOW_V3
+            workflow_options = {"workflow": SO101_WORKFLOW_V3}
         mark("build_actions.begin")
         actions = profile_actions(
-            runtime.build_actions(execution, targets),
+            runtime.build_actions(execution, targets, **workflow_options),
             profiler,
         )
         mark("build_actions.end")
@@ -930,6 +976,7 @@ def run_dynamic_execute(
             # The runner reads the Teacher's own observer directly. It used to be wrapped by a recorder that appended every
             # observation to a list nothing ever read (an unbounded Teacher-side data copy with no consumer, removed in A4a).
             world_observer=execution.observer,
+            **workflow_options,
         )
         finish_setup("accepted")
         # The attempt deadline is frozen here, from the frozen execution policy. The watchdog thread only sets a flag:

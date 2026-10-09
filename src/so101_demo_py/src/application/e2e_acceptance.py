@@ -57,6 +57,8 @@ FINAL_MAX_LINEAR_SPEED_M_S = 0.001
 FINAL_MAX_ANGULAR_SPEED_RAD_S = 0.05
 SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
 SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+#: Teacher execution policy v3 (minimal runtime gates): the same success trace, a `teacher_process_summary_v1` beside the result
+SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 _TEACHER_RESULTS = frozenset({"PASS", "FAIL", "UNCONFIRMED"})
 
 
@@ -274,7 +276,7 @@ def _validate_dynamic_contract(
     events = dynamic.get("state_events")
     release_marker = _integer(dynamic.get("release_marker_sequence"))
     if (
-        dynamic.get("schema") not in {SCHEMA_V1, SCHEMA_V2}
+        dynamic.get("schema") not in {SCHEMA_V1, SCHEMA_V2, SCHEMA_V3}
         or dynamic.get("status") != "DONE"
         or dynamic.get("current_state") != "DONE"
         or dynamic.get("failure") is not None
@@ -289,6 +291,16 @@ def _validate_dynamic_contract(
         or perception.get("published_cup_pose") is not True
     ):
         _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
+        return False
+    return True
+
+
+def _process_summary_valid(value: object) -> bool:
+    from ..core.process_summary import validate_summary
+
+    try:
+        validate_summary(value)
+    except ValueError:
         return False
     return True
 
@@ -568,8 +580,10 @@ def validate_e2e_evidence(document: dict[str, object]) -> AcceptanceReport:
     if legacy:
         # a manifest v1 is read-only legacy evidence of the old coupled contract: never new-run success
         _append(failures, "E2E_LEGACY_MANIFEST_READ_ONLY")
-    elif contract_ok and manifest_schema == SCHEMA_V2:
+    elif contract_ok and manifest_schema in {SCHEMA_V2, SCHEMA_V3}:
         teacher_result = _validate_teacher_result(dynamic, failures)
+        if manifest_schema == SCHEMA_V3 and not _process_summary_valid(dynamic.get("teacher_process_summary")):
+            _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
     # process-quality facts: computed for every manifest, but they only gate the legacy (v1) record, which is
     # rejected anyway; for a v2 run they are audit-only diagnostics beside the Teacher's result
     process: list[str] = []

@@ -60,7 +60,7 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
 #: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
 #: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
 _MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy", "execution_snapshot",
-                                "teacher_endpoint_v2", "teacher_execution_policy_v1", "teacher_execution_policy_v2",
+                                "teacher_endpoint_v2", "teacher_execution_policy_v1", "teacher_execution_policy_v2", "teacher_execution_policy_v3",
                                 "episode_recorder_v1"})
 #: The three policy bindings that replaced the endpoint_pose_v1 `endpoint_policy` (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
@@ -68,10 +68,11 @@ POLICY_BINDINGS = {
     "teacher_endpoint_v2": ("teacher_endpoint_v2.yaml", "config/act/teacher_endpoint_v2.yaml"),
     "teacher_execution_policy_v1": ("teacher_execution_policy_v1.yaml", "config/act/teacher_execution_policy_v1.yaml"),
     "teacher_execution_policy_v2": ("teacher_execution_policy_v2.yaml", "config/act/teacher_execution_policy_v2.yaml"),
+    "teacher_execution_policy_v3": ("teacher_execution_policy_v3.yaml", "config/act/teacher_execution_policy_v3.yaml"),
     "episode_recorder_v1": ("episode_recorder_v1.yaml", "config/act/episode_recorder_v1.yaml"),
 }
 #: the execution policy bindings and the policy schema each one holds (exactly one is frozen with an attempt)
-EXECUTION_POLICY_BINDINGS = {"teacher_execution_policy_v1": 1, "teacher_execution_policy_v2": 2}
+EXECUTION_POLICY_BINDINGS = {"teacher_execution_policy_v1": 1, "teacher_execution_policy_v2": 2, "teacher_execution_policy_v3": 3}
 _POLICY_BINDING_FIELDS = frozenset({"path", "file_sha256", "bytes", "policy_sha256", "values"})
 _MANIFEST_FIELDS = _MANIFEST_REQUIRED | _MANIFEST_OPTIONAL
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})

@@ -50,10 +50,15 @@ def prepare_dynamic_cup_scene(
     template: DynamicPickTemplate,
     geometry: TaskGeometry,
     scene: TaskScenePort,
+    *,
+    perception_gate: bool = True,
 ) -> TaskGeometry:
-    """Confirm simulator truth, update only the cup shadow, and read it back."""
+    """Confirm simulator truth, update only the cup shadow, and read it back.
 
-    validate_cup_against_simulator(sample, observation, template)
+    ``perception_gate=False`` (Teacher policy v3): the perceived pose is not compared with simulator truth (the difference is
+    recorded as telemetry); the MoveIt shadow is still built from it and read back."""
+
+    validate_cup_against_simulator(sample, observation, template, perception_gate=perception_gate)
     updated = geometry_with_cup_pose(geometry, sample.pose_world)
     applied = scene.apply_task_scene(updated)
     if not applied.success:

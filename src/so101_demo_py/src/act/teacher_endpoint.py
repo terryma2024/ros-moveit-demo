@@ -43,6 +43,12 @@ PLACE_HEIGHT_FIELDS = frozenset({
     "place_reference_offset_m",
 })
 EXECUTION_FIELDS_V2 = (EXECUTION_FIELDS - {"place_descend_offset_m"}) | PLACE_HEIGHT_FIELDS
+#: Policy v3 (CP-3502, CP-3504): the minimal runtime gates. The v2 fields plus the fixed dwells, the arm-stop wait of the release
+#: sequence and the provenance of the cup pose (broker RGB-D) and of the verdict (simulator truth).
+EXECUTION_SCHEMA_V3 = 3
+V3_NUMBER_FIELDS = ("grasp_stable_dwell_s", "release_settle_dwell_s", "arm_stop_wait_s", "arm_stop_velocity_rad_s")
+V3_PROVENANCE = {"cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
+EXECUTION_FIELDS_V3 = EXECUTION_FIELDS_V2 | frozenset(V3_NUMBER_FIELDS) | frozenset(V3_PROVENANCE)
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
 
@@ -102,7 +108,8 @@ def load_teacher_execution_policy(source) -> dict:
     if not isinstance(document, dict):
         raise ValueError(f"{code}: not the closed policy document")
     version = document.get("schema_version")
-    expected = {SCHEMA_VERSION: EXECUTION_FIELDS, EXECUTION_SCHEMA_V2: EXECUTION_FIELDS_V2}.get(version) if type(version) is int else None
+    expected = ({SCHEMA_VERSION: EXECUTION_FIELDS, EXECUTION_SCHEMA_V2: EXECUTION_FIELDS_V2,
+                 EXECUTION_SCHEMA_V3: EXECUTION_FIELDS_V3}.get(version) if type(version) is int else None)
     if expected is None or set(document) != expected:
         raise ValueError(f"{code}: not the closed policy document")
     if document["kind"] != EXECUTION_KIND:
@@ -146,6 +153,17 @@ def load_teacher_execution_policy(source) -> dict:
         PlaceHeightPolicy.from_document(policy)
     except (ValueError, TypeError, KeyError) as error:
         raise ValueError(f"{code}: {error}") from error
+    if version == EXECUTION_SCHEMA_V3:
+        for key in V3_NUMBER_FIELDS:
+            policy[key] = _real(document[key], key, code, allow_zero=False)
+        if not 0.0 < policy["arm_stop_wait_s"] <= 5.0 or not 0.0 < policy["arm_stop_velocity_rad_s"] <= 0.01:
+            raise ValueError(f"{code}: arm_stop_wait_s or arm_stop_velocity_rad_s is out of range")
+        if policy["grasp_stable_dwell_s"] > 5.0 or policy["release_settle_dwell_s"] > 5.0:
+            raise ValueError(f"{code}: a dwell exceeds 5 s")
+        for key, wanted in V3_PROVENANCE.items():
+            if document[key] != wanted:
+                raise ValueError(f"{code}: {key} is not {wanted}")
+            policy[key] = wanted
     return {**policy, "policy_sha256": _sha256(policy)}
 
 

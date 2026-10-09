@@ -221,6 +221,15 @@ def formal_episode(tmp_path):
         (root / name).mkdir(parents=True, exist_ok=True)
     (root / "scope.json").write_text("{}")
     (root / "inputs.json").write_text("{}")
+    # the sealed result carries the Teacher manifest the QC bound (the export rule of the oracle exclusion reads it; policy v2: no summary)
+    import hashlib
+    from test_act_qc_report_publication import report
+    manifest = root / "sealed" / "dynamic" / "dynamic-execute-manifest.json"
+    manifest.parent.mkdir()
+    manifest.write_text('{"schema": "so101-dynamic-mujoco-execute-v2"}')
+    qc = report()
+    qc["checks"]["teacher_reference_consistency"]["details"]["teacher_manifest_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    episode_qc.write_qc_report(qc, root / "sealed" / "qc-report.json")
     return dict(kind="ACT_COMMITTED_EPISODE", schema_version=2, scene_id="scene", status="PASSED", split="train",
                 journal_sha256="a" * 64, verifier_sha256="b" * 64, collection_evidence=evidence)
 

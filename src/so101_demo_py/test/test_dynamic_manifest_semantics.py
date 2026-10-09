@@ -437,7 +437,7 @@ def test_v2_pass_requires_a_completed_execution():
         validate(error, "ERROR")
 
 
-@pytest.mark.parametrize("schema", [None, "so101-dynamic-mujoco-execute-v3", "so101-dynamic-mujoco-execute-v0", 2])
+@pytest.mark.parametrize("schema", [None, "so101-dynamic-mujoco-execute-v4", "so101-dynamic-mujoco-execute-v0", 2])
 def test_unknown_or_missing_manifest_versions_are_rejected(schema):
     document = v2_done("PASS")
     if schema is None:

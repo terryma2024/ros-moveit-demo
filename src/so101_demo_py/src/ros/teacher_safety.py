@@ -81,7 +81,12 @@ class CollisionWatch:
     reset epoch are ignored; a frame of another session or a later epoch is invalid evidence and stops.
     """
 
-    def __init__(self, *, process_pairs, known_geoms, session_id: str, reset_epoch: int) -> None:
+    def __init__(self, *, process_pairs, known_geoms, session_id: str, reset_epoch: int, record_only: bool = False,
+                 tap=None, clock=time.monotonic) -> None:
+        self._clock = clock
+        #: Teacher policy v3: nothing latches. A pair outside the process pairs is offered to `tap.offer_collision`
+        #: and an unreadable frame to `tap.note_incomplete` (the facts become process telemetry, never a stop).
+        self._record_only, self._tap = record_only, tap
         self._process_pairs = frozenset(tuple(sorted(pair)) for pair in process_pairs)
         self._known = frozenset(known_geoms)
         self._session_id = session_id
@@ -93,6 +98,10 @@ class CollisionWatch:
         self._subscription = None
 
     def _latch(self, detail: str, step) -> None:
+        if self._record_only:
+            if self._tap is not None:
+                self._tap.note_incomplete("CONTACT_FRAME_UNREADABLE: " + detail[:80])
+            return None
         if self.hazard is None:
             self.hazard, self.detail, self.hazard_step = COLLISION_CODE, detail, step
 
@@ -106,15 +115,28 @@ class CollisionWatch:
             if frame["reset_epoch"] < self._reset_epoch:
                 return None  # a frame from before the reset boundary
             self.frames_seen += 1
+            if self._record_only and self._tap is not None:
+                self._tap.note_receipt("collision", self._clock())
             if frame["truncated"] is not False or frame["evidence_loss"] is not False:
-                return self._latch("contact frame truncated or lossy", step)
+                if self._record_only:
+                    self._latch("contact frame truncated or lossy", step)
+                else:
+                    return self._latch("contact frame truncated or lossy", step)
             arrays = [list(frame[key]) for key in ("geom_a", "geom_b", "signed_distance_m", "normal_force_n")]
             if len({len(item) for item in arrays}) != 1:
                 return self._latch("contact arrays differ in length", step)
-            for first, second in zip(arrays[0], arrays[1], strict=True):
+            for index, (first, second) in enumerate(zip(arrays[0], arrays[1], strict=True)):
                 if self._known and (first not in self._known or second not in self._known):
+                    if self._record_only:
+                        self._latch(f"unknown geometry {first}/{second}", step)
+                        continue
                     return self._latch(f"unknown geometry {first}/{second}", step)
                 if tuple(sorted((first, second))) not in self._process_pairs:
+                    if self._record_only:
+                        if self._tap is not None:
+                            self._tap.offer_collision(step, frame["simulation_time_s"], first, second,
+                                                      arrays[2][index], arrays[3][index])
+                        continue
                     return self._latch(f"pair {first} / {second}", step)
         except (KeyError, TypeError, ValueError):
             self._latch("frame invalid", None)
@@ -152,7 +174,10 @@ class PhysicsHazardWatch:
     """
 
     def __init__(self, *, session_id: str, reset_epoch: int, limits=None, state_getter=None,
-                 clock=time.monotonic) -> None:
+                 clock=time.monotonic, record_only: bool = False, tap=None) -> None:
+        #: Teacher policy v3: the watch still subscribes and counts, but nothing latches (no limit, no hazard). Every in-scope step
+        #: is offered to `tap.offer_step` and every gap or truncated sample to `tap.note_incomplete`.
+        self._record_only, self._tap = record_only, tap
         self._session_id, self._reset_epoch = session_id, reset_epoch
         self.hazard: str | None = None
         self.detail = ""
@@ -181,6 +206,8 @@ class PhysicsHazardWatch:
     def _gap(self, detail: str) -> None:
         self.gaps += 1
         self.gap_detail = detail
+        if self._tap is not None:
+            self._tap.note_incomplete("PHYSICS_" + detail.split(" ")[0].upper().rstrip(":"))
 
     def _limit(self, code: str, kind: str, value: float, limit: float, step: int) -> None:
         state = None if self._state_getter is None else self._state_getter()
@@ -193,7 +220,10 @@ class PhysicsHazardWatch:
     def accept_chunk(self, message) -> None:
         self.chunks_seen += 1
         limits = self.limits
-        if limits is not None:
+        tracking = limits is not None or self._record_only
+        if self._record_only and self._tap is not None:
+            self._tap.note_receipt("physics", self.clock())
+        if tracking:
             self.last_chunk_monotonic_s = self.clock()
             sequence = message.chunk_sequence
             if self._last_sequence is not None and sequence != self._last_sequence + 1:
@@ -205,13 +235,16 @@ class PhysicsHazardWatch:
             if item.simulation_session_id != self._session_id or item.reset_epoch != self._reset_epoch:
                 continue
             step = int(item.physics_step)
-            if limits is not None:
+            if self._tap is not None and not item.truncated:
+                self._tap.offer_step(step, item.simulation_time_s, item.total_normal_force_n,
+                                     max(item.left_fingertip_compression_m, item.right_fingertip_compression_m))
+            if tracking:
                 if self._last_step is not None and step != self._last_step + 1:
                     self._gap(f"physics_step {self._last_step} -> {step}")
                 self._last_step = step
                 if item.truncated is not False:
                     self._gap(f"truncated sample at physics step {step}")
-                elif self.limit_code is None:
+                elif limits is not None and self.limit_code is None:
                     force = item.total_normal_force_n
                     compression = max(item.left_fingertip_compression_m, item.right_fingertip_compression_m)
                     if force > limits.maximum_safe_force_n:
@@ -219,6 +252,8 @@ class PhysicsHazardWatch:
                     elif compression > limits.maximum_compression_distance_m:
                         self._limit(CUP_COMPRESSION_CODE, "compression_m", compression,
                                     limits.maximum_compression_distance_m, step)
+            if self._record_only:
+                continue
             if self.hazard is None and (item.static_shadow_crossed or item.diagnostic_hazard_breached):
                 name = "static_shadow_crossed" if item.static_shadow_crossed else "diagnostic_hazard_breached"
                 self.hazard, self.hazard_step = PHYSICS_HAZARD_CODE, step

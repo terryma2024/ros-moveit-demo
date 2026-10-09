@@ -40,6 +40,50 @@ def require_exported_dataset(output) -> dict:
     return manifest
 
 
+#: the directory a trainer receives: the export manifest (its digest is the dataset provenance) and the whitelisted samples only
+TRAINING_VIEW_SUFFIX = ".training-view"
+TRAINING_SAMPLES_FILE = "training-samples.json"
+
+
+def materialize_training_view(dataset, view, samples) -> Path:
+    """Write the training view: a copy of the export manifest and the whitelisted samples, atomically, once."""
+
+    view = Path(view)
+    view.mkdir(parents=True)
+    (view / "export-manifest.json").write_bytes((Path(dataset) / "export-manifest.json").read_bytes())
+    payload = (json.dumps({"kind": "act_training_samples", "schema_version": 1, "samples": samples}, sort_keys=True,
+                          indent=2, allow_nan=False) + chr(10)).encode()
+    temporary = view / (TRAINING_SAMPLES_FILE + ".partial")
+    with open(temporary, "wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    temporary.replace(view / TRAINING_SAMPLES_FILE)
+    return view
+
+
+def load_training_samples(output) -> list:
+    """The training samples of a verified export, read through the whitelist (observation and action only).
+
+    The export is re-verified (every episode hashes to its manifest entry), and each episode is read again through
+    `bundle.training_content`: a file edited together with its digest still cannot put an audit, contact, force or collision field
+    in front of the trainer. A sample is `{scene_id, split, rows}`; a flat content has no rows."""
+
+    from .bundle import training_content
+
+    manifest = require_exported_dataset(output)
+    root = Path(output)
+    samples = []
+    for episode in manifest["episodes"]:
+        content = training_content(json.loads((root / "episodes" / (episode["scene_id"] + ".json")).read_bytes()))
+        rows = content.get("rows")
+        if rows is None:
+            rows = ([{"observation": content["observation"], "action": content["action"]}]
+                    if "observation" in content and "action" in content else [])
+        samples.append({"scene_id": episode["scene_id"], "split": episode.get("split"), "rows": rows})
+    return samples
+
+
 def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output, trainer) -> dict:
     """Run the pre-flight gates, then the injected trainer, and record the terminal state."""
 
@@ -57,6 +101,12 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
     target = Path(output)
     if target.exists() or target.is_symlink():
         raise ValueError("TRAINING_OUTPUT_EXISTS")
+    # The trainer is given a training VIEW, never the export: the digests are re-checked and every episode is re-read through the
+    # whitelist (observation and action only), so no audit, contact, force or collision field can reach it.
+    view = target.with_name(target.name + TRAINING_VIEW_SUFFIX)
+    if view.exists() or view.is_symlink():
+        raise ValueError("TRAINING_OUTPUT_EXISTS")
+    samples = load_training_samples(dataset)
 
     state_path = target.with_name(target.name + ".state.json")
     disposition = {"schema_version": 1, "kind": "act_training_state", "status": "FAILED",
@@ -67,7 +117,8 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
                    "device": owner["device"], "run_root": owner["run_root"],
                    "episode_count": len(manifest["episodes"]), "error": None}
     try:
-        bundle = trainer(config, Path(dataset), target)
+        materialize_training_view(dataset, view, samples)
+        bundle = trainer(config, view, target)
         if not isinstance(bundle, dict) or bundle.get("kind") != "act_bundle":
             raise ValueError("TRAINING_BUNDLE_INVALID")
         disposition["status"] = "COMPLETED"

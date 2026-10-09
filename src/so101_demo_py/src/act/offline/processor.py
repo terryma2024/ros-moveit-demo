@@ -374,6 +374,21 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
         if qc.get("status") != "PASS":
             verdict = "INVALID"
             reasons_out.append("OFFLINE_QC_" + str(qc.get("status")) + ": " + str(qc.get("reason", ""))[:300])
+    if verdict == "VALID":
+        # Teacher policy v3: the process summary, the policy version and the provenance are copied beside the sealed episode (never
+        # into it). The data verdict is already decided; a manifest that cannot be copied is reported, not hidden.
+        try:
+            from ..teacher_process import write_metadata
+
+            metadata = write_metadata(teacher, out)
+            report["teacher_process"] = None if metadata is None else {
+                "teacher_execution_policy_version": metadata["teacher_execution_policy_version"],
+                "cup_pose_source": metadata["cup_pose_source"], "verdict_source": metadata["verdict_source"],
+                "summary_schema": metadata["teacher_process_summary_schema"],
+                "complete": metadata["teacher_process_summary"]["complete"],
+                "flags": metadata["teacher_process_summary"]["flags"]}
+        except (OSError, ValueError) as error:
+            report["teacher_process"] = {"error": str(error)[:300]}
     report["episode"] = {"root": str(episode_root), "seal_sha256": None if result["seal"] is None else result["seal"]["sha256"]}
     report.update(verdict=verdict, rc=RC_VALID if verdict == "VALID" else RC_INVALID, reasons=reasons_out)
     if camera_repair or teacher_clock_repair or ignore_scene_colors:

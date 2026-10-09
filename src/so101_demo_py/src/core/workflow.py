@@ -15,6 +15,8 @@ class WorkflowDefinition:
     terminal_states: frozenset[State]
     force_continue_states: frozenset[State]
     plan_only_states: frozenset[State]
+    #: failure codes that go straight to ERROR from any state (v1/v2: `TERMINAL_STOP_CODES`; v3: `TERMINAL_STOP_CODES_V3`)
+    terminal_stop_codes: frozenset[str] = frozenset()
 
 
 _TRANSITIONS = {
@@ -98,34 +100,6 @@ _PLAN_ONLY_STATES = frozenset(
 )
 
 
-SO101_WORKFLOW = WorkflowDefinition(
-    transitions=MappingProxyType(_TRANSITIONS),
-    action_states=_ACTION_STATES,
-    forward_states=_FORWARD_STATES,
-    terminal_states=_TERMINAL_STATES,
-    force_continue_states=frozenset({State.VALIDATION_FAILED}),
-    plan_only_states=_PLAN_ONLY_STATES,
-)
-
-
-def _validate(definition: WorkflowDefinition) -> None:
-    if set(definition.transitions) != set(State) - definition.terminal_states:
-        raise ValueError("every nonterminal state must have a transition")
-    if any(len(destinations) != 2 for destinations in definition.transitions.values()):
-        raise ValueError("every transition must have success and failure destinations")
-    if any(
-        destination not in State for pair in definition.transitions.values() for destination in pair
-    ):
-        raise ValueError("transition destination is unknown")
-    if State.VALIDATION_FAILED in definition.action_states:
-        raise ValueError("VALIDATION_FAILED cannot own an action")
-    if not definition.plan_only_states <= definition.action_states:
-        raise ValueError("plan-only states must own actions")
-
-
-_validate(SO101_WORKFLOW)
-
-
 # A failure with one of these codes is a protective stop, a deadline, a user stop or a cancel that never settled. It
 # ends the run: the failure destination is ERROR and no recovery goal (lift, move, open the gripper) is ever sent.
 # Only the other failures (a controller reject or abort, planning, scene) may take the original RECOVER_* route.
@@ -151,17 +125,98 @@ TERMINAL_STOP_CODES = frozenset({
 })
 
 
+SO101_WORKFLOW = WorkflowDefinition(
+    transitions=MappingProxyType(_TRANSITIONS),
+    action_states=_ACTION_STATES,
+    forward_states=_FORWARD_STATES,
+    terminal_states=_TERMINAL_STATES,
+    force_continue_states=frozenset({State.VALIDATION_FAILED}),
+    plan_only_states=_PLAN_ONLY_STATES,
+    terminal_stop_codes=TERMINAL_STOP_CODES,
+)
+
+
+def _validate(definition: WorkflowDefinition) -> None:
+    if set(definition.transitions) != set(State) - definition.terminal_states:
+        raise ValueError("every nonterminal state must have a transition")
+    if any(len(destinations) != 2 for destinations in definition.transitions.values()):
+        raise ValueError("every transition must have success and failure destinations")
+    if any(
+        destination not in State for pair in definition.transitions.values() for destination in pair
+    ):
+        raise ValueError("transition destination is unknown")
+    if State.VALIDATION_FAILED in definition.action_states:
+        raise ValueError("VALIDATION_FAILED cannot own an action")
+    if not definition.plan_only_states <= definition.action_states:
+        raise ValueError("plan-only states must own actions")
+
+
+_validate(SO101_WORKFLOW)
+
+# ---- workflow v3 (Teacher execution policy v3, design 2026-10-10-so101-teacher-minimal-runtime-gates) ---------------------------
+# The same forward states in the same order, so the success trace is identical to v1/v2, but: no RECOVER_* state and no
+# VALIDATION_FAILED (VERIFY_PHYSICAL_GRASP and VALIDATE_FINAL_PLACEMENT are record-only pass-throughs), and every failure of
+# every state goes straight to ERROR.
+_V3_FORWARD = tuple(state for state in _FORWARD_STATES if state is not State.VALIDATION_FAILED)
+_TRANSITIONS_V3 = {
+    state: (following, State.ERROR)
+    for state, following in zip(_V3_FORWARD, (*_V3_FORWARD[1:], State.DONE))
+}
+
+#: the only codes that are terminal stops in v3: the operator and watchdog, the unavailable joint state (the arm cannot be
+#: commanded blind) and the simulation-integrity codes. Every other failure is non-terminal and also goes to ERROR.
+SIM_INTEGRITY_CODES = frozenset({
+    "SIM_INTEGRITY_SESSION_MISMATCH",
+    "SIM_INTEGRITY_RESET_EPOCH_MISMATCH",
+    "SIM_INTEGRITY_NON_FINITE_STATE",
+    "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE",
+})
+TERMINAL_STOP_CODES_V3 = frozenset({
+    "TEACHER_DEADLINE",
+    "TEACHER_USER_STOP",
+    "TEACHER_PARENT_DIED",
+    "TEACHER_CANCEL_UNSETTLED",
+    "TEACHER_JOINT_STATE_UNAVAILABLE",
+}) | SIM_INTEGRITY_CODES
+
+SO101_WORKFLOW_V3 = WorkflowDefinition(
+    transitions=MappingProxyType(_TRANSITIONS_V3),
+    action_states=frozenset(_TRANSITIONS_V3) - {State.IDLE},
+    forward_states=_V3_FORWARD,
+    terminal_states=_TERMINAL_STATES,
+    force_continue_states=frozenset(),
+    plan_only_states=_PLAN_ONLY_STATES,
+    terminal_stop_codes=TERMINAL_STOP_CODES_V3,
+)
+
+
+def _validate_v3(definition: WorkflowDefinition) -> None:
+    states = set(definition.transitions)
+    if states != set(definition.forward_states):
+        raise ValueError("every forward state must have a transition and no other state may")
+    if any(state.name.startswith("RECOVER_") or state is State.VALIDATION_FAILED for state in states):
+        raise ValueError("workflow v3 has no recovery or validation-failed state")
+    for state, (success, failure) in definition.transitions.items():
+        if failure is not State.ERROR or (success not in states and success is not State.DONE):
+            raise ValueError("workflow v3 transitions must go forward or to ERROR")
+    if not definition.plan_only_states <= definition.action_states or State.IDLE in definition.action_states:
+        raise ValueError("plan-only states must own actions")
+
+
+_validate_v3(SO101_WORKFLOW_V3)
+
+
 def resolve_transition(
-    state: State, outcome: ActionStatus, failure: Failure | None = None
+    state: State, outcome: ActionStatus, failure: Failure | None = None, *, workflow: WorkflowDefinition = SO101_WORKFLOW
 ) -> State:
     """Return the success destination only for an explicit success outcome.
 
-    A terminal stop failure (`TERMINAL_STOP_CODES`) goes straight to ERROR from any state.
+    A terminal stop failure (the workflow's `terminal_stop_codes`) goes straight to ERROR from any state.
     """
     if (
         outcome is not ActionStatus.SUCCEEDED
         and failure is not None
-        and failure.code in TERMINAL_STOP_CODES
+        and failure.code in workflow.terminal_stop_codes
     ):
         return State.ERROR
-    return SO101_WORKFLOW.transitions[state][outcome is not ActionStatus.SUCCEEDED]
+    return workflow.transitions[state][outcome is not ActionStatus.SUCCEEDED]
