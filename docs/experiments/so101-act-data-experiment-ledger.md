@@ -33871,6 +33871,29 @@ before anything ran, and `exit 97` on mismatch. **The benchmark suite was exclud
 - **Three self-review passes, three findings, all fixed before the reviewer saw them:** a stale audit count (CP-1761), three figures that were true of a set but read as if of a file (CP-1762), and this one - **a number that was true one commit earlier than the sentence said it was.**
 - **State:** **frozen, indexed, audited; the review still the owner's to launch.** No controlled source change since the freeze; the goal stays active.
 
+## CP-1765 — Self-review, fourth pass: a cited log that could not be checked, and two absences verified
+
+- **What the pass did:** it tried to verify every source the packet points at, rather than the packet's prose.
+  | checked | result |
+  | --- | --- |
+  | `green-p14-full2.log` states `151 passed` | **yes** - but it is a `-q` run, so **it names no files**: the packet's "eleven suites" was not verifiable from the source it cited |
+  | the boundary logs and the training counters | **no `Train` / `Validation` / `Offline-Test` output in any of them**, consistent with the "0/0/0" statement |
+  | the demo leg's log and the live-stack claim | **zero occurrences of `rclpy`, `gz sim`, `gazebo`, `CUDA`** - consistent with "no live stack, no simulator session, no CUDA run" |
+- **Fixed by stating the command beside the log**, because a number whose command is not written down is a number, not evidence:
+  ```
+  pytest -q -p no:cacheprovider \
+    test/test_act_task8_nine_phase_case.py test/test_act_task8_sealed_artifact.py \
+    test/test_act_task8_sealed_raw_sources.py test/test_act_task8_live_epoch_and_edges.py \
+    test/test_act_task8_search_port.py test/test_act_task8_live_evidence.py \
+    test/test_act_task8_measurement_driver.py test/test_act_task8_calibration_aggregator.py \
+    test/test_act_task8_identity_contract_end_to_end.py test/test_act_task8_phase_camera_measurement.py \
+    test/test_act_task8_formal_measurement_entry.py
+  ```
+- **And the two absences are now stated as what they are:** *"no `Train`/`Validation`/`Offline-Test` output in the boundary logs"* and *"zero live-stack/CUDA markers in the demo leg's log"* are **weak evidence of absence** - they show the logs contain no such marker, not that no such thing ran - and the packet's wording was already careful ("no live stack ... was used"), so nothing needed changing. **Recording the distinction is the point: absence of a marker is not proof of absence, and this ledger should not let the two look alike.**
+- **Costs paid:** packet now **13265 bytes**; index re-synced; freeze rewritten and read back; audit green.
+- **Four self-review passes, four findings, all fixed before the reviewer saw them.**
+- **State:** **frozen, indexed, audited; the review still the owner's to launch.** No controlled source change since the freeze; the goal stays active.
+
 ## CP-1766 — Fifth self-review pass: the packet's cited number REPRODUCES, and the self-review has converged
 
 - **What the pass did that the previous four did not:** instead of reading the artefacts, it **ran the command the packet now states** and compared the result with the number the packet cites:
