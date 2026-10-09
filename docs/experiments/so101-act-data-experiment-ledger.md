@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3517
+latest_checkpoint: CP-3518
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3518 — follow-up batch done: pinned injected verdict + recorder stop escalation (0f5a65f62, gate GREEN 8088/0/178); live wrapper r14 reads back sealed ERROR runs
+
+- Item 1: the hook test pins validate → AttemptStatus.FAILED and e2e → "UNCONFIRMED" + ["E2E_TEACHER_TASK_NOT_PASSED"], plus a PASS negative control. The synthetic document gives exactly the live f6bc2e3d values. No RED is possible for a tightening (the loose assertion passed). sonnet-item1.L3yqBy2N: 17 passed.
+- Item 2: RawRecorder._stop_bag_process sends SIGINT and re-sends it every 2.0 s; SIGTERM at 8.0 s; SIGKILL at 15.0 s → RAW_BAG_CLOSE_TIMEOUT. It records stop_signals only when more than one signal was sent or the process was killed, and stop_log_tail (≤ 4 KiB) on a kill. A first-SIGINT exit returns unchanged stats.
+  - RED sonnet-red-stop.Hnu8TLU5: 4 failed, including the re-send case taking 15.0 s. GREEN sonnet-green-stop.BgiSwWGC: 26 passed (including rec13). Full gate sonnet-full-item.t1bRChn0: rc 0.
+  - Root risk check: could a re-sent SIGINT interrupt a slow live bag close? Live p11 T06 d902b92b (1.7 GB bag): "Pausing recording" → "Recording stopped" took 8 ms. Live closes complete far inside the 2 s re-send interval.
+- Item 3 (tooling, outside git): run-qualified-live-20261010-r14.zsh (65a584ba…) and live-r11.zsh (190580fb…). r13 (8ad96f54…) and live-r10 (a144c7d5…) are unchanged.
+  - Live rc 1 with a sealed v3 manifest → independent readback, expect INVALID; a failing readback exits 94. Nothing sealed → NO_READBACK + readback.not-run, never reported as a pass.
+  - Offline readback of f6bc2e3d: wrapper rc 0, readback rc 0, receipt PASS, expect INVALID, verify-commit PASS, QC NOT_APPLICABLE.
+  - The rc-1/nothing-sealed branch was not exercised on a real root (T20 had rc 4).
+- Remaining for the user to prioritise: CP-3517 items 4–7.
 
 ## CP-3517 — p11-claude-1010d step C: injected LIFT failure ends in a validating v3 ERROR manifest; T01–T06 6/6 PASS/VALID; v3 live acceptance items all met; follow-up batch dispatched
 
