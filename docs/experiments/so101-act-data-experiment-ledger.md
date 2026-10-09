@@ -69,11 +69,16 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3498
+latest_checkpoint: CP-3499
 next_experiment: user priority — Teacher place-stop (slower final approach / grasp geometry) or formal-collection design (randomized domain, reachability, carry-tilt sim, formal mode).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3499 — real-observable gate design: review 1 FAIL (grasp premise wrong, sub-resolution gates); revision 2 written → re-review
+
+- Review 1 (fresh Opus; GPT-6 Astra unavailable): FAIL. Key: finding 2 was wrong — the close at −0.0476 rad is "just closed" (0.23 N one side); the carry hold is a wedge formed at MICRO_LIFT; force ≈1.2 N/mrad vs command, viable window 0.4 mrad, one STS3215 count (≈1.5 mrad) spans the whole r10b force limit → a position-shaped close can't bound force and can drop the cup; the shaped close and the stall presence test can't both work; tracking error (kp 998 sim vs STS3215) can't be set from sim and the place unexpected-contact stop used the "undetectable" signal; h_rel ignored localizer bias; the emulator lacked bias/correlated noise/occlusion; new end states undefined (OPEN_NOT_REACHED → lifting a half-released cup); oracle demotion right but "bound by construction" insufficient without a torque limit → keep a catastrophic infrastructure abort; † thresholds unset; real-cell calibrations blocked (no driver).
+- Revision 2 (same file docs/superpowers/specs/2026-10-10-so101-teacher-real-observable-safety-gates-design.md): torque-limited close past contact (sim actuator-6 forcerange τ_grip in a versioned ACT model; real STS3215 Torque_Limit) with a far-command stall presence test (miss = at command; band covers 12-gon flats/corners, offset, quantization); tracking error diagnostic-only until a servo model exists; in-hand pose model (pick-anchored kinematics + wrist-camera relative pose with bias calibrated at pick) for carry/place, head camera only when unoccluded; micro-lift 10 mm with a lift-follows-TCP gate (t_lift 4 mm); hover release h_rel = h_min + b_z + 3σ ≈ 2–3 mm; release authorization from encoder stop + in-hand static + clearance band + tilt; post-stop source = wrist frames exposed after the stop (sim scene-frame matching removed); end states A–D defined (no arm motion after OPEN_NOT_REACHED); SIM_ORACLE_ABORT infrastructure status (≥11.60 N, collision penetration > 2 mm, non-finite), ON in collection, OFF in sweeps; §8 initial numbers; acceptance targets (0 misses / 500 on miss/drop/slip injections ≈ 0.6% bound, false stops ≤ 2%, release displacement ≤ 1%; live PASS ∧ oracle-clean ≥ 19/20); real-cell prerequisites listed; versioning (policy v3, TERMINAL_STOP_CODES, manifest validator per version, dataset partition by policy version).
 
 ## CP-3498 — inventory of Teacher checks done; real-observable safety-gate design drafted → independent review
 
