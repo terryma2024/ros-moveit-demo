@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3494
+latest_checkpoint: CP-3495
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3495 — camera pairing on image stamps + deep camera queues implemented (T05/T19 → VALID offline); lighter carry grip rejected by its own sweep; committed; confirmation round started
+
+- (b) scan.py pairs head/wrist on the image stamps; a lone camera_info loss with both images present is diagnostic (camera grid = union of infos; report paired_on, camera_info_pair_equal); no images → camera_info fallback. raw_recorder DEEP_RELIABLE adds camera_info depth 100 and images depth 50 (QoS overrides in the bag); cost at 640×480 10 Hz: 92.4 vs 92.5 MB, 0.59 s CPU both over 12 s; worst-case extra queue memory ≈90 MB. Offline: T05 1171b642 and T19 a0580eac → VALID rc 0; the 8 golden inputs keep their verdicts/reasons (only the new camera_grid keys differ). 4 RED→GREEN tests; gate 7,696 pass / 186 skip / rc 0; scratch install 100 pass. Backup p9-base.tar.gz (a5e2b59a…).
+- (a) Lighter carry grip — design doc 2026-10-10-teacher-lighter-carry-grip.md (not implemented). The model reproduces the live carry (hold 1.537 vs 1.5386 N; compression 97.5 µm; micro-lift single-side force 0.052 N ≈ the slip minimum). The carry force is a wedge (the cup hangs and rotates between the pads at MICRO_LIFT; at the end of CLOSE_GRIPPER only 0.23 N / 34 µm), not jaw squeeze: a calibrated-pose carry exists only in a 0.0004 rad window of gripper_close_target (97.1–97.5 µm); at −0.0468 the cup slips 10.5 mm, k leaves its band by 9 mm; at −0.0460 the cup is lost. Relaxing at the hover lowers force only at 0.016–0.024 rad, with tilt 10.6–13.8° (calibrated 3.0–5.5°) and 0/100 supported descents at 0.012–0.016. With a bounce modelled as a velocity kick (reproduces the live +34–40 µm → 132–137 µm, 111–115%), only relax 0.016 stays ≤ 85%, and it fails the undisturbed descent. ≤140 trials/setting.
+  Decision (CP-3394, the writer's recommendation): do not build. The remaining levers are a smaller bounce excursion (slower final approach) or a grasp-geometry change — a new initiative, left for the user to prioritise. Teacher place-stop status: ≈1 stop + 2 near-misses in 20 v2 runs; safety limits intact (the stop is a correct protection).
+- Evidence: sweep scripts/outputs copied to teacher-force-stop-20261009/p8/grip/.
+- Started: tmp/final-e8.zsh — cycle-r6 p9-claude-1010b + second demo + T01–T06 (collection on, live-r9) + L3–L7 (confirmation of the camera fixes and the release diagnostics on a fresh freeze).
 
 ## CP-3494 — round p8 issues diagnosed; decisions: lighter carry grip (design → review), camera pairing on image stamps + deep camera queues, release-source wait-for-evidence; release diagnostics extended (committed)
 

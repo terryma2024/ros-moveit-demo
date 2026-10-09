@@ -66,6 +66,32 @@ def test_an_image_lost_while_its_camera_info_arrived_is_a_topic_loss(tmp_path):
     assert any(r.startswith(f"OFFLINE_TOPIC_LOSS:{HEAD} ") for r in report["reasons"]), report["reasons"]
 
 
+WRIST_INFO = "/wrist_camera/camera_info"
+HEAD_INFO = "/head_camera/camera_info"
+
+
+def test_a_camera_info_lost_on_one_camera_with_both_images_present_is_diagnostic_only(tmp_path):
+    """CP-3494 (T05, T19 of the second v2 round): rosbag2 dropped one wrist camera_info; both images of that frame are in the bag."""
+    for topic in (WRIST_INFO, HEAD_INFO):
+        report = scan(tmp_path, name=topic.split("/")[1], drop=[(topic, 2)], transport_lost=1)
+        assert "OFFLINE_CAMERA_PAIR_STAMPS_DIFFER" not in report["reasons"], report["reasons"]
+        assert not any(r.startswith("OFFLINE_CAMERA_GRID") for r in report["reasons"]), report["reasons"]
+        grid = report["camera_grid"]
+        assert grid["head_wrist_equal"] is True and grid["paired_on"] == "images" and grid["camera_info_pair_equal"] is False
+
+
+def test_an_image_missing_on_one_camera_still_makes_the_pair_differ(tmp_path):
+    report = scan(tmp_path, drop=[(HEAD, 2)], transport_lost=1)
+    assert "OFFLINE_CAMERA_PAIR_STAMPS_DIFFER" in report["reasons"], report["reasons"]
+    assert report["camera_grid"]["head_wrist_equal"] is False
+
+
+def test_the_pair_falls_back_to_camera_info_when_the_bag_has_no_images(tmp_path):
+    report = scan(tmp_path, drop=[(WRIST_INFO, 2)], transport_lost=1, omit=(HEAD, "/wrist_camera/color"))
+    assert report["camera_grid"]["paired_on"] == "camera_info"
+    assert "OFFLINE_CAMERA_PAIR_STAMPS_DIFFER" in report["reasons"], report["reasons"]
+
+
 def test_planning_scene_reads_fewer_in_the_bag_than_the_sidecar_made_are_a_topic_loss(tmp_path):
     bag = build_bag(tmp_path / "raw")
     report = scan_bag(bag, transport_lost=0, scene_reads_expected=2)

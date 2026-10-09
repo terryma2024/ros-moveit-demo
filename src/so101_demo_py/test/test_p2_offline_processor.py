@@ -150,8 +150,14 @@ def test_a_gripper_gap_at_or_next_to_a_label_instant_is_invalid(tmp_path, index)
     assert "OFFLINE_SOURCE_GAP: /gripper_controller/controller_state gaps=1" in report["scan_reasons"]
 
 
+#: a camera frame that is really missing: the camera_info and the image of both cameras at one stamp (a camera_info lost on one
+#: camera with both images present is a diagnostic only, CP-3494)
+MISSING_CAMERA_FRAME = tuple((topic, 2) for topic in ("/head_camera/camera_info", "/wrist_camera/camera_info",
+                                                       "/head_camera/color", "/wrist_camera/color"))
+
+
 def test_a_camera_frame_missing_or_off_the_100_ms_grid_is_named_by_the_scan(tmp_path):
-    bag = build_bag(tmp_path / "raw", drop=(("/head_camera/camera_info", 2),))
+    bag = build_bag(tmp_path / "raw", drop=MISSING_CAMERA_FRAME)
     report, _ = run(tmp_path, bag)
     assert report["verdict"] == "INVALID"
     assert any(reason.startswith("OFFLINE_CAMERA_GRID") for reason in report["scan_reasons"])
@@ -382,7 +388,7 @@ def test_the_diagnostic_camera_repair_snaps_and_fills_and_counts_what_it_changed
 
 
 def test_a_diagnostic_run_is_never_a_valid_result_and_never_exit_code_0_or_3(tmp_path):
-    bag = build_bag(tmp_path / "raw", drop=(("/head_camera/camera_info", 2),))
+    bag = build_bag(tmp_path / "raw", drop=MISSING_CAMERA_FRAME)
     report, _ = run(tmp_path, bag, camera_repair=True)
     assert report["verdict"].startswith("DIAGNOSTIC_") and report["rc"] == 5
     assert set(report["diagnostic"]["camera_grid_repair"]) == {"snapped", "inserted"}

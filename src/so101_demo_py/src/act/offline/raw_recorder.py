@@ -52,7 +52,12 @@ CORE_TOPICS = ("/clock", "/head_camera/color", "/wrist_camera/color", "/so101/si
 #: slow subscriber. The world topic is left to rosbag2's own adaptation to the publisher (transient-local, 256 deep).
 DEEP_RELIABLE = {"/so101/simulation/physics_step_chunks": 1000, "/so101/simulation/robot_contacts": 10000,
                  "/arm_controller/controller_state": 20000, "/gripper_controller/controller_state": 20000,
-                 "/neck_controller/controller_state": 20000, "/clock": 20000}
+                 "/neck_controller/controller_state": 20000, "/clock": 20000,
+                 # CP-3494: a single wrist camera_info was lost on the transport layer in two runs of the second v2 round (rosbag2's
+                 # default queue is 10 deep): camera_info is tiny and the images are 10 Hz, so a deep queue costs memory only
+                 # while the recorder falls behind
+                 "/head_camera/camera_info": 100, "/wrist_camera/camera_info": 100,
+                 "/head_camera/color": 50, "/wrist_camera/color": 50}
 
 
 #: `debug` is what makes rosbag2 print the per-topic loss lines (there is no per-topic status at `info`).

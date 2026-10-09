@@ -189,14 +189,26 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     stop_ns = facts["normal_stop_sim_ns"]
     labels = []
     if reset_ns is not None and stop_ns is not None:
-        head = [s for s in cameras.get("/head_camera/camera_info", []) if reset_ns <= s <= stop_ns]
-        wrist = [s for s in cameras.get("/wrist_camera/camera_info", []) if reset_ns <= s <= stop_ns]
+        head_info = [s for s in cameras.get("/head_camera/camera_info", []) if reset_ns <= s <= stop_ns]
+        wrist_info = [s for s in cameras.get("/wrist_camera/camera_info", []) if reset_ns <= s <= stop_ns]
+        head_image = [s for s in color_stamps.get("/head_camera/color", []) if reset_ns <= s <= stop_ns]
+        wrist_image = [s for s in color_stamps.get("/wrist_camera/color", []) if reset_ns <= s <= stop_ns]
+        # CP-3494: the pair is judged on the IMAGE stamps (the frames the rows use). A camera_info lost on one camera while both
+        # paired images are present is a transport loss the topic-loss gate already reports (diagnostic): the camera grid is then the
+        # union of the two cameras' infos. Without images in the bag the camera_info pair decides, as before.
+        if head_image or wrist_image:
+            pair_equal = head_image == wrist_image
+            head = sorted(set(head_info) | set(wrist_info)) if pair_equal else head_info
+        else:
+            pair_equal = head_info == wrist_info
+            head = head_info
         off_grid = [[a, b] for a, b in zip(head, head[1:]) if b - a != CAMERA_PERIOD_NS]
         report["camera_grid"] = {"frames": len(head), "off_grid_count": len(off_grid), "first_off_grid": off_grid[:10],
-                                     "head_wrist_equal": head == wrist}
+                                     "head_wrist_equal": pair_equal, "paired_on": "images" if (head_image or wrist_image) else "camera_info",
+                                     "camera_info_pair_equal": head_info == wrist_info}
         if off_grid:
             reasons.append(f"OFFLINE_CAMERA_GRID: {len(off_grid)} intervals other than 100 ms (a +2 ms frame or a missing frame)")
-        if head != wrist:
+        if not pair_equal:
             reasons.append("OFFLINE_CAMERA_PAIR_STAMPS_DIFFER")
         labels = [s + CAMERA_PERIOD_NS for s in head]
 
