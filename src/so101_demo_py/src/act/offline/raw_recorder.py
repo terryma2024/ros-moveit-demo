@@ -31,6 +31,13 @@ from pathlib import Path
 READY_SCHEMA = "SO101_RAW_RECORDER_READY_V1"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS_V1"
 NODE_NAME = "so101_raw_recorder"
+#: CP-3517: how `stop` ends the bag process. A SIGINT that the recorder does not act on (two installed demo gates: its log ended at
+#: "Topics discovery started" and nothing followed for 15 s) is re-sent every STOP_SIGINT_RESEND_S, a SIGTERM follows at STOP_SIGTERM_AT_S,
+#: and the process group is killed at STOP_SIGKILL_AT_S (RAW_BAG_CLOSE_TIMEOUT). The tail of the recorder log is kept on a timeout.
+STOP_SIGINT_RESEND_S = 2.0
+STOP_SIGTERM_AT_S = 8.0
+STOP_SIGKILL_AT_S = 15.0
+STOP_LOG_TAIL_BYTES = 4096
 EVENTS_TOPIC = "/so101/teacher/events"
 SCENE_READS_TOPIC = "/so101/raw/planning_scene_reads"
 CAMERA_TOPICS = ("/head_camera/color", "/head_camera/camera_info", "/wrist_camera/color", "/wrist_camera/camera_info")
@@ -343,6 +350,56 @@ class RawRecorder:
                 return False, state
             sleep(0.05)
 
+    def _stop_bag_process(self, stats: dict) -> None:
+        """SIGINT now (as before), re-sent every STOP_SIGINT_RESEND_S, SIGTERM at STOP_SIGTERM_AT_S, SIGKILL at STOP_SIGKILL_AT_S.
+
+        A process that exits on the first SIGINT returns exactly what it always did. When more than one signal was needed, or the
+        process had to be killed, `stop_signals` lists what was sent and when; on a kill `stop_log_tail` holds the end of its log."""
+        process = self._recorder
+        began = time.monotonic()
+        sent: list[dict] = []
+
+        def send(number, name):
+            try:
+                os.killpg(process.pid, number)
+            except ProcessLookupError:
+                pass
+            sent.append({"signal": name, "at_s": round(time.monotonic() - began, 3)})
+
+        killed = False
+        if process.poll() is None:
+            send(signal.SIGINT, "SIGINT")
+            next_int, termed = began + STOP_SIGINT_RESEND_S, False
+            while process.poll() is None:
+                elapsed = time.monotonic() - began
+                if elapsed >= STOP_SIGKILL_AT_S:
+                    send(signal.SIGKILL, "SIGKILL")
+                    process.wait()
+                    killed = True
+                    break
+                if elapsed >= STOP_SIGTERM_AT_S:
+                    if not termed:
+                        send(signal.SIGTERM, "SIGTERM")
+                        termed = True
+                elif time.monotonic() >= next_int:
+                    send(signal.SIGINT, "SIGINT")
+                    next_int += STOP_SIGINT_RESEND_S
+                time.sleep(0.05)
+        if killed:
+            self.failure = "RAW_BAG_CLOSE_TIMEOUT"
+        else:
+            stats["bag_process_rc"] = process.poll()
+        if len(sent) > 1 or killed:
+            stats["stop_signals"] = sent
+        if killed:
+            try:
+                if self._log is not None:
+                    self._log.flush()
+                data = (self.bag_dir.parent / (self.bag_dir.name + "-record.log")).read_bytes()[-STOP_LOG_TAIL_BYTES:]
+                stats["stop_log_tail"] = data.decode("utf-8", errors="replace")[-STOP_LOG_TAIL_BYTES:]
+            except OSError:
+                stats["stop_log_tail"] = ""
+
     def stop(self) -> dict:
         """Stop recording, close the bag and read it back. Never raises."""
         stats = {"schema": STATS_SCHEMA, "failure": self.failure}
@@ -353,14 +410,7 @@ class RawRecorder:
                 deadline = time.monotonic() + 5.0
                 while (not self.bag_dir.exists() and self._recorder.poll() is None and time.monotonic() < deadline):
                     time.sleep(0.02)
-                if self._recorder.poll() is None:
-                    os.killpg(self._recorder.pid, signal.SIGINT)
-                try:
-                    stats["bag_process_rc"] = self._recorder.wait(timeout=15.0)
-                except subprocess.TimeoutExpired:
-                    os.killpg(self._recorder.pid, signal.SIGKILL)
-                    self._recorder.wait()
-                    self.failure = "RAW_BAG_CLOSE_TIMEOUT"
+                self._stop_bag_process(stats)
             self._recorder = None
             if self._log is not None:
                 self._log.close()

@@ -58,13 +58,24 @@ def test_the_hook_fires_once(tmp_path):
 
 
 def test_the_injected_failure_ends_in_a_v3_error_manifest_that_validates_with_the_cup_held(tmp_path):
+    """Pinned to the live verdict of p11 (injected case f6bc2e3d): validate -> FAILED, e2e -> UNCONFIRMED with exactly one failure."""
     from test_dynamic_manifest_v3 import v3_error, validate
     from so101_demo.application import e2e_acceptance as e2e
+    from so101_demo.parallel_batch.contracts import AttemptStatus
     document = v3_error("LIFT", failure=f"{CODE}: diagnostic injection", attached=True)
-    validate(document, "ERROR")
+    assert validate(document, "ERROR") is AttemptStatus.FAILED
     assert not any(item.startswith("RECOVER_") for item in document["state_trace"]) and document["state_trace"][-2:] == ["LIFT", "ERROR"]
     failures: list[str] = []
-    assert e2e._validate_teacher_result(document, failures) in ("UNCONFIRMED", "FAIL", None) or failures == []
+    assert e2e._validate_teacher_result(document, failures) == "UNCONFIRMED"
+    assert failures == ["E2E_TEACHER_TASK_NOT_PASSED"]
+
+
+def test_the_pinned_verdict_is_specific_to_a_failed_attempt(tmp_path):
+    """Negative control: a PASS document does not give the injected-failure values."""
+    from test_dynamic_manifest_v3 import v3_done
+    from so101_demo.application import e2e_acceptance as e2e
+    failures: list[str] = []
+    assert e2e._validate_teacher_result(v3_done(), failures) == "PASS" and failures == []
 
 
 # ---- (b) unset: no effect -----------------------------------------------------------------------------------------------------
