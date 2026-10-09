@@ -69,11 +69,21 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3492
+latest_checkpoint: CP-3493
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3493 — full live round p8-claude-1010a (1382bb9a3; policy v2; integer-ns evidence): T01–T20 17/20 VALID, Teacher 19/20; faults 4/5 as designed; recorder_absent Teacher compression stop at place
+
+- Cycle-r6 p8-claude-1010a rc 0; all gates pass first try; second demo rc 0. Same point every run (default anchor start (0.02,-0.28,0.165), place (-0.0803,-0.2468), seed 0, preselected_target_diagnostic) — a reliability round, not coverage.
+- T01–T20 (collection on, live-r9/r12): VALID + QC PASS + readback PASS in 17 runs (9a5d63e0, 3e332c5b, cc62777f, eb174a77, efa5b602, 87c3f7b9, 559d031a, 31ee305a, e6feea7b, 93f3ce52, 5621423b, 1694958b, cafb7395, 0ee05224, 24c932ab, 4deb408c, 904ea4c3); ≈385–399 s each.
+  - T05 1171b642 and T19 a0580eac: Teacher PASS, data INVALID OFFLINE_CAMERA_PAIR_STAMPS_DIFFER (new mode, 2/20).
+  - T09 72f5b3f7: Teacher STOPPED_SAFETY DYNAMIC_RELEASE_SOURCE_EXPIRED at the DETACH_MOVEIT boundary (recover path, then ERROR; with T06's SOURCE_UNAVAILABLE in the previous round = 2 release-source failures in 34 v2 runs).
+  None of the previous round's INVALID families recurred (INPUT_STALE, apply race, endpoint-initial, pre-window reads). Rates: VALID 85% (was 36%), Teacher 95%.
+- Faults: recorder_late 046e968e, queue_overflow a833293c, source_gap 9219d4e5, output_write_failure 3d3c9c38 → rc 3 + readback PASS as designed. recorder_absent 008b058f: rc 1 — Teacher STOPPED_SAFETY DYNAMIC_CUP_COMPRESSION_EXCEEDED in DESCEND_TO_PLACE (no recorder in that case → Teacher-side; the first place-phase safety stop under v2).
+- Next: diagnose (a) the v2 place compression stop, (b) camera pair stamps differ, (c) the release-source failures; then fix/decide and re-verify.
 
 ## CP-3492 — data-side fixes + evidence integer-ns cadence implemented; offline re-run of T01–T14: 11/14 VALID (was 5/14); committed; full live round (cycle-r6 + live-r9) started
 
