@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3495
-next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
+latest_checkpoint: CP-3496
+next_experiment: user priority — Teacher place-stop (slower final approach / grasp geometry) or formal-collection design (randomized domain, reachability, carry-tilt sim, formal mode).
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3496 — confirmation round p9-claude-1010b (dc7c9a9b6): T01–T06 6/6 VALID + readback PASS; faults 5/5 as designed
+
+- Cycle-r6 p9-claude-1010b rc 0; all gates first try; second demo rc 0.
+- T01–T06 (collection on, live-r9; same default point): b2f7bd57, ddd1858c, 96900ef4, 37504f5f, e61fa93e, 8f819d3b — all rc 0, Teacher PASS, VALID, QC PASS, independent readback rc 0; 386–393 s each.
+- Faults: recorder_absent 75c1ca56, recorder_late 88a9f4d4, queue_overflow c1a49c22, source_gap 1c7bd81d, output_write_failure 4fbf68e5 — all rc 3 (Teacher PASS, data INVALID) with readback rc 0.
+- Cumulative on the current code line (p8 + p9, 26 Teacher runs at the default point): Teacher 25/26 PASS (T09 release-source expiry; plus the p8 recorder_absent place compression stop = 2 Teacher stops in 31 Teacher runs incl. faults); data VALID 23/26 live (T05/T19 camera pairing since fixed → would be VALID offline).
+- Open (user to prioritise): Teacher place-stop reduction (slower final approach or grasp geometry; lighter grip rejected); release-source failure awaiting the next occurrence with the extended diagnostics; formal-collection gates (randomized domain + MoveIt/QuIK reachability, carry-tilt sim for the v2 tilt range, formal mode). Not pushed; submodule commit 16ca7bc59 is local only.
 
 ## CP-3495 — camera pairing on image stamps + deep camera queues implemented (T05/T19 → VALID offline); lighter carry grip rejected by its own sweep; committed; confirmation round started
 
