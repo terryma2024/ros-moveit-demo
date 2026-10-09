@@ -2303,7 +2303,7 @@ class RosDynamicMujocoExecution:
         return PoseEvidence((x, y, document["target_tcp_z_m"]), target.orientation_xyzw)
 
     def _measure_place_height(self) -> tuple[float, float]:
-        """(tilt rad, grasp offset m) of the held cup, from a stable window of fresh evidence: 100 ms of simulation whose tilt
+        """(tilt rad, grasp offset m) of the held cup, from a stable window of fresh evidence: at least 100 ms of simulation whose tilt
         range stays under 0.05 deg, within 1 s (else TEACHER_PLACE_TILT_UNSTABLE). ``k`` is the actual TCP height (forward
         kinematics of the actual joints, sag included) above the cup origin at the end of the window."""
 
@@ -2312,6 +2312,8 @@ class RosDynamicMujocoExecution:
 
         window: list[tuple[float, float, object]] = []
         last_sequence = -1
+        seen: list[tuple[float, float]] = []
+        widest_span_s = 0.0
         deadline = time.monotonic() + STABILITY_TIMEOUT_S
         while time.monotonic() < deadline:
             value = self._snapshot()
@@ -2319,10 +2321,18 @@ class RosDynamicMujocoExecution:
                 continue
             last_sequence = value.publisher_sequence
             self._enforce_safety(getattr(self, "_safety_state", None), value)
-            window.append((value.simulation_time_s, self._upright_tilt_rad(value.object_state.orientation_xyzw), value))
-            while window and value.simulation_time_s - window[0][0] > STABILITY_WINDOW_S + _WINDOW_TOLERANCE_S:
+            now_s = value.simulation_time_s
+            tilt = self._upright_tilt_rad(value.object_state.orientation_xyzw)
+            seen.append((now_s, tilt))
+            window.append((now_s, tilt, value))
+            # The window is the newest samples that cover at least STABILITY_WINDOW_S: drop the oldest while the next one is still
+            # old enough to start such a window. The evidence cadence (12 ms live) need not divide 100 ms, so a window that is cut
+            # back to at most 100 ms (the first version) never reaches it: live it stalled at 96 ms and every run refused.
+            while len(window) >= 2 and now_s - window[1][0] >= STABILITY_WINDOW_S - _WINDOW_TOLERANCE_S:
                 window.pop(0)
-            if value.simulation_time_s - window[0][0] >= STABILITY_WINDOW_S - _WINDOW_TOLERANCE_S:
+            span_s = now_s - window[0][0]
+            widest_span_s = max(widest_span_s, span_s)
+            if span_s >= STABILITY_WINDOW_S - _WINDOW_TOLERANCE_S:
                 tilts = [item[1] for item in window]
                 if max(tilts) - min(tilts) < STABILITY_RANGE_RAD:
                     cup_z = value.object_state.position_world[2]
@@ -2331,8 +2341,15 @@ class RosDynamicMujocoExecution:
                     self._require_fresh_joint_state()
                     tilts.sort()
                     return tilts[len(tilts) // 2], tcp_z - cup_z
-        raise PlaceHeightRefused(TILT_UNSTABLE, f"no {STABILITY_WINDOW_S * 1000:.0f} ms window with a tilt range under "
-                                 f"{math.degrees(STABILITY_RANGE_RAD):.2f} deg within {STABILITY_TIMEOUT_S:.0f} s")
+        tilts_seen = [item[1] for item in seen]
+        latest = [item[1] for item in window]
+        raise PlaceHeightRefused(
+            TILT_UNSTABLE,
+            f"no {STABILITY_WINDOW_S * 1000:.0f} ms window with a tilt range under {math.degrees(STABILITY_RANGE_RAD):.2f} deg "
+            f"within {STABILITY_TIMEOUT_S:.0f} s; samples {len(seen)}"
+            + (f", simulation span {seen[-1][0] - seen[0][0]:.3f} s, tilt range {math.degrees(max(tilts_seen) - min(tilts_seen)):.4f} deg, "
+               f"latest window {len(window)} samples over {window[-1][0] - window[0][0]:.3f} s with range "
+               f"{math.degrees(max(latest) - min(latest)):.4f} deg, widest window {widest_span_s:.3f} s" if seen else ", none received"))
 
     def _require_fresh_joint_state(self) -> None:
         """k is computed from the joint state: it must be younger than the execution policy's ``state_max_age_s``."""

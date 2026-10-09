@@ -3,6 +3,7 @@ calibration with a terminal stop and leaves the cup held, and a freeze can bind 
 
 import dataclasses
 import math
+import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from types import SimpleNamespace
@@ -214,11 +215,11 @@ def test_k_needs_a_fresh_joint_state(tmp_path):
         assert refusal.value.code == ph.MEASUREMENT_FAILED
 
 
-@pytest.mark.parametrize("step_s,closes", [(0.0099999, True), (0.01000005, True), (0.0100002, False), (0.0098, False)])
-def test_the_100_ms_window_is_inclusive_with_a_tolerance_on_both_sides(tmp_path, monkeypatch, step_s, closes):
-    """Ten steps spanning 0.1 s +- 1 us close the window (a sum of float steps is never exactly 0.1); a span further off, short or
-    long, does not."""
-    monkeypatch.setattr(ph, "STABILITY_TIMEOUT_S", 0.05)
+@pytest.mark.parametrize("step_s,count", [(0.0099999, 11), (0.01000005, 11), (0.0100002, 11), (0.0098, 12), (0.012, 10), (0.003, 35)])
+def test_the_window_is_at_least_100_ms_whatever_the_evidence_cadence(tmp_path, step_s, count):
+    """The first version cut the window back to at most 100 ms, so it only closed when a sample fell exactly 100 ms after its
+    oldest one. The live evidence arrives every 12 ms (96 ms or 108 ms, never 100): all 10 runs of the first live round refused.
+    The window is now the newest samples that cover at least 100 ms (minus 1 us), whatever the cadence."""
     value = v2_adapter(tmp_path)
 
     class Timed(SteppingObserver):
@@ -227,13 +228,70 @@ def test_the_100_ms_window_is_inclusive_with_a_tolerance_on_both_sides(tmp_path,
             return dataclasses.replace(base, simulation_time_s=self.count * step_s, publisher_sequence=self.count)
 
     value.observer = Timed(4.04)
-    if closes:
+    value._place_target(State.DESCEND_TO_PLACE, hover_target())
+    assert value.observer.count == count
+
+
+def test_a_window_shorter_than_100_ms_of_samples_is_not_enough(tmp_path, monkeypatch):
+    """The 1 s timeout (here 50 ms of wall time) ends a measurement whose samples never cover 100 ms of simulation."""
+    monkeypatch.setattr(ph, "STABILITY_TIMEOUT_S", 0.05)
+    value = v2_adapter(tmp_path)
+
+    class Slow(SteppingObserver):
+        def snapshot(self):
+            base = super().snapshot()
+            return dataclasses.replace(base, simulation_time_s=self.count * 1e-7, publisher_sequence=self.count)
+
+    value.observer = Slow(4.04)
+    with pytest.raises(ph.PlaceHeightRefused) as refusal:
         value._place_target(State.DESCEND_TO_PLACE, hover_target())
-        assert value.observer.count == 11
-    else:
-        with pytest.raises(ph.PlaceHeightRefused) as refusal:
-            value._place_target(State.DESCEND_TO_PLACE, hover_target())
-        assert refusal.value.code == ph.TILT_UNSTABLE
+    assert refusal.value.code == ph.TILT_UNSTABLE
+
+
+def test_the_refusal_says_how_many_samples_over_what_span_with_what_tilt_range(tmp_path, monkeypatch):
+    monkeypatch.setattr(ph, "STABILITY_TIMEOUT_S", 0.05)
+    value = v2_adapter(tmp_path, tilts=lambda n: 4.04 + (0.2 if n % 2 else -0.2))
+    with pytest.raises(ph.PlaceHeightRefused) as refusal:
+        value._place_target(State.DESCEND_TO_PLACE, hover_target())
+    detail = str(refusal.value)
+    assert re.search(r"samples \d+, simulation span \d+\.\d{3} s, tilt range 0\.4\d+ deg", detail), detail
+    assert "latest window" in detail and "widest window" in detail
+    assert value._document["place_height"]["detail"].startswith(ph.TILT_UNSTABLE)
+
+
+LIVE_INTERVAL = Path(__file__).parent / "place_height_live/run_3a7cb058_measurement_interval.json"
+
+
+def test_a_live_measurement_interval_that_every_first_round_run_refused_is_now_accepted(tmp_path):
+    """Replays the evidence of run 3a7cb058 (MOVE_ABOVE_PLACE finish to the refusal, 91 samples, 12 ms apart, tilt 4.03 deg
+    drifting 0.013 deg over 1.09 s) through the real measurement code. The tilt range over any 100 ms there is 0.002 deg, 25 times
+    under the criterion; the old window logic refused it, the new one accepts it at the 10th sample."""
+    import json
+
+    recorded = json.loads(LIVE_INTERVAL.read_text())
+    rows = recorded["samples"]
+    assert len(rows) == 91 and {round(rows[i + 1]["sim"] - rows[i]["sim"], 6) for i in range(90)} == {0.012}
+
+    class Replay:
+        def __init__(self):
+            self.index = 0
+
+        def snapshot(self):
+            row = rows[min(self.index, len(rows) - 1)]
+            self.index += 1
+            state = ObjectState(12, "plastic_cup", (0.02, -0.28, row["z"]), (row["qx"], row["qy"], row["qz"], row["qw"]),
+                                (0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+            return dataclasses.replace(evidence(step=row["step"]), object_state=state, simulation_time_s=row["sim"],
+                                       publisher_sequence=row["seq"])
+
+    value = v2_adapter(tmp_path, cup_z=rows[0]["z"])
+    value.observer = Replay()
+    target = value._place_target(State.DESCEND_TO_PLACE, hover_target())
+    document = value._document["place_height"]
+    assert "refused" not in document and value.observer.index <= 11
+    assert math.degrees(document["tilt_rad"]) == pytest.approx(4.03, abs=0.01)
+    assert target.position_m[2] == pytest.approx(document["target_tcp_z_m"], abs=1e-12)
+    ph.validate_document(document, ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(V2)))
 
 
 def test_v1_keeps_the_constant_offset_and_a_policy_without_either_refuses(tmp_path):

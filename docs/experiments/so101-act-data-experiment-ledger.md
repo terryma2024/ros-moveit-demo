@@ -69,11 +69,25 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3485
+latest_checkpoint: CP-3487
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3487 — v2 tilt-window defect fixed (12 ms evidence cadence never closed a 100 ms window); committed; re-freeze + T01–T20 + faults restarted
+
+- Cause: /so101/simulation/evidence arrives every 12 ms (6 × 2 ms steps); offline measure.py used 2 ms steps and the unit tests 10 ms. The window was cut back to ≤ 100 ms and then required to span ≥ 100 ms; at 12 ms spacing the span alternates 96/108 ms, so it always returned to 96 ms (max span 0.096 s in 10/10 bags). Ruled out in the bags: duplicate/stale samples (91/91 distinct), wall/sim time base (1.07–1.08 vs 1.08–1.09 s), the tilt formula (acos(1−2(x²+y²)) ≡ 2·asin(hypot(x,y))), motion (tilt 3.99–4.04°, drift 0.0124–0.0129° over 1.09 s; cup z 3 µm). The criteria (0.05°/100 ms/1 s) stand (the actual 100 ms range is ≈0.002°); no decision needed.
+- Fix: the window = the newest samples covering ≥ 100 ms (−1 µs); the oldest sample is dropped only while the rest still covers the window (tested range over 100–112 ms). Replay of all 10 bags accepts at the 9th sample (108 ms window). The refusal detail now reports samples, sim span, overall tilt range, latest window and widest window. Doc §2.4.
+- Tests: the live replay of the 91-sample interval of 3a7cb058 through the real _measure_place_height (fixture test/place_height_live/run_3a7cb058_measurement_interval.json) → accepted at 4.03°, the document validates; cadences 3/9.8/10/12 ms; <100 ms refused; the diagnostic text. RED: 5 fail on the old window. Gate 7,678 pass / 186 skip / rc 0; scratch install 290 pass. The policy v2 file is unchanged (eb9ea492…). Backup p5k2-base.tar.gz (19df8b66…). Bag series/replay copied to teacher-force-stop-20261009/q2live/ (original /tmp/so101-debug-cp3394-c5/q2live = deletion candidate).
+- Lesson: the offline analysis used a different sample cadence than the runtime; the live-replay fixture now pins the real cadence.
+- Restarted: tmp/final-e6.zsh = cycle-r6 p7-claude-1009c + second demo gate + T01–T20 (collection on) + L3–L7.
+
+## CP-3486 — freeze p7-claude-1009b (policy v2) gates PASS; T01–T10 all TEACHER_PLACE_TILT_UNSTABLE (fail-closed, cup held); batch stopped; diagnosis dispatched
+
+- Cycle-r6 p7-claude-1009b rc 0 (all gates + second demo rc 0).
+- T01–T10 (collection on; lives 3a7cb058, ed45e6db, 89976a4d, 037805e9, 07720de5, 1e142f74, ad5fd8a6, eba13ecb, d960a78d, 106f2190): every run rc 1, STOPPED_SAFETY, failure TEACHER_PLACE_TILT_UNSTABLE ("no 100 ms window with a tilt range under 0.05 deg within 1 s") at the start of DESCEND_TO_PLACE; the cup was held (the refusal path worked as designed); task UNCONFIRMED; data INVALID. This contradicts the offline bag analysis (window met immediately in 20/20) → a live/offline mismatch in the measurement (source, time base, tilt computation, motion state, or window logic).
+- The batch (tmp/final-e5.zsh) was stopped after T10; T11–T20 and the faults did not run. v2 is not deployable until fixed. Diagnosis + fix dispatched to the writer (replay a bag's measurement interval through the real code as a test; the criteria are not loosened without evidence + decision).
 
 ## CP-3485 — final-review changes implemented; δ (URDF vs MuJoCo TCP z) = 1.7e-13 mm; committed; freeze with policy v2 + 20 collection-on Teacher runs + faults started
 
