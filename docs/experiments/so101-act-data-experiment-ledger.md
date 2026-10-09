@@ -69,11 +69,30 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3522
+latest_checkpoint: CP-3523
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3523 — Phase A committed (fd94bf81f, gate 8133/0/178); user: U1 = wait for Head Search, U2 = prepare an unsigned draft; Phase C next
+
+- Phase A (root review of the diff):
+  - Allowlist: `INPUT_REFUSAL_PREFIXES = ("STALE_RGBD:", "STALE_RGBD_OR_TF:")` and `BROKER_CANDIDATE_AMBIGUOUS`, plus perception terminals intercepted after request_model and before admit_pose (`_InputUnavailable`). It applies only in EXECUTE mode, at boundary request_model, with no action started.
+  - D8f is committed only if `stopped and confirmed and _recorder_stopped(lease)`. Otherwise the worker is quarantined and today's path is kept.
+  - failure_origin_type is written only when set. `retire()` returns the recorder stop proof.
+  - rc 5 is decided by `_is_committed_input_refusal` before the rc-1 line.
+  - Tests: test_worker_input_refusals.py has 45 cases, RED sonnet-red-refusal.x5zzMqs8 (20 failed: exactly the behaviour changes) → GREEN 45. One existing test that pinned the old terminal flow was replaced on purpose. Full gate sonnet-full-refusal2.ZrzrOTSv rc 0, 8133/0/178.
+  - The gate runner now points at freeze 3SxS0GQW, because the cleanup removed qmtGo5Uj.
+  - Wrapper r15 (707336fc…) / live-r12 (254f9fb2…); r14 and live-r11 are unchanged. Offline check: f6bc2e3d gives identical results under r14 and r15; a synthetic rc 5 sealed root reads back 0; nothing sealed → NO_READBACK 93. The run-stage rc-5 branch has only been syntax-checked so far.
+  - Residual: `_recorder_stopped` returns True when the runtime has no `recorder_stop_proven` method. Production has the method.
+- User answers to the design questions (AskUserQuestion, 2026-10-10):
+  - U1 "Wait for Head Search": fixed_head_domain_v1 rejected; the nonhead formal rule stands. Phases B, D and E (formal sampling, pilot, campaign) wait for the Head Search merge; item 4 is BLOCKED on Head Search.
+  - U2 "Prepare a draft for me": the root prepares an unsigned user_activation receipt draft and the list of values to re-authorise.
+- Design §3.0 item 5: Phase C acceptance without formal data is a synthetic real-size export plus GPU smoke, and a read-only decode check on a real sealed p11 episode. The real-data smoke runs after the first formal campaign.
+- Dispatch:
+  - a fresh Sonnet executor for Phase C, the sole source writer;
+  - the existing executor for the U2 draft only (a document under the evidence root; no source).
 
 ## CP-3522 — independent design review FAIL (14 findings); revision 2; Phase A dispatched; two user decisions requested
 

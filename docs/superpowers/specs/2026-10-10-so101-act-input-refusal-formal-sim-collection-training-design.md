@@ -94,7 +94,12 @@ The cup pose is published to the Teacher only in `execute_expert` (`parallel_wor
 
 ### 2.0 Revision 2: blockers and required rework (§2.1–§2.6 below are revision 1 and are superseded where this list conflicts)
 
-**User decisions required before Phase B.** These cannot be taken under CP-3394.
+**User answers (2026-10-10).**
+
+- **U1: "Wait for Head Search".** `fixed_head_domain_v1` is rejected, and the nonhead formal rule stands. Phases B, D and E wait until Head Search calibration is merged; then this section is redesigned around `head_search_v1`.
+- **U2: "Prepare a draft for me".** The root prepares an unsigned activation-receipt draft and the list of values to re-authorise, for the user to sign before any formal live run.
+
+**User decisions required before Phase B (as asked).** These could not be taken under CP-3394.
 
 - **U1.** The nonhead design (§3, §9, §10) says formal mode keeps requiring Head Search qualification and that formal admission is not relaxed. A `fixed_head_domain_v1` provider relaxes a user-approved rule. It needs explicit user approval, or an instruction to wait for Head Search.
 - **U2.**
@@ -200,6 +205,14 @@ The cup pose is published to the Teacher only in `execute_expert` (`parallel_wor
    - `LerobotPolicy.infer` must normalise the state and de-normalise the actions using the bundle statistics. It applies none today (`lerobot.py:94-102`).
    - Verify against LeRobot 0.6.1, whose normalisation lives in separate processors.
    - A test proves that a degenerate-std dimension stays finite end to end.
+
+5. **Smoke acceptance without formal data (user decision U1 = wait for Head Search, 2026-10-10).** No exportable formal episodes will exist until Head Search lands, and diagnostic episodes stay non-exportable (`DIAGNOSTIC_EPISODE_NOT_TRAINABLE`). Phase C acceptance is therefore:
+   - the ordinary gate (training tests skip);
+   - the training gate under `train-venv`;
+   - a GPU smoke run of 500 steps on a synthetic dataset produced by the real export code from synthetic committed episodes with real-size frames (the frame size of the sealed p10/p11 episodes). The bundle hashes must verify, the loss must decrease, and `build_policy_from_bundle` must predict finite 6-wide actions;
+   - a read-only decode check: the D8 table decodes the frames of a real sealed p11 episode (no export), and the shape, dtype and state width match the config.
+
+   The real-data smoke moves to after the first formal campaign.
 
 ### 3.1 Today
 
