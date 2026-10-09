@@ -1800,8 +1800,15 @@ class RosDynamicMujocoExecution:
             if current:
                 facts["newest_evidence_step"] = current[-1].evidence.simulation_step
                 facts["newest_evidence_sequence"] = current[-1].evidence.publisher_sequence
+                facts["newest_evidence_age_s"] = now - current[-1].received_monotonic_s
             if pending_source is not None and not 0 <= now - pending_source.received_monotonic_s <= age:
-                raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
+                # the candidate aged out while its scene frame never matched (CP-3493: T09 of the second v2 round ended here, T06 of
+                # the first at the deadline): the same facts, so that a stalled executor (everything old) and a lost frame (newer
+                # frames present, this one absent) can be told apart
+                facts["ended_by"] = "pending_candidate_expired"
+                facts["pending_age_s"] = now - pending_source.received_monotonic_s
+                self._document["post_stop_source_unavailable"] = facts
+                raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED: " + json.dumps(facts, sort_keys=True, default=str))
             for received in ((pending_source,) if pending_source is not None else current):
                 source = received.evidence
                 if (source.simulation_session_id, source.reset_epoch) != (
@@ -1822,6 +1829,9 @@ class RosDynamicMujocoExecution:
                             break  # wait for this candidate's association, never skip to a later source
                         raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_INVALID") from error
                     facts["scene_steps_held"] = [frame["simulation_step"] for frame, _ in scenes][-8:]
+                    if scenes:
+                        facts["scene_newest_step"] = scenes[-1][0]["simulation_step"]
+                        facts["scene_newest_age_s"] = now - scenes[-1][1]
                     matched = [(frame, receipt) for frame, receipt in scenes if
                         (frame["simulation_session_id"], frame["reset_epoch"], frame["simulation_step"])
                         == (source.simulation_session_id, source.reset_epoch, source.simulation_step)]
@@ -1860,6 +1870,7 @@ class RosDynamicMujocoExecution:
             self._wait_progress()
         # the code stays DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE (what follows the colon is detail only); the facts say what the
         # loop was waiting for, so that the next occurrence can be explained (CP-3489)
+        facts["ended_by"] = "deadline"
         self._document["post_stop_source_unavailable"] = facts
         raise RuntimeError("DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE: " + json.dumps(facts, sort_keys=True, default=str))
 

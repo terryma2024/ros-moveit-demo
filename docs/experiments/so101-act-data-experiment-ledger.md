@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3493
+latest_checkpoint: CP-3494
 next_experiment: Teacher place force-stop investigation; perception risks for formal collection (randomized starts); formal collection design.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3494 — round p8 issues diagnosed; decisions: lighter carry grip (design → review), camera pairing on image stamps + deep camera queues, release-source wait-for-evidence; release diagnostics extended (committed)
+
+- (a) recorder_absent 008b058f DYNAMIC_CUP_COMPRESSION_EXCEEDED: the v2 target was correct (tilt 4.02°, k 37.462 mm, target z 0.204616; first contact at cup z 0.167692 vs predicted 0.167696; 19 v2 bags 0.16769–0.16772; travel after contact 0.708–0.769 mm → effective guard inside 0.4–1.0 mm). The mechanism is the contact-chatter bifurcation again: 47 ms after contact the cup bounced 23 µm off the table, the right fingertip lost contact, the left reached 139.0 µm vs the 119.28 µm limit (sum force only 0.77 N). Carry compression is already 97.5 µm in every run (81.7% of the limit) → ≈22 µm margin. v2 touchdown metrics (19 bags): contact speed 3.03 ± 0.03 mm/s (v1 3.42–3.47), travel 0.733 ± 0.017 mm (v1 0.943–0.958), peak above hold median 0.0405 N, table force at end 0.212 N (v1 0.262); 2 runs (efa5b602, 0ee05224) at 0.082 N above hold and 111.6–111.8 µm (94%) → 3/20 bifurcations under v2. v2 does not demonstrably reduce the rate (the v1 reference is thin).
+  Decision (CP-3394): the lever is the pre-touchdown margin → a lighter carry grip (hold 1.54 N vs a slip minimum ≈0.053 N): design doc → independent review → offline sweep (carry slip + touchdown) → live; v2 touchdown metrics keep being collected.
+- (b) T05/T19 OFFLINE_CAMERA_PAIR_STAMPS_DIFFER (scan.py:200, head/wrist camera_info stamps must match within [reset, normal stop]): exactly one /wrist_camera/camera_info message lost (rosbag2 logged a transport loss of that topic; images complete and paired). Seen in 7 earlier roots outside the window. Camera topics have the default depth-10 reliable QoS. Decisions (accept both): pair head/wrist on the image stamps (a camera_info loss with both images present is diagnostic only); add the camera topics to DEEP_RELIABLE (camera_info 100, images 50).
+- (c) T09 DYNAMIC_RELEASE_SOURCE_EXPIRED and T06 SOURCE_UNAVAILABLE share one mechanism: the first eligible candidate in _first_source_after_stop becomes pending, and its scene frame never matches in the Teacher's observer; the loop never skips a pending candidate → the deadline (UNAVAILABLE) or candidate expiry (EXPIRED). Bag replay of the real selection function with 0–15 ms receipt lags selects correctly within 9–15 ms → the cause is Teacher-side (lost frame or stalled executor). Fix (defect): the EXPIRED path now records the same facts as UNAVAILABLE + ended_by, pending age, newest evidence age, newest scene step/age (distinguishes a stall from a lost frame); code unchanged; test_act_dynamic_release_safety.py 31 pass; gate 7,692 pass / 186 skip / rc 0. Decision: wait for one more occurrence with these facts; if a lost frame → skip a pending candidate without a scene frame after ≈50 ms; if a stall → fix elsewhere.
+- Evidence: metrics/scripts copied to teacher-force-stop-20261009/p8/; backup p8-base.tar.gz (78d1e997…).
 
 ## CP-3493 — full live round p8-claude-1010a (1382bb9a3; policy v2; integer-ns evidence): T01–T20 17/20 VALID, Teacher 19/20; faults 4/5 as designed; recorder_absent Teacher compression stop at place
 

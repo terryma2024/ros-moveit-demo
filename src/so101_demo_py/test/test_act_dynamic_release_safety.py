@@ -307,3 +307,32 @@ def test_a_stale_scene_state_is_named_in_the_facts():
         value._supported_release_preflight()
     assert value._document["post_stop_source_unavailable"]["last_scene_error"] == "SCENE_STATE_STALE"
     assert commands == []
+
+
+def test_a_pending_candidate_that_ages_out_records_the_same_facts_with_the_same_code():
+    """CP-3493 (T09 of the second v2 round ended DYNAMIC_RELEASE_SOURCE_EXPIRED without the facts the deadline path records): a
+    candidate whose scene frame never arrives ends the search either at the deadline (UNAVAILABLE) or when it ages out (EXPIRED)."""
+    import json
+
+    value, selected, commands = boundary()
+    clock = value._monotonic
+    received = 10.04     # after the stop confirmation (10.03), 10 ms before the search starts (10.05)
+    # the candidate was received just after the stop; its frame never arrives; newer evidence keeps coming
+    value.observer.recent_with_receipts = lambda: (ReceivedSimulationEvidence(selected, received),
+                                                    ReceivedSimulationEvidence(replace(selected, simulation_step=502, publisher_sequence=7),
+                                                                               clock() - 0.001))
+    scene = value._scene_source_observer
+    with scene._lock:
+        scene._history.clear()
+    value._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
+    value._teacher_execution_policy = {**value._teacher_execution_policy, "state_max_age_s": 0.2}
+    value._joint_state_received_monotonic_s = 10.03
+    with pytest.raises(RuntimeError) as expired:
+        value._supported_release_preflight()
+    message = str(expired.value)
+    assert message.split(":")[0] == "DYNAMIC_RELEASE_SOURCE_EXPIRED"
+    facts = value._document["post_stop_source_unavailable"]
+    assert json.loads(message.split(": ", 1)[1]) == json.loads(json.dumps(facts, sort_keys=True, default=str))
+    assert facts["ended_by"] == "pending_candidate_expired" and facts["pending_step"] == 501 and facts["pending_age_s"] > 0.2
+    assert facts["newest_evidence_age_s"] is not None and facts["waiting_for_scene_frame"] >= 1
+    assert commands == [] and value._release_authorization is None
