@@ -1,7 +1,7 @@
 # SO-101 Teacher: real-observable safety gates (design, revision 3)
 
 Date: 2026-10-10
-Status: REVISION 3 (re-review 2: PASS-WITH-CHANGES, changes applied). Not implemented.
+Status: REVISION 3 (re-review 2: PASS-WITH-CHANGES, changes applied). Not implemented. SUPERSEDED for the current sim version by `2026-10-10-so101-teacher-minimal-runtime-gates-design.md` (CP-3501); kept as the reference for the real-cell phase.
 Ledger: CP-3497 (user request and assumptions), CP-3498 (draft 1), CP-3499 (review 1 FAIL, revision 2), CP-3500 (review 2 PASS-WITH-CHANGES, revision 3).
 Inventory used (row IDs S01–S14, B01–B18, P01–P23, E01–E02):
 `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/handoffs/teacher-act-decoupling-20261005.1RmsJ3ZJ/real-observable-gates-20261010/inventory.md`

@@ -69,11 +69,24 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3500
-next_experiment: user go-ahead for implementing the real-observable gate design (revision 3); then sweeps (τ_grip, carry tilt, drop), gates, oracle, live.
+latest_checkpoint: CP-3501
+next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3501 — user redirect: sim truth for the cup pose, minimal runtime gates, end-to-end verdict by the final cup pose; process data for strategy tuning only; minimal-gates design drafted
+
+- User (2026-10-10): "先不做这个，先从仿真取真值。后续把head camera换成rgb-d做位姿估计（这版先先不做） 中间过程减少判断，用最终的杯子位姿判断端到端成功。过程中的碰撞、感知数据用调整摘取策略，而不用于运行期安全门。" Also asked what the SIM_ORACLE_ABORT rules were (answered: ≥ 11.60 N summed/single force, collision penetration > 2 mm, non-finite state, 500 Hz unfiltered; design only, not implemented) — dropped by this redirect except simulation integrity.
+- Design: docs/superpowers/specs/2026-10-10-so101-teacher-minimal-runtime-gates-design.md.
+  - Runtime keeps: input integrity, planning/execution failures, MoveIt scene housekeeping, joint-state availability, operator/watchdog stops, simulation integrity (SIM_INTEGRITY_ABORT), end observation + teacher_endpoint_v2.
+  - Removed as gates (→ per-episode teacher_process_summary telemetry for pick-strategy tuning): force/compression/hazard (B09–B11), collision pairs (B13), release proofs (P13 proof part, P15, P16), grasp/micro-lift/VERIFY/carry/settle/final-placement proofs, place-height refusals.
+  - Place: the v2 target as a strategy with a v1 fallback (no refusal; mode recorded).
+  - No recovery chain in v3 (sim attempts start from a reset): an execution failure → cancel, hold, end (FAILED).
+  - Overload/collision episodes flagged, not filtered at collection.
+  - Policy v3; v1/v2 unchanged; the manifest validator gets a v3 branch.
+  - Acceptance: live 20 runs, end-to-end PASS ≥ 19/20, VALID ≥ 17/20, no SIM_INTEGRITY_ABORT; a telemetry report produced.
+- The revision-3 real-observable design is marked SUPERSEDED for the sim version (kept for the real-cell phase).
 
 ## CP-3500 — real-observable gate design: review 2 PASS-WITH-CHANGES; revision 3 applied (all 7 changes); awaiting user go-ahead for implementation
 
