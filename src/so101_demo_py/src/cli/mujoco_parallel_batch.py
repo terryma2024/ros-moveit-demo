@@ -2542,13 +2542,22 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     return worker, runtime
 
 
+def _worker_result_document(result):
+    """One result for worker-run-results.json. `failure_origin_type` (design 2026-10-10 section 1) is written only when it is set, so a
+    file without an input refusal is byte-for-byte what it always was and old readers never see a new key."""
+    document = _jsonable(result)
+    if document.get("failure_origin_type") is None:
+        document.pop("failure_origin_type", None)
+    return document
+
+
 def _write_worker_results(resources, results):
     path = resources.worker_root / "worker-run-results.json"
     _write_json(path, {
         "schema_version": 1,
         "worker_id": resources.worker_id,
         "worker_generation": resources.generation,
-        "results": [_jsonable(result) for result in results],
+        "results": [_worker_result_document(result) for result in results],
     })
     return path
 

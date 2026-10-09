@@ -30,6 +30,7 @@ from .contracts import (
     ValidationStatus,
     WorkerState,
 )
+from .perception import PerceptionError
 
 
 class WorkerError(RuntimeError):
@@ -67,6 +68,9 @@ class WorkerRunResult:
     failure_boundary: str | None = None
     failure_type: str | None = None
     failure_message: str | None = None
+    #: the type of the original input refusal when `failure_type` is `TeacherPreMotionRefused` (design 2026-10-10 section 1);
+    #: written to worker-run-results.json only when set, so readers of older files and writers are unaffected
+    failure_origin_type: str | None = None
 
 
 def adaptive_result_is_infrastructure(result: WorkerRunResult) -> bool:
@@ -100,6 +104,22 @@ def adaptive_result_is_infrastructure(result: WorkerRunResult) -> bool:
     ):
         return True
     return stopped_reason != "POINT_TERMINAL"
+
+
+class _InputUnavailable(Exception):
+    """A perception-terminal decision that `request_model` returned (not raised), carried to the refusal classification."""
+
+    def __init__(self, message: str, *, origin_type: str, failure_message: str) -> None:
+        super().__init__(message)
+        self.origin_type = origin_type
+        self.failure_message = failure_message
+
+
+#: The closed input-availability allowlist (design 2026-10-10 section 1.2): the only request_model outcomes that are committed as a
+#: pre-motion input refusal. Everything else (other PerceptionErrors, other BROKER_* codes, RUNNING_EVIDENCE_UNAVAILABLE, arbitrary
+#: exceptions) keeps the generic path.
+INPUT_REFUSAL_PREFIXES = ("STALE_RGBD:", "STALE_RGBD_OR_TF:")
+INPUT_REFUSAL_BROKER_CODE = "BROKER_CANDIDATE_AMBIGUOUS"
 
 
 def _bounded_failure_message(error: Exception) -> str:
@@ -926,6 +946,28 @@ class ParallelWorker:
         decision.act_data_reason = reason
         return decision
 
+    @staticmethod
+    def _input_refusal(error):
+        """(reason message, origin type, failure message) when `error` is on the closed allowlist, else None."""
+        if isinstance(error, _InputUnavailable):
+            return str(error), error.origin_type, error.failure_message
+        text = str(error)
+        if isinstance(error, PerceptionError) and text.startswith(INPUT_REFUSAL_PREFIXES):
+            return text, type(error).__name__, text
+        if isinstance(error, RuntimeError) and text.startswith(INPUT_REFUSAL_BROKER_CODE):
+            return text, type(error).__name__, text
+        return None
+
+    def _recorder_stopped(self, lease) -> bool:
+        """The recorder is proven stopped (process exited, stop stats written). A runtime without a recorder has nothing to prove."""
+        check = getattr(self._runtime, "recorder_stop_proven", None)
+        if check is None:
+            return True
+        try:
+            return check(lease) is True
+        except Exception:
+            return False
+
     def _safe_stop(self, lease, *, action_may_have_started):
         record = self._start_revocation(lease)
         record["event"].wait(self._config.heartbeat_timeout_s)
@@ -1240,6 +1282,17 @@ class ParallelWorker:
                         start_event_type=start_event_type,
                         reset_epoch=reset_epoch,
                     ))
+                if self._mode is RunMode.EXECUTE and getattr(chain, "perception_terminal", False) is True:
+                    # the perception-terminal decision is an input refusal before motion: intercepted before admit_pose
+                    disposition = getattr(chain, "disposition", None) or "UNKNOWN"
+                    terminal_reason = getattr(chain, "reason", None) or "UNKNOWN"
+                    origin = getattr(chain, "failure_type", None)
+                    detail = getattr(chain, "failure_message", None)
+                    raise _InputUnavailable(
+                        f"PERCEPTION_TERMINAL:{disposition} {terminal_reason}",
+                        origin_type=(origin if isinstance(origin, str) and origin else "PerceptionTerminal")[:128],
+                        failure_message=(detail if isinstance(detail, str) and detail
+                                         else f"PERCEPTION_TERMINAL:{disposition} {terminal_reason}"))
                 terminal_failure = None
                 if getattr(chain, "perception_terminal", False) is True:
                     failure_type = getattr(chain, "failure_type", None)
@@ -1273,8 +1326,29 @@ class ParallelWorker:
                 None if self._mode is RunMode.DRY_RUN else terminal_failure
             )
         except Exception as error:
-            decision, _, _, _ = self._safe_stop(
+            decision, _, stopped, confirmed = self._safe_stop(
                 lease, action_may_have_started=action_may_have_started)
+            refusal = (self._input_refusal(error)
+                       if self._mode is RunMode.EXECUTE and not action_may_have_started and failure_boundary == "request_model"
+                       else None)
+            if refusal is not None:
+                reason_message, origin_type, failure_message = refusal
+                if stopped and confirmed and self._recorder_stopped(lease):
+                    # the stop is proven and the recorder is proven stopped: commit the manifest-free D8f form
+                    refused = TeacherPreMotionRefused(f"INPUT_UNAVAILABLE {failure_boundary} {reason_message}")
+                    return self._pre_motion_decision(refused, decision), action_may_have_started, {
+                        "failure_boundary": failure_boundary,
+                        "failure_type": "TeacherPreMotionRefused",
+                        "failure_origin_type": origin_type[:128],
+                        "failure_message": _bounded_failure_message(RuntimeError(failure_message)),
+                    }
+                # not proven: today's unsealed path, and the worker is quarantined (a live bag must never write into a sealed result)
+                self._quarantined = True
+                return decision, action_may_have_started, {
+                    "failure_boundary": failure_boundary,
+                    "failure_type": origin_type[:128],
+                    "failure_message": _bounded_failure_message(RuntimeError(failure_message)),
+                }
             if (self._mode is RunMode.EXECUTE and isinstance(error, TeacherPreMotionRefused)
                     and not action_may_have_started):
                 # D8f: the start ACK exists and the Teacher was fenced (or its enable failed terminally)

@@ -681,28 +681,29 @@ def test_authorized_boundary_failure_reports_bounded_structured_diagnostic(
     assert fake.results.calls[0][2] == "AUTHORIZATION_OR_PORT_FAILURE"
 
 
-def test_broker_terminal_diagnostic_is_projected_without_changing_result_reason():
+def test_broker_terminal_diagnostic_is_projected_into_the_committed_input_refusal():
+    """Design 2026-10-10 section 1 (CP-3522): a perception-terminal decision is an input refusal before motion. It is committed in the
+    D8f form; the broker diagnostic stays in failure_message and its type moves to failure_origin_type."""
     fake = Fake(RunMode.EXECUTE)
     terminal = SimpleNamespace(
         perception_terminal=True,
+        disposition="INVALID",
+        reason="PERCEPTION_INFRA_ERROR",
         failure_type="BrokerResponse.INFRA_ERROR",
         failure_message="INPUT_OPENED_OWNER_MODE\n" + "é" * 600,
     )
     fake.broker.request_model = lambda *_args, **_kwargs: terminal
-    fake.runtime.execute_decision = Decision(
-        AttemptStatus.INVALID,
-        reason="PERCEPTION_INFRA_ERROR",
-        physical_action_proven_absent=True,
-    )
 
     result = ParallelWorker(fake.ports()).run_one()
 
     assert result.failure_boundary == "request_model"
-    assert result.failure_type == "BrokerResponse.INFRA_ERROR"
+    assert result.failure_type == "TeacherPreMotionRefused"
+    assert result.failure_origin_type == "BrokerResponse.INFRA_ERROR"
     assert result.failure_message.startswith("INPUT_OPENED_OWNER_MODE ")
     assert len(result.failure_message.encode("utf-8")) <= 512
     assert "\n" not in result.failure_message
-    assert fake.results.calls[0][2] == "PERCEPTION_INFRA_ERROR"
+    assert fake.results.calls[0][2].startswith(
+        "TEACHER_FENCED_BEFORE_MOTION:INPUT_UNAVAILABLE request_model PERCEPTION_TERMINAL:INVALID PERCEPTION_INFRA_ERROR")
 
 
 def expected_gate_summary(lease):

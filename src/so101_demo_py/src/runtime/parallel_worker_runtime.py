@@ -922,6 +922,8 @@ class ParallelWorkerRuntime:
         # before its Teacher and is processed offline afterwards, with the bounds frozen in episode_recorder_v1.
         self._collection = collection
         self._recorders: dict[tuple[object, ...], Any] = {}
+        #: lease key -> whether the recorder was proven stopped when the attempt was retired (design 2026-10-10 section 1.2)
+        self._recorder_stop_proofs: dict[tuple[object, ...], bool] = {}
         self._teacher_exit_callback: Callable[[], None] | None = None
         self._recorder_clock = recorder_clock
         self._recorder_sleep = recorder_sleep
@@ -1671,7 +1673,20 @@ class ParallelWorkerRuntime:
         """A cancelled attempt ends its bag recorder too, best effort: the data side never decides control's result."""
         collection = self._recorders.pop(key, None)
         if collection is not None:
-            collection.retire()
+            proven = False
+            try:
+                proven = collection.retire() is True
+            except Exception:   # noqa: BLE001 - the data side never decides control's result
+                proven = False
+            self._recorder_stop_proofs[key] = proven
+
+    def recorder_stop_proven(self, lease: Any) -> bool:
+        """Whether this attempt's bag recorder is proven stopped (process exited, stop stats written). A run without a recorder has
+        nothing to prove; a recorder that is still registered, or whose stop was not proven, is not proven."""
+        key = self._lease_key(lease)
+        if key in self._recorder_stop_proofs:
+            return self._recorder_stop_proofs[key]
+        return key not in self._recorders
 
     def record_revocation(
         self,

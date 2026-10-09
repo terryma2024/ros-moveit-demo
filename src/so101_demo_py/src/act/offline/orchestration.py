@@ -230,15 +230,23 @@ class OfflineCollection:
         except Exception as error:   # noqa: BLE001
             return {"bag_first_stamp_error": repr(error)[:120]}
 
-    def retire(self) -> None:
-        """A cancelled attempt ends its bag recorder too, best effort."""
+    def retire(self) -> bool:
+        """A cancelled attempt ends its bag recorder too, best effort. Returns whether the recorder is PROVEN stopped: its process
+        exited and its stop stats were written (design 2026-10-10 section 1.2). Nothing started is vacuously proven."""
+        from .raw_recorder import STATS_SCHEMA
         self.teacher_ended = True
         pilot = self._pilot
-        if pilot is not None:
-            try:
-                pilot.finish()
-            except Exception:   # noqa: BLE001
-                pass
+        if pilot is None:
+            return True
+        if getattr(pilot, "identity", "started") is None:
+            return True                                        # the recorder process was never started
+        try:
+            facts = pilot.finish()
+        except Exception:   # noqa: BLE001
+            return False
+        failure = facts.get("failure") if isinstance(facts, dict) else None
+        return (isinstance(facts, dict) and facts.get("rc") is not None and facts.get("schema") == STATS_SCHEMA
+                and not str(failure or "").startswith("RAW_PILOT_STOP_FAILED"))
 
     def finish(self, *, lease: dict, skip_processing: str | None = None, deadline_s: float | None = None) -> RecorderOutcome:
         """After the Teacher ended: close the bag, run the processor, map its verdict. Never raises.

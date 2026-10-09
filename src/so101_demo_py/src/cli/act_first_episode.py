@@ -429,6 +429,21 @@ def judge_readback_receipt(receipt, *, pid, live_root, expect) -> list:
     return problems
 
 
+#: the reason prefix a worker input refusal is committed under (worker.py, design 2026-10-10 section 1.2)
+INPUT_REFUSAL_REASON_PREFIX = 'TEACHER_FENCED_BEFORE_MOTION:INPUT_UNAVAILABLE'
+
+
+def _is_committed_input_refusal(proof) -> bool:
+    """All of: the D8f Teacher pair, data INVALID with QC NOT_RUN and not exportable, and the INPUT_UNAVAILABLE reason prefix.
+    (The cleanup verification has already passed when this is asked.) Anything else falls through to the existing exit codes."""
+    receipt = proof.get('receipt')
+    reason = receipt.get('act_data_reason') if isinstance(receipt, dict) else proof.get('act_data_reason')
+    return (proof.get('teacher_execution_status') == 'INDETERMINATE' and proof.get('teacher_task_result') == 'UNCONFIRMED'
+            and proof.get('act_data_status') == 'INVALID' and proof.get('act_data_qc') == 'NOT_RUN'
+            and proof.get('export_eligible') is False
+            and isinstance(reason, str) and reason.startswith(INPUT_REFUSAL_REASON_PREFIX))
+
+
 def _verified_run_completion(run_root):
     """Return success only after original native QC, commit and cleanup readback."""
     from ..act.result_store import (resolve_native_run, verify_coordinator_commit,
@@ -444,6 +459,14 @@ def _verified_run_completion(run_root):
         report = dict(teacher_result_status=proof['result_status'],
             teacher_task_result=proof.get('teacher_task_result'), act_data_qc=proof.get('act_data_qc'),
             export_eligible=proof['export_eligible'], result_location=str(context['location']))
+        if _is_committed_input_refusal(proof):
+            # exit 5 (design 2026-10-10 section 1.2): a worker input refusal before any motion, committed in the manifest-free D8f
+            # form. Not a Teacher failure (rc 1) and not an unsealed run (rc 4); the commit proof is kept for the readback.
+            receipt_path = Path(run_root) / 'commit-proof.json'
+            digest = write_commit_proof(proof, receipt_path)
+            report.update(receipt_path=str(receipt_path), receipt_sha256=digest,
+                          cleanup_proof_path=cleanup['cleanup_proof_path'])
+            return 5, dict(status='FAIL', reason='INPUT_UNAVAILABLE_BEFORE_MOTION', **report)
         if proof['result_status'] != 'PASSED':
             # exit 1: the Teacher itself did not pass; the data verdict stays in the report beside it
             return 1, dict(status='FAIL', reason='TEACHER_TASK_NOT_PASSED', **report)
