@@ -69,11 +69,96 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3518
+latest_checkpoint: CP-3522
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3522 — independent design review FAIL (14 findings); revision 2; Phase A dispatched; two user decisions requested
+
+- Review: fresh Opus, read-only. Confirmed: the pose is first published in execute_expert (parallel_worker_runtime.py:1571); the D8f seal is reachable (result_store.py:161, 379-380, 810-813); rc 5 is free (run uses 0/1/3/4; D8f today → rc 1 at act_first_episode.py:447); the lock pins torch 2.11.0+cu128 and lerobot 0.6.1. Findings:
+  - Blockers:
+    - (1) capacity: D5 ≈ 0.0171 m² holds only 35–41 points at a 0.02 m gap;
+    - (2) make_manifest needs all 5 splits and refuses failing candidates, so qualification must happen before the freeze via the existing Task 10 pipeline;
+    - (3) perception-terminal decisions (no cup / rejected / broker timeouts) return without raising and are also unsealable;
+    - (4) fixed_head_domain_v1 relaxes the user-approved nonhead §3/§9/§10 formal rule and needs user approval.
+  - Majors:
+    - (5) "every PerceptionError" would commit integrity faults as benign attempts; it must be a closed allowlist;
+    - (6) D8f must be sealed only when the stop and the recorder stop are confirmed;
+    - (7) formal needs a user-signed contact activation, re-authorised empirical values and a formal anchor approval;
+    - (8) the scope field breaks closed schemas at 7+ sites, so it moves to the inputs manifest;
+    - (9) export/training seams (index builder, content hash, split re-derivation, view lacks frames, frame digests, owner lease);
+    - (10) training config closed, neck std = 0, infer has no normalisation.
+  - Minors: (11)–(14).
+- Revision 2 of the design:
+  - §1 rewritten: allowlist STALE_RGBD / STALE_RGBD_OR_TF / BROKER_CANDIDATE_AMBIGUOUS / perception terminals; RUNNING_EVIDENCE_UNAVAILABLE excluded as infrastructure; commit only on a confirmed stop with the recorder proven stopped; bounded reason plus failure_origin_type; strict rc 5 conditions.
+  - §2.0 lists the user decisions U1/U2 and the rework.
+  - §3.0 lists the training rework.
+  - Phase 0 added.
+- Decision (CP-3394): Phase A (§1 revision 2) dispatched now. Phase C (training code + venv) may follow A, since it does not depend on U1/U2. Phase B and the formal live phases wait for the user (U1/U2), which CP-3394 cannot decide.
+
+## CP-3521 — evidence cleanup done under the user's explicit authorization (CP-3519): ~909.5 GB freed
+
+- df /data: 1,259.8 GB used / 651.8 GB free → 350.3 GB used / 1,561.3 GB free (root readback 327G / 19%).
+- Records: /data/work/so101-evidence/cleanup-20261010/ (inventory.tsv 5,560 entries with decision and reason; deleted.tsv; decisions.tsv; df-before/after).
+- No process held a deleted path (/proc scan before and after).
+- Deleted:
+
+  | Category | Entries | Size |
+  |---|---|---|
+  | scratch/ children | 2,542 | 596.8 GB |
+  | non-kept episode roots (including p8 and older) | 237 | 180.7 GB |
+  | other experiment dirs (including earlier "retained" goldens such as gate6-batch3-protocol-audit/golden) | 535 | 42.4 GB |
+  | resume-root dirs (broker-*, ipc*, gate-*, dispatch-receipts, ruff-tool-venv, …) | 1,840 | 22.6 GB |
+  | older freezes | 15 | 19.0 GB |
+  | non-kept plan roots | 121 | 5.0 GB |
+  | archived/ | 1 | — |
+
+  About 150 read-only paths were chmod-ed and removed on a second pass, with no failures.
+- Kept:
+  - 43 episode roots with their plan roots: p9 ×11, p10 ×25, p11 ×7 (96.6 GB + 1.85 GB).
+  - Freezes 3SxS0GQW and tYzeFiaX.
+  - handoffs (50.2 GB, kept whole), models, test-venv, i, deps, calibration, inputs, python-src, scripts.
+  - README and the empty scratch/.
+- Git worktrees: scratch/ab-worktree-b4175bf3a and merge-scratch/wt removed; 7 prunable entries pruned. Remaining: main, 20260924-pytest-opt-021323, so101-act-data-0917a, so101-unified-webapp.
+- Consequence: absolute evidence paths cited by ledger entries before CP-3490 (and p8 CP-3493 paths) now point at deleted data. Their conclusions stand as historical records; the evidence is gone. The kept freezes' copy-build-evidence-path.txt points into the emptied scratch/.
+- Possible further trim (not done): handoffs/ 50 GB (20260930-task7-onward, nonhead-first-episode-20260930).
+
+## CP-3520 — research for items 1/3/4 done; design written; independent design review dispatched
+
+- Research (read-only, Sonnet Explore):
+  - Item 1: request_model/admit_pose exceptions take the generic `except` at worker.py:1275, which produces an INVALID decision. seal_attempt rejects it, giving TERMINAL_ACK_FAILED, nothing sealed, and RESULT_RUN_CONTEXT_INVALID rc 4. The D8f manifest-free path (TeacherPreMotionRefused → _pre_motion_decision, worker.py:912-927) exists and is tested, but nothing in src raises it. v3 design §1 calls a broker failure an "input-availability refusal", §5b adds no status.
+  - Item 3:
+    - train_act_bundle was never defined (imported since 4857a2fda), and build_policy_from_bundle is also missing; train_with_lerobot has a different signature and an injected train callable.
+    - Nothing produces episode content for export. Training rows carry head_png/wrist_png path strings, while the runtime and _as_batch need head/wrist uint8 RGB arrays.
+    - No torch/lerobot venv exists (lerobot 0.6.1 only in the uv cache); requirements.lock is RESOLVED.
+  - Item 4:
+    - MODES = formal | preselected_target_diagnostic; run builds the same single task_start point for both; require_scope (HEAD_QUALIFICATION_REQUIRED for formal) is never called.
+    - No domain sampler, no domain reachability sweep, no points generator. export_eligible requires formal (result_store.py:33-39).
+    - The only domain spec is the CP-3479 proposal.
+- Design: docs/superpowers/specs/2026-10-10-so101-act-input-refusal-formal-sim-collection-training-design.md. Decisions D1–D8 (CP-3394, recommended):
+  - D1 commit input refusals through the D8f form; D2 reason prefix TEACHER_FENCED_BEFORE_MOTION:INPUT_UNAVAILABLE; D3 rc 5.
+  - D4 keep mode `formal` with scope target_provider ∈ {head_search_v1, fixed_head_domain_v1}; fixed-head visibility qualification replaces Head Search qualification for sim.
+  - D5 the CP-3479 domain; D6 carry-tilt as v3 telemetry plus export exclusion.
+  - D7 a separate train-venv from the lock; D8 one head_png→head / wrist_png→wrist decode table in the adapter.
+  - Phases A (item 1) → B (formal offline: sampler + qualification) → C (training code + venv) → D (freeze, 12-point pilot, export, smoke training) → E (full 50/10/10).
+- Independent review: a fresh Opus subagent, read-only, verifying the claims against the code.
+
+## CP-3519 — user (2026-10-10): authorize cleanup of /data/work/so101-evidence/; pull & rebase on main; solve open items 1, 3, 4
+
+- User: "1. 授权清理 /data/work/so101-evidence/  2. pull & rebase on main.  3. 解决 上面的 1，3，4". The items refer to the CP-3518 report list: (1) worker input refusals surface as TEACHER_USER_STOP with no manifest; (3) training side: missing train_act_bundle, head_png/wrist_png vs head/wrist; (4) formal collection mode, so data becomes exportable.
+- Git (root):
+  - Fetched origin and github. origin/main = github/main = 7a62d8e88 is already an ancestor of this branch (behind 0), so the branch needed no rebase onto remote main.
+  - Local main had one stray unpushed commit, 57ab6f6c3 (2026-09-30). It created a 23-line fragment of this ledger (CP-1765) on main from the wrong checkout. CP-1765 was missing from this branch's ledger, so it was inserted in place between CP-1764 and CP-1766 (0b8c2e405).
+  - Local main was then moved to origin/main with `reset --keep` (backup ref backup/main-57ab6f6c3).
+  - The main checkout's uncommitted AGENTS.md Sonnet-execution rule was re-applied on the new base. The patch was saved at /tmp/so101-debug-act-data-66c42e4c/main-AGENTS.md.patch. Both copies of AGENTS.md are now identical and uncommitted.
+  - Nothing pushed. origin/codex/so101-act-data-0917a stays diverged (ahead 3497 / behind 2332), untouched.
+- Cleanup: dispatched to the Sonnet executor under the user's explicit authorization. The policy:
+  - Keep: README, test-venv, python-src, i (if referenced), handoffs tooling, current freezes 3SxS0GQW and tYzeFiaX, p9/p10/p11 live evidence.
+  - Delete: scratch/ (including the detached A/B worktree via git worktree remove), older freezes, superseded episode and plan roots, and archived/.
+  - Inventory first; every deletion recorded in cleanup-20261010/deleted.tsv.
+- Items 1, 3, 4: read-only research dispatched; root designs follow, then Sonnet execution.
 
 ## CP-3518 — follow-up batch done: pinned injected verdict + recorder stop escalation (0f5a65f62, gate GREEN 8088/0/178); live wrapper r14 reads back sealed ERROR runs
 
