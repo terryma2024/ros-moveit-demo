@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from so101_demo.act.expert import MoveItExpertActionTap, CausalEpisodeCapture
+from audited_episode import audit_of, seal_audited
 from so101_demo.act.recorder import EpisodeRecorder, RecorderInfraError, require_grid, verify_episode_seal
 
 
@@ -109,7 +110,8 @@ def test_missing_reference_emits_no_training_row_or_image(tmp_path):
     with pytest.raises(ValueError, match="EXPERT_REFERENCE_UNAVAILABLE"):
         capture.append(observation(1.0), physical_audit)
     assert list((tmp_path / "episode/frames").iterdir()) == []
-    assert verify_episode_seal(recorder.finish(outcome("FAILED")))["record_count"] == 0
+    path, manifest, scope = seal_audited(recorder, tmp_path, outcome("FAILED"))
+    assert verify_episode_seal(path, audit_manifest=manifest, scope=scope)["record_count"] == 0
 
 
 def test_recorder_seals_lossless_rgb_and_keeps_audit_out_of_observation(tmp_path):
@@ -120,8 +122,8 @@ def test_recorder_seals_lossless_rgb_and_keeps_audit_out_of_observation(tmp_path
                                                         reference_positions=(0.1,) * 6))
     recorder.append(observation(1.2), (0.2,) * 6, audit(1.2, release_epoch=1,
         release_time_s=1.08, reference_positions=(0.2,) * 6))
-    seal_path = recorder.finish(outcome())
-    seal = verify_episode_seal(seal_path)
+    seal_path, manifest, scope = seal_audited(recorder, tmp_path, outcome())
+    seal = verify_episode_seal(seal_path, audit_manifest=manifest, scope=scope)
     assert seal["status"] == "PASSED" and seal["qc_passed"] is True
     assert seal["record_count"] == 3 and seal["committed"] is False
     rows = [json.loads(line) for line in (tmp_path / "episode/records.jsonl").read_text().splitlines()]
@@ -161,19 +163,22 @@ def test_action_must_equal_audited_controller_reference(tmp_path):
         recorder.append(observation(1.0), (0.5,) * 6, audit(1.0))
 
 
-def test_verifier_rejects_self_hashed_missing_frame_and_bad_reference(tmp_path):
+@pytest.mark.parametrize("tamper,expected", [("missing_frame", (ValueError, OSError)), ("bad_reference", ValueError)])
+def test_verifier_rejects_self_hashed_missing_frame_and_bad_reference(tmp_path, tamper, expected):
     import hashlib
     import so101_demo.act.recorder as recorder_module
 
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
     recorder.append(observation(1.0), (0.,) * 6, audit(1.0))
-    recorder.append(observation(1.1), (0.,) * 6, audit(1.1))
-    seal_path = recorder.finish(outcome())
+    recorder.append(observation(1.1), (0.,) * 6, audit(1.1, reference_positions=(0.,) * 6))
+    seal_path, manifest, scope = seal_audited(recorder, tmp_path, outcome())
     rows_path = seal_path.parent / "records.jsonl"
     rows = [json.loads(line) for line in rows_path.read_text().splitlines()]
-    rows[0]["observation"]["head_png"] = "frames/missing.png"
-    rows[1]["action"] = [0.5] * 6
+    if tamper == "missing_frame":
+        rows[0]["observation"]["head_png"] = "frames/missing.png"
+    else:
+        rows[1]["action"] = [0.5] * 6
     data = b"".join(recorder_module._canonical(row) + b"\n" for row in rows)
     rows_path.write_bytes(data)
     seal = json.loads(seal_path.read_bytes())
@@ -181,14 +186,17 @@ def test_verifier_rejects_self_hashed_missing_frame_and_bad_reference(tmp_path):
     seal["manifest_sha256"] = hashlib.sha256(recorder_module._canonical({
         key: value for key, value in seal.items() if key != "manifest_sha256"})).hexdigest()
     seal_path.write_bytes(recorder_module._canonical(seal) + b"\n")
-    with pytest.raises(ValueError, match="EPISODE_SEAL_FILES_INVALID"):
-        verify_episode_seal(seal_path)
+    with pytest.raises(expected) as caught:
+        verify_episode_seal(seal_path, audit_manifest=manifest, scope=scope)
+    if tamper == "bad_reference":
+        assert "EPISODE_SEAL_ROWS_MISMATCH" in str(caught.value)
 
 
 def test_business_failed_episode_can_seal_but_never_claims_training_qc(tmp_path):
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
-    seal = verify_episode_seal(recorder.finish(outcome("FAILED")))
+    path, manifest, scope = seal_audited(recorder, tmp_path, outcome("FAILED"))
+    seal = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
     assert seal["status"] == "FAILED" and seal["qc_passed"] is False
     assert seal["record_count"] == 0 and seal["committed"] is False
 
@@ -199,9 +207,10 @@ def test_fsync_failure_is_infrastructure_not_a_business_failed_seal(tmp_path, mo
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
     recorder.append(observation(1.0), (0.,) * 6, audit(1.0))
+    manifest, scope = audit_of(recorder, tmp_path)
     monkeypatch.setattr(recorder_module.os, "fsync", lambda fd: (_ for _ in ()).throw(OSError("disk failed")))
     with pytest.raises(RecorderInfraError, match="RECORDER_SEAL_FAILED"):
-        recorder.finish(outcome("FAILED"))
+        recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
     assert not (tmp_path / "episode/seal.json").exists()
 
 
@@ -245,7 +254,7 @@ def _audit_and_scope(tmp_path, *, session="session-1", attempt="attempt-1"):
     return manifest, scope
 
 
-def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
+def test_a_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
     manifest, scope = _audit_and_scope(tmp_path)
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
@@ -262,16 +271,6 @@ def test_a_v2_seal_names_the_raw_audit_and_the_collection_scope(tmp_path):
             verify_episode_seal(path, **incomplete)
     rechecked = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
     assert rechecked == document
-
-
-def test_a_seal_without_the_audit_stays_v1_and_readable(tmp_path):
-    """The old schema stays readable for audit; only the new closure is v2."""
-
-    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
-                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
-    document = verify_episode_seal(recorder.finish(outcome("FAILED")))
-    assert document["schema_version"] == 1
-    assert "audit_manifest_sha256" not in document and "scope_sha256" not in document
 
 
 def test_a_half_referenced_audit_is_refused(tmp_path):
@@ -295,7 +294,7 @@ def test_a_tampered_audit_cannot_be_sealed(tmp_path):
         recorder.finish(outcome("FAILED"), audit_manifest=manifest, scope=scope)
 
 
-def test_a_v2_seal_refuses_an_audit_that_changed_after_sealing(tmp_path):
+def test_a_seal_refuses_an_audit_that_changed_after_sealing(tmp_path):
     manifest, scope = _audit_and_scope(tmp_path)
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
                                attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
@@ -305,7 +304,7 @@ def test_a_v2_seal_refuses_an_audit_that_changed_after_sealing(tmp_path):
         verify_episode_seal(path, audit_manifest=manifest, scope=scope)
 
 
-def test_a_v2_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path, monkeypatch):
+def test_a_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path, monkeypatch):
     import os as os_module
     import stat
 
@@ -327,7 +326,7 @@ def test_a_v2_seal_fsyncs_the_referenced_files_and_the_parent_directory(tmp_path
     assert (recorder.root.parent.stat().st_ino, True) in synced
 
 
-def test_a_v2_seal_refuses_an_audit_of_another_episode(tmp_path):
+def test_a_seal_refuses_an_audit_of_another_episode(tmp_path):
     """A checksum-consistent seal naming a valid but unrelated audit is not evidence (T3-F4)."""
 
     manifest, scope = _audit_and_scope(tmp_path)
@@ -340,42 +339,6 @@ def test_a_v2_seal_refuses_an_audit_of_another_episode(tmp_path):
     # identity comparison behind that digest is exercised by the positive case above
     with pytest.raises(ValueError, match="EPISODE_SEAL_AUDIT_MISMATCH"):
         verify_episode_seal(path, audit_manifest=other, scope=other_scope)
-
-
-def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
-    """The seal field set is version-specific, so v2 digests cannot ride on a v1 document (T3-F4)."""
-
-    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
-                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
-    path = recorder.finish(outcome("FAILED"))
-    document = json.loads(path.read_bytes())
-    assert document["schema_version"] == 1
-    document["audit_manifest_sha256"] = "a" * 64
-    document["scope_sha256"] = "b" * 64
-    document.pop("manifest_sha256")
-    document["manifest_sha256"] = hashlib.sha256(
-        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
-    with pytest.raises(ValueError, match="EPISODE_SEAL_SCHEMA"):
-        verify_episode_seal(path)
-
-
-def test_a_rehashed_v1_seal_may_not_carry_v2_fields(tmp_path):
-    """The seal field set is version-specific, so v2 digests cannot ride on a v1 document (T3-F4)."""
-
-    recorder = EpisodeRecorder(tmp_path / "episode", session_id="session-1",
-                               attempt_id="attempt-1", reset_epoch=2, provenance=PROVENANCE)
-    path = recorder.finish(outcome("FAILED"))
-    document = json.loads(path.read_bytes())
-    assert document["schema_version"] == 1
-    document["audit_manifest_sha256"] = "a" * 64
-    document["scope_sha256"] = "b" * 64
-    document.pop("manifest_sha256")
-    document["manifest_sha256"] = hashlib.sha256(
-        json.dumps(document, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    path.write_bytes(json.dumps(document, sort_keys=True, separators=(",", ":")).encode())
-    with pytest.raises(ValueError, match="EPISODE_SEAL_SCHEMA"):
-        verify_episode_seal(path)
 
 
 def _multi_row_audit(tmp_path, instants, *, mismatched_pixels=False):
@@ -484,7 +447,8 @@ def test_a_raw_reference_port_still_writes_training_rows(tmp_path):
                 if key not in ("reference_time_s", "reference_source", "reference_positions")}
     capture.append(observation(1.0), physical)
     assert capture.raw_reference == raw
-    seal = verify_episode_seal(recorder.finish(outcome("FAILED")))
+    path, manifest, scope = seal_audited(recorder, tmp_path, outcome("FAILED"))
+    seal = verify_episode_seal(path, audit_manifest=manifest, scope=scope)
     assert seal["record_count"] == 1
     row = json.loads((tmp_path / "episode" / "records.jsonl").read_text().splitlines()[0])
     assert not set(capture._RAW_REFERENCE_KEYS) & set(row["audit"])

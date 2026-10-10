@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from act_result_teacher import sealed_teacher, write_manifest
+from so101_demo.act.collection_scope import write_collection_scope
+from so101_demo.act.episode_audit import EpisodeAuditWriter
 from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import (
     ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults, ResultInfraError,
@@ -18,6 +20,7 @@ from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, loa
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
+from test_act_seal_and_downgrade import IDENTITY, SCOPE
 
 
 PROVENANCE = {"source_sha256": "a" * 64, "scene_sha256": "b" * 64,
@@ -31,12 +34,27 @@ def lease():
                          lease_deadline_monotonic_s=20.)
 
 
-def failed_episode(store):
-    recorder = EpisodeRecorder(store.episode_root, session_id="session-1",
-                               attempt_id=store.lease.attempt_id, reset_epoch=2,
-                               provenance=PROVENANCE)
+def scope_of(tmp_path):
+    """The collection scope every episode of a test ran under, written once next to the worker roots."""
+    path = tmp_path / "collection-scope.json"
+    if not path.exists():
+        write_collection_scope(SCOPE, path)
+    return path
+
+
+def failed_episode(store, tmp_path, *, session_id="session-1"):
+    """A sealed business-failed episode with the audit it names, at the store's episode root."""
+    scope = scope_of(tmp_path)
+    recorder = EpisodeRecorder(store.episode_root, session_id=session_id,
+                               attempt_id=store.lease.attempt_id, reset_epoch=2, provenance=PROVENANCE)
+    identity = {**IDENTITY, "session_id": session_id, "attempt_id": store.lease.attempt_id,
+                "lease": asdict(store.lease)}
+    audit = EpisodeAuditWriter(store.episode_root, SCOPE, identity, {"inputs_sha256": "a" * 64}).seal(
+        {"start_s": 1., "end_s": 1., "label_cutoff_s": 1.})
+    store.audit_manifest, store.scope = audit, scope
     return recorder.finish({"status": "FAILED", "reason": "search_failed",
-                            "task8_success": False, "stopped_confirmed": True})
+                            "task8_success": False, "stopped_confirmed": True},
+                           audit_manifest=audit, scope=scope)
 
 
 def test_exact_lease_seal_verifies_and_discovers_only_reserved_workspace(tmp_path):
@@ -44,8 +62,8 @@ def test_exact_lease_seal_verifies_and_discovers_only_reserved_workspace(tmp_pat
     current = lease()
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
-    verifier = ActCollectionResultVerifier({"w00": worker_root})
+    sealed = store.seal(failed_episode(store, tmp_path), teacher=sealed_teacher(store, "FAILED"))
+    verifier = ActCollectionResultVerifier({"w00": worker_root}, scope=scope_of(tmp_path))
     result = verifier.verify(current, str(sealed), RunMode.EXECUTE)
     assert result["status"] == "FAILED" and len(result["sha256"]) == 64
     assert verifier.discover(current, workspace) == str(sealed)
@@ -59,8 +77,8 @@ def test_verifier_rejects_self_declared_late_completion_and_identity_tamper(tmp_
     worker_root = tmp_path / "w00"
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 19.)
-    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
-    verifier = ActCollectionResultVerifier({"w00": worker_root})
+    sealed = store.seal(failed_episode(store, tmp_path), teacher=sealed_teacher(store, "FAILED"))
+    verifier = ActCollectionResultVerifier({"w00": worker_root}, scope=scope_of(tmp_path))
     later = replace(current, lease_deadline_monotonic_s=18.)
     with pytest.raises(ValueError, match="RESULT_AFTER_LEASE_DEADLINE"):
         verifier.verify(later, str(sealed), RunMode.EXECUTE)
@@ -74,8 +92,8 @@ def test_episode_hash_and_business_status_are_independently_verified(tmp_path):
     worker_root = tmp_path / "w00"
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
-    verifier = ActCollectionResultVerifier({"w00": worker_root})
+    sealed = store.seal(failed_episode(store, tmp_path), teacher=sealed_teacher(store, "FAILED"))
+    verifier = ActCollectionResultVerifier({"w00": worker_root}, scope=scope_of(tmp_path))
     episode = sealed / "episode/seal.json"
     episode.write_text(episode.read_text() + " ")
     with pytest.raises(ValueError, match="EPISODE_SEAL_HASH_MISMATCH"):
@@ -87,8 +105,8 @@ def test_unsealed_directory_cannot_be_discovered_or_committed(tmp_path):
     worker_root = tmp_path / "w00"
     workspace = worker_root / "attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    failed_episode(store)
-    verifier = ActCollectionResultVerifier({"w00": worker_root})
+    failed_episode(store, tmp_path)
+    verifier = ActCollectionResultVerifier({"w00": worker_root}, scope=scope_of(tmp_path))
     assert verifier.discover(current, workspace) is None
     with pytest.raises(ValueError, match="LEASE_LOCATION_MISMATCH|RESULT_MISSING"):
         verifier.verify(current, str(store.episode_root.parent), RunMode.EXECUTE)
@@ -100,7 +118,7 @@ def test_corrupt_episode_marks_the_data_invalid_and_never_the_teacher_result(tmp
     current = lease()
     workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    episode_path = failed_episode(store)
+    episode_path = failed_episode(store, tmp_path)
     episode_path.write_text(episode_path.read_text() + " ")
     sealed = store.seal(episode_path, teacher=sealed_teacher(store, "FAILED"))
     result = json.loads((sealed / "result.json").read_bytes())
@@ -118,14 +136,14 @@ def test_worker_result_port_requires_decision_to_match_the_teacher_result(tmp_pa
     current = lease()
     workspace = tmp_path / "w00/attempts" / current.point_id / current.attempt_id
     store = ActCollectionResultStore(workspace, current, clock=lambda: 15.)
-    episode_path = failed_episode(store)
+    episode_path = failed_episode(store, tmp_path)
     fields = sealed_teacher(store, "FAILED")
     wrong = _decision(AttemptStatus.PASSED, fields, episode_path)
     with pytest.raises(ValueError, match="RESULT_TERMINAL_MISMATCH"):
         store.seal_attempt(current, wrong)
     right = _decision(AttemptStatus.FAILED, fields, episode_path)
     sealed = store.seal_attempt(current, right)
-    assert ActCollectionResultVerifier({"w00": tmp_path / "w00"}).verify(
+    assert ActCollectionResultVerifier({"w00": tmp_path / "w00"}, scope=scope_of(tmp_path)).verify(
         current, sealed, RunMode.EXECUTE)["status"] == "FAILED"
 
 
@@ -182,12 +200,8 @@ def test_worker_factory_requires_episode_scope_to_match_reset_receipt(tmp_path):
     current = lease()
     results = ActCollectionResults({"w00": tmp_path / "w00"}, clock=lambda: 15.)
     results.reserve_workspace(current, reset_receipt(current))
-    recorder = EpisodeRecorder(results.episode_root(current), session_id="wrong-session",
-                               attempt_id=current.attempt_id, reset_epoch=2,
-                               provenance=PROVENANCE)
-    path = recorder.finish({"status": "FAILED", "reason": "search_failed",
-                            "task8_success": False, "stopped_confirmed": True})
     store = results._store(current)
+    path = failed_episode(store, tmp_path, session_id="wrong-session")
     decision = _decision(AttemptStatus.FAILED, sealed_teacher(store, "FAILED"), path)
     # the episode of another session is a data problem: it is graded INVALID and the Teacher result is kept
     import json
@@ -201,7 +215,7 @@ def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
     journal = CoordinatorJournal.create(tmp_path / "journal", "batch-a")
     try:
         root = tmp_path / "w00"
-        verifier = ActCollectionResultVerifier({"w00": root})
+        verifier = ActCollectionResultVerifier({"w00": root}, scope=scope_of(tmp_path))
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
         config = load_parallel_runtime_config_v2(
@@ -225,7 +239,7 @@ def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
         store = ActCollectionResultStore(workspace, current, clock=lambda: 1.)
         with pytest.raises(ValueError, match="RESULT_MISSING"):
             coordinator.commit_result(current, str(workspace / "sealed"), request_key="result-1")
-        sealed = store.seal(failed_episode(store), teacher=sealed_teacher(store, "FAILED"))
+        sealed = store.seal(failed_episode(store, tmp_path), teacher=sealed_teacher(store, "FAILED"))
         result = coordinator.commit_result(current, str(sealed), request_key="result-1")
         assert result["status"] == "FAILED"
         assert coordinator.snapshot().points["scene-1"].terminal is True

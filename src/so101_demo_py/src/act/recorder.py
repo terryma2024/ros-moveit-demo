@@ -257,37 +257,35 @@ class EpisodeRecorder:
 
     def finish(self, outcome: dict, *, audit_manifest: Path | None = None,
                scope: Path | None = None) -> Path:
-        if (audit_manifest is None) != (scope is None):
-            # a v2 seal names both the raw audit and the scope it was collected under, or neither
+        if audit_manifest is None or scope is None:
+            # a seal names both the raw audit and the scope it was collected under
             raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
-        audit_block = None
-        if audit_manifest is not None:
-            audit_manifest, scope = Path(audit_manifest), Path(scope)
-            for target in (audit_manifest, scope):
-                if not target.is_absolute() or ".." in target.parts:
-                    raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
-            verify_audit_manifest(audit_manifest)
-            if not scope.is_file() or scope.is_symlink():
+        audit_manifest, scope = Path(audit_manifest), Path(scope)
+        for target in (audit_manifest, scope):
+            if not target.is_absolute() or ".." in target.parts:
                 raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
-            # the audit must belong to this episode, and the scope it names must be the scope handed in
-            with (audit_manifest.parent / "episode.json").open("rb") as stream:
-                audit_identity = json.loads(stream.read())
-            with (audit_manifest.parent / "source.json").open("rb") as stream:
-                audit_scope = json.loads(stream.read())
-            if (audit_identity.get("session_id") != self.session_id
-                    or audit_identity.get("attempt_id") != self.attempt_id
-                    or audit_identity.get("reset_epoch") != self.reset_epoch):
-                raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
-            with scope.open("rb") as stream:
-                scope_document = json.loads(stream.read())
-            if scope_document != audit_scope or _hash(scope.read_bytes()) != _hash(
-                    (audit_manifest.parent / "source.json").read_bytes()):
-                # the scope the seal names must be byte-for-byte the payload the audit recorded
-                raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
-            # one approved immutable scope payload: the audit's own source.json is the scope, and the
-            # seal names that same payload's digest under its own name for the file the caller supplied
-            audit_block = {"audit_manifest_sha256": _hash(audit_manifest.read_bytes()),
-                           "scope_sha256": _hash((audit_manifest.parent / "source.json").read_bytes())}
+        verify_audit_manifest(audit_manifest)
+        if not scope.is_file() or scope.is_symlink():
+            raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+        # the audit must belong to this episode, and the scope it names must be the scope handed in
+        with (audit_manifest.parent / "episode.json").open("rb") as stream:
+            audit_identity = json.loads(stream.read())
+        with (audit_manifest.parent / "source.json").open("rb") as stream:
+            audit_scope = json.loads(stream.read())
+        if (audit_identity.get("session_id") != self.session_id
+                or audit_identity.get("attempt_id") != self.attempt_id
+                or audit_identity.get("reset_epoch") != self.reset_epoch):
+            raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+        with scope.open("rb") as stream:
+            scope_document = json.loads(stream.read())
+        if scope_document != audit_scope or _hash(scope.read_bytes()) != _hash(
+                (audit_manifest.parent / "source.json").read_bytes()):
+            # the scope the seal names must be byte-for-byte the payload the audit recorded
+            raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
+        # one approved immutable scope payload: the audit's own source.json is the scope, and the
+        # seal names that same payload's digest under its own name for the file the caller supplied
+        audit_block = {"audit_manifest_sha256": _hash(audit_manifest.read_bytes()),
+                       "scope_sha256": _hash((audit_manifest.parent / "source.json").read_bytes())}
         if self._failed or self._closed:
             raise RecorderInfraError("RECORDER_NOT_SEALABLE")
         if not isinstance(outcome, dict) or set(outcome) != _OUTCOME_KEYS:
@@ -318,21 +316,20 @@ class EpisodeRecorder:
                 os.fsync(frames_fd)
             finally:
                 os.close(frames_fd)
-            if audit_block is not None:
-                # every referenced file and the parent directory are durable before the seal exists
-                for target in (audit_manifest, scope):
-                    fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
-                    try:
-                        os.fsync(fd)
-                    finally:
-                        os.close(fd)
-                parent_fd = os.open(self.root.parent, os.O_RDONLY | os.O_DIRECTORY)
+            # every referenced file and the parent directory are durable before the seal exists
+            for target in (audit_manifest, scope):
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
                 try:
-                    os.fsync(parent_fd)
+                    os.fsync(fd)
                 finally:
-                    os.close(parent_fd)
+                    os.close(fd)
+            parent_fd = os.open(self.root.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent_fd)
+            finally:
+                os.close(parent_fd)
             seal = {
-                "schema_version": 2 if audit_block is not None else 1,
+                "schema_version": 2,
                 "kind": "ACT_EPISODE_SEAL",
                 "status": outcome["status"], "reason": outcome["reason"],
                 "task8_success": outcome["task8_success"],
@@ -341,10 +338,8 @@ class EpisodeRecorder:
                 "attempt_id": self.attempt_id, "reset_epoch": self.reset_epoch,
                 "record_count": len(self._times), "provenance": self.provenance,
                 "files": dict(sorted(self._files.items())),
+                **audit_block,
             }
-            if audit_block is not None:
-                # the frozen v2 seal adds exactly these two digests to the existing closed keys
-                seal.update(audit_block)
             seal["manifest_sha256"] = _hash(_canonical(seal))
             data = _canonical(seal) + b"\n"
             fd, staging = tempfile.mkstemp(prefix=".seal.", dir=self.root)
@@ -386,13 +381,8 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
     keys = {"schema_version", "kind", "status", "reason", "task8_success",
             "stopped_confirmed", "qc_passed", "committed", "session_id",
             "attempt_id", "reset_epoch", "record_count", "provenance", "files",
-            "manifest_sha256"}
-    v2_keys = keys | {"audit_manifest_sha256", "scope_sha256"}
-    if not isinstance(document, dict) or set(document) not in (keys, v2_keys):
-        raise ValueError("EPISODE_SEAL_SCHEMA")
-    if set(document) != (v2_keys if document.get("schema_version") == 2 else keys):
-        # the field set is version-specific: a rehashed v1 document may not carry v2 digest fields and
-        # thereby skip their verification
+            "manifest_sha256", "audit_manifest_sha256", "scope_sha256"}
+    if not isinstance(document, dict) or set(document) != keys:
         raise ValueError("EPISODE_SEAL_SCHEMA")
     if source_bytes != _canonical(document) + b"\n":
         raise ValueError("EPISODE_SEAL_NONCANONICAL")
@@ -401,7 +391,7 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
     if digest != _hash(_canonical({key: value for key, value in document.items()
                                    if key != "manifest_sha256"})):
         raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
-    if (document["schema_version"] not in (1, 2) or document["kind"] != "ACT_EPISODE_SEAL"
+    if (document["schema_version"] != 2 or document["kind"] != "ACT_EPISODE_SEAL"
             or document["status"] not in ("PASSED", "FAILED")
             or document["committed"] is not False
             or document["stopped_confirmed"] is not True
@@ -425,70 +415,68 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         actual_hash, actual_size = _regular_hash(root / rel)
         if expected != {"sha256": actual_hash, "size": actual_size}:
             raise ValueError("EPISODE_FILE_HASH_MISMATCH")
-    if document["schema_version"] == 2:
-        # a v2 seal names the raw audit and the scope it was collected under
-        sha256(document["audit_manifest_sha256"])
-        sha256(document["scope_sha256"])
-        if audit_manifest is None or scope is None:
-            # a v2 seal is only verified when both artifacts are resolved; a caller that cannot supply
-            # them must not be able to mistake this call for verified evidence
-            raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
-        if True:
-            audit_manifest, scope = Path(audit_manifest), Path(scope)
-            if (not audit_manifest.is_file() or not scope.is_file()):
-                raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
-            if _hash(audit_manifest.read_bytes()) != document["audit_manifest_sha256"]:
-                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
-            if _hash(scope.read_bytes()) != document["scope_sha256"]:
-                raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
-            # and the audit must still verify end to end, not merely hash to the sealed digest
-            verify_audit_manifest(audit_manifest)
-            with (audit_manifest.parent / "episode.json").open("rb") as stream:
-                audit_identity = json.loads(stream.read())
-            if (audit_identity.get("session_id") != document["session_id"]
-                    or audit_identity.get("attempt_id") != document["attempt_id"]
-                    or audit_identity.get("reset_epoch") != document["reset_epoch"]):
-                # a checksum-consistent seal naming a valid but unrelated audit is still not evidence
-                raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
-            audit_document = json.loads(audit_manifest.read_bytes())
-            if _hash(scope.read_bytes()) != audit_document["scope_sha256"]:
-                # the scope handed to verification must be the payload the audit was collected under
-                raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
-            bindings = [json.loads(line)
-                        for line in (audit_manifest.parent / "row-bindings.jsonl")
-                        .read_text().splitlines()]
-            recorded = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
-            references = {record["sequence"]: record
-                          for record in (json.loads(line) for line in
-                                         (audit_manifest.parent / "references.jsonl")
-                                         .read_text().splitlines())}
-            acquisitions = {record["acquisition_id"]: record
-                            for record in (json.loads(line) for line in
-                                           (audit_manifest.parent / "acquisitions.jsonl")
-                                           .read_text().splitlines())}
-            if document["record_count"] == 0:
-                # a labelled binding means a training row was written, so a zero-row episode may not
-                # name one; raw unlabelled acquisitions are a different thing and stay allowed
-                if bindings:
-                    raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-            else:
-                # every recorded row must be bound to the acquisitions it consumed, at the same instant
-                # and to the reference its action actually claims
-                if len(bindings) != document["record_count"]:
-                    raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-                for row, binding in zip(recorded, bindings, strict=True):
-                    if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
-                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-                    named = references.get(binding["reference_sequence"])
-                    if named is None or list(row["action"]) != list(named["positions"]):
-                        raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
-                    for slot, png_key in (("head_acquisition_id", "head_png"),
-                                          ("wrist_acquisition_id", "wrist_png")):
-                        acquisition = acquisitions.get(binding[slot])
-                        if acquisition is None or _decoded_pixel_sha256(
-                                root / row["observation"][png_key]) != acquisition["pixel_sha256"]:
-                            # the stored lossless frame must be the frame that acquisition identified
-                            raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
+    # a seal names the raw audit and the scope it was collected under
+    sha256(document["audit_manifest_sha256"])
+    sha256(document["scope_sha256"])
+    if audit_manifest is None or scope is None:
+        # a seal is only verified when both artifacts are resolved; a caller that cannot supply
+        # them must not be able to mistake this call for verified evidence
+        raise ValueError("EPISODE_SEAL_AUDIT_INCOMPLETE")
+    audit_manifest, scope = Path(audit_manifest), Path(scope)
+    if (not audit_manifest.is_file() or not scope.is_file()):
+        raise ValueError("EPISODE_SEAL_AUDIT_INVALID")
+    if _hash(audit_manifest.read_bytes()) != document["audit_manifest_sha256"]:
+        raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+    if _hash(scope.read_bytes()) != document["scope_sha256"]:
+        raise ValueError("EPISODE_SEAL_AUDIT_MISMATCH")
+    # and the audit must still verify end to end, not merely hash to the sealed digest
+    verify_audit_manifest(audit_manifest)
+    with (audit_manifest.parent / "episode.json").open("rb") as stream:
+        audit_identity = json.loads(stream.read())
+    if (audit_identity.get("session_id") != document["session_id"]
+            or audit_identity.get("attempt_id") != document["attempt_id"]
+            or audit_identity.get("reset_epoch") != document["reset_epoch"]):
+        # a checksum-consistent seal naming a valid but unrelated audit is still not evidence
+        raise ValueError("EPISODE_SEAL_AUDIT_EPISODE_MISMATCH")
+    audit_document = json.loads(audit_manifest.read_bytes())
+    if _hash(scope.read_bytes()) != audit_document["scope_sha256"]:
+        # the scope handed to verification must be the payload the audit was collected under
+        raise ValueError("EPISODE_SEAL_AUDIT_SCOPE_MISMATCH")
+    bindings = [json.loads(line)
+                for line in (audit_manifest.parent / "row-bindings.jsonl")
+                .read_text().splitlines()]
+    recorded = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
+    references = {record["sequence"]: record
+                  for record in (json.loads(line) for line in
+                                 (audit_manifest.parent / "references.jsonl")
+                                 .read_text().splitlines())}
+    acquisitions = {record["acquisition_id"]: record
+                    for record in (json.loads(line) for line in
+                                   (audit_manifest.parent / "acquisitions.jsonl")
+                                   .read_text().splitlines())}
+    if document["record_count"] == 0:
+        # a labelled binding means a training row was written, so a zero-row episode may not
+        # name one; raw unlabelled acquisitions are a different thing and stay allowed
+        if bindings:
+            raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+    else:
+        # every recorded row must be bound to the acquisitions it consumed, at the same instant
+        # and to the reference its action actually claims
+        if len(bindings) != document["record_count"]:
+            raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+        for row, binding in zip(recorded, bindings, strict=True):
+            if binding["sim_time_s"] != row["observation"]["sim_time_s"]:
+                raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+            named = references.get(binding["reference_sequence"])
+            if named is None or list(row["action"]) != list(named["positions"]):
+                raise ValueError("EPISODE_SEAL_ROWS_MISMATCH")
+            for slot, png_key in (("head_acquisition_id", "head_png"),
+                                  ("wrist_acquisition_id", "wrist_png")):
+                acquisition = acquisitions.get(binding[slot])
+                if acquisition is None or _decoded_pixel_sha256(
+                        root / row["observation"][png_key]) != acquisition["pixel_sha256"]:
+                    # the stored lossless frame must be the frame that acquisition identified
+                    raise ValueError("EPISODE_SEAL_PIXELS_MISMATCH")
     rows = [json.loads(line) for line in (root / "records.jsonl").read_text().splitlines()]
     if len(rows) != document["record_count"]:
         raise ValueError("EPISODE_RECORD_COUNT_MISMATCH")

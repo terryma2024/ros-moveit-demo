@@ -4,6 +4,7 @@ import threading
 
 import pytest
 
+from audited_episode import audit_of
 from test_act_recorder import PROVENANCE, audit, observation, outcome
 
 POLICY = {"sample_rate_hz": 10, "queue_capacity_samples": 16,
@@ -25,8 +26,10 @@ def test_real_recorder_flushes_copied_original_pixels_before_sealing(tmp_path):
             expected = value["head"].copy()
             queue.append(value, (0.,) * 6, audit(t))
             value["head"][:] = 99  # producer may reuse its own buffer after accepted ingress
-        seal = queue.finish(outcome())
-        verified = verify_episode_seal(seal)
+        queue.flush()
+        manifest, scope = audit_of(recorder, tmp_path)
+        seal = queue.finish(outcome(), audit_manifest=manifest, scope=scope)
+        verified = verify_episode_seal(seal, audit_manifest=manifest, scope=scope)
         assert verified["record_count"] == 3
         from so101_demo.act.lossless_recorder import verify_queue_evidence
         verify_queue_evidence(queue.snapshot())
