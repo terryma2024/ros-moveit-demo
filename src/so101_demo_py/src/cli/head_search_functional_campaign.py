@@ -32,81 +32,61 @@ def select_terminal_image(events, result):
     return rows[0]
 
 
-def _validated_proof(proof):
-    # Reuse the strict wire predicate on the exact recorded fields.
-    from so101_demo.adapters.act.head_control_protocol import _PROOF, _FIELDS, parse_proof_record
-    if type(proof) is not dict:
-        raise ValueError('HEAD_FUNCTIONAL_PROOF_ABSENT')
-    values = []
-    for key in _FIELDS:
-        value = 0 if key.startswith('_reserved') else proof[key]
-        if type(value) is not int:
-            raise ValueError('HEAD_FUNCTIONAL_PROOF_TYPE')
-        values.append(value)
-    return parse_proof_record(_PROOF.pack(*values))
+_CONTROLLER_TYPE = 'so101_mujoco_support/HeadNeckTrajectoryController'
+_WINDOW_SAMPLES = 51
+_WINDOW_VELOCITY = 0.002
+
+
+def _complete_window(window):
+    """A stop window as recorded: 51 samples, both velocities within the bound."""
+    return (type(window) is dict and window.get('n') == _WINDOW_SAMPLES
+            and type(window.get('first_sim_ns')) is int and type(window.get('last_sim_ns')) is int
+            and window['first_sim_ns'] < window['last_sim_ns']
+            and all(type(window.get(key)) in (int, float) and 0 <= window[key] <= _WINDOW_VELOCITY
+                    for key in ('max_abs_feedback_velocity', 'max_abs_reference_velocity')))
 
 
 def _startup_complete(facts):
-    from so101_demo.adapters.act.head_control_protocol import identity_fields
+    """Startup protocol v2: the subclass readback, the armed dead-man, the graph, the windows and the close."""
     protocol = facts['startup_protocol']
     if protocol.get('seal_verified') is not True:
         return False
+
     def one(kind):
         rows = protocol[kind]
         if type(rows) is not list or len(rows) != 1 or type(rows[0]) is not dict:
             raise ValueError('HEAD_FUNCTIONAL_STARTUP_CARDINALITY')
         return rows[0]
-    bootstrap = one('BOOTSTRAP_IDENTITY')
-    generation = bootstrap['generation']
-    if type(generation) is not int or generation <= 0:
+    readback = one('CONTROLLER_READBACK')
+    activation = readback.get('activation_id')
+    if (readback.get('controller_type') != _CONTROLLER_TYPE or readback.get('state') != 'active'
+            or type(activation) is not str or not activation
+            or type(readback.get('parameters')) is not dict):
         return False
-    scope = identity_fields(bootstrap, generation)
-    owner = bootstrap['native_owner']
-    if (type(owner) is not dict or set(owner) != {'uid', 'pid', 'start_ticks'}
-            or any(type(value) is not int for value in owner.values())
-            or not 0 <= owner['uid'] < 2**32 or not 0 < owner['pid'] < 2**31
-            or not 0 < owner['start_ticks'] < 2**64
-            or bootstrap.get('status') != 'AVAILABLE'
-            or bootstrap.get('ack_validated') is not True):
+    armed = one('DEADMAN_ARMED')
+    if (armed.get('activation_id') != activation or type(armed.get('peer_pid')) is not int
+            or armed['peer_pid'] <= 0 or type(armed.get('socket_path')) is not str
+            or not armed['socket_path'].endswith(f'neck-{activation}.sock')
+            or armed.get('head_deadman_period_s') != 0.02 or armed.get('head_deadman_timeout_s') != 0.2):
         return False
-    statuses = protocol['PREARM_STATUS']
-    if type(statuses) is not list or not statuses:
+    graph = one('GRAPH_PROOF')
+    if type(graph.get('own_gids')) is not dict or type(graph.get('allowed_node_names')) is not list:
         return False
-    ready_id = None
-    for index, status in enumerate(statuses):
-        if (identity_fields(status, generation) != scope or status.get('native_owner') != owner
-                or status.get('gate_reason') != 0 or type(status.get('stored_generation')) is not int
-                or not 0 <= status['stored_generation'] < generation):
-            return False
-        proof = _validated_proof(status['proof'])
-        last = index == len(statuses)-1
-        expected = 'READY' if last else 'NOT_READY'
-        if (status.get('status') != expected or status.get('native_status') != (0 if last else 1)
-                or (proof['wrapper_reason'] == 0) != last
-                or proof['wrapper_reason'] in (7, 8)):
-            return False
-        if last:
-            ready_id = proof['evaluation_id']
-    arm = one('ARM_RESULT')
-    proof = _validated_proof(arm['proof'])
-    if (arm.get('status') != 'ACK' or arm.get('native_status') != 0
-            or arm.get('phase') != 'NONE' or arm.get('gate_reason') != 0
-            or arm.get('role') != 3 or arm.get('generation') != generation
-            or arm.get('native_owner') != owner or proof['wrapper_reason'] != 0
-            or proof['evaluation_id'] <= ready_id):
+    if not _complete_window(one('STARTUP_STOP_WINDOW')):
         return False
-    close = one('NATIVE_CLOSE')
-    receipt = close.get('receipt')
-    if (close.get('ack') is not True or close.get('error') is not None
-            or type(receipt) is not dict or receipt.get('ack_validated') is not True
-            or receipt.get('status') != 'ARMED_CLOSED'
-            or receipt.get('stored_generation') != generation
-            or identity_fields(receipt, generation) != scope
-            or receipt.get('native_owner') != owner):
+    proof = one('STOCK_STOP_PROOF')
+    terminal = proof.get('terminal')
+    if (proof.get('deadman_closed_planned') is not True or not _complete_window(proof.get('window'))
+            or type(terminal) is not dict
+            or any(status not in (4, 5, 6) for status in terminal.values())
+            or type(proof.get('raw_stop_samples')) is not list or len(proof['raw_stop_samples']) < 3):
+        return False
+    close = one('DEADMAN_CLOSED_PLANNED')
+    if close.get('activation_id') != activation:
         return False
     stops = protocol['CANCEL_STOP']
-    if not stops or not any(row.get('raw_stop_confirmed') is True and row.get('error') is None
-                            for row in stops):
+    if not stops or not any(row.get('raw_stop_confirmed') is True and row.get('cancel_error') is None
+                            and row.get('result_error') is None for row in stops):
         return False
     children = facts['children']
     post = facts['postflight']
@@ -275,11 +255,19 @@ def extract_attempt(inputs_path, receipt, output):
     def records(kind):
         return [row['record'] for row in events if row['kind'] == kind]
     facts['startup_protocol'] = dict(seal_verified=True, **{
-        kind: records(kind) for kind in ('BOOTSTRAP_IDENTITY', 'PREARM_STATUS',
-            'ARM_RESULT', 'NATIVE_CLOSE', 'CANCEL_STOP')})
-    facts['stop_confirmed'] = (any(row.get('ack') is True and row.get('error') is None
-        for row in records('NATIVE_CLOSE')) and any(row.get('raw_stop_confirmed') is True
-        for row in records('CANCEL_STOP')))
+        kind: records(kind) for kind in ('CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF',
+            'STARTUP_STOP_WINDOW', 'STOCK_STOP_PROOF', 'DEADMAN_CLOSED_PLANNED',
+            'DEADMAN_CLOSED_FAULT', 'NATIVE_CLOSE', 'CANCEL_STOP')})
+    raw_stopped = any(row.get('raw_stop_confirmed') is True for row in records('CANCEL_STOP'))
+    # v2: a stop is confirmed by the terminal result, the raw stop and the end window, with the dead-man
+    # closed as planned. A v1 (broker-era) run is confirmed by the native close acknowledgement.
+    stock = records('STOCK_STOP_PROOF')
+    if stock or records('DEADMAN_ARMED'):
+        facts['stop_confirmed'] = (raw_stopped and len(stock) == 1 and _complete_window(stock[0].get('window'))
+            and stock[0].get('deadman_closed_planned') is True and len(records('DEADMAN_CLOSED_PLANNED')) == 1)
+    else:
+        facts['stop_confirmed'] = (raw_stopped and any(row.get('ack') is True and row.get('error') is None
+            for row in records('NATIVE_CLOSE')))
     exits = records('EXECUTION_CHILD_RETIREMENT')
     children = exits[-1]['children'] if exits else []
     post = postflight(receipt, inputs['ros']['environment'], output/'postflight')

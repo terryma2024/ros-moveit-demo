@@ -500,3 +500,64 @@ def test_corrupt_consumed_rgb_cannot_support_capture_pass(tmp_path,monkeypatch,c
     result=audit(reader)
     assert result['integrity']['status']==('FAIL' if corrupt else 'PASS')
     assert verdict(result,'HFA-005')==('UNKNOWN' if corrupt else 'HOLDS')
+
+
+def _quiet_joints(first=3, last=6):
+    return [('JOINT',{'source_ns':n*1000000,'sequence':n,'wall_s':n*.001,
+        'raw_names':['neck_yaw_joint'],'raw_positions':[0.0],'raw_velocities':[0.0],'valid':True})
+        for n in range(first,last)]
+
+
+def _v2_stop_records(*, planned=True, window_n=51, proof=True):
+    window = {'first_sim_ns': 9000000, 'last_sim_ns': 9100000, 'n': window_n}
+    records = [('STOP_REQUEST',{'origin':'success','occurred_ns':1000000})] if planned else \
+        [('FAULT',{'occurred_ns':1000000,'reason':'intended'})]
+    records.append(('DEADMAN_ARMED',{'activation_id':'x'}))
+    records += _quiet_joints()
+    records.append(('CANCEL_STOP',{'raw_stop_confirmed':True,'cancel_error':None,'result_error':None,
+                                   'raw_stop_confirmed_sim_ns':5000000}))
+    if proof:
+        records.append(('STOCK_STOP_PROOF',{'terminal':{'a':4},'raw_stop_samples':[3000000,4000000,5000000],
+                                            'raw_stop_confirmed_sim_ns':5000000,'window':window,
+                                            'deadman_closed_planned':planned}))
+    records.append(('DEADMAN_CLOSED_PLANNED',{'activation_id':'x'}) if planned else
+                   ('DEADMAN_CLOSED_FAULT',{'reason':'intended','ack':True,'error':None,
+                                            'requested_wall_s':.0015}))
+    records.append(('EXECUTION_LOOP_RETIREMENT',{'outcomes':{'runtime':{'deadman_close':{
+        'ack':True,'error':None,'planned':planned}}}}))
+    return records
+
+
+def test_hfa009_v2_accepts_a_planned_dead_man_close_after_the_stop_proof(tmp_path, monkeypatch):
+    result=audit(make_reader(tmp_path,_v2_stop_records(),monkeypatch))
+    assert result['stop']['status']=='PASS', result['stop']
+    assert verdict(result,'HFA-009')!='VIOLATED'
+
+
+def test_hfa009_v2_wrong_window_size_is_a_stop_failure(tmp_path, monkeypatch):
+    result=audit(make_reader(tmp_path,_v2_stop_records(window_n=50),monkeypatch))
+    assert result['stop']['status']=='FAIL'
+
+
+def test_hfa009_v2_missing_stop_proof_after_a_confirmed_raw_stop_is_unknown(tmp_path, monkeypatch):
+    result=audit(make_reader(tmp_path,_v2_stop_records(proof=False),monkeypatch))
+    assert result['stop']['status']=='UNKNOWN'
+
+
+def test_hfa009_v2_fault_close_must_be_acknowledged(tmp_path, monkeypatch):
+    records=_v2_stop_records(planned=False)
+    for index,(kind,record) in enumerate(records):
+        if kind=='DEADMAN_CLOSED_FAULT':records[index]=(kind,dict(record,ack=False))
+    result=audit(make_reader(tmp_path,records,monkeypatch))
+    assert result['stop']['status']=='FAIL'
+
+
+def test_hfa009_v1_native_close_evidence_still_audits_as_v1(tmp_path, monkeypatch):
+    records=[('FAULT',{'occurred_ns':1000000,'reason':'intended'}),
+        ('NATIVE_CLOSE',{'ack':True,'error':None,'requested_wall_s':.0015})]+_quiet_joints()+[
+        ('CANCEL_STOP',{'raw_stop_confirmed':True,'cancel_error':None,'result_error':None}),
+        ('EXECUTION_LOOP_RETIREMENT',{'outcomes':{'runtime':{'native_close':{'receipt':{
+            'generation':7,'ack_wall_s':.002,'request_wall_s':.0015,'ack_validated':True,
+            'native_transport':{'simulation_policy_sha256':'c'*64}}}}}})]
+    result=audit(make_reader(tmp_path,records,monkeypatch))
+    assert result['stop']['status']=='PASS', result['stop']

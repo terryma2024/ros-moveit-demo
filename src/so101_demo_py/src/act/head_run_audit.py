@@ -26,7 +26,15 @@ KINDS = {
     'EXECUTION_LOOP_TERMINAL', 'EXECUTION_LOOP_REFUSED', 'FAULT', 'STOP_REQUEST',
     'NATIVE_CLOSE', 'CANCEL_STOP', 'EXECUTION_LOOP_RETIREMENT', 'EXECUTION_STACK_RETIREMENT',
     'EXECUTION_CHILD_RETIREMENT', 'EXECUTION_OWNER_DESCRIPTOR', 'NATIVE_CHILD_BOUND',
+    # startup protocol v2 (stock-controller subclass runs)
+    'CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF', 'STARTUP_STOP_WINDOW',
+    'CONTROLLER_SWITCH_PLANNED', 'DEADMAN_CLOSED_PLANNED', 'DEADMAN_CLOSED_FAULT',
+    'STOCK_STOP_PROOF',
 }
+#: events that exist only in a v2 run
+PROTOCOL_V2_KINDS = ('CONTROLLER_READBACK', 'DEADMAN_ARMED', 'STARTUP_STOP_WINDOW', 'STOCK_STOP_PROOF',
+                     'DEADMAN_CLOSED_PLANNED', 'DEADMAN_CLOSED_FAULT')
+STOP_WINDOW_SAMPLES = 51
 
 
 def finite(value):
@@ -651,38 +659,46 @@ class BasicAudit:
         retirements = self.rows['EXECUTION_LOOP_RETIREMENT']
         runtimes = [event['record'].get('outcomes', {}).get('runtime', {})
                     for event in retirements]
-        receipts = [(event, runtime.get('native_close', {}).get('receipt'))
-                    for event, runtime in zip(retirements, runtimes)
-                    if isinstance(runtime.get('native_close', {}).get('receipt'), dict)]
-        if not receipts:
-            self.check('HFA-009', None, 'NATIVE_CLOSE_RECEIPT_MISSING')
-        for event, receipt in receipts:
-            generation = self.manifest.get('run', {}).get('generation')
-            transport = receipt.get('native_transport', {})
-            policy_sha = self.manifest.get('simulation_policy_sha256')
-            self.check('HFA-009', None if generation is None or receipt.get('generation') is None
-                       else is_integer(receipt['generation']) and receipt['generation'] == generation,
-                       'NATIVE_CLOSE_RECEIPT_GENERATION_MATCH', event)
-            self.check('HFA-009', None if policy_sha is None or
-                       transport.get('simulation_policy_sha256') is None else
-                       transport['simulation_policy_sha256'] == policy_sha,
-                       'NATIVE_CLOSE_RECEIPT_POLICY_MATCH', event)
-            self.check('HFA-009', None if 'ack_validated' not in receipt else
-                       receipt['ack_validated'] is True, 'NATIVE_CLOSE_RECEIPT_ACK_VALIDATED', event)
-            self.budget('HFA-009', 'NATIVE_RECEIPT_ACK_DURATION',
-                        ns_interval(receipt.get('ack_wall_s')),
-                        ns_interval(receipt.get('request_wall_s')),
-                        self.policy.get('native_close_timeout_s'), event)
-        if not closes:
-            self.check('HFA-009',None,'NATIVE_CLOSE_ORIGINAL_MISSING')
-        for event in closes:
-            record=event['record'];end=(event['occurrence_mono_ns'],event['occurrence_mono_ns'])
-            self.check('HFA-009',None if 'ack' not in record else record['ack'] is True and
-                       record.get('error') is None,'NATIVE_CLOSE_ACK',event)
-            self.budget('HFA-009','NATIVE_CLOSE_DURATION',end,ns_interval(record.get('requested_wall_s')),
-                        self.policy.get('native_close_timeout_s'),event)
-            self.metrics['stop']['native_close_reaction']=self.budget('HFA-009','FAULT_TO_NATIVE_CLOSE',
-                end,origin,self.policy.get('fault_reaction_limit_s'),event)
+        # HFA-009 v2 covers a run closed by the dead-man of the stock-controller subclass; v1 covers the
+        # broker-era runs and reads their sealed evidence exactly as before.
+        v2 = bool(any(self.rows[kind] for kind in PROTOCOL_V2_KINDS)
+                  or any('deadman_close' in runtime for runtime in runtimes))
+        self.metrics['stop']['hfa009_version'] = 2 if v2 else 1
+        if v2:
+            self.deadman_stop_checks(origin, runtimes, retirements)
+        else:
+            receipts = [(event, runtime.get('native_close', {}).get('receipt'))
+                        for event, runtime in zip(retirements, runtimes)
+                        if isinstance(runtime.get('native_close', {}).get('receipt'), dict)]
+            if not receipts:
+                self.check('HFA-009', None, 'NATIVE_CLOSE_RECEIPT_MISSING')
+            for event, receipt in receipts:
+                generation = self.manifest.get('run', {}).get('generation')
+                transport = receipt.get('native_transport', {})
+                policy_sha = self.manifest.get('simulation_policy_sha256')
+                self.check('HFA-009', None if generation is None or receipt.get('generation') is None
+                           else is_integer(receipt['generation']) and receipt['generation'] == generation,
+                           'NATIVE_CLOSE_RECEIPT_GENERATION_MATCH', event)
+                self.check('HFA-009', None if policy_sha is None or
+                           transport.get('simulation_policy_sha256') is None else
+                           transport['simulation_policy_sha256'] == policy_sha,
+                           'NATIVE_CLOSE_RECEIPT_POLICY_MATCH', event)
+                self.check('HFA-009', None if 'ack_validated' not in receipt else
+                           receipt['ack_validated'] is True, 'NATIVE_CLOSE_RECEIPT_ACK_VALIDATED', event)
+                self.budget('HFA-009', 'NATIVE_RECEIPT_ACK_DURATION',
+                            ns_interval(receipt.get('ack_wall_s')),
+                            ns_interval(receipt.get('request_wall_s')),
+                            self.policy.get('native_close_timeout_s'), event)
+            if not closes:
+                self.check('HFA-009',None,'NATIVE_CLOSE_ORIGINAL_MISSING')
+            for event in closes:
+                record=event['record'];end=(event['occurrence_mono_ns'],event['occurrence_mono_ns'])
+                self.check('HFA-009',None if 'ack' not in record else record['ack'] is True and
+                           record.get('error') is None,'NATIVE_CLOSE_ACK',event)
+                self.budget('HFA-009','NATIVE_CLOSE_DURATION',end,ns_interval(record.get('requested_wall_s')),
+                            self.policy.get('native_close_timeout_s'),event)
+                self.metrics['stop']['native_close_reaction']=self.budget('HFA-009','FAULT_TO_NATIVE_CLOSE',
+                    end,origin,self.policy.get('fault_reaction_limit_s'),event)
         terminal_floor=0;terminal_mono=origin[0]
         for goal,entry in self.goals.items():
             terminal=entry['terminal']
@@ -749,6 +765,56 @@ class BasicAudit:
                        'STOP_SERVICE_ERRORS_ABSENT',event)
             if record.get('raw_stop_confirmed') is False:
                 self.check('HFA-009',False,'REPORTED_STOP_UNCONFIRMED',event)
+
+    def deadman_stop_checks(self, origin, runtimes, retirements):
+        """HFA-009 v2: the dead-man close, the stop proof and the end window of a stock-controller run."""
+        closes = self.rows['DEADMAN_CLOSED_PLANNED'] + self.rows['DEADMAN_CLOSED_FAULT']
+        proofs = self.rows['STOCK_STOP_PROOF']
+        receipts = [(event, runtime.get('deadman_close'))
+                    for event, runtime in zip(retirements, runtimes)
+                    if isinstance(runtime.get('deadman_close'), dict)]
+        if not receipts:
+            self.check('HFA-009', None, 'DEADMAN_CLOSE_RECEIPT_MISSING')
+        for event, receipt in receipts:
+            self.check('HFA-009', None if 'ack' not in receipt else receipt['ack'] is True and
+                       receipt.get('error') is None, 'DEADMAN_CLOSE_RECEIPT_ACK', event)
+        if not closes:
+            self.check('HFA-009', None, 'DEADMAN_CLOSE_ORIGINAL_MISSING')
+        for event in self.rows['DEADMAN_CLOSED_FAULT']:
+            record = event['record']
+            end = (event['occurrence_mono_ns'], event['occurrence_mono_ns'])
+            self.check('HFA-009', None if 'ack' not in record else record['ack'] is True and
+                       record.get('error') is None, 'DEADMAN_CLOSE_ACK', event)
+            self.metrics['stop']['deadman_close_reaction'] = self.budget(
+                'HFA-009', 'FAULT_TO_DEADMAN_CLOSE', end, origin,
+                self.policy.get('fault_reaction_limit_s'), event)
+        confirmed = [e for e in self.rows['CANCEL_STOP'] if e['record'].get('raw_stop_confirmed') is True]
+        if confirmed and not proofs:
+            self.check('HFA-009', None, 'STOCK_STOP_PROOF_MISSING')
+        for event in proofs:
+            record = event['record']
+            window = record.get('window') if isinstance(record.get('window'), dict) else {}
+            samples = record.get('raw_stop_samples')
+            self.check('HFA-009', None if 'n' not in window else
+                       is_integer(window['n']) and window['n'] == STOP_WINDOW_SAMPLES,
+                       'STOP_WINDOW_SAMPLE_COUNT', event, observed=window.get('n'))
+            floor = record.get('raw_stop_confirmed_sim_ns')
+            self.check('HFA-009', None if floor is None or window.get('first_sim_ns') is None else
+                       is_integer(floor) and is_integer(window['first_sim_ns']) and window['first_sim_ns'] > floor,
+                       'STOP_WINDOW_AFTER_RAW_STOP', event)
+            self.check('HFA-009', None if samples is None else
+                       isinstance(samples, list) and len(samples) >= 3 and all(is_integer(x) for x in samples)
+                       and samples == sorted(set(samples)), 'STOP_PROOF_RAW_SAMPLES', event)
+            terminal = record.get('terminal')
+            self.check('HFA-009', None if not isinstance(terminal, dict) else
+                       all(status in (4, 5, 6) for status in terminal.values()),
+                       'STOP_PROOF_TERMINAL_RESULT', event)
+            if record.get('deadman_closed_planned') is True:
+                planned = [e for e in self.rows['DEADMAN_CLOSED_PLANNED']
+                           if e['occurrence_mono_ns'] >= event['occurrence_mono_ns']]
+                self.check('HFA-009', bool(planned), 'DEADMAN_CLOSED_PLANNED_AFTER_PROOF', event)
+        for event in self.rows['DEADMAN_CLOSED_PLANNED']:
+            self.check('HFA-009', True if proofs else None, 'PLANNED_CLOSE_NEEDS_STOP_PROOF', event)
 
     def exit_checks(self):
         launcher=self.reader.external.get('launcher')

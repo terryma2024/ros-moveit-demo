@@ -126,66 +126,75 @@ def test_extractor_reads_sealed_detector_records_and_actual_rgb_payload(tmp_path
     with pytest.raises(ValueError,match='SEAL_MISMATCH'):
         campaign.extract_attempt(inputs,dict(actual_os_return_code=1),output)
 
+def _window(first=1_000_000_000):
+    return dict(n=51, first_sim_ns=first, last_sim_ns=first + 100_000_000, max_abs_feedback_velocity=0.0005,
+                max_abs_reference_velocity=0.0, reference_position=0.2, max_age_ns=1_000_000, completed_mono_ns=5)
+
+
 def startup_protocol_facts():
-    from copy import deepcopy
-    from so101_demo.adapters.act.head_control_protocol import parse_proof_record
-    from test_act_head_reservation_authority import startup_proof
-    scope=dict(role=3,generation=5,incarnation='inc',boot='boot')
-    owner=dict(uid=1000,pid=55,start_ticks=99)
-    proof=parse_proof_record(startup_proof())
-    bootstrap=dict(scope,status='AVAILABLE',ack_validated=True,stored_generation=0,native_owner=deepcopy(owner))
-    ready=dict(scope,status='READY',native_status=0,gate_reason=0,stored_generation=0,native_owner=deepcopy(owner),proof=proof)
-    arm=dict(status='ACK',native_status=0,phase='NONE',gate_reason=0,role=3,generation=5,native_owner=deepcopy(owner),proof=deepcopy(proof))
-    arm['proof']['evaluation_id']+=1
-    close=dict(ack=True,error=None,receipt=dict(scope,status='ARMED_CLOSED',stored_generation=5,ack_validated=True,native_owner=deepcopy(owner)))
+    activation = 'act-1-4242'
     return dict(stop_confirmed=True,owned_children_exited=True,children=[dict(pid=999999999,rc=0)],
         postflight=dict(owner_absent=True,graph_empty=True,graph_rc=0),
-        startup_protocol=dict(seal_verified=True,BOOTSTRAP_IDENTITY=[bootstrap],PREARM_STATUS=[ready],
-            ARM_RESULT=[arm],NATIVE_CLOSE=[close],CANCEL_STOP=[dict(raw_stop_confirmed=True,error=None)]))
+        startup_protocol=dict(seal_verified=True,
+            CONTROLLER_READBACK=[dict(controller='neck_controller',
+                controller_type='so101_mujoco_support/HeadNeckTrajectoryController',state='active',
+                activation_id=activation,parameters={'head_deadman_timeout_s':0.2})],
+            DEADMAN_ARMED=[dict(socket_path='/tmp/dm/neck-act-1-4242.sock',peer_pid=4242,
+                activation_id=activation,head_deadman_period_s=0.02,head_deadman_timeout_s=0.2)],
+            GRAPH_PROOF=[dict(own_gids={'/neck_controller/follow_joint_trajectory':[]},allowed_node_names=['a'],
+                foreign_allowed=[],service_clients={},watched={})],
+            STARTUP_STOP_WINDOW=[_window()],
+            STOCK_STOP_PROOF=[dict(terminal={'g':4},raw_stop_samples=[1,2,3],raw_stop_confirmed_sim_ns=5,
+                window=_window(2_000_000_000),deadman_closed_planned=True)],
+            DEADMAN_CLOSED_PLANNED=[dict(activation_id=activation)],
+            DEADMAN_CLOSED_FAULT=[],
+            CANCEL_STOP=[dict(raw_stop_confirmed=True,cancel_error=None,result_error=None)]))
 
 
-def test_strict_startup_allows_complete_ack_and_interruption_only():
+def test_strict_startup_allows_complete_protocol_and_interruption_only():
     from so101_demo.cli.head_search_functional_campaign import may_continue
     facts=startup_protocol_facts();facts['original_terminal']='INTERRUPTED'
     assert may_continue(facts,require_startup_protocol=True)
 
 
 @pytest.mark.parametrize('damage',[
-    'arm_reject','arm_missing','arm_duplicate','arm_id','arm_owner','arm_wrapper8',
-    'ready_missing','ready_wrapper8','ready_scope','ready_duplicate',
-    'close_missing','close_unarmed','close_scope','close_false_ack','close_stored',
-    'bootstrap_missing','bootstrap_duplicate','bootstrap_scope','bootstrap_owner',
-    'stop_missing','stop_error','graph','owner','child','seal','missing','proof_range','protocol_type'])
+    'readback_missing','readback_duplicate','readback_type','readback_inactive','armed_missing','armed_activation',
+    'armed_pid','armed_period','armed_timeout','graph_missing','graph_shape','window_missing','window_short',
+    'window_fast','window_reference_fast','proof_missing','proof_not_planned','proof_window_short',
+    'proof_terminal','proof_samples','close_missing','close_activation','stop_missing','stop_error',
+    'graph','owner','child','seal','missing','protocol_type'])
 def test_strict_startup_stops_at_first_refusal_or_missing_evidence(damage):
     from so101_demo.cli.head_search_functional_campaign import may_continue
     facts=startup_protocol_facts();p=facts['startup_protocol']
-    if damage=='arm_reject':p['ARM_RESULT'][0].update(status='REJECT',phase='STOP_BEFORE')
-    elif damage=='arm_missing':p['ARM_RESULT']=[]
-    elif damage=='arm_duplicate':p['ARM_RESULT']*=2
-    elif damage=='arm_id':p['ARM_RESULT'][0]['proof']['evaluation_id']=47
-    elif damage=='arm_owner':p['ARM_RESULT'][0]['native_owner']['pid']=66
-    elif damage=='arm_wrapper8':p['ARM_RESULT'][0]['proof']['wrapper_reason']=8
-    elif damage=='ready_missing':p['PREARM_STATUS']=[]
-    elif damage=='ready_wrapper8':p['PREARM_STATUS'][0]['proof']['wrapper_reason']=8
-    elif damage=='ready_scope':p['PREARM_STATUS'][0]['incarnation']='other'
-    elif damage=='ready_duplicate':p['PREARM_STATUS']*=2
-    elif damage=='close_missing':p['NATIVE_CLOSE']=[]
-    elif damage=='close_unarmed':p['NATIVE_CLOSE'][0]['receipt'].update(status='NOT_ARMED_CLOSED',stored_generation=0)
-    elif damage=='close_scope':p['NATIVE_CLOSE'][0]['receipt']['boot']='other'
-    elif damage=='close_false_ack':p['NATIVE_CLOSE'][0]['receipt']['ack_validated']=False
-    elif damage=='close_stored':p['NATIVE_CLOSE'][0]['receipt']['stored_generation']=0
-    elif damage=='bootstrap_missing':p['BOOTSTRAP_IDENTITY']=[]
-    elif damage=='bootstrap_duplicate':p['BOOTSTRAP_IDENTITY']*=2
-    elif damage=='bootstrap_scope':p['BOOTSTRAP_IDENTITY'][0]['role']=1
-    elif damage=='bootstrap_owner':p['BOOTSTRAP_IDENTITY'][0]['native_owner']=None
+    if damage=='readback_missing':p['CONTROLLER_READBACK']=[]
+    elif damage=='readback_duplicate':p['CONTROLLER_READBACK']*=2
+    elif damage=='readback_type':p['CONTROLLER_READBACK'][0]['controller_type']='joint_trajectory_controller/JointTrajectoryController'
+    elif damage=='readback_inactive':p['CONTROLLER_READBACK'][0]['state']='inactive'
+    elif damage=='armed_missing':p['DEADMAN_ARMED']=[]
+    elif damage=='armed_activation':p['DEADMAN_ARMED'][0]['activation_id']='other'
+    elif damage=='armed_pid':p['DEADMAN_ARMED'][0]['peer_pid']=0
+    elif damage=='armed_period':p['DEADMAN_ARMED'][0]['head_deadman_period_s']=0.05
+    elif damage=='armed_timeout':p['DEADMAN_ARMED'][0]['head_deadman_timeout_s']=1.0
+    elif damage=='graph_missing':p['GRAPH_PROOF']=[]
+    elif damage=='graph_shape':p['GRAPH_PROOF'][0]['own_gids']=None
+    elif damage=='window_missing':p['STARTUP_STOP_WINDOW']=[]
+    elif damage=='window_short':p['STARTUP_STOP_WINDOW'][0]['n']=50
+    elif damage=='window_fast':p['STARTUP_STOP_WINDOW'][0]['max_abs_feedback_velocity']=0.0021
+    elif damage=='window_reference_fast':p['STARTUP_STOP_WINDOW'][0]['max_abs_reference_velocity']=0.01
+    elif damage=='proof_missing':p['STOCK_STOP_PROOF']=[]
+    elif damage=='proof_not_planned':p['STOCK_STOP_PROOF'][0]['deadman_closed_planned']=False
+    elif damage=='proof_window_short':p['STOCK_STOP_PROOF'][0]['window']['n']=3
+    elif damage=='proof_terminal':p['STOCK_STOP_PROOF'][0]['terminal']={'g':2}
+    elif damage=='proof_samples':p['STOCK_STOP_PROOF'][0]['raw_stop_samples']=[1]
+    elif damage=='close_missing':p['DEADMAN_CLOSED_PLANNED']=[]
+    elif damage=='close_activation':p['DEADMAN_CLOSED_PLANNED'][0]['activation_id']='other'
     elif damage=='stop_missing':p['CANCEL_STOP']=[]
-    elif damage=='stop_error':p['CANCEL_STOP'][0]['error']='TimeoutError'
+    elif damage=='stop_error':p['CANCEL_STOP'][0]['cancel_error']='TimeoutError'
     elif damage=='graph':facts['postflight']['graph_empty']=False
     elif damage=='owner':facts['postflight']['owner_absent']=False
     elif damage=='child':facts['children'][0]['rc']=1
     elif damage=='seal':p['seal_verified']=False
     elif damage=='missing':facts.pop('startup_protocol')
-    elif damage=='proof_range':p['PREARM_STATUS'][0]['proof']['evaluation_id']=2**65
     elif damage=='protocol_type':facts['startup_protocol']=[]
     assert not may_continue(facts,require_startup_protocol=True)
 
@@ -207,7 +216,7 @@ def test_strict_startup_records_come_only_from_seal_verified_events(tmp_path,mon
     with pytest.raises(ValueError,match='EVENTS_UNSEALED'):
         campaign.extract_attempt(path,dict(actual_os_return_code=1),out)
 
-def test_strict_run_case_stops_before_second_attempt_after_arm_reject(tmp_path,monkeypatch):
+def test_strict_run_case_stops_before_second_attempt_after_a_refused_deadman_arm(tmp_path,monkeypatch):
     import so101_demo.cli.head_search_functional_campaign as campaign
     from test_act_head_search_campaign_scene import _case
     calls=[]
@@ -220,7 +229,7 @@ def test_strict_run_case_stops_before_second_attempt_after_arm_reject(tmp_path,m
         return dict(actual_os_return_code=1)
     facts=startup_protocol_facts()
     facts.update(original_terminal='FAULT')
-    facts['startup_protocol']['ARM_RESULT'][0].update(status='REJECT',phase='STOP_BEFORE')
+    facts['startup_protocol']['DEADMAN_ARMED']=[]
     monkeypatch.setattr(campaign,'prepare_attempt',prepare)
     monkeypatch.setattr(campaign,'launch_installed',launch)
     monkeypatch.setattr(campaign,'extract_attempt',lambda *args: facts)
