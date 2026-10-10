@@ -69,11 +69,31 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3539
+latest_checkpoint: CP-3540
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3540 — user: code-style refactor (latest version only; business names; tests by module/component; split oversized files); inventory dispatched
+
+- User (2026-10-10): "代码风格重构：1. 代码里有很多版本的代码和schema，v1,v2,v3之类, 无需兼容老版本，只保留最新版即可。2. 还有一些文件名、函数名用的过程名，类似于task 6,task 8, r1,r2... 需要改成代表业务含义的名字。3. 单元测试的文件需要按模块和组件重新组织一下 4. 有一些超大代码文件，需要重构以提高可读性".
+- Pushes before this:
+  - codex/so101-act-data-0917a d38c4f399..7e936ec58 to origin (gitee), including the AGENTS.md Sonnet-execution rule;
+  - main 7a62d8e88..fce9aaaf1 to origin (the same AGENTS.md rule, user "commit AGENTS.md" + "push");
+  - github not pushed, so github/main is 1 behind origin/main.
+- Scale (git ls-files):
+
+  | Area | Files | Lines |
+  |---|---|---|
+  | so101_demo_py src | 573 | 218k |
+  | so101_demo_py test | 604 | 188k |
+  | so101_teleop | 241 | 64k |
+  | so101_mujoco_support | 13 | 6k |
+  | so101_quik | 12 | 2k |
+
+  45 source/test files exceed 1,500 lines; the largest is cli/mujoco_parallel_batch.py at 4,488.
+- Three read-only inventories dispatched in parallel: (A) versioned code/schema families; (B) process-named identifiers; (C) test layout and oversized files. Next: design and a phased plan with gates after every phase, then independent review, then Sonnet execution, one writer at a time.
 
 ## CP-3539 — thin-subclass step 7 PASS: Head single case 900000 under protocol v2 and one pick-place Teacher run, on the refactored tree
 
