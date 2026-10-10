@@ -130,14 +130,14 @@ def _window(first=1_000_000_000):
 
 
 def startup_protocol_facts():
-    activation = 'act-1-4242'
+    activation = 1
     return dict(stop_confirmed=True,owned_children_exited=True,children=[dict(pid=999999999,rc=0)],
         postflight=dict(owner_absent=True,graph_empty=True,graph_rc=0),
         startup_protocol=dict(seal_verified=True,
             CONTROLLER_READBACK=[dict(controller='neck_controller',
                 controller_type='so101_mujoco_support/HeadNeckTrajectoryController',state='active',
                 activation_id=activation,parameters={'head_deadman_timeout_s':0.2})],
-            DEADMAN_ARMED=[dict(socket_path='/tmp/dm/neck-act-1-4242.sock',peer_pid=4242,
+            DEADMAN_ARMED=[dict(socket_path='/tmp/dm/neck-1.sock',peer_pid=4242,
                 activation_id=activation,head_deadman_period_s=0.02,head_deadman_timeout_s=0.2)],
             GRAPH_PROOF=[dict(own_gids={'/neck_controller/follow_joint_trajectory':[]},allowed_node_names=['a'],
                 foreign_allowed=[],service_clients={},watched={})],
@@ -169,7 +169,7 @@ def test_strict_startup_stops_at_first_refusal_or_missing_evidence(damage):
     elif damage=='readback_type':p['CONTROLLER_READBACK'][0]['controller_type']='joint_trajectory_controller/JointTrajectoryController'
     elif damage=='readback_inactive':p['CONTROLLER_READBACK'][0]['state']='inactive'
     elif damage=='armed_missing':p['DEADMAN_ARMED']=[]
-    elif damage=='armed_activation':p['DEADMAN_ARMED'][0]['activation_id']='other'
+    elif damage=='armed_activation':p['DEADMAN_ARMED'][0]['activation_id']=2
     elif damage=='armed_pid':p['DEADMAN_ARMED'][0]['peer_pid']=0
     elif damage=='armed_period':p['DEADMAN_ARMED'][0]['head_deadman_period_s']=0.05
     elif damage=='armed_timeout':p['DEADMAN_ARMED'][0]['head_deadman_timeout_s']=1.0
@@ -185,7 +185,7 @@ def test_strict_startup_stops_at_first_refusal_or_missing_evidence(damage):
     elif damage=='proof_terminal':p['STOCK_STOP_PROOF'][0]['terminal']={'g':2}
     elif damage=='proof_samples':p['STOCK_STOP_PROOF'][0]['raw_stop_samples']=[1]
     elif damage=='close_missing':p['DEADMAN_CLOSED_PLANNED']=[]
-    elif damage=='close_activation':p['DEADMAN_CLOSED_PLANNED'][0]['activation_id']='other'
+    elif damage=='close_activation':p['DEADMAN_CLOSED_PLANNED'][0]['activation_id']=2
     elif damage=='stop_missing':p['CANCEL_STOP']=[]
     elif damage=='stop_error':p['CANCEL_STOP'][0]['cancel_error']='TimeoutError'
     elif damage=='graph':facts['postflight']['graph_empty']=False

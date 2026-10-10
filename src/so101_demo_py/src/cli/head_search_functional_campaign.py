@@ -60,7 +60,7 @@ def _startup_complete(facts):
     readback = one('CONTROLLER_READBACK')
     activation = readback.get('activation_id')
     if (readback.get('controller_type') != _CONTROLLER_TYPE or readback.get('state') != 'active'
-            or type(activation) is not str or not activation
+            or type(activation) is not int or activation <= 0
             or type(readback.get('parameters')) is not dict):
         return False
     armed = one('DEADMAN_ARMED')
