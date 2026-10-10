@@ -38,7 +38,7 @@ class Worker:
         self.launch = type("Launch", (), {"mujoco_session_id": "session-247"})()
         self.requests = []
 
-    async def task8(self, request):
+    async def run_pick_place(self, request):
         self.requests.append(request)
         raise AssertionError("no case may reach a reused child")
 

@@ -24,7 +24,7 @@ from so101_demo.cli.act_run_pick_place_validation import load_spec_file
 
 def _spec_document(evidence_root: Path, manifest: Path) -> dict:
     return {
-        "command_id": "command-1131", "domain": "validation", "kind": "task8_full",
+        "command_id": "command-1131", "domain": "validation", "kind": "pick_place_validation_full",
         "payload": {"evidence_root": str(evidence_root), "manifest_path": str(manifest)},
         "runtime_id": "runtime-1131", "execution_generation": 1,
         "deadline_ns": time.monotonic_ns() + 60_000_000_000,

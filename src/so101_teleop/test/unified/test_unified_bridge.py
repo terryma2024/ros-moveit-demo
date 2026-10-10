@@ -334,3 +334,10 @@ def test_ros_import_is_child_only():
     )
     assert completed.returncode == 0, completed.stderr
     assert "WEB_IMPORT_ROS_FREE" in completed.stdout
+
+
+def test_the_worker_port_offers_one_pick_place_entry_point():
+    from so101_teleop.unified.bridge import ActWorkerPort
+
+    assert callable(ActWorkerPort.run_pick_place)
+    assert not hasattr(ActWorkerPort, "task8")

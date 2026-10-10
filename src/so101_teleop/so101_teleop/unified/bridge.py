@@ -280,9 +280,9 @@ class ActWorkerPort:
             raise MutationError("ACT_PICK_PLACE_VALIDATION_STARTUP_OWNER_UNBOUND")
         mode = request["mode"]
         if mode == "phase_prefix" and isinstance(request["stop_after"], str):
-            operation = "task8_phase"
+            operation = "pick_place_validation_phase"
         elif mode == "full" and request["stop_after"] is None:
-            operation = "task8_full"
+            operation = "pick_place_validation_full"
         else:
             raise MutationError("ACT_PICK_PLACE_VALIDATION_MODE_INVALID")
         payload = {
@@ -297,16 +297,12 @@ class ActWorkerPort:
             "contact_policy_fingerprint": self.context.contact_policy_fingerprint,
             "stack_owner": asdict(self._startup_stack_owner),
         }
-        if operation == "task8_phase":
+        if operation == "pick_place_validation_phase":
             payload["stop_after"] = request["stop_after"]
         return await self._call(
             operation, session_id=session_id, attempt_id=attempt_id,
             deadline_ns=deadline_ns, payload=payload,
         )
-
-    async def task8(self, request: dict) -> dict:
-        """Compatibility entry point for version-one callers."""
-        return await self.run_pick_place(request)
 
     async def act_collection(self, request: dict) -> dict:
         fields = frozenset({

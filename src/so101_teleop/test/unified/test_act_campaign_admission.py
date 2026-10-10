@@ -198,7 +198,7 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
                                                     head_search=head_search)
     receipt_path_prepared, receipt_sha_prepared = _prepared_receipt(tmp_path)
     return OperationSpec(
-        command_id="start-1", domain=Domain.VALIDATION, kind="task8_phase",
+        command_id="start-1", domain=Domain.VALIDATION, kind="pick_place_validation_phase",
         payload={
             "campaign_id": "campaign-1", "backend": backend, "worker_count": 1,
             **artifacts,
@@ -296,7 +296,7 @@ def context() -> AdmittedCampaignContext:
     return AdmittedCampaignContext(
         campaign_id="campaign-1",
         operation_id="operation-1",
-        workload_kind="task8_phase",
+        workload_kind="pick_place_validation_phase",
         service_epoch="epoch-1",
         execution_generation=3,
         stable_host_id="ai-station-1",
@@ -443,7 +443,7 @@ def test_pick_place_calibration_start_records_a_calibration_identity_that_is_not
     try:
         service = _service(store)
         context = service.start(spec)
-        assert context.workload_kind == "task8_phase"
+        assert context.workload_kind == "pick_place_validation_phase"
         assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
     finally:
         store.close()
@@ -776,7 +776,7 @@ def test_campaign_lifecycle_composes_exact_eight_admitted_children(tmp_path):
         base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
         children = [launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
                     for index in range(8)]
-        spec = replace(base, kind="task8_full", payload={**base.payload,
+        spec = replace(base, kind="pick_place_validation_full", payload={**base.payload,
             "worker_count": 8, "children": children})
         started, stopped = [], []
 

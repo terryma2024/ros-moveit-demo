@@ -103,8 +103,8 @@ class PickPlaceCaseOwner:
         context = self.workload_service.start(spec, allow_existing=False)
         self.context = context
         try:
-            if (getattr(spec, "kind", None) != "task8_full"
-                    or context.workload_kind != "task8_full" or context.worker_count != 1
+            if (getattr(spec, "kind", None) != "pick_place_validation_full"
+                    or context.workload_kind != "pick_place_validation_full" or context.worker_count != 1
                     or spec.payload.get("evidence_root") != context.evidence_root):
                 raise MutationError("PICK_PLACE_VALIDATION_CASE_CONTEXT_INVALID")
             artifacts = self.artifact_binding(spec.payload, context)

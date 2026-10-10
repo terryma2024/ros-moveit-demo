@@ -47,9 +47,9 @@ def prepared(tmp_path, *, fail=None):
     stack_root.mkdir(parents=True)
     context = SimpleNamespace(
         campaign_id=child.campaign_id, execution_generation=1,
-        workload_kind="task8_full", worker_count=1, evidence_root=str(tmp_path),
+        workload_kind="pick_place_validation_full", worker_count=1, evidence_root=str(tmp_path),
     )
-    spec = SimpleNamespace(kind="task8_full", payload={"children": [child.__dict__],
+    spec = SimpleNamespace(kind="pick_place_validation_full", payload={"children": [child.__dict__],
                                          "evidence_root": str(tmp_path)})
 
     class Workload:

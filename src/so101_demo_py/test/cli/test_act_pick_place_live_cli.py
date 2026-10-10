@@ -32,7 +32,7 @@ class Context:
     collection_config_sha256: str
     contact_policy_fingerprint: str
     evidence_root: str
-    workload_kind: str = "task8_full"
+    workload_kind: str = "pick_place_validation_full"
     worker_count: int = 1
 
 
@@ -43,7 +43,7 @@ class Worker:
         self.bad = bad
         self.requests = []
 
-    async def task8(self, request):
+    async def run_pick_place(self, request):
         self.requests.append(request)
         phases = list(PickPlaceRunner.PHASES)
         if request["mode"] == "phase_prefix":
@@ -85,7 +85,7 @@ def prepared(tmp_path):
     write_new_manifest(path, manifest)
     context = Context("campaign-246", hashlib.sha256(path.read_bytes()).hexdigest(),
                       "a" * 64, "b" * 64, "c" * 64, "d" * 64, str(tmp_path))
-    spec = OperationSpec("command-246", Domain.VALIDATION, "task8_full",
+    spec = OperationSpec("command-246", Domain.VALIDATION, "pick_place_validation_full",
                          {"manifest_path": str(path), "evidence_root": str(tmp_path)},
                          "runtime-246", 1, time.monotonic_ns() + 60_000_000_000)
     return spec, context

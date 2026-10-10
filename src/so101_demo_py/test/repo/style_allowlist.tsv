@@ -69,7 +69,6 @@ wire	src/so101_demo_py/src/backends/mujoco/qualified_phases/policy_lift_waypoint
 wire	src/so101_demo_py/src/backends/mujoco/qualified_phases/release_retreat.py	str	so101-live-outcome-first-release-retreat-v1	single-version-rename	so101-live-outcome-first-release-retreat	decided	root decision 13: kind literal carrying a version: the version moves into a `schema_version` field (R6); confirm the wire kind with its reader
 wire	src/so101_demo_py/src/backends/mujoco/qualified_phases/remaining_lift.py	str	so101-live-noslip-remaining-lift-v1	single-version-rename	so101-live-noslip-remaining-lift	decided	root decision 13: kind literal carrying a version: the version moves into a `schema_version` field (R6); confirm the wire kind with its reader
 wire	src/so101_demo_py/src/backends/mujoco/qualified_phases/transport.py	str	so101-live-noslip-transport-v1	single-version-rename	so101-live-noslip-transport	decided	root decision 13: kind literal carrying a version: the version moves into a `schema_version` field (R6); confirm the wire kind with its reader
-wire	src/so101_demo_py/src/cli/act_run_pick_place_validation.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
 wire	src/so101_demo_py/src/cli/macos_two_worker_campaign.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/cli/mujoco_parallel_batch.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/parallel_batch/contracts.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
@@ -83,19 +82,6 @@ wire	src/so101_demo_py/src/runtime/result_manifest.py	str	so101-run-result-v1	si
 wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_teleop/so101_teleop/unified/act_stack_probes.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/admission.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/admission.py	str	task8_phase	wire-rename	pick_place_phase	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/bridge.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/bridge.py	str	task8_phase	wire-rename	pick_place_phase	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/child_runtime.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/child_runtime.py	str	task8_phase	wire-rename	pick_place_phase	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/ipc.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/ipc.py	str	task8_phase	wire-rename	pick_place_phase	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/pick_place_case_execution.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/pick_place_case_owner.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/pick_place_child_startup.py	str	task8_full	wire-rename	pick_place_validation_full	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_teleop/so101_teleop/unified/pick_place_child_startup.py	str	task8_phase	wire-rename	pick_place_phase	mechanical	process name replaced by its business phrase (phase D)
 
 wire	src/so101_demo_py/config/act/training.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_motor_holder_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version

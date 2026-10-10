@@ -59,7 +59,7 @@ def prepared(tmp_path):
         "SO101_ACT_POLICY_FINGERPRINT": context.contact_policy_fingerprint,
     }
     request = SimpleNamespace(
-        operation="task8_phase", campaign_id=context.campaign_id,
+        operation="pick_place_validation_phase", campaign_id=context.campaign_id,
         worker_id=child.worker_id, session_id=child.mujoco_session_id,
         execution_generation=child.execution_generation,
         token=SimpleNamespace(operation_id=context.operation_id),

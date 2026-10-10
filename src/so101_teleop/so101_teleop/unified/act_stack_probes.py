@@ -68,7 +68,7 @@ def make_pick_place_act_stack(context, child: ActChildLaunch, *,
         campaign_root = Path(context.evidence_root)
         observer = Path(readiness_executable)
         if (not isinstance(child, ActChildLaunch)
-                or context.workload_kind != "task8_full" or context.worker_count != 1
+                or context.workload_kind != "pick_place_validation_full" or context.worker_count != 1
                 or context.execution_generation != child.execution_generation
                 or campaign != child.campaign_id
                 or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", campaign) is None

@@ -235,7 +235,7 @@ class AdmissionGateway:
         return self.arbiter.prepare_child(parent_id, child_id)
 
 
-_ACT_START_KINDS = frozenset({"task8_phase", "task8_full", "act_collection_start",
+_ACT_START_KINDS = frozenset({"pick_place_validation_phase", "pick_place_validation_full", "act_collection_start",
                               "act_collection_resume", "act_diagnostic_episode"})
 _DIAGNOSTIC_START_KIND = "act_diagnostic_episode"
 _ACT_PAYLOAD_KEYS = frozenset({
@@ -350,9 +350,9 @@ class UnifiedWorkloadService:
         payload = spec.payload
         if not isinstance(payload, dict):
             raise ValueError("CAMPAIGN_START_SCHEMA")
-        task8 = spec.kind in ("task8_phase", "task8_full")
+        pick_place_validation = spec.kind in ("pick_place_validation_phase", "pick_place_validation_full")
         diagnostic = spec.kind == _DIAGNOSTIC_START_KIND
-        expected = (_PICK_PLACE_VALIDATION_PAYLOAD_KEYS if task8 else
+        expected = (_PICK_PLACE_VALIDATION_PAYLOAD_KEYS if pick_place_validation else
                     _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _ACT_PAYLOAD_KEYS)
         if set(payload) != expected:
             # a payload missing only the calibration pair is a calibration problem, not a schema one
@@ -360,7 +360,7 @@ class UnifiedWorkloadService:
                                            "calibration_report_sha256"}:
                 raise ValueError("CALIBRATION_REQUIRED")
             raise ValueError("CAMPAIGN_START_SCHEMA")
-        if task8:
+        if pick_place_validation:
             # the receipt is verified before any mutation/GPU acquisition, and the verified bundle is
             # the only object an ActArtifactBinding may be built from
             from so101_demo.act.pick_place_validation_artifact_bundle import verify_pick_place_validation_startup_receipt
@@ -397,15 +397,15 @@ class UnifiedWorkloadService:
         for name in ("source", "runtime_config", "collection_config"):
             verified = self._verify_artifact(
                 payload[f"{name}_path"], payload[f"{name}_sha256"],
-                read_bytes=name == "runtime_config" and spec.kind in ("task8_phase", "task8_full"),
+                read_bytes=name == "runtime_config" and spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"),
             )
             if name == "runtime_config":
                 runtime_bytes = verified
         manifest_bytes = self._verify_artifact(
             payload["manifest_path"], payload["manifest_sha256"],
-            read_bytes=spec.kind in ("task8_phase", "task8_full"),
+            read_bytes=spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"),
         )
-        if spec.kind in ("task8_phase", "task8_full"):
+        if spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"):
             from so101_demo.act.pick_place_validation_manifest import require_pick_place_validation_manifest
 
             try:
@@ -446,7 +446,7 @@ class UnifiedWorkloadService:
             from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
 
             require_nonhead_gate(calibration)
-        if spec.kind in ("task8_phase", "task8_full"):
+        if spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"):
             from so101_demo.act.head_search_binding import validate_head_search_binding
             try:
                 validate_head_search_binding(json.loads(runtime_bytes), calibration)

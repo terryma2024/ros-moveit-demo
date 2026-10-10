@@ -41,7 +41,7 @@ def _regular_bytes(path: Path) -> bytes:
 
 
 def _preflight(spec, case_id: str, journal_path: Path) -> tuple[dict, dict, Path]:
-    if (getattr(spec, "kind", None) != "task8_full"
+    if (getattr(spec, "kind", None) != "pick_place_validation_full"
             or type(getattr(spec, "deadline_ns", None)) is not int
             or spec.deadline_ns <= time.monotonic_ns()
             or not isinstance(getattr(spec, "payload", None), dict)

@@ -42,7 +42,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
     child_root.mkdir()
     context = SimpleNamespace(
         campaign_id=campaign_id, manifest_sha256=digest,
-        workload_kind="task8_full", evidence_root=str(tmp_path),
+        workload_kind="pick_place_validation_full", evidence_root=str(tmp_path),
         source_sha256=manifest["source_sha256"],
         runtime_config_sha256=manifest["runtime_config_sha256"],
         collection_config_sha256=manifest["collection_config_sha256"],
@@ -50,7 +50,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
         worker_count=1,
     )
     spec = SimpleNamespace(
-        kind="task8_full",
+        kind="pick_place_validation_full",
         deadline_ns=time.monotonic_ns() + 60_000_000_000,
         payload={"evidence_root": str(tmp_path), "manifest_path": str(manifest_path),
                  "manifest_sha256": digest},

@@ -31,7 +31,7 @@ def load_spec_file(path: Path):
         if (not isinstance(data, dict)
                 or set(data) != set(OperationSpec.__dataclass_fields__)
                 or data["domain"] != Domain.VALIDATION.value
-                or data["kind"] != "task8_full"
+                or data["kind"] != "pick_place_validation_full"
                 or not isinstance(data["command_id"], str) or not data["command_id"]
                 or not isinstance(data["runtime_id"], str) or not data["runtime_id"]
                 or type(data["execution_generation"]) is not int
@@ -49,7 +49,7 @@ def _validate_local_paths(spec, journal_path: Path) -> None:
 
     payload = getattr(spec, "payload", None)
     if (getattr(spec, "domain", None) is not Domain.VALIDATION
-            or getattr(spec, "kind", None) != "task8_full"
+            or getattr(spec, "kind", None) != "pick_place_validation_full"
             or not isinstance(payload, dict)):
         raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
     try:

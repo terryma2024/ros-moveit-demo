@@ -28,7 +28,7 @@ MOTION_OPERATIONS = (
     "workflow",
 )
 OBSERVE_OPERATIONS = ("observe", "plan_joints", "plan_tcp")
-ACT_OPERATIONS = ("task8_phase", "task8_full", "act_collection_start", "act_collection_resume", "cancel")
+ACT_OPERATIONS = ("pick_place_validation_phase", "pick_place_validation_full", "act_collection_start", "act_collection_resume", "cancel")
 ALLOWED_OPERATIONS = OBSERVE_OPERATIONS + MOTION_OPERATIONS + ACT_OPERATIONS
 #: Operations that must carry a dispatch token; observe-only reads must not.
 TOKEN_REQUIRED_OPERATIONS = MOTION_OPERATIONS + ACT_OPERATIONS
@@ -111,8 +111,8 @@ class _ActCancel(_ActPayload):
 
 
 ACT_PAYLOADS = {
-    "task8_phase": _PickPlacePhasePayload,
-    "task8_full": _PickPlacePayload,
+    "pick_place_validation_phase": _PickPlacePhasePayload,
+    "pick_place_validation_full": _PickPlacePayload,
     "act_collection_start": _CollectionStart,
     "act_collection_resume": _CollectionResume,
     "cancel": _ActCancel,
@@ -138,8 +138,8 @@ class IpcRequest(BaseModel):
         "camera_preset",
         "parameters",
         "workflow",
-        "task8_phase",
-        "task8_full",
+        "pick_place_validation_phase",
+        "pick_place_validation_full",
         "act_collection_start",
         "act_collection_resume",
         "cancel",

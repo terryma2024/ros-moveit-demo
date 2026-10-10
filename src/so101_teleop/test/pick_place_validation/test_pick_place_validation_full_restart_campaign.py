@@ -48,7 +48,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
             "socket_root": f"/tmp/act389-{identity}",
         }
         spec = OperationSpec(
-            f"command-{index}", Domain.VALIDATION, "task8_full",
+            f"command-{index}", Domain.VALIDATION, "pick_place_validation_full",
             {"evidence_root": str(tmp_path), "manifest_path": str(manifest_path),
              "manifest_sha256": expected_hash, "children": [child]},
             "other-service" if index == runtime_drift_at else "runtime-service",

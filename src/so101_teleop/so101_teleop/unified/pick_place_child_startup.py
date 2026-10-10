@@ -42,7 +42,7 @@ def consume_child_pick_place_startup(request, child_owner: OwnerKey, environment
         operation_id = environment["SO101_ACT_OPERATION_ID"]
         generation = environment["SO101_ACT_GENERATION"]
         domain = environment["ROS_DOMAIN_ID"]
-        if (request.operation not in ("task8_phase", "task8_full")
+        if (request.operation not in ("pick_place_validation_phase", "pick_place_validation_full")
                 or any(not isinstance(value, str) or not value for value in (
                     campaign_id, worker_id, session_id, operation_id,
                 ))
