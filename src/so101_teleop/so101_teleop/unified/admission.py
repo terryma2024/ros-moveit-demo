@@ -443,7 +443,7 @@ class UnifiedWorkloadService:
         if diagnostic:
             # the Head Search prerequisite is the only thing this scope removes: every non-Head
             # check and its measured values must still be present
-            from so101_demo.act.first_episode_inputs import require_nonhead_gate
+            from so101_demo.act.diagnostic_episode_inputs import require_nonhead_gate
 
             require_nonhead_gate(calibration)
         if spec.kind in ("task8_phase", "task8_full"):
@@ -546,7 +546,7 @@ class UnifiedWorkloadService:
         """
 
         from so101_demo.act.collection_scope import CollectionMode, read_collection_scope
-        from so101_demo.act.first_episode_inputs import (anchor_identity_from_bytes,
+        from so101_demo.act.diagnostic_episode_inputs import (anchor_identity_from_bytes,
                                                          require_nonhead_gate,
                                                          resource_policy_identity,
                                                          verify_frozen_inputs)

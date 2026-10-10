@@ -88,7 +88,7 @@ def test_the_console_script_and_the_receipt_plumbing_are_gone():
 
 
 def test_the_old_inputs_manifest_schema_is_refused():
-    from so101_demo.act.first_episode_inputs import MANIFEST_SCHEMA_VERSION, freeze_inputs
+    from so101_demo.act.diagnostic_episode_inputs import MANIFEST_SCHEMA_VERSION, freeze_inputs
     assert MANIFEST_SCHEMA_VERSION == 2
     parameters = inspect.signature(freeze_inputs).parameters
     assert "broker" + "_stop_policy" not in parameters and "teacher_bound" + "_timing" not in parameters

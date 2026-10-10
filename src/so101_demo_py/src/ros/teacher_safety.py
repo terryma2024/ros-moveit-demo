@@ -280,7 +280,7 @@ class TeacherSafetyInputs:
 
 
 def load_frozen_safety(manifest_path: Path) -> TeacherSafetyInputs:
-    """Build the limits and the collision geometry from the frozen first-episode inputs.
+    """Build the limits and the collision geometry from the frozen diagnostic-episode inputs.
 
     Same inputs the broker-era Teacher source used: the verified frozen manifest, its execution snapshot's scene, the
     activated contact proposal and receipt. Any mismatch refuses before motion.
@@ -290,7 +290,7 @@ def load_frozen_safety(manifest_path: Path) -> TeacherSafetyInputs:
     import mujoco
 
     from ..act.execution_snapshot import verify_execution_snapshot
-    from ..act.first_episode_inputs import verify_frozen_inputs
+    from ..act.diagnostic_episode_inputs import verify_frozen_inputs
     from ..act.contact_policy import spot_check_receipt_allowed
     from ..adapters.act.phase_contact_allowlist import PhaseContactAllowlist
 

@@ -69,7 +69,7 @@ def test_an_unknown_kind_or_a_candidate_for_a_default_proposal_is_refused(propos
 @pytest.mark.parametrize("mode, accepted", [("formal", False), (None, False), ("anything", False),
                                             ("preselected_target_diagnostic", True)])
 def test_the_frozen_inputs_path_opts_in_only_for_the_diagnostic_mode(proposal, tmp_path, mode, accepted):
-    from so101_demo.act.first_episode_inputs import verify_contact_activation
+    from so101_demo.act.diagnostic_episode_inputs import verify_contact_activation
     candidate = receipt(proposal, tmp_path)
     identity = {"model_sha256": ACT_MODEL_SHA256, "scene_sha256": ACT_SCENE_SHA256,
                 "mujoco_version": proposal["payload"]["mujoco_version"]}

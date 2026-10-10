@@ -40,7 +40,7 @@ def _diagnostic_spec(tmp_path, *, tag="a", calibration_mutation=None, scope_muta
                      payload_mutation=None):
     """A complete diagnostic payload: frozen inputs, mode record and a non-Head calibration."""
 
-    from so101_demo.act.first_episode_inputs import freeze_inputs, read_inputs_manifest
+    from so101_demo.act.diagnostic_episode_inputs import freeze_inputs, read_inputs_manifest
 
     registry = _registry(tmp_path)
     # the calibration report is one of the frozen roles, so a mutation has to land before the

@@ -2450,7 +2450,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     if act_profile and mode is not RunMode.DRY_RUN:
         # the manifest the worker writes is bound to the frozen Teacher execution policy (its place_height record)
         try:
-            from ..act.first_episode_inputs import verify_frozen_inputs
+            from ..act.diagnostic_episode_inputs import verify_frozen_inputs
             from ..act.frozen_runtime_inputs import EXECUTION_POLICY_BINDING
 
             frozen = verify_frozen_inputs(Path(document["episode_inputs_manifest"]))
@@ -2494,7 +2494,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # spec generation; it never reallocates ROS domains or directories.
         runtime_kwargs["replace_resources"] = coordinator.replace_resources
         # The run's scope document belongs here, written once and named to every worker, but this file has no
-        # frozen manifest to build it from: `_frozen` is act_first_episode.py's name and lives in that
+        # frozen manifest to build it from: `_frozen` is act_diagnostic_episode.py's name and lives in that
         # process, not this one. Whether the batch path is given the frozen set, or the composition that
         # already reads it writes the document, is the one question left before the last wire is complete
         # Until then the port is absent, which is the state every existing caller is in.
@@ -2722,7 +2722,7 @@ class ProductionBatchComposition:
             # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
             self._episode_scope_path = kwargs.pop("episode_scope_path", None)
             self._episode_inputs_manifest = kwargs.pop("episode_inputs_manifest", None)
-            # the validated collection options of an ACT first-episode run (Phase A4c); None for every other caller
+            # the validated collection options of an ACT diagnostic-episode run (Phase A4c); None for every other caller
             self._collection = kwargs.pop("collection", None)
             # the container-broker flag defaults here as well as in _initialize: tests replace _initialize to keep
             # its side effects out, and an attribute that only exists when the real initialiser ran is an attribute

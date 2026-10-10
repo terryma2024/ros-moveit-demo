@@ -2,7 +2,7 @@
 full effective values and its sha256.
 
 The Teacher and the Recorder load their policies from the frozen manifest at runtime and refuse a mismatch: the Teacher
-before any motion, the Recorder before it listens, `act_first_episode run` before it creates its run root.
+before any motion, the Recorder before it listens, `act_diagnostic_episode run` before it creates its run root.
 """
 
 import hashlib
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from so101_demo.act.first_episode_inputs import (
+from so101_demo.act.diagnostic_episode_inputs import (
     POLICY_BINDINGS, freeze_inputs, policy_binding, verify_frozen_inputs, verify_policy_bindings)
 from test_act_first_episode_scope import _registry, _write_registry
 from paths import PACKAGE_ROOT
@@ -33,7 +33,7 @@ def freeze(tmp_path, **overrides):
 
 def rehash(manifest_path, document):
     """Rewrite a manifest with its hash chain recomputed, as a self-consistent forger would."""
-    from so101_demo.act.first_episode_inputs import _MANIFEST_OPTIONAL, _canonical
+    from so101_demo.act.diagnostic_episode_inputs import _MANIFEST_OPTIONAL, _canonical
     extra = {key: document[key] for key in _MANIFEST_OPTIONAL if key in document}
     document["inputs_sha256"] = hashlib.sha256(_canonical({**document["roles"], **extra})).hexdigest()
     manifest_path.write_bytes(_canonical(document))
@@ -80,11 +80,11 @@ def test_each_policy_value_enters_the_inputs_hash_chain(tmp_path):
 
 
 def test_the_freezer_and_prepare_no_longer_take_the_retired_endpoint_policy():
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     assert "endpoint_policy" not in inspect.signature(freeze_inputs).parameters
     for name in ("teacher_endpoint", "teacher_execution_policy", "episode_recorder_policy"):
         assert inspect.signature(freeze_inputs).parameters[name].default is None
-    parser = act_first_episode.build_parser()
+    parser = act_diagnostic_episode.build_parser()
     base = ["prepare", "--candidates", "c", "--runtime-policy", "r", "--output", "o"]
     options = parser.parse_args(base + ["--teacher-endpoint", "e", "--teacher-execution-policy", "x",
                                         "--episode-recorder-policy", "p"])
@@ -223,13 +223,13 @@ def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
 
 
 def test_act_first_episode_run_refuses_a_forged_policy_before_creating_its_run_root(tmp_path):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     from test_act_child_recorder_binding import frozen_child_inputs
     manifest_path, document, _ = frozen_child_inputs(tmp_path)
     forge_a_consistent_policy(manifest_path, "teacher_endpoint",
                               lambda values: values["tolerances"].update(final_xy_m=0.5))
     root = tmp_path / "live"
-    assert act_first_episode.main(["run", "--inputs", str(manifest_path.parent), "--root", str(root),
+    assert act_diagnostic_episode.main(["run", "--inputs", str(manifest_path.parent), "--root", str(root),
                                    "--mode", document["mode"], "--lifecycle", "FULL_RESTART"]) == 2
     assert not root.exists()
 

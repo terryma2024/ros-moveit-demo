@@ -9,7 +9,7 @@ ten second result acknowledgement.
 The memo records that this exact recomputation succeeded on this exact content. It is a SHA-256 fingerprint of every file of the
 episode (path, size, digest), of the scope, the frozen inputs and the Teacher manifest, bound to the QC rule version and to the
 canonical report. A gate that is configured to trust it accepts it only when all of that matches what is on disk now; any other case
-recomputes in full. Nothing that reads back a finished run (`verify_coordinator_commit`, `act_first_episode qc`, `verify-commit`)
+recomputes in full. Nothing that reads back a finished run (`verify_coordinator_commit`, `act_diagnostic_episode qc`, `verify-commit`)
 trusts it.
 """
 
@@ -34,7 +34,7 @@ MEMO_SCHEMA = 2
 #: rules, the scene-association rules and the frozen-input verification. A memo written by other source than the reader's own is
 #: not trusted (CP-3457), whatever `QC_RULE_VERSION` says.
 CODE_MODULES = ("episode_qc", "episode_audit", "recorder", "native_endpoints", "raw_physics_chunks", "scene_association",
-                "execution_snapshot", "collection_boundaries", "first_episode_inputs", "qc_memo", "topic_loss")
+                "execution_snapshot", "collection_boundaries", "diagnostic_episode_inputs", "qc_memo", "topic_loss")
 COVERS = ("episode_seal", "physical_audit", "native_qc")
 _TEACHER_RELATIVE = Path("dynamic") / "dynamic-execute-manifest.json"
 _CHUNK = 1 << 20

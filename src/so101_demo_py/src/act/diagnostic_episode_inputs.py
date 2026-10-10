@@ -10,7 +10,7 @@ that is missing, ambiguous, unapproved or internally inconsistent, then copies t
 into an immutable directory and returns the manifest that binds their bytes. A missing value is a
 blocker code, never a default.
 
-Per the owner amendment recorded in the ledger as CP-1928, an artifact's recorded source/config
+By the owner's decision, an artifact's recorded source/config
 identity is provenance, not a claim about the tree that happens to be running: it is validated for
 shape and recorded, never compared with the current identity. Byte integrity, report structure,
 byte-derived anchor and resource identities, and the payload-to-frozen-role binding are still
@@ -58,7 +58,7 @@ _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_c
 _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source_commit",
                                 "config_sha256", "evidence_root", "roles", "inputs_sha256"})
 #: the freezer binds the collection mode, the policies and the development runtime too, but a call that writes none of them
-#: keeps its contract (CP-2440) - so they are allowed, not required
+#: keeps its contract - so they are allowed, not required
 _MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
                                 "teacher_endpoint", "teacher_execution_policy", "episode_recorder"})
 #: The policy bindings (Phase A4c): binding name -> the file
@@ -171,7 +171,7 @@ def require_nonhead_gate(report) -> dict:
     A report that claims PASS for any check must carry that check's measurements, so a PASS cannot
     outrun its evidence. The two Head checks (`fov`, `search`) are not required to be anything:
     that is the whole substitution this milestone makes. The report's own recorded identity is
-    checked for shape only; per the owner amendment recorded in CP-1928 it is not compared with the
+    checked for shape only; by the owner's decision it is not compared with the
     tree that is running.
     """
 
@@ -322,7 +322,7 @@ def read_inputs_manifest(path: Path) -> dict:
         if type(item["bytes"]) is not int or item["bytes"] < 0 or item["approval"] not in _APPROVALS:
             raise ValueError("INPUTS_MANIFEST_INVALID")
     # the writer folds the amendment's three bindings into the same digest the design requires them to be part of,
-    # so the reader hashes what was written rather than only the role table (CP-2416)
+    # so the reader hashes what was written rather than only the role table
     extra = {key: document[key] for key in _MANIFEST_OPTIONAL if key in document}
     if hashlib.sha256(_canonical({**roles, **extra})).hexdigest() != document["inputs_sha256"]:
         raise ValueError("INPUTS_MANIFEST_INVALID")
@@ -490,7 +490,7 @@ def _verify_roles(registry: dict, *, mode=None) -> dict:
     The verified bytes are handed back so a freeze copies exactly what was approved. Reading the
     candidate a second time would let a file that changed after verification be frozen instead.
 
-    Per the owner amendment recorded in CP-1928 the registry's `source_commit` and `config_sha256`
+    By the owner's decision the registry's `source_commit` and `config_sha256`
     are recorded provenance, not a claim about the tree that happens to be running now.
     """
 
@@ -531,7 +531,7 @@ def _verify_roles(registry: dict, *, mode=None) -> dict:
         raise ValueError("INPUT_IDENTITY_MISMATCH")
 
     # the two resource stops come from the design's section 5.1 document when the registry's own root carries it,
-    # and an older registry whose root does not keeps the call it always had (CP-2437's guard)
+    # and an older registry whose root does not keeps the call it always had
     development = Path(registry["source_root"]) / DEVELOPMENT_RUNTIME_FILE
     derived_resource = resource_policy_identity(
         payloads["runtime_config"], payloads["collection_config"],
@@ -682,7 +682,7 @@ ANCHOR_FILE = "src/so101_demo_py/config/act/task8-live-anchors.yaml"
 ANCHOR_APPROVAL_FILE = "src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json"
 SCENE_FILE = "src/so101_demo_py/assets/mujoco/act/scene.xml"
 COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection.yaml"
-RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml"   # CP-3456: stage bounds long enough for offline processing
+RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml"   # stage bounds long enough for offline processing
 #: the design's section 5.1 document, which declares the two resource hard stops
 DEVELOPMENT_RUNTIME_FILE = "src/so101_demo_py/config/act/endpoint_pose_development_runtime.yaml"
 RESET_RECIPE_FILE = "src/so101_demo_py/src/backends/mujoco/reset.py"
@@ -711,7 +711,7 @@ def profile_config_identity(source_root: Path) -> str:
     `so101_demo.act.calibration.installed_calibration_identity()` digests every file under the
     installed `assets/mujoco/act` and `config/mujoco/act` keyed by its package-relative path. This
     derives the same value from a named source root so the registry and the manifest can record which
-    profile the frozen inputs were inspected against. Per CP-1928 that value is recorded provenance:
+    profile the frozen inputs were inspected against. That value is recorded provenance:
     nothing compares it with the tree that is running.
     """
 
@@ -900,7 +900,7 @@ def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes, *,
     hard = hard if isinstance(hard, dict) else {}
     if not hard and development_runtime is not None:
         # the amendment's two stops live in the section 5.1 development runtime document, not in the batch runtime
-        # whose own contract is closed; reading them there keeps this file's digest untouched (CP-2434)
+        # whose own contract is closed; reading them there keeps this file's digest untouched
         try:
             amendment = yaml.safe_load(Path(development_runtime).read_text())
         except (OSError, yaml.YAMLError):

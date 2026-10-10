@@ -12,7 +12,7 @@ event_inbox_capacity: 256
 finish_budget_s: 5.0
 # Idle sleep of the engine loop between passes.
 poll_s: 0.005
-# Orchestrator bounds (act_first_episode, Teacher-independent). The orchestrator starts the Recorder first and waits at
+# Orchestrator bounds (act_diagnostic_episode, Teacher-independent). The orchestrator starts the Recorder first and waits at
 # most ready_timeout_s for its LISTENING ready file and then at most capturing_timeout_s for CAPTURING (the capture started and
 # its initial boundary is committed, CP-3425), then starts the Teacher whether or not the Recorder is there (data INVALID if
 # it never got there, with its own reason). After the Teacher ended it waits at most exit_wait_s for the Recorder to exit by

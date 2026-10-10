@@ -2326,14 +2326,14 @@ def _configured_task_station_actions(context):
     act_profile = context.launch_configurations.get("act_profile", "false") == "true"
     environment_actions = []
     if act_profile:
-        # The ACT profile is the same station with the frozen first-episode inputs checked before anything starts.
+        # The ACT profile is the same station with the frozen diagnostic-episode inputs checked before anything starts.
         # There is no command broker and no reservation: the Teacher drives plain JointTrajectoryControllers.
         first_inputs = context.launch_configurations.get("act_first_episode_inputs", "")
         first_pin = context.launch_configurations.get("act_expected_inputs_sha256", "")
         if bool(first_inputs) != bool(first_pin):
             raise ValueError("EPISODE_INPUTS_IDENTITY_REQUIRED")
         if first_inputs:
-            from ..act.first_episode_inputs import verify_frozen_inputs, validate_execution_snapshot_binding
+            from ..act.diagnostic_episode_inputs import verify_frozen_inputs, validate_execution_snapshot_binding
             frozen = verify_frozen_inputs(Path(first_inputs))
             if frozen["inputs_sha256"] != first_pin:
                 raise ValueError("EPISODE_INPUTS_IDENTITY_MISMATCH")

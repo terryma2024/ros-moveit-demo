@@ -155,7 +155,7 @@ def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, 
 
 def test_every_role_command_resolves_to_a_qualified_executable_under_a_decoy_path(tmp_path, monkeypatch):
     from so101_demo.act.offline.orchestration import PROCESSOR_ROLE, RAW_ROLE
-    from so101_demo.cli.act_first_episode import _broker_command
+    from so101_demo.cli.act_diagnostic_episode import _broker_command
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
 
     decoys = _decoy_path(tmp_path)

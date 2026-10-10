@@ -296,7 +296,7 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     from ..episode_open import open_recorder_episode
     from ..frozen_runtime_inputs import load_recorder_frozen_policy
     from ..collection_scope import build_collection_scope, write_collection_scope
-    from ..first_episode_inputs import verify_frozen_inputs
+    from ..diagnostic_episode_inputs import verify_frozen_inputs
     from ..teacher_event_stream import StreamIdentity
     from .engine import OfflineEngine
     from .replay import BagStream, CameraGridRepair, ReplayNode, TeacherClockRepair, VirtualClock, virtual_time

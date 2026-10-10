@@ -65,7 +65,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     from .contracts import finite
     from .episode_audit import _identity_ok
     from .execution_snapshot import verify_execution_snapshot
-    from .first_episode_inputs import audit_execution_model_identity
+    from .diagnostic_episode_inputs import audit_execution_model_identity
     from .joints import ACT_JOINTS
     from .native_endpoints import first_world_after_start, first_world_after_stop, verify_world_source
     from .raw_physics_chunks import verify_raw_chunk
@@ -707,7 +707,7 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
     (default ``<attempt>/dynamic/dynamic-execute-manifest.json``, beside the episode). A legal report remains separate
     from the Coordinator's durable commit authority.
     """
-    from .first_episode_inputs import verify_frozen_inputs
+    from .diagnostic_episode_inputs import verify_frozen_inputs
     from .recorder import verify_episode_seal
     from .scene_association import canonical
 

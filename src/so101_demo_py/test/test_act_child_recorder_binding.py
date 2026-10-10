@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.collection_scope import build_collection_scope, write_collection_scope
-from so101_demo.act.first_episode_inputs import freeze_inputs
+from so101_demo.act.diagnostic_episode_inputs import freeze_inputs
 from so101_demo.act.episode_open import open_recorder_episode
 from test_act_first_episode_scope import _registry, _write_registry
 from paths import PACKAGE_ROOT, REPOSITORY
@@ -72,7 +72,7 @@ def frozen_child_inputs(tmp_path):
         payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
         (root / entry["path"]).write_bytes(payload)
         entry.update(sha256=hashlib.sha256(payload).hexdigest(), bytes=len(payload))
-    from so101_demo.act.first_episode_inputs import execution_snapshot_binding
+    from so101_demo.act.diagnostic_episode_inputs import execution_snapshot_binding
     document["execution_snapshot"] = execution_snapshot_binding(snapshot, root / "execution")
     bindings = {**document["roles"], **{key: document[key] for key in
                 ("mode", "teacher_endpoint", "teacher_execution_policy",
@@ -173,7 +173,7 @@ def test_sandbox_layout_records_beside_the_run_never_in_an_attempt_workspace(tmp
 
 
 def test_run_rejects_a_posthoc_final_target_before_creating_run_root(tmp_path, monkeypatch):
-    from so101_demo.cli.act_first_episode import main
+    from so101_demo.cli.act_diagnostic_episode import main
     inputs, manifest, snapshot = frozen_child_inputs(tmp_path)
     root = tmp_path / "live"
     mkdir = Path.mkdir
@@ -191,7 +191,7 @@ def test_run_rejects_a_posthoc_final_target_before_creating_run_root(tmp_path, m
 
 
 def test_only_the_model_bound_execution_snapshot_binding_is_accepted(tmp_path):
-    from so101_demo.act.first_episode_inputs import validate_execution_snapshot_binding
+    from so101_demo.act.diagnostic_episode_inputs import validate_execution_snapshot_binding
 
     _, manifest, snapshot = frozen_child_inputs(tmp_path)
     binding = manifest["execution_snapshot"]

@@ -108,7 +108,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "act_first_episode = so101_demo.cli.act_first_episode:main",
+            "act_diagnostic_episode = so101_demo.cli.act_diagnostic_episode:main",
             "act_offline_episode = so101_demo.cli.act_offline_episode:main",
             "act_preflight = so101_demo.cli.act_preflight:main",
             "act_resolve_training_requirements = so101_demo.cli.act_resolve_training_requirements:main",

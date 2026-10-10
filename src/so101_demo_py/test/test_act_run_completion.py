@@ -65,11 +65,11 @@ def test_cleanup_artifact_without_journaled_completion_is_not_success(tmp_path,m
 
 def test_false_success_summary_cannot_promote_actual_failed_commit(tmp_path,monkeypatch):
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     run,location,scope,inputs,_=controlled_committed_result(tmp_path,monkeypatch,completed=True)
     context=dict(episode=location/'episode',location=location,scope=scope,inputs_manifest=inputs,coordinator_root=run/'coordinator')
     monkeypatch.setattr(result_store,'resolve_native_run',lambda root:context)
-    reader=getattr(act_first_episode,'_verified_run_completion',None)
+    reader=getattr(act_diagnostic_episode,'_verified_run_completion',None)
     assert callable(reader),'default run final result gate is absent'
     code,document=reader(run.parent)
     assert code==1 and document['status']=='FAIL' and document['reason']=='TEACHER_TASK_NOT_PASSED'
@@ -79,11 +79,11 @@ def test_false_success_summary_cannot_promote_actual_failed_commit(tmp_path,monk
 
 def _completion(tmp_path,monkeypatch,**options):
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     run,location,scope,inputs,_=controlled_committed_result(tmp_path,monkeypatch,completed=True,**options)
     context=dict(episode=location/'episode',location=location,scope=scope,inputs_manifest=inputs,coordinator_root=run/'coordinator')
     monkeypatch.setattr(result_store,'resolve_native_run',lambda root:context)
-    return run,act_first_episode._verified_run_completion(run.parent)
+    return run,act_diagnostic_episode._verified_run_completion(run.parent)
 
 
 def test_a_teacher_pass_with_failing_data_is_nonzero_but_reports_the_teacher_pass_and_keeps_the_proof(tmp_path,monkeypatch):
@@ -114,7 +114,7 @@ def test_exit_codes_are_0_for_a_passing_teacher_with_valid_or_disabled_data_3_fo
     """The orchestrator's contract (A4c): 0 = Teacher PASS and data VALID/DISABLED with QC PASS where applicable;
     3 = Teacher PASS but data INVALID or QC FAIL; 1 = the Teacher did not pass. Exercised on the verified completion gate."""
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     def completion(teacher_status, data_status, qc, eligible):
         proof = dict(result_status=teacher_status, teacher_task_result='PASS' if teacher_status == 'PASSED' else 'FAIL',
@@ -124,7 +124,7 @@ def test_exit_codes_are_0_for_a_passing_teacher_with_valid_or_disabled_data_3_fo
         monkeypatch.setattr(result_store, 'verify_coordinator_commit', lambda *a, **k: proof)
         monkeypatch.setattr(result_store, 'verify_coordinator_cleanup', lambda *a, **k: dict(cleanup_proof_path='cleanup'))
         monkeypatch.setattr(result_store, 'write_commit_proof', lambda proof, path: 'digest')
-        return act_first_episode._verified_run_completion('/nonexistent-run')
+        return act_diagnostic_episode._verified_run_completion('/nonexistent-run')
 
     assert completion('PASSED', 'VALID', 'PASS', True)[0] == 0
     assert completion('PASSED', 'DISABLED', 'NOT_RUN', False)[0] == 0

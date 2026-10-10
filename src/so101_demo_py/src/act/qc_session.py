@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 _STACK: list = []
-#: the only owners that may hold a session while the export path runs: the readback entry points (`act_first_episode qc`,
+#: the only owners that may hold a session while the export path runs: the readback entry points (`act_diagnostic_episode qc`,
 #: `verify-commit`, `check-export`, `readback`). A session opened anywhere else (bundle.py, training, a library) makes the export
 #: path refuse: a cached proof grants no eligibility, and only an entry point may share a recomputation between its stages.
 ENTRY_OWNERS = frozenset({"readback:qc", "readback:verify-commit", "readback:check-export", "readback:readback"})
@@ -34,7 +34,7 @@ class QcSession:
         #: report-level reuse of full QC recomputations (entry-point sessions only): key -> {"fingerprint", "report"}
         self.qc_results: dict = {}
         self.qc_hits = 0
-        #: set by `act_first_episode readback`: the inputs it watches and the content fingerprint taken at its start
+        #: set by `act_diagnostic_episode readback`: the inputs it watches and the content fingerprint taken at its start
         self.watch = None
         self.input_fingerprint = None
         self.cache: dict = {}

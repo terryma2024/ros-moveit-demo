@@ -251,7 +251,7 @@ D8F = dict(result_status="INDETERMINATE", teacher_execution_status="INDETERMINAT
 
 def completion(monkeypatch, tmp_path, cleanup_error=None, **changes):
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     proof = {**D8F, **changes}
     context = dict(coordinator_root="coordinator", location="location", scope="scope", inputs_manifest="inputs")
     written = []
@@ -264,7 +264,7 @@ def completion(monkeypatch, tmp_path, cleanup_error=None, **changes):
     monkeypatch.setattr(result_store, "verify_coordinator_commit", lambda *a, **k: proof)
     monkeypatch.setattr(result_store, "verify_coordinator_cleanup", cleanup)
     monkeypatch.setattr(result_store, "write_commit_proof", lambda proof, path: written.append(path) or "digest")
-    code, document = act_first_episode._verified_run_completion(tmp_path)
+    code, document = act_diagnostic_episode._verified_run_completion(tmp_path)
     return code, document, written
 
 
@@ -289,9 +289,9 @@ def test_a_failed_cleanup_verification_is_exit_4_and_nothing_sealed_is_exit_4(mo
     code, document, _ = completion(monkeypatch, tmp_path, cleanup_error="RESULT_CLEANUP_READBACK_INVALID")
     assert code == 4
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     def nothing(root):
         raise ValueError("RESULT_RUN_CONTEXT_INVALID")
     monkeypatch.setattr(result_store, "resolve_native_run", nothing)
-    assert act_first_episode._verified_run_completion(tmp_path)[0] == 4
+    assert act_diagnostic_episode._verified_run_completion(tmp_path)[0] == 4

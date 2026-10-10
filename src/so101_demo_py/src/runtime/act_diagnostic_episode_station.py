@@ -1,6 +1,6 @@
-"""The first-episode station: the ACT launch profile, selected by the frozen inputs.
+"""The diagnostic-episode station: the ACT launch profile, selected by the frozen inputs.
 
-The Worker's station for a first-episode run is the ACT task station (ACT `ros2_controllers.yaml` and `mujoco_plugins.yaml`,
+The Worker's station for a diagnostic-episode run is the ACT task station (ACT `ros2_controllers.yaml` and `mujoco_plugins.yaml`,
 the neck controller, the seven-joint reset), and it is chosen here from the frozen inputs manifest and its collection scope,
 never from the process environment. The Teacher drives plain JointTrajectoryControllers: this binding owns no broker, no
 reservation and no IPC socket, only the launch command and the worker environment that go with it.
@@ -15,7 +15,7 @@ from pathlib import Path
 
 from so101_demo.act.collection_scope import build_collection_scope, require_valid_scope
 from so101_demo.act.execution_snapshot import verify_execution_snapshot
-from so101_demo.act.first_episode_inputs import validate_execution_snapshot_binding, verify_frozen_inputs
+from so101_demo.act.diagnostic_episode_inputs import validate_execution_snapshot_binding, verify_frozen_inputs
 from so101_demo.application.qualification_stack import ros2_command
 from .task_stack import PersistentStackConfig, StackProcessSpec
 
@@ -23,7 +23,7 @@ LAUNCH_FILE = "so101_mujoco_act.launch.py"
 
 
 @dataclass(frozen=True)
-class FirstEpisodeStation:
+class DiagnosticEpisodeStation:
     inputs_manifest: Path
     scope_path: Path
     inputs_sha256: str

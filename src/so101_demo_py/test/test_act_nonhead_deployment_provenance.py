@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from so101_demo.cli import act_first_episode as cli
+from so101_demo.cli import act_diagnostic_episode as cli
 
 
 def inputs(tmp_path):

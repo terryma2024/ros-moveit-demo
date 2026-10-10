@@ -614,7 +614,7 @@ def _window_ok(window, *, mode: str) -> bool:
         return False
     # OWNER DECISION (CP-2217): `cadence_s`, `streams_required` and `permitted_gaps_s` are **episode
     # parameters**, not frozen inputs. F11 asked for them to be checked against the frozen policy, but the
-    # frozen input roles (act/first_episode_inputs.py:37) define no window policy, so the audit checks them for
+    # frozen input roles (act/diagnostic_episode_inputs.py:37) define no window policy, so the audit checks them for
     # internal consistency here and, through `_window_matches_observed`, against what the episode observed.
     if (not isinstance(window["streams_required"], list) or not window["streams_required"]
             or any(not isinstance(name, str) or not name for name in window["streams_required"])
@@ -847,7 +847,7 @@ class EpisodeAuditWriter:
         if not _hex64(digest):
             # the audit always names the frozen inputs it belongs to
             raise ValueError("AUDIT_INPUTS_INVALID")
-        from .first_episode_inputs import audit_execution_model_identity
+        from .diagnostic_episode_inputs import audit_execution_model_identity
         self._execution_model = audit_execution_model_identity(inputs)
         self._execution_chunks = (inputs["execution_snapshot"]["physics_chunks"]
                                   if self._execution_model is not None else None)
@@ -1655,7 +1655,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
     queues = []
     raw_physics_previous = None
     inputs = json.loads((audit / "inputs.json").read_bytes())
-    from .first_episode_inputs import audit_execution_model_identity
+    from .diagnostic_episode_inputs import audit_execution_model_identity
     execution_model = audit_execution_model_identity(inputs)
     execution_chunks = inputs["execution_snapshot"]["physics_chunks"] if execution_model is not None else None
     associations = []

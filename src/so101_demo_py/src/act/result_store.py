@@ -839,7 +839,7 @@ class ActCollectionResultVerifier:
 
 def resolve_native_run(run_root):
     """Locate retained originals from one actual dispatch and its journaled lease workspace."""
-    from .first_episode_inputs import verify_frozen_inputs
+    from .diagnostic_episode_inputs import verify_frozen_inputs
     from .collection_scope import read_collection_scope,build_collection_scope
     from so101_demo.parallel_batch.journal import CoordinatorJournal,JournalCorruption
     try:

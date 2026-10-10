@@ -15,7 +15,7 @@ from so101_demo.act.collection_scope import (
     require_scope,
     write_collection_scope,
 )
-from so101_demo.act.first_episode_inputs import (
+from so101_demo.act.diagnostic_episode_inputs import (
     CANDIDATES_KIND,
     INPUT_ROLES,
     MANIFEST_KIND,
@@ -688,19 +688,19 @@ def test_frozen_bytes_are_re_verified_not_just_described(tmp_path):
 def test_freeze_copies_the_verified_bytes_not_a_second_read(tmp_path, monkeypatch):
     """A candidate replaced between verification and copying must not become the frozen input."""
 
-    from so101_demo.act import first_episode_inputs
+    from so101_demo.act import diagnostic_episode_inputs
 
     registry = _registry(tmp_path)
     victim = Path(registry["roles"]["reset_recipe"]["selected"]["path"])
     original = victim.read_bytes()
-    real_verify = first_episode_inputs._verify_roles
+    real_verify = diagnostic_episode_inputs._verify_roles
 
     def racing_verify(document, **kwargs):
         payloads = real_verify(document, **kwargs)
         victim.write_bytes(b"replaced after verification\n")
         return payloads
 
-    monkeypatch.setattr(first_episode_inputs, "_verify_roles", racing_verify)
+    monkeypatch.setattr(diagnostic_episode_inputs, "_verify_roles", racing_verify)
     manifest_path = freeze_inputs(_write_registry(tmp_path, registry), tmp_path / "inputs")
     manifest = read_inputs_manifest(manifest_path)
     frozen = manifest_path.parent / manifest["roles"]["reset_recipe"]["path"]
@@ -774,7 +774,7 @@ def test_a_malformed_collection_mode_is_ineligible_not_a_raise():
 def test_ledger_references_keep_absolute_and_relative_paths(tmp_path):
     """An absolute reference under the registered root must resolve to itself, not to a duplicate."""
 
-    from so101_demo.act.first_episode_inputs import _ledger_referenced_json
+    from so101_demo.act.diagnostic_episode_inputs import _ledger_referenced_json
 
     evidence = tmp_path / "evidence"
     (evidence / "experiments" / "run").mkdir(parents=True)
@@ -795,7 +795,7 @@ def test_ledger_references_keep_absolute_and_relative_paths(tmp_path):
 def test_resource_role_refuses_missing_hard_stops(tmp_path):
     """A start guard alone is not the resource policy: the plan also requires the stop points."""
 
-    from so101_demo.act.first_episode_inputs import _inspect_resource_thresholds
+    from so101_demo.act.diagnostic_episode_inputs import _inspect_resource_thresholds
 
     root = tmp_path / "source"
     (root / "src/so101_demo_py/config/act").mkdir(parents=True)
@@ -884,7 +884,7 @@ def test_freeze_accepts_an_identity_it_cannot_prove(tmp_path):
 
 
 def test_ledger_references_reject_traversal_and_symlink_escapes(tmp_path):
-    from so101_demo.act.first_episode_inputs import _ledger_referenced_json
+    from so101_demo.act.diagnostic_episode_inputs import _ledger_referenced_json
 
     evidence = tmp_path / "evidence"
     (evidence / "experiments").mkdir(parents=True)

@@ -47,9 +47,9 @@ def test_the_retired_raw_pilot_switch_is_a_no_op_on_and_refused_off():
 
 
 def test_the_cli_default_is_the_bag_recorder_and_the_old_switch_still_parses():
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
-    parser = act_first_episode.build_parser()
+    parser = act_diagnostic_episode.build_parser()
     base = ["run", "--inputs", "i", "--root", "r", "--mode", "preselected_target_diagnostic", "--lifecycle", "FULL_RESTART"]
     assert parser.parse_args(base).raw_pilot is None and parser.parse_args(base).collection == "on"
     assert parser.parse_args(base + ["--raw-pilot", "on"]).raw_pilot == "on"
@@ -102,14 +102,14 @@ def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspec
 
     import yaml
 
-    from so101_demo.act import first_episode_inputs
+    from so101_demo.act import diagnostic_episode_inputs
 
     package = PACKAGE_ROOT
     document = yaml.safe_load((package / "config/act/parallel_collection.yaml").read_bytes())
     runtime = package / document["parallel_runtime"]["path"]
     assert runtime.name == "parallel_batch_act_offline.yaml"
     assert document["parallel_runtime"]["sha256"] == hashlib.sha256(runtime.read_bytes()).hexdigest()
-    assert first_episode_inputs.RUNTIME_CONFIG_FILE.endswith("config/mujoco/parallel_batch_act_offline.yaml")
+    assert diagnostic_episode_inputs.RUNTIME_CONFIG_FILE.endswith("config/mujoco/parallel_batch_act_offline.yaml")
 
 
 # ---- the bag fault helper, on a real bag -------------------------------------------------------------------------------------
@@ -703,9 +703,9 @@ def test_a_fault_outside_the_sandbox_is_refused_before_any_process_starts(tmp_pa
 
 
 def _exit_code(sealed, monkeypatch):
-    """What `act_first_episode run` returns for this committed result (the verified completion gate's mapping)."""
+    """What `act_diagnostic_episode run` returns for this committed result (the verified completion gate's mapping)."""
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     proof = dict(result_status=sealed["status"], teacher_task_result="PASS", act_data_status=sealed["act_data_status"],
                  act_data_qc=sealed["act_data_qc"], export_eligible=sealed["export_eligible"])
@@ -714,7 +714,7 @@ def _exit_code(sealed, monkeypatch):
     monkeypatch.setattr(result_store, "verify_coordinator_commit", lambda *a, **k: proof)
     monkeypatch.setattr(result_store, "verify_coordinator_cleanup", lambda *a, **k: dict(cleanup_proof_path="cleanup"))
     monkeypatch.setattr(result_store, "write_commit_proof", lambda proof, path: "digest")
-    return act_first_episode._verified_run_completion("/nonexistent-run")[0]
+    return act_diagnostic_episode._verified_run_completion("/nonexistent-run")[0]
 
 
 @pytest.mark.parametrize("fault", [fault for fault in COLLECTION_FAULTS if fault != "none"])

@@ -13,7 +13,7 @@ from paths import REPOSITORY
 def frozen_scene(tmp_path_factory):
     import mujoco
     from so101_demo.act.execution_snapshot import freeze_execution_snapshot
-    from so101_demo.act.first_episode_inputs import execution_snapshot_binding, INPUT_ROLES
+    from so101_demo.act.diagnostic_episode_inputs import execution_snapshot_binding, INPUT_ROLES
     from so101_demo.act.scene_association import digest
     root = tmp_path_factory.mktemp("alignment-frozen") / "execution"
     source = REPOSITORY

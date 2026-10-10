@@ -1,6 +1,6 @@
 """Assemble one episode's capture from the parts a physical run already holds.
 
-The first-episode path owns the episode's directory and identity; the physical side owns the producer. This module is
+The diagnostic-episode path owns the episode's directory and identity; the physical side owns the producer. This module is
 the seam between them, so that neither has to know the other's internals: a caller that has a sampler (an object with
 `sample_with_audit(session_id, attempt_id, at_s)`), a `physical_audit` callable and optionally a step guard, plus the
 episode's root, scope and identity, gets back a `ContinuousEpisodeCapture` wired to a real recorder and audit writer.

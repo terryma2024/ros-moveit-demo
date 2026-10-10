@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from so101_demo.act.frozen_runtime_inputs import load_teacher_frozen_inputs
-from so101_demo.act.first_episode_inputs import (
+from so101_demo.act.diagnostic_episode_inputs import (
     EXECUTION_POLICY_BINDING, POLICY_BINDINGS, policy_binding, read_inputs_manifest, verify_frozen_inputs)
 from so101_demo.act.general_runtime_policy import load_general_runtime_policy
 from so101_demo.act.teacher_endpoint import EXECUTION_VALUES, load_teacher_execution_policy

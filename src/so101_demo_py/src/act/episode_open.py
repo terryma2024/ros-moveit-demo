@@ -30,7 +30,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     from .contact_calibration import proposal_validation_mode, verify_disabled_proposal
     from .contact_policy import policy_fingerprint, spot_check_receipt_allowed, verify_activation
     from .execution_snapshot import verify_execution_snapshot
-    from .first_episode_inputs import POLICY_BINDINGS, verify_frozen_inputs, validate_execution_snapshot_binding
+    from .diagnostic_episode_inputs import POLICY_BINDINGS, verify_frozen_inputs, validate_execution_snapshot_binding
     from .collection_config import validate_recorder_policy
     from ..parallel_batch.contracts import ContractError, LeaseIdentity
 

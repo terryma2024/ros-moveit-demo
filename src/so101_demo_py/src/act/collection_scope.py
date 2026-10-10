@@ -1,6 +1,6 @@
 """Explicit collection mode and the closed collection-scope record.
 
-The non-head first-episode milestone runs the same acquisition chain as formal collection but with
+The non-head diagnostic-episode milestone runs the same acquisition chain as formal collection but with
 one substitution: the target is preselected instead of chosen by Head Search. That substitution
 changes exactly one thing — which startup prerequisites apply. It must never clear a non-Head
 safety gate, and the formal mode must keep requiring a real Head qualification, so the applicability

@@ -5,7 +5,7 @@ runs it twice under its state lock, the Worker's ResultStore once more, and the 
 The offline processor's fresh-process QC has just done exactly that recomputation on exactly those files, so the run path may rely on
 a memo of it that is bound to the content: every episode file, the scope, the frozen inputs and the Teacher manifest, plus the QC
 rule version and the report. Anything else (a changed byte, a missing memo, another report) recomputes in full. The read-only
-readback (`verify_coordinator_commit`, `act_first_episode qc`, `verify-commit`) never trusts the memo.
+readback (`verify_coordinator_commit`, `act_diagnostic_episode qc`, `verify-commit`) never trusts the memo.
 """
 
 import copy

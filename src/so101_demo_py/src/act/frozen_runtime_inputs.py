@@ -20,7 +20,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     are the ones the freeze bound (`verify_frozen_inputs` cross-checks each policy file against the snapshot's copy).
     """
     from .execution_snapshot import verify_execution_snapshot
-    from .first_episode_inputs import validate_execution_snapshot_binding, verify_frozen_inputs
+    from .diagnostic_episode_inputs import validate_execution_snapshot_binding, verify_frozen_inputs
 
     manifest_path = Path(manifest_path)
     frozen = verify_frozen_inputs(manifest_path)
@@ -43,7 +43,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
 
 def load_recorder_frozen_policy(manifest_path: Path) -> dict:
     """The frozen `episode_recorder` policy (values and policy_sha256), or a refusal when it was not frozen."""
-    from .first_episode_inputs import verify_frozen_inputs
+    from .diagnostic_episode_inputs import verify_frozen_inputs
     from .offline.policy import RecorderConfigRefused
 
     try:

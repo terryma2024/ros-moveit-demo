@@ -172,7 +172,7 @@ def _with_injection(options):
 
 
 def test_the_episode_cli_has_the_option_off_by_default():
-    from so101_demo.cli.act_first_episode import build_parser as episode_parser
+    from so101_demo.cli.act_diagnostic_episode import build_parser as episode_parser
     base = ["run", "--inputs", "i", "--root", "r", "--final-cup-pose", "0 0 0 0 0 0 1"]
     try:
         defaults = episode_parser().parse_args(base)

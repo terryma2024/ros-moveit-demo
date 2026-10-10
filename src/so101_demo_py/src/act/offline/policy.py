@@ -1,6 +1,6 @@
 """The frozen Recorder policy document (`episode_recorder`), loaded and validated.
 
-The policy is baked into every frozen inputs manifest (`frozen_runtime_inputs`, `first_episode_inputs`), so its closed schema is
+The policy is baked into every frozen inputs manifest (`frozen_runtime_inputs`, `diagnostic_episode_inputs`), so its closed schema is
 unchanged by the removal of the live Recorder: keys only the live Recorder read (`ready_timeout_s`, `capturing_timeout_s`,
 `exit_wait_s`, `term_grace_s`, `physics_spool_backlog_frames_max`) are still required and validated, and nothing reads them.
 """

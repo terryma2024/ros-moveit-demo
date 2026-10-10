@@ -179,6 +179,6 @@ def is_current_episode(inputs, events=()) -> bool:
 
     The frozen manifest is digest-bound, so stripping every event from a current episode cannot select an older reader.
     """
-    from .first_episode_inputs import MANIFEST_SCHEMA_VERSION
+    from .diagnostic_episode_inputs import MANIFEST_SCHEMA_VERSION
     return (isinstance(inputs, dict) and inputs.get("schema_version") == MANIFEST_SCHEMA_VERSION) or any(
         event.get("kind") == "teacher_event" for event in events)

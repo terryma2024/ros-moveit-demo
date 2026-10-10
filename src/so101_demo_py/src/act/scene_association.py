@@ -337,7 +337,7 @@ def verify_scene_association(document, *, inputs, identity, raw_steps):
     from ..core.task_geometry import load_task_geometry
     from ..control.planning_scene.task_scene import normalized_scene_geometry, verify_task_scene
     from .execution_snapshot import verify_execution_snapshot
-    from .first_episode_inputs import audit_execution_model_identity
+    from .diagnostic_episode_inputs import audit_execution_model_identity
 
     validate_scene_association(document)
     if not isinstance(raw_steps, (list, tuple)) or not raw_steps:

@@ -1,6 +1,6 @@
 """The collection request crosses every process boundary the way --collection always did (CP-3428, CP-3456).
 
-act_first_episode (CLI) -> CollectionOptions -> coordinator composition -> the Worker specification file -> the Worker process
+act_diagnostic_episode (CLI) -> CollectionOptions -> coordinator composition -> the Worker specification file -> the Worker process
 (`_build_worker_from_spec`) -> the Worker runtime. The record-only bag recorder is the data path exactly when the collection is on,
 so the specification carries no separate switch's value of its own; nothing here reads `os.environ`.
 """
@@ -52,9 +52,9 @@ def test_the_collection_option_is_in_the_worker_specification_and_the_worker_run
     monkeypatch.setattr(frozen_runtime_inputs, "load_recorder_frozen_policy", lambda _path: {"ready_timeout_s": 5.0})
     from unittest import mock
 
-    from so101_demo.runtime.act_first_episode_station import FirstEpisodeStation
+    from so101_demo.runtime.act_diagnostic_episode_station import DiagnosticEpisodeStation
 
-    monkeypatch.setattr(FirstEpisodeStation, "bind", classmethod(lambda cls, manifest, scope: mock.MagicMock()))
+    monkeypatch.setattr(DiagnosticEpisodeStation, "bind", classmethod(lambda cls, manifest, scope: mock.MagicMock()))
     scratch = _scratch_root()
     composition = composition_with(CollectionOptions(mode), f"chain-{mode}",
                                    episode_scope_path=str(scratch / "scope.json"),

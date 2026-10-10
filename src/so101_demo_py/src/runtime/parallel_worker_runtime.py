@@ -872,10 +872,10 @@ class ParallelWorkerRuntime:
         # port with a default rather than a hard-coded launch command.
         self._station_config = station_config or task_station_config
         if station_config is None and episode_inputs_manifest is not None:
-            # A first-episode run is the ACT station, chosen by the frozen inputs (never by the ambient environment).
+            # A diagnostic-episode run is the ACT station, chosen by the frozen inputs (never by the ambient environment).
             from dataclasses import replace
-            from .act_first_episode_station import FirstEpisodeStation
-            self._station_config = FirstEpisodeStation.bind(episode_inputs_manifest, episode_scope_path)
+            from .act_diagnostic_episode_station import DiagnosticEpisodeStation
+            self._station_config = DiagnosticEpisodeStation.bind(episode_inputs_manifest, episode_scope_path)
             self.resources = replace(resources, environment=self._station_config.environment(resources))
         if not callable(self._station_config):
             raise TypeError("station_config must be callable")

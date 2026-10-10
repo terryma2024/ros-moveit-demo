@@ -18,7 +18,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
     from sensor_msgs.msg import JointState
     from ..control.planning_scene.task_scene import normalized_scene_geometry
     from .execution_snapshot import verify_execution_snapshot
-    from .first_episode_inputs import audit_execution_model_identity
+    from .diagnostic_episode_inputs import audit_execution_model_identity
     from .raw_physics_chunks import verify_raw_chunk
 
     try:

@@ -40,11 +40,11 @@ def test_original_world_record_requires_exact_native_and_frozen_model(frozen_sce
     elif change == "missing_raw":
         raw = []
     if change is None:
-        from so101_demo.act.first_episode_inputs import audit_execution_model_identity
+        from so101_demo.act.diagnostic_episode_inputs import audit_execution_model_identity
         assert verify_world_source(record, identity={"session_id": "alignment-session", "reset_epoch": 1},
             model=frozen_scene[2], model_identity=audit_execution_model_identity(frozen_scene[1]), raw_steps=raw) is True
     else:
-        from so101_demo.act.first_episode_inputs import audit_execution_model_identity
+        from so101_demo.act.diagnostic_episode_inputs import audit_execution_model_identity
         with pytest.raises(ValueError):
             verify_world_source(record, identity={"session_id": "alignment-session", "reset_epoch": 1},
                 model=frozen_scene[2], model_identity=audit_execution_model_identity(frozen_scene[1]), raw_steps=raw)

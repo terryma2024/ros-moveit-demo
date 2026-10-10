@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from so101_demo.act.endpoint_pose_acceptance import load_development_runtime
-from so101_demo.act.first_episode_inputs import (
+from so101_demo.act.diagnostic_episode_inputs import (
     freeze_inputs, inspect_inputs, read_inputs_manifest, verify_frozen_inputs,
 )
 
@@ -31,7 +31,7 @@ class _Parser(argparse.ArgumentParser):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = _Parser(prog="act_first_episode", description=__doc__)
+    parser = _Parser(prog="act_diagnostic_episode", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     inspect = subparsers.add_parser("inspect", help="discover approved input candidates without selecting by recency")
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="on: a record-only `ros2 bag record` process records the run (raw/bag) and the offline processor builds "
                           "the episode from it after the Teacher ended; off: no recorder, no processing, no QC")
     run.add_argument("--raw-pilot", default=None, choices=("on", "off"),
-                     help="retired (CP-3456): the bag recorder is the only data path. `on` is accepted and does nothing; `off` "
+                     help="retired: the bag recorder is the only data path. `on` is accepted and does nothing; `off` "
                           "with --collection on is refused")
     run.add_argument("--collection-fault", default="none",
                      choices=("none", "recorder_absent", "recorder_late", "queue_overflow", "source_gap",
@@ -71,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
                      help="sandbox fault injection (preselected_target_diagnostic mode only, outputs under "
                           "<run>/fault-sandbox/)")
     run.add_argument("--teacher-inject-failure-at", default=None,
-                     help="CP-3513, diagnostic only (preselected_target_diagnostic mode, collection on, policy v3): inject one "
+                     help="Diagnostic only (preselected_target_diagnostic mode, collection on, policy v3): inject one "
                           "Teacher execution failure at the execute boundary of this state (LIFT). Off by default; refused by name "
                           "otherwise. Recorded in <run>/injected-failure.json and run.log")
     run.add_argument("--final-cup-pose",
@@ -122,7 +122,7 @@ def _preflight(arguments) -> int:
         if manifest.get("mode") != arguments.mode:
             raise ValueError("INPUT_MODE_MISMATCH")
     except (OSError, ValueError) as error:
-        print(f"act_first_episode: {error}", file=sys.stderr)
+        print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
     report = {
         "mode": arguments.mode,
@@ -155,7 +155,7 @@ def _qc(arguments) -> int:
         report = recompute_native_qc(root, scope=scope, inputs_manifest=inputs_manifest)
         digest = write_qc_report(report, Path(arguments.output))
     except (OSError, ValueError, TypeError, KeyError) as error:
-        print(f'act_first_episode: {error}', file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}', file=sys.stderr)
         return 4 if arguments.run is not None else 2
     print(json.dumps(dict(status=report['status'], output=arguments.output, sha256=digest), sort_keys=True))
     return 0 if report['status'] == 'PASS' else (3 if arguments.run is not None else 1)
@@ -169,7 +169,7 @@ def _verify_commit(arguments) -> int:
             scope=context['scope'],inputs_manifest=context['inputs_manifest'])
         digest=write_commit_proof(proof,Path(arguments.output))
     except (OSError,ValueError,TypeError,KeyError) as error:
-        print(f'act_first_episode: {error}',file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}',file=sys.stderr)
         return 3
     print(json.dumps(dict(status=proof['status'],output=arguments.output,sha256=digest),sort_keys=True))
     return 0
@@ -196,7 +196,7 @@ def _check_export(arguments) -> int:
         calls={'resolver':lambda:resolve_committed_episodes(manifest=dict(episodes=[entry]),campaign_index=index),
             'direct_export':lambda:export_dataset((entry,),dataset,source_manifest_sha256=scope['inputs_sha256'],
                 campaign_index_sha256=hashlib.sha256(index.read_bytes()).hexdigest())}
-        # A committed INVALID result that never produced a QC report has no episode a dataset entry could resolve to (CP-3394): when
+        # A committed INVALID result that never produced a QC report has no episode a dataset entry could resolve to: when
         # the entry does resolve it must be refused; when it does not resolve there is nothing to refuse and the check does not apply.
         no_qc=_committed_invalid_without_qc(commit)
         for name,call in calls.items():
@@ -221,7 +221,7 @@ def _check_export(arguments) -> int:
             dataset_produced=False,perception_or_policy_models_loaded=False)
         digest=write_export_rejection_proof(proof,Path(arguments.output))
     except (OSError,ValueError,TypeError,KeyError) as error:
-        print(f'act_first_episode: {error}',file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}',file=sys.stderr)
         return 3
     print(json.dumps(dict(status=proof['status'],output=arguments.output,sha256=digest),sort_keys=True))
     return 0
@@ -250,7 +250,7 @@ def _readback_entry(arguments) -> int:
                 return _readback(arguments, session)
             return globals()[_STAGES[command]](arguments)
     except qc_memo.ReadbackMemoForbidden as error:
-        print(f'act_first_episode: {error}', file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}', file=sys.stderr)
         return 4
 
 
@@ -277,7 +277,7 @@ def _readback(arguments, session) -> int:
         session.watch = dict(episode_root=episode, scope=context['scope'], inputs_manifest=context['inputs_manifest'])
         _guard_inputs(session, 'begin')
     except (OSError, ValueError, TypeError, KeyError) as error:
-        print(f'act_first_episode: {error}', file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}', file=sys.stderr)
         return 4
     done = {}
 
@@ -290,7 +290,7 @@ def _readback(arguments, session) -> int:
             rc = function(namespace)
             _guard_inputs(session, f'after {name}')
         except ValueError as error:
-            print(f'act_first_episode: {error}', file=sys.stderr)
+            print(f'act_diagnostic_episode: {error}', file=sys.stderr)
             rc, namespace.not_applicable_reason = 4, None
         if rc == 0 and namespace.not_applicable_reason and not target.is_file():
             return dict(status='NOT_APPLICABLE', rc=0, output=None, sha256=None, reason=namespace.not_applicable_reason)
@@ -298,7 +298,7 @@ def _readback(arguments, session) -> int:
                     sha256=hashlib.sha256(target.read_bytes()).hexdigest() if target.is_file() else None, reason=None)
 
     # The commit proof comes first: it says whether the data was ever graded. A committed INVALID result without a QC report has no
-    # recomputation to make (CP-3394); every other result is recomputed exactly once, as before.
+    # recomputation to make; every other result is recomputed exactly once, as before.
     done['verify-commit'] = run_stage('verify-commit', _verify_commit)
     proof = {}
     if done['verify-commit']['output']:
@@ -323,7 +323,7 @@ def _readback(arguments, session) -> int:
     try:
         write_readback_receipt(receipt, out / READBACK_RECEIPT)
     except ValueError as error:
-        print(f'act_first_episode: {error}', file=sys.stderr)
+        print(f'act_diagnostic_episode: {error}', file=sys.stderr)
         return 4
     print(json.dumps(dict(status=receipt['status'], output=str(out / READBACK_RECEIPT), failures=receipt['failures']),
                      sort_keys=True))
@@ -526,9 +526,9 @@ def _nonhead_provenance(inputs: dict) -> dict:
         "grounded_root": str(grounded), "grounded_manifest_sha256": grounded_sha,
     }
 
-#: the broker image the coordinator approved for this milestone (CP-2760): the perception stack and torch
+#: the broker image the coordinator approved for this milestone: the perception stack and torch
 #: live inside it, which is what the host lacks - and reusing it is the decision that supersedes the
-#: container-free route this path was written under (CP-2854)
+#: container-free route this path was written under
 BROKER_IMAGE = "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1"
 BROKER_IMAGE_ID = "sha256:010dca70ce3ce995367793642c2e5515718986253cecacc032e9f7f7ec6c5457"
 YOLO_WEIGHTS = Path("/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt")
@@ -549,7 +549,7 @@ def _broker_command(composition):
 
     flags = [str(item) for item in broker_argv()]
     # three of the composition's locations are always populated and the fourth falls back to the same authority IPC
-    # root the composition itself builds its broker runtime root from (CP-2533)
+    # root the composition itself builds its broker runtime root from
     ipc_root = composition.runtime_ipc_root or composition.authority.ipc_root
     substitutions = {
         "--endpoint": str(ipc_root / "perception.sock"),
@@ -557,7 +557,7 @@ def _broker_command(composition):
         "--ready-receipt": str(composition.broker_runtime_root / "ready.json"),
         "--runtime-spec": str(composition.broker_spec_path),
         # the transport checks a declared digest against the file this flag names, so it too must point at the
-        # file whose digest the specification declares (CP-2542)
+        # file whose digest the specification declares
         "--yolo-weights": str(composition.spec.yolo_weights),
     }
     for index, flag in enumerate(flags):
@@ -580,10 +580,10 @@ def _run(arguments) -> int:
         if json.loads(manifest_bytes) != manifest:
             raise ValueError("EPISODE_INPUTS_IDENTITY_CHANGED")
     except (OSError, ValueError) as error:
-        print(f"act_first_episode: {error}", file=sys.stderr)
+        print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
     if manifest.get("mode") != arguments.mode:
-        print(f"act_first_episode: the frozen set was prepared for {manifest.get('mode')!r}, "
+        print(f"act_diagnostic_episode: the frozen set was prepared for {manifest.get('mode')!r}, "
               f"not {arguments.mode!r}", file=sys.stderr)
         return 2
     try:
@@ -605,7 +605,7 @@ def _run(arguments) -> int:
                     or abs(sum(a / norm * b for a, b in zip(supplied[3:], target[3:]))) < 1 - 1e-12):
                 raise ValueError("EPISODE_FINAL_TARGET_FROZEN_MISMATCH")
     except (OSError, ValueError) as error:
-        print(f"act_first_episode: {error}", file=sys.stderr)
+        print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
 
     # The collection request is refused here, before any Teacher start (and before the run root exists): an unknown
@@ -621,19 +621,19 @@ def _run(arguments) -> int:
         if collection.enabled:
             load_recorder_frozen_policy(inputs / "inputs-manifest.json")
     except (CollectionRefused, OSError, ValueError) as error:
-        print(f"act_first_episode: {error}", file=sys.stderr)
+        print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
     from so101_demo.core.task_points import TaskPoint
     from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode
 
     root = Path(arguments.root)
     if root.exists():
-        print(f"act_first_episode: {root} already exists; a run is a new evidence root", file=sys.stderr)
+        print(f"act_diagnostic_episode: {root} already exists; a run is a new evidence root", file=sys.stderr)
         return 2
     root.mkdir(parents=True, mode=0o700)
     batch_id = f"nonhead-{arguments.mode}-{int(time.time())}"
     # the point must be one the approved catalogue actually names: task_start is the episode's start, and the
-    # request selects exactly that one id, so the sweep vehicle runs a single episode (CP-2519)
+    # request selects exactly that one id, so the sweep vehicle runs a single episode
     point = TaskPoint(id="task_start", label=arguments.mode,
                       cup_position_world_m=tuple(endpoint_targets["initial_target"][:3]))
     # the composition reads selected_point_ids off this request, so it is the versioned contract rather than the
@@ -655,7 +655,7 @@ def _run(arguments) -> int:
                 or verify_frozen_inputs(inputs / "inputs-manifest.json") != manifest):
             raise ValueError("EPISODE_INPUTS_IDENTITY_CHANGED")
     except (OSError, ValueError) as error:
-        print(f"act_first_episode: {error}", file=sys.stderr)
+        print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
     # the two artefacts the specification needs, both written under this run's own root: a one-point TaskPointList
     # (the sweep catalogue reduced to this episode) and a copy of the frozen provenance inputs, so the composition
@@ -679,9 +679,9 @@ def _run(arguments) -> int:
                      f"final_cup_pose={target}\ninputs={inputs.resolve()}\n"
                      f"config={type(config).__name__}\ncomposition=ProductionBatchComposition\n"
                      f"points={points_path}\nprovenance={sorted(provenance_paths)}\n"
-                     f"broker_image={BROKER_IMAGE} (reused, per the coordinator's decision CP-2760)\n")
+                     f"broker_image={BROKER_IMAGE} (reused)\n")
         if collection.inject_failure_at is not None:
-            stream.write(f"teacher_injected_failure_at={collection.inject_failure_at} (diagnostic injection, CP-3513)\n")
+            stream.write(f"teacher_injected_failure_at={collection.inject_failure_at}\n")
         stream.flush()
         os.fsync(stream.fileno())
     if collection.inject_failure_at is not None:
@@ -716,11 +716,11 @@ def _run(arguments) -> int:
         catalog_sha256=catalog_sha, selection_sha256=selection_sha, broker_image=BROKER_IMAGE,
         # the broker spec takes these four from the specification itself, so they name the frozen documents that
         # really participate here - the development runtime and the scene model - with the same digests the
-        # provenance states (CP-2540)
+        # provenance states
         # the transport checks each declared digest against the file beside it, so both names point at one real
         # file and carry that file's own digest: the frozen scene model, whose copy is byte-identical to the source
         # the transport compares these against the frozen runtime configuration's own fields, so the run declares
-        # exactly what that configuration carries rather than a digest of its own choosing (CP-2543)
+        # exactly what that configuration carries rather than a digest of its own choosing
         yolo_weights=YOLO_WEIGHTS,
         yolo_weights_sha256=config.yolo_weights_sha256,
         grounded_root=GROUNDED_ROOT,
@@ -729,15 +729,15 @@ def _run(arguments) -> int:
         provenance_inputs=provenance_inputs, provenance_verifier=_nonhead_provenance,
         start_guard_evidence=None, resume=False)
     # this route runs the broker as a host process beside the run, so its spec names the host copy of the runtime
-    # config rather than the container mount (CP-2680/2681)
+    # config rather than the container mount
     # the composition builds the ACT result port when it is given the episode scope below, so the coordinator's ACT gate
-    # fires on a real ACT episode (CP-2798/2802)
-    # the broker runs in its image, which is the route the coordinator approved (CP-2760): the composition's
+    # fires on a real ACT episode
+    # the broker runs in its image, which is the route the coordinator approved: the composition's
     # own default builds that command from the spec, so the container-free builder is not passed here
     # The episodes of this run share one scope document: its values - mode, scene, seed, inputs digest - are the
     # same for every episode, while each episode's own audit source is a different path under that episode's
     # root. It is written here because this is the process that holds the frozen set; the composition only
-    # carries the path into the worker specifications (CP-2862).
+    # carries the path into the worker specifications.
     from so101_demo.act.collection_scope import build_collection_scope, write_collection_scope
 
     _scope_path = root / "episode-scope.json"

@@ -283,14 +283,14 @@ def committed_run(tmp_path, monkeypatch, fault=None):
 
 
 def standalone(command, run, output):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
-    return act_first_episode.main([command, "--run", str(run.parent), "--output", str(output)])
+    return act_diagnostic_episode.main([command, "--run", str(run.parent), "--output", str(output)])
 
 
 @pytest.mark.parametrize("fault", [None, "missing_commit"])
 def test_readback_gives_the_bytes_and_exit_codes_of_the_three_standalone_commands(tmp_path, monkeypatch, fault):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch, fault)
     alone = tmp_path / "alone"
@@ -299,7 +299,7 @@ def test_readback_gives_the_bytes_and_exit_codes_of_the_three_standalone_command
     standalone_calls = len(calls)
     del calls[:]
     together = tmp_path / "together"
-    rc = act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(together)])
+    rc = act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(together)])
     receipt = json.loads((together / "readback-receipt.json").read_bytes())
     for name, code in codes.items():
         stage = receipt["stages"][name]
@@ -319,11 +319,11 @@ def test_check_export_recomputes_the_qc_once_not_three_times(tmp_path, monkeypat
 
 
 def test_readback_writes_one_receipt_that_binds_the_three_digests_the_fingerprint_and_the_process(tmp_path, monkeypatch):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     out = tmp_path / "readback"
-    rc = act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    rc = act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     receipt = json.loads((out / "readback-receipt.json").read_bytes())
     assert len(calls) == 1 and receipt["qc_recomputations"] == 1 and receipt["pid"] == os.getpid()
     digests = receipt["qc_report_sha256"]
@@ -334,37 +334,37 @@ def test_readback_writes_one_receipt_that_binds_the_three_digests_the_fingerprin
     assert receipt["code_digest"] == qc_memo.code_digest() and len(receipt["input_fingerprint"]) == 64
     assert receipt["stages"]["qc"]["rc"] == 3 and receipt["stages"]["verify-commit"]["rc"] == 0, "a QC FAIL does not stop the commit proof"
     assert receipt["stages"]["check-export"]["status"] == "PASS" and rc == 3 and receipt["status"] == "PASS"
-    assert act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)]) == 4, "an existing output directory is never reused"
+    assert act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)]) == 4, "an existing output directory is never reused"
 
 
 def test_a_run_that_is_not_a_diagnostic_has_no_export_check_stage(tmp_path, monkeypatch):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
-    monkeypatch.setattr(act_first_episode, "_run_mode", lambda context: "formal")
-    monkeypatch.setattr(act_first_episode, "_check_export", lambda arguments: pytest.fail("a formal run has no refusal check"))
+    monkeypatch.setattr(act_diagnostic_episode, "_run_mode", lambda context: "formal")
+    monkeypatch.setattr(act_diagnostic_episode, "_check_export", lambda arguments: pytest.fail("a formal run has no refusal check"))
     out = tmp_path / "readback"
-    act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     stage = json.loads((out / "readback-receipt.json").read_bytes())["stages"]["check-export"]
     assert stage["status"] == "NOT_APPLICABLE" and stage["rc"] == 0 and stage["reason"].startswith("DIAGNOSTIC_EXPORT_CHECK_MODE_REQUIRED")
     assert not (out / "check-export.json").exists()
 
 
 def test_a_receipt_with_two_recomputations_fails_its_own_stage_check(tmp_path, monkeypatch):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     inner = episode_qc._recompute_native_qc
     monkeypatch.setattr(episode_qc, "_recompute_for_readback",
                         lambda session, root, **kw: (session.note("recompute_native_qc"), inner(root, **kw))[1])   # no reuse
     out = tmp_path / "readback"
-    act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     receipt = json.loads((out / "readback-receipt.json").read_bytes())
     assert receipt["status"] == "FAIL" and any(item.startswith("READBACK_RECOMPUTE_COUNT") for item in receipt["failures"])
 
 
 def test_the_readback_never_opens_the_memo_even_when_a_matching_one_is_present(tmp_path, monkeypatch):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     memo = context["location"] / qc_memo.MEMO_NAME
@@ -374,19 +374,19 @@ def test_the_readback_never_opens_the_memo_even_when_a_matching_one_is_present(t
     real_open = os.open
     monkeypatch.setattr(os, "open", lambda path, *a, **k: (opened.append(str(path)), real_open(path, *a, **k))[1])
     out = tmp_path / "readback"
-    act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     assert not [path for path in opened if path.endswith(qc_memo.MEMO_NAME)]
     assert len(calls) == 1, "the QC was recomputed in this process"
 
 
 def test_a_process_with_a_filled_memo_cache_or_a_trusting_gate_is_refused_by_every_entry_point(tmp_path, monkeypatch, capsys):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     monkeypatch.setitem(qc_memo._CACHE, ("leak",), ("sig", "fp"))
     for name in ("qc", "verify-commit", "check-export"):
         assert standalone(name, run, tmp_path / f"{name}.json") == 4
-    assert act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(tmp_path / "rb")]) == 4
+    assert act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(tmp_path / "rb")]) == 4
     assert calls == [] and "READBACK_MEMO_STATE_PRESENT" in capsys.readouterr().err
     qc_memo._CACHE.clear()
     from so101_demo.act.result_store import ActCollectionResultVerifier
@@ -397,19 +397,19 @@ def test_a_process_with_a_filled_memo_cache_or_a_trusting_gate_is_refused_by_eve
 def test_the_run_command_writes_the_commit_proof_only(tmp_path, monkeypatch):
     """The run process builds memo-trusting gates (the Coordinator's), so it is not an independent readback: no receipt, no export check."""
     from so101_demo.act import result_store
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
     from test_act_result_qc import controlled_committed_result
 
     run, location, scope, inputs, _ = controlled_committed_result(tmp_path, monkeypatch, completed=True, teacher_outcome="PASSED")
     context = dict(episode=location / "episode", location=location, scope=scope, inputs_manifest=inputs,
                    coordinator_root=run / "coordinator")
     monkeypatch.setattr(result_store, "resolve_native_run", lambda root: context)
-    monkeypatch.setattr(act_first_episode, "_check_export", lambda arguments: pytest.fail("the run does not check the export"))
-    monkeypatch.setattr(act_first_episode, "_readback", lambda *a, **k: pytest.fail("the run does not read back"))
+    monkeypatch.setattr(act_diagnostic_episode, "_check_export", lambda arguments: pytest.fail("the run does not check the export"))
+    monkeypatch.setattr(act_diagnostic_episode, "_readback", lambda *a, **k: pytest.fail("the run does not read back"))
     root = run.parent
-    code, report = act_first_episode._verified_run_completion(root)
+    code, report = act_diagnostic_episode._verified_run_completion(root)
     assert code == 3 and (root / "commit-proof.json").is_file()
-    assert not (root / act_first_episode.READBACK_RECEIPT).exists() and not list(root.glob("check-export*"))
+    assert not (root / act_diagnostic_episode.READBACK_RECEIPT).exists() and not list(root.glob("check-export*"))
     assert not list(root.glob("qc*.json")) and not list(root.glob("verify-commit*"))
 
 
@@ -441,9 +441,9 @@ def invalid_without_qc(tmp_path, monkeypatch, *, episode=False, report=False):
 
 
 def readback(run, out):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
-    rc = act_first_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
+    rc = act_diagnostic_episode.main(["readback", "--run", str(run.parent), "--output-dir", str(out)])
     return rc, json.loads((out / "readback-receipt.json").read_bytes())
 
 
@@ -501,7 +501,7 @@ def test_qc_not_applicable_is_refused_when_the_result_holds_a_qc_report(tmp_path
 
 
 def test_the_receipt_allows_zero_recomputations_only_where_the_qc_stage_does_not_apply(tmp_path, monkeypatch):
-    from so101_demo.cli import act_first_episode
+    from so101_demo.cli import act_diagnostic_episode
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     inner = episode_qc._recompute_native_qc
@@ -509,11 +509,11 @@ def test_the_receipt_allows_zero_recomputations_only_where_the_qc_stage_does_not
     rc, receipt = readback(run, tmp_path / "applicable-zero")
     assert receipt["qc_recomputations"] == 0 and receipt["qc_applicability"] == "APPLICABLE"
     assert any(item.startswith("READBACK_RECOMPUTE_COUNT") for item in receipt["failures"]) and receipt["status"] == "FAIL"
-    assert act_first_episode.READBACK_RECEIPT
+    assert act_diagnostic_episode.READBACK_RECEIPT
 
 
 def test_the_wrapper_accepts_the_invalid_receipt_and_still_requires_one_recompute_for_a_valid_run(tmp_path, monkeypatch):
-    from so101_demo.cli.act_first_episode import judge_readback_receipt
+    from so101_demo.cli.act_diagnostic_episode import judge_readback_receipt
 
     run, context, calls = invalid_without_qc(tmp_path, monkeypatch)
     unresolvable(monkeypatch)
@@ -534,7 +534,7 @@ def test_the_wrapper_accepts_the_invalid_receipt_and_still_requires_one_recomput
 
 
 def test_the_wrapper_judges_an_applicable_receipt_as_before(tmp_path, monkeypatch):
-    from so101_demo.cli.act_first_episode import judge_readback_receipt
+    from so101_demo.cli.act_diagnostic_episode import judge_readback_receipt
 
     run, context, calls = committed_run(tmp_path, monkeypatch)
     rc, receipt = readback(run, tmp_path / "valid")
