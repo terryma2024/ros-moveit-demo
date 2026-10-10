@@ -569,6 +569,8 @@ class CampaignProjectionResponse(ClosedModel):
     current_generation: int | None = None
     infra_attempts: int = 0
     resource_observations: dict[str, object] = {}
+    #: Present only when the batch ended without a terminal event of its own (the owned process exited).
+    terminal_reason: str | None = None
     #: Retries appended after the first pass. Read-only history: it never rewrites the point
     #: statuses or the counters that describe what the first pass actually did.
     retry_history: tuple[RetryHistoryResponse, ...] = ()

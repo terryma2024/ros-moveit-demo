@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 import logging
@@ -430,6 +430,10 @@ def _accelerator_for_document(document):
             raise RuntimeError("MPS_ACCELERATOR_PROBE_MISSING")
         return selection.probe.probe
     return None
+
+
+#: The terminal reason of a batch whose owned coordinator or runner exited before any terminal event.
+COORDINATOR_EXITED_NON_TERMINAL = "COORDINATOR_EXITED_NON_TERMINAL"
 
 
 def _verified_cleanup_receipt_sha256(batch) -> str | None:
@@ -1203,6 +1207,27 @@ class ProductionExpertValidationService(ExpertValidationService):
         self._campaigns[campaign_id] = projection
         return projection
 
+    def _owner_exited(self, request) -> bool:
+        """True when the process this service owns for the batch is dead with nothing left running in its group.
+
+        Read before the journal so that every event the owner wrote before it exited is part of the same
+        projection: a coordinator that committed its terminal event and then exited is terminal, not exited.
+        An absent or foreign owner proves nothing (a restarted service reconnects before it projects).
+        """
+        owner = getattr(getattr(self, "supervisor", None), "process_owner", None)
+        active = getattr(owner, "active_execution", None)
+        if (
+            active is None
+            or getattr(active, "campaign_id", None) != request.campaign_id
+            or getattr(active, "batch_id", None) != request.batch_id
+        ):
+            return False
+        try:
+            status = owner.poll(active)
+        except CoordinatorOwnershipError:
+            return False
+        return status.running is False and status.descendants_alive is False
+
     def _with_recovery_fence(self, campaign_id, projection):
         # Web admission state must not rewrite upstream outcomes or receipts.
         if self.store.recovery_fence(campaign_id) is not None:
@@ -1234,6 +1259,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             journal_root=journal_root,
             batch_root=batch_root,
         )
+        owner_exited = self._owner_exited(request)
         journal = ReadOnlyCoordinatorJournal(journal_root, request.batch_id)
         if layout.layout == CAMPAIGN_LAYOUT:
             # The macOS campaign journal: the same verification, its own committed payload schema.
@@ -1396,6 +1422,16 @@ class ProductionExpertValidationService(ExpertValidationService):
         cleanup_complete = state.get("batch_cleanup_complete", False)
         if not isinstance(cleanup_complete, bool):
             raise CoordinatorProjectionError("BATCH_PROJECTION_INVALID")
+        owner_lost = owner_exited and not terminal
+        if owner_lost:
+            # The owned coordinator is gone without a terminal event: nothing will ever advance this batch, so it is
+            # terminal for every consumer. Its journal leases are stale, and cleanup is complete only when the
+            # batch's own verified cleanup event exists.
+            terminal = True
+            terminal_reason = terminal_reason or COORDINATOR_EXITED_NON_TERMINAL
+            cleanup_complete = cleanup_complete or _verified_cleanup_receipt_sha256(batch) is not None
+            points = [replace(point, active_worker_id=None) for point in points]
+            workers = [replace(worker, active_point_id=None) for worker in workers]
         if terminal and cleanup_complete:
             # A first pass runs for its whole campaign inside the coordinator, so the supervisor's
             # spawn-result receipt (``start_first_pass``) never sees it. The batch's own verified
@@ -1425,6 +1461,8 @@ class ProductionExpertValidationService(ExpertValidationService):
         )
         if terminal_reason == "WEB_CANCEL_REQUESTED":
             status = "CANCELLED" if terminal and cleanup_complete else "CANCELLING"
+        elif owner_lost:
+            status = "INFRA_FAILED" if cleanup_complete else "CLEANING_UP"
         elif terminal and cleanup_complete and statistics.qualification_passed:
             status = "COMPLETED"
         elif terminal and cleanup_complete and statistics.valid_failed:
@@ -1511,6 +1549,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             "execution_complete": statistics.execution_complete,
             "batch_cleanup_complete": statistics.batch_cleanup_complete,
             "qualification_passed": statistics.qualification_passed,
+            **({"terminal_reason": terminal_reason} if owner_lost else {}),
         }
 
     def _record_verified_batch_cleanup(self, request, batch) -> None:
@@ -1616,6 +1655,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             journal_root=journal_root,
             batch_root=batch_root,
         )
+        owner_exited = self._owner_exited(request)
         reader = AdaptiveEventReader(
             ReadOnlyCoordinatorJournal(journal_root, request.batch_id),
             binding,
@@ -1650,7 +1690,11 @@ class ProductionExpertValidationService(ExpertValidationService):
             })
         terminal_status = view.terminal_status
         cleanup_complete = view.cleanup_complete is True
-        if terminal_status is None:
+        owner_lost = owner_exited and terminal_status is None
+        if owner_lost:
+            # The wrapper is gone and its runner wrote no terminal event: nothing will advance this batch.
+            status = "INFRA_FAILED" if cleanup_complete else "CLEANING_UP"
+        elif terminal_status is None:
             status = "RUNNING"
         elif not cleanup_complete:
             status = "CLEANING_UP"
@@ -1695,11 +1739,12 @@ class ProductionExpertValidationService(ExpertValidationService):
             "qualified_success_rate": (
                 succeeded / evaluated if evaluated else None
             ),
-            "coverage_complete": terminal_status is not None and evaluated == requested,
-            "execution_complete": terminal_status is not None,
+            "coverage_complete": (terminal_status is not None or owner_lost) and evaluated == requested,
+            "execution_complete": terminal_status is not None or owner_lost,
             "batch_cleanup_complete": cleanup_complete,
             "qualification_passed": (
-                terminal_status == "COMPLETED" if terminal_status is not None else None
+                terminal_status == "COMPLETED" if terminal_status is not None
+                else False if owner_lost else None
             ),
             "levels_used": view.levels_used,
             "fallback_history": tuple(
@@ -1716,6 +1761,7 @@ class ProductionExpertValidationService(ExpertValidationService):
             "infra_attempts": sum(
                 point.infra_attempts for point in view.points.values()
             ),
+            **({"terminal_reason": COORDINATOR_EXITED_NON_TERMINAL} if owner_lost else {}),
         }
 
     def cancel_campaign(self, campaign_id, body):

@@ -693,3 +693,105 @@ def test_adaptive_projection_falls_back_to_cache_before_runner_journal_exists(tm
     cached = service._campaigns["campaign-a"]
     assert service.get_campaign("campaign-a") is cached
     assert service.store.accepted == []
+
+
+class _ProcessOwnerDouble:
+    """An owner whose one execution has the given liveness; only what the projection reads."""
+
+    def __init__(self, request, *, running, descendants_alive=False, campaign_id=None):
+        self.active_execution = SimpleNamespace(
+            campaign_id=campaign_id or request.campaign_id, batch_id=request.batch_id)
+        self._status = SimpleNamespace(running=running, exit_code=None if running else 1,
+                                       descendants_alive=descendants_alive)
+
+    def poll(self, _owned):
+        return self._status
+
+
+def _fixed_request(tmp_path):
+    return SimpleNamespace(
+        campaign_id="campaign-a", manifest_id="manifest-a", batch_id="batch-a",
+        execution_mode="SEQUENTIAL", evidence_root=tmp_path,
+        selection=SimpleNamespace(
+            point_ids=("point-a", "point-b"),
+            points=(SimpleNamespace(id="point-a", display_id="P01"),
+                    SimpleNamespace(id="point-b", display_id="P02"))),
+    )
+
+
+def _fixed_journal_without_terminal(tmp_path):
+    """point-a holds a lease on worker-01; point-b was never run; no terminal event exists."""
+    journal = CoordinatorJournal.create(
+        tmp_path / "campaigns/campaign-a/batch-a/coordinator", "batch-a")
+    journal.append("LEASE_GRANTED", "lease", {"delta": {
+        "points": {"point-a": {"status": "UNRUN", "attempts": 1, "terminal": False,
+                               "active_attempt": "point-a-lease-1"}},
+        "workers": {"worker-01": {"generation": 1, "state": "EXECUTING", "lease_count": 1,
+                                  "lease": {"point_id": "point-a", "attempt_id": "point-a-lease-1"}}}}})
+    return journal
+
+
+def _service_with_owner(request, owner):
+    service = object.__new__(ProductionExpertValidationService)
+    service.store = CursorStore()
+    service.supervisor = SimpleNamespace(process_owner=owner)
+    return service
+
+
+@pytest.mark.parametrize("owner_state", ["live", "dead_but_group_alive", "no_owner", "other_campaign"])
+def test_fixed_projection_stays_running_when_the_owner_is_not_proved_gone(tmp_path, owner_state):
+    request = _fixed_request(tmp_path)
+    owner = {
+        "live": _ProcessOwnerDouble(request, running=True),
+        "dead_but_group_alive": _ProcessOwnerDouble(request, running=False, descendants_alive=True),
+        "no_owner": SimpleNamespace(active_execution=None),
+        "other_campaign": _ProcessOwnerDouble(request, running=False, campaign_id="campaign-other"),
+    }[owner_state]
+    service = _service_with_owner(request, owner)
+    with _fixed_journal_without_terminal(tmp_path):
+        projection = service._fixed_campaign_projection(request)
+    assert projection["status"] == "RUNNING"
+    assert "terminal_reason" not in projection
+
+
+def test_fixed_projection_of_a_dead_coordinator_without_a_terminal_event_is_not_running(tmp_path):
+    """The coordinator exited non-terminal (live: DYNAMIC_RELEASE_SOURCE_EXPIRED on a worker, then the coordinator
+    was gone): nothing will advance the batch, so every consumer must see it terminal rather than RUNNING forever."""
+    request = _fixed_request(tmp_path)
+    service = _service_with_owner(request, _ProcessOwnerDouble(request, running=False))
+    with _fixed_journal_without_terminal(tmp_path):
+        projection = service._fixed_campaign_projection(request)
+    # no cleanup event in the journal yet
+    assert projection["status"] == "CLEANING_UP"
+    assert projection["terminal_reason"] == "COORDINATOR_EXITED_NON_TERMINAL"
+    assert projection["batch_cleanup_complete"] is False
+    assert projection["qualification_passed"] is False
+    assert [point["active_worker_id"] for point in projection["points"]] == [None, None]
+    assert all(worker["current_point_id"] is None for worker in projection["workers"])
+    assert projection["not_executed"] == 2 and projection["valid_succeeded"] == 0
+
+
+def test_fixed_projection_of_a_dead_coordinator_is_infra_failed_once_cleanup_is_verified(tmp_path, monkeypatch):
+    from so101_teleop.expert_validation import production
+
+    request = _fixed_request(tmp_path)
+    service = _service_with_owner(request, _ProcessOwnerDouble(request, running=False))
+    monkeypatch.setattr(production, "_verified_cleanup_receipt_sha256", lambda _batch: "c" * 64)
+    with _fixed_journal_without_terminal(tmp_path):
+        projection = service._fixed_campaign_projection(request)
+    assert projection["status"] == "INFRA_FAILED"
+    assert projection["batch_cleanup_complete"] is True
+    assert projection["terminal_reason"] == "COORDINATOR_EXITED_NON_TERMINAL"
+
+
+def test_adaptive_projection_of_a_dead_wrapper_without_a_terminal_event_is_not_running(tmp_path):
+    service = _adaptive_service(tmp_path)
+    request = service._campaign_requests["campaign-a"]
+    service.supervisor = SimpleNamespace(process_owner=_ProcessOwnerDouble(request, running=False))
+    with _adaptive_journal(tmp_path) as journal:
+        journal.append("BATCH_MANIFEST", "manifest", {"selected_point_ids": ["point-a", "point-b"]})
+        journal.append("POOL_STARTING", "pool-starting-01", {"generation": 1, "worker_count": 8})
+        projection = service.get_campaign("campaign-a")
+    assert projection["status"] == "CLEANING_UP"
+    assert projection["terminal_reason"] == "COORDINATOR_EXITED_NON_TERMINAL"
+    assert projection["execution_complete"] is True and projection["qualification_passed"] is False
