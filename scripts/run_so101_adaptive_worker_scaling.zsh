@@ -57,8 +57,8 @@ typeset repo_root="${script_dir:h}"
 typeset points="$repo_root/src/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml"
 typeset config="$repo_root/src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
 typeset adaptive_config="$repo_root/src/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml"
-typeset yolo_weights="/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt"
-typeset grounded_root="/data/work/so101-models/grounded-sam-v2-scipy-lock"
+typeset yolo_weights="/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt"
+typeset grounded_root="/data/work/models/so101-perception/grounded-sam-cup-pickplace/bundle"
 typeset -A batch_ids=(1 wy101 2 wy201 4 wy401 6 wy601 8 wy801)
 for count in $counts; do
   if [[ -z "${batch_ids[$count]:-}" ]]; then
@@ -85,7 +85,7 @@ function batch_command() {
     --yolo-weights "$yolo_weights"
     --yolo-weights-sha256 f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781
     --grounded-root "$grounded_root"
-    --grounded-manifest-sha256 0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775
+    --grounded-manifest-sha256 b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05
     --run-mode execute
   )
 }
