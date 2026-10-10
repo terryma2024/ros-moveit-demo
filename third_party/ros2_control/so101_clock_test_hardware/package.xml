@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>so101_clock_test_hardware</name>
+  <version>0.1.0</version>
+  <description>Official ros2_control hardware fixtures for the clock regression test closure.</description>
+  <maintainer email="terryma2024@users.noreply.github.com">SO-101 maintainers</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <test_depend>hardware_interface</test_depend>
+  <test_depend>pluginlib</test_depend>
+  <test_depend>rclcpp</test_depend>
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
