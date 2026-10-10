@@ -18,7 +18,7 @@ def _ref(path):
 
 def _inputs(tmp_path, change=None):
     from rclpy.serialization import serialize_message
-    from mujoco_ros2_control_msgs.msg import CameraTruthFrame
+    from mujoco_ros2_control_msgs.msg import CameraTruthFrame, CameraTruthFrameV2
     from so101_mujoco_support.msg import PhysicsStepEvidence, PhysicsStepEvidenceChunk
     from sensor_msgs.msg import Image, CameraInfo
     from std_msgs.msg import Header
@@ -56,8 +56,8 @@ def _inputs(tmp_path, change=None):
     fixture = dict(schema_version=1, case_id='hs40-900000', seed=900000,
         condition_class='nominal', anchor='default', scene_sha256='c'*64,
         reset_free_bodies=[], lighting={}, truth_manifest=truth, injection={})
-    frame_doc = dict(schema_version=1, kind='paired_camera_truth_original',
-        cdr=save('paired.cdr',serialize_message(frame)),
+    frame_doc = dict(schema_version=2, kind='paired_camera_truth_original',
+        cdr=save('paired.cdr',serialize_message(CameraTruthFrameV2(schema_version=2, original=frame, reference_kind=0))),
         production_rgb=save('rgb.cdr',serialize_message(rgb)),
         production_info=save('info.cdr',serialize_message(info)),
         received_utc_ns=1000, received_monotonic_ns=2000)
@@ -171,3 +171,15 @@ def test_cdr_alignment_padding_does_not_change_original_message_content(tmp_path
     document_path.write_text(json.dumps(document))
     result = module.build_frame_truth(_ref(document_path), states, fixture, tmp_path/'truth')
     assert result['status'] == 'PASS'
+
+
+def test_a_frame_document_of_another_schema_is_refused(tmp_path):
+    module = _module()
+    frame, states, fixture = _inputs(tmp_path)
+    document = json.loads(Path(frame['path']).read_text())
+    document["schema_version"] = 1
+    retired = tmp_path / 'retired-frame.json'
+    retired.write_bytes(json.dumps(document).encode())
+    with pytest.raises(ValueError, match='FRAME_SCHEMA'):
+        module.build_frame_truth(_ref(retired), states, fixture, tmp_path/'truth')
+    assert not (tmp_path/'truth').exists()

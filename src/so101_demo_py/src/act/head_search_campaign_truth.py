@@ -172,21 +172,15 @@ def _validated_paired_original(doc, truth, reference_expected=None):
     keys = {'schema_version', 'kind', 'cdr', 'production_rgb', 'production_info',
             'received_utc_ns', 'received_monotonic_ns'}
     _require(type(doc) is dict and set(doc) == keys and type(doc['schema_version']) is int and
-             doc['schema_version'] in (1,2) and doc['kind'] == ('paired_camera_truth_original'
-                 if doc['schema_version']==1 else 'paired_camera_truth_v2_original') and
+             doc['schema_version']==2 and doc['kind']=='paired_camera_truth_original' and
              _positive_int(doc['received_utc_ns']) and _positive_int(doc['received_monotonic_ns']), 'FRAME_SCHEMA')
     from rclpy.serialization import deserialize_message
     from sensor_msgs.msg import Image, CameraInfo
     try:
-        if doc['schema_version']==1:
-            from mujoco_ros2_control_msgs.msg import CameraTruthFrame
-            envelope=None
-            frame=deserialize_message(_read_ref(doc['cdr']),CameraTruthFrame)
-        else:
-            from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
-            envelope=deserialize_message(_read_ref(doc['cdr']),CameraTruthFrameV2)
-            frame=envelope.original
-            validate_native_reference(envelope,reference_expected)
+        from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
+        envelope=deserialize_message(_read_ref(doc['cdr']),CameraTruthFrameV2)
+        frame=envelope.original
+        validate_native_reference(envelope,reference_expected)
     except Exception as error:
         raise ValueError('HEAD_CAMPAIGN_TRUTH_FRAME_DECODE') from error
     _require(frame.schema_version == 1 and frame.record_type == frame.FRAME and
@@ -247,7 +241,7 @@ def build_frame_truth(frame_ref, state_refs, fixture_ref, output_root):
                  for k in ('model_sha256','render_config_sha256')), 'TRUTH_DIGESTS')
     doc = _json_ref(frame_ref)
     expected=None
-    if doc.get('schema_version')==2 and fixture['lighting'].get('render_config_ref'):
+    if fixture['lighting'].get('render_config_ref'):
         render_ref=fixture['lighting']['render_config_ref']
         _require(render_ref['sha256']==truth['render_config_sha256'],'RENDER_CONFIG_SHA')
         expected=_json_ref(render_ref)['initial_reference']
@@ -312,10 +306,10 @@ def build_initial_condition_reference(initial_ref, fixture_ref, output_root):
     keys={'schema_version','kind','cdr','production_rgb','production_info',
           'received_utc_ns','received_monotonic_ns','reset_original'}
     _require(type(doc) is dict and set(doc)==keys and type(doc['schema_version']) is int and
-             doc['schema_version']==2 and doc['kind']=='initial_paired_camera_truth_v2_original',
+             doc['schema_version']==2 and doc['kind']=='initial_paired_camera_truth_original',
              'INITIAL_SCHEMA')
     pair={key:value for key,value in doc.items() if key!='reset_original'}
-    pair['kind']='paired_camera_truth_v2_original'
+    pair['kind']='paired_camera_truth_original'
     frame,envelope,pixels=_validated_paired_original(pair,truth,render['initial_reference'])
     reset=doc['reset_original']
     _require(type(reset) is dict and reset.get('paused') is True and

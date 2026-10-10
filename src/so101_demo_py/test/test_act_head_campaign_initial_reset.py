@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from test_act_head_campaign_truth_collector import _collector, _frame, _module, _writer
+from test_act_head_campaign_truth_collector import _collector, _envelope, _frame, _module, _writer
 from test_act_head_execution_reset import setup_scene
 
 
@@ -23,7 +23,7 @@ def _reset():
 def _originals(recorder, *, omit=None, damage=None):
     frame=_frame()
     if omit!='paired':
-        recorder.record_frame(frame,received_utc_ns=10,received_monotonic_ns=20)
+        recorder.record_frame(_envelope(frame),received_utc_ns=10,received_monotonic_ns=20)
     rgb=copy.deepcopy(frame.rgb);info=copy.deepcopy(frame.camera_info)
     if damage=='rgb':rgb.data=b'xyz'
     elif damage=='info':info.k[0]=1.
@@ -121,10 +121,10 @@ def test_late_final_watermark_cannot_promote_an_expired_initial_frame(tmp_path):
         _originals(recorder,omit='info')
         with pytest.raises(TimeoutError):
             recorder.wait_initial_reset_frame(_reset(),deadline=time.monotonic()+.02)
-        recorder.record_frame(CameraTruthFrame(schema_version=1,record_type=1,
+        recorder.record_frame(_envelope(CameraTruthFrame(schema_version=1,record_type=1,
             capture_identity='capture',camera_name='head_camera',model_sha256='a'*64,
             render_config_sha256='b'*64,generated_count=1,enqueued_count=1,published_count=1,
-            last_enqueued_sequence=1,last_published_sequence=1,frame_sequence=1),
+            last_enqueued_sequence=1,last_published_sequence=1,frame_sequence=1)),
             received_utc_ns=13,received_monotonic_ns=23)
         assert recorder.receipt()['final_received'] is True
         assert recorder.receipt()['complete'] is False

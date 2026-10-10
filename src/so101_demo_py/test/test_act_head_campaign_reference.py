@@ -11,7 +11,7 @@ import yaml
 
 
 @pytest.mark.parametrize('index,kind',[(0,'none'),(6,'normal_light'),(7,'amodal_cup')])
-def test_fixture_seals_v2_reference_config_and_exact_light_baseline(tmp_path,index,kind):
+def test_fixture_seals_reference_config_and_exact_light_baseline(tmp_path,index,kind):
     from test_act_head_search_campaign_scene import _baseline,_case
     from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
     baseline=_baseline(tmp_path)
@@ -55,7 +55,7 @@ def _native_envelope():
         frozen_cameras=[0.]*32,scene_restored=True,initial_render_elapsed_ns=1000000)
 
 
-def test_recorder_preserves_outer_v2_original_without_reserializing_v1(tmp_path):
+def test_recorder_preserves_outer_original_without_reserializing(tmp_path):
     from test_act_head_campaign_truth_collector import _writer
     from so101_demo.adapters.act.head_campaign_truth_collector import FrameOriginalRecorder
     from rclpy.serialization import deserialize_message
@@ -63,7 +63,7 @@ def test_recorder_preserves_outer_v2_original_without_reserializing_v1(tmp_path)
     writer=_writer(tmp_path)
     try:
         recorder=FrameOriginalRecorder(writer=writer,capture_identity='capture',camera_name='head_camera',
-            model_sha256='a'*64,render_config_sha256='b'*64,expected_schema_version=2)
+            model_sha256='a'*64,render_config_sha256='b'*64)
         envelope=_native_envelope()
         saved=recorder.record_frame(envelope,received_utc_ns=1000,received_monotonic_ns=2000)
         assert saved['message_schema_version']==2
@@ -75,13 +75,13 @@ def test_recorder_preserves_outer_v2_original_without_reserializing_v1(tmp_path)
 
 
 @pytest.mark.parametrize('damage',['empty','header','kind','restoration','camera_nan','repeat','late','final'])
-def test_v2_reference_violation_is_sticky_and_keeps_rejected_outer_original(tmp_path,damage):
+def test_reference_violation_is_sticky_and_keeps_rejected_outer_original(tmp_path,damage):
     from test_act_head_campaign_truth_collector import _writer
     from so101_demo.adapters.act.head_campaign_truth_collector import FrameOriginalRecorder
     writer=_writer(tmp_path)
     try:
         recorder=FrameOriginalRecorder(writer=writer,capture_identity='capture',camera_name='head_camera',
-            model_sha256='a'*64,render_config_sha256='b'*64,expected_schema_version=2)
+            model_sha256='a'*64,render_config_sha256='b'*64)
         envelope=_native_envelope()
         if damage=='empty':envelope.reference.data=[]
         elif damage=='header':envelope.reference.header.frame_id='other'
@@ -103,18 +103,11 @@ def _save(path,raw):
     return {'path':str(path),'sha256':hashlib.sha256(raw).hexdigest()}
 
 
-def test_dynamic_truth_decodes_outer_v2_and_keeps_exact_physics_gate(tmp_path):
+def test_dynamic_truth_decodes_outer_and_keeps_exact_physics_gate(tmp_path):
     from test_act_head_search_campaign_truth import _inputs
     from so101_demo.act.head_search_campaign_truth import build_frame_truth
-    from rclpy.serialization import serialize_message,deserialize_message
-    from mujoco_ros2_control_msgs.msg import CameraTruthFrame,CameraTruthFrameV2
     frame_ref,state_refs,fixture_ref=_inputs(tmp_path)
     doc=json.loads(Path(frame_ref['path']).read_text())
-    original=deserialize_message(Path(doc['cdr']['path']).read_bytes(),CameraTruthFrame)
-    envelope=CameraTruthFrameV2(schema_version=2,original=original)
-    doc.update(schema_version=2,kind='paired_camera_truth_v2_original',
-               cdr=_save(tmp_path/'v2.cdr',serialize_message(envelope)))
-    frame_ref=_save(tmp_path/'v2-frame.json',json.dumps(doc).encode())
     result=build_frame_truth(frame_ref,state_refs,fixture_ref,tmp_path/'truth')
     assert result['status']=='PASS'
     assert result['original_message_schema_version']==2 and result['native_outer_cdr']==doc['cdr']
@@ -170,7 +163,7 @@ def _initial_case(tmp_path,index):
     reset=dict(paused=True,simulation_step=0,simulation_time_s=1.,reset_epoch=truth['reset_epoch'],
         simulation_session_id=truth['simulation_session_id'],model_sha256=truth['model_sha256'],
         qpos=qpos.tolist(),qvel=[0.]*model.nv)
-    doc=dict(schema_version=2,kind='initial_paired_camera_truth_v2_original',
+    doc=dict(schema_version=2,kind='initial_paired_camera_truth_original',
         cdr=_save(tmp_path/'initial.cdr',serialize_message(outer)),
         production_rgb=_save(tmp_path/'rgb.cdr',serialize_message(rgb)),
         production_info=_save(tmp_path/'info.cdr',serialize_message(info)),

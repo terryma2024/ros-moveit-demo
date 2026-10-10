@@ -43,13 +43,13 @@ def create_campaign_truth_collector(*,node,inputs,writer):
     required=dict(truth_enabled=True,truth_topic='/head_campaign/paired_truth',
         truth_capture_identity=truth['capture_identity'],truth_model_sha256=truth['model_sha256'],
         truth_render_config_sha256=truth['render_config_sha256'],frame_name=truth['frame_id'])
-    schema_version=render.get('truth_schema_version',1)
+    if render.get('truth_schema_version')!=2:
+        raise ValueError('HEAD_TRUTH_NATIVE_CONFIG_CONFLICT')
     reference=render.get('initial_reference')
-    if schema_version==2:
-        required.update(truth_schema_version=2,truth_reference_kind=reference['kind'],
-            truth_baseline_diffuse=reference['baseline_diffuse'],
-            truth_baseline_specular=reference['baseline_specular'],
-            truth_hidden_geom_ids=reference['hidden_geom_ids'])
+    required.update(truth_schema_version=2,truth_reference_kind=reference['kind'],
+        truth_baseline_diffuse=reference['baseline_diffuse'],
+        truth_baseline_specular=reference['baseline_specular'],
+        truth_hidden_geom_ids=reference['hidden_geom_ids'])
     if any(type(camera.get(key)) is not type(value) or camera[key]!=value
            for key,value in required.items()):
         raise ValueError('HEAD_TRUTH_NATIVE_CONFIG_CONFLICT')
@@ -67,7 +67,7 @@ def create_campaign_truth_collector(*,node,inputs,writer):
         expected_native_identity=dict(simulation_session_id=truth['simulation_session_id'],
                                       reset_epoch=truth['reset_epoch']),
         expected_image=dict(width=truth['width'],height=truth['height'],frame_id=truth['frame_id']),
-        expected_schema_version=schema_version,expected_reference=reference)
+        expected_reference=reference)
     return HeadCampaignTruthCollector(node=node,recorder=recorder,truth_topic=camera['truth_topic'],
         rgb_topic=camera['image_topic'],info_topic=camera['info_topic'],
         physics_topic=render['physics_step_topic'])
@@ -78,7 +78,7 @@ class FrameOriginalRecorder:
 
     def __init__(self, *, writer, capture_identity, camera_name, model_sha256,
                  render_config_sha256, expected_native_identity=None, expected_image=None,
-                 expected_schema_version=1, expected_reference=None):
+                 expected_reference=None):
         from so101_demo.act.head_run_evidence import HeadRunEvidence
         if type(writer) is not HeadRunEvidence:
             raise ValueError('HEAD_TRUTH_WRITER_REQUIRED')
@@ -93,9 +93,6 @@ class FrameOriginalRecorder:
         self.native_identity = None
         self.expected_native_identity = expected_native_identity
         self.expected_image = expected_image
-        if type(expected_schema_version) is not int or expected_schema_version not in (1,2):
-            raise ValueError('HEAD_TRUTH_SCHEMA_VERSION_INVALID')
-        self.expected_schema_version=expected_schema_version
         self.expected_reference=copy.deepcopy(expected_reference)
         self._lock = threading.RLock()
         # Preparation keeps one paired RGB/Info and one latest production pair.
@@ -214,17 +211,12 @@ class FrameOriginalRecorder:
             time.sleep(min(.005,max(0.,deadline-time.monotonic())))
 
     def record_frame(self, frame, *, received_utc_ns, received_monotonic_ns):
-        from mujoco_ros2_control_msgs.msg import CameraTruthFrame
+        from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
         original=frame
-        extra={}
-        if self.expected_schema_version==2:
-            from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
-            if type(frame) is not CameraTruthFrameV2:
-                self._fail('HEAD_TRUTH_MESSAGE_TYPE_INVALID')
-            extra=dict(message_schema_version=2,reference_kind=frame.reference_kind)
-            frame=frame.original
-        elif type(frame) is not CameraTruthFrame:
+        if type(frame) is not CameraTruthFrameV2:
             self._fail('HEAD_TRUTH_MESSAGE_TYPE_INVALID')
+        extra=dict(message_schema_version=2,reference_kind=frame.reference_kind)
+        frame=frame.original
         with self._lock:
             final = frame.record_type == frame.FINAL_WATERMARK
             source = None if final else self._source(frame.rgb)
@@ -239,10 +231,9 @@ class FrameOriginalRecorder:
                 received_utc_ns,received_monotonic_ns)
             if self.failure:
                 raise ValueError(self.failure)
-            if self.expected_schema_version==2:
-                from so101_demo.act.head_search_campaign_truth import validate_native_reference
-                try:validate_native_reference(original,self.expected_reference)
-                except ValueError as error:self._fail(str(error))
+            from so101_demo.act.head_search_campaign_truth import validate_native_reference
+            try:validate_native_reference(original,self.expected_reference)
+            except ValueError as error:self._fail(str(error))
             if frame.schema_version != 1 or any(getattr(frame,k) != v for k,v in self.expected.items()):
                 self._fail('HEAD_TRUTH_FRAME_IDENTITY_INVALID')
             if frame.loss_latched or frame.dropped_count or frame.last_dropped_sequence:
@@ -347,11 +338,8 @@ class HeadCampaignTruthCollector:
                  physics_topic='/so101/simulation/physics_step_chunks'):
         from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
         from sensor_msgs.msg import Image, CameraInfo
-        from mujoco_ros2_control_msgs.msg import CameraTruthFrame
-        if recorder.expected_schema_version==2:
-            from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
-            frame_type=CameraTruthFrameV2
-        else:frame_type=CameraTruthFrame
+        from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
+        frame_type=CameraTruthFrameV2
         from so101_mujoco_support.msg import PhysicsStepEvidenceChunk
         self.node, self.recorder = node, recorder
         self.subscriptions = []

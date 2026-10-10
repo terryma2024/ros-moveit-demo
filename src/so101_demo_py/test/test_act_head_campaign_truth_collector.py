@@ -24,6 +24,12 @@ def _frame():
         generated_count=1,enqueued_count=1,last_enqueued_sequence=1)
 
 
+def _envelope(frame):
+    """The native message wraps every original frame in the reference envelope (no initial reference: kind 0)."""
+    from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
+    return CameraTruthFrameV2(schema_version=2, original=frame, reference_kind=0)
+
+
 def _writer(tmp_path):
     from so101_demo.act.head_run_evidence import HeadRunEvidence
     return HeadRunEvidence.create(tmp_path/'run',{'run':{'run_id':'test'}})
@@ -37,12 +43,12 @@ def _collector(module,writer):
 def test_collector_keeps_exact_cdr_and_original_receive_times(tmp_path):
     module = _module()
     from rclpy.serialization import deserialize_message
-    from mujoco_ros2_control_msgs.msg import CameraTruthFrame
+    from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
     writer = _writer(tmp_path)
     try:
         collector = _collector(module,writer)
         frame = _frame()
-        collector.record_frame(frame,received_utc_ns=10,received_monotonic_ns=20)
+        collector.record_frame(_envelope(frame),received_utc_ns=10,received_monotonic_ns=20)
         collector.record_production('rgb',frame.rgb,received_utc_ns=11,received_monotonic_ns=21)
         collector.record_production('info',frame.camera_info,received_utc_ns=12,received_monotonic_ns=22)
         assert collector.frame_watermark == 1
@@ -55,7 +61,7 @@ def test_collector_keeps_exact_cdr_and_original_receive_times(tmp_path):
     assert event['record']['received_monotonic_ns']==20
     assert event['record']['source_ns']==1000000000
     ref = event['record']['cdr_ref']
-    assert deserialize_message((tmp_path/'run'/ref['path']).read_bytes(),CameraTruthFrame)==frame
+    assert deserialize_message((tmp_path/'run'/ref['path']).read_bytes(),CameraTruthFrameV2)==_envelope(frame)
     assert len([row for row in events if row['kind']=='TRUTH_CAMERA_PRODUCTION'])==2
 
 
@@ -66,7 +72,7 @@ def test_fault_is_sticky_and_bad_original_is_still_saved(tmp_path,fault):
     try:
         collector = _collector(module,writer)
         frame = _frame()
-        collector.record_frame(frame,received_utc_ns=10,received_monotonic_ns=20)
+        collector.record_frame(_envelope(frame),received_utc_ns=10,received_monotonic_ns=20)
         import copy
         second = copy.deepcopy(frame)
         second.frame_sequence=2
@@ -78,12 +84,12 @@ def test_fault_is_sticky_and_bad_original_is_still_saved(tmp_path,fault):
         if fault=='identity':second.capture_identity='old'
         if fault=='loss':second.loss_latched=True
         with pytest.raises(ValueError):
-            collector.record_frame(second,received_utc_ns=11,received_monotonic_ns=21)
+            collector.record_frame(_envelope(second),received_utc_ns=11,received_monotonic_ns=21)
         first=collector.failure
         assert first
         assert collector.frame_watermark==1
         with pytest.raises(ValueError):
-            collector.record_frame(second,received_utc_ns=12,received_monotonic_ns=22)
+            collector.record_frame(_envelope(second),received_utc_ns=12,received_monotonic_ns=22)
         assert collector.failure==first
     finally:
         writer.finish({'execution':'TEST_ONLY'})
@@ -97,13 +103,13 @@ def test_final_watermark_detects_last_missing_frame_without_next_gap(tmp_path):
     try:
         collector = _collector(module,writer)
         frame = _frame()
-        collector.record_frame(frame,received_utc_ns=10,received_monotonic_ns=20)
+        collector.record_frame(_envelope(frame),received_utc_ns=10,received_monotonic_ns=20)
         final = type(frame)(schema_version=1,record_type=1,capture_identity='capture',
             camera_name='head_camera',model_sha256='a'*64,render_config_sha256='b'*64,
             generated_count=2,enqueued_count=2,published_count=2,last_enqueued_sequence=2,
             last_published_sequence=2,frame_sequence=2)
         with pytest.raises(ValueError):
-            collector.record_frame(final,received_utc_ns=11,received_monotonic_ns=21)
+            collector.record_frame(_envelope(final),received_utc_ns=11,received_monotonic_ns=21)
         assert collector.failure
     finally:
         writer.finish({'execution':'TEST_ONLY'})
@@ -117,7 +123,7 @@ def test_real_writer_capacity_fault_latches_truth_incomplete(tmp_path):
     recorder=_collector(_module(),writer)
     try:
         with pytest.raises(BufferError):
-            recorder.record_frame(_frame(),received_utc_ns=10,received_monotonic_ns=20)
+            recorder.record_frame(_envelope(_frame()),received_utc_ns=10,received_monotonic_ns=20)
         assert recorder.receipt()['failure']=='HEAD_TRUTH_ORIGINAL_SAVE_FAILED'
         assert recorder.receipt()['complete'] is False
         assert [str(fault) for fault in faults]==['HEAD_RUN_EVIDENCE_CAPACITY']
@@ -137,7 +143,7 @@ def test_owned_ros_subscriptions_receive_real_native_topic_types_and_retire(tmp_
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.node import Node
     from rclpy.qos import QoSProfile, ReliabilityPolicy
-    from mujoco_ros2_control_msgs.msg import CameraTruthFrame
+    from mujoco_ros2_control_msgs.msg import CameraTruthFrameV2
     from sensor_msgs.msg import Image, CameraInfo
     from so101_mujoco_support.msg import PhysicsStepEvidenceChunk
     context = Context()
@@ -164,14 +170,14 @@ def test_owned_ros_subscriptions_receive_real_native_topic_types_and_retire(tmp_
             truth_topic=base+'/paired',rgb_topic=base+'/rgb',info_topic=base+'/info')
         qos=QoSProfile(depth=10,reliability=ReliabilityPolicy.BEST_EFFORT)
         pubs=[node.create_publisher(cls,topic,qos) for cls,topic in (
-            (CameraTruthFrame,base+'/paired'),(Image,base+'/rgb'),(CameraInfo,base+'/info'),
+            (CameraTruthFrameV2,base+'/paired'),(Image,base+'/rgb'),(CameraInfo,base+'/info'),
             (PhysicsStepEvidenceChunk,'/so101/simulation/physics_step_chunks'))]
         deadline=time.monotonic()+2
         while not all(p.get_subscription_count()==1 for p in pubs) and time.monotonic()<deadline:
             executor.spin_once(timeout_sec=.01)
         assert [p.get_subscription_count() for p in pubs]==[1,1,1,1]
         frame=_frame()
-        pubs[0].publish(frame)
+        pubs[0].publish(_envelope(frame))
         pubs[1].publish(frame.rgb)
         pubs[2].publish(frame.camera_info)
         pubs[3].publish(PhysicsStepEvidenceChunk(chunk_sequence=1,
@@ -252,7 +258,7 @@ def test_malformed_native_frame_is_preserved_and_immediately_invalidates_truth(t
     else:frame.segmentation_ids=[0,0];frame.object_ids=[1,2];frame.object_types=[5,5]
     try:
         with pytest.raises(ValueError):
-            recorder.record_frame(frame,received_utc_ns=10,received_monotonic_ns=20)
+            recorder.record_frame(_envelope(frame),received_utc_ns=10,received_monotonic_ns=20)
         assert recorder.receipt()['failure'] and recorder.frame_watermark==0
     finally:writer.finish({'execution':'TEST_ONLY'})
     rows=[json.loads(row) for row in (tmp_path/'run/events.jsonl').read_text().splitlines()]
