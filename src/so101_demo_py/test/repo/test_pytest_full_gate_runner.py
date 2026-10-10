@@ -389,7 +389,7 @@ def test_emit_colcon_split_keeps_nested_and_parametrised_identity(tmp_path):
     serial_module = SERIAL_MODULES[0]
     node_ids = [
         f"test/{serial_module}::TestNested::test_case[param-1]",
-        "test/test_parallel_start_guard.py::test_equal_floor_passes",
+        "test/parallel_batch/test_parallel_start_guard.py::test_equal_floor_passes",
     ]
     coverage = emit_colcon_split(_write_collection(tmp_path, node_ids), tmp_path / "out")
 

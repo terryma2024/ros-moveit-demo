@@ -31,7 +31,7 @@ colcon test-result --verbose
 
 - `so101_demo_py` 的普通门禁只收集 `src/so101_demo_py/test/`，不得收集 `src/so101_demo_py/benchmark_test/`。这条路径只属于 `so101_demo_py`，其他模块（例如 `so101_teleop`、`pick_place_common`）按各自 package 声明的测试范围收集。
 - `benchmark_test/` 不属于任何普通门禁，只在改动 benchmark 实现、配置、adapter、报告或测试，或选择、比较感知模型时显式运行：`colcon test --packages-select so101_demo_py --pytest-args benchmark_test`。普通功能工作不跑 benchmark。
-- 普通门默认排除标记 `explicit_ml` 的 Torch/SAM 集成用例；用本任务登记的精确 Python 单独验证：`"$TEST_PYTHON" -m pytest -m explicit_ml src/so101_demo_py/test/test_sam_decoder_runtime.py`。
+- 普通门默认排除标记 `explicit_ml` 的 Torch/SAM 集成用例；用本任务登记的精确 Python 单独验证：`"$TEST_PYTHON" -m pytest -m explicit_ml src/so101_demo_py/test/training/test_sam_decoder_runtime.py`。
 
 ## 全量 pytest 并行门禁
 

@@ -6,12 +6,12 @@ import sys
 from paths import PACKAGE_ROOT
 
 
-TARGET = PACKAGE_ROOT / "test/test_sam_decoder_runtime.py"
+TARGET = PACKAGE_ROOT / "test/training/test_sam_decoder_runtime.py"
 EXPLICIT_ML_CASES = {
-    "test/test_sam_decoder_runtime.py::"
+    "test/training/test_sam_decoder_runtime.py::"
     "test_epoch_export_binds_model_optimizer_receipt_and_identity",
-    "test/test_sam_decoder_runtime.py::test_export_failure_never_marks_checkpoint_complete",
-    "test/test_sam_decoder_runtime.py::test_real_processor_accepts_two_jittered_box_prompts",
+    "test/training/test_sam_decoder_runtime.py::test_export_failure_never_marks_checkpoint_complete",
+    "test/training/test_sam_decoder_runtime.py::test_real_processor_accepts_two_jittered_box_prompts",
 }
 
 
@@ -50,7 +50,7 @@ def test_default_collection_excludes_explicit_ml_cases() -> None:
 
     assert collected.isdisjoint(EXPLICIT_ML_CASES)
     assert (
-        "test/test_sam_decoder_runtime.py::"
+        "test/training/test_sam_decoder_runtime.py::"
         "test_training_rejects_invalid_source_before_creating_output"
         in collected
     )

@@ -11,7 +11,7 @@ from so101_demo.core import process_summary as ps
 from so101_demo.ros.teacher_safety import CupSafetyLimits
 from paths import TEST_ROOT
 
-FIXTURES = TEST_ROOT / "process_summary"
+FIXTURES = TEST_ROOT / "data"
 LIMITS = CupSafetyLimits(1.8916304473471774, 0.00011928116711427007)
 
 
@@ -188,7 +188,7 @@ def test_the_aggregation_runs_on_its_own_thread():
 
 def test_replay_of_cp_3480_run_392e7925_peak_force_1940_at_step_41943():
     """The force-stop run: 1.940 N +- 0.005 at step 41943 +- 1 is the first step over the r10b limit in DESCEND_TO_PLACE."""
-    data = json.loads((FIXTURES / "replay_392e7925.json").read_text())
+    data = json.loads((FIXTURES / "process_summary_force_stop_replay.json").read_text())
     value = ps.ProcessSummary(limits=CupSafetyLimits(**data["limits"]))
     for phase in data["phases"]:
         value.phase_begin(phase["state"], phase["begin_s"])
@@ -203,7 +203,7 @@ def test_replay_of_cp_3480_run_392e7925_peak_force_1940_at_step_41943():
 
 def test_replay_of_cp_3493_run_008b058f_left_compression_139_um_from_the_manifest_evidence():
     """That run has no bag: the manifest's own contact evidence is replayed through the same metric."""
-    data = json.loads((FIXTURES / "replay_008b058f.json").read_text())
+    data = json.loads((FIXTURES / "process_summary_compression_violation_replay.json").read_text())
     contacts = {group: [SimpleNamespace(**item) for item in items] for group, items in data["monitor_violation"]["contacts"].items()}
     summed, compression = ps.sample_contact_metrics(contacts["left"], contacts["right"], contacts["other"])
     assert compression * 1e6 == pytest.approx(139.0, abs=0.5)

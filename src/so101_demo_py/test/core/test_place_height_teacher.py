@@ -162,7 +162,7 @@ def test_the_refusal_says_how_many_samples_over_what_span_with_what_tilt_range(t
     assert "latest window" in detail and "widest window" in detail
 
 
-LIVE_INTERVAL = TEST_ROOT / "place_height_live/run_3a7cb058_measurement_interval.json"
+LIVE_INTERVAL = TEST_ROOT / "data/place_height_measured_tilt_interval.json"
 
 
 def test_a_live_measurement_interval_that_every_first_round_run_refused_is_now_accepted(tmp_path):

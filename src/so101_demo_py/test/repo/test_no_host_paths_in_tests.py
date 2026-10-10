@@ -18,24 +18,24 @@ TEST_TREES = (
 )
 LITERALS = ("/data/work", "/opt/data/work")
 SUFFIXES = {".py", ".json", ".yaml", ".yml", ".txt", ".md", ".cpp", ".hpp", ".zsh", ".sh", ".xml", ".toml", ".cfg"}
-SELF = "src/so101_demo_py/test/test_no_host_paths_in_tests.py"
+SELF = "src/so101_demo_py/test/repo/test_no_host_paths_in_tests.py"
 
 ALLOWED = {
     # an evidence_root string inside a receipt/document fixture; the validators only check it is a non-empty string
-    "src/so101_demo_py/test/test_act_contact_policy_activation.py": "receipt field string, never opened",
-    "src/so101_demo_py/test/test_act_task8_calibration_admission.py": "document field string, never opened",
-    "src/so101_demo_py/test/test_act_task8_formal_context_fields.py": "document field string, never opened",
-    "src/so101_demo_py/test/test_act_task8_measurement_driver.py": "document field string, never opened",
-    "src/so101_demo_py/test/test_act_task8_validation_campaign.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_contact_policy_activation.py": "receipt field string, never opened",
+    "src/so101_demo_py/test/act/test_act_task8_calibration_admission.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_task8_formal_context_fields.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_task8_measurement_driver.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_task8_validation_campaign.py": "document field string, never opened",
     "src/so101_teleop/test/teleop/test_act_campaign_admission.py": "document field string, never opened",
     # the AF_UNIX 107-byte boundary is a property of the path string length; nothing is created
-    "src/so101_demo_py/test/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
-    "src/so101_demo_py/test/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
-    "src/so101_demo_py/test/test_parallel_batch_cli.py": "string argument compared with the CLI's own output",
-    "src/so101_demo_py/test/test_pick_place_executor_adapter.py": "installed_prefix label passed to a fake adapter",
+    "src/so101_demo_py/test/parallel_batch/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
+    "src/so101_demo_py/test/repo/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
+    "src/so101_demo_py/test/cli/test_parallel_batch_cli.py": "string argument compared with the CLI's own output",
+    "src/so101_demo_py/test/ports/test_pick_place_executor_adapter.py": "installed_prefix label passed to a fake adapter",
     # command-line arguments for argument-parsing / option-binding tests
-    "src/so101_demo_py/test/test_qualification_runner.py": "CLI argument string; the runner is parsed, not executed",
-    "src/so101_demo_py/test/test_teleop_owner.py": "checkpoint path argument of an argument builder",
+    "src/so101_demo_py/test/application/test_qualification_runner.py": "CLI argument string; the runner is parsed, not executed",
+    "src/so101_demo_py/test/cli/test_teleop_owner.py": "checkpoint path argument of an argument builder",
     # window-title / process-command-line / platform-rule classifiers on strings
     "src/so101_teleop/test/test_ai_station_x11.py": "window title string for a classifier",
     "src/so101_teleop/test/test_tile_ai_station_guis.py": "window title string for a classifier",

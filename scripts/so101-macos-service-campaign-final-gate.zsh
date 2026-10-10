@@ -172,8 +172,8 @@ record_step demo-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --ba
 record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/teleop -q \
   --junitxml="$run_root/teleop-pytest.xml"
 record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[copied-install]" -q \
-  src/so101_demo_py/test/test_copied_installed_entrypoint.py \
-  src/so101_demo_py/test/test_macos_install_contract.py \
+  src/so101_demo_py/test/packaging/test_copied_installed_entrypoint.py \
+  src/so101_demo_py/test/packaging/test_macos_install_contract.py \
   --junitxml="$run_root/copied-install.xml"
 # `--log-base` is a global colcon option: it has to precede the verb, and `--event-handlers` takes
 # the remaining values, so the handlers stay last.

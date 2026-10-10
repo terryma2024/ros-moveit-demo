@@ -124,5 +124,5 @@ def test_the_native_build_and_plugin_list_declare_only_the_head_neck_controller(
 
 
 def test_the_head_neck_limits_module_no_longer_pins_a_broker_source():
-    text = (PACKAGE / "test/test_act_head_neck_limits.py").read_text()
+    text = (PACKAGE / "test/adapters/act/test_act_head_neck_limits.py").read_text()
     assert _name("broker", "owned", "trajectory", "controller") not in text

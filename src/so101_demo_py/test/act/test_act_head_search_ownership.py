@@ -141,7 +141,7 @@ def test_a_token_is_classified_by_the_owner_it_names() -> None:
     # a test file that merely mentions the calibration is not a running campaign
     assert (
         classify_owner_command(
-            ["pytest", "src/so101_demo_py/test/test_act_head_search_calibration.py"]
+            ["pytest", "src/so101_demo_py/test/act/test_act_head_search_calibration.py"]
         )
         is None
     )
