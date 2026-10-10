@@ -1,4 +1,4 @@
-"""CP-3504: `teacher_process_summary_v1` - synthetic streams, incomplete streams and replays of known runs."""
+"""CP-3504: `teacher_process_summary` - synthetic streams, incomplete streams and replays of known runs."""
 
 import json
 import math
@@ -156,7 +156,7 @@ def test_the_document_is_json_and_carries_schema_units_and_policy_provenance():
     document = value.build(policy=policy, place_height={"mode": "fallback_reference", "fallback_reason": "TILT_UNSTABLE"},
                            perception_error={"xy_mm": 1.0, "z_mm": 0.5, "tilt_deg": 0.2})
     assert json.loads(json.dumps(document, allow_nan=False)) == document
-    assert document["schema"] == "teacher_process_summary_v1" and document["units"]["compression"] == "um"
+    assert document["schema"] == "teacher_process_summary" and document["units"]["compression"] == "um"
     assert document["policy"] == {"execution_policy_schema": 3, "execution_policy_sha256": "a" * 64, "cup_pose_source": "broker_rgbd",
                                   "verdict_source": "sim_truth"}
     assert document["place_height_mode"] == "fallback_reference" and document["place_fallback_reason"] == "TILT_UNSTABLE"

@@ -194,7 +194,7 @@ def anchor_run(**overrides) -> dict:
             "runtime_device": "cuda:0",
             "allow_cpu_fallback": False,
             "weights_sha256": runtime_identity()["weight_sha256_declared"],
-            "model_id": "head-search-v2",
+            "model_id": "head-search-runtime",
         },
         "search": {
             "terminal_status": "TARGET_LOCKED",

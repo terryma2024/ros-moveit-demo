@@ -193,7 +193,8 @@ def main() -> int:
     physical_outcome_policy = task_policy.physical_outcome
     retreat_policy = load_release_retreat_policy(POLICY_PATH)
     result: dict = {
-        "schema": "so101-live-outcome-first-release-retreat-v1",
+        "schema": "so101-live-outcome-first-release-retreat",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "release_target_xyz_m": list(RELEASE_TARGET_XYZ),
         "release_q6_rad": RELEASE_Q6,

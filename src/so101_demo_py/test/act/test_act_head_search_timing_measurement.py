@@ -127,7 +127,7 @@ def _seal(tmp_path, scene, **overrides):
 def _production(tmp_path, **overrides):
     document = {
         "schema_version": 2,
-        "runtime_id": "head-search-v2",
+        "runtime_id": "head-search-runtime",
         "camera": {
             "name": "head_camera",
             "width": 640,

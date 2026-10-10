@@ -148,11 +148,11 @@ def test_the_teacher_status_mapping(tmp_path):
 
 def test_the_manifest_fields_name_the_teacher_schema_the_failure_class_and_the_summary(tmp_path):
     value = teacher_adapter(tmp_path)
-    value._document["teacher_process_summary"] = {"schema": "teacher_process_summary_v1"}
+    value._document["teacher_process_summary"] = {"schema": "teacher_process_summary"}
     failed = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="SIM_INTEGRITY_NON_FINITE_STATE"))
     fields = value._teacher_manifest_fields(failed, {"physical_action_proven_absent": False}, None, None)
     assert fields["schema"] == SCHEMA_TEACHER and fields["teacher_execution_status"] == "FAILED"
-    assert fields["failure_class"] == "sim_integrity" and fields["teacher_process_summary"]["schema"] == "teacher_process_summary_v1"
+    assert fields["failure_class"] == "sim_integrity" and fields["teacher_process_summary"]["schema"] == "teacher_process_summary"
     other = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="MOVEIT_EXECUTION_FAILED"))
     assert value._teacher_manifest_fields(other, {"physical_action_proven_absent": False}, None, None)["failure_class"] is None
 
@@ -366,7 +366,7 @@ def test_finish_builds_the_summary_off_thread_and_stores_it_in_the_manifest(tmp_
     value._document["place_height"] = {"mode": "fallback_reference", "fallback_reason": "K_OUT_OF_BAND"}
     value.finish(result())
     document = value._document["teacher_process_summary"]
-    assert document["schema"] == "teacher_process_summary_v1" and document["complete"] is True
+    assert document["schema"] == "teacher_process_summary" and document["complete"] is True
     assert document["flags"]["ORACLE_CUP_OVERLOAD"] == ["LIFT"] and document["flags"]["ORACLE_COLLISION"] == ["LIFT"]
     assert document["perception_error"]["xy_mm"] == 1.5 and document["place_fallback_reason"] == "K_OUT_OF_BAND"
     assert document["policy"]["cup_pose_source"] == "broker_rgbd" and document["policy"]["verdict_source"] == "sim_truth"
@@ -377,7 +377,7 @@ def test_a_summary_that_cannot_be_built_is_an_incomplete_document_not_an_error(t
     value._process_summary.build = lambda **kwargs: 1 / 0
     value.finish(result())
     document = value._document["teacher_process_summary"]
-    assert document["complete"] is False and document["schema"] == "teacher_process_summary_v1"
+    assert document["complete"] is False and document["schema"] == "teacher_process_summary"
     assert value._document["status"] == "DONE"
 
 
@@ -398,7 +398,7 @@ def test_a_failed_attempt_still_carries_a_summary(tmp_path):
     failed = result(done=False)
     failed.failure = SimpleNamespace(code="MOVEIT_EXECUTION_FAILED")
     value.finish(failed)
-    assert value._document["status"] == "ERROR" and value._document["teacher_process_summary"]["schema"] == "teacher_process_summary_v1"
+    assert value._document["status"] == "ERROR" and value._document["teacher_process_summary"]["schema"] == "teacher_process_summary"
 
 
 def test_the_activation_taps_the_observer_and_makes_a_sequence_gap_telemetry(tmp_path):

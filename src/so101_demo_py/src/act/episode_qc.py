@@ -86,15 +86,15 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     previous = None
     chunks = inputs['execution_snapshot']['physics_chunks']
     for event in events:
-        if event['kind'] == 'native_dispatch_v1':
-            raise ValueError('NATIVE_QC_V1_EVENT_REJECTED')
-        if event['kind'] == 'physics_chunk_v1':
+        if event['kind'] == 'native_dispatch':
+            raise ValueError('NATIVE_QC_EVENT_REJECTED')
+        if event['kind'] == 'physics_chunk':
             raw = event['payload']['raw_chunk']
             verify_raw_chunk(raw, previous=previous, previous_verified=True, session_id=identity['session_id'],
                 reset_epoch=identity['reset_epoch'], nq=model_identity['nq'], nv=model_identity['nv'],
                 max_samples=chunks['max_samples'], max_contacts=chunks['max_contacts'])
             raw_steps.extend(raw['chunk']['samples']); previous = raw
-        elif event['kind'] == 'world_source_v1':
+        elif event['kind'] == 'world_source':
             source = event['payload']['world_source']
             sources.append(source)
             sequence = source['physics']['publisher_sequence']
@@ -114,7 +114,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             summaries.append(validate_event_summary(event['payload']['event_summary']))
         elif event['kind'] == 'controller_reference':
             continuity.append(event['payload']['reference_continuity'])
-        elif event['kind'] == 'collection_boundary_v1':
+        elif event['kind'] == 'collection_boundary':
             document = claim_collection_boundary(event, identity=identity,
                 seen=seen_boundaries, world_hashes=world_hashes)
             boundaries[document['stage']] = document
@@ -167,7 +167,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             raise ValueError('NATIVE_QC_BOUNDARY_ORDER_INVALID')
     # ---- the source alignments the rows rest on (CP-3425): the empty scene before the capture, the SETUP scene before the
     # first command. The Teacher's later scene changes (attach, detach) are checked row by row against their own alignments.
-    alignments = [item['payload']['association'] for item in events if item['kind'] == 'source_alignment_v1']
+    alignments = [item['payload']['association'] for item in events if item['kind'] == 'source_alignment']
     initial = [item for item in alignments if item['operation'] == 'initial']
     capture_start = boundaries['capture_start']['value']
     if (len(initial) != 1 or initial[0]['schema_version'] != 3
@@ -375,9 +375,9 @@ def verify_episode_physical_audit(episode_root, audit_manifest, scope):
         verify_original_references(references)
         summary = verify_episode_physical_rows(rows,
             raw_chunks=[event["payload"]["raw_chunk"] for event in events
-                        if event["kind"] == "physics_chunk_v1"],
+                        if event["kind"] == "physics_chunk"],
             associations=[event["payload"]["association"] for event in events
-                          if event["kind"] == "source_alignment_v1"],
+                          if event["kind"] == "source_alignment"],
             inputs=inputs, identity=manifest["identity"])
         if _requires_native_collection(inputs, events):
             verify_native_collection_events(events, identity=manifest['identity'], window=manifest['window'], inputs=inputs)
@@ -620,10 +620,10 @@ def read_qc_report(path: Path):
 
 
 def _raw_physics_samples(events):
-    """The raw physics samples of the retained, already verified ``physics_chunk_v1`` events."""
+    """The raw physics samples of the retained, already verified ``physics_chunk`` events."""
     samples = []
     for event in events:
-        if type(event) is dict and event.get("kind") == "physics_chunk_v1":
+        if type(event) is dict and event.get("kind") == "physics_chunk":
             samples.extend(event["payload"]["raw_chunk"]["chunk"]["samples"])
     return samples
 
@@ -645,7 +645,7 @@ def physics_chunk_count(events) -> int:
     writes it, so its row count was always 0 and a passing report could not validate (a passing report needs every count above 0).
     The raw chunks are the physics the episode carries.
     """
-    return sum(1 for event in events if type(event) is dict and event.get('kind') == 'physics_chunk_v1')
+    return sum(1 for event in events if type(event) is dict and event.get('kind') == 'physics_chunk')
 
 
 def recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manifest=None, topic_loss=None):

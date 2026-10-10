@@ -51,7 +51,7 @@ def test_a_teacher_that_started_before_the_capture_was_running_is_invalid(frozen
 
 def test_a_verified_reset_after_the_capture_start_is_invalid_the_old_order_is_gone(frozen_scene):
     events, identity, window, boundaries, _s, _x, _t = collection_materials(frozen_scene)
-    boundary = next(item for item in events if item["kind"] == "collection_boundary_v1"
+    boundary = next(item for item in events if item["kind"] == "collection_boundary"
                     and item["payload"]["collection_boundary"]["stage"] == "verified_reset")
     clock = boundary["payload"]["collection_boundary"]["value"]["source_clock"]
     clock["begin_monotonic_ns"] = clock["end_monotonic_ns"] = boundaries["capture_start"]["end_monotonic_ns"] + 10
@@ -63,7 +63,7 @@ def test_a_verified_reset_after_the_capture_start_is_invalid_the_old_order_is_go
 
 def test_a_missing_world_sync_before_the_first_command_makes_the_data_invalid(frozen_scene):
     events, identity, window, _b, _s, _x, _t = collection_materials(frozen_scene)
-    kept = [item for item in events if not (item["kind"] == "source_alignment_v1"
+    kept = [item for item in events if not (item["kind"] == "source_alignment"
                                             and item["payload"]["association"]["operation"] == "world_sync")]
     with pytest.raises(ValueError, match="NATIVE_QC_WORLD_SYNC_REQUIRED"):
         verify(kept, identity, window, frozen_scene)
@@ -71,7 +71,7 @@ def test_a_missing_world_sync_before_the_first_command_makes_the_data_invalid(fr
 
 def test_a_world_sync_whose_readback_came_after_the_first_command_does_not_count(frozen_scene):
     events, identity, window, _b, _s, _x, _t = collection_materials(frozen_scene)
-    sync = next(item for item in events if item["kind"] == "source_alignment_v1"
+    sync = next(item for item in events if item["kind"] == "source_alignment"
                 and item["payload"]["association"]["operation"] == "world_sync")
     sync["payload"]["association"]["query"]["record"]["response_ros_clock"]["sim_time_ns"] = 9_000_000
     with pytest.raises(ValueError, match="NATIVE_QC_WORLD_SYNC_REQUIRED"):
@@ -81,7 +81,7 @@ def test_a_world_sync_whose_readback_came_after_the_first_command_does_not_count
 @pytest.mark.parametrize("change", ["missing", "twice", "old_schema", "after_start"])
 def test_exactly_one_pre_setup_initial_alignment_of_the_current_schema_before_the_capture_start(frozen_scene, change):
     events, identity, window, boundaries, _s, _x, _t = collection_materials(frozen_scene)
-    initial = next(item for item in events if item["kind"] == "source_alignment_v1"
+    initial = next(item for item in events if item["kind"] == "source_alignment"
                    and item["payload"]["association"]["operation"] == "initial")
     if change == "missing":
         events.remove(initial)

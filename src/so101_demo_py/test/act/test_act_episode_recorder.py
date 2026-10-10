@@ -403,7 +403,7 @@ def test_the_result_names_the_recording_start(tmp_path):
     engine, sources, working = build(tmp_path)
     engine.process(NOT_EXHAUSTED)
     result = result_of(working)
-    assert result["schema"] == "SO101_RECORDER_RESULT_V1"
+    assert result["schema"] == "SO101_RECORDER_RESULT"
     assert (result["identity"]["session_id"], result["identity"]["reset_epoch"], result["identity"]["attempt_id"]) == (
         "session-1", 2, "attempt-1")
     assert result["listening"] is True and result["collection_start_s"] == 1.0

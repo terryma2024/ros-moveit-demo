@@ -839,7 +839,7 @@ class RosDynamicMujocoExecution:
         self._write()
 
     def _build_process_summary(self, end_observation) -> dict[str, object]:
-        """The `teacher_process_summary_v1` document, aggregated on its own thread and awaited with a bound. Never raises."""
+        """The `teacher_process_summary` document, aggregated on its own thread and awaited with a bound. Never raises."""
         from ..core.process_summary import failure_summary
 
         policy = getattr(self, "_execution_policy", None)
@@ -1486,7 +1486,7 @@ class RosDynamicMujocoExecution:
         Everything else the broker checked about the process (hold, stability, contact timing) stays audit-only.
 
         Teacher run (design section 3): none of these stops the Teacher. Force, compression and collisions are process telemetry
-        (`teacher_process_summary_v1`); the identity and availability checks stay in `_monitor_sample` and `_snapshot`.
+        (`teacher_process_summary`); the identity and availability checks stay in `_monitor_sample` and `_snapshot`.
         """
         if self._teacher_run():
             return

@@ -137,7 +137,7 @@ def test_top_view_script_consumes_baseline_selection(tmp_path: Path) -> None:
             "--repository-root",
             str(REPOSITORY_ROOT),
             "--catalog-profile",
-            "ai_station_baseline_v1",
+            "ai_station_baseline",
             "--total-points",
             "9",
             "--output-dir",

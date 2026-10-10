@@ -1209,7 +1209,7 @@ def _default_detector_factory(
             READBACK_DETECTOR_FAILED,
             f"the weights at {weights_path} digest to {observed}, the frozen config declares {declared}",
         )
-    model_id = str(production.get("runtime_id") or "head-search-v2")
+    model_id = str(production.get("runtime_id") or "head-search-runtime")
     try:
         yolo = YoloSegDetector(
             weights_path=Path(weights_path),

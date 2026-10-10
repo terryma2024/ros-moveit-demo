@@ -245,7 +245,7 @@ def test_actual_child_queue_seals_and_independent_audit_requires_queue_receipt(t
         verified = verify_episode_seal(root / "seal.json", audit_manifest=audit_manifest, scope=scope)
         events = [json.loads(line) for line in (root / "audit/events.jsonl").read_text().splitlines()]
         proof = next(event["payload"]["queue_evidence"] for event in events
-                     if event["kind"] == "recorder_queue_v1")
+                     if event["kind"] == "recorder_queue")
         assert proof["accepted_samples"] == proof["written_samples"] == verified["record_count"]
         assert not episode.capture.recorder.worker_alive
         original = hashlib.sha256(audit_manifest.read_bytes()).hexdigest()
@@ -312,14 +312,14 @@ def test_execution_bound_audit_requires_raw_physics_and_frozen_dimensions(tmp_pa
         event_path = copied / "audit/events.jsonl"
         events = [json.loads(line) for line in event_path.read_text().splitlines()]
         if damage == "missing_raw":
-            removed = next(event["task_sequence"] for event in events if event["kind"] == "physics_chunk_v1")
-            events = [event for event in events if event["kind"] != "physics_chunk_v1"]
+            removed = next(event["task_sequence"] for event in events if event["kind"] == "physics_chunk")
+            events = [event for event in events if event["kind"] != "physics_chunk"]
             for i, event in enumerate(events, 1):
                 event["sequence"] = i
                 if event["task_sequence"] > removed:
                     event["task_sequence"] -= 1
         elif damage == "wrong_raw_dimension":
-            raw = next(event["payload"]["raw_chunk"] for event in events if event["kind"] == "physics_chunk_v1")
+            raw = next(event["payload"]["raw_chunk"] for event in events if event["kind"] == "physics_chunk")
             raw["chunk"]["samples"][0]["model_qpos"].append(9.)
         else:
             path = copied / "audit/inputs.json"

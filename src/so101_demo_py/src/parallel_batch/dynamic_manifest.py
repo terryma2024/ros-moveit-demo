@@ -265,7 +265,7 @@ def _place_height_contract(
 
 
 def _process_summary_contract(document: Mapping[str, object], frozen_execution_policy: Mapping[str, object] | None) -> None:
-    """Teacher manifest: the `teacher_process_summary_v1` is present and coherent, names the provenance and agrees with the place record."""
+    """Teacher manifest: the `teacher_process_summary` is present and coherent, names the provenance and agrees with the place record."""
 
     from ..core.process_summary import validate_summary
 

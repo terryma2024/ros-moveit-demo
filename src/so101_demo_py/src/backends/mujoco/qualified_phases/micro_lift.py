@@ -78,7 +78,8 @@ def main() -> int:
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     micro_lift_policy = task_policy.carry.micro_lift
     result = {
-        "schema": "so101-live-noslip-micro-lift-v1",
+        "schema": "so101-live-noslip-micro-lift",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "lift_target_arm_rad": list(LIFT_TARGET),
         "physics_pause_calls": 0,

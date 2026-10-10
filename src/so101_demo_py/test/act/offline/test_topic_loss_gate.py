@@ -433,7 +433,7 @@ def test_the_processor_keeps_a_bag_with_start_of_stream_losses_valid_and_a_loss_
                       transport_lost_events=[event(CLOCK_TOPIC, wall - 3 * SEC), event(JOINT, wall - 3 * SEC)])
     kept, out = run(tmp_path, start, name="sealed1")
     assert kept["verdict"] == "VALID", kept["reasons"]
-    assert json.loads((out / topic_loss.DOCUMENT_NAME).read_bytes())["rule_version"] == "topic_loss_v2"
+    assert json.loads((out / topic_loss.DOCUMENT_NAME).read_bytes())["rule_version"] == "topic_loss"
     inside = build_bag(tmp_path / "raw2", transport_lost=1, transport_lost_by_topic={JOINT: 1},
                        transport_lost_events=[event(JOINT, wall + SEC)])
     lost, _ = run(tmp_path, inside, name="sealed2")
@@ -460,7 +460,7 @@ def write_document(root, **changes):
 def test_the_qc_check_passes_a_clean_document_and_names_it_by_digest(tmp_path):
     path = write_document(tmp_path)
     check = topic_loss.qc_check(tmp_path / "episode", identity=IDENTITY)
-    assert check["status"] == "PASS" and check["rule_version"] == "topic_loss_v2" and check["lost_in_window"] == 0
+    assert check["status"] == "PASS" and check["rule_version"] == "topic_loss" and check["lost_in_window"] == 0
     assert check["document_sha256"] == __import__("hashlib").sha256(path.read_bytes()).hexdigest()
     topic_loss.validate_check(check)
 

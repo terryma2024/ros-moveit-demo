@@ -9,7 +9,7 @@ import uuid
 from .head_run_reader import (AuditToolError, MAX_CORRELATIONS, canonical_digest,
                               is_integer, normalized, open_regular)
 
-RULESET_ID = 'head-file-postrun-basic-v1'
+RULESET_ID = 'head-file-postrun-basic'
 EXECUTION_RULES = tuple('HFA-%03d' % number for number in range(2, 9)) + ('HFA-011',)
 CAPABILITIES = {name: 'NOT_ASSESSED' for name in (
     'wire_payload_equivalence', 'trajectory_safety_reproof', 'pointing_algorithm_reproof',
@@ -802,7 +802,7 @@ class BasicAudit:
         post=self.reader.external.get('postflight') or self.reader.external.get('owned_postflight')
         if not isinstance(post,dict) or not isinstance(post_ref,dict) or not isinstance(launcher,dict):
             self.check('HFA-010',None,'OWNED_POSTFLIGHT_OR_LAUNCHER_MISSING');return
-        domain=post.get('domain') if self.reader.profile=='F015-file-v1' else post.get('ros_domain_id')
+        domain=post.get('domain') if self.reader.profile=='postflight-domain-key' else post.get('ros_domain_id')
         partition=post.get('partition')
         self.check('HFA-010',str(domain)==str(launcher.get('ros_domain_id')) and
                    partition==launcher.get('partition'),'OWNED_POSTFLIGHT_SCOPE_MATCH')

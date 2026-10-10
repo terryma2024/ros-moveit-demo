@@ -546,7 +546,8 @@ class AtomicTransportEvidenceStore:
 
     def _write_index(self, **terminal: Any) -> Path:
         document: dict[str, Any] = {
-            "schema": "so101-dynamic-transport-raw-v4",
+            "schema": "so101-dynamic-transport-raw",
+            "schema_version": 4,
             "run_id": self.run_id,
             "chunks": list(self._chunks),
             "boundaries": list(self._boundaries),

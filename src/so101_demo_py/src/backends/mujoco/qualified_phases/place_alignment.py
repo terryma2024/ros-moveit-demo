@@ -74,7 +74,8 @@ def main() -> int:
     policy = load_place_alignment_policy(POLICY_PATH)
     target = release_alignment_target(PLACE_XYZ, policy)
     result: dict = {
-        "schema": "so101-live-place-alignment-v1",
+        "schema": "so101-live-place-alignment",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "reset_epoch": EXPECTED_EPOCH,
         "target_cup_position_world_m": list(target),

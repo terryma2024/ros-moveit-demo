@@ -103,14 +103,14 @@ _EVENT_PAYLOADS = {
     "alignment_apply": frozenset({"apply_event_id", "applied_at_s", "accepted"}),
     "alignment_query": frozenset({"query_id", "query_at_s", "request_bytes", "response_bytes"}),
     "alignment_receipt": frozenset({"receipt_id", "received_at_s", "clock_source", "uncertainty_s"}),
-    "recorder_queue_v1": frozenset({"queue_evidence"}),
-    "physics_chunk_v1": frozenset({"raw_chunk"}),
-    "source_alignment_v1": frozenset({"association"}),
-    "world_source_v1": frozenset({"world_source"}),
+    "recorder_queue": frozenset({"queue_evidence"}),
+    "physics_chunk": frozenset({"raw_chunk"}),
+    "source_alignment": frozenset({"association"}),
+    "world_source": frozenset({"world_source"}),
     "teacher_event": frozenset({"teacher_event"}),
     "teacher_event_summary": frozenset({"event_summary"}),
     "controller_reference": frozenset({"reference_continuity"}),
-    "collection_boundary_v1": frozenset({"collection_boundary"}),
+    "collection_boundary": frozenset({"collection_boundary"}),
 }
 _EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept",
                   "apply_event_id": "alignment_apply", "query_id": "alignment_query", "receipt_id": "alignment_receipt"}
@@ -979,7 +979,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity["release_epoch"] = self._event_release_epoch
-        self.append_source("events", {"kind": "recorder_queue_v1", "identity": identity,
+        self.append_source("events", {"kind": "recorder_queue", "identity": identity,
             "sim_time_s": sim_time_s, "monotonic_ns": time.monotonic_ns(),
             "payload": {"queue_evidence": document}})
 
@@ -989,7 +989,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity["release_epoch"] = self._event_release_epoch
-        self.append_source("events", {"kind": "physics_chunk_v1", "identity": identity,
+        self.append_source("events", {"kind": "physics_chunk", "identity": identity,
             "sim_time_s": document["chunk"]["last_simulation_time_s"],
             "monotonic_ns": time.monotonic_ns(), "payload": {"raw_chunk": document}})
 
@@ -999,7 +999,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity["release_epoch"] = self._event_release_epoch
-        self.append_source("events", {"kind": "source_alignment_v1", "identity": identity,
+        self.append_source("events", {"kind": "source_alignment", "identity": identity,
             "sim_time_s": document["source"]["physics"]["simulation_time_s"],
             "monotonic_ns": time.monotonic_ns(), "payload": {"association": document}})
 
@@ -1009,7 +1009,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity["release_epoch"] = self._event_release_epoch
-        self.append_source("events", {"kind": "world_source_v1", "identity": identity,
+        self.append_source("events", {"kind": "world_source", "identity": identity,
             "sim_time_s": document["physics"]["simulation_time_s"], "monotonic_ns": time.monotonic_ns(),
             "payload": {"world_source": document}})
 
@@ -1054,7 +1054,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity['release_epoch'] = self._event_release_epoch
-        self.append_source('events', dict(kind='collection_boundary_v1', identity=identity,
+        self.append_source('events', dict(kind='collection_boundary', identity=identity,
             sim_time_s=boundary_clock(document)['sim_time_ns'] / 1e9, monotonic_ns=time.monotonic_ns(),
             payload={'collection_boundary': document}))
 
@@ -1093,13 +1093,13 @@ class EpisodeAuditWriter:
                 clock = first_command_clock(document)
                 if clock is not None and self._native_first_dispatch_clock is None:
                     self._native_first_dispatch_clock = dict(clock)
-            if item['kind'] == 'collection_boundary_v1':
+            if item['kind'] == 'collection_boundary':
                 from .collection_boundaries import claim_collection_boundary
                 boundary=claim_collection_boundary(item, identity=self.identity, seen=self._collection_boundaries,
                     world_hashes=self._world_source_hashes)
                 if boundary['stage']=='normal_stop':
                     self._native_normal_end_clock=dict(boundary['value']['source_clock'])
-            if item["kind"] == "physics_chunk_v1":
+            if item["kind"] == "physics_chunk":
                 from .raw_physics_chunks import verify_raw_chunk
                 raw = item["payload"]["raw_chunk"]
                 verify_raw_chunk(raw, previous=self._raw_physics_previous,
@@ -1112,7 +1112,7 @@ class EpisodeAuditWriter:
                         or item["sim_time_s"] != raw["chunk"]["last_simulation_time_s"]):
                     raise ValueError("AUDIT_PHYSICS_RAW_EVENT_INVALID")
                 self._raw_physics_previous = json.loads(_canonical(raw))
-            if item["kind"] == "source_alignment_v1":
+            if item["kind"] == "source_alignment":
                 association = item["payload"]["association"]
                 source = association["source"]["physics"]
                 if (source["simulation_session_id"] != self.identity["session_id"]
@@ -1123,7 +1123,7 @@ class EpisodeAuditWriter:
                     raise ValueError("AUDIT_SOURCE_ALIGNMENT_INVALID")
                 from .scene_association import claim_scene_records
                 claim_scene_records(association, self._scene_records)
-            if item["kind"] == "world_source_v1":
+            if item["kind"] == "world_source":
                 from .native_endpoints import validate_world_source
                 source = item["payload"]["world_source"]
                 validate_world_source(source, identity=self.identity, previous=self._world_source_previous)
@@ -1395,7 +1395,7 @@ def verify_audit_manifest(path: Path) -> dict:
     validate_first_command_window(None if not first_commands else first_commands[0], manifest['window'])
     normal_ends=[row['payload']['collection_boundary']['value']['source_clock']
         for row in _records(audit/'events.jsonl',_EVENT_FIELDS,'AUDIT_EVENT_INVALID')
-        if row['kind']=='collection_boundary_v1' and row['payload']['collection_boundary']['stage']=='normal_stop']
+        if row['kind']=='collection_boundary' and row['payload']['collection_boundary']['stage']=='normal_stop']
     validate_normal_end_window(None if not normal_ends else normal_ends[0],manifest['window'])
     if set(manifest["window"]) == _WINDOW_FIELDS:
         bound = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
@@ -1701,12 +1701,12 @@ def _verify_streams(audit: Path, identity: dict) -> None:
                     or row['sim_time_s'] != document['sim_time_ns'] / 1e9):
                 raise ValueError('AUDIT_EVENT_INVALID')
             teacher_event_last_seq = document['seq']
-        if row['kind'] == 'collection_boundary_v1':
+        if row['kind'] == 'collection_boundary':
             from .collection_boundaries import claim_collection_boundary
             claim_collection_boundary(row, identity=identity, seen=collection_boundaries,world_hashes=world_hashes)
-        if row["kind"] == "recorder_queue_v1":
+        if row["kind"] == "recorder_queue":
             queues.append(payload["queue_evidence"])
-        if row["kind"] == "physics_chunk_v1":
+        if row["kind"] == "physics_chunk":
             from .raw_physics_chunks import verify_raw_chunk
             raw = payload["raw_chunk"]
             verify_raw_chunk(raw, previous=raw_physics_previous, previous_verified=True,
@@ -1719,14 +1719,14 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             raw_physics_previous = raw
             for sample in raw["chunk"]["samples"]:
                 native_steps[sample["physics_step"]] = sample
-        if row["kind"] == "source_alignment_v1":
+        if row["kind"] == "source_alignment":
             association = payload["association"]
             if (association["source"]["physics"]["simulation_time_s"] != row["sim_time_s"]
                     or association["query"]["record"]["response_ros_clock"]["end_monotonic_ns"]
                     > row["monotonic_ns"]):
                 raise ValueError("AUDIT_SOURCE_ALIGNMENT_INVALID")
             associations.append(association)
-        if row["kind"] == "world_source_v1":
+        if row["kind"] == "world_source":
             source = payload["world_source"]
             if (source["physics"]["simulation_time_s"] != row["sim_time_s"]
                     or row["monotonic_ns"] < max(source["received_monotonic_ns"], source["scene_received_monotonic_ns"])):

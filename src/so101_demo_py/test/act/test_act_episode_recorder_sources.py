@@ -377,9 +377,9 @@ def test_the_reference_check_reads_every_raw_sample_of_the_episode_not_only_the_
     sources, _, engine, _ = _prepared()
     audit = tmp_path / "audit"
     audit.mkdir()
-    rows = [{"kind": "physics_chunk_v1", "payload": {"raw_chunk": {"chunk": {"samples": [{"physics_step": step} for step in chunk]}}}}
+    rows = [{"kind": "physics_chunk", "payload": {"raw_chunk": {"chunk": {"samples": [{"physics_step": step} for step in chunk]}}}}
             for chunk in ((1, 2), (3, 4))]
-    rows.append({"kind": "world_source_v1", "payload": {}})
+    rows.append({"kind": "world_source", "payload": {}})
     (audit / "events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows))
     sources.episode.capture.recorder = SimpleNamespace(root=tmp_path)
     sources.binding.physics_adapter.original_durable_steps = lambda **kw: [{"physics_step": 4}]    # the adapter remembers the tail

@@ -28,7 +28,7 @@ def valid_descriptor(tmp_path: Path) -> dict:
         "operation": "TELEOP_ACCEPTANCE",
         "runtime_id": "runtime-0001",
         "head_search_runtime_id": "runtime-0001",
-        "model_id": "head-search-v2",
+        "model_id": "head-search-runtime",
         "bundle_sha256": "a" * 64,
         "simulation_session_id": "session-0001",
         "execution_generation": 1,

@@ -110,7 +110,7 @@ def test_actual_audit_retains_world_source_and_independent_reader_refuses_resign
     shutil.copytree(path.parent, copied)
     events_path = copied / "events.jsonl"
     events = [json.loads(line) for line in events_path.read_bytes().splitlines()]
-    event = next(value for value in events if value["kind"] == "world_source_v1")
+    event = next(value for value in events if value["kind"] == "world_source")
     event["payload"]["world_source"]["scene_state"]["qpos"][0] += .01
     payload = b"".join(canonical(value) + b"\n" for value in events)
     events_path.write_bytes(payload)

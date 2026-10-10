@@ -71,7 +71,8 @@ def main() -> int:
     assert task_policy.contact is not None
     contact_thresholds = task_policy.contact.thresholds
     result = {
-        "schema": "so101-live-noslip-contact-hold-v1",
+        "schema": "so101-live-noslip-contact-hold",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "reset_epoch": EXPECTED_EPOCH,
         "model_change": "scene noslip_iterations=10",

@@ -14,7 +14,7 @@ from .contracts import fields, identifier, integer, sha256
 from .qc_session import Identity, load_model, session_memo
 
 KIND = "ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION"
-RULE = "frozen_geometry_from_native_step_v1"
+RULE = "frozen_geometry_from_native_step"
 #: operations a document may name. `initial` has no apply: the Recorder's own read-only query of the scene BEFORE the Teacher's
 #: SETUP, associated with a physics source, asserting that nothing is attached (what the worker's initial gate guarantees): schema_version 3
 #: (CP-3425; version 2 asserted the Teacher's setup scene and is never accepted again). The others carry the Teacher's apply;

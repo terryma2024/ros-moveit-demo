@@ -32,7 +32,7 @@ class HeadSimulationPolicy:
 
     def __post_init__(self):
         if (type(self.schema_version) is not int or self.schema_version != 3
-                or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search_file_v1'):
+                or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search_file'):
             raise ValueError('HEAD_SIMULATION_POLICY_SCOPE_INVALID')
         ceilings = dict(watchdog_period_s=.1, fault_reaction_limit_s=.5, native_close_timeout_s=.25,
             stop_confirmation_timeout_s=3., perception_max_age_s=1.,
@@ -84,7 +84,7 @@ class HeadSimulationPolicy:
     @staticmethod
     def default_document():
         """An explicit candidate for calibration, never an approved fallback."""
-        return dict(schema_version=3, mode='mujoco_bounded_stop_search_file_v1',
+        return dict(schema_version=3, mode='mujoco_bounded_stop_search_file',
             watchdog_period_s=.02,
             fault_reaction_limit_s=.25, native_close_timeout_s=.05,
             stop_confirmation_timeout_s=1., perception_max_age_s=1.,

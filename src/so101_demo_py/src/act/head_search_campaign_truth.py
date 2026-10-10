@@ -69,7 +69,7 @@ def validate_native_reference(envelope, expected=None):
     """
     from sensor_msgs.msg import Image
     frame=envelope.original
-    _require(envelope.schema_version==2 and envelope.reference_kind in (0,1,2),'V2_SCHEMA')
+    _require(envelope.schema_version==2 and envelope.reference_kind in (0,1,2),'CAMERA_TRUTH_SCHEMA')
     first=frame.record_type==frame.FRAME and frame.frame_sequence==1
     kind=envelope.reference_kind
     if not first or kind==0:
@@ -77,9 +77,9 @@ def validate_native_reference(envelope, expected=None):
             not envelope.scene_light_model_ids and not envelope.hidden_geom_ids and
             not envelope.reference_light_diffuse and not envelope.reference_light_specular and
             not envelope.frozen_cameras and not envelope.scene_restored and
-            envelope.initial_render_elapsed_ns==0,'V2_REFERENCE_EMPTY')
+            envelope.initial_render_elapsed_ns==0,'CAMERA_TRUTH_REFERENCE_EMPTY')
         if first and expected is not None:
-            _require(expected['kind']=='none','V2_REFERENCE_MISSING')
+            _require(expected['kind']=='none','CAMERA_TRUTH_REFERENCE_MISSING')
         return
     image=envelope.reference
     channels=3 if kind==1 else 8
@@ -87,32 +87,32 @@ def validate_native_reference(envelope, expected=None):
         image.height==frame.rgb.height and image.encoding==('rgb8' if kind==1 else '32SC2') and
         not image.is_bigendian and image.step==image.width*channels and
         len(image.data)==image.width*image.height*channels and image.width>0 and image.height>0,
-        'V2_REFERENCE_LAYOUT')
+        'CAMERA_TRUTH_REFERENCE_LAYOUT')
     _require(envelope.scene_restored and 0<envelope.initial_render_elapsed_ns<100000000 and
         len(envelope.frozen_cameras)==32 and all(math.isfinite(x) for x in envelope.frozen_cameras),
-        'V2_REFERENCE_FROZEN_SCENE')
+        'CAMERA_TRUTH_REFERENCE_FROZEN_SCENE')
     lights=list(envelope.scene_light_model_ids)
     _require(len(lights)<=100 and len(lights)==len(set(lights)) and
-        all(-1<=x<100 for x in lights),'V2_REFERENCE_LIGHT_MAP')
+        all(-1<=x<100 for x in lights),'CAMERA_TRUTH_REFERENCE_LIGHT_MAP')
     if kind==1:
         diffuse=list(envelope.reference_light_diffuse);specular=list(envelope.reference_light_specular)
         _require(not envelope.hidden_geom_ids and 0<len(diffuse)==len(specular)<=300 and
             len(diffuse)%3==0 and all(math.isfinite(x) and x>=0 for x in diffuse+specular),
-            'V2_REFERENCE_LIGHT_COEFFICIENTS')
+            'CAMERA_TRUTH_REFERENCE_LIGHT_COEFFICIENTS')
     else:
         hidden=list(envelope.hidden_geom_ids)
         _require(not envelope.reference_light_diffuse and not envelope.reference_light_specular and
             0<len(hidden)<=2000 and len(hidden)==len(set(hidden)) and all(x>=0 for x in hidden),
-            'V2_REFERENCE_OCCLUDERS')
+            'CAMERA_TRUTH_REFERENCE_OCCLUDERS')
         allowed=set(zip(frame.object_ids,frame.object_types))|{(-1,-1)}
         _require(all(pixel in allowed for pixel in struct.iter_unpack('<ii',bytes(image.data))),
-                 'V2_REFERENCE_UNMAPPED_PIXEL')
+                 'CAMERA_TRUTH_REFERENCE_UNMAPPED_PIXEL')
     if expected is not None:
         _require(expected['kind']==('normal_light' if kind==1 else 'amodal_cup') and
             list(envelope.hidden_geom_ids)==expected['hidden_geom_ids'] and
             list(envelope.reference_light_diffuse)==expected['baseline_diffuse'] and
             list(envelope.reference_light_specular)==expected['baseline_specular'],
-            'V2_REFERENCE_CONFIG_CONFLICT')
+            'CAMERA_TRUTH_REFERENCE_CONFIG_CONFLICT')
 
 
 def _physics_join(state_refs, truth, source_ns):

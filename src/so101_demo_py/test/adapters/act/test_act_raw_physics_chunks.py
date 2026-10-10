@@ -397,7 +397,7 @@ def test_pre_execution_child_failure_durably_retains_rejected_original_and_accep
         assert original.chunk_sequence == 9
         events = [json.loads(line) for line in (root / "audit/events.jsonl").read_text().splitlines()]
         assert [event["payload"]["raw_chunk"]["chunk"]["chunk_sequence"] for event in events
-                if event["kind"] == "physics_chunk_v1"] == [7]
+                if event["kind"] == "physics_chunk"] == [7]
         assert not (root / "seal.json").exists()
     finally:
         episode.close()
@@ -427,7 +427,7 @@ def test_actual_audit_seal_rechecks_raw_scope_clocks_and_chunk_continuity(tmp_pa
     shutil.copytree(writer.root, copied)
     event_path = copied / "audit/events.jsonl"
     events = [json.loads(line) for line in event_path.read_text().splitlines()]
-    raw = [event for event in events if event["kind"] == "physics_chunk_v1"]
+    raw = [event for event in events if event["kind"] == "physics_chunk"]
     raw[1]["payload"]["raw_chunk"]["chunk"]["chunk_sequence"] += 1
     event_path.write_text("".join(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
                                   for event in events))

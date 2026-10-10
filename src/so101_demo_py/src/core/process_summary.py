@@ -1,4 +1,4 @@
-"""``teacher_process_summary_v1``: the process telemetry of one Teacher attempt (policy v3, design 2026-10-10 minimal runtime gates).
+"""``teacher_process_summary``: the process telemetry of one Teacher attempt (policy v3, design 2026-10-10 minimal runtime gates).
 
 Collision, contact, force and perception facts observed during the run are recorded here, per phase, to tune the pick strategy and
 to select episodes offline. They never stop, refuse or branch the Teacher. This module is pure: it holds scalars fed by the
@@ -30,7 +30,7 @@ import threading
 from collections import deque
 from typing import Any, Callable, Iterable
 
-SCHEMA = "teacher_process_summary_v1"
+SCHEMA = "teacher_process_summary"
 FLAG_OVERLOAD = "ORACLE_CUP_OVERLOAD"
 FLAG_COLLISION = "ORACLE_COLLISION"
 ORACLE_FLAGS = (FLAG_OVERLOAD, FLAG_COLLISION)
@@ -454,7 +454,7 @@ def failure_summary(reason: str, *, policy: dict | None = None) -> dict:
 
 
 def validate_summary(document: Any) -> None:
-    """Structural check of a `teacher_process_summary_v1` (data side, ValueError): the schema, the completeness flag against its
+    """Structural check of a `teacher_process_summary` (data side, ValueError): the schema, the completeness flag against its
     reasons, and the oracle flags against the phases they are derived from."""
     if type(document) is not dict or document.get("schema") != SCHEMA:
         raise ValueError("PROCESS_SUMMARY: schema")

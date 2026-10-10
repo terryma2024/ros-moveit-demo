@@ -13,7 +13,7 @@ def policy_type():
 
 
 def document(**change):
-    value = dict(schema_version=3, mode='mujoco_bounded_stop_search_file_v1',
+    value = dict(schema_version=3, mode='mujoco_bounded_stop_search_file',
         watchdog_period_s=.02, fault_reaction_limit_s=.25, native_close_timeout_s=.05,
         stop_confirmation_timeout_s=1., perception_max_age_s=.15,
         perception_job_timeout_s=1., camera_loss_timeout_s=.5,
@@ -31,7 +31,7 @@ def test_file_policy_has_no_online_budgets_and_maps_local_feedback_exactly():
     candidate = cls.default_document()
     assert candidate == dict(document(), perception_max_age_s=1.)
     encoded = (json.dumps(candidate, sort_keys=True, indent=2) + '\n').encode('utf-8')
-    assert hashlib.sha256(encoded).hexdigest() == 'b15a4f132e0044c7c8425b13dc04bb90cc44a890da0f4ae3fd38eb5555e31eef'    # the frozen schema 3 candidate of the live Head cases
+    assert hashlib.sha256(encoded).hexdigest() == '64b170f620863d032c60426fa1d45997eb7d2e04df922ecc343692711f78cad1'    # the schema 3 candidate document with the unversioned mode label (digest-bound: the Head case inputs carry this document)
     parsed = cls.parse(document())
     assert parsed.feedback_values() == dict(joint_max_receipt_age_s=.25,
         joint_max_source_age_s=.05, camera_interarrival_deadline_s=.5,

@@ -1484,7 +1484,7 @@ def measure_and_search(
         factory = detector_factory or (
             lambda: TimedHeadDetector.build(
                 weights_path=weights_path,
-                model_id=str(production.get("runtime_id") or "head-search-v2"),
+                model_id=str(production.get("runtime_id") or "head-search-runtime"),
                 device=device,
                 values=values,
                 operating_point=_operating_point(frozen_candidate_path),

@@ -160,7 +160,7 @@ def test_actual_audit_writer_and_resigned_reader_resolve_alignment_to_retained_n
     copied = tmp_path / "isolated-resigned-audit"
     shutil.copytree(path.parent, copied)
     events = [json.loads(line) for line in (copied / "events.jsonl").read_text().splitlines()]
-    alignment_event = next(event for event in events if event["kind"] == "source_alignment_v1")
+    alignment_event = next(event for event in events if event["kind"] == "source_alignment")
     if mutation == "extra_acm":
         alignment_event["payload"]["association"]["apply"]["record"]["request"]["scene"]["allowed_collision_matrix"]["default_entry_names"] = ["plastic_cup"]
         alignment_event["payload"]["association"]["apply"]["record"]["request"]["scene"]["allowed_collision_matrix"]["default_entry_values"] = [True]

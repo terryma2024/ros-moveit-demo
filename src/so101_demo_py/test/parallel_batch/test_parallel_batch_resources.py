@@ -647,7 +647,7 @@ def test_concurrent_batches_cannot_claim_the_same_ros_domains(tmp_path, config):
     assert first_document['domain_claim_scope'] == 'cooperating_same_uid_processes'
     assert [claim['domain_id'] for claim in first_document['domain_claims']] == [181, 182]
     for claim in first_document['domain_claims']:
-        assert claim['protocol'] == 'uid_flock_v1'
+        assert claim['protocol'] == 'uid_flock'
         assert claim['uid'] == os.getuid()
         assert claim['pid'] == os.getpid()
         assert claim['process_starttime_ticks'] > 0

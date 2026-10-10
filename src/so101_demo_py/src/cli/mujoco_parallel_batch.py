@@ -1700,7 +1700,7 @@ _RPC_PAYLOAD_FIELDS = {
     },
     "replace_resources": {"expected_generation"},
     "heartbeat": set(),
-    "heartbeat_teacher_v1": set(),
+    "heartbeat_teacher": set(),
     "ack_lease": set(),
     "ack_attempt_started": {"gate_summary"},
     "ack_validation_started": {"gate_summary"},
@@ -3812,7 +3812,7 @@ class ProductionBatchComposition:
         lease = self._active_lease(message)
         if operation == "heartbeat":
             return _jsonable(self.coordinator.heartbeat(lease))
-        if operation == "heartbeat_teacher_v1":
+        if operation == "heartbeat_teacher":
             return _jsonable(self.coordinator.heartbeat_projection(lease))
         if operation == "ack_lease":
             return _jsonable(self.coordinator.ack_lease(

@@ -438,7 +438,8 @@ def run_live_workflow(
         _atomic_manifest(
             manifest_path,
             {
-                "schema": "so101-mujoco-live-runtime-v1",
+                "schema": "so101-mujoco-live-runtime",
+                "schema_version": 1,
                 "status": "FAILED",
                 "simulation_session_id": config.simulation_session_id,
                 "expected_reset_epoch": config.expected_reset_epoch,
@@ -503,7 +504,8 @@ def run_live_workflow(
         if spec.evidence_path.is_file()
     }
     manifest = {
-        "schema": "so101-mujoco-live-runtime-v1",
+        "schema": "so101-mujoco-live-runtime",
+        "schema_version": 1,
         "status": "DONE" if failure is None else "FAILED",
         "simulation_session_id": config.simulation_session_id,
         "expected_reset_epoch": config.expected_reset_epoch,

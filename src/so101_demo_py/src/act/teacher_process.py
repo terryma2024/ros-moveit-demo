@@ -1,6 +1,6 @@
 """The Teacher's process telemetry as the data side sees it (design 2026-10-10 sections 7 to 9).
 
-The Teacher manifest carries a `teacher_process_summary_v1`. The data side copies it, with the Teacher policy version, the
+The Teacher manifest carries a `teacher_process_summary`. The data side copies it, with the Teacher policy version, the
 cup-pose source and the verdict source, into a metadata document beside the sealed episode (the sealed episode itself is never
 rewritten). The same manifest decides whether the episode is training-eligible: an oracle flag or an incomplete summary excludes it.
 Collision, contact and force data never enter a training sample (`bundle.TRAINING_FIELDS`)."""
@@ -14,7 +14,7 @@ from pathlib import Path
 from ..application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
 from ..core.process_summary import SCHEMA as SUMMARY_SCHEMA, oracle_exclusion, validate_summary
 
-METADATA_SCHEMA = "teacher_process_metadata_v1"
+METADATA_SCHEMA = "teacher_process_metadata"
 METADATA_FILE = "teacher-process-metadata.json"
 EXCLUDED_CODE = "EXPORT_EPISODE_ORACLE_EXCLUDED"
 

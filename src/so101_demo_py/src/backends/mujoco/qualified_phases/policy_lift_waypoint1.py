@@ -80,7 +80,8 @@ def main() -> int:
     assert task_policy.contact is not None
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result = {
-        "schema": "so101-live-noslip-policy-lift-waypoint1-v1",
+        "schema": "so101-live-noslip-policy-lift-waypoint1",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "lift_target_arm_rad": list(LIFT_TARGET),
         "physics_pause_calls": 0,

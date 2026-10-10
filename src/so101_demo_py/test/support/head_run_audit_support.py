@@ -84,5 +84,5 @@ def make_reader(tmp_path, records=(), monkeypatch=None):
     root, receipt, sha, manifest = corpus(tmp_path, records)
     if monkeypatch is not None:
         monkeypatch.setitem(module.PROFILES, (manifest['source_manifest']['sha256'],
-            manifest['freeze_receipt']['sha256']), 'F015-file-v1')
+            manifest['freeze_receipt']['sha256']), 'postflight-domain-key')
     return module.RunReader(root, receipt, sha, evidence_root=tmp_path)

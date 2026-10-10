@@ -28,8 +28,8 @@ import threading
 import time
 from pathlib import Path
 
-READY_SCHEMA = "SO101_RAW_RECORDER_READY_V1"
-STATS_SCHEMA = "SO101_RAW_RECORD_STATS_V1"
+READY_SCHEMA = "SO101_RAW_RECORDER_READY"
+STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
 NODE_NAME = "so101_raw_recorder"
 #: CP-3517: how `stop` ends the bag process. A SIGINT that the recorder does not act on (two installed demo gates: its log ended at
 #: "Topics discovery started" and nothing followed for 15 s) is re-sent every STOP_SIGINT_RESEND_S, a SIGTERM follows at STOP_SIGTERM_AT_S,
@@ -402,7 +402,7 @@ class RawRecorder:
 
     def stop(self) -> dict:
         """Stop recording, close the bag and read it back. Never raises."""
-        stats = {"schema": STATS_SCHEMA, "failure": self.failure}
+        stats = {"schema": STATS_SCHEMA, "schema_version": 1, "failure": self.failure}
         try:
             if self._sidecar is not None:
                 self._sidecar.stop()
@@ -467,10 +467,10 @@ def main(argv=None) -> int:
     try:
         recorder.start()
         ok, state = recorder.wait_recording(options.ready_timeout_s)
-        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "state": "RECORDING" if ok else "NOT_RECORDING",
+        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "schema_version": 1, "state": "RECORDING" if ok else "NOT_RECORDING",
                                           "pid": os.getpid(), "anchor": recorder.anchor_start, "topics": state})
     except BaseException as error:   # noqa: BLE001
-        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "state": "FAILED", "error": repr(error)[:300]})
+        _atomic_json(options.ready_file, {"schema": READY_SCHEMA, "schema_version": 1, "state": "FAILED", "error": repr(error)[:300]})
         _atomic_json(options.stats_file, recorder.stop())
         return 3
     stop.wait()

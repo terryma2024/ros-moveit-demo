@@ -646,7 +646,7 @@ class HeadTrajectoryGuard:
                 or _point_ns(trajectory.points[-1]) > _MAX_DURATION_NS):
             raise PermissionError("HEAD_TRAJECTORY_FINAL_CLOCK_INVALID")
         proof = {
-            "schema_version": 1, "kind": "PREPARED_HEAD_QUINTIC_V1",
+            "schema_version": 1, "kind": "PREPARED_HEAD_QUINTIC",
             "scope": json.loads(before.scope),
             "simulation_session_id": before.scene_session,
             "reset_epoch": before.reset_epoch,

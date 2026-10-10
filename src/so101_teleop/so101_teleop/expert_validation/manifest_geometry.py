@@ -59,7 +59,7 @@ def _read_inputs(layout):
 def _identity(layout, inputs):
     return {
         "source_commit": layout.source_commit,
-        "sampler_id": "ai_station_baseline_v1",
+        "sampler_id": "ai_station_baseline",
         "sampler_version": 1,
         "source_hashes": {name: hashlib.sha256(raw).hexdigest() for name, raw in inputs.items()},
     }

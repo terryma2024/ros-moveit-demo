@@ -39,7 +39,7 @@ def test_rc0_does_not_conceal_execution_failure(tmp_path,monkeypatch,capsys):
     root,receipt,sha,manifest=corpus(tmp_path,[('HEAD_ACTION_SDK_RETURNED',{'goal_uuid':'a'})]*2)
     reader=reader_module();monkeypatch.setattr(reader,'DEFAULT_EVIDENCE_ROOT',tmp_path)
     monkeypatch.setitem(reader.PROFILES,(manifest['source_manifest']['sha256'],
-        manifest['freeze_receipt']['sha256']),'F015-file-v1')
+        manifest['freeze_receipt']['sha256']),'postflight-domain-key')
     rc=cli().main(['--run-root',str(root),'--execution-receipt',str(receipt),
         '--execution-receipt-sha256',sha,'--output-root',str(tmp_path/'reviews/audit')])
     assert rc==0

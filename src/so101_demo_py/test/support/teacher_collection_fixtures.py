@@ -71,18 +71,18 @@ def collection_materials(frozen_scene):
     boundaries = dict(verified_reset=reset, capture_start=clock(.002, 1_000_000),
         initial_capture=dict(source_clock=clock(.004, 2_500_000), world_source=sources[1]),
         normal_stop=stop, final_capture=dict(source_clock=clock(.008, 7_000_000), world_source=sources[3]))
-    events = [dict(kind="physics_chunk_v1", payload=dict(raw_chunk=dict(schema_version=1,
+    events = [dict(kind="physics_chunk", payload=dict(raw_chunk=dict(schema_version=1,
         received_monotonic_ns=base + 8_000_000, chunk=dict(chunk_sequence=1, simulation_session_id="alignment-session",
             reset_epoch=1, first_physics_step=1, last_physics_step=4, first_simulation_time_s=.002,
             last_simulation_time_s=.008, failed_publish_attempts=0, handoff_monotonic_ns=0, publish_monotonic_ns=0,
             publish_deferrals_total=0, evidence_loss=False, samples=samples))))]
-    events += [dict(kind="world_source_v1", payload=dict(world_source=source)) for source in sources]
+    events += [dict(kind="world_source", payload=dict(world_source=source)) for source in sources]
     # the two alignments the QC requires of a new episode (CP-3425): the Recorder's pre-SETUP one, the Teacher's SETUP world_sync
     for operation, version, call, field, stamp in (("initial", 3, "request_ros_clock", "query", 1_000_000),
                                                     ("world_sync", 1, "response_ros_clock", "query", 3_000_000)):
         record = {"request_ros_clock": dict(sim_time_ns=stamp, begin_monotonic_ns=base, end_monotonic_ns=base),
                   "response_ros_clock": dict(sim_time_ns=stamp, begin_monotonic_ns=base, end_monotonic_ns=base)}
-        events.append(dict(kind="source_alignment_v1", sim_time_s=stamp / 1e9, monotonic_ns=base + 1,
+        events.append(dict(kind="source_alignment", sim_time_s=stamp / 1e9, monotonic_ns=base + 1,
                            payload=dict(association=dict(operation=operation, schema_version=version,
                                                          query=dict(record=record)))))
     teacher = [
@@ -109,7 +109,7 @@ def collection_materials(frozen_scene):
                                      "terminal": 1}, monotonic_ns=base + 8_000_001))
     for stage, value in boundaries.items():
         doc = dict(kind="ACT_COLLECTION_BOUNDARY", schema_version=2, stage=stage, value=value)
-        events.append(dict(kind="collection_boundary_v1", sim_time_s=boundary_clock(doc)["sim_time_ns"] / 1e9,
+        events.append(dict(kind="collection_boundary", sim_time_s=boundary_clock(doc)["sim_time_ns"] / 1e9,
                            monotonic_ns=base + 8_000_000, payload=dict(collection_boundary=doc)))
     continuity = dict(schema_version=2, period_ns=2_000_000, session_id="alignment-session", reset_epoch=1,
         kinds={kind: dict(frames=500, gaps=0, steps=[]) for kind in ("arm", "gripper", "neck")})

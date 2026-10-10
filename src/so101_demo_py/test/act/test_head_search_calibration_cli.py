@@ -1146,7 +1146,7 @@ def _deadband_inputs(tmp_path: Path) -> dict:
         json.dumps(
             {
                 "schema_version": 2,
-                "runtime_id": "head-search-v2",
+                "runtime_id": "head-search-runtime",
                 "weight_path": "models/head-search/yolo11n-seg-best.pt",
                 "weight_sha256": hashlib.sha256(weights.read_bytes()).hexdigest(),
                 "camera": {
@@ -3673,7 +3673,7 @@ def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", tea
                 "runtime_device": "cuda:0",
                 "allow_cpu_fallback": False,
                 "weights_sha256": "2" * 64,
-                "model_id": "head-search-v2",
+                "model_id": "head-search-runtime",
             },
             "frames": frames,
             "search": {

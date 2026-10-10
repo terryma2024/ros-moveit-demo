@@ -90,7 +90,8 @@ def main() -> int:
     assert task_policy.contact is not None
     maximum_safe_force_n = task_policy.contact.thresholds.maximum_safe_force_n
     result: dict = {
-        "schema": "so101-live-noslip-descend-v1",
+        "schema": "so101-live-noslip-descend",
+        "schema_version": 1,
         "simulation_session_id": SESSION_ID,
         "targets_arm_rad": [list(target) for target in TARGETS],
         "contact_loss_grace_s": CONTACT_LOSS_GRACE_S,

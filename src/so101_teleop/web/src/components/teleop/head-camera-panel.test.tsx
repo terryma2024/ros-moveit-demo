@@ -9,7 +9,7 @@ function status(overrides: Partial<HeadCameraStatus> = {}): HeadCameraStatus {
     available: true,
     operation: "TELEOP_ACCEPTANCE",
     runtime_id: "runtime-0001",
-    model_id: "head-search-v2",
+    model_id: "head-search-runtime",
     state: "STOPPING",
     detector_constructed: 0,
     qualified: false,
@@ -62,7 +62,7 @@ describe("HeadCameraPanel", () => {
               mask_sha256: "b".repeat(64),
             },
           ],
-          model_id: "head-search-v2",
+          model_id: "head-search-runtime",
           bundle_sha256: "c".repeat(64),
         }}
       />,
@@ -78,7 +78,7 @@ describe("HeadCameraPanel", () => {
     expect(screen.getByTestId("vertical-bounds")).toBeTruthy();
     expect(screen.getByTestId("candidate-center")).toBeTruthy();
     expect(screen.getByTestId("lock-progress").textContent).toBe("1 of 3");
-    expect(screen.getByText("head-search-v2")).toBeTruthy();
+    expect(screen.getByText("head-search-runtime")).toBeTruthy();
     expect(screen.getByText("runtime-0001")).toBeTruthy();
   });
 
@@ -123,7 +123,7 @@ describe("HeadCameraPanel overlays and bounds", () => {
         ] as Array<[number, number]>,
       },
     ],
-    model_id: "head-search-v2",
+    model_id: "head-search-runtime",
     bundle_sha256: "f".repeat(64),
   };
 

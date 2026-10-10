@@ -117,7 +117,7 @@ def _production_config(**value_overrides) -> dict:
     values.update(value_overrides)
     return {
         "schema_version": 2,
-        "runtime_id": "head-search-v2",
+        "runtime_id": "head-search-runtime",
         "values": values,
         "motion": {"goal_tolerance_rad": 0.05, "settle_velocity_rad_s": 0.05},
         "camera": {

@@ -493,7 +493,7 @@ class ScriptedValidationService:
         return {
             "manifest_id": manifest_id,
             "point_count": total_points,
-            "catalog_sha256": hashlib.sha256(b"ai_station_baseline_v1").hexdigest(),
+            "catalog_sha256": hashlib.sha256(b"ai_station_baseline").hexdigest(),
             "selection_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
             "stale": False,
             "points": document_points,
@@ -501,7 +501,7 @@ class ScriptedValidationService:
                 (manifest_id + canonical).encode("utf-8")
             ).hexdigest(),
             "source_commit": "scripted",
-            "sampler_id": "ai_station_baseline_v1",
+            "sampler_id": "ai_station_baseline",
             "sampler_version": 1,
             "catalog_seed": 20260911,
             "geometry_sha256": hashlib.sha256(b"top_view_projection").hexdigest(),

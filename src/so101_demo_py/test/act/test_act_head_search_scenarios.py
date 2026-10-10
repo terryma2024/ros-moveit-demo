@@ -297,7 +297,7 @@ _EVIDENCE = {
     "dataset_config_sha256": "5" * 64,
     "scenario_partitions_sha256": "6" * 64,
     "controller_config_sha256": "7" * 64,
-    "runtime_identity": {"runtime_id": "head-search-v2", "allow_cpu_fallback": False},
+    "runtime_identity": {"runtime_id": "head-search-runtime", "allow_cpu_fallback": False},
     "command": "so101_head_search_calibration measure-scenarios ...",
 }
 
@@ -1122,7 +1122,7 @@ def _write_inputs(tmp_path) -> dict:
         json.dumps(
             {
                 "schema_version": 2,
-                "runtime_id": "head-search-v2",
+                "runtime_id": "head-search-runtime",
                 "allow_cpu_fallback": False,
                 "cuda_device": "cuda:0",
                 "weight_path": str(weights),

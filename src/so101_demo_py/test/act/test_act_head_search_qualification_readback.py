@@ -116,7 +116,7 @@ def _runtime(tmp_path: Path, values=None) -> dict:
         json.dumps(
             {
                 "schema_version": 2,
-                "runtime_id": "head-search-v2",
+                "runtime_id": "head-search-runtime",
                 "weight_path": str(weights),
                 "allow_cpu_fallback": False,
                 "cuda_device": "cuda:0",

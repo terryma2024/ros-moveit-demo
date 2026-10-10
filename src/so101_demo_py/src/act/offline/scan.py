@@ -500,7 +500,7 @@ def _split_events(count, events, wall_begin_ns):
 
 def _with_breakdown(topics, detected, reasons, *, lo, end, rows_lo, rows_hi, transport_lost, by_topic, events=None,
                     wall_begin_ns=None) -> dict:
-    """The per-topic reconciliation (C5, rule `topic_loss_v2`), used when the recorder reported its losses topic by topic.
+    """The per-topic reconciliation (C5, rule `topic_loss`), used when the recorder reported its losses topic by topic.
 
     * the per-topic numbers must sum to the total and name only recorded topics (else OFFLINE_TRANSPORT_LOSS_UNATTRIBUTED);
     * a loss whose log line precedes the window is provably outside it (a line is never earlier than the loss) and is only recorded;

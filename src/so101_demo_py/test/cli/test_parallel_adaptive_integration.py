@@ -342,7 +342,7 @@ def test_external_cleanup_retires_only_owned_worker_and_releases_claim(tmp_path)
         claim_root.mkdir(mode=0o700)
         claim_path = claim_root / "domain-215.lock"
         claim = {
-            "protocol": "uid_flock_v1",
+            "protocol": "uid_flock",
             "scope": "cooperating_same_uid_processes",
             "domain_id": 215,
             "uid": os.getuid(),

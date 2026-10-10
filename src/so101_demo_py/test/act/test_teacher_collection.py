@@ -26,7 +26,7 @@ def test_the_collection_reads_back_complete_with_no_dispatch_receipt(frozen_scen
     answer = verify(events, identity, window, frozen_scene)
     assert answer["initial_source"] == sources[1] and answer["final_source"] == sources[3]
     assert answer["normal_stop_step"] == 3 and answer["goal_phase_begins"] == 1
-    assert not any(row["kind"] == "native_dispatch_v1" for row in events)
+    assert not any(row["kind"] == "native_dispatch" for row in events)
 
 
 @pytest.mark.parametrize("fault,match", [
@@ -41,7 +41,7 @@ def test_the_collection_reads_back_complete_with_no_dispatch_receipt(frozen_scen
     ("summary_gap", "NATIVE_QC_EVENT_SEQUENCE_GAP"),
     ("repeated_seq", "NATIVE_QC_EVENT_SEQUENCE_GAP"),
     ("v1_schema", "NATIVE_QC_EVENT_SCHEMA_INVALID"),
-    ("v1_dispatch_row", "NATIVE_QC_V1_EVENT_REJECTED"),
+    ("v1_dispatch_row", "NATIVE_QC_EVENT_REJECTED"),
     ("foreign_attempt", "NATIVE_QC_EVENT_IDENTITY_INVALID"),
     ("reset_mismatch", "NATIVE_QC_RESET_EVENT_MISMATCH"),
     ("first_command_window", "NATIVE_DISPATCH_WINDOW_INVALID"),
@@ -79,7 +79,7 @@ def test_collection_faults_are_invalid(frozen_scene, fault, match):
     if fault == "v1_schema":
         rows[0]["payload"]["teacher_event"]["schema"] = "SO101_TEACHER_EVENT_V1"
     if fault == "v1_dispatch_row":
-        events.append(dict(kind="native_dispatch_v1", sim_time_s=.005, monotonic_ns=1, payload=dict(native_dispatch={})))
+        events.append(dict(kind="native_dispatch", sim_time_s=.005, monotonic_ns=1, payload=dict(native_dispatch={})))
     if fault == "foreign_attempt":
         rows[2]["payload"]["teacher_event"]["attempt_id"] = "foreign"
     if fault == "reset_mismatch":
@@ -237,7 +237,7 @@ def test_the_audit_refuses_a_retired_dispatch_row_a_retired_event_and_a_repeated
     writer.append_teacher_event(envelope(4, "phase_finish", 1, 10, dict(state="Y", status="SUCCEEDED", code=None),
                                          identity=identity))
     with pytest.raises(ValueError):
-        writer.append_source("events", dict(kind="native_dispatch_v1", identity=identity, sim_time_s=0.,
+        writer.append_source("events", dict(kind="native_dispatch", identity=identity, sim_time_s=0.,
                                             monotonic_ns=1, payload={"native_dispatch": {}}))
 
 

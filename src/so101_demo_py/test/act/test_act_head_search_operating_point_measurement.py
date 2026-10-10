@@ -401,7 +401,7 @@ def test_the_rule_producer_writes_both_rules_before_any_measurement(tmp_path: Pa
         production_config=_production_config(),
         measurements_output_dir=measurements,
         output_dir=tmp_path / "rules",
-        generation="head-search-v2",
+        generation="head-search-runtime",
     )
     head = json.loads((tmp_path / "rules" / RULE_NAME).read_text(encoding="utf-8"))
     task = json.loads((tmp_path / "rules" / TASK_RULE_NAME).read_text(encoding="utf-8"))

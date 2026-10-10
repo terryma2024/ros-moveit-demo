@@ -20,9 +20,9 @@ MAX_ARTIFACTS = 100_000
 MAX_CORRELATIONS = 100_000
 PROFILES = {
     ('63f3dc2b950c2d7b7be7f294db5b1b0b23184b40d55bf658a4a7d331452c17b5',
-     'a5fb3450da59e2bfff452de5823efdf0bb070f71f7ff59a129b541e163a7fecc'): 'F015-file-v1',
+     'a5fb3450da59e2bfff452de5823efdf0bb070f71f7ff59a129b541e163a7fecc'): 'postflight-domain-key',
     ('780f1719d52af0df73ba3eebb4c70f493bf45b0571e2620b254d6eb189bdf993',
-     '25f2bec71a0fee9288f019432335ce5cb788b5ac360510bbf1f47fefb72d7c95'): 'F022-file-v1',
+     '25f2bec71a0fee9288f019432335ce5cb788b5ac360510bbf1f47fefb72d7c95'): 'postflight-ros-domain-id-key',
 }
 
 

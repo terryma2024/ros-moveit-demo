@@ -1602,7 +1602,7 @@ def accept_teleop(
         report=read_closed_report(qualification_report),
         values=values,
         runtime_id=runtime_id,
-        model_id=str(document.get("runtime_id") or "head-search-v2"),
+        model_id=str(document.get("runtime_id") or "head-search-runtime"),
         weights_path=weights,
         device=device,
         frames=frames,

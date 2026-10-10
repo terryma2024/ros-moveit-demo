@@ -234,7 +234,7 @@ def test_the_processor_metadata_copies_the_summary_policy_and_provenance(tmp_pat
     stored = json.loads((tmp_path / teacher_process.METADATA_FILE).read_text())
     assert stored == json.loads(json.dumps(metadata))
     assert stored["teacher_execution_policy_version"] == 3 and stored["cup_pose_source"] == "broker_rgbd"
-    assert stored["verdict_source"] == "sim_truth" and stored["teacher_process_summary_schema"] == "teacher_process_summary_v1"
+    assert stored["verdict_source"] == "sim_truth" and stored["teacher_process_summary_schema"] == "teacher_process_summary"
     assert stored["teacher_manifest_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     assert stored["teacher_process_summary"] == document["teacher_process_summary"]
     assert teacher_process.write_metadata(manifest_path, tmp_path) == metadata          # idempotent

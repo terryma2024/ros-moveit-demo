@@ -41,5 +41,5 @@ def test_the_physics_count_of_a_schema_3_report_counts_the_raw_chunks_the_episod
     decoupled, so the pilot episode's QC computed PASS and then failed to validate its own report ('verdict')."""
     from so101_demo.act.episode_qc import physics_chunk_count
 
-    events = [{"kind": "physics_chunk_v1"}, {"kind": "world_source_v1"}, {"kind": "physics_chunk_v1"}, "not an event"]
+    events = [{"kind": "physics_chunk"}, {"kind": "world_source"}, {"kind": "physics_chunk"}, "not an event"]
     assert physics_chunk_count(events) == 2 and physics_chunk_count([]) == 0

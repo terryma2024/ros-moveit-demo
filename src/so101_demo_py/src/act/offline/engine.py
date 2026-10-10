@@ -4,7 +4,7 @@ It consumes the Teacher event stream (`/so101/teacher/events`, replayed from the
 writes an isolated episode directory with the existing episode assembly and lossless writer, seals it and reads it back. Every defect
 it finds is a verdict on the data (INVALID), never an input to the Teacher.
 
-Result: `recorder-result.json` (schema `SO101_RECORDER_RESULT_V1`, exclusive and durable). Return code: 0 sealed VALID, 3 INVALID (the
+Result: `recorder-result.json` (schema `SO101_RECORDER_RESULT`, exclusive and durable). Return code: 0 sealed VALID, 3 INVALID (the
 record is retained and rejected for export).
 
 Recording window. `collection_start_s` is the simulation time at which the capture starts. The capture starts when the initial scene
@@ -40,7 +40,7 @@ from ..teacher_event_stream import (
 from .policy import check_outputs_absent
 
 RC_VALID, RC_INVALID = 0, 3
-RESULT_SCHEMA = "SO101_RECORDER_RESULT_V1"
+RESULT_SCHEMA = "SO101_RECORDER_RESULT"
 REQUIRED_SOURCES = ("head", "wrist", "physics", "scene_state", "world", "joint_states")
 #: a poll below this advances the replay by this much (a zero poll would never move the virtual clock)
 MIN_STEP_S = 0.001
@@ -524,12 +524,12 @@ class OfflineEngine:
         except Exception as error:
             inventory = {"__inventory_error__": {"sha256": "0" * 64, "size": -1, "error": str(error)[:100]}}
         document = {
-            "schema": RESULT_SCHEMA, "status": "INVALID" if invalid else "VALID", "rc": self.rc,
+            "schema": RESULT_SCHEMA, "schema_version": 1, "status": "INVALID" if invalid else "VALID", "rc": self.rc,
             "reasons": list(self.invalid), "reason_count": self._invalid_total,
             # The engine never authorises export: that needs the Teacher PASS, an independent QC PASS and the commit.
             "export_eligible": False, "export_gate": "REJECTED" if invalid else "PENDING_INDEPENDENT_QC",
             "identity": self.identity.document(),
-            # The document keeps the shape its readers know (schema V1): there is no fault injector, no live listening state and no stall
+            # The document keeps the shape its readers know (schema version 1): there is no fault injector, no live listening state and no stall
             # telemetry any more, so these are the constants an offline run always had.
             "fault": "none", "faults": {"fault": "none", "physics_chunks_dropped": 0, "physics_chunks_seen": 0},
             "policy_sha256": self.policy["policy_sha256"], "collection_start_s": self.collection_start_s,

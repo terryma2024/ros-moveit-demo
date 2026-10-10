@@ -760,8 +760,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument(
         "--catalog-profile",
-        choices=("ai_station_baseline_v1", "geometry_v2"),
-        default="ai_station_baseline_v1",
+        choices=("ai_station_baseline", "geometry_v2"),
+        default="ai_station_baseline",
     )
     parser.add_argument("--total-points", type=int, default=CANDIDATE_COUNT)
     parser.add_argument(
@@ -793,7 +793,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             required_minimum_separation_m=0.0,
         )
         manifest_note = f"冻结清单：{args.points_yaml.name}"
-    elif args.catalog_profile == "ai_station_baseline_v1":
+    elif args.catalog_profile == "ai_station_baseline":
         from so101_teleop.expert_validation.catalog import (
             CATALOG_RELATIVE_PATH,
             CATALOG_SHA256,

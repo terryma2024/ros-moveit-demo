@@ -36,7 +36,7 @@ def report():
         "checks": {"episode_data": {"status": "PASS", "reason": ""},
                    "teacher_reference_consistency": copy.deepcopy(TEACHER_REFERENCE),
                    "topic_loss_gate": {"status": "PASS", "reason": "", "document_sha256": "f" * 64,
-                                       "rule_version": "topic_loss_v2", "lost_in_window": 0}}, "reason": ""}
+                                       "rule_version": "topic_loss", "lost_in_window": 0}}, "reason": ""}
 
 
 def fail_teacher_reference(document, code="TEACHER_REFERENCE_END_AFTER_RECORDING"):

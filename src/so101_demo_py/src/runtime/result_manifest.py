@@ -110,7 +110,8 @@ def write_run_result(path: Path, result: RunResultManifest) -> Path:
         "qualification_status": result.qualification_status.value,
         "reset_epoch": result.reset_epoch,
         "run_status": result.run_status.value,
-        "schema": "so101-run-result-v1",
+        "schema": "so101-run-result",
+        "schema_version": 1,
         "session_id": result.session_id,
         "source_commit": result.source_commit,
     }

@@ -1511,7 +1511,7 @@ class ParallelWorkerRuntime:
     @staticmethod
     def _write_collection_record(point_root: Path, facts: dict, reason) -> None:
         try:
-            payload = json.dumps({"schema": "SO101_RECORDER_ORCHESTRATION_V1", "reason": reason, **facts},
+            payload = json.dumps({"schema": "SO101_RECORDER_ORCHESTRATION", "schema_version": 1, "reason": reason, **facts},
                                  sort_keys=True, default=str, allow_nan=False).encode() + b"\n"
             with open(Path(point_root) / "recorder-orchestration.json", "xb") as stream:
                 stream.write(payload)

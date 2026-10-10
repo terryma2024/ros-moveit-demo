@@ -26,7 +26,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 RC_VALID, RC_CONFIG, RC_INVALID, RC_INFRA, RC_DIAGNOSTIC = 0, 2, 3, 4, 5
-REPORT_SCHEMA = "SO101_OFFLINE_EPISODE_REPORT_V1"
+REPORT_SCHEMA = "SO101_OFFLINE_EPISODE_REPORT"
 LEASE_FIELDS = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id",
                 "lease_generation", "lease_issued_monotonic_s", "lease_deadline_monotonic_s")
 #: a bag clock map that disagrees with the sidecar's own (system, monotonic) pairs by more than this is not trusted
@@ -268,7 +268,7 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     if clock_facts["max_residual_ns"] is not None and clock_facts["max_residual_ns"] > CLOCK_RESIDUAL_LIMIT_NS:
         reasons.append(f"OFFLINE_CLOCK_MAP_INCONSISTENT: residual_ns={clock_facts['max_residual_ns']}")
     timeline = scan["timeline"]
-    report = {"schema": REPORT_SCHEMA, "bag": {"path": str(bag), "message_count": info["message_count"],
+    report = {"schema": REPORT_SCHEMA, "schema_version": 1, "bag": {"path": str(bag), "message_count": info["message_count"],
                                                "duration_ns": info["duration_ns"], "counts": scan["counts"]},
               "clock": clock_facts, "timeline": timeline, "continuity": scan["continuity"], "camera_grid": scan.get("camera_grid"), "window_start": scan.get("window_start"), "scan_reasons": list(scan["reasons"]),
               "inputs_manifest": str(inputs_manifest), "engine": None, "qc": {"status": "NOT_RUN"}, "episode": None}

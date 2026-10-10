@@ -17,7 +17,7 @@
     "goal_tolerance_rad": 0.05,
     "settle_velocity_rad_s": 0.05
   },
-  "runtime_id": "head-search-v2",
+  "runtime_id": "head-search-runtime",
   "schema_version": 2,
   "tracker": {
     "iou_threshold": 0.3,

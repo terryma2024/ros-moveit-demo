@@ -48,7 +48,7 @@ RUNTIME = {
     "source_commit": "d8d1b5f8be37678f5bdbdaa92c322b4548f25504",
     "setup_bash_present": True,
     "production_config": "/evidence/head-toolchain-frozen/head_search_runtime.json",
-    "production_config_sha256": "3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9",
+    "production_config_sha256": "c5db9b4c6602f49287ec1687bc46bf0bf82e18bff1e21c69d3747850f569c430",
     "values_count": 17,
     "values_sha256": "3c787fd7ec402355d8a6e363a6bcbf814273ce30d98d47a3af2bc4400f568df2",
     "allow_cpu_fallback": False,
@@ -172,7 +172,7 @@ def _flight(
             "runtime_device": "cuda:0",
             "allow_cpu_fallback": False,
             "weights_sha256": RUNTIME["weight_sha256_observed"],
-            "model_id": "head-search-v2",
+            "model_id": "head-search-runtime",
         },
         "admission": {"protocol": "HeadNeckTrajectoryController owner dead-man admission"},
         "adapter_liveness": {
