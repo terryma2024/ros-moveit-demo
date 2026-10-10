@@ -362,7 +362,7 @@ ros2 launch so101_demo_py so101_mujoco_perception_pick_place.launch.py \
   sam_mask_quality_threshold:=0.50 sam_min_mask_pixels:=64 sam_max_mask_area_ratio:=0.50
 ```
 
-YOLO 那条把 `perception_backend` 换成 `yolo_seg`，权重参数换成 `perception_weights` 加 `perception_weights_sha256`，场景换成 `v5_multi_object_scene.xml`，`perception_runtime:=auto` 在 Linux 会自动选 docker 并把设备收敛成 `cuda`。
+YOLO 那条把 `perception_backend` 换成 `yolo_seg`，权重参数换成 `perception_weights` 加 `perception_weights_sha256`，场景换成 `multi_object_scene.xml`，`perception_runtime:=auto` 在 Linux 会自动选 docker 并把设备收敛成 `cuda`。
 
 几个容易白跑一趟的细节：
 

@@ -169,7 +169,7 @@ frame 3: cup.x = 0.023
 | place | 固定 place TCP、approach、retreat clearance |
 | safety | workspace、消息新鲜度、场景位置和姿态容差 |
 
-实际 MuJoCo 参数在 [`config/policies/dynamic_cup_pick/v1/mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)。
+实际 MuJoCo 参数在 [`config/policies/dynamic_cup_pick/mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/mujoco.yaml)。
 
 [`dynamic_pick_policy.py`](../../src/so101_demo_py/src/core/dynamic_pick_policy.py) 使用严格 schema 加载配置：
 
@@ -786,7 +786,7 @@ ROS topic
 1. [`dynamic_cup_pick_place.py`](../../src/so101_demo_py/src/cli/dynamic_cup_pick_place.py)：模式和执行门禁；
 2. [`cup_pose_source.py`](../../src/so101_demo_py/src/ros/cup_pose_source.py)：ROS 消息如何变成 `CupPoseSample`；
 3. [`dynamic_pick.py`](../../src/so101_demo_py/src/core/dynamic_pick.py)：刚体变换和目标解析；
-4. [`mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/v1/mujoco.yaml)：抓取模板中的标定参数；
+4. [`mujoco.yaml`](../../src/so101_demo_py/config/policies/dynamic_cup_pick/mujoco.yaml)：抓取模板中的标定参数；
 5. [`cup_pose_preflight.py`](../../src/so101_demo_py/src/application/cup_pose_preflight.py)：三份 Pose 为什么必须一致；
 6. [`dynamic_execute.py`](../../src/so101_demo_py/src/application/dynamic_execute.py)：动态 action 如何复用唯一状态机；
 7. [`underactuated_ik.py`](../../src/so101_demo_py/src/control/moveit/underactuated_ik.py)：5-DoF IK、FK 和 residual；

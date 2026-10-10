@@ -281,8 +281,7 @@ dry-run 不触碰物理执行：
 ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py \
   run_mode:=dry_run \
   execute:=false \
-  policy_id:=light_cup_wall_pick \
-  policy_version:=v1
+  policy_id:=light_cup_wall_pick
 ```
 
 live execute 必须双重显式授权，并使用唯一 session 与 `/data/work` 证据目录：
@@ -294,7 +293,6 @@ ros2 launch so101_demo_py so101_mujoco_pick_place.launch.py \
   execute:=true \
   session_id:=so101-run-001 \
   policy_id:=light_cup_wall_pick \
-  policy_version:=v1 \
   evidence_file:=/data/work/so101-run-001/result.json
 ```
 

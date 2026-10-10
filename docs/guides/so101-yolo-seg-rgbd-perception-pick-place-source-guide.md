@@ -242,12 +242,12 @@ tar -xzf "$ARCHIVE"
 
 ### 7.1 多物体 MJCF
 
-训练和验收场景位于 [`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)。它包含两个杯子实例、瓶子干扰物、桌面、目标区域和 `task_camera`。
+训练和验收场景位于 [`multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/multi_object_scene.xml)。它包含两个杯子实例、瓶子干扰物、桌面、目标区域和 `task_camera`。
 
 数据生成配置 [`plastic_cup_yolo_seg.yaml`](../../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml) 固定：
 
 ```yaml
-mjcf_path: ../../assets/mujoco/v5_multi_object_scene.xml
+mjcf_path: ../../assets/mujoco/multi_object_scene.xml
 camera_name: task_camera
 image_width: 640
 image_height: 480
@@ -332,7 +332,7 @@ segmentation render: H x W x 2
 
 ### 8.3 geom ID 如何合成杯子实例
 
-一个杯子由多个 geom 组成。[`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml) 中的 `plastic_cup` 有杯壁和杯底，`plastic_cup_b` 也有自己的一组 geom。`model.geom_bodyid` 提供从 geom 到所属 body 的映射：
+一个杯子由多个 geom 组成。[`multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/multi_object_scene.xml) 中的 `plastic_cup` 有杯壁和杯底，`plastic_cup_b` 也有自己的一组 geom。`model.geom_bodyid` 提供从 geom 到所属 body 的映射：
 
 ```text
 geom ID -> model.geom_bodyid[geom_id] -> body ID -> body name
@@ -736,7 +736,7 @@ ros2 run so101_demo_py so101_mujoco_perception_pick_place \
   sensor_rendering:=true \
   session_id:=yolo-tutorial-001 \
   evidence_file:=/tmp/so101-debug-yolo-tutorial/run-001.json \
-  mujoco_scene:="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml" \
+  mujoco_scene:="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py/assets/mujoco/multi_object_scene.xml" \
   mujoco_initial_keyframe:=task_start \
   perception_backend:=yolo_seg \
   perception_weights:=/absolute/path/to/best.pt \
@@ -983,7 +983,7 @@ result.json
 
 按数据流读，比从 launch 或最长的 ROS node 开始更容易：
 
-1. [`v5_multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/v5_multi_object_scene.xml)：两个杯子、瓶子和相机；
+1. [`multi_object_scene.xml`](../../src/so101_demo_py/assets/mujoco/multi_object_scene.xml)：两个杯子、瓶子和相机；
 2. [`plastic_cup_yolo_seg.yaml`](../../src/so101_demo_py/config/perception/plastic_cup_yolo_seg.yaml)：数据规模与 MJCF；
 3. [`mujoco_dataset.py`](../../src/so101_demo_py/src/adapters/perception/mujoco_dataset.py)：object-ID 标签与数据生成；
 4. [`training.yaml`](../../src/so101_demo_py/config/perception/training.yaml)：微调契约；
