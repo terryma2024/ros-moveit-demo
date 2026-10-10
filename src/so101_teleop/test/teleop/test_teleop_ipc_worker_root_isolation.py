@@ -17,7 +17,9 @@ import importlib.util
 import os
 from pathlib import Path
 
-CONFTEST = Path(__file__).resolve().parent / "conftest.py"
+from teleop_paths import TEST_ROOT
+
+CONFTEST = TEST_ROOT / "conftest.py"
 
 
 def _configure(monkeypatch, base: Path, *, worker: str, pid: int) -> Path:

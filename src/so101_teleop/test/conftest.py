@@ -15,10 +15,13 @@ import subprocess
 import sys
 
 import pytest
-from teleop_paths import PACKAGE_ROOT
+from teleop_paths import PACKAGE_ROOT, TEST_DIRECTORIES
 
 if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
+for _directory in reversed(TEST_DIRECTORIES):
+    if str(_directory) not in sys.path:
+        sys.path.insert(0, str(_directory))
 
 from so101_teleop.owned_group import terminate_group  # noqa: E402
 from so101_teleop.process_identity import (  # noqa: E402

@@ -23,7 +23,7 @@ from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
 from so101_teleop.unified.intent_store import IntentStore
 from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
 from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest
-from teleop_paths import SOURCE_ROOT
+from teleop_paths import DEMO_TEST_IMPORT_PATH
 
 
 def _canonical(value):
@@ -86,8 +86,7 @@ def _prepared_receipt(tmp_path):
 
     import sys
 
-    demo_tests = SOURCE_ROOT / "so101_demo_py" / "test"
-    for directory in (demo_tests / "support", demo_tests):
+    for directory in DEMO_TEST_IMPORT_PATH:
         if str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
     from test_act_task8_artifact_bundle import _inputs
