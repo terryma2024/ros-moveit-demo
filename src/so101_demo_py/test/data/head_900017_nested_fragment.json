@@ -13,7 +13,7 @@
       "sha256": "1ee09c953a94a0b01459d13493a9a689a591535e655d32adc6d967cc5c3f5adf"
     }
   ],
-  "fixture": "/data/work/ws_moveit/.worktrees/so101-head-file-protocol-1003/src/so101_demo_py/test/data/head_900017_nested_fragment.npz",
+  "fixture": "test/data/head_900017_nested_fragment.npz",
   "fixture_sha256": "09edbf505eb8a9f6c59c9c7e0fa840437f19a18dcce5d9c3d467c66a820de6ec",
   "note": "Exact frozen post-erosion masks and original box/confidence/class arrays; no approximation or inference."
 }

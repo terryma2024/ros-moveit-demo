@@ -25,9 +25,6 @@ from pathlib import Path
 
 import pytest
 
-TASK_ROOT = Path(
-    "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget")
 #: The copied install under test. Task 9 of the lightweight start guard plan replaced the
 #: hardcoded historical prefix with an explicit one: the new immutable copy of the current
 #: runtime is named by SO101_E2E_INSTALL_PREFIX, and the old path stays only as the

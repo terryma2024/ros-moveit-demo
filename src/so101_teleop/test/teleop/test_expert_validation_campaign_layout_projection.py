@@ -80,13 +80,6 @@ SHA_CLOSURE = RUNTIME_CLOSURE_SHA256
 CAMPAIGN_PASS = "W2_CAMPAIGN_PASS"
 CAMPAIGN_INCOMPLETE = "W2_CAMPAIGN_INCOMPLETE"
 
-#: The one real batch this task's evidence records: journal, binding, per-point results and the
-#: campaign's own result document, written by the campaign composition itself.
-RECORDED_REAL_BATCH = (
-    "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"
-    "/task11/after-fix/w2-20260922T011804Z/batch"
-)
-
 
 #: The verified result hash of one committed attempt, as the batch's own ``POINT_TERMINAL`` writes
 #: it. The shared writer computes the same value for the same input.

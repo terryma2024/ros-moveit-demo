@@ -18,9 +18,6 @@ from pathlib import Path
 
 import pytest
 
-TASK_ROOT = Path(
-    "/data/work/so101-evidence/teleop-expert-validation-serve/20260917-merged-main"
-    "/unbounded-queue-resource-budget")
 WORKTREE = Path(__file__).resolve().parents[3]
 V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
 V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"

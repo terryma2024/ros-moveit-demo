@@ -560,11 +560,10 @@ BLOCKER_CODES = {"NONHEAD_INPUT_BINDING_REQUIRED", "INPUT_CANDIDATE_AMBIGUOUS", 
 
 
 def _real_registry(tmp_path):
-    """Inspect this worktree read-only; skip where the registered evidence root is absent."""
+    """Inspect this checkout read-only; the ledger is a tracked file, so this runs on any machine."""
 
     ledger = WORKTREE / "docs/experiments/so101-act-data-experiment-ledger.md"
-    if not ledger.is_file() or not Path("/data/work/so101-evidence").is_dir():
-        pytest.skip("requires the ai-station worktree and its registered evidence root")
+    assert ledger.is_file(), "the tracked ACT ledger is part of every checkout"
     document = inspect_inputs(WORKTREE, ledger)
     path = tmp_path / "input-candidates.json"
     path.write_bytes(_canonical(document))

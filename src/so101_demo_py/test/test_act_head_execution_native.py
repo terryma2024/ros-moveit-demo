@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import uuid
 
@@ -45,8 +46,8 @@ def scoped_inputs(tmp_path):
     inputs, policy = build_inputs(tmp_path)
     session = 'native-' + uuid.uuid4().hex
     inputs.document['run']['session_id'] = session
-    root = Path('/tmp/so101-debug-head-file-protocol-1003')
-    root.mkdir(exist_ok=True)
+    # AF_UNIX paths cap at 107 bytes, so the reservation root is a short private directory outside the (long) test scratch.
+    root = Path(tempfile.mkdtemp(prefix='so101-hrn-', dir='/tmp'))
     directory = controller_reservation_directory(root, session)
     inputs.document['ros']['environment'].update(
         SO101_ACT_RESERVATION_ROOT=str(root),
