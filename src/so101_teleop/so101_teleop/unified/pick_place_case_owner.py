@@ -98,7 +98,7 @@ class PickPlaceCaseOwner:
         if self._ever_started:
             raise MutationError("PICK_PLACE_VALIDATION_CASE_OWNER_REUSED")
         if self.context is not None:
-            raise MutationError("PICK_PLACE_CALIBRATION_CASE_ALREADY_ADMITTED")
+            raise MutationError("PICK_PLACE_VALIDATION_CASE_ALREADY_ADMITTED")
         self._ever_started = True
         context = self.workload_service.start(spec, allow_existing=False)
         self.context = context
@@ -174,7 +174,7 @@ class PickPlaceCaseOwner:
 
     async def finish(self, *, attempt_id: str) -> None:
         if not self._ready or self.context is None:
-            raise MutationError("PICK_PLACE_CALIBRATION_CASE_NOT_READY")
+            raise MutationError("PICK_PLACE_VALIDATION_CASE_NOT_READY")
         await self._retire(attempt_id=attempt_id)
 
     async def retire_failed_start(self, *, attempt_id: str) -> None:

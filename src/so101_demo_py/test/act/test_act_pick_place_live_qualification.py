@@ -246,7 +246,7 @@ def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path
 
 
 @pytest.mark.parametrize("mutation,code", [
-    ({"status": "CALIBRATION_REQUIRED"}, "PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID"),
+    ({"status": "CALIBRATION_REQUIRED"}, "PICK_PLACE_VALIDATION_QUALIFICATION_READY_INVALID"),
     ({"checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
                  "synchronization": "FAIL", "execution": "PASS",
                  "release": "UNMEASURED", "retreat": "UNMEASURED"}},

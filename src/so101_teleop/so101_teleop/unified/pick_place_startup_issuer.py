@@ -134,7 +134,7 @@ class PickPlaceStartupProofIssuer:
         if any((root / name).exists() or (root / name).is_symlink() for name in (
             "readiness.json", "startup-receipt.json", "startup-consumed.json",
         )):
-            raise MutationError("PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_ISSUED")
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_ISSUED")
         now_ns = self.clock_ns()
         try:
             if (type(now_ns) is not int or now_ns <= 0

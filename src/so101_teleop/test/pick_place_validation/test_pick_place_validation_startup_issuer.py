@@ -94,9 +94,9 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     assert consumer.consume() == receipt
-    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
-    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_ISSUED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_ISSUED"):
         issuer.issue(probe.readiness_bytes)
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_REUSED"):
         probe()

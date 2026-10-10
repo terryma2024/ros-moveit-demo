@@ -573,7 +573,7 @@ class LiveEvidenceWindow:
         """
 
         if self._identity["reset_epoch"] is not UNBOUND_RESET_EPOCH:
-            raise ValueError("PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND")
+            raise ValueError("PICK_PLACE_VALIDATION_RESET_EPOCH_ALREADY_BOUND")
         if self._opened or self._sealed:
             raise ValueError("PICK_PLACE_VALIDATION_RESET_EPOCH_BOUND_TOO_LATE")
         if type(epoch) is not int or epoch < 0:

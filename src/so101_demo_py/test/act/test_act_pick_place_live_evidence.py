@@ -722,7 +722,7 @@ def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
     window = LiveEvidenceWindow(rec, identity=identity)
     window.bind_reset_epoch(7)
     assert window.reset_epoch == 7 and window.identity["reset_epoch"] == 7
-    with pytest.raises(ValueError, match="PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_ALREADY_BOUND"):
         window.bind_reset_epoch(8)
     for bad in (True, -1, None, "7"):
         with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_INVALID"):
@@ -730,7 +730,7 @@ def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
     # an unbound window cannot open at all, so "bound after opening" is unreachable by construction; the reachable
     # too-late case is a window invalidated by the retirement path before its epoch ever arrived
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
-    with pytest.raises(ValueError, match="PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_ALREADY_BOUND"):
         window.bind_reset_epoch(9)
     other = LiveEvidenceWindow(rec, identity=dict(identity))
     other.invalidate("OWNER_RETIRE")

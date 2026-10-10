@@ -68,7 +68,7 @@ def test_valid_startup_proof_is_consumed_once(tmp_path):
     result = consumer.consume()
     assert result["operation_id"] == "operation-281"
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
 
 
@@ -78,7 +78,7 @@ def test_hash_tamper_consumes_attempt_without_granting_replay(tmp_path):
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
 
 

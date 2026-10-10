@@ -100,7 +100,7 @@ class PickPlaceStartupProofConsumer:
             fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600)
         except FileExistsError as error:
-            raise MutationError("PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED") from error
         except OSError as error:
             raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID") from error
         try:

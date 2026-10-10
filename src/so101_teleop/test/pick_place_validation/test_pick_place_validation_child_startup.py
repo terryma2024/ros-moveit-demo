@@ -76,7 +76,7 @@ def test_child_consumes_exact_issued_proof_once(tmp_path):
     )
     assert consume() == receipt
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consume()
 
 

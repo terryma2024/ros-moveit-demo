@@ -164,13 +164,13 @@ def build_pick_place_validation_qualified_report(calibration_ready_report: Path,
     if output.exists() or output.is_symlink():
         raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_OUTPUT_EXISTS")
     ready_path = require_regular_file(Path(calibration_ready_report),
-                                      "PICK_PLACE_CALIBRATION_QUALIFICATION_READY_MISSING")
+                                      "PICK_PLACE_VALIDATION_QUALIFICATION_READY_MISSING")
     try:
         ready = json.loads(ready_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_READY_INVALID") from error
     if type(ready) is not dict or set(ready) != _READY_KEYS or ready["status"] != "PICK_PLACE_CALIBRATION_READY":
-        raise ValueError("PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_READY_INVALID")
     checks = ready["checks"]
     if type(checks) is not dict or any(checks.get(name) != "PASS"
                                        for name in _QUALIFICATION_CHECKS):

@@ -92,7 +92,7 @@ def build_pick_place_validation_manifest(
     # Copy through canonical bytes so later caller mutations cannot alter this manifest.
     frozen_anchors = json.loads(_canonical(anchors))
     if type(calibration_report_path) is not str or not calibration_report_path:
-        raise ValueError("PICK_PLACE_CALIBRATION_MANIFEST_CALIBRATION_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_CALIBRATION_PATH_INVALID")
     document = {
         "schema_version": SCHEMA_VERSION, "kind": "ACT_PICK_PLACE_VALIDATION", "backend": "mujoco",
         "anchors": frozen_anchors, "anchors_sha256": _sha(frozen_anchors),
@@ -113,7 +113,7 @@ def require_pick_place_validation_manifest(value: object, *, expected_anchors_sh
         raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_ROLE_INVALID")
     _require_anchors(value["anchors"])
     if type(value["calibration_report_path"]) is not str or not value["calibration_report_path"]:
-        raise ValueError("PICK_PLACE_CALIBRATION_MANIFEST_CALIBRATION_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_CALIBRATION_PATH_INVALID")
     for key in (*_HASH_KEYS, "anchors_sha256", "calibration_report_sha256",
                 "manifest_document_sha256"):
         _require_hash(value[key])

@@ -100,7 +100,7 @@ def _publish_receipt(document: dict, target: Path) -> Path:
         os.link(str(partial), str(target))
     except FileExistsError as error:
         os.unlink(str(partial))
-        raise ValueError("PICK_PLACE_CALIBRATION_PREPARATION_ALREADY_COMMITTED") from error
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_ALREADY_COMMITTED") from error
     os.unlink(str(partial))
     return target
 
