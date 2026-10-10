@@ -69,11 +69,52 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3537
+latest_checkpoint: CP-3538
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3538 — thin-subclass steps 2–6 done (HEAD f89f69d5d); gates 0/0; sim negative tests pass; go for step 7
+
+- Commits 9e3a314ea..f89f69d5d (18):
+  - dead-man socket, HeadNeckTrajectoryController, HeadSimulationPolicy v3 (v2 readable);
+  - reference monitor, guard against the latest controller_state, graph check, dead-man helper/client;
+  - neck owner with local per-goal admission; runtime v2; stack/reset/composition; startup protocol v2; HFA-009 v1/v2;
+  - calibration port (the reservation key renamed admission, --reservation-root removed, 0700 dead-man dir from the sealed controllers file);
+  - deletion of 148 gtests in 14 files plus the broker/SOGB/witness/timing/revocation sources, 9 Python modules and 6 test files; test_b3_cleanup tightened.
+  - RED/GREEN items 21–33 logged (red-green/). Import-graph RED: 40+ failures before the deletions, GREEN after.
+- Gates (fresh base, gate-20261010-003, HEAD f89f69d5d):
+  - 10-package build rc 0;
+  - colcon test/test-result on 9 packages: 1918 tests, 0 err, 0 fail, 60 skip (so101_mujoco_support 91, including the new dead-man and controller gtests);
+  - so101_demo_py, grounded-sam pytest against the installed package: 11240 pass, 0 fail, 0 err, 165 skip (test_p3_* 134/134).
+  - Deviation: so101_demo_py runs through the grounded-sam interpreter, not `colcon test`, because the system interpreter lacks torch and ultralytics. Same as CP-3531.
+- Sim negative tests (case-v2-001):
+
+  | Case | Result |
+  |---|---|
+  | foreign action client | goal accepted → HEAD_GRAPH_CHANGED +3.3 ms → fault close +24 ms → goal ABORTED ~+50 ms |
+  | ~/joint_trajectory publisher | idle: subscription count 0, reference unchanged over 1 s; mid-run: HEAD_GRAPH_CHANGED +1.8 ms |
+  | scaling publisher | subscription count 0; forced ≠ 1 covered by the C++ hook |
+  | goal in the stop window | HEAD_REFERENCE_DIVERGED +4.6 ms, then HEAD_STOP_WINDOW_UNAVAILABLE after 0.5 s |
+  | runtime SIGKILL | v_ref 0 at +2.7 / +1.3 ms |
+  | runtime SIGSTOP | v_ref 0 at +325.9 / +329.6 ms (bound 352 ms, margin 22–26 ms) |
+  | unplanned switch | HEAD_UNPLANNED_CONTROLLER_SWITCH +71 ms |
+  | neck deactivated | HEAD_NECK_CONTROLLER_DEACTIVATED +58 ms |
+
+  Teardown proofs for every case. After the first SIGKILL the orphaned ros2_control_node and robot_state_publisher needed a manual kill; the injector was fixed, and later runs tore down clean.
+- NaN: MuJoCo sanitizes a NaN reset, so a sim injection is impossible. The NaN → ERROR → no non-finite command path is covered by the C++ rig only; the CM deactivation on ERROR has no test.
+- Root review notes and rulings (CP-3394):
+  - (1) Follow-up, not blocking step 7: a controller-manager-level gtest (mock hardware plus the subclass NaN test hook) proving CM deactivates the neck on ERROR and that no non-finite command is written.
+  - (2) Follow-up: when the Head runtime is SIGKILLed, its stack children (ros2_control_node, robot_state_publisher) are orphaned, as the k9b run showed. Production teardown needs PDEATHSIG or a process group for the stack children. The latch already holds the neck safely.
+  - (3) The SIGSTOP margin (22–26 ms within the 350 ms budget) is accepted; watch it in live runs.
+  - (4) CP-3532 cannot be re-audited with the real CLI (no execution receipt in that tree). v1 selection is covered by tests; accepted.
+  - (5) The new tooling (freeze r10, qualify r7, live r17, cycle-r9, live-r14) is only syntax-checked; step 7 exercises it.
+  - Diagnostic nominal runs nom1/nom3: TARGET_LOCKED in about 15 s; end window max |v_fb| 0.00030 / 0.00026 (bound 0.002). f89f69d5d fixes the integer activation id.
+- Go for step 7:
+  - (a) Head single case 900000 under protocol v2 on the gate-20261010-003 install via case-v2-001 scripts, with the visual check;
+  - (b) one pick-place Teacher run through cycle-r9 (freeze r10, qualify r7) and live-r14 / r17.
+  - One stack at a time.
 
 ## CP-3537 — thin-subclass step 1 (shadow comparison) done; root rulings; go for steps 2–6
 
