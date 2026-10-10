@@ -61,6 +61,7 @@ def test_a_run_writes_started_startup_goal_end_phase_end_window_and_final(rig, t
     assert rows[6]['phase'] == 'end' and rows[6]['first_sim_ns'] == raw_stop + STOP_WINDOW_STEP_NS
     assert final['startup_window'] == startup['window'] and final['end_window'] == end['window']
     assert rows[7]['stop_receipt']['thread_alive'] is False
+    assert rows[7]['end_max_abs_velocity'] == 0.0 and rows[7]['end_velocity_resets'] == 0
     # the log is consumable by the comparison
     events = [dict(kind='PREARM_STATUS', record=dict(status='READY', proof=dict(
         last_sim_time_ns=startup['window']['last_sim_ns']))),
@@ -77,6 +78,7 @@ def test_finish_without_an_end_phase_does_not_wait_and_writes_final(rig, tmp_pat
     final = shadow.finish(timeout_s=5.)
     assert time.monotonic() - started < 1.5
     assert final['startup_window'] is None and final['end_window'] is None
+    assert final['end_max_abs_velocity'] is None and final['end_velocity_resets'] is None
     assert kinds(shadow.path) == ['SHADOW_STARTED', 'SHADOW_FINAL']
     assert shadow.finish(timeout_s=.1) == final  # idempotent
 
@@ -147,3 +149,23 @@ def test_quiet_runs_are_logged_when_they_close_with_the_phase_in_effect(rig, tmp
     runs = [row for row in read_jsonl(shadow.path) if row['kind'] == 'SHADOW_QUIET_RUN']
     assert [(row['phase'], row['n'], row['first_sim_ns']) for row in runs] == [
         ('startup', 120, BASE_SIM), ('end', 80, BASE_SIM + 131 * STOP_WINDOW_STEP_NS)]
+
+
+def test_end_phase_velocity_statistics_are_logged_for_the_stricter_classification(rig, tmp_path):
+    shadow = make(rig, tmp_path)
+    try:
+        raw_stop = BASE_SIM
+        shadow.on_raw_stop_confirmed(raw_stop)
+        for index in range(1, 40):  # a 0.01 rad/s jitter: never quiet
+            rig.publish(index, 1, fb=0.01)
+        assert wait_for(lambda: shadow.snapshot()['stats']['samples'] == 39)
+        final = shadow.finish(timeout_s=.3)
+    finally:
+        shadow.finish(timeout_s=.1)
+    assert final['end_max_abs_velocity'] == 0.01 and final['end_velocity_resets'] == 39
+    rows = read_jsonl(shadow.path)
+    events = [dict(kind='NATIVE_CLOSE', record=dict(ack=True, error=None, receipt=dict(status='ARMED_CLOSED'))),
+              dict(kind='CANCEL_STOP', record=dict(raw_stop_confirmed=True, cancel_error=None, result_error=None,
+                                                  raw_stop_confirmed_sim_ns=raw_stop))]
+    verdict = compare_end(events, rows)
+    assert verdict['classification'] == 'SHADOW_STRICTER' and verdict['blocks'] is False

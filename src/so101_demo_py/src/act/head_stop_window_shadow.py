@@ -22,6 +22,9 @@ import json
 
 from . import head_neck_limits as limits
 
+#: the native end proof's raw-stop bound (``stop_velocity_rad_s`` of the Head development config)
+NATIVE_RAW_STOP_VELOCITY_RAD_S = limits.QUIET_VELOCITY_RAD_S
+
 
 def read_jsonl(path):
     rows = []
@@ -50,9 +53,10 @@ def _record(row):
 
 
 def _verdict(native, shadow, **fields):
+    equal = bool(native) == bool(shadow['pass'])
     return dict(native='PASS' if native else 'FAIL', shadow='PASS' if shadow['pass'] else 'FAIL',
-                shadow_reason=shadow.get('reason'), equal=bool(native) == bool(shadow['pass']),
-                **fields)
+                shadow_reason=shadow.get('reason'), equal=equal,
+                classification='AGREE' if equal else 'DISAGREEMENT', blocks=not equal, **fields)
 
 
 def _startup_candidates(shadow):
@@ -124,7 +128,8 @@ def compare_end(events, shadow):
              if _record(row).get('raw_stop_confirmed') is True
              and _record(row).get('cancel_error') is None and _record(row).get('result_error') is None]
     native = bool(closes) and bool(stops)
-    stamp = _record(stops[0]).get('raw_stop_confirmed_sim_ns') if stops else None
+    confirmed = [row for row in _rows(events, 'CANCEL_STOP') if _record(row).get('raw_stop_confirmed') is True]
+    stamp = _record(confirmed[0]).get('raw_stop_confirmed_sim_ns') if confirmed else None
     stamp = stamp if type(stamp) is int else None
     deadline_ns = round(limits.STOP_WINDOW_DEADLINE_S * 1e9)
     phases = _rows(shadow, 'SHADOW_END_PHASE')
@@ -142,11 +147,24 @@ def compare_end(events, shadow):
     else:
         margin = stamp + deadline_ns - window['last_sim_ns']
         outcome = {'pass': margin >= 0, 'reason': None if margin >= 0 else 'LATE'}
-    return _verdict(native, outcome, raw_stop_sim_ns=stamp, margin_ns=margin, deadline_ns=deadline_ns,
-                    shadow_first_sim_ns=None if window is None else window['first_sim_ns'],
-                    shadow_last_sim_ns=None if window is None else window['last_sim_ns'])
+    verdict = _verdict(native, outcome, raw_stop_sim_ns=stamp, margin_ns=margin, deadline_ns=deadline_ns,
+                       shadow_first_sim_ns=None if window is None else window['first_sim_ns'],
+                       shadow_last_sim_ns=None if window is None else window['last_sim_ns'])
+    # The one allowed disagreement (CP-3537): the shadow is stricter. Native PASS, shadow NO_WINDOW,
+    # and the end phase saw velocity resets whose largest |v| lies strictly between the window bound
+    # (0.002) and the native raw-stop bound (0.0414). Anything else still blocks the switch.
+    finals = _rows(shadow, 'SHADOW_FINAL')
+    observed = finals[-1].get('end_max_abs_velocity') if finals else None
+    resets = finals[-1].get('end_velocity_resets') if finals else None
+    verdict['observed_max_abs_velocity'] = observed
+    if (native and verdict['shadow'] == 'FAIL' and verdict['shadow_reason'] == 'NO_WINDOW'
+            and type(observed) in (int, float) and type(resets) is int and resets > 0
+            and limits.STOP_WINDOW_MAX_VELOCITY_RAD_S < observed < NATIVE_RAW_STOP_VELOCITY_RAD_S):
+        verdict['classification'], verdict['blocks'] = 'SHADOW_STRICTER', False
+    return verdict
 
 
 def compare_run(events, shadow):
     startup, end = compare_startup(events, shadow), compare_end(events, shadow)
-    return dict(startup=startup, end=end, equal=startup['equal'] and end['equal'])
+    return dict(startup=startup, end=end, equal=startup['equal'] and end['equal'],
+                blocks=startup['blocks'] or end['blocks'])

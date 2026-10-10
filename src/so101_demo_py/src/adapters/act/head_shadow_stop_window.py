@@ -114,7 +114,10 @@ class ShadowStopWindow:
         self._log_runs()
         snapshot = self.subscriber.snapshot()
         receipt = self.subscriber.stop()
+        stats = snapshot['stats']
         final = dict(startup_window=self._startup_window, end_window=self._end_window,
+                     end_max_abs_velocity=stats['max_abs_velocity'] if waiting else None,
+                     end_velocity_resets=stats['velocity_resets'] if waiting else None,
                      resets=snapshot['resets'], voids=snapshot['voids'], received=snapshot['received'],
                      below_floor=snapshot['below_floor'])
         self._write(dict(kind='SHADOW_FINAL', stop_receipt=receipt, errors=list(self.errors), **final))

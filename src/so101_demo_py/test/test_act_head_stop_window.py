@@ -227,3 +227,25 @@ def test_flush_run_closes_the_open_run_without_losing_the_window_latch():
     feed(window, 10, start=51)
     window.flush_run()
     assert [run['n'] for run in window.runs] == [61] and window.completed == first
+
+
+# ---- velocity statistics since the last rearm (SHADOW_STRICTER evidence) -------------------------
+
+def test_max_abs_velocity_and_velocity_resets_are_counted_since_the_last_rearm():
+    window = StopWindow()
+    assert window.stats() == dict(max_abs_velocity=0.0, velocity_resets=0, samples=0)
+    window.observe(sim_ns=BASE_SIM, receive_mono_ns=BASE_MONO, feedback_velocity=0.01,
+                   reference_velocity=-0.02, reference_position=0.0, now_mono_ns=BASE_MONO)
+    window.observe(sim_ns=BASE_SIM + 2_000_000, receive_mono_ns=BASE_MONO + 1, feedback_velocity=0.0015,
+                   reference_velocity=0.0, reference_position=0.0, now_mono_ns=BASE_MONO + 1)
+    assert window.stats() == dict(max_abs_velocity=0.02, velocity_resets=1, samples=2)
+    window.rearm()
+    assert window.stats() == dict(max_abs_velocity=0.0, velocity_resets=0, samples=0)
+    assert window.resets['VELOCITY'] == 1  # the lifetime counter keeps running
+
+
+def test_non_finite_samples_do_not_poison_the_maximum():
+    window = StopWindow()
+    window.observe(sim_ns=BASE_SIM, receive_mono_ns=BASE_MONO, feedback_velocity=math.nan,
+                   reference_velocity=0.0, reference_position=0.0, now_mono_ns=BASE_MONO)
+    assert window.stats()['max_abs_velocity'] == 0.0

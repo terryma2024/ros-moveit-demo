@@ -37,6 +37,9 @@ class StopWindow:
         #: shadow comparison checks against the native READY instant)
         self.runs = []
         self._run = None
+        self._max_abs_velocity = 0.0
+        self._velocity_resets = 0
+        self._stat_samples = 0
 
     @property
     def completed(self):
@@ -51,6 +54,12 @@ class StopWindow:
         self._close_run()
         self._samples.clear()
         self._completed = None
+        self._max_abs_velocity, self._velocity_resets, self._stat_samples = 0.0, 0, 0
+
+    def stats(self):
+        """Largest |velocity| (feedback or reference) and velocity resets since the last rearm."""
+        return dict(max_abs_velocity=self._max_abs_velocity, velocity_resets=self._velocity_resets,
+                    samples=self._stat_samples)
 
     def _report(self, run):
         return dict(first_sim_ns=run['first_sim_ns'], last_sim_ns=run['last_sim_ns'], n=run['n'],
@@ -91,8 +100,12 @@ class StopWindow:
                            (feedback_velocity, reference_velocity, reference_position))):
             self._reset('INVALID_SAMPLE')
             return None
+        self._stat_samples += 1
+        self._max_abs_velocity = max(self._max_abs_velocity, abs(feedback_velocity),
+                                     abs(reference_velocity))
         if (abs(feedback_velocity) > limits.STOP_WINDOW_MAX_VELOCITY_RAD_S
                 or abs(reference_velocity) > limits.STOP_WINDOW_MAX_VELOCITY_RAD_S):
+            self._velocity_resets += 1
             self._reset('VELOCITY')
             return None
         if self._samples:

@@ -107,10 +107,10 @@ The owner sends no goal during the window, and if one is sent the window is void
 - `stop_confirmed` requires all three of the terminal result, the raw stop and the window.
 
 **Shadow comparison.** It runs on the current broker stack before the switch, over the 900000 case, and its verdict blocks step 2 of §7.
-- At startup, the shadow window must complete no later than the native PREARM READY sim stamp + 102 ms.
-- At the end, the anchor is the raw-stop confirmation sim stamp in `CANCEL_STOP`, because the native close receipt carries no sim stamp (review 3, issue 3). The shadow window must complete within `head_stop_window_deadline_s` after it.
+- At startup, both verdicts are judged at the native decision instant `L`: the sim stamp of the last proof sample of the READY status, or, when READY never comes, of the native's last evaluation. The shadow says READY at `L` only if a quiet run of `controller_state` samples is still unbroken at `L` and a 51-sample window of it completes no later than `L` + 102 ms. A window that completed earlier but whose run ended before `L` is not evidence, and a quiet period that began after the native gave up is not a startup run.
+- At the end, the anchor is the raw-stop confirmation sim stamp in `CANCEL_STOP`, because the native close receipt carries no sim stamp (review 3, issue 3). The shadow window, made only of samples stamped after the anchor, must complete within `head_stop_window_deadline_s` after it.
 - In both cases the shadow and native verdicts must be equal: both pass or both fail.
-- Any disagreement blocks the switch.
+- Any disagreement blocks the switch, with one exception (CP-3537). `SHADOW_STRICTER` is allowed when the native end proof passes and the shadow fails with `NO_WINDOW` because the end phase saw velocity resets and its largest |v| lies strictly between the window bound 0.002 and the native raw-stop bound 0.0414. The window bound is not loosened; if nominal live runs fail the end window, the bound is revisited, not silently relaxed.
 - Besides the passing 900000 run, one shadow negative must show fail/fail agreement: either a goal injected into the window, or motion forced before it.
 
 ## 4. Protocol, audit and evidence

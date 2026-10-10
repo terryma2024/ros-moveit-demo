@@ -224,3 +224,74 @@ def test_without_any_native_evaluation_there_is_no_instant_and_the_shadow_fails(
     assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('FAIL', 'FAIL', True)
     assert verdict['shadow_reason'] == 'NATIVE_NEVER_EVALUATED' and verdict['native_decision_sim_ns'] is None
     assert compare_startup([], [])['equal'] is True
+
+
+# ---- SHADOW_STRICTER: the one allowed end disagreement (CP-3537 ruling 2) ------------------------
+
+def end_events():
+    return [native_close(), cancel_stop()]
+
+
+def end_phase(max_v=None, velocity_resets=None):
+    row = dict(kind='SHADOW_END_PHASE', raw_stop_sim_ns=RAW_STOP)
+    final = dict(kind='SHADOW_FINAL', end_max_abs_velocity=max_v, end_velocity_resets=velocity_resets)
+    return [row, final]
+
+
+@pytest.mark.parametrize('max_v', [0.0021, 0.01, 0.0413])
+def test_native_pass_with_a_velocity_between_the_two_bounds_is_shadow_stricter(max_v):
+    verdict = compare_end(end_events(), end_phase(max_v, 40))
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('PASS', 'FAIL', False)
+    assert verdict['shadow_reason'] == 'NO_WINDOW'
+    assert verdict['classification'] == 'SHADOW_STRICTER'
+    assert verdict['observed_max_abs_velocity'] == max_v
+    assert verdict['blocks'] is False
+
+
+@pytest.mark.parametrize('max_v,resets', [
+    (0.002, 5),        # not strictly above the window bound: the velocity cannot be the cause
+    (0.0414, 5),       # not strictly below the native raw-stop bound
+    (0.5, 5),          # a real motion the native raw stop would also have refused
+    (0.01, 0),         # no velocity reset: some other cause
+    (None, None),      # no statistics at all (an old log) cannot be classified
+])
+def test_every_other_end_disagreement_still_blocks(max_v, resets):
+    verdict = compare_end(end_events(), end_phase(max_v, resets))
+    assert verdict['equal'] is False and verdict['classification'] == 'DISAGREEMENT'
+    assert verdict['blocks'] is True
+
+
+def test_a_late_window_or_a_missing_end_phase_is_never_shadow_stricter():
+    late = RAW_STOP + DEADLINE_NS - 100_000_000 + 2_000_000
+    rows = [dict(kind='SHADOW_END_PHASE', raw_stop_sim_ns=RAW_STOP), window(late, 'end'),
+            dict(kind='SHADOW_FINAL', end_max_abs_velocity=0.01, end_velocity_resets=3)]
+    assert compare_end(end_events(), rows)['classification'] == 'DISAGREEMENT'
+    assert compare_end(end_events(), [])['blocks'] is True
+
+
+def test_agreement_and_shadow_pass_native_fail_classify_as_before():
+    rows = [dict(kind='SHADOW_END_PHASE', raw_stop_sim_ns=RAW_STOP), window(RAW_STOP + 2_000_000, 'end')]
+    verdict = compare_end(end_events(), rows)
+    assert verdict['classification'] == 'AGREE' and verdict['blocks'] is False
+    failing = compare_end([native_close(), cancel_stop(confirmed=False)], [])
+    assert failing['classification'] == 'AGREE'
+    opposite = compare_end([native_close(), cancel_stop(cancel_error='TimeoutError')],
+                           [dict(kind='SHADOW_END_PHASE', raw_stop_sim_ns=RAW_STOP), window(RAW_STOP + 2_000_000, 'end')])
+    assert opposite['classification'] == 'DISAGREEMENT' and opposite['blocks'] is True
+
+
+def test_the_run_verdict_blocks_only_on_blocking_disagreements():
+    events = [prearm(), native_close(), cancel_stop()]
+    rows = [window(NATIVE_LAST - 100_000_000), dict(kind='SHADOW_END_PHASE', raw_stop_sim_ns=RAW_STOP),
+            dict(kind='SHADOW_FINAL', end_max_abs_velocity=0.01, end_velocity_resets=9)]
+    verdict = compare_run(events, rows)
+    assert verdict['equal'] is False and verdict['blocks'] is False
+    assert verdict['end']['classification'] == 'SHADOW_STRICTER'
+    assert compare_run(events, rows[:2])['blocks'] is True
+
+
+def test_startup_verdicts_carry_the_same_classification_fields():
+    ok = compare_startup([prearm()], [window(NATIVE_LAST - 100_000_000)])
+    assert ok['classification'] == 'AGREE' and ok['blocks'] is False
+    bad = compare_startup([prearm()], [])
+    assert bad['classification'] == 'DISAGREEMENT' and bad['blocks'] is True

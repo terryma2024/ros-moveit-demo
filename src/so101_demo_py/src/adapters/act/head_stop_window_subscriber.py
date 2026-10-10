@@ -169,5 +169,5 @@ class StopWindowSubscriber:
             return dict(resets=dict(self._window.resets), voids=list(self._window.voids),
                         pending=self._window.pending_count, observed=self._window.observed,
                         received=self.received, below_floor=self.below_floor,
-                        completed=self._window.completed,
+                        completed=self._window.completed, stats=self._window.stats(),
                         callback_errors=list(self.callback_errors))
