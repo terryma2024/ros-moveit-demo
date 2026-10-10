@@ -69,11 +69,36 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3546
+latest_checkpoint: CP-3547
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3547 — phase-B live checks: Head, Teacher pick-place and the offline smoke PASS; the general-path parallel batch and adaptive runs FAIL on a PRE-EXISTING release failure; phase C dispatched
+
+- All runs on the gates/final install (HEAD 53278f0be).
+- (1) Head 900000: TARGET_LOCKED, classify PASS, yaw 0.670°, HFA-009 integrity and stop PASS. End window max |v_fb| 0.000197; DEADMAN_CLOSED_PLANNED. final.png has the cup centred near x≈323. Teardown clean.
+- (2) Pick-place Teacher, freeze 8VdrOQzF, plan 5S5NYiCT, live 3af30445:
+  - built by cycle-r10 / prepare r7 / inspect r3 (a new inspect version, because r2 named the old contract file);
+  - no re-activation was needed;
+  - live rc 0; Teacher PASS; VALID; QC PASS (act_data_qc schema 3); readback PASS; manifest so101-teacher-execute;
+  - xy 4.930 mm, z 0.152 mm, tilt 1.29e-5 rad; 108.96 µm / 1.712 N with no flags; head/wrist 819/819; topic_loss_v2 0 lost.
+- (5) Offline smoke: export of the diagnostic episode is refused with DIAGNOSTIC_EPISODE_NOT_TRAINABLE (as designed). load_training_view on the CP-3525 synthetic fixture under train-venv: 10 samples, digests re-verified.
+- (3) Linux fixed-N through the teleop unified service (linux_cuda; the smallest configuration is PARALLEL, 2 workers, 4 points): P01 INDETERMINATE, P02–P04 UNRUN. Both workers' general manifests (so101-dynamic-execute) end ERROR DYNAMIC_RELEASE_SOURCE_EXPIRED at DETACH_MOVEIT. Cleanup gates passed.
+- (4) Adaptive (worker count 2 → fallback 1, 2 points): INFRA_FAILED, with DYNAMIC_RELEASE_SOURCE_EXPIRED / DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE, then DYNAMIC_RESET_EPOCH_MISMATCH on fallback. Cleanup complete.
+- Classification: the executor reran the same adaptive command on the PRE-REFACTOR install (gate-20261010-003, f89f69d5d) and got the same DYNAMIC_RELEASE_SOURCE_EXPIRED → INFRA_FAILED. This is a pre-existing general-runtime (non-Teacher) release-source failure under parallel load, not a phase-B regression. It may relate to CP-3493 (release-source expiry under load) and is undiagnosed.
+- Other pre-existing defects found:
+  - (a) the unified service keeps a campaign RUNNING after the coordinator exits non-terminal (batch_terminal false);
+  - (b) run_so101_adaptive_worker_scaling.zsh defaults to non-existent model paths and a grounded hash that differs from the frozen one;
+  - (c) tooling teardown should use `ros2 node list --no-daemon` (a daemon blocked a prestart).
+- Decision (CP-3394, recommended):
+  - the phase-B result is accepted (no regression against baseline) and the refactor continues with phase C;
+  - the release-source failure and defect (a) are logged as follow-up defects, with a read-only root-cause diagnosis started in parallel (no source writes, so the single-writer rule holds);
+  - defect (b) is fixed in phase C (script defaults);
+  - defect (c) gets new tooling versions when next touched.
+  - Live checks 3 and 4 are repeated after the follow-up fix; until then the refactor's live acceptance for those paths is "same as baseline".
+- Deletion candidates: freeze TMILF7R6, plan sPwsgTIU, live/fixed-n runs 1–3, live/adaptive(2).
 
 ## CP-3546 — refactor phase B done (HEAD 53278f0be, 32 family commits), gates 0/0; live checks dispatched
 
