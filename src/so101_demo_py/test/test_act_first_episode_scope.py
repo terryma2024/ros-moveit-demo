@@ -800,14 +800,14 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
     root = tmp_path / "source"
     (root / "src/so101_demo_py/config/act").mkdir(parents=True)
     (root / "src/so101_demo_py/config/mujoco").mkdir(parents=True)
-    (root / "src/so101_demo_py/config/mujoco/parallel_batch_v3_act_offline.yaml").write_bytes(RUNTIME_YAML)
+    (root / "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml").write_bytes(RUNTIME_YAML)
     (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_bytes(COLLECTION_YAML)
     ready = _inspect_resource_thresholds(root)
     assert ready["status"] == "READY"
     assert ready["identity"]["rtf_hard_stop"] == 0.5
     assert ready["identity"]["queue_hard_stop"]["queue_high_watermark_samples"] == 12
 
-    runtime = root / "src/so101_demo_py/config/mujoco/parallel_batch_v3_act_offline.yaml"
+    runtime = root / "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml"
     runtime.write_bytes(RUNTIME_YAML.replace(b"hard_stops:", b"unrelated:"))
     missing = _inspect_resource_thresholds(root)
     assert missing["status"] == "MISSING"

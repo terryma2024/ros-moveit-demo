@@ -186,18 +186,18 @@ describe("readProcessState", () => {
 
 describe("the execution document and coordinator this host runs", () => {
   it("names the active execution document and its own coordinator default on linux", () => {
-    // `require_v3_execution` refuses new execution for any contract version but 3, and the installed
+    // `require_linux_cuda_execution` refuses new execution for any contract version but 3, and the installed
     // v2 document declares 2. The gate runner and the plan's own profiles are v3/v4/v5/v6 for that
     // reason; pointing the legacy host at v2 refused every preflight with
     // CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION.
-    expect(hostExecutionDocument("linux")).toBe("parallel_batch_v3.yaml");
+    expect(hostExecutionDocument("linux")).toBe("parallel_batch_linux_cuda.yaml");
     expect(hostCoordinatorRelative("linux")).toBeNull();
   });
 
   it("names the macOS profile document and the macOS coordinator on darwin", () => {
     // The probe admitted nothing with the legacy v2 document here: its rows are the ai-station
     // ladder, and the macOS profiles resolve only beside a macOS document.
-    expect(hostExecutionDocument("darwin")).toBe("parallel_batch_v6_macos_mps_w1_first_pass.yaml");
+    expect(hostExecutionDocument("darwin")).toBe("parallel_batch_macos_mps_single_worker_first_pass.yaml");
     expect(hostCoordinatorRelative("darwin")).toBe(
       "lib/so101_demo_py/so101_macos_service_campaign",
     );

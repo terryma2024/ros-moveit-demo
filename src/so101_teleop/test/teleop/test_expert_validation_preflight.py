@@ -21,11 +21,11 @@ CONFIG_DIR = REPO / "src" / "so101_demo_py" / "config" / "mujoco"
 #: The three installed macOS combinations (design section 6). The document, not the caller,
 #: decides which profile/config hash/scope a preflight binds.
 MACOS_DOCUMENTS = {
-    4: CONFIG_DIR / "parallel_batch_v4_macos_mps_w2.yaml",
-    5: CONFIG_DIR / "parallel_batch_v5_macos_mps_w1_retry.yaml",
-    6: CONFIG_DIR / "parallel_batch_v6_macos_mps_w1_first_pass.yaml",
+    4: CONFIG_DIR / "parallel_batch_macos_mps_two_worker.yaml",
+    5: CONFIG_DIR / "parallel_batch_macos_mps_single_worker_retry.yaml",
+    6: CONFIG_DIR / "parallel_batch_macos_mps_single_worker_first_pass.yaml",
 }
-V3_DOCUMENT = CONFIG_DIR / "parallel_batch_v3.yaml"
+LINUX_CUDA_DOCUMENT = CONFIG_DIR / "parallel_batch_linux_cuda.yaml"
 
 W2_CLAIM = {"execution_profile": "MPS_W2_FIRST_PASS", "batch_kind": "FIRST_PASS"}
 W1_RETRY_CLAIM = {
@@ -322,7 +322,7 @@ def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
 
         document = yaml.safe_load(
             (SOURCE_ROOT / "so101_demo_py/config/mujoco"
-             / "parallel_batch_v4_macos_mps_w2.yaml").read_text(encoding="utf-8"))
+             / "parallel_batch_macos_mps_two_worker.yaml").read_text(encoding="utf-8"))
         policy = StartGuardPolicy(
             mps_minimum_headroom_bytes=document["start_guard"]["mps_minimum_headroom_bytes"])
         worker_count, gpu_selector = 2, "MPS:default"
@@ -418,7 +418,7 @@ def test_a_macos_document_admits_only_its_own_routing_key(tmp_path, schema_versi
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
-def test_a_v4_document_refuses_a_w1_claim(tmp_path):
+def test_a_macos_mps_two_worker_document_refuses_a_single_worker_claim(tmp_path):
     """v4 is frozen exact-W2: a W1 claim is a different platform claim, not a W2 run."""
 
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
@@ -434,7 +434,7 @@ def test_a_v4_document_refuses_a_w1_claim(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
-def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
+def test_a_macos_mps_single_worker_retry_document_refuses_a_first_pass_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
@@ -446,7 +446,7 @@ def test_a_v5_document_refuses_a_first_pass_claim(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires macOS MPS host")
-def test_a_v6_document_refuses_a_retry_claim(tmp_path):
+def test_a_macos_mps_single_worker_first_pass_document_refuses_a_retry_claim(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
@@ -511,7 +511,7 @@ def test_a_declared_config_hash_that_does_not_match_the_document_is_refused(tmp_
     assert "PARALLEL_CONFIG_HASH_MISMATCH" in receipt.reason_codes
 
 
-def test_a_v3_document_keeps_the_existing_fixed_semantics(tmp_path):
+def test_a_linux_cuda_document_keeps_the_existing_fixed_semantics(tmp_path):
     """The Linux v3 fixture is untouched: no matrix, no profile, the same counts as before."""
 
     receipt = PreflightEngine(Resources()).preflight(
@@ -520,8 +520,8 @@ def test_a_v3_document_keeps_the_existing_fixed_semantics(tmp_path):
             mode="PARALLEL",
             count=20,
             worker_count=8,
-            parallel_config_path=V3_DOCUMENT,
-            parallel_config_sha256=hashlib.sha256(V3_DOCUMENT.read_bytes()).hexdigest(),
+            parallel_config_path=LINUX_CUDA_DOCUMENT,
+            parallel_config_sha256=hashlib.sha256(LINUX_CUDA_DOCUMENT.read_bytes()).hexdigest(),
         )
     )
 

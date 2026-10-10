@@ -12,11 +12,10 @@ import pytest
 import yaml
 
 from so101_demo.parallel_batch.contracts import (
-    AcceleratorKind,
     ContractError,
     IpcTransport,
-    ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV4,
+    ParallelRuntimeConfigLinuxCuda,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
 )
 from so101_demo.parallel_batch.w2_composition import (
     EXACT_W2_WORKERS,
@@ -31,8 +30,8 @@ from so101_demo.parallel_batch.w2_composition import (
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
-V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
+LINUX_CUDA_CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
+MACOS_MPS_TWO_WORKER_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_two_worker.yaml"
 
 
 # --------------------------------------------------------------------------------------
@@ -40,22 +39,22 @@ V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 # --------------------------------------------------------------------------------------
 
 
-def test_v3_still_loads_through_the_widened_loader():
+def test_linux_cuda_still_loads_through_the_widened_loader():
     """Widening the gate for v4 must not change the v3 result at all."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
-    through_new = load_execution_config(V3_CONFIG)
-    through_old = load_parallel_runtime_config_v3(V3_CONFIG)
-    assert isinstance(through_new, ParallelRuntimeConfigV3)
+    through_new = load_execution_config(LINUX_CUDA_CONFIG)
+    through_old = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)
+    assert isinstance(through_new, ParallelRuntimeConfigLinuxCuda)
     assert through_new == through_old
 
 
-def test_v4_loads_and_v1_v2_are_still_refused_for_execution(tmp_path):
+def test_macos_mps_two_worker_loads_and_retired_schemas_are_refused_for_execution(tmp_path):
     """New execution accepts v3 and v4 only."""
 
-    loaded = load_execution_config(V4_CONFIG)
-    assert isinstance(loaded, ParallelRuntimeConfigV4)
+    loaded = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
+    assert isinstance(loaded, ParallelRuntimeConfigMacosMpsTwoWorker)
     assert loaded.schema_version == 4
     for retired in (1, 2):
         legacy = tmp_path / f"retired-{retired}.yaml"
@@ -72,40 +71,18 @@ def test_v4_loads_and_v1_v2_are_still_refused_for_execution(tmp_path):
 def test_the_mps_combination_is_refused_on_a_host_that_cannot_run_it():
     """A Darwin v4 document on a non-Darwin host is a refusal, not a silent CPU attempt."""
 
-    assert isinstance(load_execution_config_for_schema(V4_CONFIG, platform="darwin"),
-                      ParallelRuntimeConfigV4)
+    assert isinstance(load_execution_config_for_schema(MACOS_MPS_TWO_WORKER_CONFIG, platform="darwin"),
+                      ParallelRuntimeConfigMacosMpsTwoWorker)
     with pytest.raises(CompositionError, match="PLATFORM_HOST_MISMATCH"):
-        load_execution_config_for_schema(V4_CONFIG, platform="linux")
+        load_execution_config_for_schema(MACOS_MPS_TWO_WORKER_CONFIG, platform="linux")
 
 
-def test_the_linux_combination_is_refused_on_darwin(tmp_path):
-    """The retained Linux v4 combination is loadable but not executable here."""
-
-    document = yaml.safe_load(V4_CONFIG.read_text())
-    document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
-    document["requested_device"] = "cuda"
-    document["ipc_transport"] = "proc_fd_unix"
-    document["mujoco_gl"] = "egl"
-    document["mps_process_memory_fraction"] = None
-    document["start_guard"].pop("mps_minimum_headroom_bytes")
-    path = tmp_path / "v4-linux.yaml"
-    path.write_text(yaml.safe_dump(document))
-
-    loaded = load_execution_config(path)
-    assert isinstance(loaded, ParallelRuntimeConfigV4)
-    assert loaded.accelerator.kind is AcceleratorKind.CUDA
-    with pytest.raises(CompositionError, match="PLATFORM_HOST_MISMATCH"):
-        load_execution_config_for_schema(path, platform="darwin")
-    assert isinstance(load_execution_config_for_schema(path, platform="linux"),
-                      ParallelRuntimeConfigV4)
-
-
-def test_a_v3_document_is_host_agnostic():
+def test_a_linux_cuda_document_is_host_agnostic():
     """The v3 path never consults the host, so its behaviour is unchanged everywhere."""
 
     for host in ("darwin", "linux", "win32"):
-        assert isinstance(load_execution_config_for_schema(V3_CONFIG, platform=host),
-                          ParallelRuntimeConfigV3)
+        assert isinstance(load_execution_config_for_schema(LINUX_CUDA_CONFIG, platform=host),
+                          ParallelRuntimeConfigLinuxCuda)
 
 
 # --------------------------------------------------------------------------------------
@@ -147,10 +124,10 @@ def test_no_points_at_all_still_yields_two_idle_slots():
 
 
 def _darwin_plan(tmp_path, **overrides):
-    config = load_execution_config(V4_CONFIG)
+    config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     arguments = {
         "config": config,
-        "config_path": V4_CONFIG,
+        "config_path": MACOS_MPS_TWO_WORKER_CONFIG,
         "campaign_id": "b-campaign-1",
         "batch_id": "batch-1",
         "selected_point_ids": ("p1", "p2"),
@@ -223,36 +200,36 @@ def test_the_plan_carries_both_capacity_slots_and_the_ordered_selection(tmp_path
 def test_the_plan_refuses_a_worker_count_that_is_not_two(tmp_path):
     """A fourth platform claim cannot be composed from the exact-W2 helper."""
 
-    config = load_execution_config(V4_CONFIG)
+    config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     object.__setattr__(config, "worker_count", 4)
     with pytest.raises(CompositionError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
-        compose_w2_campaign(config=config, config_path=V4_CONFIG, campaign_id="b",
+        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=tmp_path)
     assert EXACT_W2_WORKERS == 2
 
 
 def test_the_plan_refuses_a_relative_evidence_root(tmp_path):
-    config = load_execution_config(V4_CONFIG)
+    config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     with pytest.raises(CompositionError, match="EVIDENCE_ROOT"):
-        compose_w2_campaign(config=config, config_path=V4_CONFIG, campaign_id="b",
+        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=Path("relative/root"))
 
 
 def test_the_plan_refuses_a_missing_campaign_id(tmp_path):
-    config = load_execution_config(V4_CONFIG)
+    config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     with pytest.raises(CompositionError, match="CAMPAIGN_ID"):
-        compose_w2_campaign(config=config, config_path=V4_CONFIG, campaign_id="",
+        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=tmp_path)
 
 
-def test_a_v3_plan_resolves_the_linux_combination(tmp_path):
+def test_a_linux_cuda_plan_resolves_the_linux_combination(tmp_path):
     """v3 composes to the frozen Linux combination, with no MPS field anywhere."""
 
-    plan = _darwin_plan(tmp_path, config=load_execution_config(V3_CONFIG),
-                        config_path=V3_CONFIG)
+    plan = _darwin_plan(tmp_path, config=load_execution_config(LINUX_CUDA_CONFIG),
+                        config_path=LINUX_CUDA_CONFIG)
     document = plan.to_document()
     assert document["schema_version"] == 3
     assert document["accelerator"] == "cuda"
@@ -308,7 +285,7 @@ def test_the_host_this_gate_runs_on_matches_the_documented_platform():
     """On this Mac the Darwin document must be the executable one."""
 
     if sys.platform == "darwin":
-        assert isinstance(load_execution_config_for_schema(V4_CONFIG),
-                          ParallelRuntimeConfigV4)
+        assert isinstance(load_execution_config_for_schema(MACOS_MPS_TWO_WORKER_CONFIG),
+                          ParallelRuntimeConfigMacosMpsTwoWorker)
     else:
         pytest.skip("this assertion is about the Darwin host this task runs on")

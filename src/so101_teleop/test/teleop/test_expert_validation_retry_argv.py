@@ -87,19 +87,19 @@ def test_a_retry_argv_names_the_admitted_chain_and_the_one_point(tmp_path):
     ]
     assert _value_after(argv, "--batch-id") == request.batch_id
     # The retry executes the retry profile's own document, not the first pass's.
-    assert Path(_value_after(argv, "--config")).name == "parallel_batch_v5_macos_mps_w1_retry.yaml"
+    assert Path(_value_after(argv, "--config")).name == "parallel_batch_macos_mps_single_worker_retry.yaml"
     assert _value_after(argv, "--config") != str(
         supervisor._requests[request.campaign_id].parallel_config_path
     )
 
 
-def test_linux_retry_argv_uses_the_original_v3_document_and_declares_retry_kind(tmp_path):
+def test_linux_retry_argv_uses_the_original_linux_cuda_document_and_declares_retry_kind(tmp_path):
     from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
     supervisor, store, request, context = _retry_supervisor(tmp_path)
     try:
         original = replace(
             supervisor._requests[request.campaign_id],
-            parallel_config_path=tmp_path / "parallel_batch_v3.yaml",
+            parallel_config_path=tmp_path / "parallel_batch_linux_cuda.yaml",
         )
         linux_request = replace(request, execution_profile=LINUX_RETRY_PROFILE, schema_version=3)
         binding = supervisor._retry_binding(original, linux_request)
@@ -166,7 +166,7 @@ def test_a_retry_for_a_profile_the_route_does_not_execute_is_refused(tmp_path):
         store.close()
 
 
-def test_the_retry_flags_are_the_v5_routes_own_flags():
+def test_the_retry_flags_are_the_macos_mps_single_worker_retry_routes_own_flags():
     """The retry argv speaks the v5 parser's vocabulary, never a parallel one.
 
     ``so101_demo.cli.macos_w2_campaign`` is imported as a *module* by the macOS campaign entry

@@ -49,7 +49,7 @@ def _install_tree(root: Path) -> Path:
         / "so101_demo_py"
         / "config"
         / "mujoco"
-        / "parallel_batch_v4_macos_mps_w2.yaml"
+        / "parallel_batch_macos_mps_two_worker.yaml"
     )
     config.write_text("schema_version: 4\n", encoding="utf-8")
     module = root / "lib" / "so101_demo_py" / "runtime" / "runtime_closure.py"
@@ -221,7 +221,7 @@ def test_installed_inventory_is_relative_and_classified(tmp_path: Path) -> None:
         "lib/libmujoco_ros2_control.dylib"
     ]
     assert sorted(entry.relative_path for entry in closure.config_inventory) == [
-        "share/so101_demo_py/config/mujoco/parallel_batch_v4_macos_mps_w2.yaml",
+        "share/so101_demo_py/config/mujoco/parallel_batch_macos_mps_two_worker.yaml",
         "share/so101_demo_py/config/mujoco_plugins.yaml",
     ]
 
@@ -248,7 +248,7 @@ def test_config_drift_is_refused_by_verify_runtime_closure(tmp_path: Path) -> No
         / "so101_demo_py"
         / "config"
         / "mujoco"
-        / "parallel_batch_v4_macos_mps_w2.yaml"
+        / "parallel_batch_macos_mps_two_worker.yaml"
     )
     config.write_text("schema_version: 4\nworker_count: 2\n", encoding="utf-8")
 
@@ -752,7 +752,7 @@ def test_stack_verifies_the_closure_before_any_spawn(tmp_path: Path) -> None:
         / "so101_demo_py"
         / "config"
         / "mujoco"
-        / "parallel_batch_v4_macos_mps_w2.yaml"
+        / "parallel_batch_macos_mps_two_worker.yaml"
     ).write_text("schema_version: 5\n", encoding="utf-8")
 
     spawned: list = []

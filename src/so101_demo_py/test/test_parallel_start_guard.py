@@ -47,7 +47,7 @@ def scope():
     )
 
 
-def test_guard_scope_accepts_only_the_v4_mps_selector_form() -> None:
+def test_guard_scope_accepts_only_the_macos_mps_two_worker_mps_selector_form() -> None:
     """Schema v4's Darwin combination has no CUDA UUID or index.
 
     v4 replaced `gpu_device` with the closed platform combination, so the guard scope carries
@@ -633,7 +633,7 @@ def test_resolve_gpu_target_is_pure(scope):
 # --------------------------------------------------------------------------------------
 
 
-def test_v3_admission_still_resolves_the_nvml_device_not_a_unified_memory_proxy():
+def test_linux_cuda_admission_still_resolves_the_nvml_device_not_a_unified_memory_proxy():
     """A v3 scope resolves a real NVML device; no MPS figure can stand in for `gpu_free_bytes`."""
 
     from so101_demo.parallel_batch import start_guard as guard_module
@@ -649,7 +649,7 @@ def test_v3_admission_still_resolves_the_nvml_device_not_a_unified_memory_proxy(
         guard_module.resolve_gpu_target("INDEX:0", (), {})
 
 
-def test_v3_start_guard_policy_default_carries_no_mps_threshold():
+def test_linux_cuda_start_guard_policy_default_carries_no_mps_threshold():
     """The default policy is the v3 shape: no MPS floor, so no MPS admission can be applied."""
 
     from dataclasses import fields

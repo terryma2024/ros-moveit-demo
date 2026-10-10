@@ -295,7 +295,7 @@ def test_helper_module_is_importable_as_a_module_entry_point():
     assert "--request-fd" in completed.stdout and "--result-fd" in completed.stdout
 
 
-def test_probe_request_carries_the_v4_accelerator_discriminator(tmp_path) -> None:
+def test_probe_request_carries_the_macos_mps_two_worker_accelerator_discriminator(tmp_path) -> None:
     """The helper must be told which accelerator family it is probing.
 
     A schema-v4 Darwin policy carries `mps_minimum_headroom_bytes`; a v3 policy leaves it None. The
@@ -335,7 +335,7 @@ def test_probe_request_carries_the_v4_accelerator_discriminator(tmp_path) -> Non
     assert captured[1]["policy"]["mps_minimum_headroom_bytes"] is None
 
 
-def test_v4_helper_measures_cpu_and_ram_without_an_nvidia_probe() -> None:
+def test_macos_mps_two_worker_helper_measures_cpu_and_ram_without_an_nvidia_probe() -> None:
     """The Darwin half of the guard keeps CPU/RAM and drops only the NVIDIA read.
 
     A schema-v4 request (one carrying `mps_minimum_headroom_bytes`) must produce the same cpu/ram
@@ -348,14 +348,14 @@ def test_v4_helper_measures_cpu_and_ram_without_an_nvidia_probe() -> None:
     import time
 
     from so101_demo.parallel_batch.start_guard import PASS, GuardScope, StartGuardPolicy
-    from so101_demo.parallel_batch.start_guard_probe import _v4_cpu_ram_result
+    from so101_demo.parallel_batch.start_guard_probe import _darwin_cpu_ram_result
 
     scope = GuardScope(
         batch_id="v4-helper", epoch=1, owner_pid=os.getpid(), owner_starttime_ticks=1,
         gpu_selector="MPS:default", worker_count=2,
     )
     policy = StartGuardPolicy(timeout_s=2.0, mps_minimum_headroom_bytes=1 << 30)
-    result = _v4_cpu_ram_result(policy, scope, time.monotonic() + 2.0, time.monotonic())
+    result = _darwin_cpu_ram_result(policy, scope, time.monotonic() + 2.0, time.monotonic())
 
     assert set(result.checks) == {"cpu_capacity", "cpu_busy", "ram"}
     assert result.snapshot is None
@@ -409,19 +409,19 @@ def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path
     import json as _json
 
     from so101_demo.parallel_batch.contracts import (
-        load_parallel_runtime_config_v4,
-        load_parallel_runtime_config_v5,
-        load_parallel_runtime_config_v6,
+        load_parallel_runtime_config_macos_mps_two_worker,
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
     )
 
     package = PACKAGE_ROOT
     policies = [
-        load_parallel_runtime_config_v4(
-            package / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml").start_guard,
-        load_parallel_runtime_config_v5(
-            package / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml").start_guard,
-        load_parallel_runtime_config_v6(
-            package / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml").start_guard,
+        load_parallel_runtime_config_macos_mps_two_worker(
+            package / "config/mujoco/parallel_batch_macos_mps_two_worker.yaml").start_guard,
+        load_parallel_runtime_config_macos_mps_single_worker_retry(
+            package / "config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml").start_guard,
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass(
+            package / "config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml").start_guard,
     ]
     captured = []
 
@@ -449,14 +449,14 @@ def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path
             "gpu_minimum_bytes", "mps_minimum_headroom_bytes"}
 
 
-def test_a_v5_policy_takes_the_darwin_helper_half_and_demands_the_mps_admission(tmp_path):
+def test_a_macos_mps_single_worker_retry_policy_takes_the_darwin_helper_half_and_demands_the_mps_admission(tmp_path):
     """The helper half is shared; the accelerator admission stays mandatory for v5/v6 too."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
 
     package = PACKAGE_ROOT
-    policy = load_parallel_runtime_config_v5(
-        package / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml").start_guard
+    policy = load_parallel_runtime_config_macos_mps_single_worker_retry(
+        package / "config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml").start_guard
     coordinator = probe_module.ProbeCoordinator(tmp_path)
     scope = GuardScope(batch_id="v5", epoch=1, owner_pid=os.getpid(), owner_starttime_ticks=1,
                        gpu_selector="MPS:default", worker_count=1)

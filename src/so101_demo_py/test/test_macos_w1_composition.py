@@ -15,9 +15,9 @@ from so101_demo.parallel_batch.contracts import (
     AcceleratorKind,
     ContractError,
     IpcTransport,
-    ParallelRuntimeConfigV4,
-    ParallelRuntimeConfigV5,
-    ParallelRuntimeConfigV6,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
 )
 from so101_demo.parallel_batch.w2_composition import (
     CompositionError,
@@ -29,8 +29,8 @@ from so101_demo.parallel_batch.w1_composition import (
     EXACT_W1_WORKERS,
     MPS_W1_FIRST_PASS,
     MPS_W1_FULL_RESTART_RETRY,
-    V5_CONFIG_BASENAME,
-    V6_CONFIG_BASENAME,
+    MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME,
+    MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME,
     W1CampaignPlan,
     assert_no_host_platform_calls,
     compose_w1_first_pass,
@@ -40,9 +40,9 @@ from so101_demo.parallel_batch.w1_composition import (
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
-V5_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
-V6_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+MACOS_MPS_TWO_WORKER_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_two_worker.yaml"
+MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml"
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml"
 
 BROKER_PID = 9101
 BROKER_BIRTH = 9201
@@ -60,20 +60,20 @@ def _plan_for(compose, path, tmp_path, *, points=("p1",), name="w1"):
 # --------------------------------------------------------------------------------------
 
 
-def test_v5_and_v6_install_documents_load_through_the_execution_loader():
+def test_single_worker_install_documents_load_through_the_execution_loader():
     """The installed W1 documents are reachable through the real execution gate."""
 
-    assert isinstance(load_execution_config(V5_CONFIG), ParallelRuntimeConfigV5)
-    assert isinstance(load_execution_config(V6_CONFIG), ParallelRuntimeConfigV6)
-    assert isinstance(load_execution_config(V4_CONFIG), ParallelRuntimeConfigV4)
+    assert isinstance(load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
+    assert isinstance(load_execution_config(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG), ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
+    assert isinstance(load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG), ParallelRuntimeConfigMacosMpsTwoWorker)
 
 
 def test_the_w1_documents_are_refused_on_a_host_that_cannot_run_mps():
     """A Linux host still refuses the MPS path, for v5/v6 exactly as for v4."""
 
-    for path in (V5_CONFIG, V6_CONFIG):
+    for path in (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG):
         assert isinstance(load_execution_config_for_schema(path, platform="darwin"),
-                          (ParallelRuntimeConfigV5, ParallelRuntimeConfigV6))
+                          (ParallelRuntimeConfigMacosMpsSingleWorkerRetry, ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass))
         with pytest.raises(CompositionError, match="PLATFORM_HOST_MISMATCH"):
             load_execution_config_for_schema(path, platform="linux")
 
@@ -81,9 +81,9 @@ def test_the_w1_documents_are_refused_on_a_host_that_cannot_run_mps():
 def test_the_installed_basenames_are_the_ones_the_manifest_records():
     """The provenance basenames name the files that are actually installed."""
 
-    assert V5_CONFIG.name == V5_CONFIG_BASENAME
-    assert V6_CONFIG.name == V6_CONFIG_BASENAME
-    assert V5_CONFIG.is_file() and V6_CONFIG.is_file()
+    assert MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG.name == MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME
+    assert MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG.name == MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME
+    assert MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG.is_file() and MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG.is_file()
 
 
 # --------------------------------------------------------------------------------------
@@ -106,8 +106,8 @@ def test_the_one_w1_slot_is_capacity_only_and_assigns_no_point():
 @pytest.mark.parametrize(
     "compose, path, profile, batch_kind",
     [
-        (compose_w1_retry, V5_CONFIG, MPS_W1_FULL_RESTART_RETRY, "FULL_RESTART_RETRY"),
-        (compose_w1_first_pass, V6_CONFIG, MPS_W1_FIRST_PASS, "FIRST_PASS"),
+        (compose_w1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, MPS_W1_FULL_RESTART_RETRY, "FULL_RESTART_RETRY"),
+        (compose_w1_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, MPS_W1_FIRST_PASS, "FIRST_PASS"),
     ],
 )
 def test_each_w1_profile_composes_one_slot_one_worker_and_one_domain(
@@ -137,7 +137,7 @@ def test_each_w1_profile_composes_one_slot_one_worker_and_one_domain(
 def test_the_manifest_records_the_route_and_the_resolved_platform_values(tmp_path):
     """The manifest carries the profile and the batch kind it admits, never `auto`."""
 
-    plan = _plan_for(compose_w1_retry, V5_CONFIG, tmp_path, points=("p1", "p2"))
+    plan = _plan_for(compose_w1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, points=("p1", "p2"))
     document = plan.to_document()
 
     assert document["execution_profile"] == MPS_W1_FULL_RESTART_RETRY
@@ -155,8 +155,8 @@ def test_the_manifest_records_the_route_and_the_resolved_platform_values(tmp_pat
 def test_the_worker_count_never_follows_the_selected_point_count(tmp_path):
     """One point is not a W1 claim and four points do not make a W4 claim."""
 
-    one = _plan_for(compose_w1_first_pass, V6_CONFIG, tmp_path / "one", points=("p1",))
-    four = _plan_for(compose_w1_first_pass, V6_CONFIG, tmp_path / "four",
+    one = _plan_for(compose_w1_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path / "one", points=("p1",))
+    four = _plan_for(compose_w1_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path / "four",
                      points=("p1", "p2", "p3", "p4"))
 
     assert (one.worker_count, four.worker_count) == (1, 1)
@@ -169,7 +169,7 @@ def test_the_worker_count_never_follows_the_selected_point_count(tmp_path):
 def test_a_w1_plan_invents_no_budget_qualification_or_promotion_field(tmp_path):
     """A W1 composition is a routing fact plus provenance, never a capacity claim."""
 
-    document = _plan_for(compose_w1_retry, V5_CONFIG, tmp_path).to_document()
+    document = _plan_for(compose_w1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path).to_document()
     forbidden = ("budget", "qualification", "promotion", "profile_sha256", "capacity",
                  "forecast", "max_points_per_worker")
 
@@ -179,14 +179,14 @@ def test_a_w1_plan_invents_no_budget_qualification_or_promotion_field(tmp_path):
 def test_a_w1_plan_is_json_serializable(tmp_path):
     """The manifest must survive the JSON round trip the evidence files use."""
 
-    document = _plan_for(compose_w1_first_pass, V6_CONFIG, tmp_path).to_document()
+    document = _plan_for(compose_w1_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path).to_document()
     assert json.loads(json.dumps(document))["execution_profile"] == MPS_W1_FIRST_PASS
 
 
 def test_a_w1_plan_never_claims_an_nvml_or_proc_fd_dependency(tmp_path):
     """The Darwin boundary check runs at composition time, not only in a config test."""
 
-    plan = _plan_for(compose_w1_retry, V5_CONFIG, tmp_path)
+    plan = _plan_for(compose_w1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path)
     assert_no_host_platform_calls(plan)
 
     from dataclasses import replace
@@ -208,19 +208,19 @@ def test_each_w1_composer_refuses_the_other_profile_document(tmp_path):
     """No cross-profile reuse: the retry composer takes v5 only, the first-pass composer v6."""
 
     with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
-        _plan_for(compose_w1_retry, V6_CONFIG, tmp_path / "a")
+        _plan_for(compose_w1_retry, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path / "a")
     with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
-        _plan_for(compose_w1_first_pass, V5_CONFIG, tmp_path / "b")
+        _plan_for(compose_w1_first_pass, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path / "b")
     with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
-        _plan_for(compose_w1_retry, V4_CONFIG, tmp_path / "c")
+        _plan_for(compose_w1_retry, MACOS_MPS_TWO_WORKER_CONFIG, tmp_path / "c")
     with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
-        _plan_for(compose_w1_first_pass, V4_CONFIG, tmp_path / "d")
+        _plan_for(compose_w1_first_pass, MACOS_MPS_TWO_WORKER_CONFIG, tmp_path / "d")
 
 
 def test_exact_w2_refuses_a_w1_document(tmp_path):
     """The W2 composer is not a fallback for a W1 profile and vice versa."""
 
-    for path in (V5_CONFIG, V6_CONFIG):
+    for path in (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG):
         with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
             compose_w2_campaign(
                 config=load_execution_config(path), config_path=path, campaign_id="b-w2",
@@ -230,14 +230,14 @@ def test_exact_w2_refuses_a_w1_document(tmp_path):
 def test_a_w1_composition_refuses_a_relative_evidence_root_and_a_missing_identity(tmp_path):
     """The same closed input rules as W2: absolute root, non-empty campaign identity."""
 
-    config = load_execution_config(V6_CONFIG)
+    config = load_execution_config(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)
     with pytest.raises(CompositionError, match="EVIDENCE_ROOT"):
         compose_w1_first_pass(
-            config=config, config_path=V6_CONFIG, campaign_id="b", batch_id="batch",
+            config=config, config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b", batch_id="batch",
             selected_point_ids=("p1",), evidence_root=Path("relative"))
     with pytest.raises(CompositionError, match="CAMPAIGN_ID"):
         compose_w1_first_pass(
-            config=config, config_path=V6_CONFIG, campaign_id="", batch_id="batch",
+            config=config, config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="", batch_id="batch",
             selected_point_ids=("p1",), evidence_root=tmp_path)
 
 
@@ -246,11 +246,11 @@ def test_a_w1_plan_cannot_carry_a_linux_transport(tmp_path):
 
     from dataclasses import replace
 
-    config = load_execution_config(V5_CONFIG)
+    config = load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG)
     assert config.accelerator.kind is AcceleratorKind.MPS
     assert config.ipc_transport is IpcTransport.DARWIN_PRIVATE_PATH_UNIX
 
-    plan = _plan_for(compose_w1_retry, V5_CONFIG, tmp_path)
+    plan = _plan_for(compose_w1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path)
     with pytest.raises(CompositionError, match="PLATFORM_COMBINATION"):
         assert_no_host_platform_calls(replace(plan, accelerator="cuda"))
     with pytest.raises(CompositionError, match="PLATFORM_COMBINATION"):
@@ -266,9 +266,9 @@ def load_w1_config_with_cuda(tmp_path):
 
     import yaml
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
 
-    document = yaml.safe_load(V5_CONFIG.read_text())
+    document = yaml.safe_load(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG.read_text())
     document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
     document["requested_device"] = "cuda"
     document["ipc_transport"] = "proc_fd_unix"
@@ -277,4 +277,4 @@ def load_w1_config_with_cuda(tmp_path):
     document["start_guard"].pop("mps_minimum_headroom_bytes")
     path = tmp_path / "v5-linux.yaml"
     path.write_text(yaml.safe_dump(document))
-    return load_parallel_runtime_config_v5(path)
+    return load_parallel_runtime_config_macos_mps_single_worker_retry(path)

@@ -19,13 +19,13 @@ from so101_demo.parallel_batch.contracts import (
     BatchRequest,
     ContractError,
     RunMode,
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.start_guard import FAIL, GuardScope, StartGuardPolicy
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 
 
 @pytest.fixture
@@ -36,7 +36,7 @@ def scope():
 
 @pytest.fixture
 def guard(tmp_path):
-    policy = load_parallel_runtime_config_v3(V3_CONFIG).start_guard
+    policy = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG).start_guard
     coordinator = probe_module.ProbeCoordinator(tmp_path / "start-guard-state")
     return probe_module.EpochStartGuard(coordinator, policy)
 
@@ -121,7 +121,7 @@ def test_cleanup_blocked_is_refused_even_for_a_warn_result(tmp_path, scope):
 
 def test_installed_composition_uses_the_task_state_root(tmp_path, monkeypatch):
     monkeypatch.setenv("SO101_TASK_ROOT", str(tmp_path))
-    config = load_parallel_runtime_config_v3(V3_CONFIG)
+    config = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)
     guard = probe_module.compose_default_start_guard(config.start_guard)
     assert guard.policy == config.start_guard
     assert (tmp_path / "start-guard-state").is_dir()
@@ -133,11 +133,11 @@ def test_budget_modules_are_absent_from_the_composition_import_graph():
     script = (
         "import json, sys\n"
         "from so101_demo.parallel_batch import start_guard_probe\n"
-        "from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3\n"
-        "config = load_parallel_runtime_config_v3(__import__('pathlib').Path(%r))\n"
+        "from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda\n"
+        "config = load_parallel_runtime_config_linux_cuda(__import__('pathlib').Path(%r))\n"
         "guard = start_guard_probe.compose_default_start_guard(config.start_guard)\n"
         "print(json.dumps(sorted(n for n in sys.modules if 'parallel_batch' in n)))\n"
-    ) % str(V3_CONFIG)
+    ) % str(LINUX_CUDA_CONFIG)
     env = dict(os.environ)
     env["SO101_TASK_ROOT"] = "/tmp/so101-composition-import-graph"
     completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
@@ -185,10 +185,10 @@ def test_no_active_path_imports_the_retired_budget_chain():
         "import so101_demo.parallel_batch.adaptive_pool as adaptive\n"
         "import so101_demo.parallel_batch.contracts as contracts\n"
         "from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard\n"
-        "config = contracts.load_parallel_runtime_config_v3(__import__('pathlib').Path(%r))\n"
+        "config = contracts.load_parallel_runtime_config_linux_cuda(__import__('pathlib').Path(%r))\n"
         "guard = compose_default_start_guard(config.start_guard)\n"
         "print(json.dumps({'imported': sorted(n for n in sys.modules if 'parallel_batch' in n)}))\n"
-    ) % str(V3_CONFIG)
+    ) % str(LINUX_CUDA_CONFIG)
     env = dict(os.environ)
     env["SO101_TASK_ROOT"] = "/tmp/so101-retired-chain-trap"
     completed = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
@@ -223,10 +223,10 @@ def _healthy_mps_snapshot():
     )
 
 
-def test_v3_policy_never_consults_the_accelerator_hook(tmp_path, scope):
+def test_linux_cuda_policy_never_consults_the_accelerator_hook(tmp_path, scope):
     """A v3 policy has no floor, so the MPS vocabulary cannot influence its result."""
 
-    policy = load_parallel_runtime_config_v3(V3_CONFIG).start_guard
+    policy = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG).start_guard
     assert policy.mps_minimum_headroom_bytes is None
     coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
     guard = probe_module.EpochStartGuard(coordinator, policy,
@@ -236,7 +236,7 @@ def test_v3_policy_never_consults_the_accelerator_hook(tmp_path, scope):
     assert "mps_headroom" not in result.checks
 
 
-def test_v4_policy_without_a_probe_fails_closed(tmp_path, scope):
+def test_macos_mps_two_worker_policy_without_a_probe_fails_closed(tmp_path, scope):
     """A Darwin policy demands the accelerator check; a missing probe is a refusal."""
 
     coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
@@ -246,7 +246,7 @@ def test_v4_policy_without_a_probe_fails_closed(tmp_path, scope):
     assert result.checks["mps_accelerator"].reason == "MPS_ACCELERATOR_PROBE_MISSING"
 
 
-def test_v4_policy_merges_a_healthy_accelerator_snapshot(tmp_path, scope):
+def test_macos_mps_two_worker_policy_merges_a_healthy_accelerator_snapshot(tmp_path, scope):
     """A healthy accelerator read adds the headroom check without hiding the helper's checks."""
 
     coordinator = probe_module.ProbeCoordinator(tmp_path / "sg")
@@ -263,7 +263,7 @@ def test_v4_policy_merges_a_healthy_accelerator_snapshot(tmp_path, scope):
     assert result.checks.get("mps_accelerator") is None
 
 
-def test_v4_policy_does_not_mask_a_refusing_helper(tmp_path, scope):
+def test_macos_mps_two_worker_policy_does_not_mask_a_refusing_helper(tmp_path, scope):
     """A healthy accelerator read never upgrades a helper that refuses on its own checks."""
 
     # The refusal is produced by the real helper, not by a double: the RAM floor is set above any
@@ -278,7 +278,7 @@ def test_v4_policy_does_not_mask_a_refusing_helper(tmp_path, scope):
     assert result.status == FAIL
 
 
-def test_v4_policy_refuses_a_snapshot_below_the_fixed_floor(tmp_path, scope):
+def test_macos_mps_two_worker_policy_refuses_a_snapshot_below_the_fixed_floor(tmp_path, scope):
     """A headroom figure below the fixed floor is a hard refusal, not a warning."""
 
     from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
@@ -296,7 +296,7 @@ def test_v4_policy_refuses_a_snapshot_below_the_fixed_floor(tmp_path, scope):
     assert result.checks["mps_headroom"].reason == "MPS_HEADROOM_BELOW_MINIMUM"
 
 
-def test_v4_probe_error_is_reported_with_its_own_reason(tmp_path, scope):
+def test_macos_mps_two_worker_probe_error_is_reported_with_its_own_reason(tmp_path, scope):
     """A probe refusal keeps its stable reason instead of becoming a generic failure."""
 
     from so101_demo.parallel_batch.accelerator_probe import ProbeError
@@ -311,7 +311,7 @@ def test_v4_probe_error_is_reported_with_its_own_reason(tmp_path, scope):
     assert result.checks["mps_accelerator"].reason == "MPS_UNAVAILABLE"
 
 
-def test_v4_probe_selection_keeps_cuda_on_the_v3_path():
+def test_macos_mps_two_worker_probe_selection_keeps_cuda_on_the_linux_cuda_path():
     """`select_accelerator_probe` returns the MPS probe only for the Darwin combination."""
 
     from so101_demo.parallel_batch import accelerator_probe
@@ -404,15 +404,15 @@ def test_the_two_approved_w1_policies_demand_the_mps_probe(tmp_path, scope):
     """A v5/v6 policy carries the same floor, so the admission is mandatory there too."""
 
     from so101_demo.parallel_batch.contracts import (
-        load_parallel_runtime_config_v5,
-        load_parallel_runtime_config_v6,
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
     )
 
     package = PACKAGE_ROOT
-    for name in ("parallel_batch_v5_macos_mps_w1_retry.yaml",
-                 "parallel_batch_v6_macos_mps_w1_first_pass.yaml"):
-        config = (load_parallel_runtime_config_v5 if "v5" in name
-                  else load_parallel_runtime_config_v6)(
+    for name in ("parallel_batch_macos_mps_single_worker_retry.yaml",
+                 "parallel_batch_macos_mps_single_worker_first_pass.yaml"):
+        config = (load_parallel_runtime_config_macos_mps_single_worker_retry if "retry" in name
+                  else load_parallel_runtime_config_macos_mps_single_worker_first_pass)(
             package / "config/mujoco" / name)
         missing = probe_module.EpochStartGuard(
             probe_module.ProbeCoordinator(tmp_path / name), config.start_guard)
@@ -427,18 +427,18 @@ def test_the_two_approved_w1_policies_demand_the_mps_probe(tmp_path, scope):
         assert admitted.checks["mps_headroom"].reason == "MPS_HEADROOM_OK"
 
 
-def test_a_v3_document_can_never_carry_the_mps_headroom(tmp_path):
+def test_a_linux_cuda_document_can_never_carry_the_mps_headroom(tmp_path):
     """The Linux v3 contract still refuses the Darwin-only field by name."""
 
     import yaml
 
-    from so101_demo.parallel_batch.contracts import ContractError, parse_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import ContractError, parse_parallel_runtime_config_linux_cuda
 
-    document = yaml.safe_load(V3_CONFIG.read_text())
+    document = yaml.safe_load(LINUX_CUDA_CONFIG.read_text())
     document["start_guard"]["mps_minimum_headroom_bytes"] = 1 << 30
     with pytest.raises(ContractError, match="UNKNOWN_START_GUARD_FIELD"):
-        parse_parallel_runtime_config_v3(document)
-    assert load_parallel_runtime_config_v3(V3_CONFIG).start_guard.mps_minimum_headroom_bytes is None
+        parse_parallel_runtime_config_linux_cuda(document)
+    assert load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG).start_guard.mps_minimum_headroom_bytes is None
 
 
 # --------------------------------------------------------------------------------------

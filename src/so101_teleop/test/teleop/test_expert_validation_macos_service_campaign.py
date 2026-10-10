@@ -26,8 +26,8 @@ from so101_teleop.expert_validation.supervisor import (
 from teleop_paths import SOURCE_ROOT, TEST_ROOT
 
 DEMO_ROOT = SOURCE_ROOT / "so101_demo_py"
-V4_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
-V3_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_v3.yaml"
+MACOS_MPS_TWO_WORKER_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_macos_mps_two_worker.yaml"
+LINUX_CUDA_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
 HELPER = TEST_ROOT / "fixtures/stubborn_helper.py"
 
 
@@ -56,7 +56,7 @@ def _request(tmp_path: Path, **overrides) -> list[str]:
     points.write_text("points: [p1, p2, p3, p4]\n")
     values = {
         "points_path": points,
-        "config_path": V4_CONFIG,
+        "config_path": MACOS_MPS_TWO_WORKER_CONFIG,
         "batch_id": "b001",
         "worker_count": 2,
         "evidence_root": tmp_path / "batch",
@@ -103,7 +103,7 @@ def test_the_adapter_accepts_exactly_the_flags_the_service_sends(tmp_path):
     assert arguments.worker_count == 2
     assert arguments.run_mode == "execute"
     assert arguments.point_id == ["p1", "p2"]
-    assert arguments.config == V4_CONFIG
+    assert arguments.config == MACOS_MPS_TWO_WORKER_CONFIG
     assert arguments.provenance_binding is None
     # A first-pass request never carries a retry binding.
     for flag in RETRY_COORDINATOR_FLAGS:
@@ -143,7 +143,7 @@ def test_the_adapter_validates_the_service_request_and_names_every_refusal(tmp_p
         )
     with pytest.raises(ServiceCampaignError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
         validate(
-            _parse(_request(tmp_path, config_path=V3_CONFIG)), environment=environment
+            _parse(_request(tmp_path, config_path=LINUX_CUDA_CONFIG)), environment=environment
         )
     with pytest.raises(ServiceCampaignError, match="SELECTED_POINTS_REQUIRED"):
         validate(

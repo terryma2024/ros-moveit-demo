@@ -23,26 +23,25 @@ from pathlib import Path
 from typing import Mapping
 
 from .contracts import (
-    AcceleratorKind,
     ContractError,
     IpcTransport,
-    ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV4,
-    ParallelRuntimeConfigV5,
-    ParallelRuntimeConfigV6,
-    load_parallel_runtime_config_v3,
-    load_parallel_runtime_config_v4,
-    load_parallel_runtime_config_v5,
-    load_parallel_runtime_config_v6,
-    require_v3_execution,
-    require_v4_execution,
+    ParallelRuntimeConfigLinuxCuda,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+    load_parallel_runtime_config_linux_cuda,
+    load_parallel_runtime_config_macos_mps_two_worker,
+    load_parallel_runtime_config_macos_mps_single_worker_retry,
+    load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    require_linux_cuda_execution,
+    require_macos_mps_two_worker_execution,
 )
 
 #: Exact W2. The design's platform claim is this number and no other.
 EXACT_W2_WORKERS = 2
 
 #: The schema-v4 document name, for the manifest's provenance fields.
-V4_CONFIG_BASENAME = "parallel_batch_v4_macos_mps_w2.yaml"
+MACOS_MPS_TWO_WORKER_CONFIG_BASENAME = "parallel_batch_macos_mps_two_worker.yaml"
 
 
 class CompositionError(RuntimeError):
@@ -67,45 +66,37 @@ def load_execution_config(path: Path):
         raise ContractError(f"CONFIG_YAML_INVALID: {path}") from error
     version = document.get("schema_version") if isinstance(document, dict) else None
     if version == 3:
-        return load_parallel_runtime_config_v3(Path(path))
+        return load_parallel_runtime_config_linux_cuda(Path(path))
     if version == 4:
-        return load_parallel_runtime_config_v4(Path(path))
+        return load_parallel_runtime_config_macos_mps_two_worker(Path(path))
     if version == 5:
-        return load_parallel_runtime_config_v5(Path(path))
+        return load_parallel_runtime_config_macos_mps_single_worker_retry(Path(path))
     if version == 6:
-        return load_parallel_runtime_config_v6(Path(path))
+        return load_parallel_runtime_config_macos_mps_single_worker_first_pass(Path(path))
     raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
 
 
 def load_execution_config_for_schema(path: Path, *, platform: str | None = None):
     """Load a document and refuse a platform combination this host cannot execute.
 
-    The Darwin `mps + darwin_private_path_unix` combination may only be executed on Darwin, and
-    the Linux `cuda + proc_fd_unix` combination may only be executed on Linux. This is what keeps
-    "the Linux v4 combination is retained in the contract but not executed in this task" honest:
-    asking for it here fails loudly instead of silently attempting an impossible launch.
+    The Darwin `mps + darwin_private_path_unix` combination may only be executed on Darwin:
+    asking for it elsewhere fails loudly instead of silently attempting an impossible launch.
 
     The rule is the same for every approved Darwin/MPS profile: v4 (W2 first-pass), v5 (W1 retry)
-    and v6 (W1 first-pass) all take this MPS path, and a Linux host refuses all three. The v3
+    and v6 (W1 first-pass) all take this MPS path, and a non-Darwin host refuses all three. The v3
     branch is untouched and remains host-agnostic.
     """
 
     config = load_execution_config(path)
-    if isinstance(config, ParallelRuntimeConfigV3):
+    if isinstance(config, ParallelRuntimeConfigLinuxCuda):
         return config
-    if isinstance(config, (ParallelRuntimeConfigV4, ParallelRuntimeConfigV5,
-                           ParallelRuntimeConfigV6)):
+    if isinstance(config, (ParallelRuntimeConfigMacosMpsTwoWorker, ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+                           ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)):
         host = sys.platform if platform is None else platform
-        darwin_combination = config.accelerator.kind is AcceleratorKind.MPS
-        if darwin_combination and host != "darwin":
+        if host != "darwin":
             raise CompositionError(
                 "PLATFORM_HOST_MISMATCH",
                 f"the MPS combination cannot be executed on {host!r}",
-            )
-        if not darwin_combination and host == "darwin":
-            raise CompositionError(
-                "PLATFORM_HOST_MISMATCH",
-                f"the CUDA/NVML combination cannot be executed on {host!r}",
             )
     return config
 
@@ -225,13 +216,13 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
                         broker_birth_identity: int | None = None) -> W2CampaignPlan:
     """Resolve one exact-W2 campaign. Refuses anything that is not exact W2."""
 
-    if isinstance(config, (ParallelRuntimeConfigV5, ParallelRuntimeConfigV6)):
+    if isinstance(config, (ParallelRuntimeConfigMacosMpsSingleWorkerRetry, ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)):
         # No cross-profile reuse: a W1 document is not a shrunken W2 request.
         raise CompositionError(
             "CONFIG_SCHEMA_MISMATCH",
             f"exact W2 requires a v4 document, not {type(config).__name__}",
         )
-    if not isinstance(config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
+    if not isinstance(config, (ParallelRuntimeConfigLinuxCuda, ParallelRuntimeConfigMacosMpsTwoWorker)):
         raise CompositionError("CONFIG_TYPE", type(config).__name__)
     if not isinstance(campaign_id, str) or not campaign_id:
         raise CompositionError("CAMPAIGN_ID", repr(campaign_id))
@@ -239,8 +230,8 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
     if not root.is_absolute():
         raise CompositionError("EVIDENCE_ROOT", "must be absolute")
 
-    if isinstance(config, ParallelRuntimeConfigV4):
-        require_v4_execution(4, config.schema_version)
+    if isinstance(config, ParallelRuntimeConfigMacosMpsTwoWorker):
+        require_macos_mps_two_worker_execution(4, config.schema_version)
         if config.worker_count != EXACT_W2_WORKERS:
             raise CompositionError(
                 "PLATFORM_WORKER_COUNT_UNSUPPORTED", str(config.worker_count))
@@ -255,7 +246,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
         requested_device = config.requested_device
         allow_cpu_fallback = config.allow_cpu_fallback
     else:
-        require_v3_execution(3, config.schema_version)
+        require_linux_cuda_execution(3, config.schema_version)
         accelerator = "cuda"
         selector = f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}"
         ipc_transport = str(IpcTransport.PROC_FD_UNIX)

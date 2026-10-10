@@ -16,7 +16,7 @@ import time
 from .contracts import (
     _require_finite, _require_id, _require_positive_int, InferenceRequest,
     ModelOutcome, NormalizedInferenceResponseIdentity,
-    ParallelRuntimeConfigV3,
+    ParallelRuntimeConfigLinuxCuda,
 )
 
 
@@ -85,7 +85,7 @@ class PerceptionBroker:
         queue_capacity_per_model=None,
     ):
         """Bind frozen model limits and local scheduling resources."""
-        if type(config) is not ParallelRuntimeConfigV3:
+        if type(config) is not ParallelRuntimeConfigLinuxCuda:
             raise BrokerError('RUNTIME_CONFIG_REQUIRED')
         _require_id('grounded_model_id', grounded_model_id)
         if grounded_model_id == config.yolo_model_id:

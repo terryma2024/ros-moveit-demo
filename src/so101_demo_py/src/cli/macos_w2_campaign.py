@@ -39,9 +39,9 @@ from typing import Callable
 from ..parallel_batch.campaign_supervisor import ACTIVE, CampaignSupervisor
 from ..parallel_batch.contracts import (
     ContractError,
-    ParallelRuntimeConfigV4,
-    ParallelRuntimeConfigV5,
-    ParallelRuntimeConfigV6,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
     resolve_execution_route,
 )
 from ..parallel_batch import point_drain
@@ -234,7 +234,7 @@ def campaign_status(*, cleanup_complete: bool, results, workers, served, refused
 
     spec = CampaignRouteSpec(
         execution_profile=MPS_W2_FIRST_PASS, batch_kind=W2_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV4, module="so101_demo.cli.macos_w2_campaign",
+        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_w2_campaign",
         worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
         composer=compose_w2_campaign)
     return campaign_verdict(spec=spec, cleanup_complete=cleanup_complete, results=results,
@@ -487,7 +487,7 @@ def _model_factories(*, yolo_weights: Path, grounded_root: Path):
     )
     from ..adapters.perception.grounded_sam import GroundedSamThresholds
     from ..core.detection import DetectionQuery
-    from ..parallel_batch.contracts import ParallelRuntimeConfigV4
+    from ..parallel_batch.contracts import ParallelRuntimeConfigMacosMpsTwoWorker
 
     def build(model_id: str):
         def factory():
@@ -495,14 +495,14 @@ def _model_factories(*, yolo_weights: Path, grounded_root: Path):
                 options = DetectorFactoryOptions(
                     backend="yolo_seg", requested_device="mps", allow_cpu_fallback=False,
                     yolo_weights_path=yolo_weights,
-                    yolo_weights_sha256=ParallelRuntimeConfigV4.FROZEN_YOLO_WEIGHTS_SHA256,
+                    yolo_weights_sha256=ParallelRuntimeConfigMacosMpsTwoWorker.FROZEN_YOLO_WEIGHTS_SHA256,
                     yolo_model_id="plastic-cup-yolo11n-seg-v1", yolo_imgsz=640)
             else:
                 options = DetectorFactoryOptions(
                     backend="grounded_sam", requested_device="mps", allow_cpu_fallback=False,
                     grounded_model_root=grounded_root,
                     grounded_manifest_sha256=(
-                        ParallelRuntimeConfigV4.FROZEN_GROUNDED_SAM_MANIFEST_SHA256),
+                        ParallelRuntimeConfigMacosMpsTwoWorker.FROZEN_GROUNDED_SAM_MANIFEST_SHA256),
                     grounded_thresholds=GroundedSamThresholds.defaults())
             detector = build_detector(options=options).detector
 
@@ -695,17 +695,17 @@ class CampaignRouteSpec:
 ROUTE_SPECS: tuple[CampaignRouteSpec, ...] = (
     CampaignRouteSpec(
         execution_profile=MPS_W2_FIRST_PASS, batch_kind=W2_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV4, module="so101_demo.cli.macos_w2_campaign",
+        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_w2_campaign",
         worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
         composer=compose_w2_campaign),
     CampaignRouteSpec(
         execution_profile=MPS_W1_FULL_RESTART_RETRY, batch_kind=W1_RETRY_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV5, module="so101_demo.cli.macos_n1_retry",
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, module="so101_demo.cli.macos_n1_retry",
         worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
         composer=compose_w1_retry),
     CampaignRouteSpec(
         execution_profile=MPS_W1_FIRST_PASS, batch_kind=W1_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV6, module="so101_demo.cli.macos_n1_first_pass",
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, module="so101_demo.cli.macos_n1_first_pass",
         worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
         composer=compose_w1_first_pass),
 )

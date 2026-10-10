@@ -20,8 +20,7 @@ import pytest
 from paths import REPOSITORY
 
 WORKTREE = REPOSITORY
-V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
-V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
 
 
 def _installed_prefix() -> Path:
@@ -46,11 +45,11 @@ def _copy_base() -> Path | None:
     return base if (base / "so101_demo_py").is_dir() else base.parent
 
 
-def _v3_config(tmp_path: Path, workers: int) -> Path:
+def _linux_cuda_config(tmp_path: Path, workers: int) -> Path:
     """Copy the packaged v3 config without changing its frozen domain list."""
 
     target = tmp_path / f"parallel_v3_w{workers}.yaml"
-    shutil.copyfile(V3_CONFIG, target)
+    shutil.copyfile(LINUX_CUDA_CONFIG, target)
     return target
 
 
@@ -136,7 +135,7 @@ def test_real_parallel_entry_requires_real_control_inputs(tmp_path) -> None:
     entry = prefix / "lib/so101_demo_py/so101_parallel_batch"
     completed = subprocess.run(
         [sys.executable, str(entry),
-         "--config", str(V3_CONFIG), "--points", str(tmp_path / "missing-points.yaml"),
+         "--config", str(LINUX_CUDA_CONFIG), "--points", str(tmp_path / "missing-points.yaml"),
          "--batch-id", "lg-t8-controls", "--worker-count", "1", "--run-mode", "dry_run",
          "--evidence-root", str(tmp_path / "batch"), "--yolo-weights", str(tmp_path / "best.pt"),
          "--yolo-weights-sha256", "0" * 64, "--grounded-root", str(tmp_path),
@@ -155,7 +154,7 @@ def test_the_shared_guard_state_root_is_required_not_guessed(tmp_path) -> None:
     """Without the task root the entry fails closed instead of inventing a lock location."""
 
     prefix = _installed_prefix()
-    config = _v3_config(tmp_path, 1)
+    config = _linux_cuda_config(tmp_path, 1)
     completed = subprocess.run(
         [sys.executable, "-m", "so101_demo.parallel_batch.resources",
          "--config", str(config), "--worker-count", "1",
@@ -166,12 +165,12 @@ def test_the_shared_guard_state_root_is_required_not_guessed(tmp_path) -> None:
     assert "PROBE_STATE_ROOT_UNSET" in completed.stdout + completed.stderr
 
 
-def test_allocator_default_entry_writes_the_v3_guard_composition(tmp_path) -> None:
+def test_allocator_default_entry_writes_the_linux_cuda_guard_composition(tmp_path) -> None:
     """The real default entry runs the guard and records it, without starting ROS."""
 
     prefix = _installed_prefix()
     evidence = tmp_path / "guard-batch"
-    config = _v3_config(tmp_path, 2)
+    config = _linux_cuda_config(tmp_path, 2)
     completed = subprocess.run(
         [*_isolated_allocator_argv(tmp_path),
          "--config", str(config), "--worker-count", "2",
@@ -206,7 +205,7 @@ def test_debug_metadata_cannot_block_but_control_errors_still_refuse(tmp_path) -
     """Missing debug provenance is not an admission gate; real control errors still are."""
 
     prefix = _installed_prefix()
-    config = _v3_config(tmp_path, 1)
+    config = _linux_cuda_config(tmp_path, 1)
 
     debug_hostile = _entry_environment(prefix, tmp_path / "task-root")
     debug_hostile.update({
@@ -285,7 +284,7 @@ def test_isolated_allocator_still_refuses_a_test_owned_domain_claim(tmp_path):
     proc_root.mkdir()
     process = _proc_process(proc_root, 4249)
     (process/'environ').write_bytes(b'ROS_DOMAIN_ID=181\0')
-    config = _v3_config(tmp_path, 1)
+    config = _linux_cuda_config(tmp_path, 1)
     completed = subprocess.run(
         [*_isolated_allocator_argv(tmp_path), '--config', str(config),
          '--worker-count', '1', '--evidence-root', str(tmp_path/'claimed'), '--dry-run'],

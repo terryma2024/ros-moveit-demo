@@ -885,7 +885,7 @@ def test_admit_retry_consumes_the_command_and_writes_batch_queue_and_intent(tmp_
         store.close()
 
 
-def test_admit_retry_accepts_the_linux_v3_single_point_route(tmp_path):
+def test_admit_retry_accepts_the_linux_cuda_single_point_route(tmp_path):
     from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
 
     store, request, context, intent = _retry_fixture(tmp_path)
@@ -1504,7 +1504,7 @@ def _first_pass_request(root, manifest_id, **changes):
         execution_mode="SEQUENTIAL",
         evidence_root=root,
         points_path=root / "points.yaml",
-        parallel_config_path=root / "parallel_batch_v6_macos_mps_w1_first_pass.yaml",
+        parallel_config_path=root / "parallel_batch_macos_mps_single_worker_first_pass.yaml",
         adaptive_config_path=root / "adaptive.yaml",
         worker_count=1,
         max_points_per_worker=None,

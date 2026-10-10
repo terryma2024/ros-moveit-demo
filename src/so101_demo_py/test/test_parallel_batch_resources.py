@@ -28,7 +28,7 @@ from so101_demo.parallel_batch.start_guard_probe import (
     CLEAR,
     ProbeCoordinator,
 )
-from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
     main,
@@ -43,8 +43,8 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
-CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
+CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_linux_cuda.yaml'
+CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_linux_cuda.yaml'
 
 
 def test_two_worker_headroom_verifier_uses_business_named_acceptance_provider():
@@ -86,9 +86,9 @@ class FakeProbe:
 
 @pytest.fixture
 def config():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
-    return load_parallel_runtime_config_v3(CLI_CONFIG_PATH)
+    return load_parallel_runtime_config_linux_cuda(CLI_CONFIG_PATH)
 
 
 @pytest.fixture(autouse=True)
@@ -1387,9 +1387,9 @@ def _refusing_guard(tmp_path, reason):
 
 
 def config_policy():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
-    return load_parallel_runtime_config_v3(CLI_CONFIG_PATH).start_guard
+    return load_parallel_runtime_config_linux_cuda(CLI_CONFIG_PATH).start_guard
 
 
 def refusing_allocator(tmp_path, config, reason='RAM_BELOW_MINIMUM', probe=None):
@@ -1909,7 +1909,7 @@ def test_fixed_eight_refusal_makes_no_domain_claims(tmp_path, config):
         owner.close()
 
 
-def test_v3_adopt_existing_rechecks_the_start_guard(tmp_path, config):
+def test_linux_cuda_adopt_existing_rechecks_the_start_guard(tmp_path, config):
     """The version-three restore path re-runs one fresh bounded check."""
 
     from so101_demo.parallel_batch.resources import WorkerResourceAllocator
@@ -1935,7 +1935,7 @@ def test_v3_adopt_existing_rechecks_the_start_guard(tmp_path, config):
         restored.close()
 
 
-def test_start_guard_scope_takes_its_selector_from_the_v4_accelerator() -> None:
+def test_start_guard_scope_takes_its_selector_from_the_macos_mps_two_worker_accelerator() -> None:
     """The v4 document has no `gpu_device`; the guard scope must use the resolved accelerator.
 
     Schema v4 replaced the v3 CUDA device reference with the closed platform combination, so a

@@ -30,8 +30,8 @@ from ..runtime.unix_address import (
     require_encoded_length,
 )
 from .contracts import (
-    ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV4,
+    ParallelRuntimeConfigLinuxCuda,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
     IpcTransport,
 )
 
@@ -629,7 +629,7 @@ class CurrentRuntimeProvenanceProbe:
             else {name: Path(path) for name, path in current_paths.items()}
         )
 
-    def snapshot(self, config: ParallelRuntimeConfigV3) -> Mapping[str, str]:
+    def snapshot(self, config: ParallelRuntimeConfigLinuxCuda) -> Mapping[str, str]:
         """Hash every current runtime input or fail closed when the port is unwired."""
         if self.current_paths is None:
             raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_UNAVAILABLE')
@@ -662,7 +662,7 @@ class TwoWorkerHeadroomVerifier:
         )
 
     def verify(
-        self, manifest_path: Path, *, config: ParallelRuntimeConfigV3
+        self, manifest_path: Path, *, config: ParallelRuntimeConfigLinuxCuda
     ) -> Mapping[str, object]:
         """Return a compact verified record or fail closed on any uncertainty."""
         path = Path(manifest_path)
@@ -751,7 +751,7 @@ class TwoWorkerHeadroomVerifier:
         self,
         document: dict[str, object],
         *,
-        config: ParallelRuntimeConfigV3,
+        config: ParallelRuntimeConfigLinuxCuda,
         artifacts_fd: int,
         snapshots: list,
     ) -> dict[str, object]:
@@ -1018,7 +1018,7 @@ class WorkerResourceAllocator:
 
     def __init__(
         self,
-        config: ParallelRuntimeConfigV3,
+        config: ParallelRuntimeConfigLinuxCuda,
         evidence_root: Path,
         *,
         probe=None,
@@ -1029,7 +1029,7 @@ class WorkerResourceAllocator:
         ipc_root: Path | None = None,
         start_guard=None,
     ) -> None:
-        if not isinstance(config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
+        if not isinstance(config, (ParallelRuntimeConfigLinuxCuda, ParallelRuntimeConfigMacosMpsTwoWorker)):
             raise ResourceAllocationError('CONFIG')
         raw_root = str(evidence_root)
         root = Path(evidence_root)
@@ -1059,7 +1059,7 @@ class WorkerResourceAllocator:
             # v4's exact-W2 platform claim, not the inherited v3 field: `max_worker_count` stays
             # frozen at its v3 value, and `AllocationPolicy` requires
             # `len(ros_domain_ids) >= max_worker_count`.
-            config.worker_count if isinstance(config, ParallelRuntimeConfigV4)
+            config.worker_count if isinstance(config, ParallelRuntimeConfigMacosMpsTwoWorker)
             else config.max_worker_count,
             config.ros_domain_ids,
         )
@@ -1163,7 +1163,7 @@ class WorkerResourceAllocator:
         """Reclaim an exact crashed batch root without recreating its allocation."""
         if self._closed or self._manifest is not None:
             raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
-        expected_schema = 4 if isinstance(self.config, ParallelRuntimeConfigV4) else 3
+        expected_schema = 4 if isinstance(self.config, ParallelRuntimeConfigMacosMpsTwoWorker) else 3
         if (
             not isinstance(manifest, ResourceManifest)
             or manifest.schema_version != expected_schema
@@ -1634,7 +1634,7 @@ class WorkerResourceAllocator:
             # The durable canonical path may exceed 107 bytes; only the exact kernel
             # sockaddr built from the owned parent descriptor must fit sun_path.
             try:
-                if isinstance(self.config, ParallelRuntimeConfigV4):
+                if isinstance(self.config, ParallelRuntimeConfigMacosMpsTwoWorker):
                     # Schema v4 replaced the dirfd transport with the Darwin private-path strategy:
                     # the same namespace stays basename-shaped, but the bound is the encoded
                     # `sun_path` capacity rather than the presence of `/proc/self/fd`.
@@ -1663,7 +1663,7 @@ class WorkerResourceAllocator:
                 for domain_id in domains
                 if (
                     self._domain_claimed_by_another_campaign(domain_id)
-                    if isinstance(self.config, ParallelRuntimeConfigV4)
+                    if isinstance(self.config, ParallelRuntimeConfigMacosMpsTwoWorker)
                     else self.probe.ros_domain_in_use(domain_id)
                 )
             ]
@@ -2026,7 +2026,7 @@ def _thaw_json(value):
     return value
 
 
-def _runtime_config_sha256(config: ParallelRuntimeConfigV3) -> str:
+def _runtime_config_sha256(config: ParallelRuntimeConfigLinuxCuda) -> str:
     return hashlib.sha256(_json_bytes(asdict(config))).hexdigest()
 
 

@@ -656,7 +656,7 @@ CANDIDATE_ISSUE_BODY = {
     "execution_profile": "MPS_W2_FIRST_PASS",
     "worker_count": 2,
     "batch_kind": "FIRST_PASS",
-    "config_document": "/opt/so101/config/parallel_batch_v4_macos_mps_w2.yaml",
+    "config_document": "/opt/so101/config/parallel_batch_macos_mps_two_worker.yaml",
     "evidence_root": "/evidence/candidate-w2",
     "owner_generation": 1,
     "expires_in_s": 3600.0,

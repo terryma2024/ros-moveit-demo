@@ -1,7 +1,7 @@
 """Task 8P3 / Boundary IV: the immutable runtime config is parsed, not merely digested.
 
 Approved preparation design §4.2: preparation accepts only content the production validator can parse; Task 8 live's
-head-search config and parallel_batch_v3.yaml must both request CUDA with allow_cpu_fallback=false, and a disagreement is
+head-search config and parallel_batch_linux_cuda.yaml must both request CUDA with allow_cpu_fallback=false, and a disagreement is
 refused rather than auto-recovered on CPU. The bundle is where that file is bound, so it is where the refusal belongs.
 """
 

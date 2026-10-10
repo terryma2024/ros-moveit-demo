@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    ExecutionKind, InferenceRequest, load_parallel_runtime_config_v3, ModelOutcome,
+    ExecutionKind, InferenceRequest, load_parallel_runtime_config_linux_cuda, ModelOutcome,
 )
 from paths import PACKAGE_ROOT
 
@@ -36,8 +36,8 @@ def model_result(outcome=ModelOutcome.NORMAL_REJECTION):
 def harness(*, ready=True, detectors=None, queue_capacity_per_model=None):
     from so101_demo.parallel_batch.broker import PerceptionBroker
     control = SimpleNamespace(now=100.0)
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     capacity_kwargs = (
         {} if queue_capacity_per_model is None
         else {'queue_capacity_per_model': queue_capacity_per_model}

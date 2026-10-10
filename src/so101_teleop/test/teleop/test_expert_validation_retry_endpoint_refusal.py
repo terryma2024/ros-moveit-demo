@@ -371,7 +371,7 @@ def test_the_retry_admission_returns_the_request_and_its_registered_context(prod
     ).state.points[POINT_ID].result_sha256
 
 
-def test_linux_retry_admission_binds_the_original_installed_v3_document(
+def test_linux_retry_admission_binds_the_original_installed_linux_cuda_document(
     production_session, monkeypatch
 ):
     """On Linux the restored request names no profile, so the v3 document *is* the retry's binding.
@@ -429,7 +429,7 @@ def test_macos_retry_admission_binds_its_installed_mps_document(
     request, context = session.service._production_retry_admission(
         CAMPAIGN_ID, POINT_ID, {"command_id": "cmd-macos-1"}
     )
-    document = session.evidence_root / "task-config/parallel_batch_v5_macos_mps_w1_retry.yaml"
+    document = session.evidence_root / "task-config/parallel_batch_macos_mps_single_worker_retry.yaml"
     assert (request.execution_profile, context.execution_profile) == (
         RETRY_PROFILE, RETRY_PROFILE,
     )

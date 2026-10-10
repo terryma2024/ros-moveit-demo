@@ -13,15 +13,15 @@ from so101_demo.parallel_batch.contracts import (
     PointStatus,
     RunMode,
     WorkerState,
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
 
 
-CONFIG = load_parallel_runtime_config_v3(
-    PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
+CONFIG = load_parallel_runtime_config_linux_cuda(
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
 )
 EXPECTED_FINAL_CUP_POSE_WORLD = (
     -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,

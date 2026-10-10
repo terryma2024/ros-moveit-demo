@@ -20,7 +20,7 @@ from teleop_paths import SOURCE_ROOT
 
 INPUTS = {
     "catalog": "config/mujoco/moveit_expert_validation_points_v1.yaml",
-    "parallel_config": "config/mujoco/parallel_batch_v3.yaml",
+    "parallel_config": "config/mujoco/parallel_batch_linux_cuda.yaml",
     "adaptive_config": "config/mujoco/parallel_adaptive_workers_v1.yaml",
     "execution_policy": "config/mujoco/headless_execution.yaml",
     "dynamic_policy": "config/policies/dynamic_cup_pick/v1/mujoco.yaml",

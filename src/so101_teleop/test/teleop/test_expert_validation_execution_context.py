@@ -37,9 +37,9 @@ from so101_teleop.expert_validation.store import SupervisorStore
 from teleop_paths import REPOSITORY
 
 REPO = REPOSITORY
-V4_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
-V5_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
-V6_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+MACOS_MPS_TWO_WORKER_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_two_worker.yaml"
+MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml"
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml"
 
 SHA_A = "a" * 64
 SHA_B = "b" * 64
@@ -374,7 +374,7 @@ def _restored_service(tmp_path, store):
     service.layout = SimpleNamespace(
         demo_prefix=(tmp_path / "install").resolve(),
         points_path=(tmp_path / "points.yaml").resolve(),
-        parallel_config_path=V4_DOCUMENT,
+        parallel_config_path=MACOS_MPS_TWO_WORKER_DOCUMENT,
         adaptive_config_path=(tmp_path / "adaptive.yaml").resolve(),
         coordinator_executable=(tmp_path / "install/so101_parallel_batch").resolve(),
         cleanup_executable=(tmp_path / "install/cleanup").resolve(),
@@ -415,7 +415,7 @@ def _persisted_campaign(tmp_path, profile_claim):
         "execution_profile": "MPS_W1_FIRST_PASS",
         "schema_version": 6,
         "batch_kind": "FIRST_PASS",
-        "execution_config_sha256": _sha256(V6_DOCUMENT),
+        "execution_config_sha256": _sha256(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT),
     }
     store.record_preflight_receipt(
         PreflightReceipt(
@@ -463,8 +463,8 @@ def test_restored_request_binds_the_receipts_own_profile_not_the_configured_docu
         request = _restored_service(tmp_path, store)._restored_request(row)
         assert request.execution_profile == "MPS_W1_FIRST_PASS"
         assert request.batch_kind == "FIRST_PASS"
-        assert request.parallel_config_path == V6_DOCUMENT
-        assert request.parallel_config_sha256 == _sha256(V6_DOCUMENT)
+        assert request.parallel_config_path == MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT
+        assert request.parallel_config_sha256 == _sha256(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT)
         assert request.worker_count == 1
         assert request.execution_mode == "SEQUENTIAL"
     finally:
@@ -482,8 +482,8 @@ def test_restored_request_keeps_the_configured_document_without_a_profile_receip
         service = _restored_service(tmp_path, store)
         request = service._restored_request(row)
         assert request.execution_profile is None
-        assert request.parallel_config_path == V4_DOCUMENT
-        assert request.parallel_config_sha256 == _sha256(V4_DOCUMENT)
+        assert request.parallel_config_path == MACOS_MPS_TWO_WORKER_DOCUMENT
+        assert request.parallel_config_sha256 == _sha256(MACOS_MPS_TWO_WORKER_DOCUMENT)
     finally:
         store.close()
 
@@ -544,7 +544,7 @@ def _issuance_service(tmp_path, *, store=None, campaigns=None):
     root = tmp_path.resolve()
     config_dir = root / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
-    for document in (V4_DOCUMENT, V5_DOCUMENT, V6_DOCUMENT):
+    for document in (MACOS_MPS_TWO_WORKER_DOCUMENT, MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT):
         shutil.copyfile(document, config_dir / document.name)
     install = root / "install"
     install.mkdir(parents=True, exist_ok=True)
@@ -555,7 +555,7 @@ def _issuance_service(tmp_path, *, store=None, campaigns=None):
     store = store or SupervisorStore.open(root / "store")
     service = ProductionExpertValidationService(
         layout=SimpleNamespace(
-            parallel_config_path=config_dir / V4_DOCUMENT.name,
+            parallel_config_path=config_dir / MACOS_MPS_TWO_WORKER_DOCUMENT.name,
             demo_prefix=install,
             points_path=root / "points.yaml",
             adaptive_config_path=root / "adaptive.yaml",
@@ -593,7 +593,7 @@ def _issue(service, config_dir, **changes):
         execution_profile="MPS_W2_FIRST_PASS",
         worker_count=2,
         batch_kind="FIRST_PASS",
-        config_document=str(config_dir / V4_DOCUMENT.name),
+        config_document=str(config_dir / MACOS_MPS_TWO_WORKER_DOCUMENT.name),
         evidence_root=str((config_dir.parent / "evidence").resolve()),
         command_id="cmd-issue-1",
         owner_generation=1,
@@ -607,8 +607,8 @@ def _issue(service, config_dir, **changes):
 @pytest.mark.parametrize(
     ("profile", "document", "schema_version", "worker_count", "batch_kind"),
     [
-        ("MPS_W2_FIRST_PASS", V4_DOCUMENT, 4, 2, "FIRST_PASS"),
-        ("MPS_W1_FIRST_PASS", V6_DOCUMENT, 6, 1, "FIRST_PASS"),
+        ("MPS_W2_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 4, 2, "FIRST_PASS"),
+        ("MPS_W1_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 6, 1, "FIRST_PASS"),
     ],
 )
 @DARWIN_ONLY
@@ -670,7 +670,7 @@ def test_a_candidate_context_is_issued_for_a_retry_of_an_existing_campaign(tmp_p
             service,
             config_dir,
             execution_profile=RETRY_PROFILE,
-            config_document=str(config_dir / V5_DOCUMENT.name),
+            config_document=str(config_dir / MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT.name),
             worker_count=RETRY_WORKER_COUNT,
             batch_kind=RETRY_BATCH_KIND,
             campaign_id="campaign-1",
@@ -687,7 +687,7 @@ def test_a_candidate_context_is_issued_for_a_retry_of_an_existing_campaign(tmp_p
                 service,
                 config_dir,
                 execution_profile=RETRY_PROFILE,
-                config_document=str(config_dir / V5_DOCUMENT.name),
+                config_document=str(config_dir / MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT.name),
                 worker_count=RETRY_WORKER_COUNT,
                 batch_kind=RETRY_BATCH_KIND,
                 campaign_id="campaign-nobody",
@@ -715,11 +715,11 @@ def test_a_replayed_issuance_or_a_reused_command_id_is_refused(tmp_path):
 @pytest.mark.parametrize(
     ("profile", "document", "worker_count", "batch_kind", "code"),
     [
-        ("MPS_W2_FIRST_PASS", V4_DOCUMENT, 1, "FIRST_PASS", "CONTEXT_PROFILE_INVALID"),
-        ("MPS_W1_FIRST_PASS", V6_DOCUMENT, 1, "FULL_RESTART_RETRY", "CONTEXT_PROFILE_INVALID"),
-        ("MPS_W1_FULL_RESTART_RETRY", V5_DOCUMENT, 2, "FULL_RESTART_RETRY",
+        ("MPS_W2_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 1, "FIRST_PASS", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_W1_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 1, "FULL_RESTART_RETRY", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_W1_FULL_RESTART_RETRY", MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, 2, "FULL_RESTART_RETRY",
          "CONTEXT_PROFILE_INVALID"),
-        ("MPS_W8_FAST", V4_DOCUMENT, 8, "FIRST_PASS", "UNSUPPORTED_ON_MACOS"),
+        ("MPS_W8_FAST", MACOS_MPS_TWO_WORKER_DOCUMENT, 8, "FIRST_PASS", "UNSUPPORTED_ON_MACOS"),
     ],
 )
 @DARWIN_ONLY
@@ -754,16 +754,16 @@ def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_pat
                 service,
                 config_dir,
                 execution_profile="MPS_W1_FIRST_PASS",
-                config_document=str(config_dir / V4_DOCUMENT.name),
+                config_document=str(config_dir / MACOS_MPS_TWO_WORKER_DOCUMENT.name),
                 worker_count=1,
             )
-        (config_dir / V6_DOCUMENT.name).unlink()
+        (config_dir / MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT.name).unlink()
         with pytest.raises(Exception, match="EXECUTION_DOCUMENT_MISSING"):
             _issue(
                 service,
                 config_dir,
                 execution_profile="MPS_W1_FIRST_PASS",
-                config_document=str(config_dir / V6_DOCUMENT.name),
+                config_document=str(config_dir / MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT.name),
                 worker_count=1,
                 command_id="cmd-issue-missing",
             )

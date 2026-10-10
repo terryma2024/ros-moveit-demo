@@ -63,13 +63,13 @@ mkdir -p "$window_root"
 case "$case_name" in
   w2) case_id="macos-w2-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"
       target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
-      profile_document="parallel_batch_v4_macos_mps_w2.yaml" ;;
+      profile_document="parallel_batch_macos_mps_two_worker.yaml" ;;
   w1) case_id="macos-w1-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"
       target_spec="expert-validation/live-sim/06-fixed-n-execution.spec.ts"; target_marker="R06 "
-      profile_document="parallel_batch_v6_macos_mps_w1_first_pass.yaml" ;;
+      profile_document="parallel_batch_macos_mps_single_worker_first_pass.yaml" ;;
   retry) case_id="macos-w1-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"
       target_spec="expert-validation/live-sim/07-retry-full-restart.spec.ts"; target_marker="R07 "
-      profile_document="parallel_batch_v5_macos_mps_w1_retry.yaml" ;;
+      profile_document="parallel_batch_macos_mps_single_worker_retry.yaml" ;;
 esac
 
 functional_manifest="$window_root/functional-manifest.json"

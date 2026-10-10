@@ -397,8 +397,8 @@ def test_grounded_oom_has_infrastructure_type():
 
 def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService, GROUNDED_ID
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_v3
-    config = load_parallel_runtime_config_v3(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     service = PerceptionService(f.runtime, config, generation=3)
     # run_next is the synchronous service seam; do not start competing executor threads.
@@ -420,7 +420,7 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
     from so101_demo.parallel_batch.broker import ModelResult
     from so101_demo.parallel_batch.contracts import (
         ModelOutcome,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
         GROUNDED_ID,
@@ -466,8 +466,8 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
             self.healthy = False
             self.health_changed(False)
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml'
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml'
     )
     runtime = Runtime()
     service = PerceptionService(runtime, config, generation=1)
@@ -515,7 +515,7 @@ def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeyp
     from so101_demo.parallel_batch.broker import ModelResult
     from so101_demo.parallel_batch.contracts import (
         ModelOutcome,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
         GROUNDED_ID,
@@ -550,8 +550,8 @@ def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeyp
             self.healthy = False
             self.health_changed(False)
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml'
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml'
     )
     runtime = Runtime()
     service = PerceptionService(
@@ -582,7 +582,7 @@ def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
     from so101_demo.parallel_batch.broker import ModelResult
     from so101_demo.parallel_batch.contracts import (
         ModelOutcome,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
         GROUNDED_ID,
@@ -620,8 +620,8 @@ def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
             self.healthy = False
             self.health_changed(False)
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml'
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml'
     )
     service = PerceptionService(Runtime(), config, generation=1)
     service.start()
@@ -645,7 +645,7 @@ def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
     from so101_demo.parallel_batch.broker import ModelResult
     from so101_demo.parallel_batch.contracts import (
         ModelOutcome,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
         GROUNDED_ID,
@@ -679,8 +679,8 @@ def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
             self.healthy = False
             self.health_changed(False)
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml'
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml'
     )
     service = PerceptionService(Runtime(), config, generation=1)
     service.start()
@@ -708,10 +708,10 @@ def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
 def test_service_preserves_initiating_runtime_failure_before_health_fanout(
         tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(
         tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
     service = PerceptionService(f.runtime, config, generation=1)
@@ -729,10 +729,10 @@ def test_service_preserves_initiating_runtime_failure_before_health_fanout(
 def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
         tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
 
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.0]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
@@ -798,9 +798,9 @@ def test_yolo_nonfinite_mask_is_deterministic_output_error():
 
 def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
     from so101_demo.core.detection import DetectionBatch
-    config = load_parallel_runtime_config_v3(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
@@ -1000,9 +1000,9 @@ def test_container_entry_installs_task11_transport_from_exact_runtime_spec(
 @pytest.mark.parametrize('running', [False, True])
 def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_path, monkeypatch, running):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
     f = fixture_runtime(tmp_path, monkeypatch)
-    config = load_parallel_runtime_config_v3(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+    config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
     # This test drives dispatch synchronously; do not race the service executor.
@@ -1023,13 +1023,13 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
 def test_health_losing_response_reports_one_exact_event(
         tmp_path, monkeypatch, outcome):
     from so101_demo.parallel_batch.contracts import (
-        ModelOutcome, load_parallel_runtime_config_v3,
+        ModelOutcome, load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
 
     f = fixture_runtime(tmp_path, monkeypatch)
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml'
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml'
     )
     events = []
     service = PerceptionService(
@@ -1147,7 +1147,7 @@ def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypa
 # --------------------------------------------------------------------------------------
 
 
-def test_frozen_options_default_to_cuda_for_every_schema_v3_caller():
+def test_frozen_options_default_to_cuda_for_every_schema_linux_cuda_caller():
     """Schema v3 behaviour is unchanged: the default device is still CUDA."""
 
     from so101_demo.runtime.parallel_perception_runtime import (

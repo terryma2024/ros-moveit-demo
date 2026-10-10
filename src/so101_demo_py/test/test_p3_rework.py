@@ -28,8 +28,8 @@ from test_p3_qc_memo import episode, paths
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-ACT_FILE = PACKAGE / "config/mujoco/parallel_batch_v3_act_offline.yaml"
-ORIGINAL_FILE = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+ACT_FILE = PACKAGE / "config/mujoco/parallel_batch_act_offline.yaml"
+ORIGINAL_FILE = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 
 
 @pytest.fixture(autouse=True)
@@ -44,15 +44,15 @@ def _fresh_fake_pilots():
 # ---- 1. the Teacher's bound is separate from the stage bound ---------------------------------------------------------------------
 
 def test_the_act_config_raises_the_stage_and_lease_bounds_and_the_teacher_bound_stays_at_the_frozen_value():
-    act = contracts.load_parallel_runtime_config_v3(ACT_FILE)
-    original = contracts.load_parallel_runtime_config_v3(ORIGINAL_FILE)
+    act = contracts.load_parallel_runtime_config_linux_cuda(ACT_FILE)
+    original = contracts.load_parallel_runtime_config_linux_cuda(ORIGINAL_FILE)
     assert (act.executing_hard_timeout_s, act.lease_duration_s) == (1500.0, 1500.0)
     assert contracts.TEACHER_EXECUTION_BOUND_S == 240.0
     assert teacher_execution_bound_s(act) == 240.0, "the stage bound is 1500 s; the Teacher's bound is not"
     assert teacher_execution_bound_s(original) == 240.0
     differing = {name for name in act.__slots__ if getattr(act, name) != getattr(original, name)}
     assert differing == {"executing_hard_timeout_s", "lease_duration_s"}
-    assert "teacher_execution_timeout_s" not in {item.name for item in contracts.fields(contracts.ParallelRuntimeConfigV3)}
+    assert "teacher_execution_timeout_s" not in {item.name for item in contracts.fields(contracts.ParallelRuntimeConfigLinuxCuda)}
 
 
 def test_the_teacher_bound_helper_never_exceeds_the_frozen_value_and_honours_a_smaller_one():
@@ -67,15 +67,15 @@ def test_the_stage_and_lease_floors_still_refuse_a_value_below_the_original(tmp_
         broken = tmp_path / f"{field}.yaml"
         broken.write_text(ACT_FILE.read_text().replace(f"{field}: 1500.0", f"{field}: {bad}"))
         with pytest.raises(contracts.ContractError, match="FROZEN_RUNTIME_VALUE"):
-            contracts.load_parallel_runtime_config_v3(broken)
+            contracts.load_parallel_runtime_config_linux_cuda(broken)
 
 
 def test_versions_four_to_six_keep_every_pin_exactly():
-    for pins in (contracts.FROZEN_RUNTIME_VALUES_V4, contracts.FROZEN_RUNTIME_VALUES_V5, contracts.FROZEN_RUNTIME_VALUES_V6):
+    for pins in (contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER, contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY, contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS):
         assert pins["executing_hard_timeout_s"] == 240.0 and pins["lease_duration_s"] == 300.0
-    assert contracts._FROZEN_RUNTIME_VALUES_V3["executing_hard_timeout_s"] == 240.0
+    assert contracts._FROZEN_RUNTIME_VALUES_LINUX_CUDA["executing_hard_timeout_s"] == 240.0
     # the v3 closed field list is exactly the dataclass (the v4 work froze that surface) and the v4 list is untouched by this change
-    assert set(contracts.EXECUTION_V3_FIELDS) == {item.name for item in contracts.fields(contracts.ParallelRuntimeConfigV3)} - {
+    assert set(contracts.EXECUTION_LINUX_CUDA_FIELDS) == {item.name for item in contracts.fields(contracts.ParallelRuntimeConfigLinuxCuda)} - {
         "schema_version", "start_guard"}
 
 
@@ -92,7 +92,7 @@ def test_a_teacher_that_runs_past_240_s_is_still_waited_for_only_240_s_under_the
     monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
     monkeypatch.setattr(os, "waitpid", lambda pid, options: (waitpid_calls.append((pid, options)) or (0, 0)))
     ports = ParallelRosRuntimePorts(SimpleNamespace(worker_root=tmp_path, session_id="session-1"), catalog={},
-                                    config=contracts.load_parallel_runtime_config_v3(ACT_FILE))
+                                    config=contracts.load_parallel_runtime_config_linux_cuda(ACT_FILE))
     receipt = ports.execute_result(_lease(), SimpleNamespace(reset_epoch="reset-17"), SimpleNamespace(pid=417))
     assert receipt.decision.status is AttemptStatus.INDETERMINATE
     assert waitpid_calls == [(417, os.WNOHANG), (417, os.WNOHANG)], "it gave up at 340 s, not at 1600 s"
@@ -111,7 +111,7 @@ def test_the_workers_teacher_deadline_guard_still_fires_at_240_s_under_the_act_c
     from test_parallel_batch_worker import _expert_blocked_with_a_lost_coordinator, _wait_for_watchdog_fault
     from test_parallel_batch_worker import Fake
 
-    act = contracts.load_parallel_runtime_config_v3(ACT_FILE)
+    act = contracts.load_parallel_runtime_config_linux_cuda(ACT_FILE)
     real_ports = Fake.ports
     monkeypatch.setattr(Fake, "ports", lambda self: {**real_ports(self), "config": act})
     fake = Fake(RunMode.EXECUTE)

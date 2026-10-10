@@ -17,7 +17,7 @@ from so101_demo.parallel_batch import history
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-LINUX_CUDA_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 
 RETIRED_MODULES = (
     "so101_demo.parallel_batch.resource_budget",
@@ -125,6 +125,6 @@ def test_history_and_contracts_agree_on_the_active_version():
     from so101_demo.parallel_batch import contracts
 
     view = history.load_history(LINUX_CUDA_CONFIG)
-    config = contracts.load_parallel_runtime_config_v3(LINUX_CUDA_CONFIG)
+    config = contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)
     assert view["schema_version"] == config.schema_version == 3
     assert view["kind"] == "LINUX_CUDA"

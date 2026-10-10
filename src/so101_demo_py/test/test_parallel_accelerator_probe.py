@@ -278,7 +278,7 @@ def test_mps_evaluation_requires_a_configured_floor():
         probe_module.evaluate_accelerator_snapshot(healthy, policy)
 
 
-def test_v3_snapshot_path_is_not_offered_the_mps_figure():
+def test_linux_cuda_snapshot_path_is_not_offered_the_mps_figure():
     """The unified-memory proxy must not be usable as a v3 `gpu_free_bytes`."""
 
     from so101_demo.parallel_batch import start_guard as guard_module
@@ -298,7 +298,7 @@ def test_v3_snapshot_path_is_not_offered_the_mps_figure():
                                            worker_count=2))
 
 
-def test_v3_cuda_probe_selection_is_unchanged():
+def test_linux_cuda_probe_selection_is_unchanged():
     """Selecting the probe by platform keeps the v3 NVML path exactly where it was."""
 
     assert probe_module.select_accelerator_probe("cuda") is None or callable(

@@ -12,15 +12,15 @@ from so101_demo.parallel_batch.contracts import (
     InferenceRequest,
     ModelOutcome,
     RunMode,
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
 
 
-CONFIG = load_parallel_runtime_config_v3(
-    PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
+CONFIG = load_parallel_runtime_config_linux_cuda(
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
 )
 YOLO = CONFIG.yolo_model_id
 GROUNDED = "grounded-sam"

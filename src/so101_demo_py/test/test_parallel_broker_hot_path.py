@@ -12,10 +12,10 @@ MODEL_VERSION = "f" * 64
 
 
 def _config():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
-    return load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
+    return load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
     )
 
 

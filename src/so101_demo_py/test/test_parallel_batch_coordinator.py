@@ -12,7 +12,7 @@ import pytest
 
 from so101_demo.parallel_batch.contracts import (
     BatchKind, BatchRequest, RunMode, ValidationStatus, WorkerState,
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
@@ -77,8 +77,8 @@ def make(tmp_path):
             request = BatchRequest('batch-a', mode, points, workers, root,
                                      BatchKind.FIRST_PASS)
         clock, results = (Clock() if clock_port is None else clock_port), Results()
-        config = load_parallel_runtime_config_v3(
-            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
+        config = load_parallel_runtime_config_linux_cuda(
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
         selector_args = (
             {} if point_selector is None else {'point_selector': point_selector}
         )
@@ -1155,7 +1155,7 @@ def test_batch_started_document_excludes_the_start_guard(make):
 # --------------------------------------------------------------------------------------
 
 
-def test_coordinator_without_a_registry_keeps_its_exact_v3_behaviour(make):
+def test_coordinator_without_a_registry_keeps_its_exact_linux_cuda_behaviour(make):
     """A v1/v2/v3 Coordinator has no registry, and admitting through one is an error."""
 
     c, _, _, _, _ = make()

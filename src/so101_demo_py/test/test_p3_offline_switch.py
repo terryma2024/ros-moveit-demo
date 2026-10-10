@@ -73,8 +73,8 @@ def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_pro
     from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
 
     package = PACKAGE_ROOT
-    act = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_v3_act_offline.yaml")
-    original = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_v3.yaml")
+    act = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_act_offline.yaml")
+    original = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_linux_cuda.yaml")
     assert act.executing_hard_timeout_s == act.lease_duration_s == 1500.0
     assert (original.executing_hard_timeout_s, original.lease_duration_s) == (240.0, 300.0)
     # everything else is the frozen v3 content
@@ -87,14 +87,14 @@ def test_below_the_original_floor_a_version_three_config_is_refused_and_other_ve
     from so101_demo.parallel_batch import contracts
 
     package = PACKAGE_ROOT
-    text = (package / "config/mujoco/parallel_batch_v3_act_offline.yaml").read_text()
+    text = (package / "config/mujoco/parallel_batch_act_offline.yaml").read_text()
     for field, bad in (("executing_hard_timeout_s", "239.0"), ("lease_duration_s", "299.0")):
         broken = tmp_path / f"{field}.yaml"
         broken.write_text(text.replace(f"{field}: 1500.0", f"{field}: {bad}"))
         with pytest.raises(contracts.ContractError, match="FROZEN_RUNTIME_VALUE"):
-            contracts.load_parallel_runtime_config_v3(broken)
-    assert contracts.FROZEN_RUNTIME_VALUES_V4["executing_hard_timeout_s"] == 240.0
-    assert contracts.FROZEN_RUNTIME_VALUES_V4["lease_duration_s"] == 300.0
+            contracts.load_parallel_runtime_config_linux_cuda(broken)
+    assert contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["executing_hard_timeout_s"] == 240.0
+    assert contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["lease_duration_s"] == 300.0
 
 
 def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspector_reads_that_file():
@@ -107,9 +107,9 @@ def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspec
     package = PACKAGE_ROOT
     document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_bytes())
     runtime = package / document["parallel_runtime"]["path"]
-    assert runtime.name == "parallel_batch_v3_act_offline.yaml"
+    assert runtime.name == "parallel_batch_act_offline.yaml"
     assert document["parallel_runtime"]["sha256"] == hashlib.sha256(runtime.read_bytes()).hexdigest()
-    assert first_episode_inputs.RUNTIME_CONFIG_FILE.endswith("config/mujoco/parallel_batch_v3_act_offline.yaml")
+    assert first_episode_inputs.RUNTIME_CONFIG_FILE.endswith("config/mujoco/parallel_batch_act_offline.yaml")
 
 
 # ---- the bag fault helper, on a real bag -------------------------------------------------------------------------------------

@@ -30,7 +30,7 @@ from so101_demo.parallel_batch.w2_composition import (
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
+MACOS_MPS_TWO_WORKER_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_two_worker.yaml"
 
 BROKER_PID = 7001
 BROKER_BIRTH = 8001
@@ -47,7 +47,7 @@ def _catalog(tmp_path) -> Path:
 
 def _plan(tmp_path):
     return compose_w2_campaign(
-        config=load_execution_config(V4_CONFIG), config_path=V4_CONFIG,
+        config=load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG), config_path=MACOS_MPS_TWO_WORKER_CONFIG,
         campaign_id="b-composed", batch_id="batch-composed",
         selected_point_ids=("p1", "p2"), evidence_root=tmp_path,
         broker_pid=BROKER_PID, broker_birth_identity=BROKER_BIRTH)
@@ -749,15 +749,15 @@ def test_campaign_journal_publishes_committed_watermarks(tmp_path):
 # cross-profile reuse.
 # --------------------------------------------------------------------------------------
 
-V5_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
-V6_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml"
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml"
 
 ROUTES = (
-    (V4_CONFIG, 2, "MPS_W2_FIRST_PASS", "FIRST_PASS",
+    (MACOS_MPS_TWO_WORKER_CONFIG, 2, "MPS_W2_FIRST_PASS", "FIRST_PASS",
      "so101_demo.cli.macos_w2_campaign"),
-    (V5_CONFIG, 1, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
+    (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
      "so101_demo.cli.macos_n1_retry"),
-    (V6_CONFIG, 1, "MPS_W1_FIRST_PASS", "FIRST_PASS",
+    (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, "MPS_W1_FIRST_PASS", "FIRST_PASS",
      "so101_demo.cli.macos_n1_first_pass"),
 )
 
@@ -822,10 +822,10 @@ def test_the_service_adapter_refuses_a_key_outside_the_table(tmp_path):
 
     environment = _service_environment(tmp_path)
     for config_path, worker_count, reason in (
-        (V4_CONFIG, 1, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
-        (V4_CONFIG, 4, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
-        (V5_CONFIG, 2, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
-        (V6_CONFIG, 8, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (MACOS_MPS_TWO_WORKER_CONFIG, 1, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (MACOS_MPS_TWO_WORKER_CONFIG, 4, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 2, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 8, "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
     ):
         adapter, argv = _service_argv(tmp_path / f"{config_path.stem}-{worker_count}",
                                       config_path=config_path, worker_count=worker_count)
@@ -850,14 +850,14 @@ def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disag
     )
 
     for config_path, worker_count, overrides, reason in (
-        (V5_CONFIG, 1, {BATCH_KIND_VARIABLE: "FIRST_PASS"}, "PROFILE_BATCH_KIND_MISMATCH"),
-        (V6_CONFIG, 1, {BATCH_KIND_VARIABLE: "FULL_RESTART_RETRY"},
+        (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, {BATCH_KIND_VARIABLE: "FIRST_PASS"}, "PROFILE_BATCH_KIND_MISMATCH"),
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, {BATCH_KIND_VARIABLE: "FULL_RESTART_RETRY"},
          "PROFILE_BATCH_KIND_MISMATCH"),
-        (V6_CONFIG, 1, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FULL_RESTART_RETRY"},
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FULL_RESTART_RETRY"},
          "PROFILE_SCHEMA_MISMATCH"),
-        (V4_CONFIG, 2, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FIRST_PASS"},
+        (MACOS_MPS_TWO_WORKER_CONFIG, 2, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FIRST_PASS"},
          "PROFILE_SCHEMA_MISMATCH"),
-        (V4_CONFIG, 2, {BATCH_KIND_VARIABLE: "ADAPTIVE_POOL"}, "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+        (MACOS_MPS_TWO_WORKER_CONFIG, 2, {BATCH_KIND_VARIABLE: "ADAPTIVE_POOL"}, "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
     ):
         adapter, argv = _service_argv(tmp_path / f"{config_path.stem}-{len(overrides)}",
                                       config_path=config_path, worker_count=worker_count)
@@ -871,7 +871,7 @@ def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disag
 def test_the_service_adapter_has_no_generic_batch_kind_or_profile_flag(tmp_path):
     """The dispatch key cannot be overridden from the command line."""
 
-    adapter, _ = _service_argv(tmp_path, config_path=V4_CONFIG, worker_count=2)
+    adapter, _ = _service_argv(tmp_path, config_path=MACOS_MPS_TWO_WORKER_CONFIG, worker_count=2)
     accepted = {option for action in adapter.build_parser()._actions
                 for option in action.option_strings}
 
@@ -882,13 +882,13 @@ def test_the_service_adapter_has_no_generic_batch_kind_or_profile_flag(tmp_path)
             adapter.build_parser().parse_args([flag, "FIRST_PASS"])
 
 
-def test_the_service_adapter_refuses_a_v3_document_and_a_missing_w1_config(tmp_path):
+def test_the_service_adapter_refuses_a_linux_cuda_document_and_a_missing_single_worker_config(tmp_path):
     """v3 is still not executable on this platform, and the W1 routes need their documents."""
 
     from so101_demo.cli.macos_service_campaign import ServiceCampaignError
 
     environment = _service_environment(tmp_path)
-    adapter, argv = _service_argv(tmp_path / "v3", config_path=PACKAGE / "config/mujoco/parallel_batch_v3.yaml",
+    adapter, argv = _service_argv(tmp_path / "v3", config_path=PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml",
                                   worker_count=2)
     with pytest.raises(ServiceCampaignError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
         adapter.validate(
@@ -907,16 +907,16 @@ def test_the_service_adapter_forwards_an_admitted_retry_binding_and_nothing_else
 
     import sys
 
-    adapter, _ = _service_argv(tmp_path / "first-pass", config_path=V4_CONFIG, worker_count=2)
+    adapter, _ = _service_argv(tmp_path / "first-pass", config_path=MACOS_MPS_TWO_WORKER_CONFIG, worker_count=2)
     first_pass = adapter.build_parser().parse_args(
-        [*_retry_argv_prefix(tmp_path / "first-pass", V4_CONFIG, worker_count=2),
+        [*_retry_argv_prefix(tmp_path / "first-pass", MACOS_MPS_TWO_WORKER_CONFIG, worker_count=2),
          "--point-id", "p1"])
     baseline = adapter.campaign_argv(first_pass, campaign_id="campaign-a")
 
     # A first-pass argv is byte-identical to what the adapter built before the retry flags existed.
     assert baseline == [
         sys.executable, "-m", adapter.CAMPAIGN_MODULE,
-        "--config", str(V4_CONFIG), "--campaign-id", "campaign-a", "--batch-id", "b001",
+        "--config", str(MACOS_MPS_TWO_WORKER_CONFIG), "--campaign-id", "campaign-a", "--batch-id", "b001",
         "--evidence-root", str(Path(tmp_path / "first-pass") / "batch"),
         "--yolo-weights", str(Path(tmp_path / "first-pass") / "yolo.pt"),
         "--grounded-root", str(Path(tmp_path / "first-pass") / "grounded"),
@@ -925,7 +925,7 @@ def test_the_service_adapter_forwards_an_admitted_retry_binding_and_nothing_else
     assert not {flag for flag in baseline if flag.startswith("--original")}
 
     retry_arguments = adapter.build_parser().parse_args([
-        *_retry_argv_prefix(tmp_path / "retry", V5_CONFIG, worker_count=1),
+        *_retry_argv_prefix(tmp_path / "retry", MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, worker_count=1),
         "--point-id", "cup_test_forward_5cm",
         "--original-selection-sha256", "a" * 64,
         "--original-result-sha256", "b" * 64,
@@ -955,9 +955,9 @@ def test_the_service_adapter_refuses_a_half_named_retry_binding(tmp_path):
 
     from so101_demo.cli.macos_service_campaign import ServiceCampaignError
 
-    adapter, _ = _service_argv(tmp_path / "half", config_path=V5_CONFIG, worker_count=1)
+    adapter, _ = _service_argv(tmp_path / "half", config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, worker_count=1)
     half = adapter.build_parser().parse_args([
-        *_retry_argv_prefix(tmp_path / "half", V5_CONFIG, worker_count=1),
+        *_retry_argv_prefix(tmp_path / "half", MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, worker_count=1),
         "--point-id", "cup_test_forward_5cm",
         "--original-selection-sha256", "a" * 64])
     with pytest.raises(ServiceCampaignError, match="RETRY_ROOT_REQUIRED"):
@@ -972,7 +972,7 @@ def test_the_service_adapter_refuses_a_half_named_retry_binding(tmp_path):
         (["--original-batch-id", "hunt17-b001"], "RETRY_BINDING_UNSUPPORTED"),
     ):
         arguments = adapter.build_parser().parse_args([
-            *_retry_argv_prefix(tmp_path / "wrong-route", V4_CONFIG, worker_count=2),
+            *_retry_argv_prefix(tmp_path / "wrong-route", MACOS_MPS_TWO_WORKER_CONFIG, worker_count=2),
             "--point-id", "p1", *extra])
         with pytest.raises(ServiceCampaignError, match=reason):
             adapter.validate(
@@ -1034,7 +1034,7 @@ def test_the_adapter_runs_the_fresh_guard_before_it_creates_the_campaign_child(
                                                   1, 1 << 30, "bytes")},
             snapshot=None, cleanup_state="CLEAR")
 
-    adapter, argv = _service_argv(tmp_path, config_path=V6_CONFIG, worker_count=1)
+    adapter, argv = _service_argv(tmp_path, config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, worker_count=1)
     code = adapter.main(argv, guard=refusing_guard, environment=_service_environment(tmp_path))
 
     assert code != 0
@@ -1067,7 +1067,7 @@ def test_the_adapter_guard_is_only_asked_once_per_campaign(tmp_path, monkeypatch
             checks={"probe": GuardCheck(FAIL, "RAM_BELOW_MINIMUM", 1, 1 << 30, "bytes")},
             snapshot=None, cleanup_state="CLEAR")
 
-    adapter, argv = _service_argv(tmp_path, config_path=V5_CONFIG, worker_count=1)
+    adapter, argv = _service_argv(tmp_path, config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, worker_count=1)
     adapter.main(argv, guard=refusing_guard, environment=_service_environment(tmp_path))
     assert calls == [1]
 
@@ -1078,7 +1078,7 @@ def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
     from so101_demo.parallel_batch.w1_composition import compose_w1_retry
 
     plan = compose_w1_retry(
-        config=load_execution_config(V5_CONFIG), config_path=V5_CONFIG, campaign_id="b-w1",
+        config=load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, campaign_id="b-w1",
         batch_id="batch-w1", selected_point_ids=("p1",), evidence_root=tmp_path)
     supervisor = CampaignSupervisor("b-w1", state_root=tmp_path / "supervisor")
     campaign = MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,

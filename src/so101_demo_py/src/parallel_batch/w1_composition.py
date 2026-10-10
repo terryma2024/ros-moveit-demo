@@ -26,10 +26,10 @@ from typing import Mapping
 from .contracts import (
     BatchKind,
     ExecutionProfile,
-    ParallelRuntimeConfigV5,
-    ParallelRuntimeConfigV6,
-    require_v5_execution,
-    require_v6_execution,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+    require_macos_mps_single_worker_retry_execution,
+    require_macos_mps_single_worker_first_pass_execution,
 )
 from .w2_composition import (
     CompositionError,
@@ -48,8 +48,8 @@ W1_RETRY_BATCH_KIND = str(BatchKind.FULL_RESTART_RETRY)
 W1_FIRST_PASS_BATCH_KIND = str(BatchKind.FIRST_PASS)
 
 #: The schema-v5/v6 document names, for the manifest's provenance fields.
-V5_CONFIG_BASENAME = "parallel_batch_v5_macos_mps_w1_retry.yaml"
-V6_CONFIG_BASENAME = "parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME = "parallel_batch_macos_mps_single_worker_retry.yaml"
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME = "parallel_batch_macos_mps_single_worker_first_pass.yaml"
 
 
 @dataclass(frozen=True)
@@ -171,9 +171,9 @@ def _compose_w1(*, config, config_path: Path, campaign_id: str, batch_id: str,
             f"{execution_profile} requires {config_basename}, not {type(config).__name__}",
         )
     if schema_version == 5:
-        require_v5_execution(5, config.schema_version)
+        require_macos_mps_single_worker_retry_execution(5, config.schema_version)
     else:
-        require_v6_execution(6, config.schema_version)
+        require_macos_mps_single_worker_first_pass_execution(6, config.schema_version)
     if not isinstance(campaign_id, str) or not campaign_id:
         raise CompositionError("CAMPAIGN_ID", repr(campaign_id))
     root = Path(evidence_root)
@@ -242,7 +242,7 @@ def compose_w1_retry(*, config, config_path: Path, campaign_id: str, batch_id: s
         config=config, config_path=config_path, campaign_id=campaign_id, batch_id=batch_id,
         selected_point_ids=selected_point_ids, evidence_root=evidence_root, schema_version=5,
         execution_profile=MPS_W1_FULL_RESTART_RETRY, batch_kind=W1_RETRY_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV5, config_basename=V5_CONFIG_BASENAME,
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, config_basename=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME,
         broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
 
 
@@ -256,7 +256,7 @@ def compose_w1_first_pass(*, config, config_path: Path, campaign_id: str, batch_
         config=config, config_path=config_path, campaign_id=campaign_id, batch_id=batch_id,
         selected_point_ids=selected_point_ids, evidence_root=evidence_root, schema_version=6,
         execution_profile=MPS_W1_FIRST_PASS, batch_kind=W1_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigV6, config_basename=V6_CONFIG_BASENAME,
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, config_basename=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME,
         broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
 
 

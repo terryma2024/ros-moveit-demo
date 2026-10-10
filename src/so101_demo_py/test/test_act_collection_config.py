@@ -11,7 +11,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 CONFIG = PACKAGE / "config/act/parallel_collection_v3.yaml"
-PUBLIC = PACKAGE / "config/mujoco/parallel_batch_v3_act_offline.yaml"
+PUBLIC = PACKAGE / "config/mujoco/parallel_batch_act_offline.yaml"
 
 
 def _package_share(tmp_path):
@@ -20,7 +20,7 @@ def _package_share(tmp_path):
     share = tmp_path / "share/so101_demo_py"
     (share / "config/mujoco").mkdir(parents=True)
     (share / "config/act").mkdir(parents=True)
-    (share / "config/mujoco/parallel_batch_v3_act_offline.yaml").write_bytes(PUBLIC.read_bytes())
+    (share / "config/mujoco/parallel_batch_act_offline.yaml").write_bytes(PUBLIC.read_bytes())
     (share / "config/act/parallel_collection_v3.yaml").write_bytes(CONFIG.read_bytes())
     return share
 
@@ -69,7 +69,7 @@ def test_loader_rejects_unresolvable_parallel_runtime(tmp_path, mutation):
     elif mutation == "symlink":
         target = tmp_path / "elsewhere.yaml"
         target.write_bytes(PUBLIC.read_bytes())
-        link = share / "config/mujoco/parallel_batch_v3_act_offline.yaml"
+        link = share / "config/mujoco/parallel_batch_act_offline.yaml"
         link.unlink()
         link.symlink_to(target)
     elif mutation == "outside_share":
@@ -107,7 +107,7 @@ def test_frozen_yaml_matches_the_approved_design():
     document = yaml.safe_load(CONFIG.read_bytes())
     assert document["schema_version"] == 1
     assert document["kind"] == "act_parallel_collection"
-    assert document["parallel_runtime"]["path"] == "config/mujoco/parallel_batch_v3_act_offline.yaml"
+    assert document["parallel_runtime"]["path"] == "config/mujoco/parallel_batch_act_offline.yaml"
     assert document["parallel_runtime"]["sha256"] == \
         hashlib.sha256(PUBLIC.read_bytes()).hexdigest()
     schema = json.loads((PACKAGE / "config/act/parallel-collection-v3-schema.json").read_text())

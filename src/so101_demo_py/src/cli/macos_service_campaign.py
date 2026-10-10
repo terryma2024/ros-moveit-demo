@@ -44,9 +44,9 @@ from so101_demo.parallel_batch.contracts import (
     BatchKind,
     ContractError,
     ExecutionProfile,
-    ParallelRuntimeConfigV4,
-    ParallelRuntimeConfigV5,
-    ParallelRuntimeConfigV6,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
     execution_route_for_schema,
     resolve_execution_route,
 )
@@ -85,9 +85,9 @@ ROUTE_MODULES = {
 
 #: The config class each admitted schema must resolve to.
 ROUTE_CONFIG_CLASSES = {
-    4: ParallelRuntimeConfigV4,
-    5: ParallelRuntimeConfigV5,
-    6: ParallelRuntimeConfigV6,
+    4: ParallelRuntimeConfigMacosMpsTwoWorker,
+    5: ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+    6: ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
 }
 
 #: Optional request declarations. The service's argv cannot carry them, so when the environment names

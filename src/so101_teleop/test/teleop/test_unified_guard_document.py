@@ -25,10 +25,10 @@ from teleop_paths import REPOSITORY
 REPO = REPOSITORY
 CONFIG_DIR = REPO / "src" / "so101_demo_py" / "config" / "mujoco"
 
-V3_DOCUMENT = CONFIG_DIR / "parallel_batch_v3.yaml"
-V4_DOCUMENT = CONFIG_DIR / "parallel_batch_v4_macos_mps_w2.yaml"
-V5_DOCUMENT = CONFIG_DIR / "parallel_batch_v5_macos_mps_w1_retry.yaml"
-V6_DOCUMENT = CONFIG_DIR / "parallel_batch_v6_macos_mps_w1_first_pass.yaml"
+LINUX_CUDA_DOCUMENT = CONFIG_DIR / "parallel_batch_linux_cuda.yaml"
+MACOS_MPS_TWO_WORKER_DOCUMENT = CONFIG_DIR / "parallel_batch_macos_mps_two_worker.yaml"
+MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT = CONFIG_DIR / "parallel_batch_macos_mps_single_worker_retry.yaml"
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT = CONFIG_DIR / "parallel_batch_macos_mps_single_worker_first_pass.yaml"
 DARWIN_ONLY = pytest.mark.skipif(
     sys.platform != "darwin", reason="the guard composes installed MPS documents on macOS"
 )
@@ -37,15 +37,15 @@ DARWIN_ONLY = pytest.mark.skipif(
 @DARWIN_ONLY
 def test_the_macos_document_composes_a_guard_its_host_can_run():
     guard = _LazyStartGuard(
-        {"SO101_VALIDATION_PARALLEL_CONFIG": str(V4_DOCUMENT)}
+        {"SO101_VALIDATION_PARALLEL_CONFIG": str(MACOS_MPS_TWO_WORKER_DOCUMENT)}
     )
     assert guard.gpu_selector == "MPS:default"
     assert guard.policy.mps_minimum_headroom_bytes == 1073741824
 
 
-def test_the_v3_document_keeps_the_nvml_guard():
+def test_the_linux_cuda_document_keeps_the_nvml_guard():
     guard = _LazyStartGuard(
-        {"SO101_VALIDATION_PARALLEL_CONFIG": str(V3_DOCUMENT)}
+        {"SO101_VALIDATION_PARALLEL_CONFIG": str(LINUX_CUDA_DOCUMENT)}
     )
     assert guard.gpu_selector.startswith("INDEX:")
     assert guard.policy.mps_minimum_headroom_bytes is None
@@ -54,9 +54,9 @@ def test_the_v3_document_keeps_the_nvml_guard():
 @pytest.mark.parametrize(
     ("document", "profile", "selector"),
     [
-        (V4_DOCUMENT, "MPS_W2_FIRST_PASS", "MPS:default"),
-        (V5_DOCUMENT, "MPS_W1_FULL_RESTART_RETRY", "MPS:default"),
-        (V6_DOCUMENT, "MPS_W1_FIRST_PASS", "MPS:default"),
+        (MACOS_MPS_TWO_WORKER_DOCUMENT, "MPS_W2_FIRST_PASS", "MPS:default"),
+        (MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, "MPS_W1_FULL_RESTART_RETRY", "MPS:default"),
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, "MPS_W1_FIRST_PASS", "MPS:default"),
     ],
 )
 @DARWIN_ONLY
@@ -78,7 +78,7 @@ def test_the_composition_is_cached_but_a_changed_document_is_not_reused(tmp_path
 
     monkeypatch.delenv("SO101_TASK_ROOT", raising=False)
     copy = tmp_path / "parallel.yaml"
-    copy.write_bytes(V4_DOCUMENT.read_bytes())
+    copy.write_bytes(MACOS_MPS_TWO_WORKER_DOCUMENT.read_bytes())
     guard = _LazyStartGuard({"SO101_VALIDATION_PARALLEL_CONFIG": str(copy)})
 
     first = guard.admission()
@@ -91,7 +91,7 @@ def test_the_composition_is_cached_but_a_changed_document_is_not_reused(tmp_path
     # The same profile with different bytes is a different composition, not a cache hit.
     changed = tmp_path / "changed.yaml"
     changed.write_bytes(
-        V4_DOCUMENT.read_bytes().replace(b"cpu_busy_warn_fraction: 0.90",
+        MACOS_MPS_TWO_WORKER_DOCUMENT.read_bytes().replace(b"cpu_busy_warn_fraction: 0.90",
                                          b"cpu_busy_warn_fraction: 0.80"))
     assert changed.read_bytes() != copy.read_bytes()
     other = _LazyStartGuard({"SO101_VALIDATION_PARALLEL_CONFIG": str(changed)}).admission()
@@ -120,7 +120,7 @@ def test_every_request_and_spawn_epoch_takes_a_fresh_probe(monkeypatch, tmp_path
             snapshot=None, cleanup_state="CLEAR")
 
     monkeypatch.setattr(ProbeCoordinator, "check", check)
-    guard = _LazyStartGuard({"SO101_VALIDATION_PARALLEL_CONFIG": str(V4_DOCUMENT)})
+    guard = _LazyStartGuard({"SO101_VALIDATION_PARALLEL_CONFIG": str(MACOS_MPS_TWO_WORKER_DOCUMENT)})
     scope = SimpleNamespace(
         batch_id="web-preflight", epoch=1, owner_pid=1, owner_starttime_ticks=1,
         gpu_selector="MPS:default", worker_count=2)

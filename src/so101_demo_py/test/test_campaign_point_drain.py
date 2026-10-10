@@ -705,17 +705,17 @@ def test_a_retry_selection_document_projects_the_original_chain(tmp_path: Path) 
 # The v5 CLI's own retry-binding contract (what the service forwards on the command line)
 # --------------------------------------------------------------------------------------
 
-V5_CONFIG = (PACKAGE_ROOT
-             / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml")
+MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG = (PACKAGE_ROOT
+             / "config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml")
 
 
 def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
                 campaign_id: str = "retry-campaign"):
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
     from so101_demo.parallel_batch.w1_composition import compose_w1_retry
 
     return compose_w1_retry(
-        config=load_parallel_runtime_config_v5(V5_CONFIG), config_path=V5_CONFIG,
+        config=load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG,
         campaign_id=campaign_id, batch_id="retry-batch",
         selected_point_ids=(point_id,), evidence_root=tmp_path)
 
@@ -723,14 +723,14 @@ def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
 def _retry_arguments(tmp_path: Path, extra=(), *, campaign_id: str = "retry-campaign"):
     cli = _cli()
     parser = cli.build_w1_parser("MPS_W1_FULL_RESTART_RETRY")
-    base = ["--config", str(V5_CONFIG), "--campaign-id", campaign_id,
+    base = ["--config", str(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), "--campaign-id", campaign_id,
             "--batch-id", "retry-batch", "--evidence-root", str(tmp_path / "retry-evidence"),
             "--yolo-weights", str(tmp_path / "yolo.pt"),
             "--grounded-root", str(tmp_path / "grounded")]
     return parser.parse_args(base + list(extra))
 
 
-def test_the_v5_cli_accepts_the_original_chain_from_its_command_line(tmp_path: Path) -> None:
+def test_the_single_worker_retry_cli_accepts_the_original_chain_from_its_command_line(tmp_path: Path) -> None:
     """The service has the original hashes, not a prior root: the retry entry must take them.
 
     The flags are the contract the service forwards: the original selection and result digests,
@@ -784,7 +784,7 @@ def test_the_v5_cli_accepts_the_original_chain_from_its_command_line(tmp_path: P
     assert projected["original_batch_id"] == prior_document["batch_id"]
 
 
-def test_the_v5_cli_refuses_a_retry_without_a_named_original_result(tmp_path: Path) -> None:
+def test_the_single_worker_retry_cli_refuses_a_retry_without_a_named_original_result(tmp_path: Path) -> None:
     """No source, a partial one, or one that disagrees with its bytes is refused by name."""
 
     cli = _cli()

@@ -446,14 +446,14 @@ def test_broker_transport_validates_locally_before_real_socket_mutation(
 
 
 def test_broker_summary_survives_runtime_start_failure(tmp_path):
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
     from so101_demo.runtime.parallel_ipc import BrokerTransport
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 
     ipc_root = tmp_path / "ipc"
     ipc_root.mkdir(mode=0o700)
-    config = load_parallel_runtime_config_v3(
-        PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
+    config = load_parallel_runtime_config_linux_cuda(
+        PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
     )
     transport = BrokerTransport(
         ipc_root=ipc_root,
@@ -1141,7 +1141,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     ipc_root.mkdir()
     config = ipc_root / "runtime-config.yaml"
     config.write_bytes(
-        (PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml").read_bytes()
+        (PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml").read_bytes()
     )
     document = {
         "schema_version": 1,

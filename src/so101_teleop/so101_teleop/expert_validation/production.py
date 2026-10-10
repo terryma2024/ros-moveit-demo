@@ -232,7 +232,7 @@ class ProductionRuntimeLayout:
         parallel = _required_file(
             environment,
             "SO101_VALIDATION_PARALLEL_CONFIG",
-            demo_share / "config/mujoco/parallel_batch_v3.yaml",
+            demo_share / "config/mujoco/parallel_batch_linux_cuda.yaml",
         )
         adaptive = _required_file(
             environment,
@@ -2060,10 +2060,10 @@ class ProductionExpertValidationService(ExpertValidationService):
             campaign_id, point_id
         )
         if sys.platform.startswith("linux") and original.execution_profile is None:
-            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
             try:
-                load_parallel_runtime_config_v3(Path(original.parallel_config_path))
+                load_parallel_runtime_config_linux_cuda(Path(original.parallel_config_path))
             except (ContractError, OSError, ValueError) as error:
                 raise ServiceConflict("RETRY_CONFIG_UNSUPPORTED") from error
             if _sha256(Path(original.parallel_config_path)) != original.parallel_config_sha256:
@@ -2248,7 +2248,7 @@ def create_production_service(
     targets the installed upstream executables.
     """
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
     environment = dict(os.environ if environment is None else environment)
     layout = ProductionRuntimeLayout.discover(environment)

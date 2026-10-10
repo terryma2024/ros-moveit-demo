@@ -605,13 +605,13 @@ def load_runtime_config_any_schema(path: Path):
         raise ContractError("CONFIG_MAPPING")
     version = document.get("schema_version")
     if version == 6:
-        return load_parallel_runtime_config_v6(Path(path))
+        return load_parallel_runtime_config_macos_mps_single_worker_first_pass(Path(path))
     if version == 5:
-        return load_parallel_runtime_config_v5(Path(path))
+        return load_parallel_runtime_config_macos_mps_single_worker_retry(Path(path))
     if version == 4:
-        return load_parallel_runtime_config_v4(Path(path))
+        return load_parallel_runtime_config_macos_mps_two_worker(Path(path))
     if version == 3:
-        return load_parallel_runtime_config_v3(Path(path))
+        return load_parallel_runtime_config_linux_cuda(Path(path))
     raise ContractError(f"SCHEMA_VERSION: {version!r}")
 
 
@@ -659,13 +659,13 @@ class BatchRequest:
 #
 # New execution uses exactly this closed document. Version 1 and version 2 stay readable for
 # history, audit and recovery only, and every new execution entry point must call
-# require_v3_execution so a legacy document can never silently carry the new semantics.
+# require_linux_cuda_execution so a legacy document can never silently carry the new semantics.
 # --------------------------------------------------------------------------------------
 
 #: The closed set of ``execution`` fields for v3. Sampling, safety and coverage are gone;
 #: the GPU selector moved next to the other device settings and the clock rules stay because
 #: they describe functional simulation timing, not a resource budget.
-EXECUTION_V3_FIELDS = frozenset({
+EXECUTION_LINUX_CUDA_FIELDS = frozenset({
     "backend", "max_worker_count", "ros_domain_ids", "heartbeat_interval_s",
     "heartbeat_timeout_s", "lease_duration_s", "lease_ack_timeout_s",
     "attempt_start_ack_timeout_s", "result_ack_timeout_s",
@@ -706,7 +706,7 @@ class GpuDeviceSelector:
 
 
 @dataclass(frozen=True, slots=True)
-class ClockRulesV3:
+class ClockRulesLinuxCuda:
     """Functional simulation-clock rules; still only used for real RTF/frame evidence."""
 
     window_s: float
@@ -733,7 +733,7 @@ class ClockRulesV3:
 
 
 @dataclass(frozen=True, slots=True)
-class ParallelRuntimeConfigV3:
+class ParallelRuntimeConfigLinuxCuda:
     schema_version: int
     backend: str
     max_worker_count: int
@@ -771,7 +771,7 @@ class ParallelRuntimeConfigV3:
     sam_mask_quality_threshold: float
     sam_min_mask_pixels: int
     sam_max_mask_area_ratio: float
-    clock: ClockRulesV3
+    clock: ClockRulesLinuxCuda
     gpu_device: GpuDeviceSelector
     start_guard: "StartGuardPolicy"
 
@@ -825,16 +825,16 @@ class ParallelRuntimeConfigV3:
             raise ContractError("REQUESTED_DEVICE")
         if not isinstance(self.allow_cpu_fallback, bool) or self.allow_cpu_fallback:
             raise ContractError("ALLOW_CPU_FALLBACK")
-        if not isinstance(self.clock, ClockRulesV3):
+        if not isinstance(self.clock, ClockRulesLinuxCuda):
             raise ContractError("CLOCK_RULES")
         if not isinstance(self.gpu_device, GpuDeviceSelector):
             raise ContractError("GPU_DEVICE_SELECTOR")
         if not isinstance(self.start_guard, StartGuardPolicy):
             raise ContractError("START_GUARD_POLICY")
-        for name, expected in _EXACT_RUNTIME_VALUES_V3.items():
+        for name, expected in _EXACT_RUNTIME_VALUES_LINUX_CUDA.items():
             if getattr(self, name) != expected:
                 raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
-        for name, floor in _MINIMUM_RUNTIME_VALUES_V3.items():
+        for name, floor in _MINIMUM_RUNTIME_VALUES_LINUX_CUDA.items():
             if getattr(self, name) < floor:
                 raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
         if len(domains) != self.max_worker_count or len(set(domains)) != len(domains):
@@ -849,7 +849,7 @@ class ParallelRuntimeConfigV3:
         return self.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
 
 
-_FROZEN_RUNTIME_VALUES_V3 = {
+_FROZEN_RUNTIME_VALUES_LINUX_CUDA = {
     "schema_version": 3,
     "backend": "mujoco",
     "max_worker_count": _FROZEN_MAX_WORKER_COUNT,
@@ -892,24 +892,24 @@ _FROZEN_RUNTIME_VALUES_V3 = {
 #: CP-3456: version three only. Two stage bounds are floors, not pins: a data pipeline with offline processing after the Teacher
 #: needs the stage and the lease to last longer than the original values (the Teacher's own execution deadline is a separate,
 #: unchanged policy). The original values stay valid. Versions four to six keep the exact pins above.
-_MINIMUM_RUNTIME_VALUES_V3 = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0}
-_EXACT_RUNTIME_VALUES_V3 = {name: value for name, value in _FROZEN_RUNTIME_VALUES_V3.items()
-                            if name not in _MINIMUM_RUNTIME_VALUES_V3}
+_MINIMUM_RUNTIME_VALUES_LINUX_CUDA = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0}
+_EXACT_RUNTIME_VALUES_LINUX_CUDA = {name: value for name, value in _FROZEN_RUNTIME_VALUES_LINUX_CUDA.items()
+                            if name not in _MINIMUM_RUNTIME_VALUES_LINUX_CUDA}
 
 START_GUARD_FIELDS = frozenset({"timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes",
                                 "ram_minimum_fraction", "gpu_minimum_bytes"})
 
 
-def parse_parallel_runtime_config_v3(document: object) -> ParallelRuntimeConfigV3:
+def parse_parallel_runtime_config_linux_cuda(document: object) -> ParallelRuntimeConfigLinuxCuda:
     """Validate a version-three document against the closed, budget-free schema."""
 
     top = _closed_mapping_fields("CONFIG", document, {"schema_version", "execution", "start_guard"})
     if type(top["schema_version"]) is not int or top["schema_version"] != 3:
         raise ContractError("SCHEMA_VERSION")
-    execution = _closed_mapping_fields("EXECUTION", top["execution"], set(EXECUTION_V3_FIELDS))
+    execution = _closed_mapping_fields("EXECUTION", top["execution"], set(EXECUTION_LINUX_CUDA_FIELDS))
     guard = _closed_mapping_fields("START_GUARD", top["start_guard"], set(START_GUARD_FIELDS))
     clock = _closed_mapping_fields(
-        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesV3)}
+        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesLinuxCuda)}
     )
     gpu_device = _closed_mapping_fields(
         "GPU_DEVICE", execution.pop("gpu_device"), {"selector_kind", "selector"}
@@ -919,19 +919,19 @@ def parse_parallel_runtime_config_v3(document: object) -> ParallelRuntimeConfigV
         selector = GpuDeviceSelector(**gpu_device)
     except ValueError as error:
         raise ContractError(f"START_GUARD_INVALID: {error}") from error
-    return ParallelRuntimeConfigV3(
+    return ParallelRuntimeConfigLinuxCuda(
         schema_version=3,
-        clock=ClockRulesV3(**clock),
+        clock=ClockRulesLinuxCuda(**clock),
         gpu_device=selector,
         start_guard=guard_policy,
         **execution,
     )
 
 
-def load_parallel_runtime_config_v3(path: Path) -> ParallelRuntimeConfigV3:
+def load_parallel_runtime_config_linux_cuda(path: Path) -> ParallelRuntimeConfigLinuxCuda:
     """Load the closed version-three YAML document; any drift or legacy key is refused."""
 
-    return parse_parallel_runtime_config_v3(_load_closed_yaml(path))
+    return parse_parallel_runtime_config_linux_cuda(_load_closed_yaml(path))
 
 
 #: CP-3457: the bound on one Teacher execution (the wait for the Teacher child, the Worker's `TEACHER_EXECUTION_DEADLINE` guard, the
@@ -947,7 +947,7 @@ def teacher_execution_bound_s(config, default: float = 180.0) -> float:
     return min(float(getattr(config, "executing_hard_timeout_s", default)), TEACHER_EXECUTION_BOUND_S)
 
 
-def require_v3_execution(request_version: int, config_version: int) -> None:
+def require_linux_cuda_execution(request_version: int, config_version: int) -> None:
     """Refuse new execution for any contract version other than the active one."""
 
     if type(request_version) is not int or type(config_version) is not int:
@@ -960,23 +960,17 @@ def require_v3_execution(request_version: int, config_version: int) -> None:
 # Version 4: the closed platform-combination contract
 #
 # Version 3 stays byte- and semantics-frozen: it is the Linux CUDA/NVML contract and is
-# still the version this repository executes on ai-station. Version 4 exists so a second
-# platform can be named explicitly instead of being inferred, and it is closed in both
-# directions: exactly two combinations are admitted, and nothing outside them parses.
+# still the version this repository executes on ai-station. Version 4 names the macOS
+# platform explicitly instead of inferring it, and it is closed: exactly one combination
+# is admitted, and nothing outside it parses.
 #
-#   Linux   : accelerator cuda + requested_device cuda + proc_fd_unix   + mujoco_gl egl
 #   macOS   : accelerator mps  + requested_device mps  + darwin_private_path_unix + cgl
-#
-# The Linux combination is retained in this contract (and covered by offline unit tests)
-# because removing it would silently narrow the product to one platform. It is not
-# executed in this task: there is no Linux environment, so it is DEFERRED_ENVIRONMENT.
 # --------------------------------------------------------------------------------------
 
 
 class AcceleratorKind(StrEnum):
     """The accelerator family a v4 document may select."""
 
-    CUDA = "cuda"
     MPS = "mps"
 
 
@@ -990,21 +984,14 @@ class IpcTransport(StrEnum):
 #: value written for ``ipc_transport`` to mean "this platform's closed default".
 IPC_TRANSPORT_AUTO = "auto"
 
-#: Exactly the two admitted (accelerator, device, transport, GL) combinations.
-V4_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
-    ("cuda", "cuda", "proc_fd_unix", "egl"),
+#: Exactly the one admitted (accelerator, device, transport, GL) combination.
+MACOS_MPS_TWO_WORKER_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("mps", "mps", "darwin_private_path_unix", "cgl"),
 )
 
-#: Per-platform default transport for ``ipc_transport: auto``. Never TCP.
-V4_AUTO_TRANSPORT_BY_PLATFORM: Mapping[str, str] = MappingProxyType({
-    "linux": "proc_fd_unix",
-    "darwin": "darwin_private_path_unix",
-})
-
 #: The only worker count this platform contract supports. W1/W4/W6/W8 are out of scope and
 #: the design forbids extrapolating any cross-N qualification from this value.
-V4_PLATFORM_WORKER_COUNT = 2
+MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT = 2
 
 #: v4 keeps the frozen functional timing, frame and model values of v3. It only replaces the
 #: platform selection, so the freeze itself is restated here instead of being duplicated.
@@ -1012,22 +999,21 @@ V4_PLATFORM_WORKER_COUNT = 2
 #: Deliberately absent, because they are platform-selected rather than globally frozen:
 #: - `ros_domain_ids` is a per-platform isolation choice (the Darwin combination uses two);
 #: - `requested_device` / `allow_cpu_fallback` belong to the platform combination;
-#: - `mps_process_memory_fraction` is the Darwin allocator cap and is refused on Linux;
+#: - `mps_process_memory_fraction` is the Darwin allocator cap;
 #: - `mujoco_gl` / `ipc_transport` follow from the combination (or from a resolved `auto`).
-#: The platform-specific pins live in FROZEN_DARWIN_VALUES_V4 / FROZEN_LINUX_VALUES_V4.
-FROZEN_RUNTIME_VALUES_V4: Mapping[str, object] = MappingProxyType({
+#: The platform-specific pins live in FROZEN_DARWIN_VALUES_MACOS_MPS_TWO_WORKER.
+FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER: Mapping[str, object] = MappingProxyType({
     **{
         name: value
-        for name, value in _FROZEN_RUNTIME_VALUES_V3.items()
+        for name, value in _FROZEN_RUNTIME_VALUES_LINUX_CUDA.items()
         if name not in {"schema_version", "requested_device", "gpu_device", "ros_domain_ids"}
     },
     "schema_version": 4,
-    "worker_count": V4_PLATFORM_WORKER_COUNT,
+    "worker_count": MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT,
 })
 
-#: The values the Darwin combination adds on top of the shared freeze. Validated on the
-#: Darwin path only, so a Linux v4 document is free to leave them absent.
-FROZEN_DARWIN_VALUES_V4: Mapping[str, object] = MappingProxyType({
+#: The values the Darwin combination adds on top of the shared freeze.
+FROZEN_DARWIN_VALUES_MACOS_MPS_TWO_WORKER: Mapping[str, object] = MappingProxyType({
     "requested_device": "mps",
     "accelerator_kind": "mps",
     "accelerator_selector": "default",
@@ -1037,28 +1023,18 @@ FROZEN_DARWIN_VALUES_V4: Mapping[str, object] = MappingProxyType({
     "ipc_transport": "darwin_private_path_unix",
 })
 
-#: The values the Linux combination pins. Not executed in this task: DEFERRED_ENVIRONMENT.
-FROZEN_LINUX_VALUES_V4: Mapping[str, object] = MappingProxyType({
-    "requested_device": "cuda",
-    "accelerator_kind": "cuda",
-    "allow_cpu_fallback": False,
-    "mps_process_memory_fraction": None,
-    "mujoco_gl": "egl",
-    "ipc_transport": "proc_fd_unix",
-})
-
 ACCELERATOR_FIELDS = frozenset({"kind", "selector"})
-START_GUARD_V4_FIELDS = frozenset(set(START_GUARD_FIELDS) | {"mps_minimum_headroom_bytes"})
+START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS = frozenset(set(START_GUARD_FIELDS) | {"mps_minimum_headroom_bytes"})
 
 #: Everything the v4 ``execution`` section may carry: the v3 functional fields minus the
 #: platform-specific device/GPU selection, which moved to the top-level ``accelerator`` block.
 #: ``requested_device`` and ``allow_cpu_fallback`` moved to the top level as well: in v4 they
 #: describe the selected platform combination, not a per-run execution knob.
-EXECUTION_V4_FIELDS = frozenset(
-    set(EXECUTION_V3_FIELDS) - {"requested_device", "allow_cpu_fallback", "gpu_device"}
+EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS = frozenset(
+    set(EXECUTION_LINUX_CUDA_FIELDS) - {"requested_device", "allow_cpu_fallback", "gpu_device"}
 )
 
-V4_CONFIG_FIELDS = frozenset({
+MACOS_MPS_TWO_WORKER_CONFIG_FIELDS = frozenset({
     "schema_version", "execution", "start_guard", "accelerator", "requested_device",
     "allow_cpu_fallback", "worker_count", "ipc_transport", "mujoco_gl",
     "mps_process_memory_fraction", "max_input_snapshot_bytes",
@@ -1092,7 +1068,7 @@ def _require_positive_bytes(name: str, value: object) -> int:
 
 
 @dataclass(frozen=True, slots=True)
-class AcceleratorSelectionV4:
+class AcceleratorSelectionMacosMpsTwoWorker:
     """The explicit accelerator choice. There is no implicit host index and no CPU device."""
 
     kind: AcceleratorKind
@@ -1106,41 +1082,20 @@ class AcceleratorSelectionV4:
         object.__setattr__(self, "kind", kind)
         if not isinstance(self.selector, str) or not self.selector:
             raise ContractError("ACCELERATOR_SELECTOR")
-        if kind is AcceleratorKind.MPS:
-            # One Apple GPU: the only valid MPS selector is the explicit default.
-            if self.selector != "default":
-                raise ContractError("ACCELERATOR_SELECTOR")
-        else:
-            GpuDeviceSelector(*_split_selector(self.selector))
+        # One Apple GPU: the only valid MPS selector is the explicit default.
+        if self.selector != "default":
+            raise ContractError("ACCELERATOR_SELECTOR")
 
     @property
     def resolved_selector(self) -> str:
         """The selector as the manifest records it, always explicit."""
 
-        if self.kind is AcceleratorKind.MPS:
-            return "default"
-        return self.selector
-
-
-def _split_selector(selector: str) -> tuple[str, str]:
-    if not isinstance(selector, str):
-        raise ContractError("ACCELERATOR_SELECTOR")
-    if selector == "default":
-        raise ContractError("ACCELERATOR_SELECTOR")
-    if selector.startswith("GPU-"):
-        return "UUID", selector
-    if ":" in selector:
-        kind, _, body = selector.partition(":")
-        if kind in _GPU_SELECTOR_KINDS:
-            return kind, body
-    if selector.isdigit():
-        return "INDEX", selector
-    raise ContractError("ACCELERATOR_SELECTOR")
+        return "default"
 
 
 @dataclass(frozen=True, slots=True)
-class ParallelRuntimeConfigV4:
-    """The closed version-four document: exact W2 on one of two named platform combinations."""
+class ParallelRuntimeConfigMacosMpsTwoWorker:
+    """The closed version-four document: exact W2 on the named macOS platform combination."""
 
     schema_version: int
     backend: str
@@ -1178,9 +1133,9 @@ class ParallelRuntimeConfigV4:
     sam_mask_quality_threshold: float
     sam_min_mask_pixels: int
     sam_max_mask_area_ratio: float
-    clock: ClockRulesV3
+    clock: ClockRulesLinuxCuda
     start_guard: "StartGuardPolicy"
-    accelerator: AcceleratorSelectionV4
+    accelerator: AcceleratorSelectionMacosMpsTwoWorker
     requested_device: str
     worker_count: int
     ipc_transport: IpcTransport
@@ -1198,7 +1153,7 @@ class ParallelRuntimeConfigV4:
             raise ContractError("SCHEMA_VERSION")
         if self.backend != "mujoco":
             raise ContractError("BACKEND")
-        if not isinstance(self.accelerator, AcceleratorSelectionV4):
+        if not isinstance(self.accelerator, AcceleratorSelectionMacosMpsTwoWorker):
             raise ContractError("ACCELERATOR_SELECTION")
         try:
             transport = IpcTransport(self.ipc_transport)
@@ -1209,11 +1164,11 @@ class ParallelRuntimeConfigV4:
         combination = (
             str(self.accelerator.kind), self.requested_device, str(transport), self.mujoco_gl,
         )
-        if combination not in V4_PLATFORM_COMBINATIONS:
+        if combination not in MACOS_MPS_TWO_WORKER_PLATFORM_COMBINATIONS:
             raise ContractError("PLATFORM_COMBINATION_UNSUPPORTED")
 
         # Exact W2. Any other count is a different platform claim this contract does not make.
-        if isinstance(self.worker_count, bool) or self.worker_count != V4_PLATFORM_WORKER_COUNT:
+        if isinstance(self.worker_count, bool) or self.worker_count != MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT:
             raise ContractError("PLATFORM_WORKER_COUNT_UNSUPPORTED")
 
         if not isinstance(self.allow_cpu_fallback, bool) or self.allow_cpu_fallback:
@@ -1251,34 +1206,23 @@ class ParallelRuntimeConfigV4:
         ):
             object.__setattr__(self, name, _require_probability(name, getattr(self, name)))
         object.__setattr__(self, "yolo_model_id", _require_id("yolo_model_id", self.yolo_model_id))
-        if not isinstance(self.clock, ClockRulesV3):
+        if not isinstance(self.clock, ClockRulesLinuxCuda):
             raise ContractError("CLOCK_RULES")
         if not isinstance(self.start_guard, StartGuardPolicy):
             raise ContractError("START_GUARD_POLICY")
 
-        if transport is IpcTransport.DARWIN_PRIVATE_PATH_UNIX:
-            # The allocator cap is set before any MPS allocation, so it must be a real
-            # fraction on the Darwin combination and absent everywhere else.
-            object.__setattr__(
-                self, "mps_process_memory_fraction",
-                _require_fraction("MPS_PROCESS_MEMORY_FRACTION", self.mps_process_memory_fraction),
-            )
-            headroom = self.start_guard.mps_minimum_headroom_bytes
-            if headroom is None:
-                raise ContractError("MPS_MINIMUM_HEADROOM_BYTES")
-            _require_positive_bytes("MPS_MINIMUM_HEADROOM_BYTES", headroom)
-        else:
-            if self.mps_process_memory_fraction is not None:
-                raise ContractError("MPS_PROCESS_MEMORY_FRACTION")
-            if self.start_guard.mps_minimum_headroom_bytes is not None:
-                raise ContractError("MPS_MINIMUM_HEADROOM_BYTES")
-
-        platform_pins = (
-            FROZEN_DARWIN_VALUES_V4
-            if transport is IpcTransport.DARWIN_PRIVATE_PATH_UNIX
-            else FROZEN_LINUX_VALUES_V4
+        # The allocator cap is set before any MPS allocation, so it must be a real fraction.
+        object.__setattr__(
+            self, "mps_process_memory_fraction",
+            _require_fraction("MPS_PROCESS_MEMORY_FRACTION", self.mps_process_memory_fraction),
         )
-        for name, expected in FROZEN_RUNTIME_VALUES_V4.items():
+        headroom = self.start_guard.mps_minimum_headroom_bytes
+        if headroom is None:
+            raise ContractError("MPS_MINIMUM_HEADROOM_BYTES")
+        _require_positive_bytes("MPS_MINIMUM_HEADROOM_BYTES", headroom)
+
+        platform_pins = FROZEN_DARWIN_VALUES_MACOS_MPS_TWO_WORKER
+        for name, expected in FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER.items():
             actual: object = getattr(self, name, None)
             if actual != expected:
                 raise ContractError(f"FROZEN_RUNTIME_VALUE: {name}")
@@ -1329,53 +1273,51 @@ class ParallelRuntimeConfigV4:
         }
 
 
-def _resolve_v4_transport(
-    value: object, accelerator: AcceleratorSelectionV4
+def _resolve_macos_mps_two_worker_transport(
+    value: object, accelerator: AcceleratorSelectionMacosMpsTwoWorker
 ) -> dict:
     """Resolve ``auto`` to the current platform's closed default; never to TCP."""
 
     if value == IPC_TRANSPORT_AUTO:
-        if accelerator.kind is AcceleratorKind.MPS:
-            return {"ipc_transport": "darwin_private_path_unix", "mujoco_gl": "cgl"}
-        return {"ipc_transport": "proc_fd_unix", "mujoco_gl": "egl"}
+        return {"ipc_transport": "darwin_private_path_unix", "mujoco_gl": "cgl"}
     return {}
 
 
-def parse_parallel_runtime_config_v4(document: object) -> ParallelRuntimeConfigV4:
+def parse_parallel_runtime_config_macos_mps_two_worker(document: object) -> ParallelRuntimeConfigMacosMpsTwoWorker:
     """Validate a version-four document against the closed platform-combination schema."""
 
-    top = _closed_mapping_fields("CONFIG", document, set(V4_CONFIG_FIELDS))
+    top = _closed_mapping_fields("CONFIG", document, set(MACOS_MPS_TWO_WORKER_CONFIG_FIELDS))
     if type(top["schema_version"]) is not int or top["schema_version"] != 4:
         raise ContractError("SCHEMA_VERSION")
     accelerator_fields = _closed_mapping_fields(
         "ACCELERATOR", top["accelerator"], set(ACCELERATOR_FIELDS)
     )
     execution = _closed_mapping_fields(
-        "EXECUTION", top["execution"], set(EXECUTION_V4_FIELDS)
+        "EXECUTION", top["execution"], set(EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS)
     )
     guard = _closed_mapping_fields(
-        "START_GUARD", top["start_guard"], set(START_GUARD_V4_FIELDS),
+        "START_GUARD", top["start_guard"], set(START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS),
         {"mps_minimum_headroom_bytes"},
     )
     clock = _closed_mapping_fields(
-        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesV3)}
+        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesLinuxCuda)}
     )
     try:
-        accelerator = AcceleratorSelectionV4(
+        accelerator = AcceleratorSelectionMacosMpsTwoWorker(
             kind=AcceleratorKind(accelerator_fields["kind"]),
             selector=accelerator_fields["selector"],
         )
     except (ValueError, KeyError) as error:
         raise ContractError(f"ACCELERATOR_INVALID: {error}") from error
 
-    resolved = _resolve_v4_transport(top["ipc_transport"], accelerator)
+    resolved = _resolve_macos_mps_two_worker_transport(top["ipc_transport"], accelerator)
     try:
         guard_policy = StartGuardPolicy(**guard)
     except ValueError as error:
         raise ContractError(f"START_GUARD_INVALID: {error}") from error
-    return ParallelRuntimeConfigV4(
+    return ParallelRuntimeConfigMacosMpsTwoWorker(
         schema_version=4,
-        clock=ClockRulesV3(**clock),
+        clock=ClockRulesLinuxCuda(**clock),
         start_guard=guard_policy,
         accelerator=accelerator,
         requested_device=top["requested_device"],
@@ -1389,13 +1331,13 @@ def parse_parallel_runtime_config_v4(document: object) -> ParallelRuntimeConfigV
     )
 
 
-def load_parallel_runtime_config_v4(path: Path) -> ParallelRuntimeConfigV4:
+def load_parallel_runtime_config_macos_mps_two_worker(path: Path) -> ParallelRuntimeConfigMacosMpsTwoWorker:
     """Load the closed version-four YAML document; any drift or cross-platform key is refused."""
 
-    return parse_parallel_runtime_config_v4(_load_closed_yaml(path))
+    return parse_parallel_runtime_config_macos_mps_two_worker(_load_closed_yaml(path))
 
 
-def require_v4_execution(request_version: int, config_version: int) -> None:
+def require_macos_mps_two_worker_execution(request_version: int, config_version: int) -> None:
     """Refuse new execution for any contract version other than version four."""
 
     if type(request_version) is not int or type(config_version) is not int:
@@ -1425,8 +1367,8 @@ class ExecutionProfile(StrEnum):
 
 
 #: The only worker counts the W1 profiles support. W1 is a platform claim, not a shrunken W2.
-V5_PLATFORM_WORKER_COUNT = 1
-V6_PLATFORM_WORKER_COUNT = 1
+MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT = 1
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT = 1
 
 #: The W1 profiles admit exactly one platform combination: the Darwin MPS one.
 W1_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
@@ -1435,28 +1377,28 @@ W1_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
 
 #: v5 and v6 restate the v4 freeze with their own schema and worker count. They add no field and
 #: redefine no functional value: the shape is the v4 shape at W1.
-FROZEN_RUNTIME_VALUES_V5: Mapping[str, object] = MappingProxyType({
-    **FROZEN_RUNTIME_VALUES_V4,
+FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY: Mapping[str, object] = MappingProxyType({
+    **FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER,
     "schema_version": 5,
-    "worker_count": V5_PLATFORM_WORKER_COUNT,
+    "worker_count": MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT,
 })
 
-FROZEN_RUNTIME_VALUES_V6: Mapping[str, object] = MappingProxyType({
-    **FROZEN_RUNTIME_VALUES_V4,
+FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS: Mapping[str, object] = MappingProxyType({
+    **FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER,
     "schema_version": 6,
-    "worker_count": V6_PLATFORM_WORKER_COUNT,
+    "worker_count": MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT,
 })
 
 #: The Darwin pins are shared by all three approved profiles.
-FROZEN_DARWIN_VALUES_V5: Mapping[str, object] = FROZEN_DARWIN_VALUES_V4
-FROZEN_DARWIN_VALUES_V6: Mapping[str, object] = FROZEN_DARWIN_VALUES_V4
+FROZEN_DARWIN_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY: Mapping[str, object] = FROZEN_DARWIN_VALUES_MACOS_MPS_TWO_WORKER
+FROZEN_DARWIN_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS: Mapping[str, object] = FROZEN_DARWIN_VALUES_MACOS_MPS_TWO_WORKER
 
-V5_CONFIG_FIELDS = V4_CONFIG_FIELDS
-V6_CONFIG_FIELDS = V4_CONFIG_FIELDS
-EXECUTION_V5_FIELDS = EXECUTION_V4_FIELDS
-EXECUTION_V6_FIELDS = EXECUTION_V4_FIELDS
-START_GUARD_V5_FIELDS = START_GUARD_V4_FIELDS
-START_GUARD_V6_FIELDS = START_GUARD_V4_FIELDS
+MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_FIELDS = MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
+MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_FIELDS = MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
+EXECUTION_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS = EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
+EXECUTION_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS = EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
+START_GUARD_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS = START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
+START_GUARD_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS = START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
 
 
 @dataclass(frozen=True, slots=True)
@@ -1490,13 +1432,13 @@ class ExecutionRoute:
 #: The whole support matrix. Three rows, no N>2 and no adaptive row.
 APPROVED_EXECUTION_ROUTES: tuple[ExecutionRoute, ...] = (
     ExecutionRoute(schema_version=4, execution_profile=ExecutionProfile.MPS_W2_FIRST_PASS,
-                   batch_kind=BatchKind.FIRST_PASS, worker_count=V4_PLATFORM_WORKER_COUNT),
+                   batch_kind=BatchKind.FIRST_PASS, worker_count=MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT),
     ExecutionRoute(schema_version=5,
                    execution_profile=ExecutionProfile.MPS_W1_FULL_RESTART_RETRY,
                    batch_kind=BatchKind.FULL_RESTART_RETRY,
-                   worker_count=V5_PLATFORM_WORKER_COUNT),
+                   worker_count=MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT),
     ExecutionRoute(schema_version=6, execution_profile=ExecutionProfile.MPS_W1_FIRST_PASS,
-                   batch_kind=BatchKind.FIRST_PASS, worker_count=V6_PLATFORM_WORKER_COUNT),
+                   batch_kind=BatchKind.FIRST_PASS, worker_count=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT),
 )
 
 _ROUTE_BY_PROFILE: Mapping[ExecutionProfile, ExecutionRoute] = MappingProxyType({
@@ -1556,7 +1498,7 @@ def resolve_execution_route(*, schema_version: object, execution_profile: object
 
 
 @dataclass(frozen=True, slots=True)
-class ParallelRuntimeConfigV5:
+class ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
     """The closed version-five document: W1 ``FULL_RESTART_RETRY`` on Darwin/MPS."""
 
     schema_version: int
@@ -1595,9 +1537,9 @@ class ParallelRuntimeConfigV5:
     sam_mask_quality_threshold: float
     sam_min_mask_pixels: int
     sam_max_mask_area_ratio: float
-    clock: ClockRulesV3
+    clock: ClockRulesLinuxCuda
     start_guard: "StartGuardPolicy"
-    accelerator: AcceleratorSelectionV4
+    accelerator: AcceleratorSelectionMacosMpsTwoWorker
     requested_device: str
     worker_count: int
     ipc_transport: IpcTransport
@@ -1614,9 +1556,9 @@ class ParallelRuntimeConfigV5:
         _validate_w1_profile(
             self,
             schema_version=5,
-            worker_count=V5_PLATFORM_WORKER_COUNT,
-            frozen_runtime_values=FROZEN_RUNTIME_VALUES_V5,
-            darwin_values=FROZEN_DARWIN_VALUES_V5,
+            worker_count=MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT,
+            frozen_runtime_values=FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY,
+            darwin_values=FROZEN_DARWIN_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY,
         )
 
     @property
@@ -1644,7 +1586,7 @@ class ParallelRuntimeConfigV5:
 
 
 @dataclass(frozen=True, slots=True)
-class ParallelRuntimeConfigV6:
+class ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
     """The closed version-six document: W1 ``FIRST_PASS`` on Darwin/MPS."""
 
     schema_version: int
@@ -1683,9 +1625,9 @@ class ParallelRuntimeConfigV6:
     sam_mask_quality_threshold: float
     sam_min_mask_pixels: int
     sam_max_mask_area_ratio: float
-    clock: ClockRulesV3
+    clock: ClockRulesLinuxCuda
     start_guard: "StartGuardPolicy"
-    accelerator: AcceleratorSelectionV4
+    accelerator: AcceleratorSelectionMacosMpsTwoWorker
     requested_device: str
     worker_count: int
     ipc_transport: IpcTransport
@@ -1702,9 +1644,9 @@ class ParallelRuntimeConfigV6:
         _validate_w1_profile(
             self,
             schema_version=6,
-            worker_count=V6_PLATFORM_WORKER_COUNT,
-            frozen_runtime_values=FROZEN_RUNTIME_VALUES_V6,
-            darwin_values=FROZEN_DARWIN_VALUES_V6,
+            worker_count=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT,
+            frozen_runtime_values=FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS,
+            darwin_values=FROZEN_DARWIN_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS,
         )
 
     @property
@@ -1740,7 +1682,7 @@ def _validate_w1_profile(config: object, *, schema_version: int, worker_count: i
         raise ContractError("SCHEMA_VERSION")
     if config.backend != "mujoco":
         raise ContractError("BACKEND")
-    if not isinstance(config.accelerator, AcceleratorSelectionV4):
+    if not isinstance(config.accelerator, AcceleratorSelectionMacosMpsTwoWorker):
         raise ContractError("ACCELERATOR_SELECTION")
     try:
         transport = IpcTransport(config.ipc_transport)
@@ -1793,7 +1735,7 @@ def _validate_w1_profile(config: object, *, schema_version: int, worker_count: i
     ):
         object.__setattr__(config, name, _require_probability(name, getattr(config, name)))
     object.__setattr__(config, "yolo_model_id", _require_id("yolo_model_id", config.yolo_model_id))
-    if not isinstance(config.clock, ClockRulesV3):
+    if not isinstance(config.clock, ClockRulesLinuxCuda):
         raise ContractError("CLOCK_RULES")
     if not isinstance(config.start_guard, StartGuardPolicy):
         raise ContractError("START_GUARD_POLICY")
@@ -1851,36 +1793,36 @@ def _w1_resolved_manifest(config: object) -> dict:
 def _parse_w1_document(document: object, *, schema_version: int, config_class):
     """Validate a W1 document against the closed v4-shaped schema, at its own version."""
 
-    top = _closed_mapping_fields("CONFIG", document, set(V4_CONFIG_FIELDS))
+    top = _closed_mapping_fields("CONFIG", document, set(MACOS_MPS_TWO_WORKER_CONFIG_FIELDS))
     if type(top["schema_version"]) is not int or top["schema_version"] != schema_version:
         raise ContractError("SCHEMA_VERSION")
     accelerator_fields = _closed_mapping_fields(
         "ACCELERATOR", top["accelerator"], set(ACCELERATOR_FIELDS)
     )
-    execution = _closed_mapping_fields("EXECUTION", top["execution"], set(EXECUTION_V4_FIELDS))
+    execution = _closed_mapping_fields("EXECUTION", top["execution"], set(EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS))
     guard = _closed_mapping_fields(
-        "START_GUARD", top["start_guard"], set(START_GUARD_V4_FIELDS),
+        "START_GUARD", top["start_guard"], set(START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS),
         {"mps_minimum_headroom_bytes"},
     )
     clock = _closed_mapping_fields(
-        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesV3)}
+        "CLOCK", execution.pop("clock"), {item.name for item in fields(ClockRulesLinuxCuda)}
     )
     try:
-        accelerator = AcceleratorSelectionV4(
+        accelerator = AcceleratorSelectionMacosMpsTwoWorker(
             kind=AcceleratorKind(accelerator_fields["kind"]),
             selector=accelerator_fields["selector"],
         )
     except (ValueError, KeyError) as error:
         raise ContractError(f"ACCELERATOR_INVALID: {error}") from error
 
-    resolved = _resolve_v4_transport(top["ipc_transport"], accelerator)
+    resolved = _resolve_macos_mps_two_worker_transport(top["ipc_transport"], accelerator)
     try:
         guard_policy = StartGuardPolicy(**guard)
     except ValueError as error:
         raise ContractError(f"START_GUARD_INVALID: {error}") from error
     return config_class(
         schema_version=schema_version,
-        clock=ClockRulesV3(**clock),
+        clock=ClockRulesLinuxCuda(**clock),
         start_guard=guard_policy,
         accelerator=accelerator,
         requested_device=top["requested_device"],
@@ -1894,31 +1836,31 @@ def _parse_w1_document(document: object, *, schema_version: int, config_class):
     )
 
 
-def parse_parallel_runtime_config_v5(document: object) -> ParallelRuntimeConfigV5:
+def parse_parallel_runtime_config_macos_mps_single_worker_retry(document: object) -> ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
     """Validate a version-five document: W1 ``FULL_RESTART_RETRY`` on Darwin/MPS only."""
 
-    return _parse_w1_document(document, schema_version=5, config_class=ParallelRuntimeConfigV5)
+    return _parse_w1_document(document, schema_version=5, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
 
 
-def parse_parallel_runtime_config_v6(document: object) -> ParallelRuntimeConfigV6:
+def parse_parallel_runtime_config_macos_mps_single_worker_first_pass(document: object) -> ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
     """Validate a version-six document: W1 ``FIRST_PASS`` on Darwin/MPS only."""
 
-    return _parse_w1_document(document, schema_version=6, config_class=ParallelRuntimeConfigV6)
+    return _parse_w1_document(document, schema_version=6, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
 
 
-def load_parallel_runtime_config_v5(path: Path) -> ParallelRuntimeConfigV5:
+def load_parallel_runtime_config_macos_mps_single_worker_retry(path: Path) -> ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
     """Load the closed version-five YAML document; any drift or other platform is refused."""
 
-    return parse_parallel_runtime_config_v5(_load_closed_yaml(path))
+    return parse_parallel_runtime_config_macos_mps_single_worker_retry(_load_closed_yaml(path))
 
 
-def load_parallel_runtime_config_v6(path: Path) -> ParallelRuntimeConfigV6:
+def load_parallel_runtime_config_macos_mps_single_worker_first_pass(path: Path) -> ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
     """Load the closed version-six YAML document; any drift or other platform is refused."""
 
-    return parse_parallel_runtime_config_v6(_load_closed_yaml(path))
+    return parse_parallel_runtime_config_macos_mps_single_worker_first_pass(_load_closed_yaml(path))
 
 
-def require_v5_execution(request_version: int, config_version: int) -> None:
+def require_macos_mps_single_worker_retry_execution(request_version: int, config_version: int) -> None:
     """Refuse new execution for any contract version other than version five."""
 
     if type(request_version) is not int or type(config_version) is not int:
@@ -1927,7 +1869,7 @@ def require_v5_execution(request_version: int, config_version: int) -> None:
         raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
 
 
-def require_v6_execution(request_version: int, config_version: int) -> None:
+def require_macos_mps_single_worker_first_pass_execution(request_version: int, config_version: int) -> None:
     """Refuse new execution for any contract version other than version six."""
 
     if type(request_version) is not int or type(config_version) is not int:
@@ -1938,6 +1880,6 @@ def require_v6_execution(request_version: int, config_version: int) -> None:
 
 #: Any execution profile document the parallel-validation runtime may load.
 RuntimeConfig = (
-    ParallelRuntimeConfigV3 | ParallelRuntimeConfigV4
-    | ParallelRuntimeConfigV5 | ParallelRuntimeConfigV6
+    ParallelRuntimeConfigLinuxCuda | ParallelRuntimeConfigMacosMpsTwoWorker
+    | ParallelRuntimeConfigMacosMpsSingleWorkerRetry | ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass
 )

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
     BatchSummary,
     PointStatus,
     RunMode,
@@ -23,7 +23,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
-CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
@@ -175,7 +175,7 @@ def verified(_spec):
     return {"source_commit": "a" * 40, "models_verified": True, "image_verified": True}
 
 
-def test_linux_v3_retry_cli_records_the_admitted_original_chain(tmp_path):
+def test_linux_cuda_retry_cli_records_the_admitted_original_chain(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
 
     catalog_sha256 = hashlib.sha256(POINTS.read_bytes()).hexdigest()
@@ -198,7 +198,7 @@ def test_linux_v3_retry_cli_records_the_admitted_original_chain(tmp_path):
     }
 
 
-def test_linux_v3_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
+def test_linux_cuda_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
     with pytest.raises(CliError, match="RETRY_ROOT_REQUIRED"):
@@ -211,7 +211,7 @@ def test_linux_v3_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
         )
 
 
-def test_linux_v3_retry_cli_refuses_a_foreign_catalog_digest(tmp_path):
+def test_linux_cuda_retry_cli_refuses_a_foreign_catalog_digest(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
 
     with pytest.raises(CliError, match="RETRY_CATALOG_MISMATCH"):
@@ -628,7 +628,7 @@ def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
         argv(
             tmp_path / "batch",
             points="config/mujoco/moveit_expert_validation_points_v1.yaml",
-            config="config/mujoco/parallel_batch_v3.yaml",
+            config="config/mujoco/parallel_batch_linux_cuda.yaml",
         ),
         provenance_verifier=verified,
     )
@@ -2039,8 +2039,8 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
     from so101_demo.cli.mujoco_parallel_batch import CliError, _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
-        load_parallel_runtime_config_v3,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
 
@@ -2061,13 +2061,13 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         ),
         tmp_path / "perception.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config_v3(CONFIG),
+        load_parallel_runtime_config_linux_cuda(CONFIG),
         broker_generation=1,
     )
     proxy._call = lambda _message: {
         "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
         "model_id": "plastic-cup-yolo11n-seg-v1",
-        "model_version": load_parallel_runtime_config_v3(CONFIG).yolo_weights_sha256,
+        "model_version": load_parallel_runtime_config_linux_cuda(CONFIG).yolo_weights_sha256,
         "broker_generation": 1,
         "outcome": "NORMAL_REJECTION",
         "candidate": None,
@@ -2309,11 +2309,11 @@ def test_fixed_w4_starts_without_any_budget_authority(tmp_path):
     """The plain v3 default path needs no profile, no promotion and no budget environment."""
 
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
-    from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigV3
+    from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigLinuxCuda
 
     prepared = prepare_batch(argv(tmp_path / "w4", worker_count="4"),
                              provenance_verifier=verified)
-    assert isinstance(prepared.config, ParallelRuntimeConfigV3)
+    assert isinstance(prepared.config, ParallelRuntimeConfigLinuxCuda)
     assert prepared.start_guard is not None
     assert prepared.start_guard_evidence["status"] in ("PASS", "WARN")
     assert prepared.start_guard_evidence["cleanup_state"] == "CLEAR"
@@ -2758,7 +2758,7 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     repository = tmp_path / "checkout"
     module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
-    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
     points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
     for path in (module, console, config, points):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2808,7 +2808,7 @@ def _external_overlay_fixture(tmp_path):
     support_prefix.mkdir(parents=True)
     share = package_prefix / "share/so101_demo_py/config/mujoco"
     share.mkdir(parents=True)
-    config = share / "parallel_batch_v3.yaml"
+    config = share / "parallel_batch_linux_cuda.yaml"
     points = share / "moveit_expert_validation_points_v1.yaml"
     config.write_text("schema_version: 2\n", encoding="utf-8")
     points.write_text("schema_version: 1\n", encoding="utf-8")
@@ -3484,8 +3484,8 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
     from so101_demo.cli.mujoco_parallel_batch import _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
-        load_parallel_runtime_config_v3,
-        load_parallel_runtime_config_v3,
+        load_parallel_runtime_config_linux_cuda,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
 
@@ -3522,7 +3522,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
             return {"payload": {
                 "request_id": "attempt-1-plastic-cup-yolo11n-seg-v1",
                 "model_id": "plastic-cup-yolo11n-seg-v1",
-                "model_version": load_parallel_runtime_config_v3(
+                "model_version": load_parallel_runtime_config_linux_cuda(
                     CONFIG
                 ).yolo_weights_sha256,
                 "broker_generation": 2,
@@ -3555,7 +3555,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
         Coordinator(),
         tmp_path / "broker-g1.sock",
         SimpleNamespace(worker_root=worker_root),
-        load_parallel_runtime_config_v3(CONFIG),
+        load_parallel_runtime_config_linux_cuda(CONFIG),
         broker_generation=1,
         broker_generation_consumer=generation_bindings.append,
         perception_runner=perception_runner,

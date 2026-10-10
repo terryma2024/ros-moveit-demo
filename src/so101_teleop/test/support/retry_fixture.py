@@ -73,12 +73,12 @@ SOURCE_SHA256 = "a" * 64
 #: The installed documents the two host branches of retry admission load, copied byte for byte
 #: into ``tmp_path``. The restored first pass has no named profile and binds v3; a macOS retry
 #: resolves its own MPS v5 document beside that configured file.
-V3_PARALLEL_DOCUMENT = (
-    SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_PARALLEL_DOCUMENT = (
+    SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
 )
 MPS_RETRY_DOCUMENT = (
     SOURCE_ROOT
-    / "so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
+    / "so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml"
 )
 
 
@@ -148,7 +148,7 @@ def build_environment(root: Path) -> dict:
 
     configuration = (Path(root) / "task-config").resolve()
     configuration.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(V3_PARALLEL_DOCUMENT, configuration / "parallel_batch_v3.yaml")
+    shutil.copyfile(LINUX_CUDA_PARALLEL_DOCUMENT, configuration / "parallel_batch_linux_cuda.yaml")
     shutil.copyfile(MPS_RETRY_DOCUMENT, configuration / MPS_RETRY_DOCUMENT.name)
     (configuration / "points.yaml").write_text(
         "catalog_id: catalog-retry-fixture\npoints:\n"
@@ -160,7 +160,7 @@ def build_environment(root: Path) -> dict:
     environment = dict(os.environ)
     environment.update({
         "SO101_VALIDATION_POINTS": str(configuration / "points.yaml"),
-        "SO101_VALIDATION_PARALLEL_CONFIG": str(configuration / "parallel_batch_v3.yaml"),
+        "SO101_VALIDATION_PARALLEL_CONFIG": str(configuration / "parallel_batch_linux_cuda.yaml"),
         "SO101_VALIDATION_ADAPTIVE_CONFIG": str(configuration / "adaptive.yaml"),
         "SO101_VALIDATION_COORDINATOR": str(configuration / "coordinator"),
         "SO101_VALIDATION_ADAPTIVE_CLEANUP": str(configuration / "adaptive-cleanup"),

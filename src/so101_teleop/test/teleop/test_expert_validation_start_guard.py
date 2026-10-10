@@ -29,18 +29,18 @@ from so101_teleop.expert_validation.production import (
 from teleop_paths import REPOSITORY
 
 WORKTREE = REPOSITORY
-V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
 MACOS_CONFIG_DIR = WORKTREE / "src/so101_demo_py/config/mujoco"
 
 #: (document basename, schema_version, execution_mode, worker_count, batch_kind) per profile.
 MACOS_PROFILES = {
     "MPS_W2_FIRST_PASS": (
-        "parallel_batch_v4_macos_mps_w2.yaml", 4, "PARALLEL", 2, "FIRST_PASS"),
+        "parallel_batch_macos_mps_two_worker.yaml", 4, "PARALLEL", 2, "FIRST_PASS"),
     "MPS_W1_FULL_RESTART_RETRY": (
-        "parallel_batch_v5_macos_mps_w1_retry.yaml", 5, "SEQUENTIAL", 1,
+        "parallel_batch_macos_mps_single_worker_retry.yaml", 5, "SEQUENTIAL", 1,
         "FULL_RESTART_RETRY"),
     "MPS_W1_FIRST_PASS": (
-        "parallel_batch_v6_macos_mps_w1_first_pass.yaml", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+        "parallel_batch_macos_mps_single_worker_first_pass.yaml", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
 }
 DARWIN_ONLY = pytest.mark.skipif(
     sys.platform != "darwin", reason="the production service executes MPS documents on macOS"
@@ -128,7 +128,7 @@ def service(tmp_path, monkeypatch):
     demo_prefix = _copied_prefix(share, (tmp_path / "demo-prefix").resolve())
     copied_share = demo_prefix / "share/so101_demo_py"
     config = file("parallel.yaml")
-    shutil.copyfile(V3_CONFIG, config)
+    shutil.copyfile(LINUX_CUDA_CONFIG, config)
     config.chmod(0o644)
     layout = _layout(
         tmp_path,
@@ -410,14 +410,14 @@ def test_legacy_contract_versions_are_refused_for_new_execution(service, monkeyp
 # --------------------------------------------------------------------------------------
 
 
-def test_v3_guard_policy_projection_is_unchanged_and_reports_no_mps_floor():
+def test_linux_cuda_guard_policy_projection_is_unchanged_and_reports_no_mps_floor():
     """A schema-v3 policy reports a null MPS floor, so existing clients see no drift."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
     from so101_demo.parallel_batch.start_guard import StartGuardPolicy
     from so101_teleop.expert_validation.api import StartGuardPolicyResponse
 
-    policy = load_parallel_runtime_config_v3(V3_CONFIG).start_guard
+    policy = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG).start_guard
     assert policy.mps_minimum_headroom_bytes is None
     document = {
         "timeout_s": policy.timeout_s,
@@ -682,7 +682,7 @@ def test_a_macos_preflight_never_reads_nvml(macos_service, monkeypatch, profile)
 
     def local_v4_check(self, policy, scope, *, accelerator=None):
         started = time.monotonic()
-        result = probe_module._v4_cpu_ram_result(
+        result = probe_module._darwin_cpu_ram_result(
             policy, scope, started + policy.timeout_s, started)
         return probe_module.ProbeCoordinator._merge_accelerator(
             self, result, policy, accelerator)

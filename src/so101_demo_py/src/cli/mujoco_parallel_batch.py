@@ -32,7 +32,7 @@ from so101_demo.parallel_batch.artifacts import (
 from so101_demo.parallel_batch.contracts import (
     BatchKind,
     BatchRequest,
-    load_parallel_runtime_config_v3,
+    load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchRequest,
@@ -875,7 +875,7 @@ def _validate_external_overlay_binding(
 
     demo_prefix = prefixes["so101_demo_py"]
     expected_console = demo_prefix / "lib/so101_demo_py/so101_parallel_batch"
-    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
     expected_points = (
         demo_prefix
         / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
