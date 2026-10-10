@@ -33,16 +33,18 @@ def test_the_act_controller_yaml_is_the_original_stock_config_plus_the_stock_nec
     assert "so101_mujoco_support/" not in text and "enable_topic_command" not in text
 
 
-# CP-3527 (Head merge): the Head Search line owns a neck port (ros_neck, whose qualification readback builds it through its
-# broker-controller stand-in, i.e. broker_execution) and a controller reservation client/provision stack for its owned neck
-# controller. Those are Head-line modules, not the broker chain this gate retires: the broker, the ROS broker driver, the
-# leased action client and the console script stay deleted.
+# The Head neck is the stock joint trajectory controller plus a thin subclass (design 2026-10-10): the broker, the
+# ROS broker driver, the leased action client, the reservation client/provision stack, the native close and the
+# broker execution port are all gone, and so is the console script.
 DELETED_MODULES = [
     ("adapters/act", "_".join(parts)) for parts in (
         ("command", "broker"), ("ros", "broker"), ("leased", "action", "client"),
         ("dispatch", "transaction"), ("teacher", "native", "runtime"),
         ("teacher", "bound", "authority"), ("teacher", "cup", "safety"), ("teacher", "physics", "source"),
-        ("pick", "place", "child", "port"), ("pick", "place", "sources"))
+        ("pick", "place", "child", "port"), ("pick", "place", "sources"),
+        ("controller", "reservation", "client"), ("controller", "reservation", "provision"),
+        ("head", "execution", "native"), ("head", "reservation", "authority"), ("head", "revocation"),
+        ("head", "native", "policy", "readback"), ("broker", "execution"), ("head", "control", "protocol"))
 ] + [("act", "_".join(parts)) for parts in (
     ("native", "dispatch"), ("native", "stop"), ("broker", "stop", "policy"), ("teacher", "bound", "timing"),
     ("contact", "live", "session"))] + [("cli", "act_command_" + "broker"), ("runtime", "teacher_worker_" + "lifecycle")]
@@ -55,15 +57,18 @@ def test_a_deleted_module_is_not_importable_and_has_no_file(package, module):
 
 
 def test_the_c_plus_plus_broker_chain_is_gone_and_the_evidence_plugin_stays():
-    # CP-3527: the Head Search owned neck controller (broker_owned_trajectory_controller, the controller reservation
-    # protocol/socket/provision and bound_reservation) is Head-line native code and is built again; the native sampler
-    # of the retired broker chain stays gone and the Teacher's controllers stay the stock JointTrajectoryController.
+    # The reservation protocol/socket/provision, the bound reservation, the stop and ingress witnesses and the
+    # broker-owned controller are deleted; the Head neck controller is the thin subclass of the stock one.
     support = REPOSITORY / "src/so101_mujoco_support"
-    gone = ["src/native_sampler" + "_c_api.cpp"]
+    gone = ["src/native_sampler" + "_c_api.cpp", "src/broker_owned_trajectory_controller.cpp",
+            "src/controller_reservation_protocol.cpp", "src/head_revocation_transport.cpp",
+            "include/so101_mujoco_support/controller_stop_witness.hpp"]
     assert not any((support / name).exists() for name in gone)
     cmake = (support / "CMakeLists.txt").read_text()
     assert "so101_simulation_evidence_plugin" in cmake and "test_physics_step_fence" in cmake
     assert "native_trajectory" + "_sampler" not in cmake
+    assert "broker_owned" not in cmake and "controller_reservation" not in cmake
+    assert "so101_head_neck_trajectory_controller" in cmake
 
 
 def test_the_vendored_jtc_is_not_in_the_worktree_and_the_snapshot_does_not_read_it():

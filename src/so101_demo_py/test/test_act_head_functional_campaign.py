@@ -62,8 +62,7 @@ def test_prepared_attempt_passes_real_closed_input_parser(tmp_path):
     assert inputs.document['campaign_truth_enabled'] is False
 
 
-def test_prepared_attempt_reservation_scope_follows_declared_root_not_a_host_constant(tmp_path):
-    import hashlib
+def test_prepared_attempt_workspace_follows_declared_root_not_a_host_constant(tmp_path):
     from pathlib import Path
     from so101_demo.cli.head_search_functional_campaign import prepare_attempt
     from test_act_head_search_campaign_scene import _baseline, _case
@@ -79,8 +78,7 @@ def test_prepared_attempt_reservation_scope_follows_declared_root_not_a_host_con
     path = prepare_attempt(_case(0), baseline, tmp_path/'prepared', identity=identity, domain=224)
     environment = json.loads(Path(path).read_text())['ros']['environment']
     assert environment['SO101_ACT_RESERVATION_ROOT'] == str(root)
-    assert environment['SO101_ACT_CONTROLLER_RESERVATION_DIR'] == str(
-        root/'ipc'/hashlib.sha256(token.encode()).hexdigest()[:16])
+    assert 'SO101_ACT_CONTROLLER_RESERVATION_DIR' not in environment
     assert Path(environment['ROS_WORKSPACE']) == root/token
     assert 'head-file-protocol-1003' not in json.dumps(environment)
 

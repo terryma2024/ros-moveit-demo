@@ -1,9 +1,7 @@
 """Head neck limits and stop-window constants: the one Python home.
 
 The guard (``adapters/act/head_trajectory_guard.py``) and the stop-window evaluator both read
-these values. The controller holds no limits of its own. While the broker-owned controller
-still exists, ``test_act_head_neck_limits.py`` pins every value here to the broker's
-head-mode constants; after that controller is deleted the pin test goes with it.
+these values. The controller holds no limits of its own.
 """
 
 # ---- trajectory shape (exact at the guard, before dispatch) ----------------------------

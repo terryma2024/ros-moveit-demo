@@ -21,3 +21,10 @@ def test_holding_simulation_gap_is_refused():
 def test_any_missing_completed_update_id_is_refused():
     updates = [row(1, 2_000_000, 10), row(3, 4_000_000, 20)]
     assert not continuous_updates(updates, 20, 20)
+
+
+def test_the_collector_based_hold_probe_refuses_to_run():
+    import pytest
+    from head_neck_timing_probe import main
+    with pytest.raises(RuntimeError, match='HEAD_TIMING_COLLECTOR_REMOVED'):
+        main()
