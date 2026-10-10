@@ -4,7 +4,7 @@ Wire identifiers are the strings that cross a process or file boundary: error co
 sealed file names, ``kind`` values. The scan reads the string values (never docstrings) of package source and
 of ``config/`` documents for ``TASK<n>_``, ``SO101_TASK<n>``, ``task<n>-`` / ``task<n>_`` and whole-string
 kind-like literals with an embedded ``[-_]v<n>`` segment, ``MPS_W<n>_`` profile values, ``hs<n>-`` case ids and
-whole-string worker labels. The wire allowlist must be empty, except for reasoned ``permanent`` entries (model
+whole-string worker labels, and ``W<n>_`` / ``N1_`` / ``_W<n>`` / ``_N1`` code segments. The wire allowlist must be empty, except for reasoned ``permanent`` entries (model
 and dataset ids, references to frozen history), at the end of phase D.
 """
 
@@ -21,7 +21,8 @@ ALLOWLIST = TEST_ROOT / "repo" / "style_allowlist.tsv"
     "value",
     ["TASK8_MODE_INVALID", "SO101_TASK8_BOTTOM_IO_SEAM", "task8-live", "task8_phase", "so101-dynamic-mujoco-execute-v2",
      "ACT_TASK8_STARTUP_OWNER_UNBOUND", "config/act/task8-live-anchors.yaml", "paired_camera_truth_v2_original",
-     "recorder_queue_v1", "SO101_RAW_RECORDER_READY_V1", "parallel_batch_v1.yaml", "MPS_W2_FIRST_PASS", "hs40-901", "w1", "W8"],
+     "recorder_queue_v1", "SO101_RAW_RECORDER_READY_V1", "parallel_batch_v1.yaml", "MPS_W2_FIRST_PASS", "hs40-901", "w1", "W8",
+     "W8_QUALIFICATION_EVIDENCE_INVALID", "N1_CAMPAIGN_PASS", "W2_CAMPAIGN_INCOMPLETE", "RETRY_SINGLE_POINT_N1"],
 )
 def test_a_process_wire_string_is_detected(value):
     assert inventory.is_wire_string(value)
@@ -31,7 +32,8 @@ def test_a_process_wire_string_is_detected(value):
     "value",
     ["TASK_MODE_INVALID", "pick_place_validation", "a sentence about version v2 of nothing", "so101-run-result",
      "SO101_PORT", "task", "tasks8", "retask8x", "recorder_queue", "paired_camera_truth_original", "invoice", "version v2 of x",
-     "w", "worker-01", "TWO_WORKER", "ATOMIC_V1X"],
+     "w", "worker-01", "TWO_WORKER", "ATOMIC_V1X", "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID", "TWO_WORKER_CAMPAIGN_PASS",
+     "SINGLE_WORKER_CAMPAIGN_PASS", "SHA256_N1X", "NEW8_CODE"],
 )
 def test_ordinary_strings_are_not_wire_hits(value):
     assert not inventory.is_wire_string(value)

@@ -17,7 +17,7 @@ from so101_demo.parallel_batch.pool_recovery import (
 
 BROKER_PID = 5001
 BROKER_BIRTH = 9001
-WORKERS = (("w1", 6001, 9101), ("w2", 6002, 9102))
+WORKERS = (("worker-01", 6001, 9101), ("worker-02", 6002, 9102))
 
 
 class Ports:
@@ -146,21 +146,21 @@ def test_the_happy_path_follows_the_order_exactly():
     assert outcome.recovered is True
     assert outcome.requeue_allowed is True
     assert outcome.broker_ready is True
-    assert outcome.workers_ready == ("w1", "w2")
+    assert outcome.workers_ready == ("worker-01", "worker-02")
     assert outcome.controller_absence_confirmed is True
     assert outcome.owned_processes_reaped == (BROKER_PID, 6001, 6002)
     assert ports.trace == [
         "remove_active_request",
         "mark_infrastructure_failure",
-        "stop_worker:w1",
-        "stop_worker:w2",
+        "stop_worker:worker-01",
+        "stop_worker:worker-02",
         "cancel_goals",
         "confirm_absence",
         "reap_owned_processes",
         "create_campaign_root",
         f"spawn_broker:{ports.new_campaign}",
-        f"spawn_worker:w1:{ports.new_campaign}",
-        f"spawn_worker:w2:{ports.new_campaign}",
+        f"spawn_worker:worker-01:{ports.new_campaign}",
+        f"spawn_worker:worker-02:{ports.new_campaign}",
         "coordinator_decision",
     ]
     # The outcome's trace is the declared step list, in order, and the serialized document
@@ -280,7 +280,7 @@ def test_the_coordinator_can_decline_the_requeue_after_a_successful_rebuild():
     outcome = _recovery(ports).recover()
     assert outcome.recovered is False
     assert outcome.broker_ready is True
-    assert outcome.workers_ready == ("w1", "w2")
+    assert outcome.workers_ready == ("worker-01", "worker-02")
     assert outcome.requeue_allowed is False
     assert "declined to requeue" in outcome.detail
     assert ports.decision_payload["new_campaign_id"] == ports.new_campaign

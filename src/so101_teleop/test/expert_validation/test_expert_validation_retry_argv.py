@@ -157,7 +157,7 @@ def test_a_retry_for_a_profile_the_route_does_not_execute_is_refused(tmp_path):
         with pytest.raises(RuntimeError, match="RETRY_PROFILE_MISMATCH"):
             asyncio.run(
                 supervisor.start_candidate_retry(
-                    request=replace(request, execution_profile="MPS_W2_FIRST_PASS"),
+                    request=replace(request, execution_profile="MPS_TWO_WORKER_FIRST_PASS"),
                     context=context,
                 )
             )

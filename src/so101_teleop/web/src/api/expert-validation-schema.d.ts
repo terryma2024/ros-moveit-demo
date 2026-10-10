@@ -552,7 +552,7 @@ export interface components {
              */
             execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
             /** Execution Profile */
-            execution_profile?: ("MPS_W2_FIRST_PASS" | "MPS_W1_FULL_RESTART_RETRY" | "MPS_W1_FIRST_PASS") | null;
+            execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */
@@ -710,7 +710,7 @@ export interface components {
              */
             execution_mode: "SEQUENTIAL" | "PARALLEL" | "ADAPTIVE";
             /** Execution Profile */
-            execution_profile?: ("MPS_W2_FIRST_PASS" | "MPS_W1_FULL_RESTART_RETRY" | "MPS_W1_FIRST_PASS") | null;
+            execution_profile?: ("MPS_TWO_WORKER_FIRST_PASS" | "MPS_SINGLE_WORKER_FULL_RESTART_RETRY" | "MPS_SINGLE_WORKER_FIRST_PASS") | null;
             /** Fallback Worker Counts */
             fallback_worker_counts?: number[] | null;
             /** Initial Points Per Worker */

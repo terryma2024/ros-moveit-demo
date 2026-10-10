@@ -587,7 +587,7 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
         # a collection payload must not carry the Task 8 receipt pair
         payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
         formal = replace(base, kind="act_collection_start", payload=payload)
-        with pytest.raises(ValueError, match="W8_QUALIFICATION_REQUIRED"):
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_REQUIRED"):
             service.start(formal)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()
@@ -622,7 +622,7 @@ def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_indepen
         # the self-declared document cites no re-derivable evidence, so it is refused as invalid evidence
         # rather than as a missing verifier. The test's point is unchanged: the document is rejected and
         # nothing is launched.
-        with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_INVALID"):
+        with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
             service.start(formal)
         assert service.child_registry.launches() == ()
         assert service.arbiter.is_idle()

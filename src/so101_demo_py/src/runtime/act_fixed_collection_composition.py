@@ -85,7 +85,7 @@ def build_fixed_collection_spec(*, context, manifest, split_manifest=None, calib
         contract_path = create_qualification_contract(
             qualification_contract,
             payload={"scenes": len(manifest_document.get("scenarios", []) or [])},
-            kind=kind if kind in ("W1", "W2", "W8") else "W8")
+            kind=kind if kind in ("SINGLE_WORKER", "TWO_WORKER", "EIGHT_WORKER") else "EIGHT_WORKER")
         contract = _json(contract_path)
         require_collection_mode(manifest_kind=contract["kind"], qualification_mode=True)
     else:

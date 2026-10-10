@@ -74,7 +74,7 @@ FIXED_COORDINATOR_FLAGS = (
 )
 
 #: The additional flags an admitted retry needs, and the exact names the v5
-#: ``MPS_W1_FULL_RESTART_RETRY`` route parses. A retry cannot bind itself from the first-pass argv:
+#: ``MPS_SINGLE_WORKER_FULL_RESTART_RETRY`` route parses. A retry cannot bind itself from the first-pass argv:
 #: the route refuses ``RETRY_ROOT_REQUIRED`` unless it is told which original chain it executes, and
 #: it accepts either the prior root (whose committed document it re-reads and hashes) or this
 #: already-admitted chain. The service sends the admitted one - the very digests its own retry

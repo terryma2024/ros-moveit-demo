@@ -29,7 +29,7 @@ def partition_waves(scene_ids, *, max_wave_size: int = 20) -> tuple:
     return tuple(ids[start:start + max_wave_size] for start in range(0, len(ids), max_wave_size))
 
 
-QUALIFICATION_KINDS = frozenset({"W1", "W2", "W8"})
+QUALIFICATION_KINDS = frozenset({"SINGLE_WORKER", "TWO_WORKER", "EIGHT_WORKER"})
 _EIGHT_WORKER_SCENES = 40
 
 
@@ -96,7 +96,8 @@ def write_campaign_index(path, *, waves, qualification: bool) -> str:
 
 
 def require_collection_mode(*, manifest_kind: str, qualification_mode: bool, contract=None) -> None:
-    """Qualification runs accept W1/W2/W8; a formal run must be exact W8 under a live 40-scene gate."""
+    """Qualification runs accept SINGLE_WORKER, TWO_WORKER and EIGHT_WORKER manifests; a formal run must be exactly
+    EIGHT_WORKER under a live 40-scene gate."""
 
     if type(qualification_mode) is not bool:
         raise ValueError("COLLECTION_QUALIFICATION_MODE_INVALID")
@@ -104,8 +105,8 @@ def require_collection_mode(*, manifest_kind: str, qualification_mode: bool, con
         if manifest_kind not in QUALIFICATION_KINDS:
             raise ValueError("QUALIFICATION_MANIFEST_KIND_INVALID")
         return
-    if manifest_kind != "W8":
-        raise ValueError("FORMAL_MANIFEST_NOT_EXACT_W8")
+    if manifest_kind != "EIGHT_WORKER":
+        raise ValueError("FORMAL_MANIFEST_NOT_EIGHT_WORKER")
     if not isinstance(contract, dict) or contract.get("revoked") is not False:
         raise ValueError("FORMAL_QUALIFICATION_CONTRACT_MISSING_OR_REVOKED")
     if contract.get("scenes") != _EIGHT_WORKER_SCENES:
@@ -138,7 +139,7 @@ class FixedActCollectionCampaign:
         if not isinstance(config, dict) or set(config) != _CONFIG_KEYS:
             raise ValueError("CAMPAIGN_CONFIG_INVALID")
         qualification = config["qualification"]
-        require_collection_mode(manifest_kind=manifest.get("kind", "W8"),
+        require_collection_mode(manifest_kind=manifest.get("kind", "EIGHT_WORKER"),
                                 qualification_mode=qualification,
                                 contract=manifest.get("qualification_contract"))
         self.manifest = manifest

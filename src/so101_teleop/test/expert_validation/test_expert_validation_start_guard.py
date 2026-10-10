@@ -34,12 +34,12 @@ MACOS_CONFIG_DIR = WORKTREE / "src/so101_demo_py/config/mujoco"
 
 #: (document basename, schema_version, execution_mode, worker_count, batch_kind) per profile.
 MACOS_PROFILES = {
-    "MPS_W2_FIRST_PASS": (
+    "MPS_TWO_WORKER_FIRST_PASS": (
         "parallel_batch_macos_mps_two_worker.yaml", 4, "PARALLEL", 2, "FIRST_PASS"),
-    "MPS_W1_FULL_RESTART_RETRY": (
+    "MPS_SINGLE_WORKER_FULL_RESTART_RETRY": (
         "parallel_batch_macos_mps_single_worker_retry.yaml", 5, "SEQUENTIAL", 1,
         "FULL_RESTART_RETRY"),
-    "MPS_W1_FIRST_PASS": (
+    "MPS_SINGLE_WORKER_FIRST_PASS": (
         "parallel_batch_macos_mps_single_worker_first_pass.yaml", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
 }
 DARWIN_ONLY = pytest.mark.skipif(
@@ -230,7 +230,7 @@ def macos_two_worker_only_service(tmp_path, monkeypatch):
     """A macOS service with only the W2 document installed: no W1 campaign can be invented."""
 
     layout = _macos_layout(
-        tmp_path, monkeypatch, (MACOS_PROFILES["MPS_W2_FIRST_PASS"][0],))
+        tmp_path, monkeypatch, (MACOS_PROFILES["MPS_TWO_WORKER_FIRST_PASS"][0],))
     yield from _created_service(tmp_path, monkeypatch, layout)
 
 
@@ -591,8 +591,8 @@ def test_macos_capabilities_expose_only_single_worker_and_two_worker(macos_servi
         assert row["accelerator"] == "mps" and row["selectable"] is True
         assert row["profile_sha256"] is None and row["qualification_sha256"] is None
 
-    configured = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_W2_FIRST_PASS"][0]
-    assert payload["execution_profile"] == "MPS_W2_FIRST_PASS"
+    configured = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_TWO_WORKER_FIRST_PASS"][0]
+    assert payload["execution_profile"] == "MPS_TWO_WORKER_FIRST_PASS"
     assert payload["execution_schema_version"] == 4
     assert payload["execution_config_sha256"] == hashlib.sha256(
         configured.read_bytes()).hexdigest()
@@ -706,7 +706,7 @@ def test_a_macos_service_refuses_more_than_two_workers_and_adaptive(macos_servic
     lease = _lease(client)
 
     oversized_body = _macos_preflight_body(
-        client, lease, "MPS_W2_FIRST_PASS", worker_count=8)
+        client, lease, "MPS_TWO_WORKER_FIRST_PASS", worker_count=8)
     oversized = client.post("/expert-validation/campaigns/preflight", json=oversized_body)
     assert oversized.status_code == 200, oversized.text
     assert oversized.json()["admitted"] is False
@@ -721,10 +721,10 @@ def test_a_macos_service_refuses_more_than_two_workers_and_adaptive(macos_servic
         def probe(self, _request, _config):
             return True, (), {}
 
-    v4_document = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_W2_FIRST_PASS"][0]
+    v4_document = MACOS_CONFIG_DIR / MACOS_PROFILES["MPS_TWO_WORKER_FIRST_PASS"][0]
     request = dataclasses.replace(
         macos_service._campaign_request(oversized_body),
-        execution_profile="MPS_W1_FIRST_PASS", batch_kind="FIRST_PASS",
+        execution_profile="MPS_SINGLE_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
         execution_mode="SEQUENTIAL", worker_count=1,
         parallel_config_path=v4_document,
         parallel_config_sha256=hashlib.sha256(v4_document.read_bytes()).hexdigest())
@@ -761,7 +761,7 @@ def test_a_macos_service_refuses_a_profile_it_has_no_installed_document_for(
     lease = _lease(client)
     response = client.post(
         "/expert-validation/campaigns/preflight",
-        json=_macos_preflight_body(client, lease, "MPS_W1_FIRST_PASS"))
+        json=_macos_preflight_body(client, lease, "MPS_SINGLE_WORKER_FIRST_PASS"))
 
     assert response.status_code == 409, response.text
     assert response.json()["code"] == "EXECUTION_DOCUMENT_MISSING"

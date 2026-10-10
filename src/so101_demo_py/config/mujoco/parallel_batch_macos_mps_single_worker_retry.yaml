@@ -4,7 +4,7 @@ schema_version: 5
 # `(schema_version, execution_profile, batch_kind, worker_count)` and this document is exactly one
 # admissible combination:
 #
-#   profile          MPS_W1_FULL_RESTART_RETRY
+#   profile          MPS_SINGLE_WORKER_FULL_RESTART_RETRY
 #   batch kind       FULL_RESTART_RETRY   (the request must carry it; it is not inferred)
 #   worker count     1
 #

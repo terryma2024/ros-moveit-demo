@@ -29,7 +29,7 @@ import {
  * its own pinning tests).  Reload behaviour is therefore recorded as a constraint, not asserted as
  * a pass here.
  *
- * On macOS this is the W2 route: the console claims the `MPS_W2_FIRST_PASS` matrix row (schema
+ * On macOS this is the W2 route: the console claims the `MPS_TWO_WORKER_FIRST_PASS` matrix row (schema
  * v4, PARALLEL, two workers), the service resolves that document from its own bytes, and the
  * batch has to prove selected-only execution, the durability watermark, the sealed physical
  * evidence set and its own cleanup.
@@ -37,7 +37,7 @@ import {
 
 const W2_ROUTE: CampaignBatchExpectation = {
   batchKind: "FIRST_PASS",
-  executionProfile: "MPS_W2_FIRST_PASS",
+  executionProfile: "MPS_TWO_WORKER_FIRST_PASS",
   schemaVersion: 4,
   workerCount: 2,
   selectedPointIds: [],
@@ -89,7 +89,7 @@ test("R02 parallel two-worker live run @live-sim", async ({ page, liveServer }) 
   const receipt = (await preflightResponse.json()) as Record<string, unknown>;
   assertRoutingClaim(receipt, expectation);
   // The point count is not a routing input: four points claim the same W2 row as any other count.
-  expect(receipt.execution_profile).toBe("MPS_W2_FIRST_PASS");
+  expect(receipt.execution_profile).toBe("MPS_TWO_WORKER_FIRST_PASS");
 
   // The campaign id comes from this spec's own start response: the campaign list also holds the
   // campaigns of every spec that ran before it.

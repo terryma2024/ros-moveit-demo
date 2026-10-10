@@ -396,9 +396,9 @@
             "anyOf": [
               {
                 "enum": [
-                  "MPS_W2_FIRST_PASS",
-                  "MPS_W1_FULL_RESTART_RETRY",
-                  "MPS_W1_FIRST_PASS"
+                  "MPS_TWO_WORKER_FIRST_PASS",
+                  "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
+                  "MPS_SINGLE_WORKER_FIRST_PASS"
                 ],
                 "type": "string"
               },
@@ -824,9 +824,9 @@
             "anyOf": [
               {
                 "enum": [
-                  "MPS_W2_FIRST_PASS",
-                  "MPS_W1_FULL_RESTART_RETRY",
-                  "MPS_W1_FIRST_PASS"
+                  "MPS_TWO_WORKER_FIRST_PASS",
+                  "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
+                  "MPS_SINGLE_WORKER_FIRST_PASS"
                 ],
                 "type": "string"
               },

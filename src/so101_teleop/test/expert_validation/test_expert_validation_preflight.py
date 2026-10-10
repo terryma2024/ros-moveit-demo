@@ -27,21 +27,21 @@ MACOS_DOCUMENTS = {
 }
 LINUX_CUDA_DOCUMENT = CONFIG_DIR / "parallel_batch_linux_cuda.yaml"
 
-TWO_WORKER_CLAIM = {"execution_profile": "MPS_W2_FIRST_PASS", "batch_kind": "FIRST_PASS"}
+TWO_WORKER_CLAIM = {"execution_profile": "MPS_TWO_WORKER_FIRST_PASS", "batch_kind": "FIRST_PASS"}
 SINGLE_WORKER_RETRY_CLAIM = {
-    "execution_profile": "MPS_W1_FULL_RESTART_RETRY",
+    "execution_profile": "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
     "batch_kind": "FULL_RESTART_RETRY",
 }
 SINGLE_WORKER_FIRST_PASS_CLAIM = {
-    "execution_profile": "MPS_W1_FIRST_PASS",
+    "execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS",
     "batch_kind": "FIRST_PASS",
 }
 
 #: (profile, schema_version, execution_mode, worker_count, batch_kind) per installed document.
 MATRIX = {
-    4: ("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
-    5: ("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
-    6: ("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+    4: ("MPS_TWO_WORKER_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    5: ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    6: ("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
 }
 CLAIMS = {4: TWO_WORKER_CLAIM, 5: SINGLE_WORKER_RETRY_CLAIM, 6: SINGLE_WORKER_FIRST_PASS_CLAIM}
 

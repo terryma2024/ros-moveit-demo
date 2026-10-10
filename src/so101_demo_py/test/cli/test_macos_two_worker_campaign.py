@@ -290,7 +290,7 @@ def test_campaign_ports_expose_the_worker_simulation_seams() -> None:
     default = CampaignPorts(model_factories={})
     assert default.worker_station is None
     assert default.worker_broker is None
-    assert default.stop_worker("w1") is True
+    assert default.stop_worker("worker-01") is True
     assert default.cancel_goals() is True
     assert default.confirm_absence() is True
 
@@ -333,14 +333,14 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
         plan=_Plan(), batch_id="b1", evidence_root=tmp_path, input_sha256="a" * 64,
         binding=binding, queue=queue)
 
-    assert sorted(leases) == ["w1", "w2"]
-    document = leases["w1"]
+    assert sorted(leases) == ["worker-01", "worker-02"]
+    document = leases["worker-01"]
     # The first id is the *lease's* attempt - the one the queue issued for the point this Worker
     # executes - and it is bound exactly like the two inference round trips beside it.
-    assert document["attempt_ids"][1:] == ["w1-att-g01-01", "w1-att-g01-02"]
+    assert document["attempt_ids"][1:] == ["worker-01-att-g01-01", "worker-01-att-g01-02"]
     assert document["attempt_ids"][0] == document["attempt_id"]
     assert document["attempt_id"].startswith(f"{document['point_id']}-attempt-")
-    assert document["slot_id"] == "slot-0" and leases["w2"]["slot_id"] == "slot-1"
+    assert document["slot_id"] == "slot-0" and leases["worker-02"]["slot_id"] == "slot-1"
     # The slot owns no point: the durable queue issued both leases, and each carries the one point
     # file the Worker may execute - never the installed catalog.
     assert {lease["point_id"] for lease in leases.values()} <= set(point_ids)
@@ -360,8 +360,8 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
 
     tuned = build_worker_leases(plan=_Plan(), batch_id="b1", evidence_root=tmp_path,
                                 input_sha256="a" * 64, deadline_s=4.0, tamper_input_sha256=True,
-                                binding=binding, queue=queue, worker_ids=("w1",), generation=2)
-    tuned_disk = json.loads(Path(tuned["w1"]["lease_path"]).read_text())
+                                binding=binding, queue=queue, worker_ids=("worker-01",), generation=2)
+    tuned_disk = json.loads(Path(tuned["worker-01"]["lease_path"]).read_text())
     assert tuned_disk["deadline_s"] == 4.0 and tuned_disk["tamper_input_sha256"] is True
 
     class _Ready:
@@ -400,10 +400,10 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
 
     bound = "a" * 64
     good = json.dumps({"input_sha256": bound})
-    consumed = {"w1-att-00-yolo"}
+    consumed = {"worker-01-att-00-yolo"}
 
     assert admission_decision(
-        operation="broker.infer", request_id="w1-att-01-yolo", serialized_request=good,
+        operation="broker.infer", request_id="worker-01-att-01-yolo", serialized_request=good,
         consumed_ids=consumed, bound_digest=bound) is None
 
     unknown = admission_decision(
@@ -413,24 +413,24 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
     assert "coordinator.cancel_request" not in IMPLEMENTED_OPERATIONS
 
     cancelled = admission_decision(
-        operation="broker.infer", request_id="w2-att-00-yolo", serialized_request=good,
-        consumed_ids=set(), bound_digest=bound, cancelled_ids={"w2-att-00-yolo"})
+        operation="broker.infer", request_id="worker-02-att-00-yolo", serialized_request=good,
+        consumed_ids=set(), bound_digest=bound, cancelled_ids={"worker-02-att-00-yolo"})
     assert cancelled["error"]["code"] == "CANCELLED"
     # cancellation is refused whether or not the id was ever consumed
     cancelled_after_use = admission_decision(
-        operation="broker.infer", request_id="w2-att-00-yolo", serialized_request=good,
-        consumed_ids={"w2-att-00-yolo"}, bound_digest=bound,
-        cancelled_ids={"w2-att-00-yolo"})
+        operation="broker.infer", request_id="worker-02-att-00-yolo", serialized_request=good,
+        consumed_ids={"worker-02-att-00-yolo"}, bound_digest=bound,
+        cancelled_ids={"worker-02-att-00-yolo"})
     assert cancelled_after_use["error"]["code"] == "CANCELLED"
 
     duplicate = admission_decision(
-        operation="broker.infer", request_id="w1-att-00-yolo", serialized_request=good,
+        operation="broker.infer", request_id="worker-01-att-00-yolo", serialized_request=good,
         consumed_ids=consumed, bound_digest=bound)
     assert duplicate["error"]["code"] == "DUPLICATE_REQUEST"
 
     for tampered in (json.dumps({"input_sha256": "0" * 64}), None, "not json", {}, b"\xff\xfe"):
         refusal = admission_decision(
-            operation="broker.infer", request_id="w1-att-02-yolo", serialized_request=tampered,
+            operation="broker.infer", request_id="worker-01-att-02-yolo", serialized_request=tampered,
             consumed_ids=set(), bound_digest=bound)
         assert refusal["error"]["code"] == "SNAPSHOT_MISMATCH", tampered
 
@@ -452,7 +452,7 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
         path.write_text(json.dumps(payload))
 
     root = tmp_path
-    base = root / "w1-station/pick/batches/b1/points"
+    base = root / "worker-01-station/pick/batches/b1/points"
     write(base / "01-task_start/dynamic/dynamic-execute-manifest.json",
           {"current_state": "DONE", "failure": None,
            "final_samples": [{"simulation_step": 33, "table_contact": True,
@@ -465,7 +465,7 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
 
     summary = summarize_per_slot_pick_place(evidence_root=root)
 
-    w1 = summary["w1"]
+    w1 = summary["worker-01"]
     assert w1["manifests"] == 2 and w1["point_results"] == 1
     assert w1["executed_points"] == ["01-task_start"]
     assert w1["failure_codes"] == ["TERMINAL_CAPTURE_FAILED"]
@@ -478,7 +478,7 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
     assert contact["release_marker_sequence"] is None
     assert contact["final_cup_position_world_m"] is None
     # a slot with nothing on disk is reported, not omitted and not an exception
-    assert summary["w2"]["manifests"] == 0 and summary["w2"]["executed_points"] == []
+    assert summary["worker-02"]["manifests"] == 0 and summary["worker-02"]["executed_points"] == []
 
 
 def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> None:
@@ -486,7 +486,7 @@ def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> 
 
     `retry-001` of campaign `campaign-e94a4b74...` is a `FULL_RESTART_RETRY` batch: one lease, one
     point executed, one committed point result (`sample_05_near_center`, `outcome FAILED`,
-    `infrastructure_code null`) and `N1_CAMPAIGN_PASS`. Its `per_slot_pick_place.w1` still read
+    `infrastructure_code null`) and `SINGLE_WORKER_CAMPAIGN_PASS`. Its `per_slot_pick_place.worker-01` still read
     `executed_points []` / `manifests 0`, because the point died at RGBD perception
     (`RGBD_PERCEPTION_EXITED_EARLY`) and so never wrote the `dynamic/dynamic-execute-manifest.json`
     the summary counted executions from. The derivation must count the batch runner's terminal
@@ -500,7 +500,7 @@ def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> 
     from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
 
     root = tmp_path
-    batch = root / "w1-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
+    batch = root / "worker-01-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
     point = batch / "points/01-sample_05_near_center"
     (point / "dynamic").mkdir(parents=True)
     (point / "point-input.json").write_text(json.dumps(
@@ -522,11 +522,11 @@ def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> 
         {"committed": True, "failure_code": "RGBD_PERCEPTION_EXITED_EARLY", "generation": 1,
          "moveit_executed": True, "outcome": "FAILED", "point_id": "sample_05_near_center",
          "evidence_manifest_relative_path":
-             "w1-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
+             "worker-01-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
              "/points/01-sample_05_near_center/point-result.json",
-         "worker_id": "w1"}))
+         "worker_id": "worker-01"}))
 
-    summary = summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))["w1"]
+    summary = summarize_per_slot_pick_place(evidence_root=root, workers=("worker-01",))["worker-01"]
 
     # the point the batch really executed is named, in the first-pass summary's own shape
     assert summary["executed_points"] == ["01-sample_05_near_center"]
@@ -550,7 +550,7 @@ def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp
     root = tmp_path
 
     def executed_point(attempt: str, batch: str, name: str, payload: dict) -> Path:
-        point = root / f"w1-station/{attempt}/pick/batches/{batch}/points/{name}"
+        point = root / f"worker-01-station/{attempt}/pick/batches/{batch}/points/{name}"
         point.mkdir(parents=True)
         (point / "point-result.json").write_text(json.dumps(payload))
         return point
@@ -575,10 +575,10 @@ def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp
     (retry_done / "dynamic/dynamic-execute-manifest.json").write_text(json.dumps(
         {"current_state": "DONE", "failure": None, "final_samples": []}))
     # a point directory from a Worker that was killed before the point finished: no execution
-    (root / "w1-station/never_ran-attempt-3/pick/batches/retry-002/points/01-never_ran").mkdir(
+    (root / "worker-01-station/never_ran-attempt-3/pick/batches/retry-002/points/01-never_ran").mkdir(
         parents=True)
 
-    w1 = summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))["w1"]
+    w1 = summarize_per_slot_pick_place(evidence_root=root, workers=("worker-01",))["worker-01"]
 
     assert w1["executed_points"] == ["01-cup_test_left_5cm", "01-sample_05_near_center",
                                      "01-task_start"]
@@ -586,7 +586,7 @@ def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp
                                                                 "01-task_start"]
     assert w1["manifests"] == 2 and w1["point_results"] == 3
     # a slot with no station tree at all is still reported as zero, not omitted
-    assert summarize_per_slot_pick_place(evidence_root=root, workers=("w2",))["w2"][
+    assert summarize_per_slot_pick_place(evidence_root=root, workers=("worker-02",))["worker-02"][
         "executed_points"] == []
 
 
@@ -605,25 +605,25 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
     """PASS is the happy path only - including the point set - and any refusal reads INCOMPLETE.
 
     The point clause is the one the live gate was missing: a campaign that executed no point
-    at all reported `W2_CAMPAIGN_PASS`. A verdict with no executed-point evidence, or with an
+    at all reported `TWO_WORKER_CAMPAIGN_PASS`. A verdict with no executed-point evidence, or with an
     unexecuted, duplicated, unselected or infrastructure-failed point, reads INCOMPLETE.
     """
 
     from so101_demo.cli.macos_two_worker_campaign import campaign_status
 
     good = dict(cleanup_complete=True, results=[{}, {}],
-                workers=[{"worker_id": "w1", "status": "ACTIVE"},
-                         {"worker_id": "w2", "status": "ACTIVE"}],
+                workers=[{"worker_id": "worker-01", "status": "ACTIVE"},
+                         {"worker_id": "worker-02", "status": "ACTIVE"}],
                 served={"count": 6, "devices": ["mps"]}, refused=[], points=_points())
-    assert campaign_status(**good) == "W2_CAMPAIGN_PASS"
+    assert campaign_status(**good) == "TWO_WORKER_CAMPAIGN_PASS"
 
     for change in (
         {"cleanup_complete": False},
         {"results": [{}]},
         {"results": [{}, {}, {}]},
-        {"workers": [{"worker_id": "w1", "status": "ACTIVE"},
-                     {"worker_id": "w2", "status": "STOPPED"}]},
-        {"workers": [{"worker_id": "w1", "status": "ACTIVE"}]},
+        {"workers": [{"worker_id": "worker-01", "status": "ACTIVE"},
+                     {"worker_id": "worker-02", "status": "STOPPED"}]},
+        {"workers": [{"worker_id": "worker-01", "status": "ACTIVE"}]},
         {"served": {"count": 5, "devices": ["mps"]}},
         {"served": {"count": 6, "devices": []}},
         {"served": {"count": 6, "devices": ["cpu"]}},
@@ -637,7 +637,7 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
                            infrastructure_failures=[{"point_id": "a",
                                                      "infrastructure_code": "POINT_EVIDENCE_MISSING"}])},
     ):
-        assert campaign_status(**{**good, **change}) == "W2_CAMPAIGN_INCOMPLETE", change
+        assert campaign_status(**{**good, **change}) == "TWO_WORKER_CAMPAIGN_INCOMPLETE", change
 
 
 def test_campaign_cli_exposes_the_fault_switches_with_safe_defaults() -> None:
@@ -725,7 +725,7 @@ def test_campaign_journal_publishes_committed_watermarks(tmp_path):
         assert [event.type for event in prefix.events] == ["CAMPAIGN_STARTED"]
         assert prefix.unconfirmed_durability is False
 
-        commit_campaign_terminal(journal, outcome="W2_CAMPAIGN_PASS", cleanup_complete=True)
+        commit_campaign_terminal(journal, outcome="TWO_WORKER_CAMPAIGN_PASS", cleanup_complete=True)
         final = journal.read_watermark()
         assert final.sequence == 3
         with pytest.raises(JournalCorruption):
@@ -753,11 +753,11 @@ MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG = PACKAGE / "config/mujoco/parallel_batch_m
 MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml"
 
 ROUTES = (
-    (MACOS_MPS_TWO_WORKER_CONFIG, 2, "MPS_W2_FIRST_PASS", "FIRST_PASS",
+    (MACOS_MPS_TWO_WORKER_CONFIG, 2, "MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS",
      "so101_demo.cli.macos_two_worker_campaign"),
-    (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
+    (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
      "so101_demo.cli.macos_mps_single_worker_retry"),
-    (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, "MPS_W1_FIRST_PASS", "FIRST_PASS",
+    (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, "MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS",
      "so101_demo.cli.macos_mps_single_worker_first_pass"),
 )
 
@@ -853,9 +853,9 @@ def test_the_service_adapter_refuses_a_declared_batch_kind_or_profile_that_disag
         (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, {BATCH_KIND_VARIABLE: "FIRST_PASS"}, "PROFILE_BATCH_KIND_MISMATCH"),
         (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, {BATCH_KIND_VARIABLE: "FULL_RESTART_RETRY"},
          "PROFILE_BATCH_KIND_MISMATCH"),
-        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FULL_RESTART_RETRY"},
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, {EXECUTION_PROFILE_VARIABLE: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"},
          "PROFILE_SCHEMA_MISMATCH"),
-        (MACOS_MPS_TWO_WORKER_CONFIG, 2, {EXECUTION_PROFILE_VARIABLE: "MPS_W1_FIRST_PASS"},
+        (MACOS_MPS_TWO_WORKER_CONFIG, 2, {EXECUTION_PROFILE_VARIABLE: "MPS_SINGLE_WORKER_FIRST_PASS"},
          "PROFILE_SCHEMA_MISMATCH"),
         (MACOS_MPS_TWO_WORKER_CONFIG, 2, {BATCH_KIND_VARIABLE: "ADAPTIVE_POOL"}, "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
     ):
@@ -1078,15 +1078,15 @@ def test_the_composed_campaign_accepts_a_single_worker_plan(tmp_path):
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_retry
 
     plan = compose_single_worker_retry(
-        config=load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, campaign_id="b-w1",
-        batch_id="batch-w1", selected_point_ids=("p1",), evidence_root=tmp_path)
-    supervisor = CampaignSupervisor("b-w1", state_root=tmp_path / "supervisor")
+        config=load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, campaign_id="b-worker-01",
+        batch_id="batch-worker-01", selected_point_ids=("p1",), evidence_root=tmp_path)
+    supervisor = CampaignSupervisor("b-worker-01", state_root=tmp_path / "supervisor")
     campaign = MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor,
                                ports=CampaignPorts(model_factories={}))
 
     assert campaign.plan.worker_count == 1
     assert campaign.plan.slots.slot_ids == ("slot-0",)
-    assert campaign.plan.execution_profile == "MPS_W1_FULL_RESTART_RETRY"
+    assert campaign.plan.execution_profile == "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
 
 
 def test_the_single_worker_verdict_requires_the_single_worker_happy_path():
@@ -1095,19 +1095,19 @@ def test_the_single_worker_verdict_requires_the_single_worker_happy_path():
     from so101_demo.cli.macos_mps_single_worker_first_pass import campaign_status as n1_status
 
     good = dict(cleanup_complete=True, results=[{}],
-                workers=[{"worker_id": "w1", "status": "ACTIVE"}],
+                workers=[{"worker_id": "worker-01", "status": "ACTIVE"}],
                 served={"count": 3, "devices": ["mps"]}, refused=[], points=_points())
-    assert n1_status(**good) == "N1_CAMPAIGN_PASS"
+    assert n1_status(**good) == "SINGLE_WORKER_CAMPAIGN_PASS"
     for change in (
         {"cleanup_complete": False},
         {"results": []},
         {"results": [{}, {}]},
-        {"workers": [{"worker_id": "w1", "status": "STOPPED"}]},
-        {"workers": [{"worker_id": "w2", "status": "ACTIVE"}]},
+        {"workers": [{"worker_id": "worker-01", "status": "STOPPED"}]},
+        {"workers": [{"worker_id": "worker-02", "status": "ACTIVE"}]},
         {"served": {"count": 2, "devices": ["mps"]}},
         {"served": {"count": 3, "devices": []}},
         {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
         {"points": _points(complete=False, committed={"a": "PASSED"},
                            unexecuted_point_ids=["b"])},
     ):
-        assert n1_status(**{**good, **change}) == "N1_CAMPAIGN_INCOMPLETE", change
+        assert n1_status(**{**good, **change}) == "SINGLE_WORKER_CAMPAIGN_INCOMPLETE", change

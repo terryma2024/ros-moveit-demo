@@ -80,7 +80,7 @@ from ..parallel_batch.two_worker_composition import (
 from ..runtime.unix_address import PRIVATE_TMP, DarwinPrivatePathUnixAddress
 
 #: The v4 exact two-worker profile this module is the entry point for.
-MPS_TWO_WORKER_FIRST_PASS = "MPS_W2_FIRST_PASS"
+MPS_TWO_WORKER_FIRST_PASS = "MPS_TWO_WORKER_FIRST_PASS"
 TWO_WORKER_FIRST_PASS_BATCH_KIND = "FIRST_PASS"
 
 
@@ -134,7 +134,7 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
         raise MacosTwoWorkerCampaignError("SELECTION_QUEUE_REQUIRED", "a binding and a queue are required")
     # One Worker per capacity slot: exact two-worker creates two, each single-worker profile exactly one.
     if worker_ids is None:
-        worker_ids = tuple(f"w{index + 1}" for index in range(len(plan.slots.slot_ids)))
+        worker_ids = tuple(f"worker-{index + 1:02d}" for index in range(len(plan.slots.slot_ids)))
     leases: dict[str, dict] = {}
     for index, worker_id in enumerate(worker_ids):
         slot_id = plan.slots.slot_ids[index] if index < len(plan.slots.slot_ids) else (
@@ -235,13 +235,13 @@ def campaign_status(*, cleanup_complete: bool, results, workers, served, refused
     spec = CampaignRouteSpec(
         execution_profile=MPS_TWO_WORKER_FIRST_PASS, batch_kind=TWO_WORKER_FIRST_PASS_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_two_worker_campaign",
-        worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
+        worker_ids=("worker-01", "worker-02"), default_point_ids=("p1", "p2"), minimum_served=6,
         composer=compose_two_worker_campaign)
     return campaign_verdict(spec=spec, cleanup_complete=cleanup_complete, results=results,
                             workers=workers, served=served, refused=refused, points=points)
 
 
-def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("w1", "w2")) -> dict:
+def summarize_per_slot_pick_place(*, evidence_root: Path, workers=("worker-01", "worker-02")) -> dict:
     """Read each slot's pick-place evidence back out of its own directory tree, defensively.
 
     A reader should not have to walk the tree to learn whether a slot executed its points, so the
@@ -685,28 +685,28 @@ class CampaignRouteSpec:
 
     @property
     def pass_label(self) -> str:
-        return "W2_CAMPAIGN_PASS" if self.worker_count == 2 else "N1_CAMPAIGN_PASS"
+        return "TWO_WORKER_CAMPAIGN_PASS" if self.worker_count == 2 else "SINGLE_WORKER_CAMPAIGN_PASS"
 
     @property
     def incomplete_label(self) -> str:
-        return "W2_CAMPAIGN_INCOMPLETE" if self.worker_count == 2 else "N1_CAMPAIGN_INCOMPLETE"
+        return "TWO_WORKER_CAMPAIGN_INCOMPLETE" if self.worker_count == 2 else "SINGLE_WORKER_CAMPAIGN_INCOMPLETE"
 
 
 ROUTE_SPECS: tuple[CampaignRouteSpec, ...] = (
     CampaignRouteSpec(
         execution_profile=MPS_TWO_WORKER_FIRST_PASS, batch_kind=TWO_WORKER_FIRST_PASS_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_two_worker_campaign",
-        worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
+        worker_ids=("worker-01", "worker-02"), default_point_ids=("p1", "p2"), minimum_served=6,
         composer=compose_two_worker_campaign),
     CampaignRouteSpec(
         execution_profile=MPS_SINGLE_WORKER_FULL_RESTART_RETRY, batch_kind=SINGLE_WORKER_RETRY_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, module="so101_demo.cli.macos_mps_single_worker_retry",
-        worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
+        worker_ids=("worker-01",), default_point_ids=("p1",), minimum_served=3,
         composer=compose_single_worker_retry),
     CampaignRouteSpec(
         execution_profile=MPS_SINGLE_WORKER_FIRST_PASS, batch_kind=SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, module="so101_demo.cli.macos_mps_single_worker_first_pass",
-        worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
+        worker_ids=("worker-01",), default_point_ids=("p1",), minimum_served=3,
         composer=compose_single_worker_first_pass),
 )
 
@@ -1489,7 +1489,7 @@ def campaign_verdict(*, spec, cleanup_complete, results, workers, served, refuse
     unselected point ever attempted.
 
     The point clause is the one the live gate was missing: without it a campaign that executed
-    nothing at all reported `W2_CAMPAIGN_PASS`. A refused request - even a deliberate probe - still
+    nothing at all reported `TWO_WORKER_CAMPAIGN_PASS`. A refused request - even a deliberate probe - still
     reads INCOMPLETE by construction.
     """
 
@@ -1572,7 +1572,7 @@ def run_single_worker(argv: list[str] | None = None, *, execution_profile: str) 
 
     spec = route_spec(execution_profile)
     if spec.worker_count != 1:
-        raise ContractError(f"NOT_A_W1_PROFILE: {execution_profile}")
+        raise ContractError(f"NOT_A_SINGLE_WORKER_PROFILE: {execution_profile}")
     arguments = build_single_worker_parser(execution_profile).parse_args(argv)
     arguments_argv = list(sys.argv[1:] if argv is None else argv)
     try:

@@ -652,7 +652,7 @@ class BatchRequest:
         if self.batch_kind is BatchKind.FULL_RESTART_RETRY and (
             len(point_ids) != 1 or self.worker_count != 1
         ):
-            raise ContractError("RETRY_SINGLE_POINT_N1")
+            raise ContractError("RETRY_SINGLE_POINT_SINGLE_WORKER")
 
 # --------------------------------------------------------------------------------------
 # Version 3: the active budget-free contract
@@ -1361,9 +1361,9 @@ def require_macos_mps_two_worker_execution(request_version: int, config_version:
 class ExecutionProfile(StrEnum):
     """The closed set of approved macOS execution profiles."""
 
-    MPS_TWO_WORKER_FIRST_PASS = "MPS_W2_FIRST_PASS"
-    MPS_SINGLE_WORKER_FULL_RESTART_RETRY = "MPS_W1_FULL_RESTART_RETRY"
-    MPS_SINGLE_WORKER_FIRST_PASS = "MPS_W1_FIRST_PASS"
+    MPS_TWO_WORKER_FIRST_PASS = "MPS_TWO_WORKER_FIRST_PASS"
+    MPS_SINGLE_WORKER_FULL_RESTART_RETRY = "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
+    MPS_SINGLE_WORKER_FIRST_PASS = "MPS_SINGLE_WORKER_FIRST_PASS"
 
 
 #: The only worker counts the single-worker profiles support. single-worker is a platform claim, not a shrunken two-worker.

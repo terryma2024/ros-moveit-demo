@@ -64,6 +64,9 @@ _WIRE_PATTERNS = (
     re.compile(r"task\d+[-_]"),
     re.compile(r"MPS_W\d_"),
     re.compile(r"(?<![A-Za-z0-9])hs\d+-"),
+    # an error code or verdict that names a worker count by its work step (W8_QUALIFICATION_..., N1_CAMPAIGN_PASS, ..._N1)
+    re.compile(r"(?<![A-Za-z0-9])(?:W\d|N1)_[A-Z]"),
+    re.compile(r"[A-Z]_(?:W\d|N1)(?![A-Za-z0-9])"),
 )
 # A kind-like literal is one token with no space or slash. It carries a version when a ``v<digits>`` segment sits
 # between separators anywhere in it (``so101-run-result-v1``, ``recorder_queue_v1``, ``paired_camera_truth_v2_original``).

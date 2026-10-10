@@ -91,7 +91,7 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   // The first pass claims the W1 first-pass row; the console never infers it from the point count.
   const firstPassExpectation: CampaignBatchExpectation = {
     batchKind: "FIRST_PASS",
-    executionProfile: "MPS_W1_FIRST_PASS",
+    executionProfile: "MPS_SINGLE_WORKER_FIRST_PASS",
     schemaVersion: 6,
     workerCount: 1,
     selectedPointIds: firstPassSelection,
@@ -255,7 +255,7 @@ test("R07 a genuinely failed point retries as its own SEQUENTIAL N1 FULL_RESTART
   // intact and the retry batch completed its own cleanup.
   const retryExpectation: CampaignBatchExpectation = {
     batchKind: "FULL_RESTART_RETRY",
-    executionProfile: "MPS_W1_FULL_RESTART_RETRY",
+    executionProfile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
     schemaVersion: 5,
     workerCount: 1,
     selectedPointIds: [target.point_id],

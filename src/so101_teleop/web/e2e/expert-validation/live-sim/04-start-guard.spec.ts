@@ -13,21 +13,21 @@ import { liveSimTest as test, expect, requireGateDetail } from "../fixtures/live
 /** The three approved combinations, exactly as design section 6 fixes them. */
 const ROUTES = [
   {
-    profile: "MPS_W2_FIRST_PASS",
+    profile: "MPS_TWO_WORKER_FIRST_PASS",
     schema_version: 4,
     execution_mode: "PARALLEL",
     worker_count: 2,
     batch_kind: "FIRST_PASS",
   },
   {
-    profile: "MPS_W1_FULL_RESTART_RETRY",
+    profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
     schema_version: 5,
     execution_mode: "SEQUENTIAL",
     worker_count: 1,
     batch_kind: "FULL_RESTART_RETRY",
   },
   {
-    profile: "MPS_W1_FIRST_PASS",
+    profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     schema_version: 6,
     execution_mode: "SEQUENTIAL",
     worker_count: 1,

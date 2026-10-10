@@ -114,9 +114,9 @@ MACOS_WORKER_COUNTS: tuple[int, ...] = (1, 2)
 
 #: The installed document each profile resolves to, beside the configured execution document.
 PROFILE_DOCUMENT_BASENAMES: Mapping[str, str] = MappingProxyType({
-    "MPS_W2_FIRST_PASS": "parallel_batch_macos_mps_two_worker.yaml",
-    "MPS_W1_FULL_RESTART_RETRY": "parallel_batch_macos_mps_single_worker_retry.yaml",
-    "MPS_W1_FIRST_PASS": "parallel_batch_macos_mps_single_worker_first_pass.yaml",
+    "MPS_TWO_WORKER_FIRST_PASS": "parallel_batch_macos_mps_two_worker.yaml",
+    "MPS_SINGLE_WORKER_FULL_RESTART_RETRY": "parallel_batch_macos_mps_single_worker_retry.yaml",
+    "MPS_SINGLE_WORKER_FIRST_PASS": "parallel_batch_macos_mps_single_worker_first_pass.yaml",
 })
 
 

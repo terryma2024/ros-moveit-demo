@@ -81,7 +81,7 @@ class CampaignConfiguration(ClosedModel):
     #: The macOS routing key. A request that names a profile must name the exact combination its
     #: installed document declares; one that names nothing is never completed by inference.
     execution_profile: Literal[
-        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"
+        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"
     ] | None = None
     batch_kind: Literal["FIRST_PASS", "FULL_RESTART_RETRY"] | None = None
 

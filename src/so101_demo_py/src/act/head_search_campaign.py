@@ -28,7 +28,7 @@ def _case_valid(case):
             and 900000 <= case["seed"] < 900040
             and case.get("condition_class") == CONDITIONS[(case["seed"] - 900000) % 10]
             and case.get("anchor") in ANCHORS
-            and case.get("case_id") == f"hs40-{case['seed']}"
+            and case.get("case_id") == f"head-search-{case['seed']}"
             and _strict_int(case.get("expected_attempt_count"))
             and case.get("expected_attempt_count") ==
             (2 if case.get("condition_class") in INTERRUPTIONS else 1))
@@ -57,7 +57,7 @@ def load_cases(partitions: dict) -> list[dict]:
             raise ValueError("CAMPAIGN_SCENE_GROUP")
         groups.add(group)
         item = deepcopy(row)
-        item["case_id"] = f"hs40-{row['seed']}"
+        item["case_id"] = f"head-search-{row['seed']}"
         item["expected_attempt_count"] = 2 if row.get("condition_class") in INTERRUPTIONS else 1
         if not _case_valid(item):
             raise ValueError("CAMPAIGN_CASE_DECLARATION")

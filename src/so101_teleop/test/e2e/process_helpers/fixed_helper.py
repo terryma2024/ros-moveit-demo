@@ -316,7 +316,7 @@ def _canonical_first_pass(args: argparse.Namespace, spec: dict, batch_root: Path
             )
         journal.append_committed(
             "BATCH_TERMINAL", f"{args.batch_id}/BATCH_TERMINAL",
-            {"outcome": "N1_CAMPAIGN_INCOMPLETE"},
+            {"outcome": "SINGLE_WORKER_CAMPAIGN_INCOMPLETE"},
         )
         journal.append_committed(
             "CLEANUP_COMMITTED", f"{args.batch_id}/CLEANUP_COMMITTED",

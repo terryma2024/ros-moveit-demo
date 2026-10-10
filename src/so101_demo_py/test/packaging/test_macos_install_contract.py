@@ -140,11 +140,11 @@ def test_task_station_install_contract_and_fork_versions_are_complete() -> None:
 
 #: The three approved macOS execution profiles, and the document each one is shipped as.
 MACOS_PROFILES = {
-    "parallel_batch_macos_mps_two_worker.yaml": (4, 2, ("MPS_W2_FIRST_PASS", "FIRST_PASS")),
+    "parallel_batch_macos_mps_two_worker.yaml": (4, 2, ("MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS")),
     "parallel_batch_macos_mps_single_worker_retry.yaml": (
-        5, 1, ("MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY")),
+        5, 1, ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY")),
     "parallel_batch_macos_mps_single_worker_first_pass.yaml": (
-        6, 1, ("MPS_W1_FIRST_PASS", "FIRST_PASS")),
+        6, 1, ("MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS")),
 }
 
 

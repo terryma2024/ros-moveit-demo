@@ -274,7 +274,7 @@ def short_socket_root(tmp_path: Path) -> Path:
     import os
 
     digest = hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:10]
-    return Path(os.environ.get("HS325_SOCKET_ROOT", "/tmp")) / f"hs325-{digest}"
+    return Path(os.environ.get("HEAD_SEARCH_SOCKET_ROOT", "/tmp")) / f"head-search-{digest}"
 
 
 def build(

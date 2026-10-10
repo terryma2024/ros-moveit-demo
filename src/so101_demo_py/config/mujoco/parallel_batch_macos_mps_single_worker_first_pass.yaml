@@ -4,7 +4,7 @@ schema_version: 6
 # `(schema_version, execution_profile, batch_kind, worker_count)` and this document is exactly one
 # admissible combination:
 #
-#   profile          MPS_W1_FIRST_PASS
+#   profile          MPS_SINGLE_WORKER_FIRST_PASS
 #   batch kind       FIRST_PASS   (the request must carry it; it is not inferred)
 #   worker count     1
 #

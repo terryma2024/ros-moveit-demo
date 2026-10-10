@@ -77,8 +77,8 @@ SHA_CATALOG = CATALOG_SHA256
 SHA_SELECTION = SELECTION_SHA256
 SHA_CONFIG = CONFIG_SHA256
 SHA_CLOSURE = RUNTIME_CLOSURE_SHA256
-CAMPAIGN_PASS = "W2_CAMPAIGN_PASS"
-CAMPAIGN_INCOMPLETE = "W2_CAMPAIGN_INCOMPLETE"
+CAMPAIGN_PASS = "TWO_WORKER_CAMPAIGN_PASS"
+CAMPAIGN_INCOMPLETE = "TWO_WORKER_CAMPAIGN_INCOMPLETE"
 
 
 #: The verified result hash of one committed attempt, as the batch's own ``POINT_TERMINAL`` writes
@@ -517,7 +517,7 @@ def test_a_five_point_first_pass_records_the_receipt_its_failed_point_needs(tmp_
     outcomes = {point_id: "PASSED" for point_id in FIVE_POINT_IDS}
     outcomes["sample_05_near_center"] = "FAILED"
     batch_root = _write_campaign_batch(
-        tmp_path, outcomes, verdict="N1_CAMPAIGN_INCOMPLETE", point_ids=FIVE_POINT_IDS
+        tmp_path, outcomes, verdict="SINGLE_WORKER_CAMPAIGN_INCOMPLETE", point_ids=FIVE_POINT_IDS
     )
     terminal_receipt = _journal_final_frame_sha256(batch_root, BATCH_ID)
     service, store, root = _service(tmp_path, point_ids=FIVE_POINT_IDS)
@@ -732,7 +732,7 @@ def test_the_coordinator_layout_without_a_sealed_reference_still_fails_closed(tm
 #
 # Recorded defect (``$RUN/task12/retry-closed-loop-20260922T063350Z``): the console's same-page
 # retry was admitted, spawned a real coordinator and ran its ``FULL_RESTART_RETRY`` batch
-# to ``N1_CAMPAIGN_PASS`` with complete cleanup - and the endpoint then answered
+# to ``SINGLE_WORKER_CAMPAIGN_PASS`` with complete cleanup - and the endpoint then answered
 # ``409 {"code": "CAMPAIGN_FIELD_INVALID:catalog_sha256"}`` while reading that batch back. The retry
 # composition writes the *same* selection in its own vocabulary: the catalog it was selected from is
 # ``original_catalog_sha256`` and the one point it executes is ``point``. The readback refused
@@ -749,7 +749,7 @@ RETRY_BATCH_ID = "retry-001"
 RETRY_POINT_ID = "sample_05_near_center"
 #: The retry batch's own verdict about the whole retry, while the one point it executed carries its
 #: own business outcome: the two are read separately and never merged into one another.
-RETRY_VERDICT = "N1_CAMPAIGN_PASS"
+RETRY_VERDICT = "SINGLE_WORKER_CAMPAIGN_PASS"
 
 
 def _campaign_upstream_binding(batch_root, batch_id, campaign_id=CAMPAIGN_ID):

@@ -663,7 +663,7 @@ def main(argv: list[str] | None = None, *, guard=None, environment=None) -> int:
             document["campaign_status"] = "UNREADABLE"
     document["status"] = (
         "SERVICE_CAMPAIGN_PASS"
-        if document.get("campaign_status") == "W2_CAMPAIGN_PASS" and exit_code == 0
+        if document.get("campaign_status") == "TWO_WORKER_CAMPAIGN_PASS" and exit_code == 0
         else "SERVICE_CAMPAIGN_INCOMPLETE"
     )
     print(json.dumps(document, indent=2, sort_keys=True))

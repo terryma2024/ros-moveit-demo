@@ -389,7 +389,7 @@ class UnifiedWorkloadService:
                 if payload["worker_count"] not in (1, 2, 8):
                     raise ValueError("QUALIFICATION_WORKER_COUNT_INVALID")
             elif payload["worker_count"] != 8:
-                raise ValueError("FORMAL_W8_REQUIRED")
+                raise ValueError("FORMAL_EIGHT_WORKER_REQUIRED")
         root = Path(payload["evidence_root"])
         if not root.is_absolute() or ".." in root.parts or not root.is_dir():
             raise ValueError("CAMPAIGN_EVIDENCE_ROOT_INVALID")
@@ -473,11 +473,11 @@ class UnifiedWorkloadService:
         if spec.kind.startswith("act_collection") and not payload["qualification_mode"]:
             qualified_path = payload["qualification_receipt_path"]
             if not isinstance(qualified_path, str):
-                raise ValueError("W8_QUALIFICATION_REQUIRED")
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_REQUIRED")
             try:
                 qualification = self._read_json(qualified_path, root)
             except ValueError as error:
-                raise ValueError("W8_QUALIFICATION_REQUIRED") from error
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_REQUIRED") from error
             required = {
                 "status": "PASSED", "worker_count": 8,
                 "source_sha256": payload["source_sha256"],
@@ -486,7 +486,7 @@ class UnifiedWorkloadService:
                 "contact_policy_fingerprint": payload["contact_policy_fingerprint"],
             }
             if any(qualification.get(key) != value for key, value in required.items()):
-                raise ValueError("W8_QUALIFICATION_MISMATCH")
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_MISMATCH")
             # A self-declared PASSED document is not physical qualification.
             # Task 11A must provide an independent verifier of the frozen
             # contract, two committed 20-scene waves and actual per-Worker
@@ -494,13 +494,13 @@ class UnifiedWorkloadService:
             try:
                 from so101_demo.act.parallel_qualification_verifier import verify_eight_worker_qualification
             except ImportError as error:
-                raise ValueError("W8_QUALIFICATION_VERIFIER_UNAVAILABLE") from error
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_VERIFIER_UNAVAILABLE") from error
             try:
                 verified = verify_eight_worker_qualification(Path(qualified_path), payload)
             except (OSError, KeyError, TypeError, ValueError) as error:
-                raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID") from error
             if verified is not True:
-                raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")
+                raise ValueError("EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID")
         elif payload["qualification_receipt_path"] is not None:
             raise ValueError("QUALIFICATION_RECEIPT_UNEXPECTED")
         if not isinstance(payload["children"], list) or len(payload["children"]) != payload["worker_count"]:

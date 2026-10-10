@@ -32,7 +32,7 @@ def _launcher_module():
 def _absolute_document(tmp_path: Path, module, overrides: dict | None = None) -> dict:
     document = {
         "schema_version": module.LAUNCH_DOCUMENT_SCHEMA_VERSION,
-        "case_id": "macos-w2-20",
+        "case_id": "macos-two-worker-20",
         "host": "127.0.0.1",
         "port": 8013,
         "evidence_root": str(tmp_path),
@@ -83,7 +83,7 @@ def test_a_valid_document_loads_and_a_bad_port_is_refused(tmp_path: Path) -> Non
 
     document = module.load_launch_document(path)
 
-    assert document.case_id == "macos-w2-20"
+    assert document.case_id == "macos-two-worker-20"
     assert document.port == 8013
     assert document.host == "127.0.0.1"
 
@@ -170,5 +170,5 @@ def test_the_child_environment_pins_the_contract_and_the_service_parameters(
     assert environment["SO101_UNIFIED_INSTALL_PREFIX"] == str(paths.project_install)
     assert environment["SO101_UNIFIED_HOST"] == "127.0.0.1"
     assert environment["SO101_UNIFIED_PORT"] == "8013"
-    assert environment["SO101_LIVE_CASE_ID"] == "macos-w2-20"
+    assert environment["SO101_LIVE_CASE_ID"] == "macos-two-worker-20"
     assert "NODE_ENV" not in environment

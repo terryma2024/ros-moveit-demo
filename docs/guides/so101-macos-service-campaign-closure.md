@@ -14,9 +14,9 @@ macOS 只支持三组组合，别想着扩展：
 
 | 场景 | schema | profile | worker_count | batch kind |
 | --- | --- | --- | --- | --- |
-| W2 first-pass | v4 | `MPS_W2_FIRST_PASS` | 2 | `FIRST_PASS` |
-| W1 retry | v5 | `MPS_W1_FULL_RESTART_RETRY` | 1 | `FULL_RESTART_RETRY` |
-| W1 first-pass | v6 | `MPS_W1_FIRST_PASS` | 1 | `FIRST_PASS` |
+| W2 first-pass | v4 | `MPS_TWO_WORKER_FIRST_PASS` | 2 | `FIRST_PASS` |
+| W1 retry | v5 | `MPS_SINGLE_WORKER_FULL_RESTART_RETRY` | 1 | `FULL_RESTART_RETRY` |
+| W1 first-pass | v6 | `MPS_SINGLE_WORKER_FIRST_PASS` | 1 | `FIRST_PASS` |
 
 路由键是 `(schema_version, execution_profile, batch_kind, worker_count)`，三处各校验一次：服务 request、adapter、public entry。选择的点数不参与路由——一个点和二十个点都还是同一个 profile。N>2 在 macOS 上、adaptive 池、CPU fallback、Linux transport、以及 v4 声称 W1 这类交叉组合，都在 spawn 之前拒绝。安装版 YAML 在 `src/so101_demo_py/config/mujoco/` 下：v4 的 bytes 已冻结，v5/v6 只改了 `schema_version`、`worker_count` 和 `ros_domain_ids`。
 

@@ -90,7 +90,7 @@ _RETRY_KIND = "FULL_RESTART_RETRY"
 #: with its durable evidence - exactly the canonical ``POINTS_COMPLETE`` fact, no more and no less.
 #: Every other verdict keeps its own name, so a reader can never mistake an incomplete campaign for
 #: a complete one.
-_CAMPAIGN_PASS_VERDICTS = frozenset({"W2_CAMPAIGN_PASS", "N1_CAMPAIGN_PASS"})
+_CAMPAIGN_PASS_VERDICTS = frozenset({"TWO_WORKER_CAMPAIGN_PASS", "SINGLE_WORKER_CAMPAIGN_PASS"})
 POINTS_COMPLETE = "POINTS_COMPLETE"
 
 
@@ -445,7 +445,7 @@ class CampaignLayoutReader:
                     POINTS_COMPLETE if verdict in _CAMPAIGN_PASS_VERDICTS else verdict
                 ),
             }
-            if verdict in {"W2_CAMPAIGN_INCOMPLETE", "N1_CAMPAIGN_INCOMPLETE"}:
+            if verdict in {"TWO_WORKER_CAMPAIGN_INCOMPLETE", "SINGLE_WORKER_CAMPAIGN_INCOMPLETE"}:
                 translated["infrastructure_terminal"] = verdict
         else:  # CLEANUP_COMMITTED
             cleanup_complete = payload.get("cleanup_complete", True)

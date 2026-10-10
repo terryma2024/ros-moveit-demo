@@ -338,9 +338,9 @@ def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -
         "cup_b_free_joint",
         "bottle_free_joint",
         "task_start",
-        "v5_no_cup",
-        "v5_two_cups",
-        "v5_cup_near_bottle",
+        "no_cup",
+        "two_cups",
+        "cup_near_bottle",
     } <= names
     target_body = next(
         element

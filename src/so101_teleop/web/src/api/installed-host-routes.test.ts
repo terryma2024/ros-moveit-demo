@@ -39,9 +39,9 @@ const MACOS: CapabilitiesDocument = {
     { worker_count: 4, selectable: false, reason_codes: ["UNSUPPORTED_ON_MACOS"] },
   ],
   support_matrix: [
-    { profile: "MPS_W2_FIRST_PASS", schema_version: 4, execution_mode: "PARALLEL", worker_count: 2, batch_kind: "FIRST_PASS" },
-    { profile: "MPS_W1_FIRST_PASS", schema_version: 6, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FIRST_PASS" },
-    { profile: "MPS_W1_FULL_RESTART_RETRY", schema_version: 5, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FULL_RESTART_RETRY" },
+    { profile: "MPS_TWO_WORKER_FIRST_PASS", schema_version: 4, execution_mode: "PARALLEL", worker_count: 2, batch_kind: "FIRST_PASS" },
+    { profile: "MPS_SINGLE_WORKER_FIRST_PASS", schema_version: 6, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FIRST_PASS" },
+    { profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", schema_version: 5, execution_mode: "SEQUENTIAL", worker_count: 1, batch_kind: "FULL_RESTART_RETRY" },
   ],
   start_guard_policy: { timeout_s: 600 },
 };
@@ -71,7 +71,7 @@ describe("hostRoute", () => {
     const route = hostRoute(MACOS, { mode: "PARALLEL", workerCount: 2, batchKind: "FIRST_PASS" });
     expect(route.runnable).toBe(true);
     expect(route.platformBound).toBe(true);
-    if (route.runnable) expect(route.profile).toBe("MPS_W2_FIRST_PASS");
+    if (route.runnable) expect(route.profile).toBe("MPS_TWO_WORKER_FIRST_PASS");
   });
 
   it("refuses a shape the platform-bound matrix does not carry, with its reason", () => {

@@ -37,18 +37,18 @@ def test_qualification_contract_is_created_once_before_any_spawn(tmp_path):
     from so101_demo.act.parallel_collection import create_qualification_contract
 
     target = tmp_path / "qualification-contract.json"
-    path = create_qualification_contract(target, payload={"scenes": 8}, kind="W8")
+    path = create_qualification_contract(target, payload={"scenes": 8}, kind="EIGHT_WORKER")
     document = _json.loads(open(path).read())
-    assert document["kind"] == "W8" and document["scenes"] == 8
+    assert document["kind"] == "EIGHT_WORKER" and document["scenes"] == 8
     assert not (tmp_path / "qualification-contract.json.partial").exists()
     # an existing contract is a refusal, never an overwrite: another run must not inherit its evidence
     with pytest.raises(ValueError, match="QUALIFICATION_CONTRACT_EXISTS"):
-        create_qualification_contract(target, payload={"scenes": 8}, kind="W8")
+        create_qualification_contract(target, payload={"scenes": 8}, kind="EIGHT_WORKER")
     with pytest.raises(ValueError, match="QUALIFICATION_KIND_INVALID"):
         create_qualification_contract(tmp_path / "other.json", payload={"scenes": 8}, kind="W9")
     with pytest.raises(ValueError, match="QUALIFICATION_CONTRACT_NOT_PERSISTABLE"):
         create_qualification_contract(tmp_path / "absent" / "qualification-contract.json",
-                                      payload={"scenes": 8}, kind="W8")
+                                      payload={"scenes": 8}, kind="EIGHT_WORKER")
 
 
 def test_campaign_index_is_atomic_and_records_the_partition(tmp_path):
@@ -69,18 +69,18 @@ def test_campaign_index_is_atomic_and_records_the_partition(tmp_path):
 def test_formal_runs_require_exact_eight_worker_under_a_live_qualification_contract():
     from so101_demo.act.parallel_collection import require_collection_mode
 
-    require_collection_mode(manifest_kind="W1", qualification_mode=True)
-    require_collection_mode(manifest_kind="W2", qualification_mode=True)
-    require_collection_mode(manifest_kind="W8", qualification_mode=True)
+    require_collection_mode(manifest_kind="SINGLE_WORKER", qualification_mode=True)
+    require_collection_mode(manifest_kind="TWO_WORKER", qualification_mode=True)
+    require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=True)
     with pytest.raises(ValueError, match="QUALIFICATION_MANIFEST_KIND_INVALID"):
         require_collection_mode(manifest_kind="train", qualification_mode=True)
     live = {"revoked": False, "scenes": 40}
-    require_collection_mode(manifest_kind="W8", qualification_mode=False, contract=live)
-    with pytest.raises(ValueError, match="FORMAL_MANIFEST_NOT_EXACT_W8"):
-        require_collection_mode(manifest_kind="W1", qualification_mode=False, contract=live)
+    require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=False, contract=live)
+    with pytest.raises(ValueError, match="FORMAL_MANIFEST_NOT_EIGHT_WORKER"):
+        require_collection_mode(manifest_kind="SINGLE_WORKER", qualification_mode=False, contract=live)
     for contract in (None, {"revoked": True, "scenes": 40}, {"revoked": False, "scenes": 8}):
         with pytest.raises(ValueError, match="FORMAL_QUALIFICATION"):
-            require_collection_mode(manifest_kind="W8", qualification_mode=False, contract=contract)
+            require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=False, contract=contract)
 
 
 def _result(scene_id="act-1", **overrides):
@@ -162,7 +162,7 @@ def _campaign_fixture(tmp_path, *, scene_count=5, max_wave_size=2, terminal=(), 
     from so101_demo.act.parallel_collection import FixedActCollectionCampaign
 
     rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(scene_count)]
-    manifest = {"kind": "W8", "scenarios": rows,
+    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
                 "qualification_contract": {"revoked": False, "scenes": 40}}
     store = __import__("so101_demo.adapters.act.parallel_collection_results",
                        fromlist=["ActCollectionResultStore"]).ActCollectionResultStore(tmp_path)
@@ -245,7 +245,7 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
         20, 20, 5)
 
     rows = [{"scene_id": scene_id, "split": "train"} for scene_id in scene_ids]
-    manifest = {"kind": "W8", "scenarios": rows,
+    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
                 "qualification_contract": {"revoked": False, "scenes": 40}}
     campaign = FixedActCollectionCampaign(manifest, config, context=None, root=tmp_path,
                                           collect_port=_CollectPort(), claim=_Claim())
@@ -261,7 +261,7 @@ def test_workload_refuses_an_unadmitted_lease_and_never_widens_a_wave(tmp_path):
     )
 
     rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(3)]
-    manifest = {"kind": "W8", "scenarios": rows,
+    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
                 "qualification_contract": {"revoked": False, "scenes": 40}}
     campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 2, "qualification": False},
                                           context=None, root=tmp_path,
@@ -304,7 +304,7 @@ def test_workload_runs_inside_a_boundary_when_the_worker_supplies_one(tmp_path):
         finally:
             bounds.append("exit")
 
-    manifest = {"kind": "W8", "scenarios": [{"scene_id": "act-0", "split": "train"}],
+    manifest = {"kind": "EIGHT_WORKER", "scenarios": [{"scene_id": "act-0", "split": "train"}],
                 "qualification_contract": {"revoked": False, "scenes": 40}}
     campaign = FixedActCollectionCampaign(manifest, {"max_wave_size": 20, "qualification": False},
                                           context=None, root=tmp_path, collect_port=_CollectPort(),

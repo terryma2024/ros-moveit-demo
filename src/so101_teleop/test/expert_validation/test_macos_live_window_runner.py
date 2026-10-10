@@ -79,9 +79,9 @@ def test_the_runner_declares_one_case_per_window_and_a_closed_environment() -> N
 
     for token in (
         'case "$case_name" in',
-        'w2) case_id="macos-w2-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"',
-        'w1) case_id="macos-w1-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"',
-        'retry) case_id="macos-w1-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"',
+        'two-worker) case_id="macos-two-worker-20"; mode="PARALLEL"; workers=2; points=20; project="fixed-n-execution"',
+        'single-worker) case_id="macos-single-worker-20"; mode="SEQUENTIAL"; workers=1; points=20; project="fixed-n-execution"',
+        'retry) case_id="macos-single-worker-20-retry"; mode="SEQUENTIAL"; workers=1; points=20; project="retry-full-restart"',
         'export SO101_LIVE_SIM_HOST="$(hostname)"',
         'export SO101_LIVE_SERVICE_BASE_URL="$SERVICE_URL"',
         'export SO101_LIVE_SERVICE_STATE_ROOT="$state_root"',
@@ -116,11 +116,11 @@ def test_the_runner_refuses_before_it_starts_anything(tmp_path: Path) -> None:
                "--selection-manifest", "/tmp/none.json").returncode == 2
     assert "LIVE_WINDOW_REFUSED CASE_REQUIRED" in run(
         "--case", "w9", "--task-root", REGISTERED_TASK_ROOT).stderr
-    refused = run("--case", "w2", "--task-root", str(tmp_path),
+    refused = run("--case", "two-worker", "--task-root", str(tmp_path),
                   "--selection-manifest", "/tmp/none.json")
     assert refused.returncode == 2
     assert "TASK_ROOT_NOT_REGISTERED" in refused.stderr
-    refused = run("--case", "w2", "--task-root", REGISTERED_TASK_ROOT,
+    refused = run("--case", "two-worker", "--task-root", REGISTERED_TASK_ROOT,
                   "--selection-manifest", "/tmp/none.json")
     assert refused.returncode == 2
     assert "SELECTION_MANIFEST_REQUIRED" in refused.stderr
@@ -176,7 +176,7 @@ def test_the_single_case_manifest_shape_is_the_one_the_specs_read(tmp_path: Path
     assert "type FunctionalManifest = { cases: FunctionalCase[]; stability: FunctionalCase }" in spec
 
     runner = RUNNER.read_text(encoding="utf-8")
-    parameters = _case_parameters(runner, "w2")
+    parameters = _case_parameters(runner, "two-worker")
     manifest = _written_manifest(tmp_path, _manifest_writer(runner), parameters)
 
     assert set(manifest) == {"cases", "stability"}

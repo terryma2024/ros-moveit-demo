@@ -162,7 +162,7 @@ class Service:
             "campaign_id": "campaign-1",
             "batch_id": "b001",
             "manifest_id": "manifest-1",
-            "execution_profile": "MPS_W2_FIRST_PASS",
+            "execution_profile": "MPS_TWO_WORKER_FIRST_PASS",
             "schema_version": 4,
             "worker_count": 2,
             "context_id": body["context_id"],
@@ -508,22 +508,22 @@ def test_the_api_accepts_a_closed_profile_claim():
     claim = CampaignConfiguration(
         contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
         manifest_id="m", execution_mode="SEQUENTIAL", worker_count=1,
-        execution_profile="MPS_W1_FIRST_PASS", batch_kind="FIRST_PASS",
+        execution_profile="MPS_SINGLE_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
     )
-    assert claim.execution_profile == "MPS_W1_FIRST_PASS"
+    assert claim.execution_profile == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert claim.batch_kind == "FIRST_PASS"
 
     w2 = CampaignConfiguration(
         contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
         manifest_id="m", execution_mode="PARALLEL", worker_count=2,
-        execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS",
+        execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
     )
-    assert w2.execution_profile == "MPS_W2_FIRST_PASS"
+    assert w2.execution_profile == "MPS_TWO_WORKER_FIRST_PASS"
 
     retry = CampaignConfiguration(
         contract_version=3, service_session_id="s", lease_id="l", lease_generation=1,
         manifest_id="m", execution_mode="SEQUENTIAL", worker_count=1,
-        execution_profile="MPS_W1_FULL_RESTART_RETRY", batch_kind="FULL_RESTART_RETRY",
+        execution_profile="MPS_SINGLE_WORKER_FULL_RESTART_RETRY", batch_kind="FULL_RESTART_RETRY",
     )
     assert retry.batch_kind == "FULL_RESTART_RETRY"
 
@@ -538,15 +538,15 @@ def test_the_api_refuses_a_claim_that_contradicts_its_mode_or_worker_count():
     # A W2 profile cannot be claimed while asking for the W1 mode.
     with pytest.raises(ValidationError, match="EXECUTION_PROFILE_MODE"):
         CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
-                              execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS")
+                              execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS")
     # W1 first-pass and W1 retry are different rows of the matrix, not one profile.
     with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
         CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
-                              execution_profile="MPS_W1_FIRST_PASS",
+                              execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
                               batch_kind="FULL_RESTART_RETRY")
     with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
         CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
-                              execution_profile="MPS_W1_FIRST_PASS")
+                              execution_profile="MPS_SINGLE_WORKER_FIRST_PASS")
     with pytest.raises(ValidationError, match="EXECUTION_PROFILE_CLAIM"):
         CampaignConfiguration(**base, execution_mode="SEQUENTIAL", worker_count=1,
                               batch_kind="FIRST_PASS")
@@ -557,7 +557,7 @@ def test_the_api_refuses_a_claim_that_contradicts_its_mode_or_worker_count():
     # which refuses it with the stable UNSUPPORTED_ON_MACOS reason.
     oversized = CampaignConfiguration(
         **base, execution_mode="PARALLEL", worker_count=8,
-        execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS")
+        execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS")
     assert oversized.worker_count == 8
 
 
@@ -567,7 +567,7 @@ def test_the_preflight_route_refuses_a_cross_profile_claim(tmp_path):
         json={
             "contract_version": 3, "service_session_id": "s", "lease_id": "l",
             "lease_generation": 1, "manifest_id": "m", "execution_mode": "SEQUENTIAL",
-            "worker_count": 1, "execution_profile": "MPS_W2_FIRST_PASS",
+            "worker_count": 1, "execution_profile": "MPS_TWO_WORKER_FIRST_PASS",
             "batch_kind": "FIRST_PASS",
         },
     )
@@ -580,7 +580,7 @@ def test_the_preflight_route_forwards_a_closed_profile_claim(tmp_path):
         json={
             "contract_version": 3, "service_session_id": "s", "lease_id": "l",
             "lease_generation": 1, "manifest_id": "m", "execution_mode": "SEQUENTIAL",
-            "worker_count": 1, "execution_profile": "MPS_W1_FIRST_PASS",
+            "worker_count": 1, "execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS",
             "batch_kind": "FIRST_PASS",
         },
     )
@@ -602,19 +602,19 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
         available=True,
         execution_modes=("SEQUENTIAL", "PARALLEL"),
         platform="macos",
-        execution_profile="MPS_W2_FIRST_PASS",
+        execution_profile="MPS_TWO_WORKER_FIRST_PASS",
         execution_schema_version=4,
         execution_config_sha256="a" * 64,
         support_matrix=(
             ExecutionProfileResponse(
-                profile="MPS_W2_FIRST_PASS", schema_version=4, execution_mode="PARALLEL",
+                profile="MPS_TWO_WORKER_FIRST_PASS", schema_version=4, execution_mode="PARALLEL",
                 worker_count=2, batch_kind="FIRST_PASS"),
             ExecutionProfileResponse(
-                profile="MPS_W1_FULL_RESTART_RETRY", schema_version=5,
+                profile="MPS_SINGLE_WORKER_FULL_RESTART_RETRY", schema_version=5,
                 execution_mode="SEQUENTIAL", worker_count=1,
                 batch_kind="FULL_RESTART_RETRY"),
             ExecutionProfileResponse(
-                profile="MPS_W1_FIRST_PASS", schema_version=6, execution_mode="SEQUENTIAL",
+                profile="MPS_SINGLE_WORKER_FIRST_PASS", schema_version=6, execution_mode="SEQUENTIAL",
                 worker_count=1, batch_kind="FIRST_PASS"),
         ),
         worker_count_availability=(
@@ -633,10 +633,10 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
     assert document["worker_count_availability"][2]["status"] == "UNSUPPORTED_ON_MACOS"
     rows = {row["profile"]: row for row in document["support_matrix"]}
     assert set(rows) == {
-        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"}
-    assert (rows["MPS_W2_FIRST_PASS"]["schema_version"],
-            rows["MPS_W2_FIRST_PASS"]["worker_count"],
-            rows["MPS_W2_FIRST_PASS"]["batch_kind"]) == (4, 2, "FIRST_PASS")
+        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"}
+    assert (rows["MPS_TWO_WORKER_FIRST_PASS"]["schema_version"],
+            rows["MPS_TWO_WORKER_FIRST_PASS"]["worker_count"],
+            rows["MPS_TWO_WORKER_FIRST_PASS"]["batch_kind"]) == (4, 2, "FIRST_PASS")
     assert "not a resource qualification proof" in document["start_guard_note"]
     assert list(document["worker_qualifications"]) == []
 
@@ -653,7 +653,7 @@ CANDIDATE_ISSUE_BODY = {
     "campaign_id": "campaign-1",
     "batch_id": "b001",
     "manifest_id": "manifest-1",
-    "execution_profile": "MPS_W2_FIRST_PASS",
+    "execution_profile": "MPS_TWO_WORKER_FIRST_PASS",
     "worker_count": 2,
     "batch_kind": "FIRST_PASS",
     "config_document": "/opt/so101/config/parallel_batch_macos_mps_two_worker.yaml",
@@ -684,7 +684,7 @@ def test_the_candidate_context_route_issues_a_context_and_requires_every_coordin
     payload = response.json()
     assert payload["kind"] == "CANDIDATE"
     assert payload["command_id"] == "cmd-1-run"
-    assert payload["execution_profile"] == "MPS_W2_FIRST_PASS"
+    assert payload["execution_profile"] == "MPS_TWO_WORKER_FIRST_PASS"
     assert payload["worker_count"] == 2 and payload["batch_kind"] == "FIRST_PASS"
     assert payload["evidence_root"] == "/evidence/candidate-w2"
     assert payload["max_runs"] == 1 and payload["owner_generation"] == 1
@@ -774,7 +774,7 @@ def test_the_candidate_routes_refuse_the_other_context_kind_and_an_unknown_conte
             install_prefix=(root / "install").resolve(),
             install_binding_sha256=install_binding_sha256(
                 install_prefix=(root / "install").resolve(), runtime_closure_sha256="b" * 64),
-            execution_profile="MPS_W1_FULL_RESTART_RETRY",
+            execution_profile="MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
             schema_version=5,
             batch_kind="FULL_RESTART_RETRY",
             worker_count=1,
@@ -798,7 +798,7 @@ def test_the_candidate_routes_refuse_the_other_context_kind_and_an_unknown_conte
             campaign_id="campaign-1",
             batch_id="b001",
             manifest_id="manifest-1",
-            execution_profile="MPS_W2_FIRST_PASS",
+            execution_profile="MPS_TWO_WORKER_FIRST_PASS",
             schema_version=4,
             batch_kind="FIRST_PASS",
             worker_count=2,
@@ -855,7 +855,7 @@ def test_an_expired_candidate_context_is_refused_before_any_run(tmp_path):
             campaign_id="campaign-1",
             batch_id="b001",
             manifest_id="manifest-1",
-            execution_profile="MPS_W2_FIRST_PASS",
+            execution_profile="MPS_TWO_WORKER_FIRST_PASS",
             schema_version=4,
             batch_kind="FIRST_PASS",
             worker_count=2,

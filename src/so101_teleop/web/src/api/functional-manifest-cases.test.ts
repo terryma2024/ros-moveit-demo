@@ -34,7 +34,7 @@ const MACOS: CapabilitiesDocument = {
   ],
   support_matrix: [
     {
-      profile: "MPS_W2_FIRST_PASS",
+      profile: "MPS_TWO_WORKER_FIRST_PASS",
       schema_version: 4,
       execution_mode: "PARALLEL",
       worker_count: 2,
@@ -46,7 +46,7 @@ const MACOS: CapabilitiesDocument = {
       reason_codes: [],
     },
     {
-      profile: "MPS_W1_FULL_RESTART_RETRY",
+      profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY",
       schema_version: 5,
       execution_mode: "SEQUENTIAL",
       worker_count: 1,
@@ -58,7 +58,7 @@ const MACOS: CapabilitiesDocument = {
       reason_codes: [],
     },
     {
-      profile: "MPS_W1_FIRST_PASS",
+      profile: "MPS_SINGLE_WORKER_FIRST_PASS",
       schema_version: 6,
       execution_mode: "SEQUENTIAL",
       worker_count: 1,
@@ -106,13 +106,13 @@ describe("selectFunctionalCases on a macOS W1/W2 host", () => {
     ]);
     // Each first-pass case claims the matrix row it will run under: never a point-count guess.
     expect(selection.caseRoutes["fixed-n2-p4"]).toEqual({
-      execution_profile: "MPS_W2_FIRST_PASS", schema_version: 4, batch_kind: "FIRST_PASS",
+      execution_profile: "MPS_TWO_WORKER_FIRST_PASS", schema_version: 4, batch_kind: "FIRST_PASS",
     });
     expect(selection.caseRoutes["sequential-n1-p20"]).toEqual({
-      execution_profile: "MPS_W1_FIRST_PASS", schema_version: 6, batch_kind: "FIRST_PASS",
+      execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS", schema_version: 6, batch_kind: "FIRST_PASS",
     });
     expect(selection.caseRoutes["n1-full-restart-single-point"]).toEqual({
-      execution_profile: "MPS_W1_FULL_RESTART_RETRY", schema_version: 5,
+      execution_profile: "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", schema_version: 5,
       batch_kind: "FULL_RESTART_RETRY",
     });
     expect(selection.platformBound).toBe(true);

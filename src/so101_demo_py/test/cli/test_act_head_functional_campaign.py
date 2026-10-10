@@ -29,7 +29,7 @@ def test_serial_result_retains_failure_without_substituting_debug_attempt():
     from test_act_head_search_campaign_scene import _case
     facts = locked_facts()
     facts.update(original_terminal='FAULT', actual_os_return_code=1, business_rc=1)
-    rows = summarize([_case(0), _case(1)], {'hs40-900000': [facts]})
+    rows = summarize([_case(0), _case(1)], {'head-search-900000': [facts]})
     assert [r['status'] for r in rows] == ['FAIL', 'NOT_RUN']
     assert rows[0]['attempts'][0]['original_terminal'] == 'FAULT'
 

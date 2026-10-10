@@ -214,7 +214,7 @@ def test_the_adapter_reports_only_what_the_campaign_can_show(tmp_path, monkeypat
             }
 
         assert state()["batch_cleanup_complete"] is False
-        result_path.write_text(json.dumps({"status": "W2_CAMPAIGN_PASS",
+        result_path.write_text(json.dumps({"status": "TWO_WORKER_CAMPAIGN_PASS",
                                            "cleanup": {"complete": True, "directory_removed": True}}))
         assert state()["batch_cleanup_complete"] is True
         assert state()["state"] == "TERMINAL"

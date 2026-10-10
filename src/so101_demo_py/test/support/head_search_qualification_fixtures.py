@@ -575,7 +575,7 @@ def build_fixture(root: Path, *, run_root: Path | None = None, seed_base: int = 
     paths["prior_report"] = prior_report
     # AF_UNIX endpoints are capped at 103 bytes, so the fixture's socket root is deliberately short:
     # a pytest tmp_path under the NVMe scratch directory is already longer than the whole budget
-    socket_root = Path("/tmp") / f"hs317-ipc-{os.getpid()}"
+    socket_root = Path("/tmp") / f"head-search-ipc-{os.getpid()}"
     socket_root.mkdir(parents=True, exist_ok=True)
     cleanup_receipt = _write(
         socket_root / "cleanup-receipt.json",

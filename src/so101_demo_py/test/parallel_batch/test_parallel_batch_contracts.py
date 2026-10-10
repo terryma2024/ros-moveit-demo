@@ -1048,7 +1048,7 @@ def test_macos_mps_single_worker_retry_document_resolves_its_profile():
     assert config.schema_version == 5
     assert config.worker_count == 1
     assert config.ros_domain_ids == (181,)
-    assert str(config.execution_profile) == "MPS_W1_FULL_RESTART_RETRY"
+    assert str(config.execution_profile) == "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
     assert str(config.batch_kind) == "FULL_RESTART_RETRY"
     assert config.accelerator.kind is contracts.AcceleratorKind.MPS
     assert config.accelerator.resolved_selector == "default"
@@ -1072,7 +1072,7 @@ def test_macos_mps_single_worker_first_pass_document_resolves_its_profile():
     assert config.schema_version == 6
     assert config.worker_count == 1
     assert config.ros_domain_ids == (181,)
-    assert str(config.execution_profile) == "MPS_W1_FIRST_PASS"
+    assert str(config.execution_profile) == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert str(config.batch_kind) == "FIRST_PASS"
     assert config.mps_minimum_headroom_bytes == 1 << 30
     assert config.resolved_manifest()["schema_version"] == 6
@@ -1150,8 +1150,8 @@ def test_the_single_worker_profiles_are_closed_against_unknown_fields(version, t
 
     base = _macos_mps_single_worker_retry_document() if version == 5 else _macos_mps_single_worker_first_pass_document()
     for mutate, expected in (
-        (lambda d: d.update({"execution_profile": "MPS_W1_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
-        (lambda d: d.update({"worker_profile": "MPS_W1_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
+        (lambda d: d.update({"execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
+        (lambda d: d.update({"worker_profile": "MPS_SINGLE_WORKER_FIRST_PASS"}), "UNKNOWN_CONFIG_FIELD"),
         (lambda d: d["execution"].update({"worker_count": 1}), "UNKNOWN_EXECUTION_FIELD"),
         (lambda d: d["accelerator"].update({"device_index": 0}), "UNKNOWN_ACCELERATOR_FIELD"),
         (lambda d: d["start_guard"].update({"mps_headroom_gib": 1}),
@@ -1226,33 +1226,33 @@ def test_require_macos_mps_single_worker_execution_is_profile_exact():
     "route, expected",
     [
         # the three admitted combinations, one line each
-        ((4, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), None),
-        ((5, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), None),
-        ((6, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), None),
+        ((4, "MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS", 2), None),
+        ((5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), None),
+        ((6, "MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS", 1), None),
         # a v4 document claiming W1
-        ((4, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
-        ((4, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
+        ((4, "MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
+        ((4, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
         # a v5 document claiming first-pass
-        ((5, "MPS_W1_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
+        ((5, "MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS", 1), "PROFILE_SCHEMA_MISMATCH"),
         # a v6 document claiming retry
-        ((6, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
+        ((6, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 1), "PROFILE_SCHEMA_MISMATCH"),
         # a profile whose batch kind is not the one it admits
-        ((5, "MPS_W1_FULL_RESTART_RETRY", "FIRST_PASS", 1), "PROFILE_BATCH_KIND_MISMATCH"),
-        ((6, "MPS_W1_FIRST_PASS", "FULL_RESTART_RETRY", 1), "PROFILE_BATCH_KIND_MISMATCH"),
-        ((4, "MPS_W2_FIRST_PASS", "FULL_RESTART_RETRY", 2), "PROFILE_BATCH_KIND_MISMATCH"),
+        ((5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FIRST_PASS", 1), "PROFILE_BATCH_KIND_MISMATCH"),
+        ((6, "MPS_SINGLE_WORKER_FIRST_PASS", "FULL_RESTART_RETRY", 1), "PROFILE_BATCH_KIND_MISMATCH"),
+        ((4, "MPS_TWO_WORKER_FIRST_PASS", "FULL_RESTART_RETRY", 2), "PROFILE_BATCH_KIND_MISMATCH"),
         # adaptive is not a macOS capability at all
-        ((5, "MPS_W1_FULL_RESTART_RETRY", "ADAPTIVE_POOL", 1), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
-        ((4, "MPS_W2_FIRST_PASS", "ADAPTIVE_POOL", 2), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+        ((5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "ADAPTIVE_POOL", 1), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
+        ((4, "MPS_TWO_WORKER_FIRST_PASS", "ADAPTIVE_POOL", 2), "ADAPTIVE_UNSUPPORTED_ON_MACOS"),
         # N>2 and the unsupported W1 counts
-        ((4, "MPS_W2_FIRST_PASS", "FIRST_PASS", 4), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
-        ((5, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 2),
+        ((4, "MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS", 4), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        ((5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FULL_RESTART_RETRY", 2),
          "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
-        ((6, "MPS_W1_FIRST_PASS", "FIRST_PASS", 8), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
+        ((6, "MPS_SINGLE_WORKER_FIRST_PASS", "FIRST_PASS", 8), "PLATFORM_WORKER_COUNT_UNSUPPORTED"),
         # an unknown profile
         ((6, "MPS_W4_FIRST_PASS", "FIRST_PASS", 1), "EXECUTION_PROFILE_UNKNOWN"),
         # a schema no profile is approved for
-        ((3, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
-        ((7, "MPS_W2_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
+        ((3, "MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
+        ((7, "MPS_TWO_WORKER_FIRST_PASS", "FIRST_PASS", 2), "CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"),
     ],
 )
 def test_the_execution_routing_table_admits_exactly_three_combinations(route, expected):
@@ -1285,7 +1285,7 @@ def test_a_profile_is_never_inferred_from_the_selected_point_count():
             schema_version=6, execution_profile=None, batch_kind="FIRST_PASS", worker_count=1)
     with pytest.raises(contracts.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
         contracts.resolve_execution_route(
-            schema_version=4, execution_profile="MPS_W2_FIRST_PASS", batch_kind="FIRST_PASS",
+            schema_version=4, execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
             worker_count=None)
     with pytest.raises(contracts.ContractError, match="EXECUTION_PROFILE_UNKNOWN"):
         contracts.resolve_execution_route(
@@ -1300,9 +1300,9 @@ def test_the_routing_table_names_the_three_approved_profiles_only():
     assert len(contracts.APPROVED_EXECUTION_ROUTES) == 3
     assert {(route.schema_version, str(route.execution_profile))
             for route in contracts.APPROVED_EXECUTION_ROUTES} == {
-        (4, "MPS_W2_FIRST_PASS"),
-        (5, "MPS_W1_FULL_RESTART_RETRY"),
-        (6, "MPS_W1_FIRST_PASS"),
+        (4, "MPS_TWO_WORKER_FIRST_PASS"),
+        (5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"),
+        (6, "MPS_SINGLE_WORKER_FIRST_PASS"),
     }
     assert {route.worker_count for route in contracts.APPROVED_EXECUTION_ROUTES} == {1, 2}
     assert "ADAPTIVE_POOL" not in {str(route.batch_kind)

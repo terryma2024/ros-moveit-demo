@@ -90,9 +90,9 @@ def _entry_argv(module, config, tmp_path, *, points=("p1",), extra=()):
 def test_each_public_entry_names_exactly_one_profile():
     """The routing key is fixed by the entry point, not by a flag."""
 
-    assert macos_mps_single_worker_retry.EXECUTION_PROFILE == "MPS_W1_FULL_RESTART_RETRY"
+    assert macos_mps_single_worker_retry.EXECUTION_PROFILE == "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
     assert macos_mps_single_worker_retry.BATCH_KIND == "FULL_RESTART_RETRY"
-    assert macos_mps_single_worker_first_pass.EXECUTION_PROFILE == "MPS_W1_FIRST_PASS"
+    assert macos_mps_single_worker_first_pass.EXECUTION_PROFILE == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert macos_mps_single_worker_first_pass.BATCH_KIND == "FIRST_PASS"
 
     for module in (macos_mps_single_worker_retry, macos_mps_single_worker_first_pass):
@@ -137,7 +137,7 @@ def test_each_entry_composes_exactly_one_slot_without_models(tmp_path, capsys):
     document = json.loads(capsys.readouterr().out)
 
     assert document["status"] == "COMPOSED_ONLY"
-    assert document["plan"]["execution_profile"] == "MPS_W1_FIRST_PASS"
+    assert document["plan"]["execution_profile"] == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert document["plan"]["batch_kind"] == "FIRST_PASS"
     assert document["plan"]["worker_count"] == 1
     assert document["plan"]["slots"]["slot_ids"] == ["slot-0"]
@@ -175,9 +175,9 @@ def test_the_single_worker_lease_names_the_profile_the_worker_executes(tmp_path,
     leases = build_worker_leases(plan=plan, batch_id="b-n1", evidence_root=tmp_path,
                                  input_sha256="a" * 64, binding=binding, queue=queue)
 
-    assert list(leases) == ["w1"]
-    document = _json.loads(Path(leases["w1"]["lease_path"]).read_text())
-    assert document["execution_profile"] == "MPS_W1_FIRST_PASS"
+    assert list(leases) == ["worker-01"]
+    document = _json.loads(Path(leases["worker-01"]["lease_path"]).read_text())
+    assert document["execution_profile"] == "MPS_SINGLE_WORKER_FIRST_PASS"
     assert document["batch_kind"] == "FIRST_PASS"
     assert document["schema_version"] == 6
     assert document["slot_id"] == "slot-0"
@@ -196,7 +196,7 @@ def test_the_retry_entry_keeps_the_full_restart_batch_kind(tmp_path, capsys):
     argv = _entry_argv(macos_mps_single_worker_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, extra=["--skip-models"])
     assert macos_mps_single_worker_retry.run(argv[1:]) == 3
     document = json.loads(capsys.readouterr().out)
-    assert document["plan"]["execution_profile"] == "MPS_W1_FULL_RESTART_RETRY"
+    assert document["plan"]["execution_profile"] == "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
     assert document["plan"]["batch_kind"] == "FULL_RESTART_RETRY"
     assert document["plan"]["worker_count"] == 1
 
@@ -484,7 +484,7 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
     document: dict = {}
     with pytest.raises(_ExecCalled):
         cli._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                             cli.route_spec("MPS_W1_FIRST_PASS"), document)
+                             cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert captured["argv"][:3] == [sys.executable, "-m", "so101_demo.cli.macos_mps_single_worker_first_pass"]
     environment = captured["environment"]
@@ -524,7 +524,7 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
                                  selected_point_ids=("p1",), evidence_root=tmp_path)
     document: dict = {}
     result = cli._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                                  cli.route_spec("MPS_W1_FIRST_PASS"), document)
+                                  cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert result is None
     assert document["status"] == "REFUSED" and document["stage"] == "start_guard"
@@ -567,7 +567,7 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
     document: dict = {"status": "PENDING"}
 
     code = cli._drive_campaign(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                               cli.route_spec("MPS_W1_FIRST_PASS"), document)
+                               cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert code == 4
     assert document["status"] == "REFUSED" and document["stage"] == "start_guard"

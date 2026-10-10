@@ -53,7 +53,7 @@ def _inputs(tmp_path, change=None):
                    dict(instance_id='distractor-b',kind='distractor',geom_ids=[91])])
     if change:
         change(frame, chunk, truth, rgb, info)
-    fixture = dict(schema_version=1, case_id='hs40-900000', seed=900000,
+    fixture = dict(schema_version=1, case_id='head-search-900000', seed=900000,
         condition_class='nominal', anchor='default', scene_sha256='c'*64,
         reset_free_bodies=[], lighting={}, truth_manifest=truth, injection={})
     frame_doc = dict(schema_version=2, kind='paired_camera_truth_original',

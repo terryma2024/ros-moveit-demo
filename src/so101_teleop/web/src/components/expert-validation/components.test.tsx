@@ -287,9 +287,9 @@ const macosCapabilities = {
     })),
   ],
   support_matrix: [
-    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
-    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
-    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+    matrixRow("MPS_TWO_WORKER_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
   ],
   adaptive_default_ladder: [],
   worker_qualifications: [],
@@ -332,7 +332,7 @@ describe("macOS W1/W2 support matrix", () => {
     expect(Array.from(modes.options).map((option) => option.value))
       .toEqual(["SEQUENTIAL", "PARALLEL"]);
     expect(Array.from(modes.options).map((option) => option.value)).not.toContain("ADAPTIVE");
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
   });
 
   test("N3 to N8 are unavailable with the macOS reason and no profile or qualification hash", () => {
@@ -387,29 +387,29 @@ describe("macOS W1/W2 support matrix", () => {
 
   test("the selected point count never selects the profile and W2 is the exact-W2 path", () => {
     const { rerender } = render(<CampaignSetup {...macosBase} />);
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
     rerender(<CampaignSetup {...macosBase} state={{ ...macosBase.state, pointCount: 20 }} />);
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W1_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_SINGLE_WORKER_FIRST_PASS");
     rerender(
       <CampaignSetup
         {...macosBase}
         state={{ ...macosBase.state, pointCount: 20, executionMode: "PARALLEL", workerCount: 2 }}
       />,
     );
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_TWO_WORKER_FIRST_PASS");
     rerender(
       <CampaignSetup
         {...macosBase}
         state={{ ...macosBase.state, pointCount: 4, executionMode: "PARALLEL", workerCount: 2 }}
       />,
     );
-    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_W2_FIRST_PASS");
+    expect(screen.getByLabelText("Execution profile").textContent).toContain("MPS_TWO_WORKER_FIRST_PASS");
 
     // The claim is a pure function of the matrix row and the selection: no point count is an input.
     expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 1 }))
-      .toEqual({ execution_profile: "MPS_W1_FIRST_PASS", batch_kind: "FIRST_PASS" });
+      .toEqual({ execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS", batch_kind: "FIRST_PASS" });
     expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 2 }))
-      .toEqual({ execution_profile: "MPS_W2_FIRST_PASS", batch_kind: "FIRST_PASS" });
+      .toEqual({ execution_profile: "MPS_TWO_WORKER_FIRST_PASS", batch_kind: "FIRST_PASS" });
     expect(executionClaim(macosCapabilities, { executionMode: "PARALLEL", workerCount: 8 })).toBeNull();
     expect(executionClaim(macosCapabilities, { executionMode: "SEQUENTIAL", workerCount: 3 })).toBeNull();
   });

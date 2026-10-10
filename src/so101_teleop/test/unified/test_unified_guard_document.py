@@ -54,9 +54,9 @@ def test_the_linux_cuda_document_keeps_the_nvml_guard():
 @pytest.mark.parametrize(
     ("document", "profile", "selector"),
     [
-        (MACOS_MPS_TWO_WORKER_DOCUMENT, "MPS_W2_FIRST_PASS", "MPS:default"),
-        (MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, "MPS_W1_FULL_RESTART_RETRY", "MPS:default"),
-        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, "MPS_W1_FIRST_PASS", "MPS:default"),
+        (MACOS_MPS_TWO_WORKER_DOCUMENT, "MPS_TWO_WORKER_FIRST_PASS", "MPS:default"),
+        (MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS:default"),
+        (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, "MPS_SINGLE_WORKER_FIRST_PASS", "MPS:default"),
     ],
 )
 @DARWIN_ONLY
@@ -158,14 +158,14 @@ def test_a_platform_bound_capability_document_does_not_consult_the_budget_source
                 "platform": "macos",
                 "execution_modes": ["SEQUENTIAL", "PARALLEL"],
                 "support_matrix": [
-                    {"profile": "MPS_W2_FIRST_PASS", "schema_version": 4,
+                    {"profile": "MPS_TWO_WORKER_FIRST_PASS", "schema_version": 4,
                      "execution_mode": "PARALLEL", "worker_count": 2,
                      "batch_kind": "FIRST_PASS", "selectable": True, "status": "SUPPORTED"},
-                    {"profile": "MPS_W1_FULL_RESTART_RETRY", "schema_version": 5,
+                    {"profile": "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "schema_version": 5,
                      "execution_mode": "SEQUENTIAL", "worker_count": 1,
                      "batch_kind": "FULL_RESTART_RETRY", "selectable": True,
                      "status": "SUPPORTED"},
-                    {"profile": "MPS_W1_FIRST_PASS", "schema_version": 6,
+                    {"profile": "MPS_SINGLE_WORKER_FIRST_PASS", "schema_version": 6,
                      "execution_mode": "SEQUENTIAL", "worker_count": 1,
                      "batch_kind": "FIRST_PASS", "selectable": True, "status": "SUPPORTED"},
                 ],
@@ -190,5 +190,5 @@ def test_a_platform_bound_capability_document_does_not_consult_the_budget_source
     assert payload["worker_qualifications"] == []
     assert payload["platform"] == "macos"
     assert [row["profile"] for row in payload["support_matrix"]] == [
-        "MPS_W2_FIRST_PASS", "MPS_W1_FULL_RESTART_RETRY", "MPS_W1_FIRST_PASS"]
+        "MPS_TWO_WORKER_FIRST_PASS", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "MPS_SINGLE_WORKER_FIRST_PASS"]
     assert payload["worker_count_availability"][-1]["status"] == "UNSUPPORTED_ON_MACOS"

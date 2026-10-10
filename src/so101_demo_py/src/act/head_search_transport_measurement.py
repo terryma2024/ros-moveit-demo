@@ -555,7 +555,7 @@ class MujocoRosTransport:
         plugin_config_path,
         controller_config_path,
         workspace,
-        session_id="hs308-skew",
+        session_id="transport-skew",
         startup_timeout_s=90.0,
         logger=None,
     ) -> None:

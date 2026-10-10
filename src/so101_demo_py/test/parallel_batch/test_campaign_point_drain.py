@@ -1,7 +1,7 @@
 """The campaign body drains the durable shared queue: one lease, one point (design section 8).
 
 Task 11's live gate found the gap this module exists to close. The campaign reported
-`W2_CAMPAIGN_PASS` / `N1_CAMPAIGN_PASS` while `per_slot_pick_place.*.executed_points` was `[]` and
+`TWO_WORKER_CAMPAIGN_PASS` / `SINGLE_WORKER_CAMPAIGN_PASS` while `per_slot_pick_place.*.executed_points` was `[]` and
 every Worker reported `pick_place.requested=false` with `error=POINTS_PATH_MISSING`: the lease the
 campaign wrote carried no `points_path`/`points_sha256`, so `single_point_input.pick_place_request`
 refused it and no point was ever executed. Nothing in the campaign body leased a point from the
@@ -107,14 +107,14 @@ class _Plan:
 
     slots = exact_two_worker_slots()
     selected_point_ids = _selected()
-    execution_profile = "MPS_W2_FIRST_PASS"
+    execution_profile = "MPS_TWO_WORKER_FIRST_PASS"
     batch_kind = "FIRST_PASS"
     schema_version = 4
 
 
 class _SingleWorkerPlan(_Plan):
     slots = exact_single_worker_slots()
-    execution_profile = "MPS_W1_FIRST_PASS"
+    execution_profile = "MPS_SINGLE_WORKER_FIRST_PASS"
     batch_kind = "FIRST_PASS"
     schema_version = 6
 
@@ -163,7 +163,7 @@ def test_campaign_lease_builder_leases_executable_points_from_the_queue(tmp_path
 
     leases = cli.build_worker_leases(**arguments)
 
-    assert sorted(leases) == ["w1", "w2"]
+    assert sorted(leases) == ["worker-01", "worker-02"]
     snapshot = queue.snapshot()
     assert len(snapshot.active_leases) == 2, (
         "the campaign body leased no point from the durable queue"
@@ -199,9 +199,9 @@ def test_campaign_lease_builder_leases_executable_points_from_the_queue(tmp_path
             worker=_queue_module().WorkerIdentity(
                 worker_id=lease.worker_id, slot_id=lease.slot_id, generation=lease.generation))
         committed.add(lease.point_id)
-    third = cli.build_worker_leases(**{**arguments, "worker_ids": ("w1",), "generation": 2})
-    assert third["w1"]["point_id"] not in committed
-    assert third["w1"]["point_id"] in binding.selected_point_ids
+    third = cli.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
+    assert third["worker-01"]["point_id"] not in committed
+    assert third["worker-01"]["point_id"] in binding.selected_point_ids
 
 
 # --------------------------------------------------------------------------------------
@@ -292,7 +292,7 @@ def _fake_spawn(*, drain, binding, evidence_root: Path, binary: Path, calls: lis
     return spawn
 
 
-def _drain(tmp_path: Path, *, point_ids=None, worker_ids=("w1", "w2"),
+def _drain(tmp_path: Path, *, point_ids=None, worker_ids=("worker-01", "worker-02"),
            slot_ids=("slot-0", "slot-1"), journal=None, max_points=None, status="SUCCEEDED",
            with_evidence=True):
     """Drive the real drain over a real queue with a stand-in Worker process."""
@@ -340,7 +340,7 @@ def test_two_worker_drain_executes_every_selected_point_exactly_once(tmp_path: P
     assert summary["unexecuted_point_ids"] == []
     assert summary["unselected_attempts"] == []
     assert summary["duplicate_attempts"] == []
-    assert set(summary["workers"]) == {"w1", "w2"}
+    assert set(summary["workers"]) == {"worker-01", "worker-02"}
     assert sorted(point_id for _worker, _slot, _generation, point_id in calls) == sorted(
         binding.selected_point_ids)
     snapshot = queue.snapshot()
@@ -371,7 +371,7 @@ def test_drain_records_an_incomplete_evidence_chain_as_infrastructure(tmp_path: 
     """
 
     _drain_module, binding, queue, _evidence_root, report, _calls = _drain(
-        tmp_path, worker_ids=("w1",), slot_ids=("slot-0",), with_evidence=False)
+        tmp_path, worker_ids=("worker-01",), slot_ids=("slot-0",), with_evidence=False)
 
     summary = report.summary(selected_point_ids=binding.selected_point_ids)
     assert report.stop_reason == "POINT_EVIDENCE_MISSING"
@@ -388,7 +388,7 @@ def test_drain_commits_a_business_failure_with_its_evidence(tmp_path: Path) -> N
     """A failed point is a legitimate terminal outcome - and it keeps its manifest."""
 
     _drain_module, binding, queue, evidence_root, report, _calls = _drain(
-        tmp_path, worker_ids=("w1",), slot_ids=("slot-0",), status="FAILED", max_points=1)
+        tmp_path, worker_ids=("worker-01",), slot_ids=("slot-0",), status="FAILED", max_points=1)
 
     summary = report.summary(selected_point_ids=binding.selected_point_ids)
     assert report.stop_reason is None
@@ -433,7 +433,7 @@ def test_drain_stops_when_a_worker_exits_without_a_result(tmp_path: Path) -> Non
             return run
 
     report = drain.drain_point_queue(
-        queue=queue, binding=binding, worker_ids=("w1",), slot_ids=("slot-0",),
+        queue=queue, binding=binding, worker_ids=("worker-01",), slot_ids=("slot-0",),
         evidence_root=evidence_root,
         lease_point=lambda worker_id, slot_id, generation: cli.lease_worker_execution(
             queue=queue, binding=binding, worker_id=worker_id, slot_id=slot_id,
@@ -456,7 +456,7 @@ def test_a_second_lease_for_one_slot_never_replays_a_bound_request_id(tmp_path: 
     """The task 11 defeat: the two inference probe ids were fixed per Worker.
 
     The campaign binds every id in the one-time table before each spawn, so a second lease for the
-    same slot that re-derived `w1-att-01` was refused with `REQUEST_DUPLICATE` and took the whole
+    same slot that re-derived `worker-01-att-01` was refused with `REQUEST_DUPLICATE` and took the whole
     campaign down mid-drain. Every id one lease carries must be generation-scoped.
     """
 
@@ -467,23 +467,23 @@ def test_a_second_lease_for_one_slot_never_replays_a_bound_request_id(tmp_path: 
                  "input_sha256": "a" * 64, "binding": binding, "queue": queue}
 
     first = cli.build_worker_leases(**arguments)
-    second = cli.build_worker_leases(**{**arguments, "worker_ids": ("w1",), "generation": 2})
+    second = cli.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
 
-    first_ids = set(first["w1"]["attempt_ids"])
-    second_ids = set(second["w1"]["attempt_ids"])
+    first_ids = set(first["worker-01"]["attempt_ids"])
+    second_ids = set(second["worker-01"]["attempt_ids"])
     assert first_ids & second_ids == set(), (first_ids, second_ids)
     # and the round-trip ids the Worker derives are generation-scoped for the same reason
-    assert drain.worker_progress_request_id(worker_id="w1", generation=1, index=0) != \
-        drain.worker_progress_request_id(worker_id="w1", generation=2, index=0)
-    assert drain.worker_probe_attempt_id(worker_id="w1", generation=1, index=1) in first_ids
-    assert len(first_ids) == len(first["w1"]["attempt_ids"])
+    assert drain.worker_progress_request_id(worker_id="worker-01", generation=1, index=0) != \
+        drain.worker_progress_request_id(worker_id="worker-01", generation=2, index=0)
+    assert drain.worker_probe_attempt_id(worker_id="worker-01", generation=1, index=1) in first_ids
+    assert len(first_ids) == len(first["worker-01"]["attempt_ids"])
 
 
 def test_a_station_that_outlived_its_worker_is_stopped_by_its_own_argv(tmp_path: Path) -> None:
     """A killed Worker never runs its `finally`, so its station must be reconciled exactly."""
 
     cli = _cli()
-    root = tmp_path / "w1-station" / "task_start-attempt-1"
+    root = tmp_path / "worker-01-station" / "task_start-attempt-1"
     other = tmp_path / "someone-elses-station"
     lines = [
         f"  101  101 /usr/bin/python ros2 launch so101_demo_py "
@@ -558,7 +558,7 @@ def test_every_served_response_is_admitted_immediately_so_the_table_stays_bounde
     campaign = _Campaign()
     served: list = []
     for index in range(6):
-        request_id = f"w1-att-g{index:02d}-01-yolo"
+        request_id = f"worker-01-att-g{index:02d}-01-yolo"
         campaign.bind(request_id)
         assert cli.serve_and_admit(campaign, request_id=request_id, candidates=1, device="mps",
                                    served=served, broker_pid=4242,
@@ -583,7 +583,7 @@ def test_the_per_slot_summary_reads_the_per_attempt_station_evidence(tmp_path: P
     root = tmp_path
     for attempt, point_id in (("task_start-attempt-1", "task_start"),
                               ("cup_test_left_5cm-attempt-2", "cup_test_left_5cm")):
-        point_root = (root / "w1-station" / attempt / "pick" / "batches" / "b1" / "points"
+        point_root = (root / "worker-01-station" / attempt / "pick" / "batches" / "b1" / "points"
                       / f"01-{point_id}")
         (point_root / "dynamic").mkdir(parents=True)
         (point_root / "dynamic" / "dynamic-execute-manifest.json").write_text(json.dumps(
@@ -593,12 +593,12 @@ def test_the_per_slot_summary_reads_the_per_attempt_station_evidence(tmp_path: P
         (point_root / "point-result.json").write_text(json.dumps(
             {"id": point_id, "status": "SUCCEEDED", "failure_code": None}))
 
-    summary = cli.summarize_per_slot_pick_place(evidence_root=root, workers=("w1",))
+    summary = cli.summarize_per_slot_pick_place(evidence_root=root, workers=("worker-01",))
 
-    assert summary["w1"]["manifests"] == 2
-    assert summary["w1"]["point_results"] == 2
-    assert summary["w1"]["executed_points"] == ["01-cup_test_left_5cm", "01-task_start"]
-    assert {contact["point_id"] for contact in summary["w1"]["contacts"]} == {
+    assert summary["worker-01"]["manifests"] == 2
+    assert summary["worker-01"]["point_results"] == 2
+    assert summary["worker-01"]["executed_points"] == ["01-cup_test_left_5cm", "01-task_start"]
+    assert {contact["point_id"] for contact in summary["worker-01"]["contacts"]} == {
         "task_start", "cup_test_left_5cm"}
 
 
@@ -626,7 +626,7 @@ def test_the_worker_reads_its_lease_before_it_uses_it() -> None:
 
 
 def _committed_failed_point(tmp_path: Path):
-    return _drain(tmp_path, worker_ids=("w1",), slot_ids=("slot-0",), status="FAILED",
+    return _drain(tmp_path, worker_ids=("worker-01",), slot_ids=("slot-0",), status="FAILED",
                   max_points=1)
 
 
@@ -722,7 +722,7 @@ def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
 
 def _retry_arguments(tmp_path: Path, extra=(), *, campaign_id: str = "retry-campaign"):
     cli = _cli()
-    parser = cli.build_single_worker_parser("MPS_W1_FULL_RESTART_RETRY")
+    parser = cli.build_single_worker_parser("MPS_SINGLE_WORKER_FULL_RESTART_RETRY")
     base = ["--config", str(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), "--campaign-id", campaign_id,
             "--batch-id", "retry-batch", "--evidence-root", str(tmp_path / "retry-evidence"),
             "--yolo-weights", str(tmp_path / "yolo.pt"),
@@ -761,7 +761,7 @@ def test_the_single_worker_retry_cli_accepts_the_original_chain_from_its_command
 
     selection, queue, resolved_catalog = cli.bind_campaign_selection(
         arguments=arguments, plan=_retry_plan(tmp_path, point_id=point_id),
-        spec=cli.route_spec("MPS_W1_FULL_RESTART_RETRY"))
+        spec=cli.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY"))
 
     assert selection.selected_point_ids == (point_id,)
     assert selection.original_selection_sha256 == prior_document["selection_sha256"]
@@ -797,7 +797,7 @@ def test_the_single_worker_retry_cli_refuses_a_retry_without_a_named_original_re
     result_sha = hashlib.sha256(result_document.read_bytes()).hexdigest()
     catalog = _catalog_copy(tmp_path)
     plan = _retry_plan(tmp_path, point_id=point_id)
-    spec = cli.route_spec("MPS_W1_FULL_RESTART_RETRY")
+    spec = cli.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY")
 
     def refusal(extra) -> str:
         arguments = _retry_arguments(tmp_path, ["--catalog", str(catalog), "--point-id", point_id]
@@ -882,10 +882,10 @@ def test_retry_binding_leases_only_the_bound_failed_point(tmp_path: Path) -> Non
 
     assert retry.selected_point_ids == (point_id,)
     lease = queue.lease_next(_queue_module().WorkerIdentity(
-        worker_id="w1", slot_id="slot-0", generation=1))
+        worker_id="worker-01", slot_id="slot-0", generation=1))
     assert lease is not None and lease.point_id == point_id
     assert queue.lease_next(_queue_module().WorkerIdentity(
-        worker_id="w2", slot_id="slot-1", generation=1)) is None
+        worker_id="worker-02", slot_id="slot-1", generation=1)) is None
     assert queue.snapshot().pending_point_ids == ()
 
 
@@ -907,7 +907,7 @@ class _Attempt:
         self.evidence_manifest_sha256 = sha
         self.physical_evidence = physical
         self.infrastructure_code = None
-        self.worker_id = "w1"
+        self.worker_id = "worker-01"
         self.slot_id = "slot-0"
 
     def as_document(self):

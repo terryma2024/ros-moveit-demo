@@ -438,7 +438,7 @@ SHA_CLOSURE = "5" * 64
 
 POINT_IDS = ("p1", "p2")
 
-RETRY_PROFILE = "MPS_W1_FULL_RESTART_RETRY"
+RETRY_PROFILE = "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
 
 
 def point_result_sha256(point_id, default=SHA_RESULT):
@@ -988,7 +988,7 @@ def test_admit_retry_refuses_a_command_id_reused_for_a_different_retry(tmp_path)
     [
         ("campaign_id", "campaign-other", "RETRY_CAMPAIGN_MISMATCH"),
         ("batch_id", "retry-002", "RETRY_BATCH_MISMATCH"),
-        ("execution_profile", "MPS_W1_FIRST_PASS", "RETRY_PROFILE_MISMATCH"),
+        ("execution_profile", "MPS_SINGLE_WORKER_FIRST_PASS", "RETRY_PROFILE_MISMATCH"),
         ("schema_version", 6, "RETRY_SCHEMA_MISMATCH"),
         ("config_sha256", SHA_A, "RETRY_CONFIG_MISMATCH"),
         ("runtime_closure_sha256", SHA_A, "RETRY_RUNTIME_CLOSURE_MISMATCH"),
@@ -1528,7 +1528,7 @@ def _first_pass_request(root, manifest_id, **changes):
         grounded_sam_manifest_sha256=SHA_A,
         broker_image_id="sha256:" + SHA_A,
         resource_manifest_sha256=SHA_A,
-        execution_profile="MPS_W1_FIRST_PASS",
+        execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
         batch_kind="FIRST_PASS",
     )
     values.update(changes)
@@ -1555,7 +1555,7 @@ def _first_pass_fixture(tmp_path, **context_changes):
         canonical_start_request_sha256=canonical_start_request_sha256(request),
         receipt={
             "admitted": True,
-            "execution_profile": "MPS_W1_FIRST_PASS",
+            "execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS",
             "schema_version": 6,
             "batch_kind": "FIRST_PASS",
         },
@@ -1586,7 +1586,7 @@ def _first_pass_fixture(tmp_path, **context_changes):
         campaign_id="campaign-1",
         batch_id="b001",
         manifest_id=manifest_id,
-        execution_profile="MPS_W1_FIRST_PASS",
+        execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
         schema_version=6,
         batch_kind="FIRST_PASS",
         worker_count=1,
@@ -1716,7 +1716,7 @@ def test_a_refused_first_pass_admission_never_consumes_its_command(tmp_path):
         ("context", "manifest_id", "manifest-other", "FIRST_PASS_MANIFEST_MISMATCH"),
         # A candidate context can never even be constructed for the other profile/schema row, so
         # the profile drift is only expressible on the request side of the pair.
-        ("request", "execution_profile", "MPS_W1_FULL_RESTART_RETRY", "FIRST_PASS_PROFILE_MISMATCH"),
+        ("request", "execution_profile", "MPS_SINGLE_WORKER_FULL_RESTART_RETRY", "FIRST_PASS_PROFILE_MISMATCH"),
         ("context", "config_sha256", SHA_A, "FIRST_PASS_CONFIG_MISMATCH"),
         ("context", "runtime_closure_sha256", SHA_A, "FIRST_PASS_RUNTIME_CLOSURE_MISMATCH"),
         ("context", "evidence_root", Path("/evidence-other"), "FIRST_PASS_EVIDENCE_ROOT_MISMATCH"),

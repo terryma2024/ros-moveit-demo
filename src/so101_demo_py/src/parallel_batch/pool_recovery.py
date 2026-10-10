@@ -131,7 +131,7 @@ class BrokerPoolRecovery:
     #: Ask the Coordinator whether the point may be requeued.
     coordinator_decision: Callable[[Mapping[str, object]], bool]
     #: The Workers this campaign owns, by name.
-    worker_names: tuple[str, ...] = ("w1", "w2")
+    worker_names: tuple[str, ...] = ("worker-01", "worker-02")
     _trace: list[str] = field(default_factory=list)
 
     # -- internal helpers ----------------------------------------------------------------

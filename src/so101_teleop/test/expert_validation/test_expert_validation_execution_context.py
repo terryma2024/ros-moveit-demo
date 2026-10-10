@@ -175,10 +175,10 @@ def test_context_refuses_a_non_positive_expiry_or_a_deadline_before_issue(tmp_pa
 @pytest.mark.parametrize(
     ("profile", "schema_version", "batch_kind", "worker_count"),
     [
-        ("MPS_W2_FIRST_PASS", 4, "FIRST_PASS", 2),
-        ("MPS_W1_FULL_RESTART_RETRY", 5, "FULL_RESTART_RETRY", 1),
-        ("MPS_W1_FIRST_PASS", 6, "FIRST_PASS", 1),
-        ("CUDA_W1_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 1),
+        ("MPS_TWO_WORKER_FIRST_PASS", 4, "FIRST_PASS", 2),
+        ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "FULL_RESTART_RETRY", 1),
+        ("MPS_SINGLE_WORKER_FIRST_PASS", 6, "FIRST_PASS", 1),
+        ("CUDA_SINGLE_WORKER_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 1),
     ],
 )
 def test_production_context_accepts_every_installed_profile_row(
@@ -198,9 +198,9 @@ def test_production_context_accepts_every_installed_profile_row(
     ("profile", "schema_version", "batch_kind", "worker_count"),
     [
         ("MPS_W4_FAST", 7, "FIRST_PASS", 4),
-        ("MPS_W2_FIRST_PASS", 5, "FULL_RESTART_RETRY", 2),
-        ("MPS_W1_FIRST_PASS", 6, "FIRST_PASS", 2),
-        ("CUDA_W1_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 2),
+        ("MPS_TWO_WORKER_FIRST_PASS", 5, "FULL_RESTART_RETRY", 2),
+        ("MPS_SINGLE_WORKER_FIRST_PASS", 6, "FIRST_PASS", 2),
+        ("CUDA_SINGLE_WORKER_FULL_RESTART_RETRY", 3, "FULL_RESTART_RETRY", 2),
     ],
 )
 def test_production_context_refuses_anything_outside_the_installed_matrix(
@@ -224,9 +224,9 @@ def test_production_context_refuses_an_unknown_install_or_invalid_binding(tmp_pa
 @pytest.mark.parametrize(
     ("profile", "schema_version", "batch_kind", "worker_count"),
     [
-        ("MPS_W2_FIRST_PASS", 4, "FIRST_PASS", 1),
-        ("MPS_W1_FIRST_PASS", 6, "FULL_RESTART_RETRY", 1),
-        ("MPS_W1_FULL_RESTART_RETRY", 5, "FULL_RESTART_RETRY", 2),
+        ("MPS_TWO_WORKER_FIRST_PASS", 4, "FIRST_PASS", 1),
+        ("MPS_SINGLE_WORKER_FIRST_PASS", 6, "FULL_RESTART_RETRY", 1),
+        ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "FULL_RESTART_RETRY", 2),
     ],
 )
 def test_candidate_context_refuses_a_combination_outside_the_installed_matrix(
@@ -412,7 +412,7 @@ def _persisted_campaign(tmp_path, profile_claim):
         created_at_ns=1,
     )
     document = {
-        "execution_profile": "MPS_W1_FIRST_PASS",
+        "execution_profile": "MPS_SINGLE_WORKER_FIRST_PASS",
         "schema_version": 6,
         "batch_kind": "FIRST_PASS",
         "execution_config_sha256": _sha256(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT),
@@ -458,10 +458,10 @@ def _persisted_campaign(tmp_path, profile_claim):
 def test_restored_request_binds_the_receipts_own_profile_not_the_configured_document(tmp_path):
     """A restart of a v6 W1 campaign must not rebuild it against the configured v4 document."""
 
-    store, row = _persisted_campaign(tmp_path, "MPS_W1_FIRST_PASS")
+    store, row = _persisted_campaign(tmp_path, "MPS_SINGLE_WORKER_FIRST_PASS")
     try:
         request = _restored_service(tmp_path, store)._restored_request(row)
-        assert request.execution_profile == "MPS_W1_FIRST_PASS"
+        assert request.execution_profile == "MPS_SINGLE_WORKER_FIRST_PASS"
         assert request.batch_kind == "FIRST_PASS"
         assert request.parallel_config_path == MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT
         assert request.parallel_config_sha256 == _sha256(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT)
@@ -489,7 +489,7 @@ def test_restored_request_keeps_the_configured_document_without_a_profile_receip
 
 
 def test_restored_request_refuses_a_receipt_naming_an_uninstalled_profile(tmp_path):
-    store, row = _persisted_campaign(tmp_path, "MPS_W1_FIRST_PASS")
+    store, row = _persisted_campaign(tmp_path, "MPS_SINGLE_WORKER_FIRST_PASS")
     try:
         connection = store._connection
         connection.execute(
@@ -590,7 +590,7 @@ def _issue(service, config_dir, **changes):
         campaign_id="campaign-candidate-1",
         batch_id="b001",
         manifest_id="manifest-1",
-        execution_profile="MPS_W2_FIRST_PASS",
+        execution_profile="MPS_TWO_WORKER_FIRST_PASS",
         worker_count=2,
         batch_kind="FIRST_PASS",
         config_document=str(config_dir / MACOS_MPS_TWO_WORKER_DOCUMENT.name),
@@ -607,8 +607,8 @@ def _issue(service, config_dir, **changes):
 @pytest.mark.parametrize(
     ("profile", "document", "schema_version", "worker_count", "batch_kind"),
     [
-        ("MPS_W2_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 4, 2, "FIRST_PASS"),
-        ("MPS_W1_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 6, 1, "FIRST_PASS"),
+        ("MPS_TWO_WORKER_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 4, 2, "FIRST_PASS"),
+        ("MPS_SINGLE_WORKER_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 6, 1, "FIRST_PASS"),
     ],
 )
 @DARWIN_ONLY
@@ -715,9 +715,9 @@ def test_a_replayed_issuance_or_a_reused_command_id_is_refused(tmp_path):
 @pytest.mark.parametrize(
     ("profile", "document", "worker_count", "batch_kind", "code"),
     [
-        ("MPS_W2_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 1, "FIRST_PASS", "CONTEXT_PROFILE_INVALID"),
-        ("MPS_W1_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 1, "FULL_RESTART_RETRY", "CONTEXT_PROFILE_INVALID"),
-        ("MPS_W1_FULL_RESTART_RETRY", MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, 2, "FULL_RESTART_RETRY",
+        ("MPS_TWO_WORKER_FIRST_PASS", MACOS_MPS_TWO_WORKER_DOCUMENT, 1, "FIRST_PASS", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_SINGLE_WORKER_FIRST_PASS", MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT, 1, "FULL_RESTART_RETRY", "CONTEXT_PROFILE_INVALID"),
+        ("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", MACOS_MPS_SINGLE_WORKER_RETRY_DOCUMENT, 2, "FULL_RESTART_RETRY",
          "CONTEXT_PROFILE_INVALID"),
         ("MPS_W8_FAST", MACOS_MPS_TWO_WORKER_DOCUMENT, 8, "FIRST_PASS", "UNSUPPORTED_ON_MACOS"),
     ],
@@ -753,7 +753,7 @@ def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_pat
             _issue(
                 service,
                 config_dir,
-                execution_profile="MPS_W1_FIRST_PASS",
+                execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
                 config_document=str(config_dir / MACOS_MPS_TWO_WORKER_DOCUMENT.name),
                 worker_count=1,
             )
@@ -762,7 +762,7 @@ def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_pat
             _issue(
                 service,
                 config_dir,
-                execution_profile="MPS_W1_FIRST_PASS",
+                execution_profile="MPS_SINGLE_WORKER_FIRST_PASS",
                 config_document=str(config_dir / MACOS_MPS_SINGLE_WORKER_FIRST_PASS_DOCUMENT.name),
                 worker_count=1,
                 command_id="cmd-issue-missing",

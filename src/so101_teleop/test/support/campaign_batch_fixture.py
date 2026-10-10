@@ -33,7 +33,7 @@ EVIDENCE_MANIFEST_SHA256 = "e" * 64
 DYNAMIC_MANIFEST_SHA256 = "d" * 64
 
 #: The bindings a batch document may name, and the verdicts the campaign's own result may carry.
-CAMPAIGN_PASS_VERDICTS = ("W2_CAMPAIGN_PASS", "N1_CAMPAIGN_PASS")
+CAMPAIGN_PASS_VERDICTS = ("TWO_WORKER_CAMPAIGN_PASS", "SINGLE_WORKER_CAMPAIGN_PASS")
 CAMPAIGN_INCOMPLETE = "CAMPAIGN_INCOMPLETE"
 
 #: The two binding vocabularies one campaign writes: the first pass names its catalog and lists its

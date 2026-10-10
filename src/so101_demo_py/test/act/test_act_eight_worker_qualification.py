@@ -43,17 +43,17 @@ def test_a_document_whose_evidence_re_derives_verifies(tmp_path):
 
 
 @pytest.mark.parametrize("mutation,code", [
-    (lambda doc, root: doc.update({"status": "PASSED"}), "W8_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc.update({"worker_count": 4}), "W8_QUALIFICATION_EVIDENCE_INVALID"),
-    (lambda doc, root: doc.pop("live_campaign"), "W8_QUALIFICATION_EVIDENCE_INVALID"),
+    (lambda doc, root: doc.update({"status": "PASSED"}), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
+    (lambda doc, root: doc.update({"worker_count": 4}), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
+    (lambda doc, root: doc.pop("live_campaign"), "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
     (lambda doc, root: doc["live_campaign"].update({"journal_sha256": []}),
-     "W8_QUALIFICATION_EVIDENCE_INVALID"),
+     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
     (lambda doc, root: doc["live_campaign"].update({"campaign_result_sha256": "f" * 64}),
-     "W8_QUALIFICATION_EVIDENCE_MISMATCH"),
+     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"),
     (lambda doc, root: doc["live_campaign"].update({"journal_sha256": ["a" * 64]}),
-     "W8_QUALIFICATION_EVIDENCE_MISMATCH"),
+     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"),
     (lambda doc, root: doc["live_campaign"].update({"case_root": str(root / "gone")}),
-     "W8_QUALIFICATION_EVIDENCE_INVALID"),
+     "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
 ])
 def test_the_verifier_refuses_what_it_cannot_re_derive(tmp_path, mutation, code):
     path, root = _document(tmp_path)
@@ -65,13 +65,13 @@ def test_the_verifier_refuses_what_it_cannot_re_derive(tmp_path, mutation, code)
 
 
 def test_a_missing_document_refuses(tmp_path):
-    with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_INVALID"):
+    with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"):
         verify_eight_worker_qualification(tmp_path / "absent.json", {})
 
 
 @pytest.mark.parametrize("payload,code", [
-    ({"preparation_receipt_path": ""}, "W8_QUALIFICATION_EVIDENCE_INVALID"),
-    ({"preparation_receipt_path": "/nonexistent/receipt.json"}, "W8_QUALIFICATION_EVIDENCE_INVALID"),
+    ({"preparation_receipt_path": ""}, "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
+    ({"preparation_receipt_path": "/nonexistent/receipt.json"}, "EIGHT_WORKER_QUALIFICATION_EVIDENCE_INVALID"),
 ])
 def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
     """When the payload names a bundle it must open, and its evidence must agree.
@@ -216,5 +216,5 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
     # one variable: a journal edited after sealing is no longer the one the document cites
     sealed = cases / f"{fulls[0]}.json"
     sealed.write_bytes(sealed.read_bytes().replace(b'"PASSED"', b'"FAILED"'))
-    with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_MISMATCH"):
+    with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_EVIDENCE_MISMATCH"):
         verify_eight_worker_qualification(path, payload)

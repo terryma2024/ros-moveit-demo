@@ -580,9 +580,9 @@ const macosCapabilities = {
     })),
   ],
   support_matrix: [
-    matrixRow("MPS_W2_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
-    matrixRow("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
-    matrixRow("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
+    matrixRow("MPS_TWO_WORKER_FIRST_PASS", 4, "PARALLEL", 2, "FIRST_PASS"),
+    matrixRow("MPS_SINGLE_WORKER_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
+    matrixRow("MPS_SINGLE_WORKER_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
   ],
   adaptive_default_ladder: [],
   worker_qualifications: [],
@@ -609,7 +609,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   expect(preflight.mock.calls[0][0]).toMatchObject({
     execution_mode: "SEQUENTIAL",
     worker_count: 1,
-    execution_profile: "MPS_W1_FIRST_PASS",
+    execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
   });
 
@@ -618,7 +618,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   await user.click(screen.getByRole("button", { name: "Generate points" }));
   await user.click(screen.getByRole("button", { name: "Check resources" }));
   expect(preflight.mock.calls[1][0]).toMatchObject({
-    execution_profile: "MPS_W1_FIRST_PASS",
+    execution_profile: "MPS_SINGLE_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
   });
 
@@ -629,7 +629,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   expect(preflight.mock.calls[2][0]).toMatchObject({
     execution_mode: "PARALLEL",
     worker_count: 2,
-    execution_profile: "MPS_W2_FIRST_PASS",
+    execution_profile: "MPS_TWO_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
   });
 
@@ -638,7 +638,7 @@ test("macOS claims the matrix profile and the point count never changes it", asy
   await user.click(screen.getByRole("button", { name: "Start validation" }));
   expect(startCampaign).toHaveBeenCalledTimes(1);
   expect(startCampaign.mock.calls[0][0]).toMatchObject({
-    execution_profile: "MPS_W2_FIRST_PASS",
+    execution_profile: "MPS_TWO_WORKER_FIRST_PASS",
     batch_kind: "FIRST_PASS",
     preflight_receipt_id: "receipt-1",
   });
