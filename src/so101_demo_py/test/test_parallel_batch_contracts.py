@@ -8,7 +8,7 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-POINTS_PATH = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+POINTS_PATH = PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml"
 CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 
 

@@ -127,7 +127,7 @@ def layout(cfg: dict[str, object]) -> dict[str, Path]:
         "entry": teleop / "lib/so101_teleop/so101_unified_web_server.py",
         "web": teleop / "share/so101_teleop/web/index.html",
         "config": demo / "share/so101_demo_py/config/mujoco" / str(cfg["config"]),
-        "points": demo / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml",
+        "points": demo / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml",
         "coordinator": demo / "lib/so101_demo_py" / str(cfg["coordinator"]),
         "adaptive_config": demo / "share/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml",
         "adaptive_wrapper": demo / "lib/so101_demo_py/run_so101_adaptive_batch.zsh",

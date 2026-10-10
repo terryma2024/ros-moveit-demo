@@ -22,7 +22,7 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
@@ -627,7 +627,7 @@ def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
     prepared = prepare_batch(
         argv(
             tmp_path / "batch",
-            points="config/mujoco/moveit_expert_validation_points_v1.yaml",
+            points="config/mujoco/moveit_expert_validation_points.yaml",
             config="config/mujoco/parallel_batch_linux_cuda.yaml",
         ),
         provenance_verifier=verified,
@@ -2759,7 +2759,7 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
     config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
-    points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+    points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml"
     for path in (module, console, config, points):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("approved", encoding="utf-8")
@@ -2809,7 +2809,7 @@ def _external_overlay_fixture(tmp_path):
     share = package_prefix / "share/so101_demo_py/config/mujoco"
     share.mkdir(parents=True)
     config = share / "parallel_batch_linux_cuda.yaml"
-    points = share / "moveit_expert_validation_points_v1.yaml"
+    points = share / "moveit_expert_validation_points.yaml"
     config.write_text("schema_version: 2\n", encoding="utf-8")
     points.write_text("schema_version: 1\n", encoding="utf-8")
     binding = tmp_path / "candidate/provenance-binding.json"

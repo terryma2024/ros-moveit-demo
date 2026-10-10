@@ -407,7 +407,7 @@ def production_batch_argv(
     acceptance=None,
     current_provenance_root=None,
 ):
-    points = PACKAGE / 'config/mujoco/moveit_expert_validation_points_v1.yaml'
+    points = PACKAGE / 'config/mujoco/moveit_expert_validation_points.yaml'
     values = [
         '--points', str(points),
         '--config', str(CLI_CONFIG_PATH),

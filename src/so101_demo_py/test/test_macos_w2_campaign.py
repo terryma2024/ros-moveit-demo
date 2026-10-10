@@ -39,7 +39,7 @@ BROKER_BIRTH = 8001
 def _catalog(tmp_path) -> Path:
     """The installed 20-point catalog, copied so a selection binding can be frozen from it."""
 
-    source = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+    source = PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml"
     target = tmp_path / source.name
     target.write_bytes(source.read_bytes())
     return target

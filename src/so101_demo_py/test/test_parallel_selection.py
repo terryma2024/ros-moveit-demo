@@ -53,7 +53,7 @@ def _catalog_document() -> dict:
 def _write_catalog(tmp_path: Path) -> Path:
     import yaml
 
-    path = tmp_path / "moveit_expert_validation_points_v1.yaml"
+    path = tmp_path / "moveit_expert_validation_points.yaml"
     path.write_text(yaml.safe_dump(_catalog_document(), sort_keys=False), encoding="utf-8")
     return path
 

@@ -227,7 +227,7 @@ class ProductionRuntimeLayout:
         points = _required_file(
             environment,
             "SO101_VALIDATION_POINTS",
-            demo_share / "config/mujoco/moveit_expert_validation_points_v1.yaml",
+            demo_share / "config/mujoco/moveit_expert_validation_points.yaml",
         )
         parallel = _required_file(
             environment,

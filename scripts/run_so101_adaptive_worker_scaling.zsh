@@ -54,7 +54,7 @@ done
 
 typeset script_dir="${0:A:h}"
 typeset repo_root="${script_dir:h}"
-typeset points="$repo_root/src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+typeset points="$repo_root/src/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml"
 typeset config="$repo_root/src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
 typeset adaptive_config="$repo_root/src/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml"
 typeset yolo_weights="/data/work/so101-evidence/act-head-wrist-moveit-baseline/run-1Mv3UyHW/optimization/3c35b60f-2211-4e2b-aca4-181604915188/models/yolo/best.pt"

@@ -69,7 +69,7 @@ SELECTION_DOCUMENT_BASENAME = "selection-binding.json"
 POINT_RESULTS_DIRNAME = "point-results"
 POINT_RESULT_BASENAME = "point-result.json"
 DYNAMIC_MANIFEST_RELATIVE = "dynamic/dynamic-execute-manifest.json"
-INSTALLED_CATALOG_RELATIVE = "config/mujoco/moveit_expert_validation_points_v1.yaml"
+INSTALLED_CATALOG_RELATIVE = "config/mujoco/moveit_expert_validation_points.yaml"
 
 COMMITTED = "COMMITTED"
 INFRA_FAILED = "INFRA_FAILED"

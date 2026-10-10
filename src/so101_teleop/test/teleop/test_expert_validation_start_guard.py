@@ -93,7 +93,7 @@ INSTALLED_ASSETS = (
     "assets/mujoco/scene.xml",
     "assets/mujoco/assets/target_landing_tolerance_ring.obj",
     "config/mujoco/rgbd_task_points.yaml",
-    "config/mujoco/moveit_expert_validation_points_v1.yaml",
+    "config/mujoco/moveit_expert_validation_points.yaml",
     "config/mujoco/adaptive_worker_pool.yaml",
 )
 
@@ -147,7 +147,7 @@ def _layout(tmp_path, *, demo_prefix, copied_share, parallel_config, runtime, fi
         source_commit="a" * 40,
         demo_prefix=demo_prefix,
         points_path=(copied_share
-                     / "config/mujoco/moveit_expert_validation_points_v1.yaml").resolve(),
+                     / "config/mujoco/moveit_expert_validation_points.yaml").resolve(),
         parallel_config_path=parallel_config,
         adaptive_config_path=(copied_share
                               / "config/mujoco/adaptive_worker_pool.yaml").resolve(),

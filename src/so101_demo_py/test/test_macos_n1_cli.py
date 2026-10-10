@@ -162,9 +162,9 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
 
     point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
                  "cup_test_right_5cm")
-    catalog = tmp_path / "moveit_expert_validation_points_v1.yaml"
+    catalog = tmp_path / "moveit_expert_validation_points.yaml"
     catalog.write_bytes(
-        (PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml").read_bytes())
+        (PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml").read_bytes())
     binding = build_first_pass_selection(
         catalog_path=catalog, point_ids=point_ids, campaign_id="b-n1", batch_id="b-n1",
         config_sha256="c" * 64, runtime_closure_sha256="d" * 64)
@@ -559,7 +559,7 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
         yolo_weights=tmp_path / "yolo.pt", grounded_root=tmp_path / "grounded",
         worker_deadline_s=1.0, tamper_snapshot_sha=False, duplicate_probe=False,
         cancel_second_worker_after_served=0, crash_broker_after_served=0,
-        point_id=point_ids, catalog=PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml",
+        point_id=point_ids, catalog=PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml",
         catalog_sha256=None, retry_root=None)
     plan = compose_w1_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
                                  config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1", batch_id="b-n1",

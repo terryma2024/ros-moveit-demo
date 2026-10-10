@@ -22,7 +22,7 @@ from teleop_paths import REPOSITORY
 REPOSITORY_ROOT = REPOSITORY
 CATALOG_PATH = (
     REPOSITORY_ROOT
-    / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+    / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml"
 )
 CATALOG_SHA256 = "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
 

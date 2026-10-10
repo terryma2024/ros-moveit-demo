@@ -878,7 +878,7 @@ def _validate_external_overlay_binding(
     expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
     expected_points = (
         demo_prefix
-        / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
+        / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points.yaml"
     )
     if (
         console_path.absolute() != expected_console.absolute()

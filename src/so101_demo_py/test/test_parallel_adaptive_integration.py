@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from paths import PACKAGE_ROOT, REPOSITORY
 
 PACKAGE = PACKAGE_ROOT
-POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
+POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 

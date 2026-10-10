@@ -87,7 +87,7 @@ def _catalog_copy(tmp_path: Path) -> Path:
     """The installed 20-point catalog, so the selection ids are the real ones."""
 
     source = (PACKAGE_ROOT
-              / "config/mujoco/moveit_expert_validation_points_v1.yaml")
+              / "config/mujoco/moveit_expert_validation_points.yaml")
     target = tmp_path / source.name
     target.write_bytes(source.read_bytes())
     return target
