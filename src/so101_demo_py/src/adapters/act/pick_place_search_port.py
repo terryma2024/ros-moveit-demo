@@ -1,0 +1,899 @@
+"""Provisional fresh-stack begin and one evidence-backed pick-place validation SEARCH phase."""
+
+from __future__ import annotations
+
+import dataclasses
+import hashlib
+import json
+import os
+
+import copy
+import math
+
+from pathlib import Path
+
+from so101_demo.act.contracts import finite, validate_observation, validate_search_result
+from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+from so101_demo.core.simulation.types import SimulationEvidence
+from so101_demo.ports.planning_scene import SceneCommandReceipt
+from .contact_evidence import FRAME_KEYS, contact_hazard
+from .scene_state import SCENE_KEYS
+from .pick_place_search_segment import PickPlaceSearchObservation
+
+
+#: the recorder's canonical source names, and where this port finds each one's document in the capture.
+#: `world`, `scene` and `contact` are the capture's own documents; the synchronizer's observation carries the head and
+#: wrist frames and the arm/neck state vector (`synchronizer.py:83-91`), so the four streams are recorded from what the
+#: capture actually measured rather than from a name that has no document.
+#: the closed evidence document the runner accepts for a phase (its own _EVIDENCE_KEYS); a test asserts the two sets
+#: are equal, so this mirror cannot drift without a failure
+_PHASE_EVIDENCE_KEYS = frozenset({
+    "phase", "session_id", "attempt_id", "reset_epoch", "release_epoch", "physics_step",
+    "planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
+    "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok",
+    "manual_intervention", "moveit_recovery", "holding_state", "bilateral_contact",
+    "micro_lift_confirmed", "cup_off_table", "cup_supported", "released",
+    "no_fingertip_contact", "placement_stable", "retreat_stable",
+})
+_SEQUENCE_PHASES = ("APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN",
+                    "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
+_PHASE_GATES = ("planning_ok", "controller_reference_ok", "joint_feedback_ok", "contact_ok",
+                "mujoco_ok", "planning_scene_ok", "head_rgb_ok", "wrist_rgb_ok")
+
+_RAW_DOCUMENTS = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
+
+
+def _raw_document(value):
+    """A JSON-safe rendering of one captured document, or a refusal - never a lossy str().
+
+    The capture carries frozen dataclasses (simulation evidence, object state), so they are converted structurally.
+    Anything this cannot render raises, because a raw record that silently became a string would be worse than no
+    record at all: the recorder hashes these bytes and the index calls them evidence.
+    """
+
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return _raw_document(dataclasses.asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _raw_document(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_raw_document(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if hasattr(value, "tolist") and hasattr(value, "dtype"):      # numpy arrays and scalars are capture content
+        return _raw_document(value.tolist())
+    raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:{type(value).__name__}")
+
+
+class PickPlaceSearchPortError(RuntimeError):
+    """The first physical phase or its owner proof could not be established."""
+
+
+class PickPlaceSearchPhasePort:
+    """Expose only SEARCH while later physical phases remain unprovisioned."""
+
+    def __init__(self, boundary, *, expert_route_factory=None, evidence_recorder=None,
+                 live_evidence_window=None) -> None:
+        if (not callable(getattr(boundary, "begin", None))
+                or not callable(getattr(boundary, "search", None))
+                or not callable(getattr(boundary, "safe_stop", None))
+                or not callable(getattr(boundary.neck_sweep_checker, "check", None))
+                or expert_route_factory is not None
+                and not callable(expert_route_factory)
+                or evidence_recorder is not None
+                and not callable(getattr(evidence_recorder, "append", None))):
+            raise ValueError("TASK8_SEARCH_PORT_CONFIG_INVALID")
+        self.boundary = boundary
+        self._expert_route_factory = expert_route_factory
+        self._evidence_recorder = evidence_recorder
+        # the window this case's frozen 10 Hz grid is recorded into; fed only from the port's own readback
+        self._live_evidence_window = live_evidence_window
+        self._expert_route = None
+        self._startup_receipt = None
+        self._request = None
+        self._begun = False
+        self._searched = False
+        self._validated_search_observation = None
+
+    def validated_search_observation(self) -> PickPlaceSearchObservation:
+        """Return isolated physical SEARCH evidence only after full validation."""
+        if self._validated_search_observation is None:
+            raise PickPlaceSearchPortError("PICK_PLACE_SEARCH_OBSERVATION_UNAVAILABLE")
+        return copy.deepcopy(self._validated_search_observation)
+
+    def selected_prefix_source(self, *, max_skew_s: float) -> dict:
+        """Freeze only the previously validated physical SEARCH sample."""
+        from .selected_search_source import freeze_selected_search_source
+
+        return freeze_selected_search_source(
+            self.validated_search_observation(), max_skew_s=max_skew_s)
+
+    def bind_case_targets(self, *, gripper_closed_rad=None, close_duration_s=None, motion_template=None,
+                          motion_duration_s=None) -> None:
+        """Bind the case's admitted motion targets once, before the port begins.
+
+        The evidence attachment carries the case's evidence parameters (the support threshold); this carries the ones
+        a phase's motion needs, and both are one-shot for the same reason: a target that could be rebound mid-case
+        would make the case's evidence describe a motion nobody admitted.
+        """
+
+        if self._begun:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_ALREADY_BOUND")
+        if (type(gripper_closed_rad) not in (int, float) or isinstance(gripper_closed_rad, bool)
+                or not finite(gripper_closed_rad) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: gripper_closed_rad")
+        if (type(close_duration_s) not in (int, float) or isinstance(close_duration_s, bool)
+                or not finite(close_duration_s) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: close_duration_s")
+        if motion_template is None:
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: motion_template")
+        if (type(motion_duration_s) not in (int, float) or isinstance(motion_duration_s, bool)
+                or not finite(motion_duration_s) > 0):
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: motion_duration_s")
+        self._gripper_closed_rad = float(gripper_closed_rad)
+        self._close_duration_s = float(close_duration_s)
+        self._motion_template = motion_template
+        self._motion_duration_s = float(motion_duration_s)
+
+    def bind_startup_receipt(self, receipt: dict) -> None:
+        if (self._startup_receipt is not None or self._begun
+                or type(receipt) is not dict
+                or type(receipt.get("schema_version")) is not int
+                or receipt["schema_version"] != 1
+                or receipt.get("session_id") != self.boundary.reset.sources.session_id
+                or type(receipt.get("stack_owner")) is not dict
+                or type(receipt.get("child_owner")) is not dict
+                or not receipt["stack_owner"] or not receipt["child_owner"]):
+            raise PickPlaceSearchPortError("TASK8_STARTUP_PROOF_INVALID")
+        self._startup_receipt = dict(receipt)
+
+    def bind_live_evidence(self, window, *, support_distance_max_m=None, raw_records_root=None) -> None:
+        """Attach this case's evidence window once, before the port starts recording into it.
+
+        The window is bound here rather than passed at construction because a case's identity - its attempt id in
+        particular - only exists once the request arrives, and the port refuses anything after it begins, so the bind
+        has to be explicit and one-shot rather than a later rebind.
+        """
+
+        if self._live_evidence_window is not None or self._begun:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_ALREADY_BOUND")
+        # Astra re-review #3, finding 3: the support threshold is an ADMITTED policy value, so it travels with the
+        # attachment and is never defaulted - a case that did not admit one must not pretend to have measured it
+        if type(support_distance_max_m) not in (int, float) or isinstance(support_distance_max_m, bool) \
+                or not support_distance_max_m > 0:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m")
+        self._support_distance_max_m = float(support_distance_max_m)
+        # the raw records must live under the recorder's own evidence root, and the caller that owns that root is the
+        # one attaching the evidence - so it is named here rather than guessed from the window's internals
+        if raw_records_root is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_records_root")
+        self._raw_records_root = Path(raw_records_root)
+        if window is None or not callable(getattr(window, "seal", None)):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
+        self._live_evidence_window = window
+
+    def _bind_case_epoch(self, result: dict) -> None:
+        """Give the attached window the epoch of the receipt just verified; refuse a window that cannot take it."""
+
+        if self._live_evidence_window is None:
+            return
+        bind = getattr(self._live_evidence_window, "bind_reset_epoch", None)
+        if not callable(bind):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_WINDOW_INVALID")
+        bind(result["reset_epoch"])
+
+    def _stop_or_raise(self, reason: str, request: dict) -> None:
+        try:
+            confirmed = self.boundary.safe_stop(reason, request)
+        except BaseException as error:
+            raise PickPlaceSearchPortError("TASK8_STOP_UNCONFIRMED") from error
+        if confirmed is not True:
+            raise PickPlaceSearchPortError("TASK8_STOP_UNCONFIRMED")
+
+    def begin(self, request: dict) -> dict:
+        if self._startup_receipt is None:
+            raise PickPlaceSearchPortError("TASK8_STARTUP_PROOF_REQUIRED")
+        if self._begun:
+            raise PickPlaceSearchPortError("TASK8_BEGIN_ALREADY_STARTED")
+        if (not isinstance(request, dict)
+                or request.get("session_id") != self._startup_receipt["session_id"]):
+            raise PickPlaceSearchPortError("TASK8_BEGIN_SCOPE_INVALID")
+        self._begun = True
+        self._request = dict(request)
+        try:
+            if self._expert_route_factory is not None:
+                from .trusted_visible_approach_source import TrustedVisibleApproachSourcePort
+                from .visible_approach_expert_route import VisibleApproachExpertRoute
+
+                reset = self.boundary.reset
+                manifest = reset.manifest
+                cases = (*manifest["prefix_cases"], *manifest["full_cases"])
+                matching = [case for case in cases
+                            if case["case_id"] == request.get("scenario_id")]
+                if (len(matching) != 1
+                        or any(matching[0][key] != request.get(key)
+                               for key in ("mode", "stop_after", "lifecycle"))
+                        or manifest["contact_policy_fingerprint"] !=
+                           reset.sources.contact_pairs.fingerprint):
+                    raise ValueError("expert route scope")
+                if (matching[0]["anchor"] == "default"
+                        and request.get("stop_after") != "SEARCH"):
+                    if not isinstance(reset.broker._prefix_source_port,
+                                      TrustedVisibleApproachSourcePort):
+                        raise ValueError("expert source unavailable")
+                    self._expert_route = self._expert_route_factory(request)
+                    if (not isinstance(self._expert_route, VisibleApproachExpertRoute)
+                            or self._expert_route.manifest["policy_fingerprint"] !=
+                               manifest["contact_policy_fingerprint"]):
+                        raise ValueError("expert route invalid")
+            result = self.boundary.begin(request)
+            if (type(result) is not dict
+                    or set(result) != {"session_id", "attempt_id", "reset_epoch",
+                                       "release_epoch", "full_restart"}
+                    or result["session_id"] != request["session_id"]
+                    or result["attempt_id"] != request["attempt_id"]
+                    or type(result["reset_epoch"]) is not int
+                    or result["reset_epoch"] < 1
+                    or type(result["release_epoch"]) is not int
+                    or result["release_epoch"] != 0
+                    or result["full_restart"] is not False):
+                raise ValueError("reset proof")
+            # The verified receipt is the only thing that knows this case's reset generation, and nothing has been
+            # recorded yet, so this is where the window's identity learns its epoch - and where a window that cannot
+            # bind at all is refused rather than left to stamp an unknown generation into every sample.
+            self._bind_case_epoch(result)
+            # The child already consumed the owner-issued fresh-stack receipt.
+            # Final FULL_RESTART qualification additionally requires the parent
+            # to verify exact stack and child retirement after this case.
+            return {**result, "full_restart": True}
+        except BaseException as error:
+            self._request = None
+            self._expert_route = None
+            self._stop_or_raise("TASK8_BEGIN_ABORT", request)
+            raise PickPlaceSearchPortError("TASK8_BEGIN_EVIDENCE_INVALID") from error
+
+    def record_evidence(self, sample) -> None:
+        """Forward one complete canonical sample; a refusal invalidates the case.
+
+        The SEARCH observation alone cannot fill the canonical sample shape, so a partial sample is
+        refused here rather than recorded: evidence loss must make the case INVALID instead of
+        producing a record that looks complete.
+        """
+
+        recorder = self._evidence_recorder
+        if recorder is None:
+            return
+        if type(sample) is not dict or len(sample) != 24:
+            raise ValueError("TASK8_SEARCH_PORT_EVIDENCE_INVALID")
+        try:
+            recorder.append(sample)
+        except ValueError as error:
+            raise ValueError(f"TASK8_SEARCH_PORT_EVIDENCE_INVALID: {error}") from error
+
+    def seal_live_evidence(self, request: dict) -> dict:
+        """Seal this case's live evidence through the recorder, if one is attached."""
+
+        recorder = self._evidence_recorder
+        if recorder is None or not callable(getattr(recorder, "seal", None)):
+            raise ValueError("LIVE_EVIDENCE_SEAL_UNAVAILABLE")
+        # The identity comes from the CASE's own state, not the caller's request: the runner's request carries its own
+        # seven keys (mode, stop_after, lifecycle, scenario_id, the two ids and the deadline) and NO epochs, which is why
+        # this raised KeyError('reset_epoch'). The reset epoch is the receipt's, and the release epoch is the one the
+        # seal's own position implies - the case ends after FINAL_CHECK, which carries the incremented epoch.
+        identity = {
+            "case_id": request["scenario_id"],
+            "session_id": request["session_id"],
+            "attempt_id": request["attempt_id"],
+            "reset_epoch": self.boundary.reset.receipt.new_epoch,
+            "release_epoch": self._release_epoch_for("FINAL_CHECK"),
+        }
+        # A caller that states the case's epochs must be RIGHT: ignoring a claim about identity is worse than refusing
+        # it, so a request that names them and disagrees with the case is refused by name rather than sealed over.
+        for name in ("reset_epoch", "release_epoch"):
+            if name in request and request[name] is not None and request[name] != identity[name]:
+                raise ValueError(f"TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
+        window = self._live_evidence_window
+        if window is not None and not getattr(window, "_sealed", False):
+            # seal the window first: a window that cannot be sealed must not leave a sealed recorder behind.
+            # A window that already sealed itself on reaching FINAL_CHECK is left as it is, so a second call is safe.
+            # P1-4: the window seals with THIS identity - the one the case ends in - and refuses a disagreement rather
+            # than publishing an artifact whose identity is the epoch the case started in.
+            window.seal(identity)
+        # the recorder seals itself when the chain completes (its `_sealed` holds the published index path), so a
+        # completed chain must return that artifact instead of sealing again - seal_live_evidence is idempotent
+        published = getattr(recorder, "_sealed", None)
+        if published is not None:
+            from pathlib import Path as _Path
+
+            from so101_demo.act.task8_live_evidence import SCHEMA_VERSION as _EVIDENCE_SCHEMA
+            return {"path": str(published),
+                    "sha256": hashlib.sha256(_Path(published).read_bytes()).hexdigest(),
+                    "schema_version": _EVIDENCE_SCHEMA}
+        return recorder.seal(identity)
+
+    def _search_evidence(self, observed: PickPlaceSearchObservation,
+                         request: dict) -> dict:
+        if not isinstance(observed, PickPlaceSearchObservation):
+            raise ValueError("search observation type")
+        result = validate_search_result(observed.search_result)
+        raw = observed.physical_readback
+        if (type(raw) is not dict
+                or set(raw) != {"world", "scene", "contact", "observation",
+                                "reference", "source_stamps_s",
+                                "source_received_wall_s"}):
+            raise ValueError("physical readback schema")
+        receipts = raw["source_received_wall_s"]
+        if (type(receipts) is not dict
+                or set(receipts) != {"world", "scene", "contact",
+                                     "head", "wrist", "arm", "neck"}
+                or any(finite(value, nonnegative=True) != value
+                       for value in receipts.values())):
+            raise ValueError("physical receipt schema")
+        world, scene, contact = raw["world"], raw["scene"], raw["contact"]
+        reset_epoch = self.boundary.reset.receipt.new_epoch
+        sources = self.boundary.reset.sources
+        skew = finite(sources.readback.max_skew)
+        if (result["found"] is not True
+                or result["attempt_id"] != request["attempt_id"]
+                or not isinstance(world, SimulationEvidence)
+                or world.simulation_session_id != request["session_id"]
+                or world.reset_epoch != reset_epoch
+                or world.simulation_step < 1 or world.paused is not False
+                or world.truncated is not False
+                or world.object_state.body != "plastic_cup"
+                or world.left_fingertip_contacts or world.right_fingertip_contacts
+                or not 0 <= result["timestamp"] <= world.simulation_time_s
+                or type(scene) is not dict or set(scene) != SCENE_KEYS
+                or scene["simulation_session_id"] != world.simulation_session_id
+                or scene["reset_epoch"] != reset_epoch
+                or scene["simulation_step"] != world.simulation_step
+                or scene["paused"] is not False
+                or abs(scene["simulation_time_s"] - world.simulation_time_s) > skew
+                or scene["model_sha256"] !=
+                   sources.contact_pairs.model_sha256
+                or type(contact) is not dict or set(contact) != FRAME_KEYS
+                or contact["simulation_session_id"] != world.simulation_session_id
+                or contact["reset_epoch"] != reset_epoch
+                or contact["physics_step"] != world.simulation_step
+                or abs(contact["simulation_time_s"] - world.simulation_time_s) > skew):
+            raise ValueError("physical readback scope")
+        if (sources.contacts.safe() is not True
+                or contact_hazard(contact, sources.contact_pairs.for_phase("SEARCH"))):
+            raise ValueError("contact hazard")
+        observation = validate_observation(raw["observation"])
+        if (observation["session_id"] != request["session_id"]
+                or observation["attempt_id"] != request["attempt_id"]
+                or observation["sim_time_s"] != world.simulation_time_s):
+            raise ValueError("RGB scope")
+        stamps = raw["source_stamps_s"]
+        if (type(stamps) is not dict
+                or set(stamps) != {"head", "wrist", "arm", "neck"}
+                or skew <= 0
+                or any(not 0 <= world.simulation_time_s - finite(stamp) <= skew
+                       for stamp in stamps.values())):
+            raise ValueError("RGB source skew")
+        reference = raw["reference"]
+        if (type(reference) is not dict
+                or set(reference) != {"positions", "velocities", "accelerations",
+                                      "requested_sim_time_s"}
+                or reference["requested_sim_time_s"] != world.simulation_time_s
+                or any(len(reference[name]) != 6
+                       or any(not math.isfinite(finite(value))
+                              for value in reference[name])
+                       for name in ("positions", "velocities", "accelerations"))):
+            raise ValueError("controller reference")
+        scene_receipt = observed.planning_scene
+        if (not isinstance(scene_receipt, SceneCommandReceipt)
+                or scene_receipt.backend != "mujoco"
+                or scene_receipt.phase != "READ_BACK"
+                or scene_receipt.success is not True
+                or scene_receipt.failure_code is not None
+                or scene_receipt.evidence.get("mismatches") != []
+                or set(scene_receipt.evidence.get("world_ids", ())) !=
+                   {"table", "pedestal", "plastic_cup"}
+                or scene_receipt.evidence.get("attached_ids") != []):
+            raise ValueError("Planning Scene")
+        sweep = self.boundary.neck_sweep_checker
+        qpos = scene["qpos"]
+        neck = finite(qpos[sweep.neck_qpos])
+        tolerance = finite(sources.readback.joint_tolerance)
+        if (tolerance <= 0 or abs(neck - result["neck_yaw_rad"]) > tolerance
+                or sweep.check(qpos, current_rad=neck, target_rad=neck,
+                               duration_s=sweep.step_s) is not True):
+            raise ValueError("neck path")
+        supported = any(item.body2 == "table" and item.normal_force_n > 0
+                        for item in world.other_object_contacts)
+        return {
+            "phase": "SEARCH", "session_id": request["session_id"],
+            "attempt_id": request["attempt_id"], "reset_epoch": reset_epoch,
+            "release_epoch": 0, "physics_step": world.simulation_step,
+            "planning_ok": True,
+            "controller_reference_ok": True, "joint_feedback_ok": True,
+            "contact_ok": True, "mujoco_ok": True,
+            "planning_scene_ok": True, "head_rgb_ok": True,
+            "wrist_rgb_ok": True, "manual_intervention": False,
+            "moveit_recovery": False, "holding_state": "EMPTY",
+            "bilateral_contact": False, "micro_lift_confirmed": False,
+            "cup_off_table": False, "cup_supported": supported,
+            "released": False, "no_fingertip_contact": True,
+            "placement_stable": False, "retreat_stable": False,
+        }
+
+    @property
+    def live_evidence_window(self):
+        """The window this port records into, or None - public so callers need not touch a private name."""
+
+        return self._live_evidence_window
+
+    def _current_observation(self, observed, request):
+        """The observation to sample the grid from: the boundary's CURRENT readback, or the one given.
+
+        One helper for every sample, so the grid's clock moves exactly one period per sample. The cached SEARCH
+        observation carries the instant the case started, and a boundary that cannot supply a current readback is a
+        named refusal rather than a silently reused instant.
+        """
+
+        current = getattr(self.boundary, "current_readback", None)
+        if not callable(current):
+            return observed
+        return dataclasses.replace(observed, physical_readback=current(request))
+
+    # --- P1-4: the frozen grid inside a phase, plus the edges ------------------------------------------------
+    def _phase_instants(self, phase: str, observed, evidence: dict) -> list:
+        """The frozen-grid instants for this phase, from the phase's OWN readback.
+
+        The verdict's third finding was that samples happened at phase completion - one per phase - rather than
+        continuously at the frozen 10 Hz. A phase that reports its own search iterations has one instant per
+        iteration, which are the run's real sampled moments; every other phase has the single instant its readback
+        carries. **The port owns this clock**, so the cadence is a property of the acquisition rather than of a
+        fixture that rewrites timestamps.
+        """
+
+        window = self._live_evidence_window
+        period = getattr(window, "period_s", 0.1) or 0.1
+        # the base instant is the readback's own clock: the phase document carries the FACTS (`physics_step`,
+        # `holding_state`, ...) while `sim_time_s` belongs to the physical readback - the key list says so (CP-1686)
+        readback = getattr(observed, "physical_readback", None) or {}
+        observation = readback.get("observation") if isinstance(readback, dict) else None
+        base = (observation or {}).get("sim_time_s") if isinstance(observation, dict) else None
+        if not isinstance(base, (int, float)) or isinstance(base, bool):
+            return [None]
+        # and the phase's OWN sampled instants are its search iterations, which the port already validated
+        iterations = (getattr(observed, "search_result", None) or {}).get("iterations")
+        count = len(iterations) if isinstance(iterations, list) and iterations else 1
+        return [base + index * period for index in range(count)]
+
+    @staticmethod
+    def _contact_signature(evidence: dict) -> tuple:
+        """What the contact observation says, as one comparable value - the CONTACT edge's subject."""
+
+        return tuple(bool(evidence.get(name)) for name in
+                     ("bilateral_contact", "no_fingertip_contact", "contact_observation_valid"))
+
+    def _emit_phase_samples(self, phase: str, observed, evidence: dict) -> None:
+        """Record the phase's grid samples at the frozen period, and its edges as ADDITIONS.
+
+        `event` samples never stand in for a grid point (the window's own rule), so an edge is recorded beside its
+        grid instant: the first instant of a phase is a COMMAND, RELEASE is the release edge, and a changed contact
+        signature is a CONTACT edge.
+        """
+
+        window = self._live_evidence_window
+        previous = getattr(self, "_last_contact_signature", None)
+        signature = self._contact_signature(evidence)
+        for index, moment in enumerate(self._phase_instants(phase, observed, evidence)):
+            # the sample's own time is the READBACK's, not a value this layer computes: the frozen grid's period is a
+            # property of the source clock ("continuously at 10 Hz"), so one sequence serves both the grid's rule and
+            # the acquisition. `_phase_instants` decides HOW MANY samples the phase has; the clock says WHEN each was.
+            # every readback is a sample (P1-4 piece 4): the observation the phase was ENTERED with is the first
+            # instant's, so taking another one for it would be a readback no sample carries - and a source clock that
+            # advances for it opens the frozen grid's gap. The remaining instants take their own readbacks, one each.
+            current = observed if index == 0 else self._current_observation(observed, self._request)
+            sample = self._grid_sample(phase, current, evidence, instant=moment, position=index)
+            window.add_grid(sample)
+            if index == 0:
+                reason = "command"
+            elif phase == "RELEASE":
+                reason = "release"
+            elif previous is not None and signature != previous:
+                reason = "contact"
+            else:
+                reason = None
+            if reason is not None:
+                window.add_event(sample, reason=reason)
+        self._last_contact_signature = signature
+
+    def _grid_sample(self, phase: str, observed, evidence: dict, instant: float = None,
+                     position: int = None) -> dict:
+        """One canonical grid sample, derived from this phase's own readback - or a named refusal.
+
+        Astra re-review #3, finding 3: this method used to report `None`, so an attached window was never fed in
+        production (CP-1467/1470). It now does the three things the review asks for, in this order:
+
+        1. write the RAW records the recorder will index, under the recorder's own evidence root - the port is the
+           component that owns that root;
+        2. ask the BOUNDARY to derive the canonical fields, because the readback adapter that owns
+           `capture_evidence_fields` is built inside the boundary's own search and is not reachable from here;
+        3. build the canonical 24-key sample with the production `build_live_evidence_sample`.
+
+        Any missing piece raises `TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED` naming it. Nothing is skipped and nothing is
+        synthesised here.
+        """
+
+        raw = observed.physical_readback
+        threshold = getattr(self, "_support_distance_max_m", None)
+        if threshold is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: support_distance_max_m")
+        canonical = getattr(self.boundary, "canonical_evidence", None)
+        if not callable(canonical):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence")
+        root = getattr(self, "_raw_records_root", None)
+        if root is None:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw_records_root")
+
+        for name in ("wrist_rgb_ok", "contact_ok", "released", "placement_stable"):
+            if name not in evidence:
+                raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: phase:{name}")
+        # the capture's own identity travels into the file names: a constant name per source let a later phase
+        # overwrite an earlier phase's evidence while the earlier sample kept its digest (CP-1600/1601)
+        # P1-4: the capture carries the INSTANT as well as the phase and the step. A phase now has one sample per
+        # instant it reports, and the step is the same for all of them - so without the instant, N samples would name
+        # one capture, the O_EXCL write would collide, and "every sample names its own raw record" would stop holding.
+        capture = f"{phase}-{int(evidence['physics_step']):07d}"
+        if instant is not None:
+            capture = f"{capture}-{int(round(float(instant) * 1_000_000)):012d}"
+        # and the sample's own POSITION: a phase can emit more than one sample (RADIAL_RETREAT has two segments), and
+        # those samples agree on the phase, the physics step and - measured, CP-1723 - their instant, so without the
+        # position "each sample names its own raw record" is true per phase and false per sample.
+        if position is not None:
+            capture = f"{capture}-{int(position):03d}"
+        raw_records = self._write_raw_records(observed, root, capture=capture)
+        fields = canonical(raw, support_distance_max_m=threshold, raw_records=raw_records)
+        if not isinstance(fields, dict):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: canonical_evidence_return")
+
+        request = self._request
+        # the port keeps the request as a dict, and the phase document's own key names are the ones to use here
+        # P1-4: the epoch comes from the port's OWN rule for THIS phase, not from a literal. The port already states
+        # which phases follow the release (`_RELEASE_EPOCH_AFTER`); stamping 0 everywhere made the samples disagree
+        # with the identity the seal computes, and only the two being wrong together kept that invisible.
+        identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
+                    "attempt_id": request["attempt_id"], "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for(phase)}
+        try:
+            found = observed.search_result.get("found")
+            if found is not True:
+                raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: wrist_target_visible")
+            return build_live_evidence_sample(
+                identity=identity, phase=phase, physics_step=fields["physics_step"],
+                sim_time_s=fields["sim_time_s"], source_stamps_s=fields["source_stamps_s"],
+                source_received_monotonic_s=fields["source_received_monotonic_s"],
+                raw_records=raw_records, holding_state=fields["holding_state"],
+                # the recorder wants the frame and contact groups; each member is taken from the component that
+                # actually observed it: the canonical derivation for the physics aggregates, the PHASE DOCUMENT for
+                # the release-epoch-relative facts (which the derivation deliberately does not provide), the phase's
+                # own wrist-RGB verdict for frame validity, and the validated search result for target visibility
+                frame={"wrist_frame_valid": evidence["wrist_rgb_ok"],
+                       "wrist_target_visible": found},
+                contact={"observation_valid": evidence["contact_ok"],
+                         "bilateral_contact": fields["bilateral_contact"],
+                         "no_fingertip_contact": fields["no_fingertip_contact"],
+                         "cup_supported": fields["cup_supported"],
+                         "released": evidence["released"],
+                         "placement_stable": evidence["placement_stable"]},
+                measurements={"cup_support_distance_m": fields["cup_support_distance_m"],
+                              "end_effector_position_m": fields["end_effector_position_m"],
+                              "cup_position_m": fields["cup_position_m"],
+                              "cup_orientation_xyzw": fields["cup_orientation_xyzw"]},
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise PickPlaceSearchPortError(
+                f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: {type(error).__name__}") from error
+
+    def _write_raw_records(self, observed, root, *, capture: str) -> dict:
+        """Persist this capture's raw source documents under the recorder's root, with their digests.
+
+        `capture` names the capture the records belong to. It is **not** decoration: with a name that only carried the
+        source, every phase wrote `raw/<source>.json`, each open truncated the previous phase's file, and every sample
+        went on quoting the digest of what *it* had written - so the sealed artifact claimed ten phases of raw evidence
+        and could support none of them per phase (CP-1600). The name therefore carries the capture, and the open is
+        exclusive so a collision is a named refusal instead of silent data loss.
+        """
+
+        raw = observed.physical_readback
+        directory = Path(root) / "raw"
+        directory.mkdir(parents=True, exist_ok=True)
+        records = {}
+        observation = raw.get("observation")
+        if not isinstance(observation, dict):
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:observation")
+        state = observation.get("state")
+        if not isinstance(state, (list, tuple)) or len(state) != 8:
+            raise PickPlaceSearchPortError("TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:arm")
+        documents = {
+            "world": raw.get("world"), "scene": raw.get("scene"), "contact": raw.get("contact"),
+            "head": observation.get("head"), "wrist": observation.get("wrist"),
+            "arm": {"sim_time_s": observation.get("sim_time_s"), "state": list(state[:6])},
+            "neck": {"sim_time_s": observation.get("sim_time_s"), "state": list(state[6:])},
+        }
+        for name in _RAW_DOCUMENTS:
+            document = documents.get(name)
+            if document is None:
+                raise PickPlaceSearchPortError(f"TASK8_LIVE_EVIDENCE_FIELDS_REQUIRED: raw:{name}")
+            payload = json.dumps(_raw_document(document), sort_keys=True,
+                                 separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+            relative = f"raw/{capture}-{name}.json"
+            target = directory / f"{capture}-{name}.json"
+            try:
+                # O_EXCL, not O_TRUNC: two captures must never share a record, and if they somehow try to, the second
+                # one is refused by name rather than destroying the first one's evidence
+                descriptor = os.open(str(target), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            except FileExistsError as error:
+                raise PickPlaceSearchPortError(
+                    f"TASK8_LIVE_EVIDENCE_RAW_RECORD_EXISTS: {relative}") from error
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            records[name] = {"relative_path": relative,
+                             "sha256": hashlib.sha256(payload).hexdigest()}
+        return records
+
+    def run_phase(self, phase: str, request: dict) -> dict:
+        if not self._begun or self._request is None:
+            raise PickPlaceSearchPortError("TASK8_BEGIN_REQUIRED")
+        if request != self._request:
+            self._stop_or_raise("TASK8_PHASE_SCOPE_MISMATCH", request)
+            raise PickPlaceSearchPortError("TASK8_PHASE_SCOPE_MISMATCH")
+        if phase != "SEARCH":
+            # the eight sequence phases share one path: the boundary executes, the port validates and stamps scope
+            if phase not in _SEQUENCE_PHASES:
+                self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
+                raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+            try:
+                return self._sequence_evidence(phase, request)
+            except BaseException:
+                self._stop_or_raise("TASK8_PHASE_NOT_PROVISIONED", request)
+                raise
+        if self._searched:
+            raise PickPlaceSearchPortError("TASK8_SEARCH_ALREADY_STARTED")
+        self._searched = True
+        try:
+            observed = copy.deepcopy(self.boundary.search(request))
+            evidence = self._search_evidence(observed, request)
+            self._validated_search_observation = observed
+            if self._expert_route is not None:
+                reset = self.boundary.reset
+                context = reset.act_context
+                ticket = reset.broker.ownership.ticket(
+                    context["lease_token"], "act", request["session_id"],
+                    request["attempt_id"])
+                reset.broker._prefix_source_port.register(
+                    reset.broker, self, self._expert_route, ticket,
+                    active_policy_fingerprint=reset.sources.contact_pairs.fingerprint)
+            if self._live_evidence_window is not None:
+                # no `is not None` guard: a phase with an attached window either records canonical evidence or has
+                # already refused by name (Astra re-review #3, finding 3)
+                # EVERY sample is built from the boundary's current readback, through one helper: the grid's clock must
+                # step exactly one period per sample, and mixing a cached observation with fresh ones produced deltas
+                # that were neither (TASK8_LIVE_EVIDENCE_GRID_GAP).
+                self._emit_phase_samples(phase, self._current_observation(observed, request), evidence)
+            return evidence
+        except PickPlaceSearchPortError:
+            # this port's own refusal already names the missing piece (P1-3's FIELDS_REQUIRED); wrapping it into
+            # SEARCH_EVIDENCE_INVALID would hide which contract failed
+            self._validated_search_observation = None
+            self._stop_or_raise("TASK8_SEARCH_ABORT", request)
+            raise
+        except BaseException as error:
+            self._validated_search_observation = None
+            self._stop_or_raise("TASK8_SEARCH_ABORT", request)
+            raise PickPlaceSearchPortError("TASK8_SEARCH_EVIDENCE_INVALID") from error
+
+    # --- the rest of the sequence, provisioned one phase at a time (Astra re-review #3, finding 4) -------------
+    # The runner calls five more protocol methods besides run_phase, and eight more phases besides SEARCH. Until each
+    # is implemented it refuses by NAME, so an unimplemented path can never be mistaken for a completed one - which is
+    # exactly what the previous behaviour (an AttributeError, or a phase that silently returned nothing) allowed.
+
+    def release_preflight(self, request, *args, **kwargs):
+        return self._boundary_capability("release_preflight", request,
+                                         support_distance_max_m=self._support_distance())
+
+    def run_retreat_segment(self, direction, distance_m, request, *args, **kwargs):
+        # the direction and the distance travel as KEYWORDS: the capability's own signature orders them after the
+        # request, and a positional call here would silently swap two arguments of the same shape
+        # A retreat segment is a PHASE document like any other: the boundary reports the facts, and the port stamps the
+        # case scope and runs the same closed rule - the runner validates this with the same verifier it uses for every
+        # phase, so returning the boundary's raw mapping (no phase, no epochs) is refused by name. That gap is what the
+        # probe found, and it would have failed on every retreat segment of a real case.
+        facts = self._boundary_capability("run_retreat_segment", request, direction=direction,
+                                          distance_m=distance_m,
+                                          support_distance_max_m=self._support_distance(),
+                                          motion_template=getattr(self, "_motion_template", None),
+                                          motion_duration_s=getattr(self, "_motion_duration_s", None))
+        if type(facts) is not dict:
+            raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: RADIAL_RETREAT: not a mapping")
+        document = {"phase": "RADIAL_RETREAT", "session_id": request["session_id"],
+                    "attempt_id": request["attempt_id"],
+                    "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for("RADIAL_RETREAT"), **facts}
+        checked = self._checked_sequence_document("RADIAL_RETREAT", document)
+        # the window must SEE every required phase before it can seal, and a retreat segment is one of them. Its sample
+        # is built from the boundary's CURRENT readback, not from the cached SEARCH observation: the grid's clock must
+        # only go forward, and the SEARCH instant is behind every phase sample (TASK8_LIVE_EVIDENCE_GRID_REGRESSION).
+        if self._live_evidence_window is not None:
+            current = getattr(self.boundary, "current_readback", None)
+            if not callable(current):
+                raise PickPlaceSearchPortError(
+                    "TASK8_PHASE_NOT_PROVISIONED: RADIAL_RETREAT: boundary.current_readback")
+            # the SEARCH observation supplies the search result and the frames the sample also needs; only its READBACK
+            # is replaced, with a copy - mutating the cached one would corrupt what later phases read
+            self._emit_phase_samples("RADIAL_RETREAT", self._current_observation(self._validated_search_observation, request), checked)
+        return checked
+
+    def set_down(self, request, *args, **kwargs):
+        return self._boundary_capability("set_down", request, support_distance_max_m=self._support_distance())
+
+    def _support_distance(self):
+        """The case's admitted support distance, refused by name when this port was never told it."""
+
+        value = getattr(self, "_support_distance_max_m", None)
+        if value is None:
+            raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: support_distance_max_m")
+        return value
+
+    def _boundary_capability(self, name, request, *args, **kwargs):
+        """Call a capability the boundary owns, or refuse by name - the port never re-implements one."""
+
+        capability = getattr(self.boundary, name, None)
+        if not callable(capability):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: boundary.{name}")
+        try:
+            return capability(request, *args, **kwargs)
+        except PickPlaceSearchPortError:
+            raise
+        except Exception as error:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: boundary.{name}: {error}") from error
+
+    def detach_moveit(self, request, *args, **kwargs):
+        return self._boundary_capability("detach_moveit", request)
+
+    def planning_attached(self, request, *args, **kwargs):
+        return self._boundary_capability("planning_attached", request)
+
+    def _sequence_evidence(self, phase: str, request: dict) -> dict:
+        """Assemble one sequence phase's evidence from the boundary's own facts, or refuse by name.
+
+        The split is the one SEARCH already proves (CP-1490): the boundary EXECUTES the phase and reports what it
+        observed; the port stamps the scope, refuses anything incomplete, and hands the document to the runner, whose
+        `_verify_phase` remains the only judge of the per-phase semantics.
+        """
+
+        # the phase runs on the SEARCH evidence this port validated and froze: APPROACH prepares its expert route from
+        # exactly those two documents, and both the owner ticket and the active policy fingerprint come from the same
+        # boundary state the SEARCH evidence used (reset.broker.ownership.ticket / sources.contact_pairs.fingerprint)
+        if self._validated_search_observation is None:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}: search evidence")
+        observed = self.validated_search_observation()
+        selected_source = self.selected_prefix_source(
+            max_skew_s=finite(self.boundary.reset.sources.readback.max_skew))
+
+        if phase == "APPROACH":
+            # APPROACH is the one phase whose preparation belongs to this port: it holds the expert route the SEARCH
+            # begin built, while the motion and the proof belong to the boundary
+            route = self._expert_route
+            if route is None:
+                raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: expert_route")
+            reset = self.boundary.reset
+            ticket = reset.broker.ownership.ticket(
+                reset.act_context["lease_token"], "act",
+                request["session_id"], request["attempt_id"])
+            prepared = route.prepare(
+                observed, selected_source=selected_source, owner_ticket=ticket,
+                active_policy_fingerprint=reset.sources.contact_pairs.fingerprint,
+                # APPROACH consumes a source the SEARCH registration already freshness-checked, and a registered
+                # source is necessarily older than its registration - so the selection's bound is not re-applied
+                # across the phase boundary (CP-1889/CP-1890, owner decision)
+                require_fresh=False)
+            # the prover's identity values belong to the route's manifest, and the route lives here - so they travel
+            # into the boundary's orchestration rather than being re-derived from anything else
+            prover_identity = {
+                "policy_fingerprint": reset.sources.contact_pairs.fingerprint,
+                "profile_sha256": route.manifest["candidate_profile_sha256"],
+                "contact_scope_sha256": route.manifest["contact_scope_sha256"],
+                "checker_sha256": route.manifest["checker_sha256"],
+                "expected_samples": route.manifest["expected_samples"],
+            }
+            execute = getattr(self.boundary, "execute_approach", None)
+            if not callable(execute):
+                raise PickPlaceSearchPortError("TASK8_PHASE_NOT_PROVISIONED: APPROACH: execute_approach")
+            try:
+                result = execute(prepared, request, prover_identity=prover_identity, ticket=ticket,
+                                 support_distance_max_m=self._support_distance_max_m,
+                                 source=selected_source)
+            except PickPlaceSearchPortError:
+                raise
+            except Exception as error:
+                raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution") from error
+            if type(result) is not dict or set(result) != {"proof", "current_snapshot", "facts"}:
+                raise PickPlaceSearchPortError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: execution result")
+            route.qualify(prepared, result["proof"], current_snapshot=result["current_snapshot"])
+            facts = result["facts"]
+            document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                        "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for(phase), **facts}
+            checked = self._checked_sequence_document(phase, document)
+            # APPROACH has its own path and therefore its own feed, for the same reason as the generic one: the
+            # window must SEE every phase before it can seal, and this branch was the last one not feeding it
+            if self._live_evidence_window is not None:
+                self._emit_phase_samples(phase, self._current_observation(observed, request), checked)
+            return checked
+
+        execute = getattr(self.boundary, "sequence_phase", None)
+        if not callable(execute):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_NOT_PROVISIONED: {phase}")
+        handoff = {"observed": observed, "selected_source": selected_source,
+                   # the case's admitted motion targets travel with the call, as the support threshold does
+                   "gripper_closed_rad": getattr(self, "_gripper_closed_rad", None),
+                   "close_duration_s": getattr(self, "_close_duration_s", None),
+                   "support_distance_max_m": getattr(self, "_support_distance_max_m", None),
+                   # the admitted policy travels with the call, so the motion phases resolve against it
+                   "motion_template": getattr(self, "_motion_template", None),
+                   "motion_duration_s": getattr(self, "_motion_duration_s", None)}
+        try:
+            facts = execute(phase, request, **handoff)
+        except PickPlaceSearchPortError:
+            raise
+        except Exception as error:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}") from error
+        if type(facts) is not dict:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: not a mapping")
+        document = {"phase": phase, "session_id": request["session_id"], "attempt_id": request["attempt_id"],
+                    "reset_epoch": self.boundary.reset.receipt.new_epoch,
+                    "release_epoch": self._release_epoch_for(phase), **facts}
+        checked = self._checked_sequence_document(phase, document)
+        # The window must SEE every phase before it can seal, and the SEARCH path's feed was the only one that existed:
+        # the eight sequence phases executed, verified and were never sampled, so the seal could never complete. This is
+        # CP-1467's finding again, one layer down - a component that was wired up and then not fed.
+        if self._live_evidence_window is not None:
+            self._emit_phase_samples(phase, self._current_observation(observed, request), checked)
+        return checked
+
+    #: The runner increments its release epoch INSIDE the RELEASE iteration, BEFORE it verifies that phase's document -
+    #: so RELEASE's own document already carries the epoch it is creating, and the two phases after it carry the same
+    #: value. Reading the loop rather than assuming the order is what fixed this: the trace showed the runner verifying
+    #: RELEASE with epoch 1 while the document said 0.
+    _RELEASE_EPOCH_AFTER = ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
+
+    def _release_epoch_for(self, phase: str) -> int:
+        """The release epoch the runner expects on this phase's document.
+
+        One release per case - the phase appears once in the runner's own PHASES - so the epoch is a function of the
+        phase's position in that order: zero up to and including RELEASE, one afterwards. Deriving it from the runner's
+        order keeps one source of truth instead of a second counter here.
+        """
+
+        return 1 if phase in self._RELEASE_EPOCH_AFTER else 0
+
+    def _checked_sequence_document(self, phase: str, document: dict) -> dict:
+        """One closed rule for every sequence phase's document, used by both preparation paths."""
+
+        if set(document) != _PHASE_EVIDENCE_KEYS:
+            raise PickPlaceSearchPortError(
+                f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: keys {sorted(set(_PHASE_EVIDENCE_KEYS) ^ set(document))}")
+        if any(document[gate] is not True for gate in _PHASE_GATES):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: gate")
+        if document["manual_intervention"] is not False or document["moveit_recovery"] is not False:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: intervention")
+        if document["holding_state"] not in ("EMPTY", "HOLDING"):
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: holding unknown")
+        if type(document["physics_step"]) is not int:
+            raise PickPlaceSearchPortError(f"TASK8_PHASE_EVIDENCE_INVALID: {phase}: step")
+        return document
+
+    def safe_stop(self, reason: str, request: dict) -> bool:
+        return self.boundary.safe_stop(reason, request) is True
+
+
+# Legacy Python API for version-one pick-place callers.
+Task8SearchPortError = PickPlaceSearchPortError
+Task8SearchPhasePort = PickPlaceSearchPhasePort

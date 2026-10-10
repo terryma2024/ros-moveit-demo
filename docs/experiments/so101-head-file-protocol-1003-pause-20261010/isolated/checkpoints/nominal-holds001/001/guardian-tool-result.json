@@ -1,0 +1,9 @@
+{
+  "actual_rc": 1,
+  "elapsed_s": 127.98450598597992,
+  "argv": [
+    "/usr/bin/python3",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/bounded_guardian.py",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/guard-config.json"
+  ]
+}

@@ -1,0 +1,116 @@
+"""Task-owned Linux deadline guard. Evidence IO occurs only in the worker.
+No file creation, fsync, hashing, evidence parsing or blocking output after spawn.
+/proc task metadata and signals are independent of durable evidence IO.
+"""
+from pathlib import Path
+import ctypes,json,os,signal,subprocess,sys,time
+
+def identity(pid):
+ p=Path('/proc',str(pid));raw=(p/'stat').read_text();tail=raw[raw.rfind(')')+2:].split()
+ return dict(pid=pid,start_ticks=int(tail[19]),ppid=int(tail[1]),state=tail[0],argv=(p/'cmdline').read_bytes().split(b'\0'))
+
+def exists(row):
+ try:return identity(row['pid'])['start_ticks']==row['start_ticks']
+ except (FileNotFoundError,ProcessLookupError):return False
+
+def send(row,sig):
+ if exists(row):
+  try:os.kill(row['pid'],sig)
+  except ProcessLookupError:pass
+
+def run(c):
+ assert 0<c['cancel_s']<c['cleanup_s']<c['kill_s']<c['owner_kill_s']<c['total_s']
+ assert ctypes.CDLL(None,use_errno=True).prctl(36,1,0,0,0)==0
+ interrupted=[False]
+ for sig in (signal.SIGTERM,signal.SIGINT):signal.signal(sig,lambda *_:interrupted.__setitem__(0,True))
+ # Opens precede child launch and timer: failure cannot leave an owned runtime.
+ out=open(c['stdout'],'wb') if c.get('stdout') else open(os.devnull,'wb')
+ err=open(c['stderr'],'wb') if c.get('stderr') else open(os.devnull,'wb')
+ tracked={};heads=set();owner=None;cancel=False;forced=False;failure=None;fallback_at=None
+ worker=None;wr=None;started=time.monotonic();absolute=started+c['total_s']
+ def discover():
+  nonlocal owner
+  pending=[os.getpid()];visited=set()
+  while pending:
+   pid=pending.pop()
+   if pid in visited:continue
+   visited.add(pid)
+   if len(visited)>64:raise RuntimeError('owned process budget exceeded')
+   try:children=[int(v) for v in Path('/proc',str(pid),'task',str(pid),'children').read_text().split()]
+   except (FileNotFoundError,ProcessLookupError):continue
+   for child in children:
+    try:row=identity(child)
+    except (FileNotFoundError,ProcessLookupError):continue
+    key=(child,row['start_ticks']);tracked.setdefault(key,row);pending.append(child)
+    # fork children inherit their parent's argv until exec; argv alone is not ownership.
+    if row['ppid']==worker.pid and any(Path(v.decode(errors='replace')).name==c['owner_marker'] for v in row['argv'] if v):
+     if owner is not None and key!=(owner['pid'],owner['start_ticks']):raise RuntimeError('multiple owners')
+     owner=row;heads.add(key)
+    parent_is_head=any(k[0]==pid for k in heads)
+    # Subreaper adoption proves ancestry even when the owner crashes before discovery.
+    adopted=pid==os.getpid() and child!=worker.pid
+    if parent_is_head or adopted:heads.add(key)
+ def direct_children():
+  return Path('/proc',str(os.getpid()),'task',str(os.getpid()),'children').read_text().split()
+ def all_absent():
+  return not any(exists(v) for v in tracked.values()) and not direct_children()
+ def reap():
+  worker.poll()
+  for row in list(tracked.values()):
+   if row['pid']==worker.pid:continue
+   try:os.waitpid(row['pid'],os.WNOHANG)
+   except ChildProcessError:pass
+ def kill_family(sig):
+  for row in list(tracked.values()):
+   if row['pid']!=worker.pid:send(row,sig)
+ try:
+  worker=subprocess.Popen(c['command'],env=dict(os.environ,**c.get('environment',{})),start_new_session=True,stdout=out,stderr=err)
+  wr=identity(worker.pid);tracked[(wr['pid'],wr['start_ticks'])]=wr
+  while time.monotonic()<absolute-.05:
+   discover();reap();discover();now=time.monotonic();elapsed=now-started
+   head_live=[tracked[k] for k in heads if exists(tracked[k])]
+   owner_dead=owner is not None and not exists(owner)
+   worker_dead=worker.poll() is not None
+   if (interrupted[0] or elapsed>=c['cancel_s'] or worker_dead) and not cancel and owner is not None and exists(owner):
+    send(owner,signal.SIGTERM);cancel=True
+   if (owner_dead and head_live) or (worker_dead and head_live) or elapsed>=c['cleanup_s'] or interrupted[0]:
+    if fallback_at is None:
+     fallback_at=now;forced=True;kill_family(signal.SIGINT)
+   if fallback_at is not None and now-fallback_at>=c['kill_s']-c['cleanup_s']:kill_family(signal.SIGKILL)
+   if elapsed>=c['owner_kill_s'] and owner is not None and exists(owner):forced=True;send(owner,signal.SIGKILL)
+   if worker_dead and all_absent():break
+   # A stuck evidence worker receives SIGKILL before the absolute wall bound.
+   if elapsed>=c['total_s']-.1:forced=True;send(wr,signal.SIGKILL);kill_family(signal.SIGKILL)
+   time.sleep(min(.02,max(0,absolute-time.monotonic()-.05)))
+ except BaseException as e:
+  failure=type(e).__name__+': '+str(e);forced=True
+ finally:
+  if worker is not None:
+   # Exception/absolute expiry cleanup is independent of owner or worker liveness.
+   try:discover()
+   except (OSError,RuntimeError):forced=True
+   if worker.poll() is None or not all_absent():
+    forced=True
+    if owner is not None:send(owner,signal.SIGTERM)
+    if wr is not None:send(wr,signal.SIGKILL)
+    elif worker.poll() is None:worker.kill()
+    kill_family(signal.SIGKILL)
+    while time.monotonic()<absolute:
+     try:discover();reap();kill_family(signal.SIGKILL)
+     except (OSError,RuntimeError):pass
+     if all_absent():break
+     time.sleep(.005)
+  # Closing local log descriptors has no fsync; child logs are owned by IO worker.
+  out.close();err.close()
+ absent=all_absent()
+ rc=worker.poll() if worker is not None else None
+ result=dict(schema='CLOCK_GUARD_001',worker_rc=rc,elapsed_s=time.monotonic()-started,cancel_sent=cancel,forced_cleanup=forced,error=failure,all_owned_absent=absent,production_qualified=False)
+ valid=rc==0 and absent and not(cancel or forced or failure) and result['elapsed_s']<c['total_s']
+ # stdout is the caller's pipe, not a durable file; do not block on evidence consumers.
+ try:
+  os.set_blocking(1,False);os.write(1,(json.dumps(result)+'\n').encode())
+ except OSError:valid=False
+ return 0 if valid else 1
+
+if __name__=='__main__':
+ c=json.loads(Path(sys.argv[1]).read_text());raise SystemExit(run(c))

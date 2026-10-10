@@ -1,0 +1,35 @@
+# Head Search candidate training contract (production profile).
+#
+# Candidate B trains on the sealed head-camera train split alone; candidate C trains on the union of the
+# head and task train splits, undownsampled, with each batch composed 1:1 by camera domain. Everything
+# else is inherited unchanged from candidate A's frozen recipe, and both candidates are scored with the
+# same two-domain checkpoint score so neither can win by ignoring a camera domain.
+task: segment
+model: yolo11n-seg.pt
+class_names: [plastic_cup]
+classes: [0]
+imgsz: 640
+epochs: 60
+batch: 32
+workers: 8
+seed: 20260930
+deterministic: true
+device: cuda
+allow_cpu_fallback: false
+amp: false
+optimizer: auto
+patience: 20
+# the checkpoint score is the two-domain average, not the stock fitness, so the stock plots do not
+# describe it; results.csv still records both domain cells
+plots: false
+# the frozen 1:1 batch composition is the order the union dataset is materialised in, so shuffling would
+# dissolve the property the plan declares; the deterministic seed still fixes every other draw
+shuffle: false
+checkpoint_score: 0.5*head_val_mask_map50_95+0.5*task_val_mask_map50_95
+validation_domains: [head, task]
+dataset_domains: [head, task]
+promotable: true
+# per-domain training and validation targets: candidate C takes this many images from each camera domain, and
+# candidate B takes the same number from the head domain alone, so the two candidates see identical head exposure
+domain_train: 800
+domain_val: 200

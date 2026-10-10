@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "head_search_feedback_quantisation_declaration",
+  "field": "quantisation_rad",
+  "unit": "rad",
+  "platform": "mujoco",
+  "quantisation_rad": 0.0,
+  "declared_here": true,
+  "basis": "the feedback path of this platform is the MuJoCo closed loop: the stop window's velocities are MuJoCo's own joint velocity state (mjData.qvel, read by MujocoStopFlight.joint_velocity_vector through the joint's jnt_dofadr), so there is no encoder, no counter and no count-to-angle conversion anywhere between the plant and the stop envelope. The quantisation term of stop_velocity_rad_s is therefore identically zero on this platform, and the envelope is governed by the measured stationary noise term plus the controller's stopped tolerance. A missing resolution would not justify this zero: it is declared here, with this statement, and the producer refuses a document whose quantisation_rad is absent or null instead of defaulting it.",
+  "applies_to": {
+    "joints": [
+      "shoulder_pan_joint",
+      "shoulder_lift_joint",
+      "elbow_flex_joint",
+      "wrist_flex_joint",
+      "wrist_roll_joint",
+      "gripper_joint",
+      "neck_yaw_joint"
+    ],
+    "consumer": "so101_demo.act.head_search_timing_params.compute_stop_velocity_rad_s(feedback=...)",
+    "producer": "so101_demo.act.head_search_stop_measurement.declared_quantisation(path)"
+  },
+  "author": "HS-305, branch codex/so101-act-data-0917a",
+  "date": "2026-10-01",
+  "review": "docs/superpowers/specs/2026-10-02-so101-head-search-undeclared-fields-amendment.md, Proposal B, reviewer finding: explicit zero for this MuJoCo path; update both positive-only validators"
+}

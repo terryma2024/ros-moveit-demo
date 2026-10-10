@@ -13,6 +13,8 @@ import { EventLog, type EventEntry } from "@/components/teleop/event-log";
 import { EnvironmentPanel } from "@/components/teleop/environment-panel";
 import { ActPanel, type ActStatus } from "@/components/teleop/act-panel";
 import { GazeboPanel } from "@/components/teleop/gazebo-panel";
+import { HeadCameraTab } from "@/components/teleop/head-camera-panel";
+import { HeadCameraClient } from "@/api/head-camera-client";
 import { JointPanel } from "@/components/teleop/joint-panel";
 import { TargetYamlControls } from "@/components/teleop/target-yaml-controls";
 import { TcpPanel } from "@/components/teleop/tcp-panel";
@@ -48,6 +50,8 @@ const unavailableCapabilities: BackendCapabilityMap = {
   manual_tcp_execute: false,
   camera_presets: false,
 };
+
+const headCameraClient = new HeadCameraClient();
 
 export function App() {
   const [state, dispatch] = useReducer(reduceTeleop, undefined, initialTeleopState);
@@ -237,7 +241,7 @@ export function App() {
     <div className="my-4 flex flex-wrap items-center gap-3"><p aria-live="polite" className="text-link">{notice}</p><Button size="sm" variant="outline" onClick={() => dispatch({ type: "current-to-target" })}>Current to Target</Button><Button size="sm" variant="outline" onClick={diagnosticSnapshot}>Download diagnostic snapshot</Button><span className="text-sm text-muted-foreground">RTF {snapshot.real_time_factor == null ? "—" : snapshot.real_time_factor.toFixed(3)}</span></div>
     <Tabs defaultValue="joints" className="min-w-0">
       <TabsList aria-label="Teleop panel navigation" className="w-full max-w-full justify-start overflow-x-auto overflow-y-hidden border border-border bg-muted text-muted-foreground">
-        {([['joints', 'Joints'], ['tcp', 'TCP'], ['collision', 'Collision'], ['target', 'Target'], ['gazebo', 'Gazebo'], ['workflow', 'Workflow'], ['events', 'Events'], ['environment', 'Environment'], ['act', 'ACT']] as const).map(([value, label]) => <TabsTrigger className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" key={value} value={value}>{label}</TabsTrigger>)}
+        {([['joints', 'Joints'], ['tcp', 'TCP'], ['collision', 'Collision'], ['target', 'Target'], ['gazebo', 'Gazebo'], ['workflow', 'Workflow'], ['events', 'Events'], ['environment', 'Environment'], ['act', 'ACT'], ['head-camera', 'Head Camera']] as const).map(([value, label]) => <TabsTrigger className="shrink-0 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground" key={value} value={value}>{label}</TabsTrigger>)}
       </TabsList>
       <TabsContent value="joints"><JointPanel joints={snapshot.joints} targets={state.target.joints} leaseHeld={Boolean(lease)} manualJointExecute={capabilities.manual_joint_execute} plan={state.plan} onEdit={(joint, value) => dispatch({ type: "edit-joint", joint, value })} onClampNotice={setNotice} onPlan={planJoints} onExecute={execute} onExecuteGripper={() => call("/gripper/execute", { target_position_rad: state.target.joints["6"] })} onExecuteAll={executeAll} onCancel={() => call("/execution/cancel")}/></TabsContent>
       <TabsContent value="tcp"><TcpPanel pose={targetPose} frame={state.target.stepFrame} leaseHeld={Boolean(lease)} manualTcpExecute={capabilities.manual_tcp_execute} planning={tcpPlanning} plan={state.plan} onFrame={(frame) => dispatch({ type: "set-step-frame", frame })} onEdit={(tcp) => dispatch({ type: "edit-tcp", tcp })} onStep={(axis, direction) => dispatch({ type: "edit-tcp", tcp: applyPoseStep(targetPose, axis, direction, state.target.stepFrame) })} onPlan={planTcp} onExecute={execute} onCancel={() => call("/execution/cancel")}/></TabsContent>
@@ -254,6 +258,7 @@ export function App() {
       <TabsContent value="events"><EventLog entries={events}/></TabsContent>
       <TabsContent value="environment"><EnvironmentPanel environment={environment} backend={backend}/></TabsContent>
       <TabsContent value="act"><ActPanel status={actStatus}/></TabsContent>
+      <TabsContent value="head-camera"><HeadCameraTab client={headCameraClient}/></TabsContent>
     </Tabs>
   </main>;
 }

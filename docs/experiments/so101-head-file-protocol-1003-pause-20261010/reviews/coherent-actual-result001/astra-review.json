@@ -1,0 +1,174 @@
+{
+  "schema": "COHERENT_ACTUAL_RESULT_INDEPENDENT_REVIEW_001",
+  "reviewer": {
+    "model": "GPT-6 Astra",
+    "reasoning_effort": "high",
+    "role": "independent read-only reviewer"
+  },
+  "reviewed_at_utc": "2026-10-10T03:02:59.098048+00:00",
+  "manifest": {
+    "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/review/coherent-actual-result001/manifest.json",
+    "sha256": "3b97fe53f45b11ab101cf8eff6646747d75d2d79018d4f1a8d3b8f94a8cb6089"
+  },
+  "verdict": "PASS",
+  "verdict_scope": "Exactly one admitted afterrepair120s actual-clock injected diagnostic, including original qualified native timing and complete independently verified lifetime",
+  "findings": [],
+  "mechanism_classification": "REPAIRED_ACTUAL_SCHEDULE_COHERENT",
+  "historical_cause": "UNKNOWN",
+  "nominal_qualification": false,
+  "production_qualified": false,
+  "live20_qualified": false,
+  "fresh40_qualified": false,
+  "visual_qualified": false,
+  "independent_raw_checks": {
+    "snapshot_refs": "All36 immutable snapshot SHA and current source SHA match; all16 raw artifact SHA match.",
+    "clock_streams": {
+      "loop_records": 363457,
+      "physics_records": 242622,
+      "final_counts_complete": true,
+      "invalid_flags": 0,
+      "checks": "Decoded binary records independently; header manifest matches frozen run; sequence and committed markers valid, record duration nonnegative."
+    },
+    "native_streams": {
+      "arm_controller": {
+        "updates": 60271,
+        "period_ns": 2000000,
+        "max_body_ns": 49595,
+        "period_anomalies": 0,
+        "body_overruns": 0,
+        "unmatched": 0
+      },
+      "gripper_controller": {
+        "updates": 60258,
+        "period_ns": 2000000,
+        "max_body_ns": 139087,
+        "period_anomalies": 0,
+        "body_overruns": 0,
+        "unmatched": 0
+      },
+      "neck_controller": {
+        "updates": 60223,
+        "period_ns": 2000000,
+        "max_body_ns": 148781,
+        "period_anomalies": 0,
+        "body_overruns": 0,
+        "unmatched": 0
+      }
+    },
+    "native_method": "Independently decoded all three SOTM0001 files, checked recorder counts/no overflow/no IO failure, matched every native update inside the actual manager UPDATE bracket, checked full-stream period2ms and sub2ms body. Selected51-loop prefix and two-cycle pair additionally have contiguous native sequence and simulation time.",
+    "physics": {
+      "successful_commits": 60655,
+      "publisher_admissions": 60655,
+      "admission_false": 0,
+      "sequence_contiguous": true,
+      "same_epoch_step_ns": 2000000,
+      "startup_reset": "The retained reset is before the armed selected prefix; no reset in that prefix or pair."
+    },
+    "seal": {
+      "event_count": 85361,
+      "sealed_files": 4,
+      "all_original_file_hashes_and_sizes_match": true,
+      "drop_count": 0,
+      "fault_count": 0,
+      "method": "Read original seal and independently hashed every referenced file, including the content-addressed stack log; counted actual JSONL events."
+    }
+  },
+  "selected_actual_boundary": {
+    "loop": 5000,
+    "epoch": 1,
+    "before_ns": 10070000000,
+    "target_ns": 10072000000,
+    "after_ns": 10072000000,
+    "probe_flags": 1,
+    "probe_wait_ns": 2200329,
+    "ordering": "Original READ ends before probe begins; probe ends before UPDATE begins. A matching actual physical commit and successful publisher admission occur before UPDATE.",
+    "supplied_arguments": {
+      "loop5000": {
+        "READ": 10070000000,
+        "UPDATE": 10070000000,
+        "WRITE": 10070000000
+      },
+      "loop5001": {
+        "READ": 10072000000,
+        "UPDATE": 10072000000,
+        "WRITE": 10072000000
+      }
+    },
+    "native_pair": "All three controllers receive10070000000/2ms followed by10072000000/2ms, while the separately recorded actual ROS clock has advanced to10072000000 before the first UPDATE.",
+    "armed_prefix": "51 preceding same-epoch loops have all three native controllers at2ms with coherent supplied operation timestamps; prefix begins after the actual sealed ARM ACK.",
+    "interpretation": "The actual interleaving remains present and the native4ms/0ms result is eliminated in this admitted run. No synthetic clock advancement, period clamp or discarded physical step is inferred.",
+    "physical_limit": "Matching physical commit/admission before UPDATE does not require the commit itself to happen after READ. Publisher admission is not by itself DDS receipt proof; the probe supplies actual manager ROS-clock observation."
+  },
+  "original_lifetime": {
+    "guardian": {
+      "tool_session": 58560,
+      "tool_rc": 0,
+      "worker_rc": 0,
+      "elapsed_s": 128.76143501908518,
+      "cancel_sent": false,
+      "forced_cleanup": false,
+      "error": null,
+      "all_owned_absent": true
+    },
+    "guardian_authenticity": "Parsed guardian-tool-result exact stdout agrees with guardian-result fields; actual toolrc0 retained separately.",
+    "worker": {
+      "status": "VALID",
+      "owner_rc": 0,
+      "trace_integrity": true,
+      "strict_startup_stop_close": true,
+      "maps_verified": true,
+      "holding_complete": true,
+      "cleanup_within15": true,
+      "postflight_empty": true
+    },
+    "original_report": {
+      "qualified": true,
+      "problem": null,
+      "holding_s": 120.000053712,
+      "holding_update_count": 60000,
+      "child_return_codes": [
+        0,
+        0,
+        0
+      ],
+      "seal_verified": true
+    },
+    "stop": {
+      "raw_confirmed_ms_from_original_request": 43.48331002984196,
+      "native_close_ack_ms_from_original_request": 5.370422033593059,
+      "native_status": "ARMED_CLOSED",
+      "original_budget_s": 1
+    },
+    "phase_durations": {
+      "original_stack_retirement_ms": 414.439103,
+      "writer_finish_ms": 713.055608,
+      "overall_sequential_retirement_ms": 1200.384971
+    },
+    "budget_interpretation": "The overall retirement span includes sequential Stop/provider retirement and evidence finish. It is not a single1s phase and does not indicate a widened deadline. Original stack retirement is below0.9s grace/1s timeout; original writer finish is below1s.",
+    "observer": "Independently decoded raw SOEXIT01 owner12/node31 records: correct creator PID/start/UID and metadata hash, zero header faults, all records completed with nonnegative duration/outcome0. Original owner final state records observer_fault=false and normal interpreter exit. Observer completion is supplementary to the original seal/report.",
+    "graph_distinction": "Original report graph_empty is false and independent_postflight_pending is true. The unchanged helper explicitly requires the parent to verify owner absence and empty graph after exit. Worker strict facts and independent root ROS228 postflight are empty withrc0; original false field remains retained, not rewritten.",
+    "retirement_identity": "Independent root receipt records five expected PID/start identities absent, including owner, three stack children and the owner-spawned graph query. Raw phase creators are independently absent at review. No denial was interpreted as absence."
+  },
+  "provenance_and_modes": {
+    "maps": "Independently checked role proof PID/start/UID, executable/session and every saved library path/device/inode. Node maps exact C manager/MuJoCo/clocktrace/marker plus original R broker; owner separately maps original R revocation transport and C marker. Current library SHA match saved expected refs.",
+    "install": "All233 current installed artifact SHA match frozen runtime install inventory.",
+    "analysis": "Current analyzer and both classifier sources match frozen admitted snapshots; analysis SHA2b8a7f3984a2aedd675146a8c17a258f7cca098ec0ea57c6840e39587a038ed4.",
+    "controller_mode_observation": "Retained one bounded read-only live parameter-query result reports all three controllers is_async=false, use_sim_time=true, update_rate=500. No controller parameter mutation is claimed or required.",
+    "scope": "Task-owned repaired overlay only; original native body/helper/predicates and budgets remain bound to reviewed source and installation."
+  },
+  "comparison_and_classification": {
+    "before": "The previously reviewed valid J/holding001 injected run had actual after-READ clock advancement and all three native4ms/0ms pairs, original TimingPeriod failure and complete lifetime.",
+    "after": "This run preserves the real clock advance and returns three coherent2ms/2ms native cycles, with every recorded native period2ms and original qualification true.",
+    "supported_conclusion": "Combined with the reviewed actual-CM and shared-dispatch RED/GREEN regressions, this supports the bounded repair for the demonstrated timestamp-resampling mechanism.",
+    "legacy_summary_field": "analysis.classification=INCONCLUSIVE_NO_SHARED_PAIR is the unchanged generic old-pair observation. It does not negate the separately tested and independently verified mechanism_classification=REPAIRED_ACTUAL_SCHEDULE_COHERENT.",
+    "unsupported_conclusions": "This single instrumented diagnostic does not prove the exact historical cause, universal scheduling guarantees, nominal run stability, or the cause of earlier holding005 close timeout."
+  },
+  "remaining_acceptance": "Three fixed nominal120s runs, frozen live20 with case9 twice, fresh40/48 attempts and visual acceptance remain pending. This injected run counts toward none of those nominal gates. Ordinary176 baseline failures remain disclosed/unwaived. No additional runtime launched or authorized by this result review itself.",
+  "retention": {
+    "retained": "All current raw/sealed/phase/map/query artifacts and prior invalid/valid captures, RED/GREEN, package failures and independent reviews",
+    "archived_by_reviewer": [],
+    "deleted_by_reviewer": [],
+    "new_deletion_candidates": []
+  },
+  "review_actions": "Read-only local artifact inspection, independent binary decoding/hash checks and exact raw creator PID absence checks. No tests, builds, services, runtime, source/ledger edits, deletion or delegation. Only this review JSON written."
+}

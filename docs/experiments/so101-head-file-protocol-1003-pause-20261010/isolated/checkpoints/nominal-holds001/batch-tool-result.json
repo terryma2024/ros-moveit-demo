@@ -1,0 +1,7 @@
+{
+  "actual_rc": 1,
+  "tool_session_id": 52040,
+  "stdout": "fixed first row FAIL; rows2/3 NOT_RUN",
+  "elapsed_s": null,
+  "no_retry": true
+}

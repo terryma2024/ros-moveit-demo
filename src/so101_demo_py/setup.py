@@ -186,6 +186,16 @@ setup(
             "grounded_sam_val_calibration = "
             "so101_demo.cli.grounded_sam_val_calibration:main",
             "train_yolo_seg = so101_demo.cli.train_yolo_seg:main",
+            "validate_head_camera_geometry = "
+            "so101_demo.cli.validate_head_camera_geometry:main",
+            "verify_head_search_dataset = "
+            "so101_demo.cli.verify_head_search_dataset:main",
+            "so101_head_search_smoke = so101_demo.cli.head_search_smoke:main",
+            "so101_head_search_calibration = so101_demo.cli.head_search_calibration:main",
+            "so101_head_search_functional_campaign = so101_demo.cli.head_search_functional_campaign:main",
+            "so101_head_search_audit = so101_demo.cli.head_search_audit:main",
+            "evaluate_head_search_yolo_candidates = "
+            "so101_demo.cli.evaluate_head_search_yolo_candidates:main",
             "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main",
             "so101_mujoco_perception_pick_place = "
             "so101_demo.cli.perception_pick_place_launch:main",

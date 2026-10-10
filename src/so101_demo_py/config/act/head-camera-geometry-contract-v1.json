@@ -1,0 +1,94 @@
+{
+  "accepted_camera_source_sha256": "08ce4a35388102eb67a55144631cc40ea52543c9191e3abe647d74c26658164e",
+  "accepted_scene_sha256": "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14",
+  "anchors": [
+    {
+      "cup_start_m": [
+        0.02,
+        -0.28,
+        0.165
+      ],
+      "name": "default",
+      "neck_start_rad": 0.1
+    },
+    {
+      "cup_start_m": [
+        -0.08,
+        -0.28,
+        0.165
+      ],
+      "name": "left",
+      "neck_start_rad": 0.0
+    },
+    {
+      "cup_start_m": [
+        0.02,
+        -0.36,
+        0.165
+      ],
+      "name": "forward",
+      "neck_start_rad": 0.0
+    }
+  ],
+  "camera": {
+    "camera_name": "head_camera",
+    "distortion": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "distortion_model": "plumb_bob",
+    "fovy_rad": 1.0471975511965976,
+    "height": 480,
+    "local_position_m": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "local_xyaxes": [
+      -1.0,
+      0.0,
+      0.0,
+      0.0,
+      -0.6,
+      0.8
+    ],
+    "parent_body": "head_mount",
+    "width": 640
+  },
+  "coarse_step_candidate_rad": 0.3,
+  "fov_tolerance_rad": 1e-06,
+  "neck_grid_rad": [
+    -6.283185307179586,
+    6.283185307179586,
+    0.002
+  ],
+  "neck_joint": "neck_yaw_joint",
+  "safe_bisection_tolerance_rad": 1e-05,
+  "safe_interval_margin_rad": 1e-05,
+  "scene_path": "../../assets/mujoco/act/scene.xml",
+  "validation_arm_rad": [
+    -0.25,
+    0.0,
+    0.6,
+    0.8,
+    0.0,
+    0.8
+  ],
+  "visible_pixel_minimum": 64,
+  "workspace_step_m": 0.02,
+  "workspace_x_m": [
+    -0.115,
+    -0.035
+  ],
+  "workspace_y_m": [
+    -0.39,
+    -0.25
+  ],
+  "workspace_z_m": [
+    0.165,
+    0.166
+  ]
+}

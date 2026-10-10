@@ -65,7 +65,9 @@ def test_ambiguity_invalidates_bearing_and_one_revolution_is_terminal():
         result=search.tick(*evidence(1.+index*.1,q=yaw),1.+index*.1)
         if "found" in result: break
         yaw=result["neck_target_rad"]
-    assert result["status"]=="TARGET_NOT_FOUND"
+    # a full revolution observes no coverage proof, so it cannot claim the clean negative that the
+    # bounded plan earns when it covers the sealed required domain
+    assert result["status"]=="TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL"
     assert yaw==pytest.approx(2*math.pi)
 
 
@@ -77,6 +79,50 @@ def test_stale_input_stops_and_search_clock_cannot_refresh():
     result=search.tick(*evidence(2.),2.)
     assert result["status"]=="SEARCH_TIMEOUT" and result["bearing_rad"] is None
     with pytest.raises(ValueError): HeadSearchController(config(coarse_step_rad=.7))
+
+
+def measured_current_context(now=1.03):
+    from test_act_head_feedback_freshness import policy
+    return dict(session_id='s',attempt_id='a',policy=policy(),
+        sample=dict(sequence=9,source_ns=1_020_000_000,wall_s=1.02,valid=True,
+            positions=[0.],velocities=[0.]),
+        decision=dict(sim_ns=1_030_000_000,sim_s=1.03,wall_before_s=now,wall_after_s=now))
+
+
+def test_separate_current_joint_policy_does_not_retime_historical_causal_feedback():
+    from copy import deepcopy
+    search=HeadSearchController(config(max_age_s=.036421324))
+    frame,feedback=evidence(1.,detections=(BOX,))
+    feedback.update(sim_time_s=.992,received_wall_s=.988)
+    original=deepcopy(feedback)
+    decision=search.tick(frame,feedback,1.03,joint_context=measured_current_context())
+    assert decision['stop'] is False and search.lock_count==1
+    assert feedback==original and search.last_feedback==original
+    # Legacy callers continue to require both inputs within their old age bound.
+    assert HeadSearchController(config(max_age_s=.036421324)).tick(frame,feedback,1.03)['stop']
+
+
+@pytest.mark.parametrize('damage',['stale_joint_receipt','stale_joint_source','foreign_scope',
+    'incomplete_context','future_decision','old_decision','future_historical_receipt','stale_camera',
+    'joint_aged_during_context'])
+def test_split_current_joint_context_cannot_hide_stale_or_foreign_inputs(damage):
+    frame,feedback=evidence(1.,detections=(BOX,));context=measured_current_context()
+    if damage=='stale_joint_receipt':context['sample']['wall_s']=.9
+    elif damage=='stale_joint_source':context['sample']['source_ns']=900_000_000
+    elif damage=='foreign_scope':context['attempt_id']='foreign'
+    elif damage=='incomplete_context':del context['policy']
+    elif damage=='future_decision':context['decision']['wall_after_s']=1.031
+    elif damage=='old_decision':context['decision'].update(wall_before_s=1.,wall_after_s=1.)
+    elif damage=='future_historical_receipt':feedback['received_wall_s']=1.031
+    elif damage=='joint_aged_during_context':
+        context['sample']['wall_s']=1.001
+        context['decision'].update(wall_before_s=1.02,wall_after_s=1.02)
+    else:frame['received_wall_s']=.9
+    search=HeadSearchController(config(max_age_s=.036421324))
+    try:result=search.tick(frame,feedback,1.03,joint_context=context)
+    except (ValueError,PermissionError):pass
+    else:assert result.get('stop') is True
+    assert search.lock_count==0
 
 
 def test_detector_spatial_identity_and_rgb_shape_filter_are_attempt_scoped():

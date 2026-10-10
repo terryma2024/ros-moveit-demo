@@ -72,6 +72,8 @@ def _instrumented_renderer(scene, *, maximum_attempts=2):
     renderer._mujoco = mujoco
     renderer._model = model
     renderer._data = data
+    renderer._neck_rad = None
+    renderer._arm_rad = None
     renderer._config = SimpleNamespace(
         camera_name="task_camera",
         geometry=SceneGeometry(maximum_deterministic_attempts=maximum_attempts),

@@ -2787,3 +2787,19 @@ export interface operations {
         };
     };
 }
+
+/**
+ * The Head Camera domain the unified app exposes. It is composed from the closed head-search connection and
+ * serves status, a stream, a bounded target, a stop and a capture.
+ */
+export interface HeadCameraPaths {
+  "/teleop/head-camera/status": {
+    get: { responses: { 200: { available: boolean; runtime_id: string; model_id: string; state: string; detector_constructed: number } } };
+  };
+  "/teleop/head-camera/stream": { get: { description: "websocket; not described by OpenAPI" } };
+  "/teleop/head-camera/target": {
+    post: { responses: { 200: { state: string }; 409: { detail: { code: "HEAD_TARGET_OUT_OF_RANGE" | "HEAD_TARGET_INTERVAL_SEALED" } } } };
+  };
+  "/teleop/head-camera/stop": { post: { responses: { 200: { state: string; consecutive_samples: number } } } };
+  "/teleop/head-camera/capture": { post: { responses: { 200: { sequence: number; jpeg_sha256: string } } } };
+}

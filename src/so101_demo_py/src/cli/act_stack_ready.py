@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from collections import deque
-from dataclasses import dataclass
 import json
 import math
 import os
 import sys
 import time
-
+from collections import deque
+from dataclasses import dataclass
 
 _CONTROLLERS = (
     "joint_state_broadcaster", "arm_controller", "gripper_controller", "neck_controller",
@@ -178,7 +177,7 @@ def main(arguments: list[str] | None = None) -> int:
     from sensor_msgs.msg import Image, JointState
     from so101_demo.act.joints import ACT_JOINTS, ordered_positions
     from so101_demo.adapters.act.ros_observation import RGB_QOS
-    from so101_demo.backends.mujoco.observer import MujocoWorldObserver, EvidenceStale
+    from so101_demo.backends.mujoco.observer import EvidenceStale, MujocoWorldObserver
 
     rclpy.init()
     node = rclpy.create_node(f"act_stack_ready_{os.getpid()}")
@@ -295,3 +294,19 @@ def main(arguments: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+def verify_head_search_startup(*, environment) -> dict | None:
+    """Verify the promoted head search pair before the stack is considered ready.
+
+    When the environment names a promoted config, its qualified report must agree with it field by field -
+    a drifted value, identity, camera, tracker, motion block or an unconsumed key refuses startup here, before
+    any ROS node, camera or model is touched. No named config means this stack carries no head search.
+    """
+
+    from so101_demo.act.head_search_binding import load_promoted_head_search
+
+    config_path = environment.get("SO101_HEAD_SEARCH_CONFIG")
+    if not config_path:
+        return None
+    return load_promoted_head_search(config_path, environment.get("SO101_HEAD_SEARCH_REPORT"))
+

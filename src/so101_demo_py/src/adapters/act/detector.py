@@ -11,6 +11,14 @@ from so101_demo.act.contracts import fields, finite, identifier, integer, sha256
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 
 
+# A fragment must be substantially smaller and less confident than its parent.
+# Independent mask and bbox containment allow tiny segmentation/box edge errors.
+_FRAGMENT_MIN_CONTAINMENT = .95
+_FRAGMENT_MAX_AREA_RATIO = .5
+_FRAGMENT_MAX_CONFIDENCE = .5
+_FRAGMENT_MAX_CONFIDENCE_RATIO = .5
+
+
 @dataclass(frozen=True, slots=True)
 class BoundHeadDetector:
     runtime: "HeadRgbDetector"
@@ -141,11 +149,48 @@ class HeadRgbDetector:
                                      DetectionQuery("plastic_cup"))
         if batch.model_id != self.model_id or batch.weights_sha256 != self.weights_sha256:
             raise ValueError("DETECTOR_PROVENANCE_CHANGED")
-        result = []; unused = set(self.tracks); current = {}
-        for candidate in sorted(batch.candidates, key=lambda value: (value.bbox_xyxy, value.instance_id)):
+        eligible = []
+        for candidate in batch.candidates:
             if candidate.class_id not in ("plastic_cup", "cup"): continue
             x1, y1, x2, y2 = candidate.bbox_xyxy
             if (y2-y1) / (x2-x1) < self.min_bbox_aspect: continue
+            eligible.append(candidate)
+        distinct = []
+        # Duplicate masks from one cup must not create competing spatial tracks.
+        for candidate in sorted(eligible, key=lambda value: (
+                -value.confidence, value.bbox_xyxy, value.instance_id)):
+            duplicate = False
+            for kept in distinct:
+                if candidate.class_id != kept.class_id: continue
+                intersection = np.count_nonzero(candidate.mask & kept.mask)
+                union = np.count_nonzero(candidate.mask | kept.mask)
+                if intersection / union >= .7:
+                    duplicate = True
+                    break
+                if (candidate.confidence > _FRAGMENT_MAX_CONFIDENCE or
+                        candidate.confidence >= kept.confidence or
+                        candidate.confidence > (
+                            _FRAGMENT_MAX_CONFIDENCE_RATIO * kept.confidence)):
+                    continue
+                area = np.count_nonzero(candidate.mask)
+                kept_area = np.count_nonzero(kept.mask)
+                if (area > _FRAGMENT_MAX_AREA_RATIO * kept_area or
+                        intersection / area < _FRAGMENT_MIN_CONTAINMENT):
+                    continue
+                x1, y1, x2, y2 = candidate.bbox_xyxy
+                kx1, ky1, kx2, ky2 = kept.bbox_xyxy
+                bbox_area = (x2-x1) * (y2-y1)
+                kept_bbox_area = (kx2-kx1) * (ky2-ky1)
+                bbox_intersection = (max(0., min(x2, kx2)-max(x1, kx1)) *
+                                     max(0., min(y2, ky2)-max(y1, ky1)))
+                if (bbox_area <= _FRAGMENT_MAX_AREA_RATIO * kept_bbox_area and
+                        bbox_intersection / bbox_area >= _FRAGMENT_MIN_CONTAINMENT):
+                    duplicate = True
+                    break
+            if not duplicate:
+                distinct.append(candidate)
+        result = []; unused = set(self.tracks); current = {}
+        for candidate in sorted(distinct, key=lambda value: (value.bbox_xyxy, value.instance_id)):
             scores = sorted(((overlap(candidate.bbox_xyxy, self.tracks[track]), track)
                              for track in unused), reverse=True)
             # Tied spatial association cannot inherit a claimed target identity.

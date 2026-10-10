@@ -129,10 +129,10 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
     for logical_name, artifact_kind, source_rel, install_rel, overlay in _ROLE_SPECS:
         if overlay == "dependency" and dependency_overlay is None:
             raise ValueError("SOURCE_PROVENANCE_DEPENDENCY_OVERLAY_REQUIRED")
-        install_overlay = Path(dependency_overlay) if overlay == "dependency" else Path(install_overlay)
+        role_overlay = Path(dependency_overlay) if overlay == "dependency" else install_overlay
         if artifact_kind == "verbatim_install":
             source_path = source_root / source_rel
-            installed_path = install_overlay / install_rel
+            installed_path = role_overlay / install_rel
             _regular(source_path, "SOURCE_PROVENANCE_SOURCE_MISSING")
             _regular(installed_path, "SOURCE_PROVENANCE_INSTALL_MISSING")
             roles.append({
@@ -142,7 +142,7 @@ def build_source_provenance(source_root: Path, install_overlay: Path, *,
                 "overlay": overlay,
             })
         elif artifact_kind == "compiled":
-            installed_path = install_overlay / install_rel
+            installed_path = role_overlay / install_rel
             receipt_path = Path(str(installed_path) + ".build-receipt.json")
             _regular(installed_path, "SOURCE_PROVENANCE_INSTALL_MISSING")
             _regular(receipt_path, "SOURCE_PROVENANCE_RECEIPT_MISSING")

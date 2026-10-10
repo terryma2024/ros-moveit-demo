@@ -1,0 +1,36 @@
+"""Readonly check of the installed native ownership scope before any stack spawn."""
+from pathlib import Path
+import hashlib,json,os,stat,sys
+
+def check_document(document,stack_environment):
+ from so101_demo.adapters.act import head_execution_native as native
+ env=document['ros']['environment'];session=document['run']['session_id']
+ expected=native.controller_reservation_directory(Path(env['SO101_ACT_RESERVATION_ROOT']),session)
+ if (Path(env['SO101_ACT_CONTROLLER_RESERVATION_DIR'])!=expected
+     or env['SO101_SIMULATION_SESSION_ID']!=session
+     or any(stack_environment.get(key)!=env[key] for key in native._ENVIRONMENT_FIELDS)):
+  raise ValueError('HEAD_EXECUTION_NATIVE_SCOPE_INVALID')
+ if len(os.fsencode(expected/'neck-primary-revoke.sock'))>107:
+  raise ValueError('HEAD_EXECUTION_NATIVE_SOCKET_PATH_TOO_LONG')
+ root=expected.parent.parent
+ ancestor=root
+ while True:
+  info=ancestor.lstat()
+  if not stat.S_ISDIR(info.st_mode):raise PermissionError('CONTROLLER_RESERVATION_ROOT_INVALID')
+  if ancestor==ancestor.parent:break
+  ancestor=ancestor.parent
+ if root.lstat().st_uid!=os.geteuid():raise PermissionError('CONTROLLER_RESERVATION_ROOT_INVALID')
+ for child in (expected.parent,expected):
+  if child.exists() or child.is_symlink():
+   info=child.lstat()
+   if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.geteuid() or stat.S_IMODE(info.st_mode)!=0o700:
+    raise PermissionError('CONTROLLER_RESERVATION_DIRECTORY_INVALID')
+ source=Path(native.__file__).resolve()
+ return dict(directory=str(expected),session_id=session,socket_bytes=len(os.fsencode(expected/'neck-primary-revoke.sock')),native_module=dict(path=str(source),sha256=hashlib.sha256(source.read_bytes()).hexdigest()),runtime_started=False)
+
+if __name__=='__main__':
+ from so101_demo.act.head_execution_inputs import HeadExecutionInputs
+ from so101_demo.adapters.act.head_execution_provider import resource_plan
+ inputs=HeadExecutionInputs.parse(sys.argv[1]);plan=resource_plan(inputs)
+ result=check_document(inputs.document,plan['constructors']['stack']['keywords']['environment'])
+ print(json.dumps(result))

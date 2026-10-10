@@ -94,6 +94,7 @@ if(BUILD_TESTING)
       APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   endfunction()
 
+  so101_add_pytest_test(test_head_camera_api test/teleop/test_head_camera_api.py)
   so101_add_pytest_test(test_backend_profiles test/backends/test_profiles.py)
   so101_add_pytest_test(test_backend_cli_adapter test/backends/test_cli_adapter.py)
   so101_add_pytest_test(test_mujoco_profile test/backends/test_mujoco_profile.py)

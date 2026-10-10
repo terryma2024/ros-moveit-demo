@@ -1,0 +1,28 @@
+from pathlib import Path
+
+def process(pid):
+ p=Path('/proc',str(pid));raw=(p/'stat').read_text();tail=raw[raw.rfind(')')+2:].split()
+ return dict(pid=pid,start_ticks=int(tail[19]),ppid=int(tail[1]),state=tail[0],uid=p.stat().st_uid,argv=(p/'cmdline').read_bytes().replace(b'\0',b' ').decode(errors='replace'))
+
+def scoped_child(pid,known,session):
+ row=process(pid)
+ if known is not None:
+  if any(row[key]!=known[key] for key in ('pid','start_ticks','uid')):raise ValueError('CHILD_IDENTITY_CHANGED')
+  if known.get('scope_validated') is not True or known.get('scope_session')!=session:raise ValueError('CHILD_SCOPE_CHANGED')
+  # Scope was established while live; a zombie has no readable environment.
+  row.update(scope_validated=True,scope_session=session)
+  if row['state']=='Z':row['argv']=known['argv']
+  return row
+ if row['state']=='Z':return None
+ try:env=Path('/proc',str(pid),'environ').read_bytes().split(b'\0')
+ except PermissionError:
+  # Exit between stat and environ is a real kernel race. Live denial remains fatal.
+  try:after=process(pid)
+  except FileNotFoundError:return None
+  if after['start_ticks']==row['start_ticks'] and after['state']=='Z':return None
+  raise
+ if ('SO101_SIMULATION_SESSION_ID='+session).encode() not in env:return None
+ after=process(pid)
+ if any(after[key]!=row[key] for key in ('pid','start_ticks','uid')):raise ValueError('CHILD_IDENTITY_CHANGED')
+ row.update(scope_validated=True,scope_session=session)
+ return row

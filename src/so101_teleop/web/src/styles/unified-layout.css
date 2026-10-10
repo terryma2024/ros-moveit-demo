@@ -96,3 +96,32 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The head camera frame keeps a fixed 4:3 box so an overlay never shifts with the incoming image. */
+.head-camera-frame {
+  position: relative;
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.head-camera-frame > * {
+  position: absolute;
+  inset: 0;
+}
+
+.head-camera-readout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 360px) {
+  .head-camera-readout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

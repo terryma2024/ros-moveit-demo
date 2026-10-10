@@ -3,7 +3,12 @@ project(so101_mujoco_support)
 
 find_package(Boost REQUIRED)
 find_package(ament_cmake REQUIRED)
+find_package(control_msgs REQUIRED)
+find_package(controller_interface REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(joint_trajectory_controller REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(moveit_ros_move_group REQUIRED)
 if(NOT APPLE)
   find_package(OpenGL REQUIRED COMPONENTS EGL)
@@ -11,12 +16,15 @@ endif()
 find_package(mujoco_ros2_control_plugins REQUIRED)
 find_package(mujoco_vendor REQUIRED)
 find_package(pluginlib REQUIRED)
+find_package(rcl_interfaces REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(rcutils REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(Threads REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ContactSample.msg"
@@ -47,6 +55,39 @@ ament_target_dependencies(so101_simulation_evidence_plugin PUBLIC
   geometry_msgs pluginlib rclcpp rcutils realtime_tools std_msgs)
 pluginlib_export_plugin_description_file(mujoco_ros2_control_plugins so101_mujoco_plugins.xml)
 
+add_library(so101_broker_owned_trajectory_controller SHARED
+  src/broker_owned_trajectory_controller.cpp)
+target_compile_features(so101_broker_owned_trajectory_controller PUBLIC cxx_std_17)
+target_include_directories(so101_broker_owned_trajectory_controller PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_broker_owned_trajectory_controller PUBLIC
+  joint_trajectory_controller::joint_trajectory_controller)
+ament_target_dependencies(so101_broker_owned_trajectory_controller PUBLIC
+  control_msgs controller_interface joint_trajectory_controller pluginlib rcl_interfaces rclcpp rclcpp_action)
+pluginlib_export_plugin_description_file(controller_interface so101_trajectory_controllers.xml)
+
+add_library(so101_controller_reservation_protocol STATIC
+  src/controller_reservation_protocol.cpp
+  src/controller_reservation_provision.cpp
+  src/controller_reservation_socket.cpp)
+set_target_properties(so101_controller_reservation_protocol PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_features(so101_controller_reservation_protocol PUBLIC cxx_std_17)
+target_include_directories(so101_controller_reservation_protocol PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+ament_target_dependencies(so101_controller_reservation_protocol PUBLIC control_msgs rclcpp rcutils)
+target_link_libraries(so101_controller_reservation_protocol PUBLIC Threads::Threads)
+target_link_libraries(so101_broker_owned_trajectory_controller PRIVATE
+  so101_controller_reservation_protocol)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_library(so101_head_revocation_transport SHARED src/head_revocation_transport.cpp)
+  target_compile_features(so101_head_revocation_transport PRIVATE cxx_std_17)
+  target_include_directories(so101_head_revocation_transport PRIVATE include)
+  install(TARGETS so101_head_revocation_transport LIBRARY DESTINATION lib)
+endif()
+
 add_executable(graceful_shutdown_move_group src/graceful_shutdown_move_group.cpp)
 target_compile_features(graceful_shutdown_move_group PRIVATE cxx_std_17)
 target_include_directories(graceful_shutdown_move_group PRIVATE ${Boost_INCLUDE_DIRS})
@@ -54,7 +95,18 @@ ament_target_dependencies(graceful_shutdown_move_group moveit_ros_move_group rcl
 target_link_libraries(graceful_shutdown_move_group
   moveit_ros_move_group::moveit_move_group_capabilities_base)
 
+add_executable(stop_witness_timing_stress test/stop_witness_timing_stress.cpp)
+target_compile_features(stop_witness_timing_stress PRIVATE cxx_std_17)
+target_include_directories(stop_witness_timing_stress PRIVATE include)
+target_link_libraries(stop_witness_timing_stress Threads::Threads)
+install(TARGETS stop_witness_timing_stress RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 if(BUILD_TESTING)
+  ament_add_gtest(test_controller_stop_witness_stress test/test_controller_stop_witness_stress.cpp TIMEOUT 300)
+  target_compile_features(test_controller_stop_witness_stress PRIVATE cxx_std_17)
+  target_include_directories(test_controller_stop_witness_stress PRIVATE include)
+  target_link_libraries(test_controller_stop_witness_stress Threads::Threads)
+
   find_package(ament_cmake_gtest REQUIRED)
   set(so101_test_library_dirs)
   if(APPLE)
@@ -96,13 +148,134 @@ if(BUILD_TESTING)
   target_compile_features(test_physics_step_fence PRIVATE cxx_std_17)
   target_include_directories(test_physics_step_fence PRIVATE include)
   target_link_libraries(test_physics_step_fence so101_simulation_evidence_plugin)
+
+  ament_add_gtest(test_controller_ingress_witness
+    test/test_controller_ingress_witness.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_ingress_witness PRIVATE cxx_std_17)
+  target_include_directories(test_controller_ingress_witness PRIVATE include)
+
+  ament_add_gtest(test_broker_owned_trajectory_controller
+    test/test_broker_owned_trajectory_controller.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_broker_owned_trajectory_controller PRIVATE cxx_std_17)
+  ament_target_dependencies(test_broker_owned_trajectory_controller
+    control_msgs controller_interface hardware_interface lifecycle_msgs
+    pluginlib rclcpp rclcpp_action)
+  target_link_libraries(test_broker_owned_trajectory_controller
+    so101_broker_owned_trajectory_controller)
+
+  ament_add_gtest(test_controller_goal_admission
+    test/test_controller_goal_admission.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_goal_admission PRIVATE cxx_std_17)
+  target_include_directories(test_controller_goal_admission PRIVATE include)
+  ament_target_dependencies(test_controller_goal_admission
+    control_msgs rclcpp trajectory_msgs)
+
+  ament_add_gtest(test_controller_stop_witness
+    test/test_controller_stop_witness.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_stop_witness PRIVATE cxx_std_17)
+  target_include_directories(test_controller_stop_witness PRIVATE include)
+
+  # Gate 6 Batch 3 (Phase 3a): bound reservation frame, bound admission state
+  # machine and SHA-256 known answers. The frozen fixture is loaded by the tests
+  # relative to __FILE__, so no install rule is required for it.
+  ament_add_gtest(test_gate6_service_identity
+    test/test_gate6_service_identity.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_service_identity PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_service_identity PRIVATE include)
+  ament_target_dependencies(test_gate6_service_identity
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_service_identity so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_bound_socket
+    test/test_gate6_bound_socket.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_socket PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_socket PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_socket
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_bound_socket so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_lifecycle
+    test/test_gate6_lifecycle.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_lifecycle PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_lifecycle PRIVATE include)
+  ament_target_dependencies(test_gate6_lifecycle
+    control_msgs controller_interface hardware_interface lifecycle_msgs rclcpp rclcpp_action)
+  target_link_libraries(test_gate6_lifecycle so101_broker_owned_trajectory_controller)
+
+  ament_add_gtest(test_gate6_bound_reservation_frame
+    test/test_gate6_bound_reservation_frame.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_reservation_frame PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_reservation_frame PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_reservation_frame
+    control_msgs rclcpp trajectory_msgs)
+  target_link_libraries(test_gate6_bound_reservation_frame
+    so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_bound_admission_state
+    test/test_gate6_bound_admission_state.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_bound_admission_state PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_bound_admission_state PRIVATE include)
+  ament_target_dependencies(test_gate6_bound_admission_state
+    control_msgs rclcpp trajectory_msgs)
+  target_link_libraries(test_gate6_bound_admission_state
+    so101_controller_reservation_protocol)
+
+  ament_add_gtest(test_gate6_sha256_vectors
+    test/test_gate6_sha256_vectors.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_gate6_sha256_vectors PRIVATE cxx_std_17)
+  target_include_directories(test_gate6_sha256_vectors PRIVATE include)
+
+  ament_add_gtest(test_controller_reservation_protocol
+    test/test_controller_reservation_protocol.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_controller_reservation_protocol PRIVATE cxx_std_17)
+  target_include_directories(test_controller_reservation_protocol PRIVATE include)
+  ament_target_dependencies(test_controller_reservation_protocol control_msgs rclcpp)
+  target_link_libraries(test_controller_reservation_protocol
+    so101_controller_reservation_protocol)
+
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ament_add_gtest(test_head_revocation_transport test/test_head_revocation_transport.cpp)
+    target_compile_features(test_head_revocation_transport PRIVATE cxx_std_17)
+    target_include_directories(test_head_revocation_transport PRIVATE include)
+    target_link_libraries(test_head_revocation_transport so101_head_revocation_transport)
+
+    ament_add_gtest(test_controller_reservation_provision
+      test/test_controller_reservation_provision.cpp
+      APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+    target_compile_features(test_controller_reservation_provision PRIVATE cxx_std_17)
+    target_include_directories(test_controller_reservation_provision PRIVATE include)
+    ament_target_dependencies(test_controller_reservation_provision control_msgs rclcpp)
+    target_link_libraries(test_controller_reservation_provision
+      so101_controller_reservation_protocol)
+
+    ament_add_gtest(test_controller_reservation_socket
+      test/test_controller_reservation_socket.cpp
+      APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+    target_compile_features(test_controller_reservation_socket PRIVATE cxx_std_17)
+    ament_target_dependencies(test_controller_reservation_socket control_msgs rclcpp)
+    target_link_libraries(test_controller_reservation_socket
+      so101_controller_reservation_protocol)
+  endif()
 endif()
 
-install(TARGETS so101_simulation_evidence_plugin EXPORT export_${PROJECT_NAME}
+install(TARGETS so101_simulation_evidence_plugin
+  so101_broker_owned_trajectory_controller EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
-ament_export_dependencies(geometry_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
-  rclcpp rcutils realtime_tools rosidl_default_runtime std_msgs)
+ament_export_dependencies(control_msgs controller_interface geometry_msgs joint_trajectory_controller
+  lifecycle_msgs mujoco_ros2_control_plugins mujoco_vendor pluginlib
+  rcl_interfaces rclcpp rclcpp_action rcutils realtime_tools rosidl_default_runtime std_msgs trajectory_msgs)
 ament_package()

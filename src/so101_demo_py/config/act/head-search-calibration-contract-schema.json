@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "head-search calibration contract v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "contract",
+    "parameters",
+    "hard_bounds",
+    "rejections"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "contract": {
+      "const": "head-search-calibration-contract/v1"
+    },
+    "description": {
+      "type": "string"
+    },
+    "parameters": {
+      "type": "object",
+      "required": [
+        "horizontal_fov_rad",
+        "lock_valid_neck_rad",
+        "coarse_step_rad",
+        "search_timeout_s",
+        "min_confidence",
+        "tracking_iou",
+        "min_bbox_aspect",
+        "min_area_px2",
+        "center_deadband_px",
+        "vertical_bounds_px",
+        "max_fine_corrections",
+        "max_fine_total_rad",
+        "max_age_s",
+        "max_skew_s",
+        "submit_lead_s",
+        "stop_velocity_rad_s",
+        "stop_latency_s"
+      ],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z_]+$": {
+          "type": "object",
+          "required": [
+            "unit",
+            "formula_id",
+            "margin",
+            "production_owner",
+            "consumer_field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "unit": {
+              "type": "string",
+              "minLength": 1
+            },
+            "formula_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "margin": {
+              "type": "number",
+              "minimum": 0
+            },
+            "production_owner": {
+              "enum": [
+                "perception",
+                "controller"
+              ]
+            },
+            "consumer_field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bound": {
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "hard_bounds": {
+      "type": "object"
+    },
+    "rejections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

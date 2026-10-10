@@ -1,0 +1,14 @@
+import json
+from pathlib import Path
+def assemble(report,events_path,post,owner_absent):
+ protocol={k:[]for k in ('BOOTSTRAP_IDENTITY','PREARM_STATUS','ARM_RESULT','NATIVE_CLOSE','CANCEL_STOP')}
+ if report and report['receipts'].get('seal_verified'):
+  for line in events_path.read_text().splitlines():
+   row=json.loads(line)
+   if row['kind']in protocol:protocol[row['kind']].append(row['record'])
+ runtime=report['receipts'].get('runtime',{})if report else{}
+ physical=runtime.get('confirmed_stop')is True and runtime.get('cancel_stop',{}).get('raw_stop_confirmed')is True
+ close=runtime.get('native_close',{});closed=close.get('ack')is True and close.get('error')is None and close.get('receipt',{}).get('status')=='ARMED_CLOSED'
+ facts=dict(startup_protocol=protocol,seal_verified=bool(report and report['receipts'].get('seal_verified')),stop_confirmed=physical and closed,owned_children_exited=bool(report and report['receipts'].get('children_absent')),children=report['receipts'].get('children',[])if report else[],postflight=dict(owner_absent=owner_absent,graph_empty=post,graph_rc=0 if post else 1))
+ protocol["seal_verified"]=bool(report and report["receipts"].get("seal_verified"))
+ return facts

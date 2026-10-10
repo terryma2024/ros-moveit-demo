@@ -1,0 +1,149 @@
+--- a/controller_manager/src/controller_manager.cpp
++++ b/controller_manager/src/controller_manager.cpp
+@@ -3366,7 +3366,11 @@
+       const bool first_update_cycle =
+         (*loaded_controller.last_update_cycle_time ==
+          rclcpp::Time(0, 0, this->get_trigger_clock()->get_clock_type()));
+-      const rclcpp::Time current_time = get_clock()->started() ? get_trigger_clock()->now() : time;
++      // In simulated time, keep the actual period and native timestamp tied to
++      // the caller's sampled control-cycle start; later clock advances are separate.
++      const rclcpp::Time current_time = use_sim_time_
++                                          ? time
++                                          : (get_clock()->started() ? get_trigger_clock()->now() : time);
+       const auto controller_actual_period =
+         first_update_cycle ? controller_period
+                            : (current_time - *loaded_controller.last_update_cycle_time);
+@@ -3395,7 +3399,8 @@
+         try
+         {
+           const auto trigger_result =
+-            loaded_controller.c->trigger_update(this->now(), controller_actual_period);
++            loaded_controller.c->trigger_update(
++              use_sim_time_ ? time : this->now(), controller_actual_period);
+           trigger_status = trigger_result.successful;
+           controller_ret = trigger_result.result;
+           if (trigger_status && trigger_result.execution_time.has_value())
+--- a/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp
++++ b/mujoco_ros2_control/src/mujoco_ros2_control_node.cpp
+@@ -21,6 +21,7 @@
+ #include "mujoco_ros2_control/clock_trace.hpp"
+ #include "mujoco_ros2_control/clock_advance_probe.hpp"
+ #include "mujoco_ros2_control/exit_phase.hpp"
++#include "mujoco_ros2_control/control_cycle.hpp"
+ 
+ #include <hardware_interface/version.h>
+ #include <hardware_interface/introspection.hpp>
+@@ -279,39 +280,38 @@
+         }
+ 
+         // execute update loop
+-        if (trace) {
+-          auto start = ClockTrace::monotonic_ns();
+-          auto argument = get_cm_now(cm);
+-          cm->read(argument, measured_period);
+-          trace->record(ClockTraceKind::Read, diagnostic_loop, ClockTrace::reset_epoch(),
+-            argument.nanoseconds(), measured_period.nanoseconds(), start, ClockTrace::monotonic_ns());
+-          if (clock_probe.enabled()) {
+-            const auto probe = clock_probe.run(diagnostic_loop, current_time, period,
+-              diagnostic_epoch, *cm->get_clock(), *cm->get_node_base_interface()->get_context());
+-            if (probe.invoked) {
+-              trace->record(ClockTraceKind::ProbeWait, diagnostic_loop, diagnostic_epoch,
+-                probe.after, probe.target, probe.start, probe.end,
+-                static_cast<uint64_t>(probe.before), probe.flags);
+-              if (probe.flags != 1 && probe.flags != 32) {
+-                probe_failure.store(true, std::memory_order_release);
+-                break;
++        using mujoco_ros2_control::CycleOperation;
++        const bool cycle_complete = mujoco_ros2_control::execute_control_cycle(
++          *cm, current_time, measured_period, use_sim_time,
++          [&] {return get_cm_now(cm);},
++          [&](CycleOperation) {return trace ? ClockTrace::monotonic_ns() : 0;},
++          [&](CycleOperation operation, const rclcpp::Time & argument, uint64_t start) {
++            if (trace) {
++              const auto kind = operation == CycleOperation::Read ? ClockTraceKind::Read :
++                operation == CycleOperation::Update ? ClockTraceKind::Update : ClockTraceKind::Write;
++              trace->record(kind, diagnostic_loop, ClockTrace::reset_epoch(),
++                argument.nanoseconds(), measured_period.nanoseconds(), start,
++                ClockTrace::monotonic_ns());
++            }
++          },
++          [&] {
++            if (trace && clock_probe.enabled()) {
++              const auto probe = clock_probe.run(diagnostic_loop, current_time, period,
++                diagnostic_epoch, *cm->get_clock(), *cm->get_node_base_interface()->get_context());
++              if (probe.invoked) {
++                trace->record(ClockTraceKind::ProbeWait, diagnostic_loop, diagnostic_epoch,
++                  probe.after, probe.target, probe.start, probe.end,
++                  static_cast<uint64_t>(probe.before), probe.flags);
++                if (probe.flags != 1 && probe.flags != 32) {
++                  probe_failure.store(true, std::memory_order_release);
++                  return false;
++                }
+               }
+             }
+-          }
+-          start = ClockTrace::monotonic_ns();
+-          argument = get_cm_now(cm);
+-          cm->update(argument, measured_period);
+-          trace->record(ClockTraceKind::Update, diagnostic_loop, ClockTrace::reset_epoch(),
+-            argument.nanoseconds(), measured_period.nanoseconds(), start, ClockTrace::monotonic_ns());
+-          start = ClockTrace::monotonic_ns();
+-          argument = get_cm_now(cm);
+-          cm->write(argument, measured_period);
+-          trace->record(ClockTraceKind::Write, diagnostic_loop, ClockTrace::reset_epoch(),
+-            argument.nanoseconds(), measured_period.nanoseconds(), start, ClockTrace::monotonic_ns());
+-        } else {
+-          cm->read(get_cm_now(cm), measured_period);
+-          cm->update(get_cm_now(cm), measured_period);
+-          cm->write(get_cm_now(cm), measured_period);
++            return true;
++          });
++        if (!cycle_complete) {
++          break;
+         }
+ 
+         // wait until we hit the end of the period
+--- a/mujoco_ros2_control/include/mujoco_ros2_control/control_cycle.hpp
++++ b/mujoco_ros2_control/include/mujoco_ros2_control/control_cycle.hpp
+@@ -0,0 +1,41 @@
++// Copyright 2026 ROS2-Control Development Team
++// Licensed under the Apache License, Version 2.0.
++#pragma once
++
++#include <rclcpp/duration.hpp>
++#include <rclcpp/time.hpp>
++
++namespace mujoco_ros2_control
++{
++
++enum class CycleOperation {Read, Update, Write};
++
++// A sim-time cycle keeps the caller's sampled timestamp across all operations.
++// Other clock domains retain the original per-operation sampling policy.
++template<class Manager, class ClockReader, class Begin, class End, class AfterRead>
++bool execute_control_cycle(
++  Manager & manager, const rclcpp::Time & cycle_time,
++  const rclcpp::Duration & period, bool use_sim_time, ClockReader get_time,
++  Begin begin, End end, AfterRead after_read)
++{
++  const auto invoke = [&](CycleOperation operation, auto call) {
++      const auto start = begin(operation);
++      const auto argument = use_sim_time ? cycle_time : get_time();
++      call(argument, period);
++      end(operation, argument, start);
++    };
++
++  invoke(CycleOperation::Read,
++    [&](const auto & time, const auto & dt) {manager.read(time, dt);});
++  if (!after_read()) {
++    return false;
++  }
++  invoke(CycleOperation::Update,
++    [&](const auto & time, const auto & dt) {manager.update(time, dt);});
++  invoke(CycleOperation::Write,
++    [&](const auto & time, const auto & dt) {manager.write(time, dt);});
++  return true;
++}
++
++}  // namespace mujoco_ros2_control
++
