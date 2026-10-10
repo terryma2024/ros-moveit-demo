@@ -32,7 +32,6 @@ def test_limits_match_the_design_values():
     assert module.STOP_WINDOW_MAX_AGE_NS == 200_000_000
     assert module.STOP_WINDOW_QOS_DEPTH == 64
     assert module.STOP_WINDOW_DEADLINE_S == 0.5
-    assert module.STOP_WINDOW_STARTUP_SLACK_NS == 102_000_000
 
 
 def test_limits_equal_the_broker_head_mode_constants():

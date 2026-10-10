@@ -45,8 +45,6 @@ STOP_WINDOW_MAX_AGE_NS = 200_000_000
 STOP_WINDOW_QOS_DEPTH = 64
 #: ``head_stop_window_deadline_s`` (provisional until it becomes a policy field in startup protocol v2)
 STOP_WINDOW_DEADLINE_S = 0.5
-#: startup shadow bound: shadow complete <= native PREARM READY sim stamp + this
-STOP_WINDOW_STARTUP_SLACK_NS = 102_000_000
 
 # ---- dead-man (design section 1.4) ---------------------------------------------------------------------
 #: the helper sends one byte every period; the controller latches after the timeout without a byte

@@ -1,9 +1,9 @@
 """Drive the owned search on one bound composition (post-CP-HFP-116 contract).
 
-The provider hands over the stack plus the detector/native/revoker constructor entries, so this module
-owns the frozen six-step order: bind ros, construct the local runtime, build the authority from that
-runtime's own guard and fault, bind native, build the detector through the owner factory once the owner
-is ready, then bind inference, runtime and search, drive a bounded tick loop and always retire.
+The provider hands over the stack, the activated Head neck owner and the detector constructor entry, so
+this module owns the frozen order: bind ros, construct the local runtime on the neck owner, bind the owner,
+build the detector through the inference-owner factory once that owner is ready, then bind inference,
+runtime and search, drive a bounded tick loop and always retire.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from so101_demo.adapters.act.head_owned_search import OwnedHeadSearch
 RUNNER_REFUSED = 'EXECUTION_RUNNER_REFUSED'
 SOURCE_ABSENT = 'EXECUTION_RUNNER_SOURCE_ABSENT'
 NECK_ABSENT = 'EXECUTION_RUNNER_NECK_ABSENT'
+OWNER_ABSENT = 'EXECUTION_RUNNER_OWNER_ABSENT'
 SETTLEMENT_ABSENT = 'EXECUTION_RUNNER_SETTLEMENT_ABSENT'
 ENTRY_ABSENT = 'EXECUTION_RUNNER_HANDOVER_INCOMPLETE'
 DEVICE_REFUSED = 'EXECUTION_RUNNER_DEVICE_REFUSED'
@@ -55,36 +56,6 @@ def _require_resource(handle, name, attribute, code, detail):
     if resource is None or not callable(getattr(resource, attribute, None)):
         _refuse(code, detail)
     return resource
-
-
-def _start_shadow(stack, inputs, runtime, *, environ=None):
-    """Start the shadow stop window when SO101_HEAD_SHADOW_STOP_WINDOW_DIR names a directory.
-
-    The shadow observes ``controller_state`` beside the broker stack and writes its own log; it never
-    gates, delays or records into the sealed run. A misconfigured switch fails the run loudly.
-    """
-    import os
-    from so101_demo.adapters.act.head_shadow_stop_window import (
-        ENVIRONMENT_VARIABLE, shadow_from_environment)
-    environ = os.environ if environ is None else environ
-    if environ.get(ENVIRONMENT_VARIABLE) is None:
-        return None
-    shadow = shadow_from_environment(context=stack.node.context, run_id=inputs.run['run_id'],
-                                     environ=environ)
-    shadow.start()
-    runtime.bind_stop_window_observer(shadow.on_raw_stop_confirmed)
-    return shadow
-
-
-def _finish_shadow(shadow):
-    """Wait (bounded) for the shadow end window and close its log; never raises into the run."""
-    if shadow is None:
-        return None
-    try:
-        from so101_demo.act import head_neck_limits
-        return shadow.finish(timeout_s=head_neck_limits.STOP_WINDOW_DEADLINE_S + 3.)
-    except Exception:
-        return None
 
 
 def _bind_originals(composition, capture, port, observer, runtime):
@@ -135,8 +106,9 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
     settlement = handle.get('settlement')
     if not callable(settlement):
         _refuse(SETTLEMENT_ABSENT, 'the entry must supply the settlement check')
-    native_callable, native_keywords = _require_entry(handle, 'native_entry')
-    revoker_callable, revoker_keywords = _require_entry(handle, 'revoker_entry')
+    neck_owner = handle.get('neck_owner')
+    if neck_owner is None:
+        _refuse(OWNER_ABSENT, 'the provider must hand over the activated Head neck owner')
     _require_entry(handle, 'detector_entry')
 
     inputs = composition.inputs
@@ -146,14 +118,13 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
                                        attempt_id=inputs.run['epoch'],
                                        search_start_rad=inputs.document['development_pose']['neck_rad'],
                                        binding_loader=binding_loader)
-    # Only guarded native ARM and matching authenticated channel readbacks may
-    # bind controller identity. Assembly snapshots cannot supply this authority.
+    # Only the neck owner's readback-checked activation may bind controller identity.
+    # Assembly snapshots cannot supply this authority.
     state = build_run_local_state(inputs, policy, None, now_s=clock())
 
     observer = HeadLocalObserver(stack.node, stack.port, state, policy=policy,
                                  camera_frame=config['frame_id'], bind_port_sink=False)
-    revoker = revoker_callable(**revoker_keywords)
-    runtime = HeadLocalRuntime(node=stack.node, port=stack.port, local_state=state, revoker=revoker,
+    runtime = HeadLocalRuntime(node=stack.node, port=stack.port, local_state=state, owner=neck_owner,
                                observer=observer, policy=policy,
                                sink=(lambda kind, record, stamp: composition.emit(
                                    kind, record, source_stamp_ns=stamp,
@@ -165,18 +136,11 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
     if original_owner is not None:
         original_owner.retain_originals_until_close(runtime)
     owner = exposure = None
-    shadow = None
     try:
-        shadow = _start_shadow(stack, inputs, runtime)
         scene = handle.get('scene')
         if scene is not None:
             scene.bind_fault(runtime.fault)
-        from so101_demo.adapters.act.head_native_policy_readback import read_native_policy
-        runtime.bind_native_policy_readback(read_native_policy(stack.node, policy))
-        authority = native_callable(**dict(native_keywords, arm_guard=runtime.prearm_guard,
-                                           fault_callback=runtime.fault))
-        runtime.bind_authority(authority)
-        composition.bind_native(authority=authority, revoker=revoker)
+        composition.bind_owner(owner=neck_owner)
 
         built = {}
 
@@ -246,8 +210,6 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
             _bind_prepared_transport(composition,handle,runtime,guard)
             if composition.event_log_enabled:
                 composition.emit('EXECUTION_OWNER_DESCRIPTOR', owner_bridge.descriptor())
-            if shadow is not None:
-                shadow.note_first_goal()
             receipt = owner_bridge.submit_target(config['required_search_domain_rad'][0])
             if handle.get('camera_relay') is not None:
                 handle['camera_relay'].cut_after_sdk_return(receipt)
@@ -261,7 +223,6 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
                              emit=(lambda stage, error: composition.emit(
                                  'EXECUTION_LOOP_RETIRE_FAILED', {'stage': stage, 'error': error}))
                              if composition.event_log_enabled else None)
-        _finish_shadow(shadow)
         if composition.event_log_enabled:
             composition.emit('EXECUTION_LOOP_RETIREMENT', {'failures': report, 'outcomes': outcomes})
         composition.finish_resource_lifetime('search_runtime', confirmed=not any(report.values()))
@@ -333,7 +294,8 @@ def _build_trajectory_guard(composition, handle, runtime):
     guard = HeadTrajectoryGuard(checker=scene.safety.checker, feedback_port=runtime.port,
         scene_observer=scene.observer,node=runtime.node,model_xml_path=refs['scene']['path'],
         geometry_path=refs['camera_geometry']['path'],geometry_sha256=refs['camera_geometry']['sha256'],
-        simulation_session_id=composition.inputs.run['session_id'],reset_epoch=scene.receipt['reset_epoch'])
+        simulation_session_id=composition.inputs.run['session_id'],reset_epoch=scene.receipt['reset_epoch'],
+        controller_state_source=runtime.owner.latest_controller_state)
     from so101_demo.act.head_execution_documents import load_search_config
     config = load_search_config(composition.inputs,composition.policy)
     if (config.get('required_search_domain_rad') != guard.search_domain
@@ -344,12 +306,17 @@ def _build_trajectory_guard(composition, handle, runtime):
 
 def _bind_prepared_transport(composition, handle, runtime, guard):
     from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
-    dispatcher = HeadInventoryDispatcher(runtime.port,runtime._authority,runtime.local_state,
+    from so101_demo.adapters.act.head_reference_monitor import HeadReferenceMonitor
+    dispatcher = HeadInventoryDispatcher(runtime.port,runtime.owner,runtime.local_state,
         guard=guard,own_inventory=runtime.own_inventory,fault_callback=runtime.fault,
         emit=(lambda kind, **record: runtime.record(kind,record))
         if composition.event_log_enabled else None)
     handle['scene'].bind_admission(runtime=runtime, guard=guard)
-    handle['neck'].bind_prepared_head(dispatcher,guard=guard,
+    # after acceptance the reference must stay on the sealed quintic; a foreign goal moves it off
+    monitor = HeadReferenceMonitor(on_diverged=lambda verdict: runtime.fault(verdict['code'], dict(verdict)))
+    runtime.owner.add_controller_state_listener(monitor.observe)
+    handle['reference_monitor'] = monitor
+    handle['neck'].bind_prepared_head(dispatcher,guard=guard,reference_monitor=monitor,
         stop_handoff=lambda occurred_ns,deadline_ns: runtime.stop('signal',dict(
             occurred_ns=occurred_ns,deadline_ns=deadline_ns)))
     if composition.event_log_enabled:

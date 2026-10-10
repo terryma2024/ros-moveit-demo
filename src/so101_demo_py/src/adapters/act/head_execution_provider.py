@@ -2,7 +2,7 @@
 
 The formal entry (`run --execution-inputs`) resolves this module and calls
 `provide(composition, inputs)`. The provider is the only place that constructs a
-run's stack, model, native pair and local search, and it constructs them from the
+run's stack, model, neck owner and local search, and it constructs them from the
 sealed execution inputs alone: no ambient default, no second stack, no fallback.
 
 Resolution is explicit and fail-closed. Every constructor is named by module and
@@ -38,8 +38,7 @@ SCOPE_REFUSED = 'EXECUTION_PROVIDER_SCOPE_REFUSED'
 RESOURCE_MODULES = {
     'stack': ('so101_demo.act.head_execution_stack', 'RestartStack'),
     'detector': ('so101_demo.adapters.act.detector', 'build_bound_head_detector'),
-    'native': ('so101_demo.adapters.act.head_reservation_authority', 'HeadReservationAuthority'),
-    'revoker': ('so101_demo.adapters.act.head_revocation', 'NativeRevocationClient'),
+    'owner': ('so101_demo.adapters.act.head_neck_owner_build', 'build_head_neck_owner'),
 }
 
 #: the closed-loop driver of the owned search on those resources
@@ -48,9 +47,7 @@ RUNNER_MODULE = ('so101_demo.cli.head_execution_runner', 'run_owned_search')
 #: the composition binding each constructed resource goes through
 RESOURCE_BINDING = {
     'stack': 'bind_ros',
-    # native, revoker and detector are constructed and bound by the runner: bind_detector needs
-    # native bound first, and bind_authority compares the authority's guard and fault to the local
-    # runtime's own methods, so both must happen after that runtime exists
+    # the neck owner and the detector are bound by the runner, after the local runtime exists
 }
 
 
@@ -183,7 +180,6 @@ def resource_plan(inputs, *, modules: Mapping | None = None):
         'ros': dict(inputs.document['ros']),
         'resources': dict(declared),
         'pose': inputs.document['development_pose'],
-        # the authority needs a native endpoint, never a sealed file (CP-HFP-181)
         'constructors': {
             'stack': {'callable': constructors['stack'],
 
@@ -210,12 +206,9 @@ def resource_plan(inputs, *, modules: Mapping | None = None):
                                       'weights_sha256': refs['weights']['sha256'],
                                       'cuda_device': declared['cuda_device'],
                                       'allow_cpu_fallback': declared['allow_cpu_fallback']}},
-            'native': {'callable': constructors['native'],
-                       'keywords': {}},
-            'revoker': {'callable': constructors['revoker'],
-                        'keywords': {}},
+            'owner': {'callable': constructors['owner'], 'keywords': {}},
         },
-        'native_provisioning': True,
+        'owned_scene': True,
         'runner': None if runner is None else {'callable': runner, 'module': RUNNER_MODULE},
     }
     return plan
@@ -407,23 +400,15 @@ def assemble(composition, inputs, *, plan):
                     stack_resource.port = provider_port
                 except Exception:
                     pass
-        if plan.get('native_provisioning') is True:
-            from .head_execution_native import provision_owned_native
-            credentials = provision_owned_native(inputs, stack, composition.policy)
-            handle['native_provisions'] = credentials['provision_receipts']
-            handle['native_child'] = credentials['native_child']
-            if composition.event_log_enabled:
-                composition.emit('NATIVE_CHILD_BOUND', credentials['native_child'])
-                composition.emit('NATIVE_PROVISIONS', credentials['provision_receipts'])
-            for stage, key in (('native', 'native_keywords'), ('revoker', 'revoker_keywords')):
-                handle[stage + '_entry'] = dict(plan['constructors'][stage],
-                    keywords=dict(credentials[key], event_log_enabled=composition.event_log_enabled))
-        else:
-            # Explicit constructor injection is used by directed tests. Native
-            # production constructors refuse empty/missing scope themselves.
-            handle['native_entry'] = dict(plan['constructors']['native'])
-            handle['revoker_entry'] = dict(plan['constructors']['revoker'])
-        if plan.get('native_provisioning') is True:
+        owner_entry = plan['constructors']['owner']
+        owner = owner_entry['callable'](**dict(
+            owner_entry['keywords'], node=stack.node, inputs=inputs, policy=composition.policy,
+            emit=(lambda kind, record: composition.emit(kind, record))
+            if composition.event_log_enabled else None))
+        handle['neck_owner'] = owner
+        # the owner (dead-man helper, stop window, monitor) retires before the stack it watches
+        built.insert(max(0, len(built) - 1), ('neck_owner', owner))
+        if plan.get('owned_scene') is True:
             from .head_execution_scene import load_scene_safety
             from .head_execution_reset import OwnedHeadScene, rebase_startup_originals
             safety = load_scene_safety(inputs)
@@ -439,6 +424,8 @@ def assemble(composition, inputs, *, plan):
             # subscription before its owned node/context closes.
             built.insert(max(0,len(built)-1), ('scene',scene))
             handle['scene'] = scene
+            # the owner activates the neck after the reset, so the controller holds the reset pose
+            scene.neck_activation = lambda *, deadline: owner.activate(deadline=deadline)
             reset_receipt = scene.reset()
             rebase_startup_originals(handle['capture'],stack.port,reset_receipt)
             scene.resume()
@@ -522,7 +509,7 @@ def provide(composition, inputs, *, plan=None):
                                               detector_loader=development_detector_loader(inputs))
         return plan['runner']['callable'](composition, handle)
     finally:
-        failures = teardown([(stage, handle[stage]) for stage in ('local_ros', 'campaign_truth', 'scene', 'stack')
+        failures = teardown([(stage, handle[stage]) for stage in ('local_ros', 'campaign_truth', 'scene', 'stack', 'neck_owner')
                   if stage in handle])
         composition.finish_resource_lifetime('provider_ros', confirmed=not failures)
         _preserve_stack_log(composition, handle.get('stack'))

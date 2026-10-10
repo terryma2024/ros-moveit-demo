@@ -67,7 +67,7 @@ def fake_provider(monkeypatch, events, *, outcome=0, failure=None, bind=True):
                                 epoch=inputs.run['epoch'], session=inputs.run['session_id'],
                                 generation=inputs.run['generation'])
             composition.bind_ros(node=stack.node, port=stack.port)
-            composition.bind_native(authority=stack.authority, revoker=stack.revoker)
+            composition.bind_owner(owner=stack.neck_owner)
             composition.bind_detector(object(), runtime_device='cuda:0')
             composition.bind_inference(stack.owner)
             composition.bind_runtime(observer=stack.observer, runtime=stack.runtime)

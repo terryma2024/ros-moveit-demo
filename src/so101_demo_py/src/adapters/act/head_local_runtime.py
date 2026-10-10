@@ -581,14 +581,6 @@ class HeadLocalRuntime:
         """Latch the first immutable origin, close admission and wake both workers."""
         if type(reason) is not str or not reason:
             raise ValueError('HEAD_LOCAL_FAULT_INVALID')
-        # A cancelled startup channel still revokes its local authority; its
-        # callback must not replace the operator's immutable stop origin.
-        with self._lock:
-            startup_cancelled=(reason=='HEAD_MAIN_AUTHORITY_FAILED' and self._arm_in_progress
-                and self._startup_cancel_event is not None and self._startup_cancel_event.is_set()
-                and not self._faulted)
-        if startup_cancelled:
-            return self.stop('sigterm',dict(startup_cancelled=True,channel_error=reason))
         token = self.local_state.latch_fault(reason)
         occurred_ns = self.local_state.fault_occurrence_ns
         with self._lock:

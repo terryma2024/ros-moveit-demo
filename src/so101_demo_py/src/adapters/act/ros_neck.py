@@ -1,4 +1,4 @@
-"""Scoped neck search port with optional shared-broker dispatch."""
+"""Scoped neck search port: the owned Head dispatch, or the plain action client."""
 
 import hashlib
 import threading
@@ -15,9 +15,9 @@ from .ros_execution import RosControllerPort
 class RosNeckSearchPort:
     def __init__(self,node,*,session_id,attempt_id,goal_duration_s,submit_lead_s,stop_timeout_s,
                  stop_velocity_rad_s,max_age_s,command_guard,monotonic=time.monotonic,
-                 progress=lambda:time.sleep(.001),broker=None,ticket_port=None,
+                 progress=lambda:time.sleep(.001),
                  controller_port=None,feedback_policy=None,head_trajectory_guard=None,
-                 head_stop_handoff=None):
+                 head_stop_handoff=None,head_reference_monitor=None):
         identifier(session_id);identifier(attempt_id)
         self.node,self.identity=node,(session_id,attempt_id)
         self.feedback_policy=None if feedback_policy is None else FeedbackPolicy.parse(feedback_policy)
@@ -26,50 +26,38 @@ class RosNeckSearchPort:
         finite(stop_velocity_rad_s)
         if min(self.duration,self.lead,self.stop_timeout,self.max_age)<=0 or not callable(command_guard):
             raise ValueError('NECK_CONFIG_INVALID')
-        if (broker is None)!=(ticket_port is None) or (ticket_port is not None and not callable(ticket_port)):
-            raise ValueError('NECK_BROKER_CONFIG_INVALID')
         if head_stop_handoff is not None and not callable(head_stop_handoff):
             raise ValueError('NECK_HEAD_STOP_HANDOFF_INVALID')
         self.monotonic,self.progress,self.guard=monotonic,progress,command_guard
-        self.broker=broker
         self._lock=threading.RLock();self._position=None;self._received=None;self._goals=[]
         self._stopped=False;self._head_dispatching=False;self._head_trajectory_guard=None
         self._head_stop_handoff=head_stop_handoff
         self._head_stop_occurrence_ns=None;self._head_stop_deadline_ns=None
         self._head_stop_handoff_started=False;self._head_cancel_requested=set()
         self._head_stop_handoff_error=None
+        self._head_reference_monitor=head_reference_monitor
         if head_trajectory_guard is not None:
             from .head_trajectory_guard import HeadTrajectoryGuard
-            if (type(head_trajectory_guard) is not HeadTrajectoryGuard or broker is not None
+            if (type(head_trajectory_guard) is not HeadTrajectoryGuard
                     or controller_port is None or self.feedback_policy is None):
                 raise ValueError('NECK_HEAD_TRAJECTORY_BINDING_INVALID')
             self._head_trajectory_guard=head_trajectory_guard
         if controller_port is not None:
-            if broker is not None or self.feedback_policy is None:
+            if self.feedback_policy is None:
                 raise ValueError('NECK_INJECTED_PORT_SCOPE_INVALID')
             underlying=getattr(controller_port,'port',controller_port)
             self.client=underlying.client;self.port=controller_port
             if getattr(underlying,'feedback_policy',None)!=self.feedback_policy:
                 raise ValueError('NECK_FEEDBACK_POLICY_MISMATCH')
-        elif broker is None:
+        else:
             self.client=ActionClient(node,FollowJointTrajectory,'/neck_controller/follow_joint_trajectory')
             self.port=RosControllerPort(node,self.client,('neck_yaw_joint',),stop_velocity_rad_s=stop_velocity_rad_s,
                                         max_age_s=max_age_s,monotonic=monotonic,
                                         feedback_policy=self.feedback_policy)
-        else:
-            from .broker_execution import BrokerControllerPort
-            self.client=broker.driver.clients['neck']
-            def scoped_ticket():
-                ticket=ticket_port()
-                if (not isinstance(ticket,tuple) or len(ticket)!=5
-                        or ticket[2:]!=('act',*self.identity)):
-                    raise PermissionError('NECK_SCOPE_INVALID')
-                return ticket
-            self.port=BrokerControllerPort(broker,'neck',scoped_ticket)
         self.subscription=None if self.feedback_policy is not None else node.create_subscription(
             JointState,'/joint_states',self._joint,qos_profile_sensor_data)
 
-    def bind_prepared_head(self, dispatcher, *, guard, stop_handoff):
+    def bind_prepared_head(self, dispatcher, *, guard, stop_handoff, reference_monitor=None):
         """Bind the authenticated local dispatcher once, preserving the owned client."""
         from .head_inventory_dispatch import HeadInventoryDispatcher
         from .head_trajectory_guard import HeadTrajectoryGuard
@@ -83,7 +71,7 @@ class RosNeckSearchPort:
             raise PermissionError('NECK_HEAD_PAUSED_ADMISSION_UNBOUND')
         underlying = getattr(self.port, 'port', self.port)
         dispatcher._check_scope()
-        if (self.broker is not None or self.feedback_policy is None
+        if (self.feedback_policy is None
                 or dispatcher.port is not underlying or guard.feedback_port is not underlying
                 or guard._dispatcher is not dispatcher or guard._local_state is not dispatcher.local_state
                 or self.client is not underlying.client
@@ -98,6 +86,7 @@ class RosNeckSearchPort:
             self.port = dispatcher
             self._head_stop_handoff = stop_handoff
             self._head_trajectory_guard = guard
+            self._head_reference_monitor = reference_monitor
 
     def _joint(self,message):
         if self.feedback_policy is not None:
@@ -113,7 +102,7 @@ class RosNeckSearchPort:
         except (KeyError,ValueError):return
         with self._lock:
             self._position,self._received,self._stamp=q,self.monotonic(),stamp
-            if self.broker is None:self.port._feedback(message)
+            self.port._feedback(message)
 
     def command_neck(self,target,*,session_id,attempt_id,observation_time_s):
         target=finite(target);observation_time_s=finite(observation_time_s,nonnegative=True)
@@ -171,6 +160,9 @@ class RosNeckSearchPort:
                     with self._lock:
                         # Retain the actual UUID before evidence or resume can fail.
                         self._goals.append(gid)
+                    if self._head_reference_monitor is not None:
+                        # accepted: from now on the controller_state reference must stay on this quintic
+                        self._head_reference_monitor.arm(prepared.proof)
                 finally:
                     if scene.emit is not None:
                         traces = self.port.dispatch_traces
@@ -204,6 +196,9 @@ class RosNeckSearchPort:
                 handoff=self._head_stop_handoff
                 handoff_error=self._head_stop_handoff_error
             self._head_trajectory_guard.stop()
+            if self._head_reference_monitor is not None:
+                # the stop holds the neck where it is: the reference leaves the quintic by design
+                self._head_reference_monitor.disarm()
             stop_admission=getattr(self.port,'stop_admission',None)
             if callable(stop_admission):stop_admission()
             if not callable(handoff):
@@ -241,7 +236,6 @@ class RosNeckSearchPort:
             for gid in self._goals:self.port.cancel(gid)
         deadline=self.monotonic()+self.stop_timeout
         while True:
-            if self.broker is not None:self.broker.driver.refresh_stop()
             if self.port.stopped():return True
             if self.monotonic()>=deadline:raise RuntimeError('SEARCH_STOP_UNCONFIRMED')
             self.progress()

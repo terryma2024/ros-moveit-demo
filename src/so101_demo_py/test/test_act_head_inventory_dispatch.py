@@ -169,8 +169,8 @@ def test_primary_callback_cannot_fake_inventory_receipt_or_allow_local_admission
     sender = HeadInventoryDispatcher(**config)
     with pytest.raises(Exception) as refused:
         send_target(sender, config)
-    assert isinstance(refused.value.__cause__, PermissionError)
-    assert str(refused.value.__cause__) == 'HEAD_PRIMARY_INVENTORY_RECEIPT_MISSING'
+    assert isinstance(refused.value, PermissionError)
+    assert str(refused.value) == 'HEAD_PRIMARY_INVENTORY_RECEIPT_MISSING'
     assert 'LOCAL_ADMIT' not in events and 'SDK_SEND' not in events
     assert sender.revoked and sender.inventory and faults
 
@@ -181,8 +181,8 @@ def test_false_primary_inventory_callback_stops_before_local_admission(composed)
     sender = HeadInventoryDispatcher(**config)
     with pytest.raises(Exception) as refused:
         send_target(sender, config)
-    assert isinstance(refused.value.__cause__, PermissionError)
-    assert str(refused.value.__cause__) == 'HEAD_PRIMARY_INVENTORY_REFUSED'
+    assert isinstance(refused.value, PermissionError)
+    assert str(refused.value) == 'HEAD_PRIMARY_INVENTORY_REFUSED'
     assert events == [] and sender.revoked and sender.inventory and faults
 
 
@@ -214,7 +214,7 @@ def test_refused_admission_keeps_inventory_and_never_sends(composed):
         return False
     config['owner'].admit_local = unknown
     sender = HeadInventoryDispatcher(**config)
-    with pytest.raises(PermissionError, match='NATIVE_RESERVATION_REFUSED'):
+    with pytest.raises(PermissionError, match='HEAD_INVENTORY_ADMISSION_REFUSED'):
         send_target(sender, config)
     assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
     row = next(iter(sender.inventory.values()))
@@ -453,9 +453,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     calls_before = tuple(calls)
     inventories_before = (sender.inventory, other_sender.inventory,
                           config['local_state'].inventory)
-    reservations_before = {
-        role: list(server.socket_state.reserved)
-        for role, server in servers.items()}
+    admissions_before = list(servers['admitted'])
     port_goals_before = dict(config['port']._goals)
     before_scene = config['guard'].scene_observer.snapshot()
     before_feedback = config['port'].feedback_snapshot()
@@ -523,8 +521,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     assert {key: prepared.proof[key] for key in original_prepared_timing} == original_prepared_timing
     assert (sender.inventory, other_sender.inventory,
             config['local_state'].inventory) == inventories_before
-    assert {role: list(server.socket_state.reserved)
-            for role, server in servers.items()} == reservations_before
+    assert list(servers['admitted']) == admissions_before
     assert config['port']._goals == port_goals_before
     assert tuple(calls) == calls_before
     assert not events and not owned
@@ -561,9 +558,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
             'original_inventory': sender.inventory,
             'other_inventory': other_sender.inventory,
             'local_state_inventory': config['local_state'].inventory,
-            'native_reservations': {
-                role: server.socket_state.reserved
-                for role, server in servers.items()},
+            'local_admissions': list(servers['admitted']),
             'port_goals': config['port']._goals,
             'events': events,
             'owned': len(owned),
@@ -771,7 +766,9 @@ def test_original_search_deadline_is_rechecked_at_final_sdk_without_refresh(comp
     from so101_demo.adapters.act import head_inventory_dispatch, ros_execution
     clock_view = SimpleNamespace(**vars(time))
     clock_view.monotonic_ns = lambda: round(wall[0] * 1e9)
+    from so101_demo.adapters.act import head_neck_owner
     monkeypatch.setattr(head_inventory_dispatch, 'time', clock_view)
+    monkeypatch.setattr(head_neck_owner, 'time', clock_view)
     monkeypatch.setattr(ros_execution, 'time', clock_view)
     monkeypatch.setattr(config['local_state'], 'clock_ns', clock_view.monotonic_ns)
     start_ns = round(wall[0] * 1e9)
@@ -873,17 +870,16 @@ def test_stop_handoff_and_unknown_uuid_cancel_start_before_blocked_dispatch_rele
     monkeypatch.setattr(case.row.port, 'cancel', cancel_goal)
 
     if boundary == 'reserve':
-        reserve = case.row.authority.reserve
-        def blocked_reserve(role, *, goal, goal_uuid, before_reserve):
+        reserve = case.row.owner.admit_local
+        def blocked_reserve(*, goal, goal_uuid, before_reserve):
             def bind_then_block(binding):
                 result = before_reserve(binding)
                 entered.set()
                 if not release.wait(timeout=2.):
                     raise TimeoutError('test reserve release timed out')
                 return result
-            return reserve(role, goal=goal, goal_uuid=goal_uuid,
-                           before_reserve=bind_then_block)
-        monkeypatch.setattr(case.row.authority, 'reserve', blocked_reserve)
+            return reserve(goal=goal, goal_uuid=goal_uuid, before_reserve=bind_then_block)
+        monkeypatch.setattr(case.row.owner, 'admit_local', blocked_reserve)
     else:
         send = case.row.action_client.send_goal_async
         def blocked_send(*args, **kwargs):

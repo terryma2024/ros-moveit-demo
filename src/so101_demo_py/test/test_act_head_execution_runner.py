@@ -7,8 +7,7 @@ import pytest
 from test_act_head_execution_composition import build_inputs
 from test_act_head_execution_composition import observer_setup
 import types
-from test_act_head_local_runtime import Authority
-from test_act_head_local_runtime import Revoker
+from head_owner_support import deadline, make as make_neck_owner
 
 
 DECLARATIONS = {
@@ -92,44 +91,18 @@ class _Neck:
 
 
 def _handle(monkeypatch, composition, inputs, *, capture=True, neck=True, settlement=True):
-    """The handle the provider produces, with native/detector built by the runner itself."""
+    """The handle the provider produces: the activated neck owner is the provider's, the detector the runner's."""
 
     row = observer_setup(monkeypatch, policy=composition.policy, bind_port_sink=False)
-    from test_act_head_local_runtime import native_policy_receipt
-    from so101_demo.adapters.act import head_native_policy_readback
-    monkeypatch.setattr(head_native_policy_readback, 'read_native_policy',
-                        lambda node, policy: native_policy_receipt(node, policy))
     stack = types.SimpleNamespace(node=row.node, port=row.port)
     built = {}
-
-    def _construct(factory, rich_keywords, plain_keywords):
-        """Build the fake with the rich keywords when it accepts them, else with the plain ones."""
-
-        try:
-            return factory(**rich_keywords)
-        except TypeError:
-            return factory(**plain_keywords)
-
-    def make_authority(**keywords):
-        built['authority'] = _construct(
-            Authority,
-            dict(arm_guard=keywords['arm_guard'], fault_callback=keywords['fault_callback'],
-                 generation=inputs.run['generation'], session_id=inputs.run['session_id'],
-                 controller_identity={'generation': inputs.run['generation'], 'incarnation': 'inc-1',
-                                      'boot': 'boot-1'}),
-            dict(arm_guard=keywords['arm_guard'], fault_callback=keywords['fault_callback']))
-        return built['authority']
-
-    def make_revoker(**keywords):
-        built['revoker'] = _construct(Revoker, dict(generation=inputs.run['generation']), {})
-        return built['revoker']
-
+    neck_owner, *_ = make_neck_owner(policy=composition.policy, generation=inputs.run['generation'],
+                                     session_id=inputs.run['session_id'], auto_window=True)
+    neck_owner.activate(deadline=deadline())
+    built['neck_owner'] = neck_owner
     handle = {
         'stack': stack,
-        'controller_identity': {'generation': inputs.run['generation'], 'incarnation': 'inc-1',
-                                'boot': 'boot-1'},
-        'native_entry': {'callable': make_authority, 'keywords': {}},
-        'revoker_entry': {'callable': make_revoker, 'keywords': {}},
+        'neck_owner': neck_owner,
         'detector_entry': {'callable': lambda **keywords: built.setdefault('detector', object()),
                            'keywords': {}},
     }
@@ -155,16 +128,17 @@ def test_every_entry_supplied_resource_is_refused_before_construction(monkeypatc
         runner_module().run_owned_search(composition, handle)
     assert refusal.value.code == code
     assert composition.bound_stages == ()
-    assert built == {}
+    assert set(built) == {'neck_owner'}, 'only the provider-built owner exists; the runner constructed nothing'
 
 
-def test_a_composition_without_the_constructor_entries_is_refused(monkeypatch, tmp_path):
+def test_a_handle_without_the_neck_owner_is_refused(monkeypatch, tmp_path):
     inputs, policy = declared_inputs(tmp_path)
     composition = composition_module().HeadExecutionComposition.open(inputs)
     handle, stack, built = _handle(monkeypatch, composition, inputs)
-    handle.pop('native_entry')
-    with pytest.raises(runner_module().HeadExecutionRunnerRefused):
+    handle.pop('neck_owner')
+    with pytest.raises(runner_module().HeadExecutionRunnerRefused) as refusal:
         runner_module().run_owned_search(composition, handle)
+    assert refusal.value.code == 'EXECUTION_RUNNER_OWNER_ABSENT'
     assert composition.bound_stages == ()
 
 class _FakeExposure:
@@ -228,7 +202,6 @@ def test_model_startup_failure_still_retires_the_owner(monkeypatch, tmp_path):
     inputs, _ = declared_inputs(tmp_path)
     composition = composition_module().HeadExecutionComposition.open(inputs)
     handle, stack, _ = _handle(monkeypatch, composition, inputs)
-    handle.pop('controller_identity')
     composition.bind_ros(node=stack.node, port=stack.port)
 
     class FailedOwner(_FakeOwner):
@@ -259,7 +232,7 @@ def test_runner_refuses_absent_or_wrong_owner_device_before_arm(monkeypatch,tmp_
             detector_loader=lambda *args:'binding',
             detector_builder=lambda *args,**kw:{'runtime':'detector'},
             owner_factory=WrongDeviceOwner,exposure_binder=lambda *args,**kw:_FakeExposure())
-    assert composition.bound_stages==('ros','native')
+    assert composition.bound_stages==('ros','owner')
     assert OWNERS[0].closed==1 and OWNERS[0].activated==0
 
 
@@ -297,7 +270,7 @@ def test_bound_loop_refuses_missing_originals_before_activation_and_retires(monk
                                                                 'runtime_device': 'cuda:0'},
             owner_factory=_FakeOwner, exposure_binder=exposure_binder)
     assert 'HEAD_LOCAL_OBSERVER_CLOCK_INVALID' in str(refusal.value), str(refusal.value)
-    assert composition.bound_stages == ('ros', 'native', 'detector', 'inference', 'runtime', 'search')
+    assert composition.bound_stages == ('ros', 'owner', 'detector', 'inference', 'runtime', 'search')
     assert len(exposures) == 1, 'the detector the owner built is bound to exactly one exposure'
     assert callable(handle['capture'].original_sink)
     assert handle['capture'].sinks == [], 'startup refusal never enables live exposures'
@@ -466,7 +439,7 @@ def test_runner_adapts_live_exposure_keyword_events_to_actual_runtime_writer(mon
     assert delivered == [(probe, {'source_stamp_ns': None, 'occurrence_mono_ns': None})]
 
 
-@pytest.mark.parametrize('phase',['not_ready','ready','inflight_arm','after_arm','capture'])
+@pytest.mark.parametrize('phase',['readback','window','after_arm','capture'])
 def test_runner_real_sigterm_startup_never_activates_owner(monkeypatch,phase):
     import signal,threading
     from test_act_head_local_runtime import runtime_setup,prime_current_inputs
@@ -478,18 +451,17 @@ def test_runner_real_sigterm_startup_never_activates_owner(monkeypatch,phase):
         seen.append(cancel_event)
         return original_arm(cancel_event=cancel_event)
     monkeypatch.setattr(row.runtime,'arm',observe_arm)
-    original_status=row.authority.prearm_status;original_native_arm=row.authority.arm
-    def status(role,**kwargs):
-        reply=original_status(role,**kwargs)
-        if phase in ('not_ready','ready'):
-            signal.raise_signal(signal.SIGTERM)
-            if phase=='not_ready':reply['status']='NOT_READY'
+    original_readback=row.owner.readback;original_window=row.owner.startup_stop_window
+    def readback(**kwargs):
+        reply=original_readback(**kwargs)
+        if phase=='readback':signal.raise_signal(signal.SIGTERM)
         return reply
-    def native_arm(role,**kwargs):
-        if phase=='inflight_arm':signal.raise_signal(signal.SIGTERM)
-        return original_native_arm(role,**kwargs)
-    monkeypatch.setattr(row.authority,'prearm_status',status)
-    monkeypatch.setattr(row.authority,'arm',native_arm)
+    def window(**kwargs):
+        reply=original_window(**kwargs)
+        if phase=='window':signal.raise_signal(signal.SIGTERM)
+        return reply
+    monkeypatch.setattr(row.owner,'readback',readback)
+    monkeypatch.setattr(row.owner,'startup_stop_window',window)
     def after_arm():
         calls.append('after_arm')
         if phase=='after_arm':signal.raise_signal(signal.SIGTERM)
@@ -505,31 +477,22 @@ def test_runner_real_sigterm_startup_never_activates_owner(monkeypatch,phase):
             1,after_arm=after_arm)==1
         assert seen and seen[0].is_set()
         assert 'activate' not in calls and 'tick' not in calls
-        assert row.authority.arm_calls==(0 if phase in ('not_ready','ready') else 1)
         assert row.runtime.stop_receipt()['stop_origin_kind']=='sigterm'
         assert not row.runtime.faulted
-    finally:row.runtime.close(timeout_s=1.)
+    finally:
+        row.runtime.close(timeout_s=1.);row.owner.close()
 
 
-@pytest.mark.parametrize('boundary',['bootstrap','prearm','arm_timeout','arm_disconnect','arm_reject','main_identity','fault_identity'])
+@pytest.mark.parametrize('boundary',['readback','graph','window','identity'])
 def test_runner_real_sigterm_and_failed_exchange_preserves_operator_stop(monkeypatch,boundary):
     import signal
     from test_act_head_local_runtime import runtime_setup,prime_current_inputs,wait_for
-    from so101_demo.adapters.act.head_reservation_authority import HeadArmRefused
     row=runtime_setup(monkeypatch);prime_current_inputs(row);calls=[]
     def refused(*args,**kwargs):
-        if boundary.startswith('arm_'):row.authority.arm_calls+=1
         signal.raise_signal(signal.SIGTERM)
-        if boundary!='bootstrap':row.runtime.fault('HEAD_MAIN_AUTHORITY_FAILED')
-        if boundary=='arm_timeout':raise HeadArmRefused('ARM_OUTCOME_UNKNOWN','timeout')
-        if boundary=='arm_reject':raise HeadArmRefused('HEAD_MAIN_ARM_STOP_BEFORE','refused',record=dict(
-            status='REJECT',phase='STOP_BEFORE',proof=dict(evaluation_id=48,wrapper_reason=6)))
         raise OSError('channel disconnected')
-    if boundary=='bootstrap':monkeypatch.setattr(row.revoker,'bootstrap_identity',refused)
-    elif boundary=='prearm':monkeypatch.setattr(row.authority,'prearm_status',refused)
-    elif boundary.startswith('arm_'):monkeypatch.setattr(row.authority,'arm',refused)
-    elif boundary=='main_identity':monkeypatch.setattr(row.authority,'identity',refused)
-    else:monkeypatch.setattr(row.revoker,'identity',refused)
+    name={'readback':'readback','graph':'graph_proof','window':'startup_stop_window','identity':'identity'}[boundary]
+    monkeypatch.setattr(row.owner,name,refused)
     composition=types.SimpleNamespace(event_log_enabled=True,emit=lambda *args:calls.append(args))
     try:
         assert runner_module()._drive(composition,types.SimpleNamespace(tick=lambda:calls.append('tick')),
@@ -538,16 +501,10 @@ def test_runner_real_sigterm_and_failed_exchange_preserves_operator_stop(monkeyp
         assert not row.runtime.faulted and not row.runtime.ready
         assert row.runtime.stop_receipt()['stop_origin_kind']=='sigterm'
         assert 'activate' not in calls and 'tick' not in calls
-        assert row.authority.arm_calls==(0 if boundary in ('bootstrap','prearm') else 1)
         assert any(isinstance(c,tuple) and c[0]=='EXECUTION_OPERATOR_TERMINAL' for c in calls)
-        if boundary=='bootstrap':
-            assert wait_for(lambda:row.runtime.retirement_snapshot()['native_close']['finished'])
-            assert row.revoker.closed==0 and not row.runtime.retirement_snapshot()['native_close']['ack']
-        else:assert wait_for(lambda:row.revoker.closed==1)
-        if boundary.startswith('arm_'):
-            arm=[r for k,r,_ in row.sink.rows if k=='ARM_RESULT']
-            assert arm and arm[-1]['status']==('REJECT' if boundary=='arm_reject' else 'UNKNOWN')
-    finally:row.runtime.close(timeout_s=1.)
+        assert wait_for(lambda:row.closed_count()==1), 'the operator stop latches the controller'
+    finally:
+        row.runtime.close(timeout_s=1.);row.owner.close()
 
 
 def test_earlier_fault_survives_later_startup_sigterm(monkeypatch):
@@ -555,18 +512,19 @@ def test_earlier_fault_survives_later_startup_sigterm(monkeypatch):
     from test_act_head_local_runtime import runtime_setup,prime_current_inputs
     row=runtime_setup(monkeypatch);prime_current_inputs(row)
     def failed(*args,**kwargs):
-        row.runtime.fault('EARLIER_NATIVE_FAULT')
+        row.runtime.fault('EARLIER_OWNER_FAULT')
         origin=row.runtime.local_state.fault_occurrence_ns
         signal.raise_signal(signal.SIGTERM)
-        row.runtime.fault('HEAD_MAIN_AUTHORITY_FAILED')
+        row.runtime.fault('HEAD_NECK_LATE_FAULT')
         assert row.runtime.local_state.fault_occurrence_ns==origin
         raise OSError('cancelled exchange')
-    monkeypatch.setattr(row.authority,'prearm_status',failed)
+    monkeypatch.setattr(row.owner,'readback',failed)
     try:
         assert runner_module()._drive(types.SimpleNamespace(event_log_enabled=False),None,row.runtime,
             types.SimpleNamespace(activate_live=lambda:pytest.fail('activated')),
             types.SimpleNamespace(bind_live_sink=lambda *args:None),None,1)==1
-        assert row.runtime.faulted and row.runtime.fault_reason=='EARLIER_NATIVE_FAULT'
+        assert row.runtime.faulted and row.runtime.fault_reason=='EARLIER_OWNER_FAULT'
         assert row.runtime.stop_receipt()['stop_origin_kind']=='fault'
-        assert row.authority.arm_calls==0 and not row.runtime.ready
-    finally:row.runtime.close(timeout_s=1.)
+        assert not row.runtime.ready
+    finally:
+        row.runtime.close(timeout_s=1.);row.owner.close()

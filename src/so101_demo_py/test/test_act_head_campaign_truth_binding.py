@@ -76,14 +76,14 @@ def test_sealed_but_inconsistent_campaign_refuses_before_subscribing(tmp_path,da
     finally:writer.finish({'execution':'TEST_ONLY'})
 
 
-def test_provider_attaches_before_stack_start_and_retires_on_native_refusal(monkeypatch,tmp_path):
+def test_provider_attaches_before_stack_start_and_retires_with_the_teardown(monkeypatch,tmp_path):
     import test_act_head_execution_provider as existing
     old_inputs=existing.build_inputs
     order=[]
     def campaign_inputs(*args,**kwargs):
         inputs,policy=old_inputs(*args,**kwargs)
         # Only the provider wiring seam is injected; factory validation has its
-        # own real scene/CDR tests above. No native child or Stop ACK is forged.
+        # own real scene/CDR tests above. No dead-man helper or Stop ACK is forged.
         inputs.refs['scenario_fixture']={'path':'not_read_by_injected_factory','sha256':'a'*64}
         return inputs,policy
     monkeypatch.setattr(existing,'build_inputs',campaign_inputs)
@@ -104,15 +104,20 @@ def test_provider_attaches_before_stack_start_and_retires_on_native_refusal(monk
             order.append('stack_started')
             return old_start(stack)
         monkeypatch.setattr(cls,'start',start)
-        return original_assemble(composition,inputs,plan=plan)
+        handle=original_assemble(composition,inputs,plan=plan)
+        seen['handle']=handle
+        return handle
+    seen={}
     monkeypatch.setattr(provider,'assemble',assemble)
     original_teardown=provider.teardown
     def teardown(built):
-        # Native admission refusal happens after the existing stack start call.
+        # The fixture's explicit teardown list omits the truth stage; add the provider's own.
+        if 'campaign_truth' in seen['handle'] and not any(stage=='campaign_truth' for stage,_ in built):
+            built=list(built)+[('campaign_truth',seen['handle']['campaign_truth'])]
         failures=original_teardown(built)
         assert order==['truth_attached','stack_started','truth_close']
         assert any(stage=='campaign_truth' for stage,_ in built)
         return failures
     monkeypatch.setattr(provider,'teardown',teardown)
-    existing.test_assemble_binds_ros_with_the_launcher_stack(monkeypatch,tmp_path,True)
+    existing.test_assemble_binds_ros_with_the_launcher_stack(monkeypatch,tmp_path)
     assert order==['truth_attached','stack_started','truth_close']

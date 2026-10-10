@@ -1,4 +1,4 @@
-"""Production Head admission with typed originals and controlled native/SDK peers.
+"""Production Head admission with typed originals and controlled owner/SDK peers.
 
 The MuJoCo model and full collision replay are real; service and action peers
 are fixtures. These tests cannot establish installed or physical acceptance.
@@ -105,23 +105,18 @@ def paused_head(monkeypatch, tmp_path_factory, request):
             geometry_path=GEOMETRY, geometry_sha256=GEOMETRY_SHA256,
             simulation_session_id=inputs.run['session_id'], reset_epoch=scene.receipt['reset_epoch'])
 
-        def reserve(role, *, goal, goal_uuid, before_reserve):
-            assert state['paused'] is True
-            claim = time.monotonic_ns()
-            identity = row.authority.identity(role)
-            binding = SimpleNamespace(role=role, generation=row.authority.generation,
-                session_id=row.authority.session_id, goal_cdr=goal, goal_uuid=goal_uuid,
-                controller_incarnation=identity['incarnation'],
-                controller_boot_incarnation=identity['boot'],
-                claim_monotonic_ns=claim, deadline_ns=claim + 400_000_000)
-            assert before_reserve(binding) is True
-            events.append(('NATIVE_RESERVE', bytes(goal)))
-            return True
+        admit = row.owner.admit_local
 
-        row.authority.reserve = reserve
+        def admitted(*, goal, goal_uuid, before_reserve):
+            assert state['paused'] is True
+            result = admit(goal=goal, goal_uuid=goal_uuid, before_reserve=before_reserve)
+            events.append(('LOCAL_ADMIT', bytes(goal)))
+            return result
+
+        row.owner.admit_local = admitted
         dispatcher = None
         if getattr(request, 'param', None) != 'unbound':
-            dispatcher = HeadInventoryDispatcher(row.port, row.authority, row.state,
+            dispatcher = HeadInventoryDispatcher(row.port, row.owner, row.state,
                 guard=bound_guard, own_inventory=row.runtime.own_inventory,
                 fault_callback=row.runtime.fault)
             scene.bind_admission(runtime=row.runtime, guard=bound_guard)
@@ -346,7 +341,7 @@ def test_complete_prepared_send_is_paused_and_resumes_before_return(paused_head)
     gid = command(case)
     assert samples and all(samples)
     kinds = [event[0] for event in case.events]
-    assert kinds.index('NATIVE_RESERVE') < kinds.index('SDK_SEND')
+    assert kinds.index('LOCAL_ADMIT') < kinds.index('SDK_SEND')
     assert next(event for event in case.events if event[0] == 'pause') == ('pause', True)
     assert ('pause', False) in case.events
     assert case.state['paused'] is False
@@ -398,7 +393,7 @@ def test_original_receipt_lease_expires_inside_collision_replay(paused_head):
     with pytest.raises(PermissionError, match='HEAD_ADMISSION_LEASE_EXPIRED'):
         command(case)
     assert case.row.runtime.faulted and not case.state['paused']
-    assert not any(event[0] == 'NATIVE_RESERVE' for event in case.events)
+    assert not any(event[0] == 'LOCAL_ADMIT' for event in case.events)
 
 
 @pytest.mark.parametrize('failure', ['pause_timeout', 'no_pause_frame', 'resume_refuse_once'])
@@ -488,7 +483,7 @@ def test_foreign_owned_run_identity_refuses_binding_before_pause(paused_head, id
     with pytest.raises(PermissionError, match='HEAD_ADMISSION_BINDING_INVALID'):
         command(case)
     assert not any(event[0] == 'pause' for event in case.events)
-    assert not any(event[0] in ('NATIVE_RESERVE', 'SDK_SEND') for event in case.events)
+    assert not any(event[0] in ('LOCAL_ADMIT', 'SDK_SEND') for event in case.events)
 
 
 def test_prepared_cdr_from_retired_lease_cannot_enter_another_transaction(paused_head):

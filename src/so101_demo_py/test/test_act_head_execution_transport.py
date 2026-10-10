@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from test_act_head_inventory_dispatch import composed, socket_root
+from test_act_head_inventory_dispatch import composed
 from test_act_head_paused_admission import paused_head, command
 from test_act_head_trajectory_guard import guard
 from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
@@ -49,7 +49,7 @@ def test_owned_neck_prepared_binding_sends_through_same_inventory_and_client(pau
 
 
 @pytest.mark.parametrize('paused_head', ['unbound'], indirect=True)
-def test_runner_post_arm_binder_uses_bound_runtime_authority_and_stop_origin(paused_head, monkeypatch):
+def test_runner_post_arm_binder_uses_the_runtime_owner_and_stop_origin(paused_head, monkeypatch):
     from so101_demo.cli.head_execution_runner import _bind_prepared_transport
     case = paused_head
     runtime, neck = case.row.runtime, case.neck
@@ -65,7 +65,7 @@ def test_runner_post_arm_binder_uses_bound_runtime_authority_and_stop_origin(pau
     client = neck.client
     dispatcher = _bind_prepared_transport(composition,
         dict(neck=neck, scene=case.scene), runtime, case.guard)
-    assert dispatcher.authority is runtime._authority and neck.port is dispatcher
+    assert dispatcher.owner is runtime.owner and neck.port is dispatcher
     assert neck.client is client is runtime.port.client
     assert case.scene._admission_binding == (runtime, case.guard)
     assert emitted[0][0] == 'EXECUTION_PREPARED_TRANSPORT_BOUND'

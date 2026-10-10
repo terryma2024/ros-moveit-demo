@@ -38,36 +38,6 @@ def test_neck_goal_has_only_neck_future_header_and_absolute_target(monkeypatch):
     assert goal.points[1].time_from_start.nanosec==500000000
 
 
-def test_neck_search_can_use_only_the_existing_broker_client(monkeypatch):
-    from so101_demo.adapters.act import ros_neck
-    monkeypatch.setattr(ros_neck,'ActionClient',lambda *args:pytest.fail('second neck client'))
-    sent=[];cancelled=[]
-    client=SimpleNamespace(server_is_ready=lambda:True)
-    driver=SimpleNamespace(clients={'neck':client},cancel=lambda gid:cancelled.append(gid),
-                           stopped=lambda:True,refresh_stop=lambda:None)
-    broker=SimpleNamespace(driver=driver,dispatch=lambda ticket,kind,goal,**options:
-                           (sent.append((ticket,kind,goal,options)) or 'neck-goal'))
-    node=SimpleNamespace(create_subscription=lambda *args:None,
-        get_clock=lambda:SimpleNamespace(now=lambda:SimpleNamespace(nanoseconds=1000000000)))
-    ticket=[(1,'lease','act','s','a')]
-    port=RosNeckSearchPort(node,session_id='s',attempt_id='a',goal_duration_s=.5,
-        submit_lead_s=.04,stop_timeout_s=.1,stop_velocity_rad_s=.002,max_age_s=.15,
-        command_guard=lambda *args:True,monotonic=lambda:10.,
-        broker=broker,ticket_port=lambda:ticket[0])
-    joint=JointState(name=['neck_yaw_joint'],position=[.2],velocity=[0.])
-    joint.header.stamp.sec=1
-    port._joint(joint)
-    assert port.command_neck(.7,session_id='s',attempt_id='a',observation_time_s=1.)=='neck-goal'
-    assert sent[0][0]==(1,'lease','act','s','a') and sent[0][1]=='neck'
-    assert list(sent[0][2].trajectory.joint_names)==['neck_yaw_joint']
-    assert sent[0][3]=={'trusted_search_neck':True}
-    ticket[0]=(1,'lease','act','other','a')
-    with pytest.raises(PermissionError,match='NECK_SCOPE_INVALID'):
-        port.command_neck(.6,session_id='s',attempt_id='a',observation_time_s=1.)
-    assert len(sent)==1
-    assert port.stop_and_confirm() is True and cancelled==['neck-goal']
-
-
 @pytest.mark.parametrize('kwargs',({'session_id':'old','attempt_id':'a','observation_time_s':1.},
     {'session_id':'s','attempt_id':'old','observation_time_s':1.},
     {'session_id':'s','attempt_id':'a','observation_time_s':1.1}))
@@ -117,7 +87,7 @@ def test_file_head_stop_starts_while_quintic_guard_is_still_preparing(paused_hea
         stop_thread = threading.Thread(target=lambda:_capture_error(stop_errors,
                                                                    case.neck.stop_and_confirm))
         stop_thread.start()
-        assert wait_for(lambda:case.row.revoker.closed > 0, timeout_s=.04)
+        assert wait_for(lambda:case.row.runtime.retirement_snapshot()['deadman_close']['requested_wall_s'] is not None, timeout_s=.04)
         assert wait_for(lambda:case.row.port._stop_epoch is not None, timeout_s=.04)
         assert not release.is_set()
         deadline = case.row.runtime.stop_receipt()['stop_deadline_wall_s']

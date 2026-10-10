@@ -462,8 +462,8 @@ def retirement_unconfirmed(receipt):
     if receipt.get('stop_requested') is True:
         if receipt.get('confirmed_stop') is not True:
             return True
-        native = receipt.get('native_close', {})
-        if native.get('finished') is not True or native.get('ack') is not True:
+        close = receipt.get('deadman_close', {})
+        if close.get('finished') is not True or close.get('ack') is not True:
             return True
     return any(retirement_unconfirmed(value) for value in receipt.values()
                if isinstance(value, dict))

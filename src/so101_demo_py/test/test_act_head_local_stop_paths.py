@@ -2,7 +2,7 @@
 
 This suite adds no behaviour: it verifies that every stop origin closes admission
 with one immutable origin, that a blocked evidence sink cannot delay a normal stop,
-that independent native-close / cancel / raw-stop work happens in parallel, and
+that independent dead-man close / cancel / raw-stop work happens in parallel, and
 that an UNKNOWN SDK UUID is cancelled by its exact original identity, keeps its
 late terminal response, and is never re-sent.
 """
@@ -55,7 +55,7 @@ def test_every_stop_origin_closes_admission_with_one_immutable_origin(monkeypatc
     assert receipt['stop_origin_wall_s'] == origin_wall
     assert receipt['stop_deadline_wall_s'] == pytest.approx(
         origin_wall + row.policy.stop_confirmation_timeout_s, abs=1e-9)
-    assert wait_for(lambda: row.revoker.closed == 1)
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['requested_wall_s'] is not None)
     assert wait_for(lambda: runtime.retirement_snapshot()['cancel_stop']['started_wall_s']
                     is not None)
     runtime.close(timeout_s=1.)
@@ -70,7 +70,7 @@ def test_blocked_evidence_sink_cannot_delay_a_normal_stop(monkeypatch):
     thread = threading.Thread(target=lambda: stopped.setdefault('receipt', runtime.stop('camera')))
     thread.start()
     assert wait_for(lambda: row.port._stop_epoch is not None)
-    assert wait_for(lambda: row.revoker.closed == 1)
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['requested_wall_s'] is not None)
     assert stopped == {}
     release.set()
     thread.join(2.)
@@ -143,22 +143,3 @@ def test_callback_fault_stop_queries_result_without_acceptance_handle(monkeypatc
     finally:
         row.port.close_head_io(timeout_s=1.)
         runtime.close(timeout_s=1.)
-
-
-def test_cancel_worker_progresses_while_the_native_transport_blocks(monkeypatch):
-    row = runtime_setup(monkeypatch)
-    block = threading.Event()
-    row.revoker.block = block
-    runtime = armed_runtime(row)
-    gid = unknown_goal(row.port)
-    runtime.fault('HEAD_LOCAL_TEST_NATIVE_BLOCKED')
-    assert wait_for(lambda: len(cancel_requests(row)) == 1)
-    assert row.port._goals[gid]['cancel_requested'] is True
-    assert runtime.retirement_snapshot()['native_close']['finished'] is False
-    # The cancel/raw-stop worker keeps observing the raw stop predicate until
-    # the original physical-stop deadline; it is not blocked by the transport.
-    assert runtime.retirement_snapshot()['cancel_stop']['started_wall_s'] is not None
-    assert runtime.retirement_snapshot()['cancel_stop']['cancel_error'] is None
-    block.set()
-    assert wait_for(lambda: runtime.retirement_snapshot()['native_close']['ack'])
-    runtime.close(timeout_s=1.)

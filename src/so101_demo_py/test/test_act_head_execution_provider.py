@@ -72,30 +72,18 @@ class FakeDetector:
         self.closed += 1
 
 
-class FakeAuthority:
-    def __init__(self, *, fail=False, generation=7, session_id='session', native_owner=None):
-        if fail:
-            raise RuntimeError('the authority refused to provision')
-        self.generation = generation
-        self.session_id = session_id
-        self.native_owner = dict(native_owner or dict(uid=1000, pid=4242, start_ticks=99))
-        self.closed = 0
+class FakeNeckOwner:
+    """The provider only builds and retires the neck owner; the runner drives it."""
+
+    def __init__(self, **keywords):
+        self.keywords, self.closed = keywords, 0
 
     def close(self):
         self.closed += 1
+        return dict(monitor_alive=False, window=dict(thread_alive=False), helper_killed=True)
 
 
-class FakeRevoker:
-    def __init__(self, *, generation=7, native_owner=None):
-        self.generation = generation
-        self.native_owner = dict(native_owner or dict(uid=1000, pid=4242, start_ticks=99))
-        self.closed = 0
-
-    def close(self):
-        self.closed += 1
-
-
-def plan_for(monkeypatch, composition, inputs, *, detector_fail=False, authority_fail=False,
+def plan_for(monkeypatch, composition, inputs, *, detector_fail=False, owner_fail=False,
              device='cuda:0', runner=None):
     stack = local_stack(monkeypatch, composition.policy, epoch=inputs.run['epoch'],
                         session=inputs.run['session_id'], generation=inputs.run['generation'])
@@ -119,18 +107,13 @@ def plan_for(monkeypatch, composition, inputs, *, detector_fail=False, authority
         built['detector'] = det
         return det
 
-    def make_authority(**keywords):
-        built['native_keywords'] = keywords
-        auth = FakeAuthority(fail=authority_fail, generation=inputs.run['generation'],
-                             session_id=inputs.run['session_id'])
-        built['native'] = auth
-        return auth
-
-    def make_revoker(**keywords):
-        built['revoker_keywords'] = keywords
-        revoked = FakeRevoker(generation=inputs.run['generation'])
-        built['revoker'] = revoked
-        return revoked
+    def make_owner(**keywords):
+        built['owner_keywords'] = keywords
+        if owner_fail:
+            raise RuntimeError('the neck owner refused to build')
+        owner = FakeNeckOwner(**keywords)
+        built['owner'] = owner
+        return owner
 
     plan = {
         'run': inputs.run, 'scope': inputs.execution_scope, 'refs': dict(inputs.refs),
@@ -139,8 +122,7 @@ def plan_for(monkeypatch, composition, inputs, *, detector_fail=False, authority
         'constructors': {
             'stack': {'callable': make_stack, 'keywords': {'controller_config_path': 'x'}},
             'detector': {'callable': make_detector, 'keywords': {'weights': 'w'}},
-            'native': {'callable': make_authority, 'keywords': {'generation': inputs.run['generation']}},
-            'revoker': {'callable': make_revoker, 'keywords': {'generation': inputs.run['generation']}}},
+            'owner': {'callable': make_owner, 'keywords': {}}},
         'runner': runner,
     }
     plan['anchor'] = fake_anchor
@@ -151,7 +133,7 @@ def test_resource_plan_resolves_the_installed_constructors(monkeypatch, tmp_path
     inputs, policy = build_inputs(tmp_path)
     plan = provider_module().resource_plan(inputs)
     assert plan['scope'] == 'MUJOCO_DEVELOPMENT_UNQUALIFIED'
-    for stage in ('stack', 'detector', 'native', 'revoker'):
+    for stage in ('stack', 'detector', 'owner'):
         assert callable(plan['constructors'][stage]['callable'])
     assert plan['constructors']['stack']['keywords']['controller_config_path'] == \
         inputs.refs['controller_config']['path']
@@ -192,10 +174,13 @@ def test_assemble_binds_every_resource_and_returns_the_handle(monkeypatch, tmp_p
     plan, built, stack = plan_for(monkeypatch, composition, inputs)
     handle = provider_module().assemble(composition, inputs, plan=plan)
     assert composition.bound_stages == ('ros',)
-    assert handle['built'] == ('stack',)
+    assert handle['built'] == ('neck_owner', 'stack')
     assert handle['run'] == inputs.run and handle['scope'] == 'MUJOCO_DEVELOPMENT_UNQUALIFIED'
     assert handle['stack'] is built['stack']
-    assert set(handle) >= {'detector_entry', 'native_entry', 'revoker_entry'}
+    assert handle['neck_owner'] is built['owner']
+    assert built['owner_keywords']['node'] is stack.node and built['owner_keywords']['inputs'] is inputs
+    assert built['owner_keywords']['policy'] is composition.policy
+    assert set(handle) >= {'detector_entry'} and 'native_entry' not in handle and 'revoker_entry' not in handle
     assert built['stack_keywords'] == {'controller_config_path': 'x'}
     stack.runtime.close(timeout_s=1.)
 
@@ -257,10 +242,13 @@ def test_assemble_binds_ros_with_an_inprocess_stack_and_binding_refs(monkeypatch
     plan, built, stack = plan_for(monkeypatch, composition, inputs)
     handle = provider_module().assemble(composition, inputs, plan=plan)
     assert composition.bound_stages == ('ros',)
-    assert handle['built'] == ('stack',)
+    assert handle['built'] == ('neck_owner', 'stack')
     assert handle['run'] == inputs.run and handle['scope'] == 'MUJOCO_DEVELOPMENT_UNQUALIFIED'
     assert handle['stack'] is built['stack']
-    assert set(handle) >= {'detector_entry', 'native_entry', 'revoker_entry'}
+    assert handle['neck_owner'] is built['owner']
+    assert built['owner_keywords']['node'] is stack.node and built['owner_keywords']['inputs'] is inputs
+    assert built['owner_keywords']['policy'] is composition.policy
+    assert set(handle) >= {'detector_entry'} and 'native_entry' not in handle and 'revoker_entry' not in handle
     assert built['stack_keywords'] == {'controller_config_path': 'x'}
     stack.runtime.close(timeout_s=1.)
 
@@ -328,24 +316,6 @@ def test_the_admission_check_names_the_sealed_binding_material(tmp_path):
     inputs.document['snapshot_root'] = str(root)
     assert provider._admission_material(inputs) is True
 
-def test_the_native_endpoint_is_not_a_sealed_file(monkeypatch, tmp_path):
-    """The authority needs a socket path, so the plan must not hand it the safety_inputs ref (CP-HFP-168/181).
-
-    A sealed ref is a regular file by contract, and the authority's own validation makes it a Unix socket
-    path; wiring the ref into the authority's endpoint argument can therefore never work, and this test pins
-    that seam so the two contracts cannot disagree unnoticed again.
-    """
-
-    inputs, policy = build_inputs(tmp_path)
-    plan = provider_module().resource_plan(inputs)
-    safety_path = inputs.refs['safety_inputs']['path']
-    for stage in ('native', 'revoker'):
-        keywords = plan['constructors'][stage]['keywords']
-        for name, value in keywords.items():
-            assert value != safety_path, (
-                f'{stage}.{name} is handed the sealed safety_inputs file, but the authority needs a socket '
-                f'path (CP-HFP-168)')
-
 def test_the_stack_keywords_carry_the_four_real_arguments(monkeypatch, tmp_path):
     """The real transport needs urdf_path, scene_path, plugin_config_path and workspace (CP-HFP-188)."""
 
@@ -358,8 +328,7 @@ def test_the_stack_keywords_carry_the_four_real_arguments(monkeypatch, tmp_path)
     assert keywords['scene_path'] == inputs.refs['scene']['path']
     assert keywords['plugin_config_path'] == inputs.refs['mujoco_plugin']['path']
 
-@pytest.mark.parametrize('native_provisioning', [False, True])
-def test_assemble_binds_ros_with_the_launcher_stack(monkeypatch, tmp_path, native_provisioning):
+def test_assemble_binds_ros_with_the_launcher_stack(monkeypatch, tmp_path):
     """The provider must bind the ros stage with the stack, which has no node and no port (CP-HFP-194)."""
 
     inputs, policy = build_inputs(tmp_path)
@@ -427,24 +396,18 @@ def test_assemble_binds_ros_with_the_launcher_stack(monkeypatch, tmp_path, nativ
             return {'started': True}
 
     plan['constructors']['stack']['callable'] = _Launcher
-    plan['native_provisioning'] = native_provisioning
-    if native_provisioning:
-        # This launcher-only fixture has no native child or declared credentials;
-        # production provisioning must refuse rather than fabricate either.
-        with pytest.raises(PermissionError, match='HEAD_EXECUTION_NATIVE_SCOPE_INVALID'):
-            provider_module().assemble(composition, inputs, plan=plan)
-        import threading
-        assert not any(thread.name.startswith('head-local-spin-')
-                       for thread in threading.enumerate())
-        composition.writer.finish({'execution': 'FAILED', 'reason': 'native scope refusal'})
-        return
+    plan['constructors']['owner'] = {'callable': FakeNeckOwner, 'keywords': {}}
+    plan['owned_scene'] = False
     handle = provider_module().assemble(composition, inputs, plan=plan)
     assert handle['stack'] is not None
     for name in ('node', 'port', 'capture', 'neck', 'settlement'):
         assert handle.get(name) is not None, f'the handle must carry {name} for the runner'
     assert composition.bound_stages[:1] == ('ros',), composition.bound_stages
+    assert handle['neck_owner'].keywords['node'] is handle['node']
     assert not provider_module().teardown([('local_ros', handle['local_ros']),
-                                          ('stack', handle['stack'])])
+                                          ('stack', handle['stack']),
+                                          ('neck_owner', handle['neck_owner'])])
+    assert handle['neck_owner'].closed == 1
     composition.writer.finish({'execution': 'FAILED', 'reason': 'no-motion fixture cleanup'})
 
 def test_the_run_node_name_is_legal_for_a_hyphenated_run_id():
@@ -481,13 +444,23 @@ def test_failed_provider_retirement_overrides_success_and_blocks_seal(monkeypatc
         composition.writer.finish({'execution': 'FAILED', 'reason': 'fixture cleanup'})
 
 
-def test_resource_plan_defers_credentials_until_its_native_child_exists(monkeypatch, tmp_path):
+def test_the_plan_builds_the_neck_owner_and_has_no_native_provisioning(monkeypatch, tmp_path):
     inputs, _ = build_inputs(tmp_path)
-    provider = provider_module()
-    def forbidden():
-        raise AssertionError('planning cannot use the primary process as the native owner')
-    monkeypatch.setattr(provider, '_native_owner', forbidden, raising=False)
-    plan = provider.resource_plan(inputs)
-    assert plan['native_provisioning'] is True
-    assert plan['constructors']['native']['keywords'] == {}
-    assert plan['constructors']['revoker']['keywords'] == {}
+    plan = provider_module().resource_plan(inputs)
+    assert set(plan['constructors']) == {'stack', 'detector', 'owner'}
+    assert plan['constructors']['owner']['keywords'] == {}
+    assert plan['owned_scene'] is True and 'native_provisioning' not in plan
+    assert callable(plan['constructors']['owner']['callable'])
+
+
+def test_a_failing_owner_build_tears_the_stack_down_and_raises(monkeypatch, tmp_path):
+    inputs, _ = build_inputs(tmp_path)
+    composition = composition_module().HeadExecutionComposition.open(inputs)
+    plan, built, stack = plan_for(monkeypatch, composition, inputs, owner_fail=True)
+    try:
+        with pytest.raises(RuntimeError, match='neck owner refused'):
+            provider_module().assemble(composition, inputs, plan=plan)
+        assert built['stack'].closed == 1
+    finally:
+        stack.runtime.close(timeout_s=1.)
+        composition.writer.finish({'execution': 'FAILED', 'reason': 'fixture cleanup'})

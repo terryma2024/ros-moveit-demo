@@ -167,22 +167,31 @@ class _SubscriptionStandIn:
 
 
 class _NeckClientStandIn:
-    """The broker's action client the neck port holds when it is scoped to a shared broker."""
+    """The action client the neck port holds; the readback never sends a goal through it."""
 
     def send_goal_async(self, message):  # pragma: no cover - the readback never commands a goal
         raise RuntimeError("the measured readback constructs the port and never sends a goal")
 
 
-class _DriverStandIn:
-    def __init__(self, clients) -> None:
-        self.clients = dict(clients)
+class _ControllerPortStandIn:
+    """An injected controller port: a client and the feedback policy, so no graph is needed."""
+
+    def __init__(self, feedback_policy) -> None:
+        self.client = _NeckClientStandIn()
+        self.feedback_policy = feedback_policy
 
 
-class _BrokerStandIn:
-    """A broker the neck port can be scoped to without a stack: no goal is ever dispatched through it."""
-
-    def __init__(self) -> None:
-        self.driver = _DriverStandIn({"neck": _NeckClientStandIn()})
+#: the default scheduling policy the port is constructed under for the readback
+READBACK_FEEDBACK_POLICY = {
+    "joint_max_receipt_age_s": 0.25,
+    "joint_max_source_age_s": 0.05,
+    "camera_interarrival_deadline_s": 0.11,
+    "camera_max_source_age_s": 0.11,
+    "clock_interarrival_deadline_s": 0.25,
+    "watchdog_period_s": 0.002,
+    "watchdog_reaction_limit_s": 0.010,
+    "revoker_connection_deadline_s": 0.002,
+}
 
 
 def _controller_configuration(values, configuration) -> dict:
@@ -233,6 +242,9 @@ def _build_neck_port(configuration, factory):
         from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
 
         factory = RosNeckSearchPort
+    from so101_demo.act.head_feedback import FeedbackPolicy
+
+    policy = FeedbackPolicy.parse(dict(READBACK_FEEDBACK_POLICY))
     return factory(
         _SubscriptionStandIn(),
         session_id=READBACK_IDENTITY,
@@ -243,8 +255,8 @@ def _build_neck_port(configuration, factory):
         stop_velocity_rad_s=_required(configuration, "stop_velocity_rad_s"),
         max_age_s=_required(configuration, "max_age_s"),
         command_guard=lambda current_rad, target_rad: True,
-        broker=_BrokerStandIn(),
-        ticket_port=lambda: None,
+        feedback_policy=policy,
+        controller_port=_ControllerPortStandIn(policy),
     )
 
 

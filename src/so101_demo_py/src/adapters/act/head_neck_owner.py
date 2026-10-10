@@ -48,7 +48,7 @@ def _refuse(code, detail=''):
 
 class HeadNeckOwner:
     def __init__(self, *, services, directory, session_id, generation, policy, node_name, graph, window,
-                 helper_factory, emit=None, fault_callback=None, monotonic=time.monotonic):
+                 helper_factory, emit=None, fault_callback=None, monotonic=time.monotonic, closers=()):
         self.directory = str(directory)
         info = os.lstat(self.directory) if os.path.lexists(self.directory) else None
         if info is None or not stat.S_ISDIR(info.st_mode):
@@ -60,6 +60,7 @@ class HeadNeckOwner:
         self.services, self.policy, self.graph, self.window = services, policy, graph, window
         self.session_id, self.generation, self.node_name = session_id, generation, node_name
         self._helper_factory, self._emit, self._fault_callback = helper_factory, emit, fault_callback
+        self._closers = tuple(closers)
         self.monotonic = monotonic
         self._lock = threading.RLock()
         self._helper = None
@@ -254,6 +255,10 @@ class HeadNeckOwner:
     def latest_controller_state(self):
         return self.window.latest()
 
+    def add_controller_state_listener(self, listener):
+        """Every usable controller_state sample goes to ``listener`` (the reference monitor)."""
+        self.window.add_listener(listener)
+
     # ---- closing ---------------------------------------------------------------------------------------------------
 
     def _close_deadman(self, reason):
@@ -370,7 +375,13 @@ class HeadNeckOwner:
         if helper is not None:
             helper.kill()
             killed = True
-        receipt = dict(monitor_alive=self.monitor_alive, window=window, helper_killed=killed)
+        closed = []
+        for closer in self._closers:
+            try:
+                closed.append(closer())
+            except Exception as error:
+                closed.append(dict(closed=False, error=type(error).__name__))
+        receipt = dict(monitor_alive=self.monitor_alive, window=window, helper_killed=killed, closers=closed)
         with self._lock:
             self._close_receipt = receipt
         return dict(receipt)

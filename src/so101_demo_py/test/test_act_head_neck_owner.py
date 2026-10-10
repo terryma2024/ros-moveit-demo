@@ -363,3 +363,13 @@ def test_admit_local_reports_a_registrar_that_does_not_accept():
     owner, *_ = make()
     owner.activate(deadline=deadline())
     assert owner.admit_local(goal=b'x', goal_uuid=b'u' * 16, before_reserve=lambda binding: False) is False
+
+
+def test_closers_run_on_close_and_listeners_reach_the_window():
+    closed = []
+    owner, services, window, *_ = make(closers=(lambda: closed.append('services') or dict(closed=True),))
+    seen = []
+    owner.add_controller_state_listener(seen.append)
+    assert window.listeners == [seen.append] or len(window.listeners) == 1
+    receipt = owner.close()
+    assert closed == ['services'] and receipt['closers'] == [dict(closed=True)]

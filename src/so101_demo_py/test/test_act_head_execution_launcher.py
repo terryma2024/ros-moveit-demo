@@ -59,7 +59,7 @@ def test_launcher_services_callbacks_on_its_new_local_node(monkeypatch, tmp_path
             raise AssertionError('identity must be read after guarded ARM, never during assembly')
 
     entries = {name: {'callable': lambda **k: None, 'keywords': {}}
-               for name in ('detector', 'native', 'revoker')}
+               for name in ('detector', 'owner')}
     entries['stack'] = {'callable': Launcher, 'keywords': {}}
     composition = module().HeadExecutionComposition.open(inputs)
 

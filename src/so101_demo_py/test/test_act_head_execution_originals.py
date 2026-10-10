@@ -141,8 +141,6 @@ def test_drive_does_not_activate_inference_after_real_prearm_refusal(monkeypatch
     from test_act_head_local_observer import simulation_policy
 
     stack = local_stack(monkeypatch, simulation_policy())
-    from test_act_head_local_runtime import native_policy_receipt
-    stack.runtime.bind_native_policy_readback(native_policy_receipt(stack.node, stack.runtime.policy))
     activated = []
     capture = SimpleNamespace(bind_live_sink=lambda sink: None)
     exposure = SimpleNamespace(observe=lambda *a, **k: None)

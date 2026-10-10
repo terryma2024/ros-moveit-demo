@@ -87,7 +87,7 @@ def test_requested_stop_without_new_originals_waits_original_deadline_and_fails(
     runtime = armed_runtime(row)
     try:
         runtime.fault('HEAD_TEST_MISSING_RAW_STOP_ORIGINALS')
-        assert wait_for(lambda: runtime.stop_receipt()['native_close'].get('ack') is True)
+        assert wait_for(lambda: runtime.stop_receipt()['deadman_close'].get('ack') is True)
         original = runtime.stop_receipt()
         deadline = original['stop_deadline_wall_s']
         outcomes = {}

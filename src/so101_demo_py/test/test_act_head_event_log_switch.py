@@ -9,11 +9,8 @@ import pytest
 
 from test_act_head_execution_composition import build_inputs, local_stack, module
 from test_act_head_inventory_dispatch import composed
-from test_act_head_search_restarts import socket_root
 from test_act_head_paused_admission import paused_head, command
 from test_act_head_trajectory_guard import guard
-from test_act_head_revocation import native_server, ack
-from test_act_head_execution_native import child
 
 
 def logging_inputs(tmp_path, enabled):
@@ -30,7 +27,7 @@ def bind_all(composition, monkeypatch):
     stack = local_stack(monkeypatch, composition.policy, epoch=inputs.run['epoch'],
                         session=inputs.run['session_id'], generation=inputs.run['generation'])
     composition.bind_ros(node=stack.node, port=stack.port)
-    composition.bind_native(authority=stack.authority, revoker=stack.revoker)
+    composition.bind_owner(owner=stack.neck_owner)
     composition.bind_detector(object(), runtime_device='cuda:0')
     composition.bind_inference(stack.owner)
     composition.bind_runtime(observer=stack.observer, runtime=stack.runtime)
@@ -186,13 +183,13 @@ def test_off_stopped_inference_keeps_causal_result_without_audit_traces(monkeypa
         local.exposures.close()
 
 
-def test_off_dispatch_still_owns_exact_cdr_before_native_and_sdk(composed):
+def test_off_dispatch_still_owns_exact_cdr_before_admission_and_sdk(composed):
     from test_act_head_inventory_dispatch import send_target
     from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
     config, events, owned, faults, servers, calls = composed
     sender = HeadInventoryDispatcher(**config, emit=None)
     gid = send_target(sender, config)
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
     assert not faults and len(owned) == 1
     assert sender.inventory[gid]['payload_sha256'] == owned[0][0]['payload_sha256']
     assert sender.local_state.prepared_cdr(gid) == owned[0][1]
@@ -249,65 +246,6 @@ def test_off_prepared_neck_keeps_uuid_and_resume_without_trace_encoding(paused_h
     monkeypatch.setattr(type(case.dispatcher), 'dispatch_traces', property(count_traces))
     gid = command(case)
     assert case.neck._goals == [gid] and gid in case.row.state.inventory
-    assert [row[0] for row in case.events] == ['pause', 'NATIVE_RESERVE', 'SDK_SEND', 'pause']
+    assert [row[0] for row in case.events] == ['pause', 'LOCAL_ADMIT', 'SDK_SEND', 'pause']
     assert case.state['paused'] is False and not case.row.runtime.faulted
     assert reads == []
-
-
-@pytest.mark.parametrize('channel', ['main', 'revoker'])
-@pytest.mark.parametrize('valid_ack', [True, False])
-@pytest.mark.skipif(sys.platform != 'linux', reason='native Head transport requires Linux peer credentials')
-def test_off_native_close_keeps_ack_validation_without_exchange_audit(native_server, channel, valid_ack):
-    path, owner, process = native_server(ack(5 if valid_ack else 6))
-    keywords = dict(capability=secrets.token_bytes(32), native_owner=owner,
-                    generation=5, event_log_enabled=False)
-    if channel == 'main':
-        from so101_demo.adapters.act.head_reservation_authority import HeadReservationAuthority
-        path.rename(path.parent / 'neck.sock')
-        faults = []
-        client = HeadReservationAuthority(directory=path.parent, session_id='session',
-            arm_guard=lambda: True, fault_callback=faults.append, **keywords)
-        client._armed.add('neck')
-        close = client.close
-        audit = client._channel
-    else:
-        from so101_demo.adapters.act.head_revocation import NativeRevocationClient
-        from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
-        client = NativeRevocationClient(path, timeout_s=.05,
-            simulation_policy=HeadSimulationPolicy.default_document(), **keywords)
-        close = client.close_strict
-        audit = client
-    if valid_ack:
-        receipt = close()
-        assert receipt['ack_validated'] and receipt['native_owner'] == owner
-        assert 0 <= receipt['ack_wall_s'] - receipt['request_wall_s'] <= .05
-    else:
-        with pytest.raises((PermissionError, RuntimeError)):
-            close()
-        if channel == 'main':
-            assert faults and client._registration_failed
-    assert process.stdout.readline() == 'RECEIVED\n'
-    assert audit.exchange_trace is None
-    if channel == 'main':
-        assert client.exchange_receipts == ()
-
-
-@pytest.mark.skipif(sys.platform != 'linux', reason='native Head provisioning requires Linux procfs')
-def test_off_native_provisions_still_bind_owned_child_without_receipt_hashes(tmp_path, child, monkeypatch):
-    from types import SimpleNamespace
-    from test_act_head_execution_native import scoped_inputs, native_module
-    inputs, policy, directory = scoped_inputs(tmp_path)
-    inputs.document['event_log_enabled'] = False
-    process = child(inputs.document['ros']['environment'])
-    stack = SimpleNamespace(processes=[process], environment=inputs.document['ros']['environment'])
-    native = native_module()
-    hashes = []
-    actual = native.hashlib.sha256
-    monkeypatch.setattr(native, 'hashlib', SimpleNamespace(
-        sha256=lambda data: (hashes.append(True), actual(data))[1]))
-    pair = native.provision_owned_native(inputs, stack, policy)
-    assert pair['native_keywords']['native_owner']['pid'] == process.pid
-    assert pair['native_keywords']['capability'] != pair['revoker_keywords']['capability']
-    assert (directory / 'neck.provision').is_file()
-    assert (directory / 'neck-primary-revoke.provision').is_file()
-    assert pair['provision_receipts'] == {} and hashes == []
