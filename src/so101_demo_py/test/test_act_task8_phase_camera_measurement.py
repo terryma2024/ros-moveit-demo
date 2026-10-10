@@ -140,7 +140,7 @@ def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, mo
 # ----------------------------------------------------------------------------------------------------------------------
 
 def test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused():
-    """*"`config/act/task8-phase-camera-matrix-v1.json` still has `phases: []` and `SCAFFOLD_PENDING…`."*
+    """*"`config/act/pick-place-phase-camera-matrix.json` still has `phases: []` and `SCAFFOLD_PENDING…`."*
 
     Two sides, because the finding has two: the SHIPPED matrix must now be a frozen, sampled document, and a scaffold
     handed to the loader must be refused by name rather than loaded and used to substitute defaults.

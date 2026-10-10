@@ -15,7 +15,7 @@ a live search. This module is the installed producer of the missing phase.
 What it is:
 
 * :func:`qualification_scenarios` reads the **tracked** partition document
-  (``config/act/head-search-scenario-partitions-v1.json``) and returns its ``qualification`` items in
+  (``config/act/head-search-scenario-partitions.json``) and returns its ``qualification`` items in
   declaration order - seed, scene group, condition class and anchor. A seed of another split is refused
   (``CAL_SCENARIO_SPLIT_LEAK``): the qualification scenes are never the calibration scenes.
 * :func:`expected_terminals` is the per-condition-class expectation, taken **verbatim** from the plan's

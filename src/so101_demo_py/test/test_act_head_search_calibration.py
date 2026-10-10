@@ -14,8 +14,8 @@ from so101_demo.perception_benchmark.contracts import canonical_sha256
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-CONTRACT = PACKAGE / "config/act/head-search-calibration-contract-v1.json"
-PARTITIONS = PACKAGE / "config/act/head-search-scenario-partitions-v1.json"
+CONTRACT = PACKAGE / "config/act/head-search-calibration-contract.json"
+PARTITIONS = PACKAGE / "config/act/head-search-scenario-partitions.json"
 
 EXPECTED = {
     "horizontal_fov_rad",

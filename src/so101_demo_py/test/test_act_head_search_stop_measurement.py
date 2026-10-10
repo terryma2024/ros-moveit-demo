@@ -326,7 +326,7 @@ def test_a_negative_declared_quantisation_is_still_a_caller_error(tmp_path: Path
 def test_the_platform_declaration_in_the_config_tree_states_the_zero_and_its_basis() -> None:
     """The retained declaration the run passes to `measure-feedback` exists and declares the zero."""
 
-    path = PACKAGE_ROOT / "config/act/feedback-quantisation-declaration-v1.json"
+    path = PACKAGE_ROOT / "config/act/feedback-quantisation-declaration.json"
     declaration = stop.declared_quantisation(path)
 
     assert declaration["quantisation_rad"] == 0.0

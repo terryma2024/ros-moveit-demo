@@ -2098,7 +2098,7 @@ def test_measure_workspace_projection_refuses_a_missing_input_and_an_existing_ou
     declared = {
         "--scene": tmp_path / "head_search_scene.xml",
         "--geometry-seal": tmp_path / "head-camera-geometry.json",
-        "--geometry-contract": tmp_path / "head-camera-geometry-contract-v1.json",
+        "--geometry-contract": tmp_path / "head-camera-geometry-contract.json",
         "--output-dir": tmp_path / "measurement",
     }
     arguments = ["measure-workspace-projection"]
@@ -2126,7 +2126,7 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
     for flag, name in (
         ("--scene", "head_search_scene.xml"),
         ("--geometry-seal", "head-camera-geometry.json"),
-        ("--geometry-contract", "head-camera-geometry-contract-v1.json"),
+        ("--geometry-contract", "head-camera-geometry-contract.json"),
     ):
         path = tmp_path / name
         path.write_text("{}", encoding="utf-8")
@@ -2191,7 +2191,7 @@ def test_measure_workspace_projection_reports_the_library_refusal(
     for flag, name in (
         ("--scene", "head_search_scene.xml"),
         ("--geometry-seal", "head-camera-geometry.json"),
-        ("--geometry-contract", "head-camera-geometry-contract-v1.json"),
+        ("--geometry-contract", "head-camera-geometry-contract.json"),
     ):
         path = tmp_path / name
         path.write_text("{}", encoding="utf-8")
@@ -2243,7 +2243,7 @@ def _fine_correction_inputs(tmp_path: Path) -> dict:
         f"image_width: 640\nimage_height: 480\n",
         encoding="utf-8",
     )
-    partitions = tmp_path / "head-search-scenario-partitions-v1.json"
+    partitions = tmp_path / "head-search-scenario-partitions.json"
     partitions.write_text(json.dumps(FINE_CORRECTION_PARTITIONS), encoding="utf-8")
     inputs["dataset_config"] = dataset_config
     inputs["partitions"] = partitions
@@ -2789,7 +2789,7 @@ def _operating_point_inputs(tmp_path: Path) -> dict:
         "--task-dataset": tmp_path / "task-dataset" / "dataset-manifest.json",
         "--dataset-config": config,
         "--production-search-config": _rule_inputs(tmp_path)["--production-search-config"],
-        "--episode-partitions": tmp_path / "head-search-scenario-partitions-v1.json",
+        "--episode-partitions": tmp_path / "head-search-scenario-partitions.json",
         "--selection-rule": tmp_path / "rules" / "selection-rule.json",
         "--task-selection-rule": tmp_path / "rules" / "selection-rule-task.json",
         "--frozen-candidate": tmp_path / "frozen-a.json",
@@ -3041,7 +3041,7 @@ def _scenario_inputs(tmp_path: Path) -> dict:
     """The nine declared inputs of the qualification scenarios: the episode fixture plus two."""
 
     inputs = _fine_correction_inputs(tmp_path)
-    partitions = tmp_path / "head-search-scenario-partitions-v1.json"
+    partitions = tmp_path / "head-search-scenario-partitions.json"
     partitions.write_text(json.dumps(SCENARIO_PARTITIONS), encoding="utf-8")
     evidence = tmp_path / "evidence"
     evidence.mkdir(exist_ok=True)

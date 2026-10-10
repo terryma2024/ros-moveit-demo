@@ -143,7 +143,7 @@ def load_phase_camera_matrix(path: Path | None = None) -> dict:
     measurement, so each of those three is now refused by name.
     """
 
-    document = _load(path or _CONFIG / "task8-phase-camera-matrix-v1.json",
+    document = _load(path or _CONFIG / "pick-place-phase-camera-matrix.json",
                      "PHASE_CAMERA_MATRIX_INVALID")
     occluders = document.get("occluders")
     if occluders != EXPECTED_OCCLUDERS:

@@ -8,7 +8,7 @@ import pytest
 from paths import PACKAGE_ROOT
 
 
-PARTITIONS = PACKAGE_ROOT / "config/act/head-search-scenario-partitions-v1.json"
+PARTITIONS = PACKAGE_ROOT / "config/act/head-search-scenario-partitions.json"
 
 
 def campaign():

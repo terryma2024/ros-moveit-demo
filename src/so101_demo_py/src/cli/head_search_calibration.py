@@ -562,7 +562,7 @@ STOP_CONFIG_REQUIRED_FLAGS = (
 #: the `measure-feedback` entry: the sealed controller configuration that declares both rates, and the
 #: optional artefact that declares the quantisation resolution. Without that artefact the resolution is
 #: written as null and refused, exactly like the camera measurement's undeclared safety margin; the
-#: retained declaration `config/act/feedback-quantisation-declaration-v1.json` states this platform's
+#: retained declaration `config/act/feedback-quantisation-declaration.json` states this platform's
 #: explicit zero with its basis (HS-305)
 FEEDBACK_REQUIRED_FLAGS = (
     ("controller_config", "--controller-config"),

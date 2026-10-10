@@ -176,7 +176,7 @@ QUANTISATION_RULE = (
     "`counts_per_revolution` and `joint_travel_rad` it is `joint_travel_rad / counts_per_revolution`, and a "
     "declaration may carry `quantisation_rad` directly. On this platform the MuJoCo feedback path exposes "
     "joint velocities with no encoder quantisation, so the retained declaration "
-    "`config/act/feedback-quantisation-declaration-v1.json` states an explicit zero together with its basis; "
+    "`config/act/feedback-quantisation-declaration.json` states an explicit zero together with its basis; "
     "a declaration that states no resolution at all still leaves the field `null` with its refusal, because a "
     "missing resolution alone never justifies a zero"
 )
@@ -201,7 +201,7 @@ QUANTISATION_SEARCH = {
         "declare pixel counts and angles, the URDF and MJCF declare joint limits, and the controller's "
         "declaration is a velocity tolerance. This platform's MuJoCo feedback exposes joint velocities, so "
         "the resolution is declared as an explicit zero by "
-        "`config/act/feedback-quantisation-declaration-v1.json` and never derived from a count"
+        "`config/act/feedback-quantisation-declaration.json` and never derived from a count"
     ),
 }
 

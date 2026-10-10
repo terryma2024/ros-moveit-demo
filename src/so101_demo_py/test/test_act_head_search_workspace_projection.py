@@ -125,7 +125,7 @@ def _contract_path(tmp_path, scene_path=None, *, local_xyaxes=None):
         "accepted_camera_source_sha256": _digest(scene),
         "scene_path": None,
     }
-    path = tmp_path / "head-camera-geometry-contract-v1.json"
+    path = tmp_path / "head-camera-geometry-contract.json"
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
 
@@ -428,7 +428,7 @@ def test_extent_is_the_union_over_the_visited_poses_with_the_intersection_beside
     document = _document(tmp_path)
     seal = json.loads((tmp_path / "head-camera-geometry.json").read_text(encoding="utf-8"))
     contract = HeadCameraGeometryContract.from_path(
-        tmp_path / "head-camera-geometry-contract-v1.json"
+        tmp_path / "head-camera-geometry-contract.json"
     )
     points = workspace_sample_points(contract)
 
@@ -504,7 +504,7 @@ def test_the_document_carries_the_keys_phase_6_reads(tmp_path) -> None:
     assert document["ros_nodes_started"] is False
     assert document["workspace"]["sample_count"] == len(
         workspace_sample_points(
-            HeadCameraGeometryContract.from_path(tmp_path / "head-camera-geometry-contract-v1.json")
+            HeadCameraGeometryContract.from_path(tmp_path / "head-camera-geometry-contract.json")
         )
     )
     assert document["sealed_evidence"]["scene"]["sha256"] == document["scene_sha256"]
@@ -512,7 +512,7 @@ def test_the_document_carries_the_keys_phase_6_reads(tmp_path) -> None:
         tmp_path / "head-camera-geometry.json"
     )
     assert document["sealed_evidence"]["geometry_contract"]["sha256"] == _digest(
-        tmp_path / "head-camera-geometry-contract-v1.json"
+        tmp_path / "head-camera-geometry-contract.json"
     )
     assert document["pose_set"]["chosen_step_rad"] > 0.0
     assert document["pose_set"]["step_source"] == "phase_2_selection_rule"

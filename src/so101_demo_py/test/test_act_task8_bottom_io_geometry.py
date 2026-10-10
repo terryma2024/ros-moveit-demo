@@ -193,7 +193,7 @@ from so101_demo.act.head_camera_geometry import (  # noqa: E402
 )
 
 PACKAGE = PACKAGE_ROOT
-GEOMETRY_CONTRACT_PATH = PACKAGE / "config/act/head-camera-geometry-contract-v1.json"
+GEOMETRY_CONTRACT_PATH = PACKAGE / "config/act/head-camera-geometry-contract.json"
 FAKE_SCENE_PATH = PACKAGE / "assets/mujoco/act/scene.xml"
 
 

@@ -803,7 +803,7 @@ def _document(tmp_path, *, episodes=None):
         frozen_candidate_sha256="e" * 64,
         weights_path=tmp_path / "C.pt",
         weights_sha256="f" * 64,
-        scenario_partitions_path=tmp_path / "head-search-scenario-partitions-v1.json",
+        scenario_partitions_path=tmp_path / "head-search-scenario-partitions.json",
         scenario_partitions_sha256="1" * 64,
         split=HELD_OUT_SPLIT,
         seeds=[800000, 800001],
@@ -990,7 +990,7 @@ def _sealed_inputs(tmp_path):
     controllers_path.write_text(
         "controller_manager:\n  ros__parameters:\n    update_rate: 500\n", encoding="utf-8"
     )
-    partitions_path = tmp_path / "head-search-scenario-partitions-v1.json"
+    partitions_path = tmp_path / "head-search-scenario-partitions.json"
     partitions_path.write_text(json.dumps(PARTITIONS), encoding="utf-8")
     dataset_config_path = tmp_path / "head_camera_yolo_seg.yaml"
     dataset_config_path.write_text(

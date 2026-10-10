@@ -90,7 +90,7 @@ def _manifest(tmp_path, scene_path, *, digest=None):
 
 def _contract(tmp_path, scene_path, *, digest=None):
     document = {"accepted_scene_sha256": _digest(scene_path) if digest is None else digest}
-    path = tmp_path / "head-camera-geometry-contract-v1.json"
+    path = tmp_path / "head-camera-geometry-contract.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
 

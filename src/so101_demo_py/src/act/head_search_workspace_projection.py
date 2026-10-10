@@ -4,7 +4,7 @@
 image safety margin, never back-filled from detection extremes" (design section 7.1). Three things have
 to exist before an installed phase can compute it: a **declared** legal pick workspace, a projection of
 that workspace into the **sealed** head camera, and the image-space extent the projection produces. The
-workspace is declared - `config/act/head-camera-geometry-contract-v1.json` fixes
+workspace is declared - `config/act/head-camera-geometry-contract.json` fixes
 `workspace_x_m`/`workspace_y_m`/`workspace_z_m` and `workspace_step_m`, and the seal's own
 `workspace_matrix.samples` counts the samples that declaration produces - but the projection itself is
 retained only as that count and five key samples, so this module is the producer that projects it.

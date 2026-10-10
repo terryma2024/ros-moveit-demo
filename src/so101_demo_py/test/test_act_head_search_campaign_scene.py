@@ -50,7 +50,7 @@ def _baseline(tmp_path):
 
 def _case(index):
     from so101_demo.act.head_search_campaign import load_cases
-    path=PACKAGE_ROOT/'config/act/head-search-scenario-partitions-v1.json'
+    path=PACKAGE_ROOT/'config/act/head-search-scenario-partitions.json'
     return load_cases(json.loads(path.read_text()))[index]
 
 

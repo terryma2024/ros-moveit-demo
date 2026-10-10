@@ -1180,7 +1180,7 @@ def _write_inputs(tmp_path) -> dict:
         f"mjcf_path: {scene.name}\ncamera_name: head_camera\nimage_width: 640\nimage_height: 480\n",
         encoding="utf-8",
     )
-    partitions = tmp_path / "head-search-scenario-partitions-v1.json"
+    partitions = tmp_path / "head-search-scenario-partitions.json"
     partitions.write_text(json.dumps(QUALIFICATION_PARTITIONS), encoding="utf-8")
     return {
         "scene": scene,
