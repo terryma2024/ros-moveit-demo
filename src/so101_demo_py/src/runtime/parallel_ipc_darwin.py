@@ -1,8 +1,8 @@
-"""Schema-v4 permission-only RPC over the private Darwin Unix path.
+"""Darwin permission-only RPC over the private Darwin Unix path.
 
-The approved design (2026-09-19, sections 7.2 and 8) deliberately narrows the v4 trust model:
+The approved design (2026-09-19, sections 7.2 and 8) deliberately narrows the Darwin trust model:
 the caller is not authenticated. Being able to reach the mode-0600 socket inside a mode-0700
-directory *is* the access check. So the v4 envelope carries only routing, deadline and payload:
+directory *is* the access check. So the Darwin envelope carries only routing, deadline and payload:
 
     request : request_id, operation, deadline_monotonic_ns, payload
     response: request_id, status, output_descriptor | error, timing
@@ -34,8 +34,8 @@ from .unix_address import (
     RegisteredEndpoint,
 )
 
-#: The closed v4 operation allowlist. An unknown operation is refused, never defaulted.
-V4_OPERATIONS: frozenset[str] = frozenset({
+#: The closed Darwin operation allowlist. An unknown operation is refused, never defaulted.
+DARWIN_OPERATIONS: frozenset[str] = frozenset({
     "broker.infer",
     "worker.progress",
     "worker.result",
@@ -46,11 +46,11 @@ V4_OPERATIONS: frozenset[str] = frozenset({
     "control.shutdown",
 })
 
-#: The only fields a v4 request may carry.
-V4_REQUEST_FIELDS = ("request_id", "operation", "deadline_monotonic_ns", "payload")
+#: The only fields a Darwin request may carry.
+DARWIN_REQUEST_FIELDS = ("request_id", "operation", "deadline_monotonic_ns", "payload")
 
-#: The only fields a v4 response may carry. `output_descriptor` and `error` are exclusive.
-V4_RESPONSE_FIELDS = ("request_id", "status", "error", "output_descriptor", "timing")
+#: The only fields a Darwin response may carry. `output_descriptor` and `error` are exclusive.
+DARWIN_RESPONSE_FIELDS = ("request_id", "status", "error", "output_descriptor", "timing")
 
 #: Stable error codes. The client may switch on these without parsing prose.
 MALFORMED = "MALFORMED_FRAME"
@@ -67,7 +67,7 @@ OK = "OK"
 DEFAULT_MAX_FRAME_BYTES = 8 * 1024 * 1024
 DEFAULT_QUEUE_CAPACITY = 8
 
-#: Fields that must never appear in a v4 frame. Their presence is itself a protocol error, which
+#: Fields that must never appear in a Darwin frame. Their presence is itself a protocol error, which
 #: is what makes "the design removed them" a testable fact rather than a comment.
 FORBIDDEN_FIELDS: frozenset[str] = frozenset({
     "token", "generation", "lease", "lease_id", "lease_epoch", "endpoint_receipt",
@@ -75,8 +75,8 @@ FORBIDDEN_FIELDS: frozenset[str] = frozenset({
 })
 
 
-class V4IpcError(RuntimeError):
-    """A v4 frame or transport contract failed. Carries the stable error code."""
+class DarwinIpcError(RuntimeError):
+    """A Darwin frame or transport contract failed. Carries the stable error code."""
 
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(f"{code}: {detail}" if detail else code)
@@ -97,43 +97,43 @@ def _decode_object(payload: bytes) -> dict:
     try:
         value = json.loads(payload.decode("utf-8", errors="strict"))
     except (UnicodeDecodeError, ValueError) as error:
-        raise V4IpcError(MALFORMED, str(error)) from error
+        raise DarwinIpcError(MALFORMED, str(error)) from error
     if type(value) is not dict:
-        raise V4IpcError(MALFORMED, "frame payload must be a JSON object")
+        raise DarwinIpcError(MALFORMED, "frame payload must be a JSON object")
     return value
 
 
-def encode_v4_frame(value: Mapping[str, object], *,
+def encode_darwin_frame(value: Mapping[str, object], *,
                     max_frame_bytes: int = DEFAULT_MAX_FRAME_BYTES) -> bytes:
     if type(max_frame_bytes) is not int or max_frame_bytes <= 0:
-        raise V4IpcError(OVERSIZED, "frame limit must be positive")
+        raise DarwinIpcError(OVERSIZED, "frame limit must be positive")
     payload = _canonical(value)
     if not payload or len(payload) > max_frame_bytes:
-        raise V4IpcError(OVERSIZED, f"{len(payload)} bytes > {max_frame_bytes}")
+        raise DarwinIpcError(OVERSIZED, f"{len(payload)} bytes > {max_frame_bytes}")
     return struct.pack(">I", len(payload)) + payload
 
 
-def decode_v4_frame(frame: bytes, *,
+def decode_darwin_frame(frame: bytes, *,
                     max_frame_bytes: int = DEFAULT_MAX_FRAME_BYTES) -> dict:
     if not isinstance(frame, (bytes, bytearray)) or len(frame) < 4:
-        raise V4IpcError(MALFORMED, "missing length prefix")
+        raise DarwinIpcError(MALFORMED, "missing length prefix")
     size = struct.unpack(">I", frame[:4])[0]
     if size == 0 or size > max_frame_bytes:
-        raise V4IpcError(OVERSIZED, f"declared size {size}")
+        raise DarwinIpcError(OVERSIZED, f"declared size {size}")
     if len(frame) != size + 4:
-        raise V4IpcError(MALFORMED, f"declared {size}, carried {len(frame) - 4}")
+        raise DarwinIpcError(MALFORMED, f"declared {size}, carried {len(frame) - 4}")
     return _decode_object(frame[4:])
 
 
 def _check_no_forbidden_fields(document: Mapping[str, object], *, where: str) -> None:
     present = sorted(set(document) & FORBIDDEN_FIELDS)
     if present:
-        raise V4IpcError(INVALID_REQUEST, f"{where} carries retired field(s) {present}")
+        raise DarwinIpcError(INVALID_REQUEST, f"{where} carries retired field(s) {present}")
 
 
 @dataclass(frozen=True)
-class V4Request:
-    """A validated v4 request. Only these four fields exist."""
+class DarwinRequest:
+    """A validated Darwin request. Only these four fields exist."""
 
     request_id: str
     operation: str
@@ -149,38 +149,38 @@ class V4Request:
         }
 
     @staticmethod
-    def from_document(document: object, *, now_monotonic_ns: int | None = None) -> "V4Request":
+    def from_document(document: object, *, now_monotonic_ns: int | None = None) -> "DarwinRequest":
         if type(document) is not dict:
-            raise V4IpcError(MALFORMED, "request must be a JSON object")
+            raise DarwinIpcError(MALFORMED, "request must be a JSON object")
         _check_no_forbidden_fields(document, where="request")
-        unknown = sorted(set(document) - set(V4_REQUEST_FIELDS))
-        missing = sorted(set(V4_REQUEST_FIELDS) - set(document))
+        unknown = sorted(set(document) - set(DARWIN_REQUEST_FIELDS))
+        missing = sorted(set(DARWIN_REQUEST_FIELDS) - set(document))
         if unknown:
-            raise V4IpcError(INVALID_REQUEST, f"unknown request field(s) {unknown}")
+            raise DarwinIpcError(INVALID_REQUEST, f"unknown request field(s) {unknown}")
         if missing:
-            raise V4IpcError(INVALID_REQUEST, f"missing request field(s) {missing}")
+            raise DarwinIpcError(INVALID_REQUEST, f"missing request field(s) {missing}")
         request_id = document["request_id"]
         if not isinstance(request_id, str) or not request_id:
-            raise V4IpcError(INVALID_REQUEST, "request_id must be a non-empty string")
+            raise DarwinIpcError(INVALID_REQUEST, "request_id must be a non-empty string")
         operation = document["operation"]
-        if operation not in V4_OPERATIONS:
-            raise V4IpcError(UNKNOWN_OPERATION, str(operation))
+        if operation not in DARWIN_OPERATIONS:
+            raise DarwinIpcError(UNKNOWN_OPERATION, str(operation))
         deadline = document["deadline_monotonic_ns"]
         if isinstance(deadline, bool) or not isinstance(deadline, int):
-            raise V4IpcError(INVALID_REQUEST, "deadline_monotonic_ns must be an int")
+            raise DarwinIpcError(INVALID_REQUEST, "deadline_monotonic_ns must be an int")
         payload = document["payload"]
         if type(payload) is not dict:
-            raise V4IpcError(INVALID_REQUEST, "payload must be a JSON object")
+            raise DarwinIpcError(INVALID_REQUEST, "payload must be a JSON object")
         now = time.monotonic_ns() if now_monotonic_ns is None else int(now_monotonic_ns)
         if deadline <= now:
-            raise V4IpcError(EXPIRED, f"deadline {deadline} <= now {now}")
-        return V4Request(request_id=request_id, operation=operation,
+            raise DarwinIpcError(EXPIRED, f"deadline {deadline} <= now {now}")
+        return DarwinRequest(request_id=request_id, operation=operation,
                          deadline_monotonic_ns=deadline, payload=payload)
 
 
 @dataclass(frozen=True)
-class V4Response:
-    """A validated v4 response: status plus exactly one of descriptor or error."""
+class DarwinResponse:
+    """A validated Darwin response: status plus exactly one of descriptor or error."""
 
     request_id: str
     status: str
@@ -203,22 +203,22 @@ class V4Response:
         }
 
     @staticmethod
-    def from_document(document: object) -> "V4Response":
+    def from_document(document: object) -> "DarwinResponse":
         if type(document) is not dict:
-            raise V4IpcError(MALFORMED, "response must be a JSON object")
+            raise DarwinIpcError(MALFORMED, "response must be a JSON object")
         _check_no_forbidden_fields(document, where="response")
-        unknown = sorted(set(document) - set(V4_RESPONSE_FIELDS))
-        missing = sorted(set(V4_RESPONSE_FIELDS) - set(document))
+        unknown = sorted(set(document) - set(DARWIN_RESPONSE_FIELDS))
+        missing = sorted(set(DARWIN_RESPONSE_FIELDS) - set(document))
         if unknown:
-            raise V4IpcError(INVALID_REQUEST, f"unknown response field(s) {unknown}")
+            raise DarwinIpcError(INVALID_REQUEST, f"unknown response field(s) {unknown}")
         if missing:
-            raise V4IpcError(INVALID_REQUEST, f"missing response field(s) {missing}")
+            raise DarwinIpcError(INVALID_REQUEST, f"missing response field(s) {missing}")
         descriptor = document["output_descriptor"]
         error = document["error"]
         if (descriptor is None) == (error is None):
-            raise V4IpcError(INVALID_REQUEST,
+            raise DarwinIpcError(INVALID_REQUEST,
                              "exactly one of output_descriptor and error is required")
-        return V4Response(
+        return DarwinResponse(
             request_id=str(document["request_id"]),
             status=str(document["status"]),
             output_descriptor=(None if descriptor is None else dict(descriptor)),
@@ -228,9 +228,9 @@ class V4Response:
 
 
 def error_response(request_id: str, code: str, detail: str = "",
-                   *, started_ns: int | None = None) -> V4Response:
+                   *, started_ns: int | None = None) -> DarwinResponse:
     now = time.monotonic_ns()
-    return V4Response(
+    return DarwinResponse(
         request_id=request_id, status=code,
         output_descriptor=None, error={"code": code, "detail": detail},
         timing={"started_monotonic_ns": now if started_ns is None else int(started_ns),
@@ -243,22 +243,22 @@ def error_response(request_id: str, code: str, detail: str = "",
 # --------------------------------------------------------------------------------------
 
 
-class V4PermissionOnlyServer:
-    """A bounded, permission-only v4 server on one registered private endpoint.
+class DarwinPermissionOnlyServer:
+    """A bounded, permission-only Darwin server on one registered private endpoint.
 
-    The handler receives a validated :class:`V4Request` and returns either an output descriptor
+    The handler receives a validated :class:`DarwinRequest` and returns either an output descriptor
     mapping or an "error" mapping. Anything else is turned into a stable error response, so a
     handler bug can never put an unbounded or off-schema frame on the wire.
     """
 
-    def __init__(self, *, endpoint_path, handler: Callable[[V4Request], object],
+    def __init__(self, *, endpoint_path, handler: Callable[[DarwinRequest], object],
                  max_frame_bytes: int = DEFAULT_MAX_FRAME_BYTES,
                  queue_capacity: int = DEFAULT_QUEUE_CAPACITY,
                  accept_timeout_s: float = 0.2) -> None:
         if type(max_frame_bytes) is not int or max_frame_bytes <= 0:
-            raise V4IpcError(OVERSIZED, "max_frame_bytes must be positive")
+            raise DarwinIpcError(OVERSIZED, "max_frame_bytes must be positive")
         if type(queue_capacity) is not int or queue_capacity <= 0:
-            raise V4IpcError(QUEUE_FULL, "queue_capacity must be positive")
+            raise DarwinIpcError(QUEUE_FULL, "queue_capacity must be positive")
         self.endpoint_path = str(endpoint_path)
         self._handler = handler
         self.max_frame_bytes = int(max_frame_bytes)
@@ -287,7 +287,7 @@ class V4PermissionOnlyServer:
             sock.bind(self.endpoint_path)
         except OSError as error:
             sock.close()
-            raise V4IpcError(MALFORMED, f"bind failed: {error}") from error
+            raise DarwinIpcError(MALFORMED, f"bind failed: {error}") from error
         finally:
             os.umask(previous_umask)
         os.chmod(self.endpoint_path, 0o600)
@@ -303,15 +303,15 @@ class V4PermissionOnlyServer:
 
         sock = self.bind()
         if address is None or root is None:
-            raise V4IpcError(MALFORMED, "an address strategy and campaign root are required")
+            raise DarwinIpcError(MALFORMED, "an address strategy and campaign root are required")
         endpoint = address.register_endpoint(sock.getsockname(), role=role,
                                              owner_pid=owner_pid,
                                              owner_birth_identity=owner_birth_identity)
-        self._accept_thread = threading.Thread(target=self._accept_loop, name="v4-ipc-accept",
+        self._accept_thread = threading.Thread(target=self._accept_loop, name="darwin-ipc-accept",
                                                daemon=True)
         self._accept_thread.start()
         self._dispatch_thread = threading.Thread(target=self._dispatch_loop,
-                                                 name="v4-ipc-dispatch", daemon=True)
+                                                 name="darwin-ipc-dispatch", daemon=True)
         self._dispatch_thread.start()
         return endpoint
 
@@ -352,7 +352,7 @@ class V4PermissionOnlyServer:
             except queue.Empty:
                 continue
             worker = threading.Thread(target=self._run_connection, args=(connection,),
-                                      name="v4-ipc-handler", daemon=True)
+                                      name="darwin-ipc-handler", daemon=True)
             with self._workers_lock:
                 self._workers = [item for item in self._workers if item.is_alive()]
                 self._workers.append(worker)
@@ -379,10 +379,10 @@ class V4PermissionOnlyServer:
     def _send_error(self, connection: socket.socket, request_id: str, code: str,
                     detail: str) -> None:
         try:
-            payload = encode_v4_frame(error_response(request_id, code, detail).to_document(),
+            payload = encode_darwin_frame(error_response(request_id, code, detail).to_document(),
                                       max_frame_bytes=self.max_frame_bytes)
             connection.sendall(payload)
-        except (OSError, V4IpcError):
+        except (OSError, DarwinIpcError):
             pass
 
     def handle_connection(self, connection: socket.socket) -> None:
@@ -390,7 +390,7 @@ class V4PermissionOnlyServer:
 
         try:
             request = self._read_request(connection)
-        except V4IpcError as error:
+        except DarwinIpcError as error:
             self.rejections.append(error.code)
             self._send_error(connection, "", error.code, error.detail)
             return
@@ -403,7 +403,7 @@ class V4PermissionOnlyServer:
             return
         if isinstance(outcome, Mapping) and "error" in outcome:
             error_body = dict(outcome["error"])
-            response = V4Response(
+            response = DarwinResponse(
                 request_id=request.request_id,
                 status=str(error_body.get("code", INTERNAL)),
                 output_descriptor=None,
@@ -412,7 +412,7 @@ class V4PermissionOnlyServer:
                         "completed_monotonic_ns": time.monotonic_ns()},
             )
         elif isinstance(outcome, Mapping):
-            response = V4Response(
+            response = DarwinResponse(
                 request_id=request.request_id, status=OK,
                 output_descriptor=dict(outcome), error=None,
                 timing={"started_monotonic_ns": started,
@@ -423,20 +423,20 @@ class V4PermissionOnlyServer:
                              f"handler returned {type(outcome).__name__}")
             return
         try:
-            connection.sendall(encode_v4_frame(response.to_document(),
+            connection.sendall(encode_darwin_frame(response.to_document(),
                                                max_frame_bytes=self.max_frame_bytes))
-        except (OSError, V4IpcError):
+        except (OSError, DarwinIpcError):
             pass
 
-    def _read_request(self, connection: socket.socket) -> V4Request:
+    def _read_request(self, connection: socket.socket) -> DarwinRequest:
         connection.settimeout(2.0)
         prefix = self._recv_exact(connection, 4)
         size = struct.unpack(">I", prefix)[0]
         if size == 0 or size > self.max_frame_bytes:
-            raise V4IpcError(OVERSIZED, f"declared size {size}")
+            raise DarwinIpcError(OVERSIZED, f"declared size {size}")
         body = self._recv_exact(connection, size)
         document = _decode_object(body)
-        return V4Request.from_document(document)
+        return DarwinRequest.from_document(document)
 
     @staticmethod
     def _recv_exact(connection: socket.socket, size: int) -> bytes:
@@ -444,7 +444,7 @@ class V4PermissionOnlyServer:
         while len(result) < size:
             part = connection.recv(size - len(result))
             if not part:
-                raise V4IpcError(MALFORMED, "connection closed mid-frame")
+                raise DarwinIpcError(MALFORMED, "connection closed mid-frame")
             result.extend(part)
         return bytes(result)
 
@@ -467,8 +467,8 @@ class V4PermissionOnlyServer:
 # --------------------------------------------------------------------------------------
 
 
-class V4PermissionOnlyClient:
-    """A v4 client that connects and sends. It performs no endpoint authentication.
+class DarwinPermissionOnlyClient:
+    """A Darwin client that connects and sends. It performs no endpoint authentication.
 
     There is deliberately no `stat()`, no inode comparison, no endpoint receipt, no peer
     credential read and no replacement check: the design removed them, and the tests assert
@@ -491,13 +491,13 @@ class V4PermissionOnlyClient:
 
     def call(self, operation: str, payload: Mapping[str, object] | None = None, *,
              request_id: str | None = None, timeout_s: float | None = None,
-             deadline_monotonic_ns: int | None = None) -> V4Response:
-        if operation not in V4_OPERATIONS:
-            raise V4IpcError(UNKNOWN_OPERATION, operation)
+             deadline_monotonic_ns: int | None = None) -> DarwinResponse:
+        if operation not in DARWIN_OPERATIONS:
+            raise DarwinIpcError(UNKNOWN_OPERATION, operation)
         budget = self.io_timeout_s if timeout_s is None else float(timeout_s)
         deadline = (time.monotonic_ns() + int(budget * 1_000_000_000)
                     if deadline_monotonic_ns is None else int(deadline_monotonic_ns))
-        request = V4Request(
+        request = DarwinRequest(
             request_id=request_id or self.next_request_id(),
             operation=operation,
             deadline_monotonic_ns=deadline,
@@ -505,7 +505,7 @@ class V4PermissionOnlyClient:
         )
         connection = self._connect()
         try:
-            connection.sendall(encode_v4_frame(request.to_document(),
+            connection.sendall(encode_darwin_frame(request.to_document(),
                                                max_frame_bytes=self.max_frame_bytes))
             return self._read_response(connection, expected_request_id=request.request_id)
         finally:
@@ -521,20 +521,20 @@ class V4PermissionOnlyClient:
             connection.connect(self.endpoint_path)
         except OSError as error:
             connection.close()
-            raise V4IpcError(MALFORMED, f"connect failed: {error}") from error
+            raise DarwinIpcError(MALFORMED, f"connect failed: {error}") from error
         connection.settimeout(self.io_timeout_s)
         return connection
 
     def _read_response(self, connection: socket.socket,
-                       *, expected_request_id: str) -> V4Response:
+                       *, expected_request_id: str) -> DarwinResponse:
         prefix = self._recv_exact(connection, 4)
         size = struct.unpack(">I", prefix)[0]
         if size == 0 or size > self.max_frame_bytes:
-            raise V4IpcError(OVERSIZED, f"declared size {size}")
+            raise DarwinIpcError(OVERSIZED, f"declared size {size}")
         document = _decode_object(self._recv_exact(connection, size))
-        response = V4Response.from_document(document)
+        response = DarwinResponse.from_document(document)
         if response.request_id and response.request_id != expected_request_id:
-            raise V4IpcError(INVALID_REQUEST, "response request_id does not match")
+            raise DarwinIpcError(INVALID_REQUEST, "response request_id does not match")
         return response
 
     @staticmethod
@@ -543,11 +543,11 @@ class V4PermissionOnlyClient:
         while len(result) < size:
             part = connection.recv(size - len(result))
             if not part:
-                raise V4IpcError(MALFORMED, "connection closed mid-frame")
+                raise DarwinIpcError(MALFORMED, "connection closed mid-frame")
             result.extend(part)
         return bytes(result)
 
-    def send_raw(self, payload: bytes, *, timeout_s: float = 5.0) -> V4Response | None:
+    def send_raw(self, payload: bytes, *, timeout_s: float = 5.0) -> DarwinResponse | None:
         """Send raw bytes, for the negative protocol tests. Returns None when the peer refuses."""
 
         connection = self._connect()
@@ -556,7 +556,7 @@ class V4PermissionOnlyClient:
             connection.sendall(payload)
             try:
                 return self._read_response(connection, expected_request_id="")
-            except V4IpcError:
+            except DarwinIpcError:
                 return None
         except OSError:
             return None
@@ -570,4 +570,4 @@ class V4PermissionOnlyClient:
 def serialize_operations() -> Sequence[str]:
     """The allowlist as a stable sequence, for manifests and evidence."""
 
-    return tuple(sorted(V4_OPERATIONS))
+    return tuple(sorted(DARWIN_OPERATIONS))

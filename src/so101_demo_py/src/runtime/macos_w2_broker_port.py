@@ -3,7 +3,7 @@
 This is the v4 port of `cli/mujoco_parallel_batch._WorkerBrokerProxy`. Two things differ, and both
 follow from schema v4 rather than from taste:
 
-* the transport is `V4PermissionOnlyClient` - a `0600` socket under the Darwin private root, with no
+* the transport is `DarwinPermissionOnlyClient` - a `0600` socket under the Darwin private root, with no
   token, generation, lease or endpoint receipt in either direction;
 * the generation bookkeeping stays local to the Worker: the Coordinator's authority document is the
   only place a generation is read, and it may only move forward.
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 import time
 from typing import Callable, Mapping
 
-from .parallel_ipc_v4 import V4PermissionOnlyClient
+from .parallel_ipc_darwin import DarwinPermissionOnlyClient
 
 
 class W2BrokerPortError(RuntimeError):
@@ -45,7 +45,7 @@ class W2BrokerPort:
         coordinator,
         authority: BrokerAuthority,
         config,
-        client_factory: Callable[..., object] = V4PermissionOnlyClient,
+        client_factory: Callable[..., object] = DarwinPermissionOnlyClient,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
         connection=None,
@@ -186,7 +186,7 @@ class W2BrokerPort:
             start_event_type,
             NormalizedInferenceResponseIdentity.from_request(request),
         )
-        # The v4 vocabulary is dotted (`V4_OPERATIONS`), so the production inference operation is
+        # The v4 vocabulary is dotted (`DARWIN_OPERATIONS`), so the production inference operation is
         # `broker.infer` - the bare `infer` the container path uses is not a v4 operation.
         response = self.connection.call(
             "broker.infer",

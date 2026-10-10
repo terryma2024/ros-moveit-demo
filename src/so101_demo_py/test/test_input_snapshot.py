@@ -234,10 +234,10 @@ def test_read_refuses_an_oversized_file_even_when_the_descriptor_agrees(store):
 def test_control_frames_stay_separate_from_snapshot_bytes(store):
     """A frame descriptor is small; the bytes are never in the control frame."""
 
-    from so101_demo.runtime.parallel_ipc_v4 import V4Request
+    from so101_demo.runtime.parallel_ipc_darwin import DarwinRequest
 
     descriptor = store.write(_array(shape=(64, 64, 3)), slot="slot-0", frame_timestamp_ns=1)
-    request = V4Request(request_id="r-1", operation="broker.infer",
+    request = DarwinRequest(request_id="r-1", operation="broker.infer",
                         deadline_monotonic_ns=time.monotonic_ns() + 10**9,
                         payload={"input_descriptor": descriptor.to_document()})
     encoded = str(request.to_document())

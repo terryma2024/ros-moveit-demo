@@ -1144,7 +1144,7 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
     # still unimported here, which is what the bootstrap checks.
     from ..runtime.mps_broker_bootstrap import MpsBrokerBootstrap
     from ..core.detection import DetectionFrame, DetectionQuery
-    from ..runtime.parallel_ipc_v4 import V4PermissionOnlyServer
+    from ..runtime.parallel_ipc_darwin import DarwinPermissionOnlyServer
 
     import numpy as np
 
@@ -1282,7 +1282,7 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
             return {"request_id": request.request_id, "device": device,
                     "candidates": candidates}
 
-        server = V4PermissionOnlyServer(
+        server = DarwinPermissionOnlyServer(
             endpoint_path=address.endpoint_path(campaign_root, "broker"), handler=handler)
         endpoint = server.start(
             address=address, root=campaign_root, role="broker", owner_pid=os.getpid(),

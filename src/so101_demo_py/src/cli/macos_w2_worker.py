@@ -17,7 +17,7 @@ ack_path, endpoint, worker_id, out_path = sys.argv[1:5]
 station_arguments = sys.argv[5:8]
 lease_argument = sys.argv[8:9]
 
-from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient
+from so101_demo.runtime.parallel_ipc_darwin import DarwinPermissionOnlyClient
 
 payload = {"pid": os.getpid(), "pgid": os.getpgid(0), "argv": ["worker", worker_id],
            "station": bool(station_arguments)}
@@ -112,7 +112,7 @@ try:
 
         from so101_demo.parallel_batch.contracts import ExecutionKind
         from so101_demo.runtime.macos_w2_broker_port import BrokerAuthority, W2BrokerPort
-        from so101_demo.runtime.parallel_ipc_v4 import V4PermissionOnlyClient as _V4Client
+        from so101_demo.runtime.parallel_ipc_darwin import DarwinPermissionOnlyClient as _DarwinClient
 
         lease_identity = {name: lease_document.get(name)
                           for name in ("execution_profile", "batch_kind", "schema_version")}
@@ -124,7 +124,7 @@ try:
         port = W2BrokerPort(
             coordinator=lambda: authority, authority=authority, config=port_config,
             resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
-            connection=_V4Client(endpoint_path=endpoint))
+            connection=_DarwinClient(endpoint_path=endpoint))
         declared_sha = lease_document["input_sha256"]
         if lease_document.get("tamper_input_sha256"):
             # Fault injection: declare a digest the Coordinator never bound.
@@ -182,7 +182,7 @@ try:
                                     "status": "REFUSED", "error": f"{type(error).__name__}: {error}"}
 
 
-        client = V4PermissionOnlyClient(endpoint_path=endpoint)
+        client = DarwinPermissionOnlyClient(endpoint_path=endpoint)
         results = []
         # The round-trip ids carry this Worker's generation: the next lease for the same slot is a new
         # spawn, and an id the one-time table already consumed could never be admitted again.

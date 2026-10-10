@@ -489,7 +489,7 @@ def test_the_new_guard_projection_fields_carry_no_ipc_auth_vocabulary():
     keeps them for the Web control channel and only removes them from the **v4 IPC envelope**. So
     this test asserts the narrow, true thing: the guard projection added here introduces no
     credential vocabulary of its own, and the IPC envelope itself remains clean (that is asserted
-    directly in `test_parallel_ipc_v4.py`).
+    directly in `test_parallel_ipc_darwin.py`).
     """
 
     from so101_teleop.expert_validation.api import (
