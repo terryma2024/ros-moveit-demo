@@ -69,11 +69,43 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3541
+latest_checkpoint: CP-3542
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3542 — refactor design review FAIL (14 findings); user answers U1–U4; design revision 2; re-review dispatched
+
+- Review (fresh Opus, read-only; AGENTS.md names Astra — deviation recorded). Main findings, root-verified:
+  - The v1/v2 workflow with RECOVER, policy v1 and manifest v2 are still the general-runtime defaults (runner, dynamic_execute, plan_only, Gazebo C++ recovery). V3 is Teacher-only, so these are parallel profiles, not versions.
+  - BatchRequestV2 and BatchKindV2 are the live request contract. The v1 ParallelRuntimeConfig holds frozen model digests.
+  - resource_identity hashes parallel_batch_v2.yaml into identity digests.
+  - Teleop expert validation and the adaptive pool default to parallel_batch_v1.yaml.
+  - v4 also defines a deferred Linux combination; v3_act_offline was missed.
+  - Missing families and names: parallel_ipc_v4, single-version files, about 64 _V<N> constants, w8/n1/w2, more Task8 aliases.
+  - R2 orphans all collected ACT data.
+  - Ordering: the test-path foundation should come first, and test moves belong with the renames.
+  - Guard regexes would hit geometry identifiers; a wire-string guard is needed.
+  - 901 handoff files: change only the active callers.
+  - Live checks too narrow; the benchmark split conflicts with the benchmark gate; HeadSim schema-3 activeness is unconfirmed.
+- User answers (AskUserQuestion, 2026-10-10):
+  - U1: keep two workflow profiles (general with recovery; Teacher minimal).
+  - U2: abandon the collected ACT episodes.
+  - U3: migrate the adaptive pool and expert validation to the current Linux config.
+  - U4: split the benchmark files with the benchmark_test gate.
+- Design revision 2 (same file):
+  - Step 0: mechanical inventory and classification, test path constants, support/ helpers, basename guard.
+  - Phase B: one commit per family; profile classifications (general vs Teacher for workflow, policy and manifest; teacher policy v2 deleted).
+  - parallel_batch on three axes:
+    - request contract renamed BatchRequest/BatchKind;
+    - profiles linux_cuda / act_offline / macos_mps_* (v4's deferred Linux combination dropped);
+    - v1/v2 history deleted only after the frozen constants are inlined, the freeze re-derived, a new resource-identity carrier built from the linux_cuda document with regenerated receipts, the provenance pin repointed, and expert validation and adaptive migrated with ADAPTIVE_POOL added to linux_cuda.
+  - Phase C merges test moves and renames; phase D handles wire and sealed renames.
+  - Phase F splits, with the benchmark gate for the benchmark files.
+  - AST-scoped guards plus a wire-string guard and an unused-allowlist check; the active external callers are listed.
+  - Live checks after B, D and F: Head case, pick-place, a Linux fixed-N batch through the teleop service, an adaptive run, and an offline dataset smoke. macOS is deferred, with a static route-table test.
+- Re-review dispatched.
 
 ## CP-3541 — refactor inventories done; design written (6 gated phases); independent review dispatched
 

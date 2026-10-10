@@ -1,148 +1,163 @@
 # SO-101 code-style refactor: latest-only versions, business names, test layout, file splits
 
-Status: design, 2026-10-10. Owner: root (Claude Opus 5.5). Execution: one Claude Sonnet 5.5 executor at a time. Ledger: CP-3540, CP-3541.
+Status: design revision 2, 2026-10-10. Owner: root (Claude Opus 5.5). Execution: one Claude Sonnet 5.5 executor at a time. Ledger: CP-3540, CP-3541, CP-3542.
 
-## 0. User request and decisions
+Revision 1 failed independent review, with 14 findings. The reviewer was a fresh Opus instance; AGENTS.md names Astra for this role, and the deviation is recorded. This revision applies every finding together with the user's answers given on 2026-10-10.
 
-The user asked for four things on 2026-10-10:
+## 0. Request and decisions
 
+The user's request, 2026-10-10:
 1. Keep only the latest version of versioned code and schemas, with no backward compatibility.
-2. Rename process-named files and identifiers (task6/task8/r1…) to business names.
-3. Reorganise unit tests by module and component.
-4. Refactor oversized files for readability.
+2. Give business names to process-named files and identifiers.
+3. Reorganise the tests by module and component.
+4. Split oversized files.
 
-Root decisions (CP-3394, recommended):
+User answers, 2026-10-10:
+- **U1, workflow.** Keep two profiles: the general runtime workflow, which has recovery, and the Teacher minimal workflow.
+- **U2, old data.** The ACT episodes collected so far may become unreadable.
+- **U3, adaptive pool and expert validation.** Migrate them from `parallel_batch_v1.yaml` to the current Linux configuration.
+- **U4, benchmark.** Split the large benchmark files, and run the explicit `benchmark_test` gate when doing so.
 
-| # | Decision | Reason |
+Root decisions (CP-3394):
+
+| # | Decision |
+|---|---|
+| R1 | **Successive versions** of one thing are deleted except the latest. **Parallel profiles** are kept and renamed by meaning, with no version in the name. Every versioned item is classified first by a mechanical inventory (§1, step 0) into one of: family, profile, single-version rename, allowlist. |
+| R2 | Sealed evidence created before this refactor stays on disk as history and becomes unreadable by the new code (U2). This includes the collected ACT episodes, the Head runs and the audits. |
+| R3 | Wire and sealed identifiers are renamed without compatibility readers. These are `kind` strings, error codes, env vars and sealed file names. |
+| R4 | External callers change in lockstep, but only **active** callers (§5). Sealed handoff trees are frozen history and are not edited (901 files reference old names). |
+| R5 | Ledgers and old designs are not rewritten. A rename map (`docs/experiments/so101-code-style-rename-map-20261010.md`) lists every old name with its new name. |
+| R6 | Version numbers leave file, module, class, function and constant names. A format that needs a version carries it as a `schema_version` field. |
+
+## 1. Phases (each ends with gates at 0 failures and 0 errors; see §4)
+
+### Step 0: mechanical inventory and the test-path foundation
+
+1. **Mechanical inventory.** Generate the full hit list with the §3 guard regexes (AST-scoped). Classify every hit as family, profile, single-version rename or allowlist, and record it in the rename map as a table. This replaces hand-made lists, so the families listed below are a minimum, not a closed set.
+2. **Test path constants.** Add `test/support/paths.py` with `PACKAGE_ROOT` and `REPOSITORY` (demo; teleop gets its own). Rewrite the 249 + 67 `parents[N]` uses, and the `Path(__file__)` data lookups, onto these constants. Content commit.
+3. **Test helpers.** Move the helpers to `test/support/` and add `pythonpath` in `setup.cfg`. Delete the `sys.path.insert` lines.
+4. **Basename guard.** Turn on the unique-basename guard before any test moves.
+
+### Phase A: shims
+
+- Delete the 14 alias shims (8 in demo, 6 in teleop `unified/task8_*`).
+- Delete these aliases: `Task8Runner`, `Task8Error`, `Task8Port`, `Task8LiveError`, `Task8LiveCampaign`, `Task8ReadbackError`, `Task8PhysicalReadback`, `Task8ContactPairs`.
+- Delete the console scripts `act_task8_live`, `act_prepare_task8_live`, `act_prepare_task8_live_artifacts` and `act_capture_task6`.
+- Migrate the test importers first.
+
+### Phase B: latest-only (one commit per family, each with a collection run and the family's targeted tests)
+
+| Family | Classification | Result |
 |---|---|---|
-| R1 | "Latest-only" applies to **successive versions of the same thing**. Parallel profiles that share a version counter are **not** versions: they are kept and renamed by meaning. The cases are `parallel_batch` v3 (Linux CUDA) and v4/v5/v6 (three macOS MPS routes), contact-policy schema 4 (a diagnostic proposal kind), and the boundary schemas (two kinds). | Deleting them would delete the Linux path or two macOS routes, which the user did not ask for. |
-| R2 | Sealed on-disk evidence created before the refactor (p9–p12 episodes, Head runs, CP-3532/3539 audits) becomes unreadable by the new code. It stays on disk unchanged as history, and the ledgers keep citing it. | The user said "无需兼容老版本" (no compatibility with old versions). |
-| R3 | Wire and sealed identifiers are renamed: `kind` strings, error-code prefixes, env vars and file names inside sealed bundles. Because R2 already accepts that old evidence breaks, there is no compatibility reader. | One vocabulary; no dual names. |
-| R4 | External callers change in lockstep with every rename. These are the zsh wrappers under the evidence tooling, `scripts/`, web e2e fixtures, `.agents` skill docs, `setup.py` console scripts and the teleop CMake ctest registrations. New tooling versions go beside the old ones. | Renames must not break tooling silently. |
-| R5 | Historical ledgers and design docs are not rewritten. A rename map document (`docs/experiments/so101-code-style-rename-map-20261010.md`) maps every old name to its new name. | Evidence stays citable. |
-| R6 | Version numbers stay inside documents as `schema_version` fields where a format needs one, but they leave file, module, class and function names. For example, `teacher_execution_policy_v3.yaml` becomes `teacher_execution_policy.yaml` with `schema_version: 3`, and `ParallelRuntimeConfigV3` becomes `LinuxCudaRuntimeConfig`. | Names express meaning; the format carries its version. |
+| Workflow: v1/v2 (with RECOVER) and V3 | profiles (U1) | `SO101_WORKFLOW` stays the general runtime workflow, and V3 is renamed `TEACHER_WORKFLOW`. Only v1-only branches, if any, are removed. The Gazebo C++ recovery is untouched. |
+| Execution policy v1/v2/v3 | v1 is the general-runtime profile; v2 is a superseded Teacher version; v3 is the Teacher profile | v1 becomes `general_execution_policy.yaml` (schema kept). v3 becomes `teacher_execution_policy.yaml`. v2 and its tests are deleted. |
+| Dynamic manifest v1/v2/v3 | v1 is history; v2 is the general profile; v3 is the Teacher profile | v1 readers are deleted. v2 becomes `so101-dynamic-execute` and v3 becomes `so101-teacher-execute`, each with a `schema_version` field. |
+| Teacher events V0/V1/V2 | family | V2 is kept as `SO101_TEACHER_EVENT`, and the module is renamed `teacher_collection.py`. |
+| ACT result 1/2/3; QC report 2/3 (rule v4); episode seal 1/2; execution snapshot binding 1/2; camera truth 1/2; training config 1/2; dataset 1/2; coordinator journal 1/2; model bundle 1/2/3; runner checkpoint 4/5; HFA-009 v1/v2 | family (U2) | Keep the latest of each and delete the older readers, `allow_legacy` and `_verify_legacy`. Repoint `result_store.py:973` (live commit path) to the latest reader. Delete `engine.py:49` and `episode_qc.py:448`'s v2 pins only if v2 is history; v2 stays as the general-profile manifest. The QC rule label is renamed `act_data_qc`. |
+| HeadSimulationPolicy 2/3 | family | Before deleting 2, confirm that the active Head candidate document is schema 3 (finding 14). If no frozen schema-3 document exists, regenerate it as schema 3 first. |
+| Measurement contract v1/v2 | family | Keep v2; delete the v1 file and the template branch. |
+| Contact policy 2/3/4 | 2 and 3 are a family; 4 is a different kind | Keep 3. Rename 4 to `diagnostic_contact_proposal`. Delete 2. |
+| parallel_batch | three axes (finding 3) | (a) **Request contract**: `BatchRequestV2` and `BatchKindV2` are live and are renamed `BatchRequest` and `BatchKind`. `BatchRequestV3`, which is document-only, is merged or deleted. (b) **Execution profiles**: v3 is renamed `linux_cuda`, `v3_act_offline` is renamed `act_offline`, and v5 and v6 are renamed `macos_mps_single_worker_retry` and `macos_mps_single_worker_first_pass`. v4's macOS combination is renamed `macos_mps_two_worker`; its deferred Linux-CUDA combination is deleted, so v4 is macOS only. (c) **History**: the v1 and v2 configs are deleted only after their live uses are replaced — see the next item. |
+| parallel_batch v1/v2 live uses | must be replaced first | (1) Inline the frozen constants (`FROZEN_YOLO_WEIGHTS_SHA256`, `FROZEN_GROUNDED_SAM_MANIFEST_SHA256`) into a `parallel_batch/frozen_models.py` read by `parallel_ipc` and `parallel_perception_runtime`. (2) Re-derive the Linux freeze without the v1/v2 field sets. (3) **Resource identity carrier**: `resource_identity.py` hashes the logical path `parallel_batch_v2.yaml` and imports the V2 rule classes. Replace it with an identity built from the `linux_cuda` profile document, and regenerate the receipts it feeds (selection, queue, point drain, teleop full-restart campaign). This is a new identity value; old receipts are history under R2. (4) Repoint the provenance pin in `mujoco_parallel_batch.py:881`. (5) **U3**: point teleop expert validation (`production.py:235`), `run_so101_adaptive_worker_scaling.zsh:58` and `so101-teleop-service.py:132` at `linux_cuda`. Add `ADAPTIVE_POOL` support to the `linux_cuda` profile, and migrate `parallel_adaptive_workers_v1.yaml` to a business name. |
+| `parallel_ipc_v4.py` | Darwin IPC profile | Renamed `parallel_ipc_darwin.py`. |
+| Single-version names | rename only | `head_search_v2.json` → `head_search_runtime.json`; `teacher_endpoint_v2.yaml` → `teacher_endpoint.yaml` (rule string `teacher_endpoint`); `episode_recorder_v1.yaml`, `moveit_expert_validation_points_v1.yaml`, `top_view_projection_v1.json`, `endpoint_pose_*_v1.yaml` (deleted if only the legacy QC used them), `task8-calibration-*-v1/v2.json` (v1 deleted, the rest renamed in phase D); `parallel_collection_v3.yaml` (schema 1) → `parallel_collection.yaml`; about 64 `*_SCHEMA_V<N>` / `_V<N>` constants; the wire kind `paired_camera_truth_v2_original`. |
+| Not versions (allowlist) | — | Model and dataset ids (`yolo11n-seg-v1`, …), vendor STL parts, container and lock ids, `IMAGENET1K_V1`, `sts3215_03a`, `plastic_cup_grounding_dino_augmented_r3.yaml` (a dataset round; renamed in phase C if it can be renamed without retraining). |
 
-## 1. Phase plan
+### Phase C: business names in code, with test renames and moves (E3/E4 merged here; finding 8)
 
-Every phase ends with:
+- **Modules.** The `act/task8_*` modules get names that qualify the calibration they belong to: `pick_place_calibration_*` or `measurement_calibration_*`, plus `pick_place_live_evidence`, `pick_place_validation_artifact_bundle`, `pick_place_phase_camera` and `calibration_production_composition`. `w8_qualification` becomes `parallel_qualification_verifier`. `macos_n1_*`, `macos_w2_*`, `w1_composition`, `w2_composition` and `macos_w2_broker_port` get single-worker and two-worker names. `first_episode` becomes `diagnostic_episode`, `fresh_qc` becomes `independent_qc`, and `candidate_source` becomes `reachability_candidate_source`.
+- **Docstrings and identifiers.** "Task N", "CP-#" and "EXP-#" in docstrings become descriptions of what the code does. Class, function and constant names follow their modules.
+- **Console scripts.** Renamed, together with `setup.py`.
+- **Tests.** In the same commits, tests move into the tree that mirrors `src/` and are renamed by the behaviour they test. The tree absorbs the existing `contracts/`, `characterization/`, `place_height_live/`, `process_summary/` and `native_scene_probe/`. `test_p3_rework` is split by content. Pure `git mv` commits are kept separate from content commits.
+- **Teleop.**
+  - `test/teleop/*` moves into `test/{expert_validation,unified,pick_place_validation,api}/`.
+  - The per-worker IPC conftest is lifted to `test/conftest.py`.
+  - `test/e2e` stays a package.
+  - The 113 CMake registrations and `test_ctest_registration.py` change in the same commit.
+- **Tooling updated in the same phase.** Gate runner duration map to relative paths; host-path guard allowlist keys; `test_explicit_ml_collection` node ids; `scripts/so101-macos-service-campaign-final-gate.zsh` test paths.
 
-- a fresh build;
-- the full gates at 0 failures and 0 errors: `so101_demo_py` with the grounded-sam interpreter against the install, and colcon test + test-result for the 10 packages;
-- the host-path guard;
-- separate commits for pure `git mv` moves and for content changes;
-- a ledger checkpoint by root.
+### Phase D: business names in wire and sealed identifiers
 
-Phases B, D and F also run live checks (§7).
-
-### Phase A: drop the compatibility shims
-
-- Delete the 14 `sys.modules` alias shims and the `Task8Runner`/`Task8Error`/`Task8Port` aliases, after migrating their importers (tests only).
-- Delete the retired console scripts `act_task8_live`, `act_prepare_task8_live`, `act_prepare_task8_live_artifacts` and `act_capture_task6`. Their business-named twins already exist.
-
-### Phase B: latest-only versions
-
-For each family the latest member is kept and the older members, plus their reader branches, are deleted:
-
-| Family | Keep | Delete |
-|---|---|---|
-| Teacher execution policy | v3 (renamed `teacher_execution_policy.yaml`, schema 3) | v1/v2 files, `EXECUTION_SCHEMA_V2`, the v1 defaults in `dynamic_mujoco_execution.py:430` and `dynamic_runtime.py:536,822`, `first_episode_inputs.py:632`, `TEACHER_POLICY_BINDINGS` v1 pair, byte/hash pin tests for v1/v2 |
-| Workflow | V3 (renamed `SO101_WORKFLOW`) | v1/v2 workflow, RECOVER_* states, `VALIDATION_FAILED` path, `_V3_FORWARD` relation tests |
-| Dynamic execute manifest | v3 (renamed schema id `so101-dynamic-mujoco-execute`, schema 3) | v1/v2 writers, readers and constants (`dynamic_manifest`, `e2e_acceptance`, `episode_qc`, `offline/engine`, `parallel_ros_runtime`), macOS web fixtures using "…execute-v1" |
-| Place height | v3 strategy | v1/v2 code paths; v1's numeric offset stays as the v3 fallback field value |
-| Teacher events | V2 (renamed `SO101_TEACHER_EVENT`, module `teacher_collection.py`) | V0/V1 constants and reject branches |
-| ACT result | schema 3 | schema 1/2 readers, `_verify_legacy`, `allow_legacy` |
-| QC report | schema 3 / rule v4 (rule label renamed `act_data_qc`) | schema 2, `legacy=` paths, `recompute_legacy_native_qc_v2`, `endpoint_pose_*` legacy files if only legacy uses them |
-| Episode seal | 2 | 1 |
-| Execution snapshot binding | 2 | 1 |
-| Camera truth | 2 | 1 |
-| HFA-009 audit | v2 | v1 native-close branch and its test |
-| Training config | 2 | 1 |
-| Coordinator journal | 2 | 1 |
-| HeadSimulationPolicy | 3 | 2 |
-| Measurement contract | v2 | v1 file and template branch |
-| Contact policy | 3 and 4 (4 is a different kind: renamed `diagnostic_contact_proposal`) | 2 |
-| Runner checkpoint | 5 | 4 migration |
-| Perception model bundle | 3 | 1/2 |
-| Dataset | 2 | 1 (and `_LEGACY_SPLITS`) |
-| parallel_batch | v3 Linux and v4/v5/v6 macOS, renamed by profile (R1) | v1/v2 files, `ParallelRuntimeConfigV2`, `BatchRequestV2`, the v1/v2 carrier bindings in `resource_identity` and `mujoco_parallel_batch:881`, `read_historical_contract` history paths; teleop `production.py:235` and `scripts/run_so101_adaptive_worker_scaling.zsh` repointed |
-
-Model and dataset identifiers (`yolo11n-seg-v1` …), vendor STL part names, container and lock ids, and single-version `SCHEMA_VERSION = 1` constants are not families and are left unchanged.
-
-### Phase C: business names, code only
-
-- `act/task8_*` modules become the business names from the inventory, for example `calibration_measurement_*`, `pick_place_live_evidence`, `pick_place_validation_artifact_bundle`, `pick_place_phase_camera`, `calibration_production_composition`, `parallel_qualification_verifier`. "Calibration" collisions get a `pick_place_` or `measurement_` qualifier.
-- The w1/w2/n1 names become `single_worker` and `two_worker`.
-- `first_episode` becomes `diagnostic_episode`.
-- `fresh_qc` becomes `independent_qc`.
-- `candidate_source` becomes `reachability_candidate_source`.
-- `teacher_collection_v2` becomes `teacher_collection`.
-- The "Task N"/CP references in docstrings and comments become behaviour descriptions.
-- Class and function names follow the module names.
-- Console scripts are renamed, and `setup.py` is updated with them.
-- `prepare_horizon`, `candidate`, `gate`, and `fresh` where it means freshness keep their names.
-
-### Phase D: business names, wire and sealed
-
-- Config files: `task8-*` becomes `pick-place-validation-*` or `calibration-*`. The `kind` strings follow (`ACT_TASK8_LIVE` becomes `ACT_PICK_PLACE_VALIDATION`). The `measurement_experiment: EXP-115` field is dropped.
-- About 193 `TASK8_*`/`TASK6_*`/`TASK1_*` error codes become domain prefixes, for example `PICK_PLACE_VALIDATION_*`, `CALIBRATION_*`, `SYNC_CAPTURE_*`.
-- Env vars: `SO101_TASK8_*_SEAM` becomes `SO101_CALIBRATION_*_SEAM`, `SO101_TASK12_*` becomes a name describing its function, and `ACT_FIRST_EPISODE_*` becomes `ACT_DIAGNOSTIC_EPISODE_*`.
-- The admission operation kinds `task8_phase`/`task8_full` and the bridge `task8` route are renamed, together with the web UI.
-- The `hs40-{seed}` case ids and the `task8-ready-*` sealed output names are renamed.
-- The macOS profile YAMLs are renamed with `scripts/`, the web fixtures and the `.agents` docs.
-- Every digest-bound config rename is followed by a fresh freeze and a re-activation via the CP-3531 procedure.
-
-### Phase E: test reorganisation
-
-1. Add a `test/support/paths.py` module with `PACKAGE_ROOT` and `REPOSITORY`. Rewrite the about 287 + 73 `parents[N]` uses to it (content commit).
-2. Move the helpers to `test/support/` (with `pythonpath` in `setup.cfg`) and drop the `sys.path.insert` lines.
-3. Move tests family by family into a tree that mirrors `src/`, using pure `git mv` commits: `act/{head_search,head,teacher,collection,training,calibration,pick_place_validation}`, `adapters/…`, `application/`, `backends/`, `cli/`, `control/`, `core/`, `parallel_batch/`, `perception_benchmark/`, `ports/`, `profiling/`, `ros/`, `runtime/`, `training/`, `repo/`, `characterization/`, `fixtures/`.
-4. Rename the process-named test files (b1–b4, c, d1–d4, p2/p3, rec*, r11, task8, w2…) by what they test. `test_p3_rework` is split by content.
-5. Add a guard test that keeps basenames globally unique.
-6. Teleop: move `test/teleop/*` into `test/{expert_validation,unified,pick_place_validation,api}/`, lift the per-worker IPC conftest to `test/conftest.py`, and rewrite the 114 CMake registrations.
-7. Fix the gate runner's duration map to use relative paths, re-key the host-path guard allowlist, update `test_explicit_ml_collection` node ids and the zsh final-gate script paths.
-8. After each family move: a full collection plus the gate.
+- **Config files and kinds.** `task8-*` config files become `pick-place-validation-*` or `pick-place-calibration-*`, and their `kind` strings follow (`ACT_TASK8_LIVE` becomes `ACT_PICK_PLACE_VALIDATION`). The `EXP-115` field is dropped.
+- **Error codes.** About 193 `TASK8_*`, `TASK6_*` and `TASK1_*` codes get domain prefixes.
+- **Env vars.** `SO101_TASK8_*_SEAM` becomes `SO101_PICK_PLACE_CALIBRATION_*_SEAM`, `SO101_TASK12_*` becomes a name for what it does, and `ACT_FIRST_EPISODE_*` becomes `ACT_DIAGNOSTIC_EPISODE_*`.
+- **Admission kinds and routes.** `task8_phase`/`task8_full` and the bridge `task8` route are renamed together with the teleop `unified/{bridge,admission,ipc}.py` modules and the web UI.
+- **Profile wire values and sealed names.** `ExecutionProfile` values such as `MPS_W2_FIRST_PASS`, the `hs40-{seed}` ids and the sealed `task8-ready-*` names are renamed.
+- **macOS profile YAMLs.** Renamed together with `scripts/`, the web fixtures and `.agents`.
+- **After the renames.** Digest-bound renames are followed by a fresh freeze and re-activation using the CP-3531 procedure.
 
 ### Phase F: split oversized files
 
-- **Threshold:** source files above 1200 lines (about 43), worked largest first and dependency-bottom-up within the `head_search_*` family.
-- **Pattern:**
-  - A module becomes a package or a set of cohesive modules, with the old module kept as a thin facade only while internal importers are migrated in the same phase.
-  - The facade is then removed: no compatibility layer is left (consistent with R2).
-  - Big classes are split into collaborators or mixins by responsibility.
-  - Splits follow the inventory proposals: `mujoco_parallel_batch` → provenance, rpc_proxies, composition_broker/workers, outcome_documents, cli; `head_search_calibration` → `cli/head_search/<command>.py`; `dynamic_mujoco_execution` → evidence, teacher, safety, planning, motion, release, scene, phases; `contracts` → after phase B only the live profiles remain, split by profile plus common; and so on.
-- **Tests:** tests that patch module globals or read `module.__file__` text are updated in the same commit.
-- **Large test files:** test files above 1500 lines are split by the behaviour they test, in phase E or F.
-- **Cycle check:** `python -X importtime` or an import-graph test proves no new import cycles.
+- **Scope.** Source files over 1200 lines, about 40 in demo plus 2 in teleop plus 1 C++ file.
+- **Order.** Largest first, and bottom-up within the `head_search_*` family.
+- **Facades.** A facade exists only while importers are migrated inside the same phase, and is then removed.
+- **Benchmark files (U4).** `perception_benchmark/reporting.py` and `runner.py` are split with the `benchmark_test` gate added for that commit.
+- **Test files.** Test files over 1500 lines are split by behaviour.
+- **Patch targets.** Monkeypatch targets and `module.__file__` text checks change in the same commit.
+- **Cycles.** An import-cycle check runs for every split.
 
-## 2. Guard tests added by this refactor
+## 2. What phase B deliberately does not change
 
-- `test_no_versioned_names`: no file, module, class or function name ends in `_v<N>`/`V<N>`, except an allowlist of model, dataset, vendor and container ids, each entry with a reason.
-- `test_no_process_names`: no `task\d`, `t8`, `r\d+b?`, `p\d_`, `rec\d`, `b\d_`, `d\d_`, `w\d`, `hs40`, `cp_\d`, `exp\d` tokens in file or module names, public identifiers or console scripts, with an allowlisted exception list.
-- `test_unique_test_basenames` (phase E).
-- `test_no_module_over_lines`: source modules ≤ 1200 lines, starting after phase F; any exception is listed with a reason.
+- The general runtime keeps its recovery chain (U1).
+- The Gazebo C++ packages are untouched.
+- Single-version schemas named `SCHEMA_VERSION = 1` keep their field.
 
-## 3. Out of scope
+## 3. Guards (AST- and manifest-scoped; finding 10)
 
-- `third_party/`.
-- Historical docs and ledgers (R5).
-- Benchmark logic changes. `benchmark_test/` is reorganised only if its names are process-named.
-- The Gazebo packages, except where a rename crosses into them.
+- **`test_no_versioned_names`.** Scans file names and module-level `def`/`class`/constant names in `src/` and `test/` of the four packages, plus `console_scripts`. The match is token-bounded on snake_case/CamelCase segments: a whole segment `v\d+` or `V\d+`. Locals and parameters are excluded.
+- **`test_no_process_names`.** Same scope. A segment equal to `task\d+`, `t8`, `w\d`, `n1`, `hs\d+`, `cp\d+`, `exp\d+`, `p\d`, `b\d+b?`, `d\d`, `rec\d+b?` or `r\d+b?`, but only when it is a whole segment of a file or module-level name. Geometry identifiers such as `x1`, `q6`, `dq1` and `p1` occur inside functions, so they are not scanned.
+- **`test_no_process_wire_strings`.** String literals in `src/` and `config/` matching `TASK\d+_`, `SO101_TASK\d+`, `task\d+[-_]`, or a `"…-v\d+"` kind literal. Phase D makes this pass.
+- **Allowlists.** Every allowlist entry carries a reason, and a companion check fails on unused entries.
+- **`test_unique_test_basenames`.** Enabled from step 0.
+- **`test_no_module_over_lines`.** Fails on any source module over 1200 lines; it starts after phase F, with a reasoned exception list.
 
-## 4. Risks
+## 4. Gates per phase
 
-- **Size.** About 470k lines are touched across 6 phases. Each phase is gated and committed separately so it can be bisected and reverted.
-- **Silent breakage of external tooling.** Covered by R4, by new tooling versions, and by the live checks after phases B, D and F.
-- **Digest-bound configs.** A rename forces a new freeze and contact re-activation, which is planned in phase D.
-- **Test-depth rewrites (`parents[N]`).** A move can fail only at run time, so a full collection and the gate run after every family move.
-- **Monkeypatch targets.** Tests patch module globals, so phase F updates those tests together with each split.
+- **Build.** A fresh build.
+- **so101_demo_py ordinary gate.** Run with the grounded-sam interpreter against the install.
+- **colcon test.** `colcon test` plus `colcon test-result` for the 10 packages.
+- **scripts tests.** `scripts/tests/test_so101_teleop_service.py`.
+- **Guards.** The host-path guard and the active guards from §3.
+- **Benchmark gate.** Added in any commit that touches `perception_benchmark/` (U4).
+- **Ledger.** Root writes a ledger checkpoint after review.
 
-## 5. Live checks
+## 5. Active external callers (R4; all others are frozen history)
 
-- After phase B: one Head single case 900000 and one pick-place Teacher run, because the policy, manifest and workflow are the latest only.
-- After phase D: the same pair, because of the renamed kinds and configs, the new freeze and the re-activation.
-- After phase F: the same pair.
-- Each check uses the CP-3539 acceptance criteria.
+**In the repo:**
+- `scripts/so101-teleop-service.py` and `scripts/tests/test_so101_teleop_service.py`.
+- `scripts/so101-macos-service-campaign-final-gate.zsh` and `scripts/so101-macos-service-campaign-live-window.zsh`.
+- `scripts/run_so101_adaptive_worker_scaling.zsh`.
+- `.agents/skills/so101-dev/references/unified-teleop-service.md`.
+- The teleop web e2e fixtures and api tests.
+- `setup.py` and the teleop `CMakeLists.txt`.
 
-## 6. Order of execution and review stops
+**In the evidence tree, current versions only:**
+- `cycle-r9.zsh`, `live-r14.zsh`, `run-qualified-live-20261010-r17.zsh`.
+- `freeze-copy-build-20261010-r10.zsh`, `qualify-copy-build-20261010-r7.zsh`.
+- `prepare-qualified-inputs-20261010-r6.zsh`.
+- The gate runners in `/tmp/so101-debug-act-data-66c42e4c/` (`run_gate_gsam.zsh`).
+- The Head case scripts (`case-v2-001/scripts`).
 
-The executor stops after each phase for root review, in the order A → B → C → D → E → F. The design itself goes to independent review before phase A.
+Each affected caller gets a new version beside the old one, and its sha256 is recorded.
+
+## 6. Live checks
+
+After phases B, D and F:
+1. One Head single case, seed 900000, with the CP-3539 criteria.
+2. One pick-place Teacher run, with the CP-3539 criteria.
+3. One Linux fixed-N parallel batch through the teleop unified service, which is the expert-validation path.
+4. One adaptive pool run (U3).
+5. An offline dataset smoke: export plus the training-view load of a freshly collected episode.
+
+The macOS v4/v5/v6 routes cannot run on ai-station. They are recorded as deferred, and a static route-table test covers them.
+
+## 7. Risks
+
+- **Size.** Every phase and every phase-B family is its own gated commit, so a bad change can be bisected.
+- **The new resource identity value (phase B).** All earlier queue and selection receipts become history.
+- **Digest-bound renames (phase D).** They require a new freeze and re-activation.
+- **Test moves.** Mitigated by step 0 (path constants, the basename guard) and a full collection after every family.
+
+## 8. Order and stops
+
+Step 0 → A → B → C → D → F, with a root review stop after each. The test reorganisation is folded into step 0 and phase C.
