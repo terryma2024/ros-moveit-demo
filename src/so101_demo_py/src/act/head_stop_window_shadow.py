@@ -6,9 +6,9 @@ log; it grants nothing and changes no run. The comparison blocks the switch to t
 subclass: any disagreement means the topic-based window is not a safe replacement.
 
 Startup. The native verdict is PASS when a ``PREARM_STATUS`` row is READY, with the sim stamp
-of its last proof sample. The shadow verdict is PASS when its first complete window finished
-before the first goal and, when the native verdict is PASS, its last sim stamp is no later than
-the native READY stamp plus 102 ms.
+``L`` of its last proof sample. The shadow verdict is PASS when a quiet run of controller_state
+samples (unbroken, before the first goal) is still unbroken at ``L`` and a 51-sample window of
+it completes no later than ``L`` plus 102 ms. A run that ended before ``L`` is not evidence.
 
 End. The native verdict is PASS when ``NATIVE_CLOSE`` was acknowledged and ``CANCEL_STOP``
 confirmed the raw stop without service errors. The anchor is the sim stamp of that raw-stop
@@ -54,7 +54,30 @@ def _verdict(native, shadow, **fields):
                 **fields)
 
 
+def _startup_candidates(shadow):
+    """The shadow's quiet extents before the first goal: logged runs, else the first window row."""
+    runs = [(row['first_sim_ns'], row['last_sim_ns']) for row in _rows(shadow, 'SHADOW_QUIET_RUN')
+            if row.get('phase') == 'startup' and type(row.get('first_sim_ns')) is int
+            and type(row.get('last_sim_ns')) is int]
+    if runs:
+        return runs, None
+    windows = [row for row in _rows(shadow, 'SHADOW_WINDOW') if row.get('phase') == 'startup']
+    if not windows:
+        return [], None
+    goals = _rows(shadow, 'SHADOW_FIRST_GOAL')
+    if goals and type(windows[0].get('mono_ns')) is int and windows[0]['mono_ns'] > goals[0]['mono_ns']:
+        return [], 'AFTER_FIRST_GOAL'
+    window = windows[0]['window']
+    return [(window['first_sim_ns'], window['last_sim_ns'])], None
+
+
 def compare_startup(events, shadow):
+    """Native READY versus the shadow's quiet extent.
+
+    The shadow must cover the native READY instant: some quiet run is still unbroken at the native
+    proof's last sim stamp ``L`` and a 51-sample window of it completes no later than ``L`` + 102 ms.
+    A run that ended before ``L`` is not evidence for it, however early it completed.
+    """
     ready = [row for row in _rows(events, 'PREARM_STATUS') if _record(row).get('status') == 'READY']
     native_stamp = None
     if ready:
@@ -62,24 +85,31 @@ def compare_startup(events, shadow):
         stamp = proof.get('last_sim_time_ns') if isinstance(proof, dict) else None
         native_stamp = stamp if type(stamp) is int else None
     native = bool(ready)
-    windows = [row for row in _rows(shadow, 'SHADOW_WINDOW') if row.get('phase') == 'startup']
-    goals = _rows(shadow, 'SHADOW_FIRST_GOAL')
-    window = windows[0]['window'] if windows else None
-    margin = None
-    if window is None:
+    candidates, refusal = _startup_candidates(shadow)
+    span = (limits.STOP_WINDOW_SAMPLES - 1) * limits.STOP_WINDOW_STEP_NS
+    chosen, margin = None, None
+    if refusal is not None:
+        outcome = {'pass': False, 'reason': refusal}
+    elif not candidates:
         outcome = {'pass': False, 'reason': 'NO_WINDOW'}
-    elif goals and type(windows[0].get('mono_ns')) is int and windows[0]['mono_ns'] > goals[0]['mono_ns']:
-        outcome = {'pass': False, 'reason': 'AFTER_FIRST_GOAL'}
     elif native and native_stamp is not None:
         bound = native_stamp + limits.STOP_WINDOW_STARTUP_SLACK_NS
-        margin = bound - window['last_sim_ns']
-        outcome = {'pass': margin >= 0, 'reason': None if margin >= 0 else 'LATE'}
+        covering = [run for run in candidates if run[1] >= native_stamp]
+        if not covering:
+            outcome = {'pass': False, 'reason': 'RUN_ENDED_BEFORE_NATIVE_READY'}
+            chosen = max(candidates, key=lambda run: run[1])
+        else:
+            chosen = min(covering, key=lambda run: run[0])
+            margin = bound - (chosen[0] + span)
+            outcome = {'pass': margin >= 0, 'reason': None if margin >= 0 else 'LATE'}
     else:
+        chosen = min(candidates, key=lambda run: run[0])
         outcome = {'pass': True, 'reason': None}
     return _verdict(native, outcome,
                     native_ready_sim_ns=native_stamp, margin_ns=margin,
-                    shadow_first_sim_ns=None if window is None else window['first_sim_ns'],
-                    shadow_last_sim_ns=None if window is None else window['last_sim_ns'],
+                    shadow_first_sim_ns=None if chosen is None else chosen[0],
+                    shadow_last_sim_ns=None if chosen is None else chosen[1],
+                    shadow_complete_sim_ns=None if chosen is None else chosen[0] + span,
                     slack_ns=limits.STOP_WINDOW_STARTUP_SLACK_NS)
 
 

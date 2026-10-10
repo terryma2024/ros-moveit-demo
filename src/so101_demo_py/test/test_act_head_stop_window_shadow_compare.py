@@ -159,3 +159,45 @@ def test_read_jsonl_skips_blank_lines_and_refuses_garbage(tmp_path):
     path.write_text('{"kind": "A"}\nnot json\n')
     with pytest.raises(ValueError, match='SHADOW_JSONL_INVALID'):
         read_jsonl(path)
+
+
+# ---- startup against quiet runs: the shadow must cover the native READY instant -----------------
+
+def run_row(first, last, phase='startup'):
+    return dict(kind='SHADOW_QUIET_RUN', phase=phase, first_sim_ns=first, last_sim_ns=last,
+                n=(last - first) // 2_000_000 + 1, reference_position=0.1)
+
+
+def test_a_long_quiet_run_that_began_long_before_native_ready_and_covers_it_passes():
+    shadow = [run_row(632_000_000, NATIVE_LAST + 3_000_000_000)]
+    verdict = compare_startup([prearm()], shadow)
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('PASS', 'PASS', True)
+    assert verdict['shadow_complete_sim_ns'] == 632_000_000 + 100_000_000
+    assert verdict['margin_ns'] == NATIVE_LAST + STOP_WINDOW_STARTUP_SLACK_NS - 732_000_000
+
+
+def test_a_quiet_run_that_ended_before_native_ready_is_not_evidence_for_it():
+    shadow = [run_row(632_000_000, NATIVE_LAST - 2_000_000)]
+    verdict = compare_startup([prearm()], shadow)
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('PASS', 'FAIL', False)
+    assert verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_READY'
+
+
+def test_a_run_that_starts_more_than_102ms_after_native_ready_is_late():
+    start = NATIVE_LAST + STOP_WINDOW_STARTUP_SLACK_NS - 100_000_000 + 2_000_000
+    verdict = compare_startup([prearm()], [run_row(start, start + 500_000_000)])
+    assert verdict['shadow'] == 'FAIL' and verdict['shadow_reason'] == 'LATE'
+    at_bound = start - 2_000_000
+    assert compare_startup([prearm()], [run_row(at_bound, at_bound + 500_000_000)])['equal'] is True
+
+
+def test_runs_win_over_a_window_row_and_only_startup_runs_count():
+    shadow = [window(NATIVE_LAST - 100_000_000), run_row(0, NATIVE_LAST - 2_000_000),
+              run_row(NATIVE_LAST - 500_000_000, NATIVE_LAST + 500_000_000, phase='end')]
+    verdict = compare_startup([prearm()], shadow)
+    assert verdict['shadow'] == 'FAIL' and verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_READY'
+
+
+def test_native_fail_with_a_startup_run_is_a_disagreement_and_without_it_agrees():
+    assert compare_startup([prearm('NOT_READY')], [run_row(0, 1_000_000_000)])['equal'] is False
+    assert compare_startup([prearm('NOT_READY')], [])['equal'] is True

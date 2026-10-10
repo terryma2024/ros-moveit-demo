@@ -50,15 +50,17 @@ def test_a_run_writes_started_startup_goal_end_phase_end_window_and_final(rig, t
         shadow.finish(timeout_s=.1)
     rows = read_jsonl(shadow.path)
     assert [row['kind'] for row in rows] == [
-        'SHADOW_STARTED', 'SHADOW_WINDOW', 'SHADOW_FIRST_GOAL', 'SHADOW_END_PHASE', 'SHADOW_WINDOW',
-        'SHADOW_FINAL']
+        'SHADOW_STARTED', 'SHADOW_WINDOW', 'SHADOW_QUIET_RUN', 'SHADOW_FIRST_GOAL', 'SHADOW_END_PHASE',
+        'SHADOW_WINDOW', 'SHADOW_QUIET_RUN', 'SHADOW_FINAL']
     assert rows[0]['qos_depth'] == 64 and rows[0]['run_id'] == 'run-1'
-    startup, end = rows[1], rows[4]
+    startup, end = rows[1], rows[5]
     assert startup['phase'] == 'startup' and startup['window']['first_sim_ns'] == BASE_SIM
     assert end['phase'] == 'end' and end['window']['first_sim_ns'] == raw_stop + STOP_WINDOW_STEP_NS
-    assert rows[3]['raw_stop_sim_ns'] == raw_stop
+    assert rows[2]['phase'] == 'startup' and rows[2]['first_sim_ns'] == BASE_SIM and rows[2]['n'] == 51
+    assert rows[4]['raw_stop_sim_ns'] == raw_stop
+    assert rows[6]['phase'] == 'end' and rows[6]['first_sim_ns'] == raw_stop + STOP_WINDOW_STEP_NS
     assert final['startup_window'] == startup['window'] and final['end_window'] == end['window']
-    assert rows[5]['stop_receipt']['thread_alive'] is False
+    assert rows[7]['stop_receipt']['thread_alive'] is False
     # the log is consumable by the comparison
     events = [dict(kind='PREARM_STATUS', record=dict(status='READY', proof=dict(
         last_sim_time_ns=startup['window']['last_sim_ns']))),
@@ -126,3 +128,22 @@ def test_the_environment_switch(rig, tmp_path):
     for bad in ('relative/dir', str(tmp_path / 'missing'), ''):
         with pytest.raises(ValueError, match='SHADOW_DIRECTORY_INVALID'):
             shadow_from_environment(context=rig.context, run_id='r', environ={ENVIRONMENT_VARIABLE: bad})
+
+
+def test_quiet_runs_are_logged_when_they_close_with_the_phase_in_effect(rig, tmp_path):
+    shadow = make(rig, tmp_path)
+    try:
+        rig.publish(0, 120)
+        assert wait_for(lambda: shadow.snapshot()['observed'] == 120)
+        shadow.note_first_goal()  # closes the startup run
+        rig.publish(120, 10, fb=0.3)
+        raw_stop = BASE_SIM + 130 * STOP_WINDOW_STEP_NS
+        shadow.on_raw_stop_confirmed(raw_stop)
+        rig.publish(131, 80)
+        assert wait_for(lambda: shadow.snapshot()['observed'] == 210)
+        shadow.finish(timeout_s=2.)
+    finally:
+        shadow.finish(timeout_s=.1)
+    runs = [row for row in read_jsonl(shadow.path) if row['kind'] == 'SHADOW_QUIET_RUN']
+    assert [(row['phase'], row['n'], row['first_sim_ns']) for row in runs] == [
+        ('startup', 120, BASE_SIM), ('end', 80, BASE_SIM + 131 * STOP_WINDOW_STEP_NS)]

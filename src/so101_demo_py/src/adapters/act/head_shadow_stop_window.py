@@ -79,12 +79,21 @@ class ShadowStopWindow:
                          reliable=True, samples=limits.STOP_WINDOW_SAMPLES,
                          deadline_s=limits.STOP_WINDOW_DEADLINE_S))
 
+    def _log_runs(self):
+        with self._lock:
+            phase = self._phase
+        for run in self.subscriber.take_runs():
+            self._write(dict(kind='SHADOW_QUIET_RUN', phase=phase, **run))
+
     def note_first_goal(self):
         """The owner is about to send its first goal: the startup phase ends, the window is void."""
         self.subscriber.void('FIRST_GOAL')
+        self._log_runs()
         self._write(dict(kind='SHADOW_FIRST_GOAL', startup_completed=self._startup_window is not None))
 
     def on_raw_stop_confirmed(self, sim_ns):
+        self.subscriber.flush_run()
+        self._log_runs()
         with self._lock:
             self._phase = 'end'
         self.subscriber.rearm(floor_sim_ns=sim_ns)
@@ -101,6 +110,8 @@ class ShadowStopWindow:
             waiting = self._phase == 'end'
         if waiting:
             self._end_recorded.wait(timeout_s)
+        self.subscriber.flush_run()
+        self._log_runs()
         snapshot = self.subscriber.snapshot()
         receipt = self.subscriber.stop()
         final = dict(startup_window=self._startup_window, end_window=self._end_window,

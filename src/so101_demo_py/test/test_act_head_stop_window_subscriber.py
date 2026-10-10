@@ -39,8 +39,10 @@ class Rig:
         return message
 
     def publish(self, first, count, **keywords):
+        # paced like the controller (a burst above the subscriber's depth would be lost by design)
         for index in range(first, first + count):
             self.publisher.publish(self.message(BASE_SIM + index * STOP_WINDOW_STEP_NS, **keywords))
+            time.sleep(.001)
 
     def close(self):
         if self.subscriber is not None:
@@ -184,3 +186,18 @@ def test_rearm_without_a_floor_clears_an_earlier_floor(rig):
     subscriber.rearm()
     rig.publish(0, 51)
     assert wait_for(lambda: subscriber.completed is not None)
+
+
+def test_take_runs_hands_out_each_closed_run_once_and_flush_closes_the_open_one(rig):
+    subscriber = started(rig)
+    rig.publish(0, 60)
+    rig.publish(60, 1, fb=0.5)  # ends the first run (60 samples)
+    rig.publish(61, 70)
+    assert wait_for(lambda: subscriber.snapshot()['observed'] == 131)
+    first = subscriber.take_runs()
+    assert [run['n'] for run in first] == [60]
+    assert subscriber.take_runs() == []
+    subscriber.flush_run()
+    second = subscriber.take_runs()
+    assert [run['n'] for run in second] == [70]
+    assert second[0]['first_sim_ns'] == BASE_SIM + 61 * STOP_WINDOW_STEP_NS

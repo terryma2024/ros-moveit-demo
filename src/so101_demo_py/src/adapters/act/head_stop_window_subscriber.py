@@ -39,6 +39,7 @@ class StopWindowSubscriber:
         self.node = self.executor = self.thread = self._subscription = None
         self.callback_thread_names = set()
         self._floor_sim_ns = None
+        self._runs_taken = 0
         self.below_floor = 0
         self.received = 0
         self.callback_errors = []
@@ -144,6 +145,18 @@ class StopWindowSubscriber:
     def void(self, reason):
         with self._lock:
             self._window.void(reason)
+
+    def flush_run(self):
+        """Close the quiet run in progress so that :meth:`take_runs` reports it."""
+        with self._lock:
+            self._window.flush_run()
+
+    def take_runs(self):
+        """The closed quiet runs (>= 51 samples) not handed out before."""
+        with self._lock:
+            runs = self._window.runs[self._runs_taken:]
+            self._runs_taken = len(self._window.runs)
+            return [dict(run) for run in runs]
 
     def rearm(self, floor_sim_ns=None):
         """Forget the latched window; samples stamped <= ``floor_sim_ns`` no longer count."""

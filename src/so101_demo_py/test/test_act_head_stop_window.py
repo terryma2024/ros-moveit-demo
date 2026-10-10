@@ -176,3 +176,54 @@ def test_the_first_completion_is_latched_until_rearm():
     assert window.completed is None
     done = feed(window, 51, start=60)
     assert done['first_sim_ns'] == BASE_SIM + 60 * 2_000_000 and window.completed == done
+
+
+# ---- quiet runs: the shadow compares a run against the native READY instant -----------------
+
+def test_a_broken_run_of_at_least_51_samples_is_reported_with_its_extent():
+    window = StopWindow()
+    feed(window, 80)
+    assert window.runs == []
+    # a moving sample ends the run; the run had samples 0..79
+    window.observe(sim_ns=BASE_SIM + 80 * 2_000_000, receive_mono_ns=BASE_MONO + 90_000_000,
+                   feedback_velocity=0.5, reference_velocity=0.0, reference_position=0.25,
+                   now_mono_ns=BASE_MONO + 90_000_000)
+    assert window.runs == [dict(first_sim_ns=BASE_SIM, last_sim_ns=BASE_SIM + 79 * 2_000_000, n=80,
+                                reference_position=0.25)]
+
+
+def test_short_runs_are_not_reported():
+    window = StopWindow()
+    feed(window, 50)
+    window.void('GOAL_SENT')
+    assert window.runs == []
+
+
+def test_a_run_survives_the_age_slide_and_a_void_closes_it():
+    window = StopWindow()
+    feed(window, 120, mono_step=5_000_000)  # too slow to complete, but one unbroken quiet run
+    assert window.completed is None and window.runs == []
+    assert window.open_run() == dict(first_sim_ns=BASE_SIM, last_sim_ns=BASE_SIM + 119 * 2_000_000, n=120,
+                                     reference_position=0.25)
+    window.void('GOAL_SENT')
+    assert window.runs == [dict(first_sim_ns=BASE_SIM, last_sim_ns=BASE_SIM + 119 * 2_000_000, n=120,
+                                reference_position=0.25)]
+    assert window.open_run() is None
+
+
+def test_a_reference_change_closes_the_run_and_the_new_sample_opens_the_next():
+    window = StopWindow()
+    feed(window, 60, ref=0.1)
+    window.observe(sim_ns=BASE_SIM + 60 * 2_000_000, receive_mono_ns=BASE_MONO + 61_000_000,
+                   feedback_velocity=0.0, reference_velocity=0.0, reference_position=0.2,
+                   now_mono_ns=BASE_MONO + 61_000_000)
+    assert [run['n'] for run in window.runs] == [60]
+    assert window.open_run() is None  # a single sample is not a reportable open run
+
+
+def test_flush_run_closes_the_open_run_without_losing_the_window_latch():
+    window = StopWindow()
+    first = feed(window, 51)
+    feed(window, 10, start=51)
+    window.flush_run()
+    assert [run['n'] for run in window.runs] == [61] and window.completed == first

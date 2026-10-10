@@ -33,6 +33,10 @@ class StopWindow:
         self.resets = Counter()
         self.voids = []
         self.observed = 0
+        #: closed runs of at least ``STOP_WINDOW_SAMPLES`` consecutive quiet samples (the extent the
+        #: shadow comparison checks against the native READY instant)
+        self.runs = []
+        self._run = None
 
     @property
     def completed(self):
@@ -44,16 +48,38 @@ class StopWindow:
 
     def rearm(self):
         """Forget the latched window and the buffer; counters keep running."""
+        self._close_run()
         self._samples.clear()
         self._completed = None
+
+    def _report(self, run):
+        return dict(first_sim_ns=run['first_sim_ns'], last_sim_ns=run['last_sim_ns'], n=run['n'],
+                    reference_position=run['reference_position'])
+
+    def _close_run(self):
+        run, self._run = self._run, None
+        if run is not None and run['n'] >= limits.STOP_WINDOW_SAMPLES:
+            self.runs.append(self._report(run))
+
+    def open_run(self):
+        """The unbroken quiet run in progress, once it has at least 51 samples; else None."""
+        if self._run is None or self._run['n'] < limits.STOP_WINDOW_SAMPLES:
+            return None
+        return self._report(self._run)
+
+    def flush_run(self):
+        """Close the run in progress (a phase change or the end of the log)."""
+        self._close_run()
 
     def void(self, reason):
         """A goal (or any other owner event) voids the samples collected so far."""
         self.voids.append(reason)
+        self._close_run()
         self._samples.clear()
 
     def _reset(self, reason):
         self.resets[reason] += 1
+        self._close_run()
         self._samples.clear()
 
     def observe(self, *, sim_ns, receive_mono_ns, feedback_velocity, reference_velocity,
@@ -77,6 +103,12 @@ class StopWindow:
                 self._reset('RECEIVED_TIME_REGRESSION')
             elif reference_position != self._samples[0]['reference_position']:
                 self._reset('REFERENCE_CHANGED')
+        if self._run is None:
+            self._run = dict(first_sim_ns=sim_ns, last_sim_ns=sim_ns, n=1,
+                             reference_position=reference_position)
+        else:
+            self._run['last_sim_ns'] = sim_ns
+            self._run['n'] += 1
         self._samples.append(dict(sim_ns=sim_ns, mono_ns=receive_mono_ns,
                                   feedback_velocity=abs(feedback_velocity),
                                   reference_velocity=abs(reference_velocity),
