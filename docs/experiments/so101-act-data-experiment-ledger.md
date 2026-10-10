@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3535
+latest_checkpoint: CP-3536
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3536 — thin-subclass design: re-review FAIL (rev 2), rev 3 → PASS-WITH-CHANGES, 5 changes applied; implementation dispatched
+
+- Re-review of rev 2: FAIL.
+  - Blockers:
+    - the dead-man was underspecified, and the Head reset path (head_execution_reset.py:267, 280 switches controllers) would silently clear the latch;
+    - goal refusal had no mechanism on 4.42.1 (non-virtual goal callbacks), so the action server must be recreated.
+  - Plus partials on scaling, ERROR→deactivate, GIDs, shadow predicate and negative tests.
+- Rev 3:
+  - action-server recreation; latch re-checked in update(); per-tick scaling and NaN → ERROR;
+  - finite-command rule on deactivate, and the HEAD_NECK_CONTROLLER_DEACTIVATED fault;
+  - per-activation socket, 0700 directory, single SO_PEERCRED peer, goals refused until the owner connects;
+  - 20 ms heartbeat helper, 200 ms timeout, non-RT I/O thread;
+  - planned close; planned controller switches with reconnect, and HEAD_UNPLANNED_CONTROLLER_SWITCH;
+  - endpoint-GID graph check with audited service clients;
+  - shadow predicate; v2 event field lists; CM 4.48.0 execution_time; negative tests with codes and bounds.
+- Re-review of rev 3: PASS-WITH-CHANGES. Applied:
+  - (1) the helper is tied to the runtime (PR_SET_PDEATHSIG, a parent-pid re-check, a liveness pipe with a 150 ms bound), so a killed or wedged runtime latches; the negative tests use SIGKILL and SIGSTOP on the runtime, not the helper;
+  - (2) the peer-pid parameter is set once per activation, is read-only while active, and is read back;
+  - (3) the end-of-case shadow anchor is the raw-stop CANCEL_STOP sim stamp (the native close receipt has no stamp), plus one fail/fail shadow negative;
+  - (4) the foreign-client test is deterministic: goal accepted, then HEAD_GRAPH_CHANGED, then the stop path;
+  - (5) a foreign-subscription allowlist by node name in GRAPH_PROOF.
+- The reviewer was Claude Opus in all three rounds (AGENTS.md names Astra); deviation recorded.
+- Dispatched implementation to a fresh Sonnet executor in the §7 order. The shadow comparison verdict gates the switch.
 
 ## CP-3535 — stock-JTC design review FAIL (13 findings); user chose a thin JTC subclass; design revision 2; pushed to origin
 
