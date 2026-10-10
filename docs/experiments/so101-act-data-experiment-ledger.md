@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3538
+latest_checkpoint: CP-3539
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3539 — thin-subclass step 7 PASS: Head single case 900000 under protocol v2 and one pick-place Teacher run, on the refactored tree
+
+- (a) Head case hc2-900000-1 (case-v2-002, gate-20261010-003 install, domain 173, 15.9 s wall):
+  - TARGET_LOCKED, business rc 0, OS rc 0. classify PASS: stop_confirmed (terminal + raw stop + 51-sample window), owned_children_exited, scene_verified, identity. Yaw error 0.670°.
+  - final.png (payload 0f1887ac…) viewed by the executor and by root: one blue cup, fully visible, centred near x≈323/640, the same framing as CP-3532.
+  - Stop windows. Startup: n 51, |v_fb| 3.3e-15. End (STOCK_STOP_PROOF): n 51, sim 10.672–10.772 s, max |v_fb| 0.000261 (bound 0.002), |v_ref| 0, 99.9 ms after the raw stop at 10.670 s.
+  - DEADMAN_CLOSED_PLANNED: ack true, helper_closed true.
+  - HFA-009 v2 audit in-process: integrity PASS, stop PASS. The production audit CLI needs the freeze registered in PROFILES, so a synthetic launcher receipt was used; exit_cleanup is UNKNOWN for that reason.
+  - Teardown proven.
+- (b) Pick-place 94ac32de-1b6e-46bf-a9e7-48596bc2dfa7. Freeze kQbw7eLo, inputs ThGTDW3k, built by cycle-r9 with freeze r10 / qualify r7, run through live-r14 / r17. These are the first real runs of the new tooling. No new activation binding was needed (the r11-headgeom receipt passed unchanged).
+  - Cycle gates were skipped in-cycle, as at CP-3531 (the in-cycle demo gate uses test-venv without torch; the source gates passed on gate-20261010-003). Two tooling stops came before the run: env -i lacked bun, then the demo gate.
+  - live, readback and watcher rc 0; commit_sequence 314.
+  - Teacher PASS. End-to-end xy 4.909 mm, z 0.152 mm, tilt 1.3e-5 rad. Data VALID, QC PASS, readback PASS.
+  - No ORACLE flags. LIFT peaks: compression 108.94/119.28 µm, force 1.712/1.892 N. Place tilt_compensated with no fallback; release displacement 4.10 mm / 3.93°; settle 2.87 s.
+  - Camera: 820/820 acquisitions. topic_loss_v2 PASS, 0 lost in window. neck controller_state 0 gaps; arm 1 and gripper 3 gaps, all outside the window.
+  - Teardown and cleanup gates passed.
+- Result: the thin-subclass refactor (CP-3530 user request) is complete and live-verified. The broker/SOGB/witness stack is gone.
+- Open follow-ups:
+  1. A CM-level test that the neck is deactivated on ERROR and no non-finite command is written (CP-3538).
+  2. Orphaned stack children after the runtime is SIGKILLed: PDEATHSIG or a process group for the stack children (CP-3538).
+  3. Register production freezes in the Head audit CLI PROFILES for v2 audits.
+  4. Make the in-cycle demo gate use the grounded-sam interpreter, so cycles need not skip gates.
+  5. Nothing from this refactor is pushed yet (local HEAD ahead of origin).
 
 ## CP-3538 — thin-subclass steps 2–6 done (HEAD f89f69d5d); gates 0/0; sim negative tests pass; go for step 7
 
