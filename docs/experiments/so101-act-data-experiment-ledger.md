@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3530
+latest_checkpoint: CP-3531
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3531 — all UT green on the merged tree; r11-headgeom contact policy activated (diagnostic); freeze SES69LkF; live tasks next
+
+- Retirement:
+  - edd1f5902 + 394bf78fb: 8 artifacts, 13 diagnostic modules, 2 alias modules, 10 test files and the orphan transfer evidence record.
+  - Inventory: docs/experiments/so101-act-retired-task6-artifacts-20261010.md.
+  - contact-calibration-schema.json is proven unread by the collect, analyze and activate CLIs.
+  - The r11 ranges vacuity floor dropped from 200 to 100 (134 vectors remain).
+- Tooling, new beside the old ones: freeze-copy-build r9, qualify r6, live wrapper r16, live-r13, cycle-r8 (sha256 in /tmp/so101-debug-act-data-66c42e4c/tooling-sha.txt). Rule now: the Teacher controller YAML is stock JTC with no broker_owned; the deleted broker-chain modules, libraries and entry points are absent; Head-owned neck controller files are allowed.
+- Red items fixed:
+  - mujoco_ros2_control_tests: real defects, not sandbox. A headless run defaulted to disable_rendering=true and test_robot.urdf never overrode it. The pose test now keys its expectation on the libmujoco version. 7/7; submodule b843139.
+  - BrokerOwnedTrajectoryController: written against a vendored JTC extension; it now declares speed_scaling_input_enabled itself on the stock Jazzy 4.42.1. 37/37, f79134a58. This is a stopgap until the CP-3530 stock-JTC refactor.
+- Gates, fresh base scratch/merge-head-final2.*, 10 packages rc 0:
+  - so101_demo_py grounded-sam: 11237 pass / 0 fail / 0 err / 165 skip, rc 0, merge-gate-gsam-FINAL4.iTFxFPlI. Root checked the skip reasons: all macOS-only, training-venv-owned or E2E-install-prefix gated; none is host-path related.
+  - colcon: submodule 7 packages (420 tests), so101_mujoco_support 17/17, quik 2/2 (648 tests), teleop 113/113 (2046 tests), all 0 failures.
+  - Known intermittent: test_act_head_revocation, 2 timeouts in one earlier full run ("native exchange refused"); 3/3 alone and green in FINAL4. Not hardened yet.
+- Contact policy r11-headgeom:
+  - Fingerprint 0dc5a897ec0e7bee…; it differs from r10b only in the model, config and collector hashes (thresholds about 1e-10 relative).
+  - Nominal spot check 29f47011 (freeze 1ffhkH1P, candidate receipt): Teacher DONE; compression 100.1/119.28 µm; force 1.573/1.892 N; no flags.
+  - Over-squeeze 85a85934 (freeze iIzIVfAB, close −0.049): v3 does not stop, by design; ORACLE_CUP_OVERLOAD flagged CLOSE→OPEN; 141.4 µm, 2.249 N (r10b 2.236 N). "Trips the limit" therefore holds as a flag under v3.
+  - Activation receipt calibration/r11-headgeom-20261010T053243Z/activation-receipt.json, standing authorization CP-3394 form, diagnostic use.
+  - New freeze nonhead-installed-freeze.SES69LkF, inputs nonhead-qualified-inputs.HfdxflZY.
+- Deletion candidates: freezes AmotsuTN and iIzIVfAB (after review), old merge-head-* bases, scratch baselines, experiments/d5b-source-r11-*.
+- Next: (1) Head-search-only single-cup case on ai-station (fresh Sonnet executor: Head overlay and native executable, baseline/matrix from the imported portable bundle, imported weights, grounded-sam interpreter); (2) one pick-place Teacher run on freeze SES69LkF with live-r13. One stack at a time.
 
 ## CP-3530 — user: refactor to stock JTC after both live tasks pass
 
