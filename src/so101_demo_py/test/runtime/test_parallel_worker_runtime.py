@@ -1869,3 +1869,13 @@ def test_terminal_capture_failure_keeps_the_teacher_decision_and_only_marks_the_
     assert (decision.teacher_execution_status, decision.teacher_task_result) == ("COMPLETED", "PASS")
     assert decision.act_data_status == "INVALID" and "TERMINAL_CAPTURE_FAILED" in decision.act_data_reason
     assert "TERMINAL_RGB_UNAVAILABLE" in decision.act_data_reason and decision.terminal_artifacts == ()
+
+
+def test_station_environment_annotations_resolve() -> None:
+    """The module defers annotations, so an unimported name in one only fails when something resolves it."""
+    import typing
+
+    from so101_demo.runtime import parallel_worker_runtime
+
+    hints = typing.get_type_hints(parallel_worker_runtime.station_environment)
+    assert hints["return"] == dict[str, str]
