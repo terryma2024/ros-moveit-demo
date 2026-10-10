@@ -6,6 +6,7 @@ executor, so a stalled runtime callback cannot delay the samples and a stalled s
 delay the runtime. The owner calls :meth:`void` when it sends a goal.
 """
 
+import math
 import threading
 import time
 
@@ -38,6 +39,8 @@ class StopWindowSubscriber:
         self._receipt = None
         self.node = self.executor = self.thread = self._subscription = None
         self.callback_thread_names = set()
+        self._latest = None
+        self._listeners = []
         self._floor_sim_ns = None
         self._runs_taken = 0
         self.below_floor = 0
@@ -108,16 +111,32 @@ class StopWindowSubscriber:
                 sim_ns=sim_ns, receive_mono_ns=received_ns,
                 feedback_velocity=_first(message.feedback.velocities),
                 reference_velocity=_first(message.reference.velocities),
-                reference_position=_first(message.reference.positions))
-            if not valid:
-                sample['sim_ns'] = None
+                reference_position=_first(message.reference.positions),
+                feedback_position=_first(message.feedback.positions))
+            usable = valid and all(type(sample[key]) is float and math.isfinite(sample[key]) for key in (
+                'feedback_velocity', 'reference_velocity', 'reference_position', 'feedback_position'))
             with self._lock:
                 self.received += 1
+                if usable:
+                    self._latest = dict(sample)
+                    listeners = tuple(self._listeners)
+                else:
+                    listeners = ()
+            for listener in listeners:
+                try:
+                    listener(dict(sample))
+                except Exception as error:
+                    self.callback_errors.append(f'{type(error).__name__}: {error}'[:200])
+            window_sample = {key: sample[key] for key in (
+                'sim_ns', 'receive_mono_ns', 'feedback_velocity', 'reference_velocity', 'reference_position')}
+            if not valid:
+                window_sample['sim_ns'] = None
+            with self._lock:
                 if (self._floor_sim_ns is not None and valid and type(sim_ns) is int
                         and sim_ns <= self._floor_sim_ns):
                     self.below_floor += 1
                     return
-                done = self._window.observe(now_mono_ns=self._monotonic_ns(), **sample)
+                done = self._window.observe(now_mono_ns=self._monotonic_ns(), **window_sample)
             if done is not None and self._on_complete is not None:
                 self._on_complete(done)
         except Exception as error:
@@ -141,6 +160,18 @@ class StopWindowSubscriber:
             if done is not None or time.monotonic() >= deadline:
                 return done
             time.sleep(.005)
+
+    def latest(self):
+        """The last usable controller_state sample (finite, the neck joint), or None."""
+        with self._lock:
+            return None if self._latest is None else dict(self._latest)
+
+    def add_listener(self, listener):
+        """Call ``listener(sample)`` on the subscriber thread for every usable sample."""
+        if not callable(listener):
+            raise ValueError('STOP_WINDOW_LISTENER_INVALID')
+        with self._lock:
+            self._listeners.append(listener)
 
     def void(self, reason):
         with self._lock:

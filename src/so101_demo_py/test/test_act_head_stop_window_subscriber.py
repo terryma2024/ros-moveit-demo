@@ -201,3 +201,44 @@ def test_take_runs_hands_out_each_closed_run_once_and_flush_closes_the_open_one(
     second = subscriber.take_runs()
     assert [run['n'] for run in second] == [70]
     assert second[0]['first_sim_ns'] == BASE_SIM + 61 * STOP_WINDOW_STEP_NS
+
+
+def test_latest_returns_the_last_valid_sample_with_its_receive_time(rig):
+    subscriber = started(rig)
+    assert subscriber.latest() is None
+    rig.publish(0, 3, fb=0.01, ref=0.002, position=0.25)
+    assert wait_for(lambda: subscriber.latest() is not None and subscriber.latest()['sim_ns'] == BASE_SIM + 4_000_000)
+    latest = subscriber.latest()
+    assert latest['feedback_velocity'] == 0.01 and latest['reference_velocity'] == 0.002
+    assert latest['feedback_position'] == 0.25 and latest['reference_position'] == 0.25
+    assert isinstance(latest['receive_mono_ns'], int) and latest['receive_mono_ns'] > 0
+
+
+def test_listeners_see_every_valid_sample_on_the_subscriber_thread_and_a_failing_one_is_isolated(rig):
+    subscriber = started(rig)
+    seen, names = [], set()
+
+    def good(sample):
+        seen.append(sample['sim_ns'])
+        names.add(threading.current_thread().name)
+
+    def bad(sample):
+        raise RuntimeError('listener failure')
+    subscriber.add_listener(bad)
+    subscriber.add_listener(good)
+    rig.publish(0, 20)
+    rig.publish(20, 1, joints=('other',))  # not a neck sample: no listener call
+    assert wait_for(lambda: len(seen) == 20)
+    assert names == {'head-stop-window'}
+    assert seen == [BASE_SIM + i * STOP_WINDOW_STEP_NS for i in range(20)]
+    assert wait_for(lambda: len(subscriber.snapshot()['callback_errors']) >= 20)
+    assert subscriber.completed is None
+
+
+def test_listeners_see_samples_below_the_floor_too(rig):
+    subscriber = started(rig)
+    seen = []
+    subscriber.add_listener(lambda sample: seen.append(sample['sim_ns']))
+    subscriber.rearm(floor_sim_ns=BASE_SIM + 100 * STOP_WINDOW_STEP_NS)
+    rig.publish(0, 5)
+    assert wait_for(lambda: len(seen) == 5)
