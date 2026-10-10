@@ -19,7 +19,7 @@ import sys
 import pytest
 
 
-from test_act_task8_measurement_contract import _bound_contract  # noqa: E402
+from test_act_pick_place_calibration_measurement_contract import _bound_contract  # noqa: E402
 
 
 def _run(tmp_path, monkeypatch, *, driver_source, extra_document=None):

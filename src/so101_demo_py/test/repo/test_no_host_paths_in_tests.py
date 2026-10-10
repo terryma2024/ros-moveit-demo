@@ -23,10 +23,10 @@ SELF = "src/so101_demo_py/test/repo/test_no_host_paths_in_tests.py"
 ALLOWED = {
     # an evidence_root string inside a receipt/document fixture; the validators only check it is a non-empty string
     "src/so101_demo_py/test/act/test_act_contact_policy_activation.py": "receipt field string, never opened",
-    "src/so101_demo_py/test/act/test_act_task8_calibration_admission.py": "document field string, never opened",
-    "src/so101_demo_py/test/act/test_act_task8_formal_context_fields.py": "document field string, never opened",
-    "src/so101_demo_py/test/act/test_act_task8_measurement_driver.py": "document field string, never opened",
-    "src/so101_demo_py/test/act/test_act_task8_validation_campaign.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_pick_place_calibration_admission.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_pick_place_validation_formal_context_fields.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_pick_place_calibration_measurement_driver.py": "document field string, never opened",
+    "src/so101_demo_py/test/act/test_act_pick_place_validation_campaign.py": "document field string, never opened",
     "src/so101_teleop/test/unified/test_act_campaign_admission.py": "document field string, never opened",
     # the AF_UNIX 107-byte boundary is a property of the path string length; nothing is created
     "src/so101_demo_py/test/parallel_batch/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",

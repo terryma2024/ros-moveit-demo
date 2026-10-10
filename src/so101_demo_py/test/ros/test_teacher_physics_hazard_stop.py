@@ -71,7 +71,7 @@ def test_subscription_uses_the_chunk_topic_with_a_bounded_queue():
 
 
 def test_the_monitor_stops_on_a_latched_plugin_hazard_and_the_code_is_terminal(tmp_path):
-    from test_b1_teacher_execution import make_adapter, run_monitor
+    from test_teacher_moveit_execution import make_adapter, run_monitor
     from so101_demo.core.workflow import TERMINAL_STOP_CODES
     adapter = make_adapter(tmp_path)
     value = watch()

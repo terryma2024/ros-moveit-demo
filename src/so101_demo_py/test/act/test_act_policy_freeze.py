@@ -15,7 +15,7 @@ import yaml
 
 from so101_demo.act.diagnostic_episode_inputs import (
     POLICY_BINDINGS, freeze_inputs, policy_binding, verify_frozen_inputs, verify_policy_bindings)
-from test_act_first_episode_scope import _registry, _write_registry
+from test_act_diagnostic_episode_scope import _registry, _write_registry
 from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"

@@ -2,7 +2,7 @@
 mode and outside the fault sandbox, and carried to the Worker as a re-validated document.
 
 The orchestrator tests of the live Recorder (ready file, CAPTURING, SIGTERM, exit wait) went with that orchestrator; the offline data path
-is tested in `test_p3_offline_switch` and `test_p3_rework`. All with fakes: no stack, no ROS.
+is tested in `test_offline_recording_switch` and the `test_offline_*` files beside it. All with fakes: no stack, no ROS.
 """
 
 from types import SimpleNamespace

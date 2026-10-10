@@ -9,9 +9,9 @@ import pytest
 from so101_demo.act import episode_qc, qc_memo
 from so101_demo.act.offline import orchestration
 
-from test_p3_offline_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
+from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
                                     collection_for, pilot_factory, worker_runtime)
-from test_p3_qc_memo import episode, paths
+from test_independent_qc_memo import episode, paths
 
 
 @pytest.fixture(autouse=True)

@@ -8,7 +8,7 @@ import hashlib
 import time
 from pathlib import Path
 
-from test_task8_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCES, _identity,  # noqa: E402
+from test_pick_place_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCES, _identity,  # noqa: E402
                                                        _raw_records)
 from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample      # noqa: E402
 
@@ -182,7 +182,7 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     """The phase set is `PickPlaceRunner.PHASES`, so a missing or reordered phase fails here rather than downstream."""
 
     from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow, PickPlaceLiveEvidenceRecorder
-    from test_task8_live_evidence_production_chain import _identity
+    from test_pick_place_live_evidence_production_chain import _identity
 
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()

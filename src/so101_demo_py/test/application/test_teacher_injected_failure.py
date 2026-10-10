@@ -17,7 +17,7 @@ from so101_demo.ros import dynamic_mujoco_execution as module
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution, _ExecutionFailed
 
 from test_teacher_execution import teacher_adapter
-from test_b1_teacher_execution import make_adapter
+from test_teacher_moveit_execution import make_adapter
 
 CODE = "TEACHER_INJECTED_EXECUTION_FAILURE"
 DIAGNOSTIC = "preselected_target_diagnostic"
@@ -133,7 +133,7 @@ def test_a_valid_injection_request_round_trips_through_the_worker_specification(
 
 
 def test_the_teacher_argv_gets_the_flag_only_when_the_collection_options_carry_the_injection(tmp_path, monkeypatch):
-    import test_p3_offline_switch as switch
+    import test_offline_recording_switch as switch
     monkeypatch.setattr(switch.orchestration, "PilotRecording", switch.pilot_factory())
     argvs = {}
     for label, options in (("plain", CollectionOptions("on")), ("injected", CollectionOptions("on", inject_failure_at="LIFT"))):

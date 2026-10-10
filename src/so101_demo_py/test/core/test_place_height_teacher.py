@@ -16,8 +16,8 @@ from so101_demo.core.simulation.types import ObjectState
 from so101_demo.core.workflow import TERMINAL_STOP_CODES
 from so101_demo.ports.evidence import PoseEvidence
 
-from test_b1_teacher_execution import make_adapter
-from test_b1_teacher_stop_core import evidence
+from test_teacher_moveit_execution import make_adapter
+from test_teacher_stop_flags_and_cup_safety import evidence
 from paths import PACKAGE_ROOT, TEST_ROOT
 
 PACKAGE = PACKAGE_ROOT

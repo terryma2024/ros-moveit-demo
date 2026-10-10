@@ -19,7 +19,7 @@ import pytest
 
 from test_act_live_physical_audit import provider
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
-from test_p2_scene_bracket import moved
+from test_planning_scene_read_bracket import moved
 
 ROW_AFTER_APPLY_S = 0.006
 READ_AFTER_APPLY_S = 0.024

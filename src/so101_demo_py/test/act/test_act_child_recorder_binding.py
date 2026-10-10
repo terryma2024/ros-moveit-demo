@@ -11,7 +11,7 @@ import pytest
 from so101_demo.act.collection_scope import build_collection_scope, write_collection_scope
 from so101_demo.act.diagnostic_episode_inputs import freeze_inputs
 from so101_demo.act.episode_open import open_recorder_episode
-from test_act_first_episode_scope import _registry, _write_registry
+from test_act_diagnostic_episode_scope import _registry, _write_registry
 from paths import PACKAGE_ROOT, REPOSITORY
 
 

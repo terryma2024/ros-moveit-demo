@@ -143,7 +143,7 @@ def _full_fixture(tmp_path):
     import dataclasses
     from pathlib import Path as _Path
 
-    from test_act_task8_artifact_bundle import _inputs        # stub-based inputs
+    from test_act_pick_place_validation_artifact_bundle import _inputs        # stub-based inputs
 
     from so101_demo.act.pick_place_validation_manifest import (
         ANCHOR_NAMES, build_pick_place_validation_manifest,
@@ -329,8 +329,8 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     import hashlib as _hashlib
     from pathlib import Path as _Path
 
-    from test_act_task8 import FakePort, request as runner_request
-    from test_act_task8_live_evidence import _Contact, _Evidence   # the physics-evidence doubles
+    from test_act_pick_place_validation import FakePort, request as runner_request
+    from test_act_pick_place_live_evidence import _Contact, _Evidence   # the physics-evidence doubles
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.pick_place_live_evidence import (
@@ -437,8 +437,8 @@ def _evidence_port(driver, *, session_id="session-1", attempt_id="attempt-1"):
 
     import hashlib as _hashlib
 
-    from test_act_task8 import FakePort                       # noqa: E402
-    from test_act_task8_live_evidence import _Contact, _Evidence   # noqa: E402
+    from test_act_pick_place_validation import FakePort                       # noqa: E402
+    from test_act_pick_place_live_evidence import _Contact, _Evidence   # noqa: E402
 
     from so101_demo.act.pick_place_live_evidence import (            # noqa: E402
         LiveEvidenceWindow, derive_frame_aggregates,
@@ -520,7 +520,7 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
     import hashlib as _hashlib
     from pathlib import Path as _Path
 
-    from test_act_task8 import request as runner_request
+    from test_act_pick_place_validation import request as runner_request
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.pick_place_live_evidence import CaseEvidenceDriver
@@ -546,7 +546,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
     import json as _json
     from pathlib import Path as _Path
 
-    from test_act_task8 import request as runner_request
+    from test_act_pick_place_validation import request as runner_request
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.pick_place_live_evidence import (
@@ -599,8 +599,8 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
 
     teleop_tests = SOURCE_ROOT / "so101_teleop" / "test"
     sys.path.insert(0, str(teleop_tests / "support"))
-    sys.path.insert(0, str(teleop_tests / "teleop"))
-    from test_task8_case_execution import CHILD_OWNER, STACK_OWNER
+    sys.path.insert(0, str(teleop_tests / "pick_place_validation"))
+    from test_pick_place_validation_case_execution import CHILD_OWNER, STACK_OWNER
 
     from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
 

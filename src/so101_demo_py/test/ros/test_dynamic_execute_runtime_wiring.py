@@ -4,7 +4,7 @@ import signal
 from types import SimpleNamespace
 
 from test_dynamic_scene_sync import RecordingTaskScenePort, _observation, _options, _runtime
-from test_b1_teacher_stop_core import evidence
+from test_teacher_stop_flags_and_cup_safety import evidence
 
 
 def _run(tmp_path, *, no_option=False):

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 from so101_demo.cli import parallel_perception_broker as broker_cli
-from test_p3_role_provenance import PACKAGE, _container_kwargs
+from test_child_role_code_provenance import PACKAGE, _container_kwargs
 from test_parallel_batch_cli import (
     local_start_guard,  # noqa: F401  (autouse: the offline start-guard seam)
 )

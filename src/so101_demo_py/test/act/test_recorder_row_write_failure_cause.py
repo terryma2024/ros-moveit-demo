@@ -110,7 +110,7 @@ def test_the_exception_chain_names_every_link_and_the_innermost_frame():
     assert [link["type"] for link in chain["links"]] == ["RuntimeError", "ValueError"]
     assert chain["links"][1]["message"].startswith("Out of range float values")
     assert chain["links"][1]["relation"] == "cause" and chain["innermost_frame"].endswith(" innermost")
-    assert "test_rec7_row_write.py" in chain["innermost_frame"]
+    assert "test_recorder_row_write_failure_cause.py" in chain["innermost_frame"]
     assert len(json.dumps(chain)) <= 2000
 
 

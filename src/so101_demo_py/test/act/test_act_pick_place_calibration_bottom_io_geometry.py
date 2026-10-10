@@ -17,7 +17,7 @@ from so101_demo.act.pick_place_calibration_bottom_io import BottomIOError, occlu
 from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS  # noqa: E402
 from paths import PACKAGE_ROOT
 
-#: the seam's invented values, quoted from `test_act_task8_formal_measurement_entry.py`
+#: the seam's invented values, quoted from `test_act_pick_place_calibration_formal_measurement_entry.py`
 SEAM_POSITION = [0.02, 0.0, 0.10]
 SEAM_RADIUS = 0.005
 

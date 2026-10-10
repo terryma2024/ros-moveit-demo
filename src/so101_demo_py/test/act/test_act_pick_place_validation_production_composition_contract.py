@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 
-from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor  # noqa: E402
+from test_act_pick_place_calibration_measurement_runtime_descriptor import _context_document, _descriptor  # noqa: E402
 
 
 def _phase_path(phase):

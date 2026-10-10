@@ -398,7 +398,7 @@ def _valid_evidence(contract):
 
     import math
 
-    from test_act_task8_measurement_formulas import FIELD_CASES
+    from test_act_pick_place_calibration_measurement_formulas import FIELD_CASES
 
     evidence = {field: valid["measurements"][field] for field, (valid, *_rest) in FIELD_CASES.items()}
     configured = {field: valid["configured"][field] for field, (valid, *_rest) in FIELD_CASES.items()}

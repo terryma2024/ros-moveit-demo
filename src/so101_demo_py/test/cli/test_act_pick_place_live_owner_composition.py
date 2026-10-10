@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from test_act_task8_live_cli import Lifecycle, Worker, prepared
+from test_act_pick_place_live_cli import Lifecycle, Worker, prepared
 
 
 class _Launch:

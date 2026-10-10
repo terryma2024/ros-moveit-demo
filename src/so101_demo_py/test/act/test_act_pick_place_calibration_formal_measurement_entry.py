@@ -43,7 +43,7 @@ def client():
     refuses - which the composition suite's own comment predicts. This is the same boundary, substituted faithfully.
     """
 
-    from test_act_task8_production_composition_contract import CannedMujocoClient
+    from test_act_pick_place_validation_production_composition_contract import CannedMujocoClient
 
     RECORDED.write_text("client")
     return CannedMujocoClient()
@@ -145,11 +145,11 @@ class _Detector:
 def _formal_run(tmp_path, monkeypatch):
     """Drive the formal entry: no `--driver`, no provider seam, only bottom I/O substituted."""
 
-    from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor
+    from test_act_pick_place_calibration_measurement_runtime_descriptor import _context_document, _descriptor
     from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
-    from test_act_task8_measurement_runtime_descriptor import TEMPLATE
+    from test_act_pick_place_calibration_measurement_runtime_descriptor import TEMPLATE
     from so101_demo.act.pick_place_calibration_measurement_contract import require_identity
-    from test_act_task8_calibration_aggregator import _cli_identities
+    from test_act_pick_place_calibration_aggregator import _cli_identities
     from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     monkeypatch.delenv(PROVIDER_SEAM_ENV, raising=False)          # the verdict forbids this seam

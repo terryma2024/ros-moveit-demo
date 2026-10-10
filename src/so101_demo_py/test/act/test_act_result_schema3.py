@@ -42,7 +42,7 @@ def test_a_teacher_pass_needs_a_completed_execution(execution):
 
 @pytest.mark.parametrize("teacher_outcome,qc,status,exportable", [
     # the fixture is a diagnostic-mode scope: even Teacher PASS + QC PASS is never export eligible (a formal mode is
-    # covered by test_d4_spot_check_receipt.test_export_eligible_needs_a_trainable_mode)
+    # covered by test_contact_spot_check_receipt.test_export_eligible_needs_a_trainable_mode)
     ("PASSED", "PASS", "PASSED", False),
     ("PASSED", "FAIL", "PASSED", False),    # Teacher PASS + data FAIL: still a Teacher success, never exported
     ("FAILED", "PASS", "FAILED", False),    # Teacher FAIL + data PASS: retained, not in the success set

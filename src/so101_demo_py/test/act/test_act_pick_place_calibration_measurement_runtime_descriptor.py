@@ -12,10 +12,10 @@ import sys
 
 import pytest
 
-from test_act_task8_calibration_aggregator import SEAL_VALID_HELPER
+from test_act_pick_place_calibration_aggregator import SEAL_VALID_HELPER
 from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
-from test_act_task8_calibration_aggregator import TEMPLATE, _cli_identities   # noqa: E402
+from test_act_pick_place_calibration_aggregator import TEMPLATE, _cli_identities   # noqa: E402
 
 
 def _descriptor(cpu_fallback: bool = False, device: str = "cuda"):
@@ -113,7 +113,7 @@ def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(t
     # happens afterwards inside the run is the fakes' business, not a wiring error
     assert recorded.exists(), "the composition must build its providers"
     # the entry must have produced the driver's seal: the descriptor is inside the batch it wrote. Full schema validity
-    # is asserted where a capturing stack exists (test_act_task8_measurement_driver.py); a provider stand-in that
+    # is asserted where a capturing stack exists (test_act_pick_place_calibration_measurement_driver.py); a provider stand-in that
     # captures no anchors legitimately seals a batch with an empty anchor list, which the schema refuses
     sealed = tmp_path / "batch" / "batch.json"
     assert sealed.exists(), "the driver sealed the batch the entry reports"

@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 
-from test_act_task8_live_evidence import sample  # noqa: E402
+from test_act_pick_place_live_evidence import sample  # noqa: E402
 
 from so101_demo.act.pick_place_live_evidence import PickPlaceLiveEvidenceRecorder  # noqa: E402
 

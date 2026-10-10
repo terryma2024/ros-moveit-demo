@@ -201,7 +201,7 @@ def test_the_origin_type_is_written_only_when_it_is_set(tmp_path):
 # ---- the recorder is proven stopped ------------------------------------------------------------------------------------------
 
 def test_the_runtime_reports_whether_the_recorder_was_proven_stopped(tmp_path, monkeypatch):
-    import test_p3_offline_switch as switch
+    import test_offline_recording_switch as switch
     from so101_demo.act.collection_orchestration import CollectionOptions
     from so101_demo.act.offline.raw_recorder import STATS_SCHEMA
     for facts, expected in (({"schema": STATS_SCHEMA, "rc": 0}, True),
@@ -219,7 +219,7 @@ def test_the_runtime_reports_whether_the_recorder_was_proven_stopped(tmp_path, m
 
 
 def test_a_run_without_a_recorder_has_nothing_to_prove(tmp_path):
-    import test_p3_offline_switch as switch
+    import test_offline_recording_switch as switch
     from so101_demo.act.collection_orchestration import CollectionOptions
     runtime, group, events, clock = switch.worker_runtime(tmp_path, CollectionOptions("off"))
     assert runtime.recorder_stop_proven(switch._lease()) is True

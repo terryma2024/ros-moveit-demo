@@ -21,7 +21,7 @@ from so101_demo.core.domain import ActionStatus, State
 from so101_demo.core.simulation.types import ReceivedSimulationEvidence
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 
-from test_b1_teacher_stop_core import (
+from test_teacher_stop_flags_and_cup_safety import (
     COMPRESSION_LIMIT_M, FORCE_LIMIT_N, evidence,
 )
 from paths import PACKAGE_ROOT

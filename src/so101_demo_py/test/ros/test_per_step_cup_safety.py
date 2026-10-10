@@ -133,14 +133,14 @@ def test_a_contiguous_stream_has_no_gap_and_tracks_the_last_chunk_time():
 # ---- the Teacher monitor stops on the per-step latch, gaps and silence ---------------------------------------
 
 def adapter(tmp_path, plugin):
-    from test_b1_teacher_execution import make_adapter
+    from test_teacher_moveit_execution import make_adapter
     value = make_adapter(tmp_path)
     value._physics_hazard_watch = plugin
     return value
 
 
 def test_the_monitor_stops_on_a_per_step_violation_the_100_hz_sample_never_showed(tmp_path):
-    from test_b1_teacher_execution import run_monitor
+    from test_teacher_moveit_execution import run_monitor
     clock = Clock()
     plugin = watch(clock=clock)
     value = adapter(tmp_path, plugin)
@@ -157,7 +157,7 @@ def test_the_monitor_stops_on_a_per_step_violation_the_100_hz_sample_never_showe
 
 
 def test_a_gap_after_the_goal_began_stops_as_unavailable_and_an_earlier_gap_does_not(tmp_path):
-    from test_b1_teacher_execution import no_snapshot
+    from test_teacher_moveit_execution import no_snapshot
     from so101_demo.core.domain import State
     plugin = watch()
     value = adapter(tmp_path, plugin)
@@ -175,7 +175,7 @@ def test_a_gap_after_the_goal_began_stops_as_unavailable_and_an_earlier_gap_does
 
 
 def test_a_silent_chunk_stream_stops_after_the_unavailable_bound(tmp_path):
-    from test_b1_teacher_execution import no_snapshot, evidence
+    from test_teacher_moveit_execution import no_snapshot, evidence
     from so101_demo.core.domain import State
     plugin = watch()
     value = adapter(tmp_path, plugin)

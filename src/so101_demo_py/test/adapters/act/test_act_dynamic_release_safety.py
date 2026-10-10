@@ -108,7 +108,7 @@ def test_first_generated_post_stop_source_is_not_skipped_for_later_rpc_epoch_mea
     assert commands == []
 
 
-@pytest.mark.parametrize("state", [State.OPEN_GRIPPER])  # RECOVER_OPEN_GRIPPER: test_b1_teacher_execution.py
+@pytest.mark.parametrize("state", [State.OPEN_GRIPPER])  # RECOVER_OPEN_GRIPPER: test_teacher_moveit_execution.py
 def test_actual_child_open_routes_require_preflight_before_any_command(state):
     value, _, commands = boundary()
     value._attached = False

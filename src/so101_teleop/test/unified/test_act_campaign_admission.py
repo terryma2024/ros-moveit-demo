@@ -89,7 +89,7 @@ def _prepared_receipt(tmp_path):
     for directory in DEMO_TEST_IMPORT_PATH:
         if str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
-    from test_act_task8_artifact_bundle import _inputs
+    from test_act_pick_place_validation_artifact_bundle import _inputs
     from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
 
     receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle")

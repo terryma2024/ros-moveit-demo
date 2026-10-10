@@ -29,7 +29,7 @@ import pytest
 def _formally_sealed(tmp_path, monkeypatch):
     """Run the formal entry (no `--driver`, no provider seam) and return its sealed batch plus its bound contract."""
 
-    from test_act_task8_formal_measurement_entry import _formal_run
+    from test_act_pick_place_calibration_formal_measurement_entry import _formal_run
 
     measure, argv = _formal_run(tmp_path, monkeypatch)
     assert measure.main(argv) == 0, "the formal entry must seal before this file can judge what it sealed"

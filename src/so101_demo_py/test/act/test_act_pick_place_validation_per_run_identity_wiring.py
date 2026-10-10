@@ -21,7 +21,7 @@ from so101_demo.act.pick_place_calibration_admission import CalibrationMeasureme
 
 
 def _formal_context(tmp_path, **extra):
-    from test_act_task8_formal_context_fields import _formal_context as build
+    from test_act_pick_place_validation_formal_context_fields import _formal_context as build
 
     return build(evidence_root=str(tmp_path), **extra)
 

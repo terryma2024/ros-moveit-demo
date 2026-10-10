@@ -12,7 +12,7 @@ import pytest
 
 from so101_demo.act.offline import sources as module
 from test_act_episode_recorder_sources import RecordingNode, _binding, _engine, _episode, _options
-from test_b2_controller_reference import PERIOD_NS, feed
+from test_controller_reference_label_stream import PERIOD_NS, feed
 
 
 def port_with(frames_arm, frames_gripper, clock_ns):

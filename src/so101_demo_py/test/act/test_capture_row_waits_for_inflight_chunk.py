@@ -71,7 +71,7 @@ def test_the_provider_reports_a_physics_source_that_has_not_arrived_yet(frozen_s
 
 
 def test_the_physics_adapter_knows_the_newest_sample_it_has_received():
-    from test_rec6_late_chunks import adapter, chunk_at
+    from test_late_physics_chunks_are_not_a_failure import adapter, chunk_at
     value, _ = adapter()
     assert value.latest_sample_time_s() is None
     message, receipt = chunk_at(1)

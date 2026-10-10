@@ -18,8 +18,8 @@ from so101_demo.ros.dynamic_mujoco_execution import (
 from so101_demo.ros.teacher_safety import CupSafetyLimits
 from so101_demo.ros.teacher_stop import TeacherStop
 
-from test_b1_teacher_execution import ARM, make_adapter, release_adapter
-from test_b1_teacher_stop_core import COMPRESSION_LIMIT_M, FORCE_LIMIT_N, evidence
+from test_teacher_moveit_execution import ARM, make_adapter, release_adapter
+from test_teacher_stop_flags_and_cup_safety import COMPRESSION_LIMIT_M, FORCE_LIMIT_N, evidence
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT

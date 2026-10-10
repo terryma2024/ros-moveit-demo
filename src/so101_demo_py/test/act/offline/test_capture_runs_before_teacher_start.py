@@ -18,7 +18,7 @@ from b2_collection_fixtures import collection_materials
 from so101_demo.act.offline.engine import RC_VALID
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 from test_act_episode_recorder import NOT_EXHAUSTED, readback, result_of, teacher_script
-from test_rec2_stall_replay import RealTimeSources, run_replay
+from test_synthetic_replay_main_thread_stall import RealTimeSources, run_replay
 
 
 from test_teacher_collection import verify

@@ -118,7 +118,7 @@ def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, mo
 
     import json as _json
 
-    from test_act_task8_formal_measurement_entry import _formal_run
+    from test_act_pick_place_calibration_formal_measurement_entry import _formal_run
 
     measure, argv = _formal_run(tmp_path, monkeypatch)
     assert measure.main(argv) == 0, "the formal entry must seal before its evidence can be judged"

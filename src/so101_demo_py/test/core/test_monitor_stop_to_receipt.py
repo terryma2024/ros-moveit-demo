@@ -8,8 +8,8 @@ import pytest
 from so101_demo.core.domain import ActionStatus, Failure, FailureCategory, State
 from so101_demo.core.workflow import resolve_transition
 from so101_demo.ros.teacher_stop import TeacherStop
-from test_b1_teacher_execution import evidence, make_adapter, no_snapshot
-from test_c3_per_step_cup_safety import CupSafetyLimits, FORCE_LIMIT, COMPRESSION_LIMIT, chunk, sample, watch
+from test_teacher_moveit_execution import evidence, make_adapter, no_snapshot
+from test_per_step_cup_safety import CupSafetyLimits, FORCE_LIMIT, COMPRESSION_LIMIT, chunk, sample, watch
 from test_dynamic_manifest_semantics import DONE_TRACE, event, manifest, validate
 
 

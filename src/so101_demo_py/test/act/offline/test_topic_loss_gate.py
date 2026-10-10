@@ -157,7 +157,7 @@ def test_a_gap_that_overlaps_a_clock_gap_is_a_producer_stall_not_a_message_loss(
 # ---- the processor: the verdict and the document -----------------------------------------------------------------------------
 
 def test_the_processor_makes_the_data_invalid_and_writes_the_gate_document(tmp_path):
-    from test_p2_offline_processor import run
+    from test_offline_episode_processor import run
 
     bag = build_bag(tmp_path / "raw", drop=[(JOINT, IN_WINDOW)], transport_lost=1)
     report, out = run(tmp_path, bag)
@@ -168,7 +168,7 @@ def test_the_processor_makes_the_data_invalid_and_writes_the_gate_document(tmp_p
 
 
 def test_the_processor_keeps_a_valid_bag_valid_and_binds_the_gate_document(tmp_path):
-    from test_p2_offline_processor import run
+    from test_offline_episode_processor import run
 
     bag = build_bag(tmp_path / "raw")
     report, out = run(tmp_path, bag)
@@ -309,7 +309,7 @@ def test_the_per_topic_lines_of_the_recorders_debug_log_are_parsed_to_the_last_c
 
 
 def test_the_processor_reads_the_breakdown_and_makes_an_unexplained_used_topic_loss_invalid(tmp_path):
-    from test_p2_offline_processor import run
+    from test_offline_episode_processor import run
 
     bag = build_bag(tmp_path / "raw", transport_lost=3, transport_lost_by_topic={JOINT: 3})
     report, out = run(tmp_path, bag)
@@ -426,7 +426,7 @@ def test_the_loss_facts_carry_the_events_from_the_stats_or_from_the_log_beside_t
 
 
 def test_the_processor_keeps_a_bag_with_start_of_stream_losses_valid_and_a_loss_inside_the_window_invalid(tmp_path):
-    from test_p2_offline_processor import run
+    from test_offline_episode_processor import run
 
     wall = window_wall_ns(tmp_path)
     start = build_bag(tmp_path / "raw1", transport_lost=2, transport_lost_by_topic={CLOCK_TOPIC: 1, JOINT: 1},
@@ -529,7 +529,7 @@ def test_a_scan_level_loss_leaves_a_sealed_failed_record_not_a_second_seal_failu
     """P1(b): a reason the scan latches before the replay (here an unattributed transport loss) used to stop the engine from
     retaining the Teacher events, so the capture saw rows but never the first command and the window it claimed (`complete`, no first
     command) could not be sealed: RECORDER_SEAL_FAILED: AUDIT_WINDOW_INVALID, and the retained record stayed unsealed."""
-    from test_p2_offline_processor import run
+    from test_offline_episode_processor import run
 
     bag = build_bag(tmp_path / "raw", transport_lost=3)
     report, out = run(tmp_path, bag)

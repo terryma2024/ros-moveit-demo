@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from test_act_task8_artifact_bundle import _inputs, _write          # noqa: E402
+from test_act_pick_place_validation_artifact_bundle import _inputs, _write          # noqa: E402
 
 
 def _runtime_document(cpu_fallback: bool, device: str = "cuda"):

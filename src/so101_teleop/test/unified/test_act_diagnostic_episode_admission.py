@@ -27,7 +27,7 @@ for _candidate in (*DEMO_TEST_IMPORT_PATH, Path(__file__).resolve().parent):
         sys.path.insert(0, str(_candidate))
 
 from test_act_campaign_admission import _service, launch  # noqa: E402  (shared fixtures)
-from test_act_first_episode_scope import (  # noqa: E402  (frozen-input fixtures)
+from test_act_diagnostic_episode_scope import (  # noqa: E402  (frozen-input fixtures)
     _canonical,
     _entry,
     _registry,

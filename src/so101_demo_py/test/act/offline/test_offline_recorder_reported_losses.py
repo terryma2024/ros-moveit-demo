@@ -2,7 +2,7 @@
 
 import pytest
 
-from test_p3_offline_switch import LEASE, FakePilot, FakeProcesses, collection_for
+from test_offline_recording_switch import LEASE, FakePilot, FakeProcesses, collection_for
 
 
 @pytest.fixture(autouse=True)

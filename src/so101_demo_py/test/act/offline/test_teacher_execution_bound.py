@@ -10,7 +10,7 @@ from so101_demo.parallel_batch import contracts
 from so101_demo.parallel_batch.contracts import RunMode, teacher_execution_bound_s
 
 from paths import PACKAGE_ROOT
-from test_p3_offline_switch import FakePilot
+from test_offline_recording_switch import FakePilot
 
 ACT_FILE = PACKAGE_ROOT / "config/mujoco/parallel_batch_act_offline.yaml"
 ORIGINAL_FILE = PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"

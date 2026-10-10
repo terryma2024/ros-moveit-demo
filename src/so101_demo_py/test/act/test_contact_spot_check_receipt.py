@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import test_act_contact_calibration as base
-import test_d3_validation_mode as d3
+import test_contact_calibration_spot_check_mode as d3
 from act_identity import ACT_MODEL_SHA256, ACT_SCENE_SHA256, PACKAGE
 from so101_demo.act.contact_calibration import analyze_evidence, make_activation_receipt
 from so101_demo.act.contact_policy import verify_activation
