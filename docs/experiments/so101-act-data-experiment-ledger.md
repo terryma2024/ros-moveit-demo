@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3547
+latest_checkpoint: CP-3548
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3548 — root cause of the general-path release failure found (read-only diagnosis): the general simulator never publishes scene-state frames
+
+- OBSERVED: DYNAMIC_RELEASE_SOURCE_EXPIRED is raised at ros/dynamic_mujoco_execution.py:1933 (_first_source_after_stop, in the DETACH_MOVEIT preflight). The predicate is pending source age > state_max_age_s 0.5.
+  - Measured pending ages: 0.5089 / 0.5013 (fixed-n run4), 0.5009 / 0.5067 (pre-refactor baseline). World evidence was fresh, 0.002–0.015 s.
+  - In every failing manifest: scene_steps_held [], last_scene_error SCENE_STATE_UNAVAILABLE (scene_state.py:127, observer.last is None: no scene frame in about 28,000 steps).
+- OBSERVED: the scene-state publisher is created only when `robot_contact_roots` is set (simulation_evidence_plugin.cpp:899-917).
+  - Only the ACT plugin files set it (config/mujoco/act/mujoco_plugins.yaml:28); the general config/mujoco/mujoco_plugins.yaml does not.
+  - The campaign workers load the general file (launch logs).
+  - The Teacher path never calls _supported_release_preflight (:2203, :2234; `not self._teacher_run()`).
+  - INFERRED: the general release path has never passed live since the scene join (d71d0dca9, 2026-09-19). Before phase B the v3 Teacher skipped it; afterwards nothing else exercised it. EXPIRED vs POST_STOP_SOURCE_UNAVAILABLE is only a 0.5 s race between pending age and the loop deadline.
+- Phase B did not change any limit: general_runtime_policy.yaml has the same values as the old teacher_execution_policy_v1 (0.5 / 1.0 / 180).
+- HYPOTHESIS (separate defect): the fallback DYNAMIC_RESET_EPOCH_MISMATCH (from _snapshot, reset_epoch or paused) comes from a pause leaking from the failed generation into the fallback stack. The fallback worker's ros-home holds logs from both generations.
+- Defect (a): teleop expert_validation/production.py:1406-1439 (and :1654) projects RUNNING whenever terminal_reason is absent, ignoring coordinator liveness. Fix: if the owned coordinator is dead with no live descendants and the campaign is not terminal, report INFRA_FAILED (CLEANING_UP until the cleanup receipt) with COORDINATOR_EXITED_NON_TERMINAL.
+- Planned fix, after phase C (single writer):
+  - (1) add robot_contact_roots [base] + robot_contact_buffer_capacity to the general plugin file (check whether scalar_joint_audit_names is needed);
+  - (2) fail fast with DYNAMIC_SCENE_SOURCE_ABSENT when no scene frame arrives within about 1 s of bind/first preflight;
+  - (3) the defect-(a) projection fix;
+  - (4) diagnose the reset-epoch fallback mismatch.
+  - RED tests: plugin-file declares the roots; observer with no frames → SCENE_SOURCE_ABSENT, not EXPIRED; dead-coordinator projection is not RUNNING.
+  - Then rerun the fixed-N service batch and the adaptive run.
+- Notes: /tmp/so101-debug-act-data-66c42e4c/release-source-diag/notes.txt.
 
 ## CP-3547 — phase-B live checks: Head, Teacher pick-place and the offline smoke PASS; the general-path parallel batch and adaptive runs FAIL on a PRE-EXISTING release failure; phase C dispatched
 
