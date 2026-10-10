@@ -1,15 +1,15 @@
 {
   "sources": [
     {
-      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-4168000000-repeat-1.npz",
+      "path": "antzb-head-evidence:///head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-4168000000-repeat-1.npz",
       "sha256": "0c10520c7b704b2125919d36404e1beb923227a877855106387b4b29063ff422"
     },
     {
-      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-5268000000-repeat-1.npz",
+      "path": "antzb-head-evidence:///head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-5268000000-repeat-1.npz",
       "sha256": "054ecc2a017a94e2b6ebb187d38779792b8522b2b402a6505c8119dcb864ca5c"
     },
     {
-      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-6268000000-repeat-1.npz",
+      "path": "antzb-head-evidence:///head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/cause-audit-20261009-001/case17/frame-6268000000-repeat-1.npz",
       "sha256": "1ee09c953a94a0b01459d13493a9a689a591535e655d32adc6d967cc5c3f5adf"
     }
   ],

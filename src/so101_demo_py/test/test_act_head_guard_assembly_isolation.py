@@ -33,7 +33,7 @@ except RuntimeError as error:
 else:raise AssertionError('fixture skipped actual model constructor')
 """
     env=dict(os.environ)
-    env['PYTHONPATH']=str(Path(__file__).resolve().parent)+os.pathsep+str(Path(os.environ['SO101_HFP_REPOSITORY'])/'src/so101_demo_py/test')+os.pathsep+env.get('PYTHONPATH','')
+    env['PYTHONPATH']=str(Path(__file__).resolve().parent)+os.pathsep+str(Path(__file__).resolve().parent)+os.pathsep+env.get('PYTHONPATH','')
     child=None; blocked=False
     try:
         with admission_peer_cpu_slot(tmp_path_factory):

@@ -4,7 +4,7 @@
   "source_stamp_ns": 4320000000,
   "rgb_payload_sha256": "cb6ed08b279680d322ede227405d88a2360a617d274fb859899277ab2fb8731a",
   "weights_sha256": "2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a",
-  "origin": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-search-40-20261006-001/search-speed-20261008-001/continuation-20261008-001/detector-replay-001/functional-formal004-0-masks.npz",
+  "origin": "antzb-head-evidence:///head-file-protocol-1003/head-search-40-20261006-001/search-speed-20261008-001/continuation-20261008-001/detector-replay-001/functional-formal004-0-masks.npz",
   "fixture_sha256": "efcf79b222e25050cc68b18577efb1c77095b6036d231625260ee4c7512d97c6",
   "purpose": "Lossless boolean masks from actual deterministic CUDA replay; no model dependency in ordinary tests."
 }

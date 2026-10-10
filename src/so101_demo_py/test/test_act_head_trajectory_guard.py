@@ -24,18 +24,13 @@ from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 
-REPOSITORY = Path(os.environ.get(
-    "SO101_HFP_REPOSITORY", "/data/work/ws_moveit/.worktrees/so101-head-file-protocol-1003"
-))
-MODEL = REPOSITORY / "src/so101_demo_py/assets/mujoco/act/head_search_scene.xml"
-GEOMETRY = Path(
-    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/"
-    "head-file-protocol-1003/head-camera-yolo-sampling-20261009-001/"
-    "geometry-new/head-camera-geometry.json"
-)
+PACKAGE = Path(__file__).resolve().parents[1]
+MODEL = PACKAGE / "assets/mujoco/act/head_search_scene.xml"
+# Vendored from the Head line's evidence (geometry-new, sha256-pinned below); no other host's evidence path is read.
+GEOMETRY = Path(__file__).resolve().parent / "data/head_camera_geometry_new.json"
 GEOMETRY_SHA256 = "f0f04d0e4519a13f9657de6f1bd2bab5b4443c0f935360968c1cee2eb6fad72a"
 MODEL_XML_SHA256 = "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14"
-MODEL_SEMANTIC_SHA256 = "970546aa5354add3b744fe027905f45a4477ae10bc7db3d4f7862a9bf05359b7"
+MODEL_SEMANTIC_SHA256 = "9fb38d68ef1e17111fd4a670bd397fb7f15d77538b5fdd1bdb652319c1fd05bf"
 
 
 class _Scene:

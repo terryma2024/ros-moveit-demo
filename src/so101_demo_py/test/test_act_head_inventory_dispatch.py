@@ -58,7 +58,7 @@ def composed(socket_root, monkeypatch, request):
         policy_sha256='a' * 64, controller_identity=identity)
     state = HeadLocalState(scope=scope, search_deadline_ns=time.monotonic_ns() + 30_000_000_000)
     model_path = Path(__file__).resolve().parents[1] / 'assets/mujoco/act/head_search_scene.xml'
-    geometry_path = Path('/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-camera-probe11-20260930T101722Z/head-camera-geometry.json')
+    geometry_path = Path(__file__).resolve().parent / 'data/head_camera_geometry_probe11.json'
     import mujoco
     model = mujoco.MjModel.from_xml_path(str(model_path))
     semantic_sha = model_sha256(model)
@@ -437,7 +437,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     other_guard = HeadTrajectoryGuard(checker=other_checker,
         feedback_port=config['port'], scene_observer=config['guard'].scene_observer,
         node=config['port'].node, model_xml_path=model_path,
-        geometry_path=Path('/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-camera-probe11-20260930T101722Z/head-camera-geometry.json'),
+        geometry_path=Path(__file__).resolve().parent / 'data/head_camera_geometry_probe11.json',
         geometry_sha256=config['guard'].geometry_sha256,
         simulation_session_id=config['guard'].simulation_session_id,
         reset_epoch=config['guard'].reset_epoch,
