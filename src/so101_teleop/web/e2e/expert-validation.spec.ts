@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import golden from "../src/fixtures/top_view_projection_v1.json" with { type: "json" };
+import golden from "../src/fixtures/top_view_projection.json" with { type: "json" };
 
 const baseCampaign = {
   campaign_id: "campaign-adaptive",

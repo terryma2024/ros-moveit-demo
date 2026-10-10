@@ -51,7 +51,7 @@ def test_teleop_install_contract_contains_validation_server_fixture_and_spa():
     assert "config docs launch" in cmake
     assert "web/dist/" in cmake
     assert (
-        TELEOP / "config" / "expert_validation" / "top_view_projection_v1.json"
+        TELEOP / "config" / "expert_validation" / "top_view_projection.json"
     ).is_file()
     assert (
         TELEOP / "so101_teleop" / "expert_validation" / "catalog.py"

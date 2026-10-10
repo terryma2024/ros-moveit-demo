@@ -37,7 +37,7 @@ _GOLDEN_TOP_VIEW = (
     Path(__file__).resolve().parents[2]
     / "config"
     / "expert_validation"
-    / "top_view_projection_v1.json"
+    / "top_view_projection.json"
 )
 _CANDIDATE_BOUNDS = (-0.045, 0.08, -0.34, -0.24)
 
@@ -504,7 +504,7 @@ class ScriptedValidationService:
             "sampler_id": "ai_station_baseline_v1",
             "sampler_version": 1,
             "catalog_seed": 20260911,
-            "geometry_sha256": hashlib.sha256(b"top_view_projection_v1").hexdigest(),
+            "geometry_sha256": hashlib.sha256(b"top_view_projection").hexdigest(),
             "source_hashes": None,
             "top_view": _golden_top_view(total_points),
         }

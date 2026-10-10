@@ -22,7 +22,7 @@ def test_teleop_is_a_single_standalone_package():
     assert (PACKAGE / "scripts" / "so101_expert_validation_server.py").is_file()
     assert (PACKAGE / "web" / "src" / "expert-validation-app.tsx").is_file()
     assert (
-        PACKAGE / "config" / "expert_validation" / "top_view_projection_v1.json"
+        PACKAGE / "config" / "expert_validation" / "top_view_projection.json"
     ).is_file()
 
 

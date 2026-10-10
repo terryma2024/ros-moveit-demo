@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
-import fixture from "@/fixtures/top_view_projection_v1.json";
+import fixture from "@/fixtures/top_view_projection.json";
 import { TopViewMap, type MapPointState } from "./top-view-map";
 
 function renderState(state: MapPointState, options: Record<string, unknown> = {}) {

@@ -7,7 +7,7 @@ import { RuntimeProvider } from "@/state/runtime-provider";
 
 import { ExpertValidationApp, type ExpertValidationApi } from "./expert-validation-app";
 import type { Lease, Manifest } from "@/api/expert-validation-types";
-import golden from "@/fixtures/top_view_projection_v1.json";
+import golden from "@/fixtures/top_view_projection.json";
 
 beforeEach(() => {
   sessionStorage.removeItem("so101-expert-validation-lease");

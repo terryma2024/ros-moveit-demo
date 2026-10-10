@@ -13,7 +13,7 @@ from teleop_paths import PACKAGE_ROOT
 
 
 FIXTURE_PATH = (
-    PACKAGE_ROOT / "config/expert_validation/top_view_projection_v1.json"
+    PACKAGE_ROOT / "config/expert_validation/top_view_projection.json"
 )
 
 
