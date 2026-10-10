@@ -1,4 +1,4 @@
-"""CP-3440 B: a planning-scene read is valid until the NEXT read when the scene is proven unchanged between them.
+"""A planning-scene read is valid until the NEXT read when the scene is proven unchanged between them.
 
 Pilot bag 031b82c6: the scene service stalled after the Teacher's acm_apply (one read took 251 ms), leaving a 148 ms hole in the
 Recorder's reads; the row at 50.506 s had no read within 100 ms and the capture died with INPUT_STALE although the scene had not

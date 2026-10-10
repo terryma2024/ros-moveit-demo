@@ -1,11 +1,11 @@
-"""B2: the Recorder data side consumes TEACHER_EVENT_SCHEMA Teacher events (no dispatch receipt, no sequence_complete, no stop RPC)."""
+"""The Recorder data side consumes TEACHER_EVENT_SCHEMA Teacher events (no dispatch receipt, no sequence_complete, no stop RPC)."""
 import copy
 import time
 from types import SimpleNamespace
 
 import pytest
 
-from b2_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope
+from teacher_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope
 from so101_demo.ros.recorder_data_side import RecorderDataSide
 
 IDENTITY = dict(session_id="s", attempt_id="a", reset_epoch=4, release_epoch=0,
@@ -34,7 +34,7 @@ def consumer(*, started=True):
 
 
 def epoch_boundary(**changes):
-    """The V3 verified reset: the Recorder's own first evidence of the epoch, on the producer's clock (CP-3425)."""
+    """The V3 verified reset: the Recorder's own first evidence of the epoch, on the producer's clock."""
     end = time.monotonic_ns() - 50_000_000
     value = dict(kind="ACT_VERIFIED_RESET_BOUNDARY", schema_version=3, session_id="s", attempt_id="a", reset_epoch=4,
                  source_clock=dict(sim_time_ns=1_000_000_000, begin_monotonic_ns=end - 1_000_000, end_monotonic_ns=end),

@@ -1,4 +1,4 @@
-"""P1-1 (rereview 5), second half: the real ``DetectionBatch`` must become a CLOSED, serializable document.
+"""The real ``DetectionBatch`` must become a CLOSED, serializable document.
 
 The verdict's finding, verbatim: *"``MeasurementDetectorAdapter`` around line 93 returns ``detect()`` unchanged. The
 real result is ``core/detection.py``'s ``DetectionBatch`` dataclass, but the driver embeds it in a document later

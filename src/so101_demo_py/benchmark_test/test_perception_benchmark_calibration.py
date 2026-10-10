@@ -872,7 +872,7 @@ def test_calibration_rejects_error_records_without_skipping_denominators(
         )
 
 
-def test_calibration_rejects_wrong_model_and_non_task1_valid_candidate(
+def test_calibration_rejects_wrong_model_and_non_valid_candidate(
     tmp_path: Path,
 ) -> None:
     mac, linux, truths = _fixture(tmp_path, "yolo_seg")

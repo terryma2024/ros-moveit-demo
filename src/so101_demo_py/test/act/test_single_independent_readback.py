@@ -1,6 +1,6 @@
-"""Phase B3: one independent readback process recomputes the QC once and its stages decide everything else afresh.
+"""One independent readback process recomputes the QC once and its stages decide everything else afresh.
 
-Reviewed design (`2026-10-08-single-fresh-readback.md`, verdict PASS-WITH-CHANGES, CP-3470): the QC *result* is shared between the stages
+Reviewed design (`2026-10-08-single-fresh-readback.md`, verdict PASS-WITH-CHANGES): the QC *result* is shared between the stages
 of a readback entry point under a full-content fingerprint taken before and after the recomputation and at every lookup; the stored
 report, the journal, the index, the receipt and every eligibility decision are read afresh; the process never trusts the memo.
 """
@@ -413,7 +413,7 @@ def test_the_run_command_writes_the_commit_proof_only(tmp_path, monkeypatch):
     assert not list(root.glob("qc*.json")) and not list(root.glob("verify-commit*"))
 
 
-# ---- CP-3394 / P3: a committed INVALID result that never produced a QC report ---------------------------------------------------
+# ---- a committed INVALID result that never produced a QC report ---------------------------------------------------
 
 def invalid_without_qc(tmp_path, monkeypatch, *, episode=False, report=False):
     """The committed result of an INVALID attempt with no sealed episode: the commit proof binds no QC report (act_data_qc NOT_RUN)."""

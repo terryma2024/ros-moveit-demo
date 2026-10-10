@@ -1,6 +1,6 @@
 """Composing W1: one slot, one Worker, one ROS domain, one approved profile.
 
-Task 7 of the macOS service campaign closure plan. W1 is not a capacity calculation and not a
+W1 is not a capacity calculation and not a
 shrunken W2: the two W1 profiles exist because the platform claim is exactly one Worker for one
 named batch kind, so the composition must produce one slot regardless of how many points were
 selected, and it must never invent a budget, qualification or promotion field.
@@ -68,7 +68,7 @@ def test_single_worker_install_documents_load_through_the_execution_loader():
     assert isinstance(load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG), ParallelRuntimeConfigMacosMpsTwoWorker)
 
 
-def test_the_w1_documents_are_refused_on_a_host_that_cannot_run_mps():
+def test_the_single_worker_documents_are_refused_on_a_host_that_cannot_run_mps():
     """A Linux host still refuses the MPS path, for v5/v6 exactly as for v4."""
 
     for path in (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG):
@@ -91,7 +91,7 @@ def test_the_installed_basenames_are_the_ones_the_manifest_records():
 # --------------------------------------------------------------------------------------
 
 
-def test_the_one_w1_slot_is_capacity_only_and_assigns_no_point():
+def test_the_one_single_worker_slot_is_capacity_only_and_assigns_no_point():
     """A W1 slot is a capacity statement; the queue decides which point it executes."""
 
     slots = exact_single_worker_slots()
@@ -110,7 +110,7 @@ def test_the_one_w1_slot_is_capacity_only_and_assigns_no_point():
         (compose_single_worker_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, MPS_SINGLE_WORKER_FIRST_PASS, "FIRST_PASS"),
     ],
 )
-def test_each_w1_profile_composes_one_slot_one_worker_and_one_domain(
+def test_each_single_worker_profile_composes_one_slot_one_worker_and_one_domain(
         compose, path, profile, batch_kind, tmp_path):
     """The plan is exactly one slot, one Worker and one ROS domain per profile."""
 
@@ -166,7 +166,7 @@ def test_the_worker_count_never_follows_the_selected_point_count(tmp_path):
     assert one.to_document()["batch_kind"] == four.to_document()["batch_kind"] == "FIRST_PASS"
 
 
-def test_a_w1_plan_invents_no_budget_qualification_or_promotion_field(tmp_path):
+def test_a_single_worker_plan_invents_no_budget_qualification_or_promotion_field(tmp_path):
     """A W1 composition is a routing fact plus provenance, never a capacity claim."""
 
     document = _plan_for(compose_single_worker_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path).to_document()
@@ -176,14 +176,14 @@ def test_a_w1_plan_invents_no_budget_qualification_or_promotion_field(tmp_path):
     assert not [key for key in document if any(token in key for token in forbidden)]
 
 
-def test_a_w1_plan_is_json_serializable(tmp_path):
+def test_a_single_worker_plan_is_json_serializable(tmp_path):
     """The manifest must survive the JSON round trip the evidence files use."""
 
     document = _plan_for(compose_single_worker_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path).to_document()
     assert json.loads(json.dumps(document))["execution_profile"] == MPS_SINGLE_WORKER_FIRST_PASS
 
 
-def test_a_w1_plan_never_claims_an_nvml_or_proc_fd_dependency(tmp_path):
+def test_a_single_worker_plan_never_claims_an_nvml_or_proc_fd_dependency(tmp_path):
     """The Darwin boundary check runs at composition time, not only in a config test."""
 
     plan = _plan_for(compose_single_worker_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path)
@@ -204,7 +204,7 @@ def test_a_w1_plan_never_claims_an_nvml_or_proc_fd_dependency(tmp_path):
 # --------------------------------------------------------------------------------------
 
 
-def test_each_w1_composer_refuses_the_other_profile_document(tmp_path):
+def test_each_single_worker_composer_refuses_the_other_profile_document(tmp_path):
     """No cross-profile reuse: the retry composer takes v5 only, the first-pass composer v6."""
 
     with pytest.raises(CompositionError, match="CONFIG_SCHEMA_MISMATCH"):
@@ -217,7 +217,7 @@ def test_each_w1_composer_refuses_the_other_profile_document(tmp_path):
         _plan_for(compose_single_worker_first_pass, MACOS_MPS_TWO_WORKER_CONFIG, tmp_path / "d")
 
 
-def test_exact_w2_refuses_a_w1_document(tmp_path):
+def test_exact_two_worker_refuses_a_single_worker_document(tmp_path):
     """The W2 composer is not a fallback for a W1 profile and vice versa."""
 
     for path in (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG):
@@ -227,7 +227,7 @@ def test_exact_w2_refuses_a_w1_document(tmp_path):
                 batch_id="batch-w2", selected_point_ids=("p1",), evidence_root=tmp_path)
 
 
-def test_a_w1_composition_refuses_a_relative_evidence_root_and_a_missing_identity(tmp_path):
+def test_a_single_worker_composition_refuses_a_relative_evidence_root_and_a_missing_identity(tmp_path):
     """The same closed input rules as W2: absolute root, non-empty campaign identity."""
 
     config = load_execution_config(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)
@@ -241,7 +241,7 @@ def test_a_w1_composition_refuses_a_relative_evidence_root_and_a_missing_identit
             selected_point_ids=("p1",), evidence_root=tmp_path)
 
 
-def test_a_w1_plan_cannot_carry_a_linux_transport(tmp_path):
+def test_a_single_worker_plan_cannot_carry_a_linux_transport(tmp_path):
     """A hand-made plan with a Linux transport is refused before anything reads it."""
 
     from dataclasses import replace
@@ -258,10 +258,10 @@ def test_a_w1_plan_cannot_carry_a_linux_transport(tmp_path):
             replace(plan, ipc_transport=str(IpcTransport.PROC_FD_UNIX), mujoco_gl="egl"))
     with pytest.raises(ContractError):
         # the closed v5 contract refuses a CUDA document before any composition exists
-        load_w1_config_with_cuda(tmp_path)
+        load_single_worker_config_with_cuda(tmp_path)
 
 
-def load_w1_config_with_cuda(tmp_path):
+def load_single_worker_config_with_cuda(tmp_path):
     """A hand-written v5 document that claims the Linux combination."""
 
     import yaml

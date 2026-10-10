@@ -1,4 +1,4 @@
-"""Task 6 (approved measurement protocol v2): the deterministic offline aggregator.
+"""the deterministic offline aggregator.
 
 One v2 sealed batch with exactly three anchors renders four canonical documents whose `sample_path` values are
 serialised against a single caller-supplied absolute `publication_root`. Rendering is pure and byte-deterministic;

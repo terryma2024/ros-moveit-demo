@@ -1,4 +1,4 @@
-"""A Task 8 case is durable only after its own stack and child retire."""
+"""A pick-place validation case is durable only after its own stack and child retire."""
 
 import asyncio
 import hashlib

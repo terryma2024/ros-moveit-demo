@@ -605,7 +605,7 @@ def test_unsafe_characterization_uses_frozen_selected_port_not_calibrated_builde
     assert captured["requested_device"] == "mps"
 
 
-def test_config_registers_exact_task6_low_floor_limits() -> None:
+def test_config_registers_exact_low_floor_limits() -> None:
     frozen = perception_benchmark._load_frozen_config(CONFIG)
 
     assert frozen["models"]["yolo_seg"]["low_floor"] == {
@@ -1129,7 +1129,7 @@ def test_calibration_requires_every_frozen_run_provenance_field(
     assert caught.value.code == "RUN_PROVENANCE_MISMATCH"
 
 
-def test_raw_adapter_result_must_match_registered_task6_limits() -> None:
+def test_raw_adapter_result_must_match_registered_limits() -> None:
     config = perception_benchmark._load_frozen_config(CONFIG)
     delegate = SimpleNamespace(
         model_id="plastic-cup-yolo11s-seg-v2",

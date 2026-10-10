@@ -1,4 +1,4 @@
-"""Task 8 case ordering is readable, but full-stack lifecycle is not yet owned."""
+"""pick-place validation case ordering is readable, but full-stack lifecycle is not yet owned."""
 
 from __future__ import annotations
 

@@ -35,7 +35,7 @@ from so101_demo.perception_benchmark.contracts import canonical_sha256
 COMMAND = "ros2 run so101_demo_py so101_head_search_calibration run --run-root /evidence/run-01"
 
 #: the authoritative seventeen, in the order ledger HS-278 lists them (design section 7.1)
-HS278_PARAMETERS = (
+CALIBRATION_BUNDLE_PARAMETERS = (
     "horizontal_fov_rad",
     "lock_valid_neck_rad",
     "coarse_step_rad",
@@ -291,9 +291,9 @@ def test_happy_path_assembles_the_seventeen_with_their_evidence(tmp_path):
 
     assert set(result) == {"bundle", "manifest", "run_status"}
     bundle = result["bundle"]
-    assert tuple(bundle["parameter_names"]) == HS278_PARAMETERS
-    assert set(bundle["parameters"]) == set(HS278_PARAMETERS)
-    for name in HS278_PARAMETERS:
+    assert tuple(bundle["parameter_names"]) == CALIBRATION_BUNDLE_PARAMETERS
+    assert set(bundle["parameters"]) == set(CALIBRATION_BUNDLE_PARAMETERS)
+    for name in CALIBRATION_BUNDLE_PARAMETERS:
         block = bundle["parameters"][name]
         assert set(block) == set(PARAMETER_EVIDENCE_KEYS), name
         assert block["value"] == PHASE_VALUES[_owner(name)][name], name
@@ -319,7 +319,7 @@ def test_happy_path_assembles_the_seventeen_with_their_evidence(tmp_path):
     assert set(result["manifest"]["artifacts"]) == set(ARTIFACT_NAMES)
     assert result["manifest"]["command"] == COMMAND
     assert result["manifest"]["runtime_identity"] == _runtime_identity()
-    assert tuple(result["manifest"]["parameter_names"]) == HS278_PARAMETERS
+    assert tuple(result["manifest"]["parameter_names"]) == CALIBRATION_BUNDLE_PARAMETERS
 
     written = {path.name for path in (tmp_path / "run-01").iterdir()}
     assert written == set(ARTIFACT_NAMES)

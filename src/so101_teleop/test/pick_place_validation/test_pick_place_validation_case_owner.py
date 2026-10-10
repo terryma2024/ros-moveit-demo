@@ -1,4 +1,4 @@
-"""A Task 8 case cannot release admission before both owned processes retire."""
+"""A pick-place validation case cannot release admission before both owned processes retire."""
 
 import asyncio
 from dataclasses import replace

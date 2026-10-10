@@ -1,4 +1,4 @@
-"""Task 7 production chain: the live-evidence artifact end to end.
+"""Production chain: the live-evidence artifact end to end.
 
 This exercises the **real** recorder, window, release correlation and journal-row readback against a real evidence
 root: nine phases recorded at the frozen grid, a release open event correlated with three pre-open support rows,

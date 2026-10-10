@@ -1,6 +1,6 @@
 """C3(a): the cup force and compression rule is evaluated on EVERY physics step of the chunk stream (500 Hz).
 
-The Teacher monitor reads the latest `SimulationEvidence` (~100 Hz); the profile of CP-3375 showed a 5-step spike
+The Teacher monitor reads the latest `SimulationEvidence` (~100 Hz); the recorded profile showed a 5-step spike
 (steps 21520-21524: 4.40 N, 1.30e-4 m) it never saw. The rows below are `c2-profile/profile.csv` steps 21515-21530
 (summed force N, left compression m); the limits are the frozen activated values.
 """

@@ -1,4 +1,4 @@
-"""Recorder round 2 (CP-3403): the evidence of the L2 run named three data-side defects, each pinned here.
+"""The evidence of the L2 run named three data-side defects, each pinned here.
 
 * The world record / scene frame join judged "scene missing" from the pump's own pass cadence BEFORE looking at the scene
   frames, so a pass that came late after the frame had arrived failed a join that was satisfied (L2: SCENE_MISSING at
@@ -170,7 +170,7 @@ def test_a_frame_received_more_than_100_ms_after_its_world_record_is_missing_whe
 
 
 def test_a_missing_scene_frame_leaves_its_facts_next_to_the_episode(monkeypatch, tmp_path):
-    """CP-3405: SCENE_MISSING recurred after the receipt-based join. The next occurrence must say what the rings held."""
+    """SCENE_MISSING recurred after the receipt-based join. The next occurrence must say what the rings held."""
     import json
     scenes = [_scene(5), _scene(6)]
     host, clock, appended = _host(monkeypatch, [_record(7, 10)], scenes)

@@ -48,7 +48,7 @@ def test_the_runner_refuses_any_existing_run_root(tmp_path: Path) -> None:
         serve_teleop(_qualified_report(existing), existing)
 
 
-def test_head_only_report_does_not_grant_task8_ready(tmp_path: Path) -> None:
+def test_head_only_report_does_not_grant_pick_place_calibration_ready(tmp_path: Path) -> None:
     """A closed head-only report grants nothing Task 8 owns - and a digest-only fixture is no report.
 
     Deliberately changed in HS-317: this test used to hand `qualify_head_search` a mapping of

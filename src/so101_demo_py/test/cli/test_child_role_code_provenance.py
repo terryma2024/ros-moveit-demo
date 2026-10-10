@@ -1,4 +1,4 @@
-"""CP-3459: every child role runs the qualified install's code.
+"""Every child role runs the qualified install's code.
 
 Live L1 and L2 on freeze feAWPg9k failed before the Teacher with `SupervisorError: EARLY_EXIT: broker: 1`. The broker is the
 image `so101-parallel-perception:...-v1` started by `docker run`; its `/opt/venv/bin/so101_parallel_perception_broker` imported the

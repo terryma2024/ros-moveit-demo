@@ -135,7 +135,7 @@ def test_collision_pairs_and_table_clearance_fail_closed():
                            table_height_m=None)["reason"] == "SCENE_GEOMETRY_UNAVAILABLE"
 
 
-def test_reachability_document_is_accepted_by_the_cp765_port(tmp_path):
+def test_reachability_document_is_accepted_by_the_port(tmp_path):
     probe = _probe()
     document = build_reachability_document({**probe, "table_clear": {"ok": True, "reason": None,
                                               "lowest_target_z_m": 0.12,
@@ -149,7 +149,7 @@ def test_reachability_document_is_accepted_by_the_cp765_port(tmp_path):
         ReachabilityReportPort.from_path(path).verify(_candidate(seed=99))
 
 
-def test_candidate_source_document_is_accepted_by_the_cp765_loader(tmp_path):
+def test_candidate_source_document_is_accepted_by_the_loader(tmp_path):
     document = build_candidate_source_document(
         candidates={"train": [_candidate(1)], "validation": [_candidate(2)],
                     "offline_test": [_candidate(3)], "rollout_validation": [_candidate(4)],

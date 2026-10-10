@@ -66,7 +66,7 @@ def test_campaign_index_is_atomic_and_records_the_partition(tmp_path):
         write_campaign_index(tmp_path / "bad.json", waves=((),), qualification=False)
 
 
-def test_formal_runs_require_exact_w8_under_a_live_qualification_contract():
+def test_formal_runs_require_exact_eight_worker_under_a_live_qualification_contract():
     from so101_demo.act.parallel_collection import require_collection_mode
 
     require_collection_mode(manifest_kind="W1", qualification_mode=True)

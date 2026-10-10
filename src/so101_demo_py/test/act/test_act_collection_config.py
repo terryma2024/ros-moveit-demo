@@ -25,7 +25,7 @@ def _package_share(tmp_path):
     return share
 
 
-def test_collection_config_freezes_w8_and_recorder_backpressure(tmp_path):
+def test_collection_config_freezes_eight_worker_and_recorder_backpressure(tmp_path):
     share = _package_share(tmp_path)
     value = load_collection_config(share / "config/act/parallel_collection.yaml",
                                    package_share=share)

@@ -1,4 +1,4 @@
-"""CP-3410: a row waits for a chunk that is still in flight; it does not fail on the wall-clock 100 ms.
+"""A row waits for a chunk that is still in flight; it does not fail on the wall-clock 100 ms.
 
 The old capture failed a row with INPUT_STALE when a source was not ready 100 ms after the row first waited. For the physics chunk
 that was the delivery-age rule by another name: a chunk 300 ms late failed the data from the capture side even after the adapter

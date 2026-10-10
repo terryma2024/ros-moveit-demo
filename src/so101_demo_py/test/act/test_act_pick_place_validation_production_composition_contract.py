@@ -1,4 +1,4 @@
-"""P1-1: the production composition must DRIVE a real measurement, not merely construct providers.
+"""The production composition must DRIVE a real measurement, not merely construct providers.
 
 The review's finding is that `calibration_production_composition.py` returns a controller of `None`, a clock that is
 not a clock, and a `PersistentTaskStack` that implements none of the protocol the measurement driver calls - so
@@ -133,7 +133,7 @@ def _run(tmp_path, monkeypatch, client):
     document["search_start_rad"] = 0.0
     # the PRODUCTION context type, not a duck-typed namespace: the previous version satisfied `getattr` reads with a
     # throwaway class, so it never exercised the type the CLI constructs - which is how item 1's four missing fields
-    # survived a green contract test (CP-1633). A test that proves the formal path must use the formal object.
+    # survived a green contract test. A test that proves the formal path must use the formal object.
     from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     context = CalibrationMeasurementContext(**document)
@@ -153,7 +153,7 @@ def _run(tmp_path, monkeypatch, client):
         return CannedDetector()
 
     # the per-run values are ARGUMENTS: this test stands in for the driver, so it supplies them the way the driver
-    # does - a composition without them refuses by name (CP-1635)
+    # does - a composition without them refuses by name
     # P1-3: the phase camera measures, so this test supplies the geometry a measurement has - the phase path, the
     # target and the occluders - through the same bottom-I/O layer the client and the model factory come from
     providers = build_real_providers(context=context, descriptor=document["runtime_descriptor"],
@@ -168,7 +168,7 @@ def _run(tmp_path, monkeypatch, client):
     identity = {"source_commit": "a" * 40,
                 **{name: hashlib.sha256(name.encode()).hexdigest() for name in MeasurementIdentity.MEMBERS
                    if name != "source_commit"}}
-    # the per-run values are ARGUMENTS now (CP-1635): the driver supplies them, and a composition that is not
+    # the per-run values are ARGUMENTS now: the driver supplies them, and a composition that is not
     # given them refuses by name rather than defaulting
     driver = build_production_measurement_driver(
         context=context, identity=identity, providers=providers, session_id=document["session_id"],

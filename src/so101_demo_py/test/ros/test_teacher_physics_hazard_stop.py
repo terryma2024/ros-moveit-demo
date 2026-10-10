@@ -1,4 +1,4 @@
-"""B1b P6: the plugin's two per-step hazard flags (`static_shadow_crossed`, `diagnostic_hazard_breached`) stop the Teacher.
+"""The plugin's two per-step hazard flags (`static_shadow_crossed`, `diagnostic_hazard_breached`) stop the Teacher.
 
 Plugin source (`simulation_evidence_plugin.cpp:418-420`): `static_shadow_crossed` = largest single cup contact force of
 the step > `static_shadow_force_n` (1.1579004532160448 N), `diagnostic_hazard_breached` = summed cup contact force

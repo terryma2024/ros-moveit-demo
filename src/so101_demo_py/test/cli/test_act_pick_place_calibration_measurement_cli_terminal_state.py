@@ -1,7 +1,6 @@
 """The measurement entry's TERMINAL ledger state: a refused seal must leave INVALID, not RUNNING.
 
-The independent review's P2 finding is that the seal validation sits OUTSIDE the handler that appends INVALID
-(CP-1616): everything after the driver is unguarded, so a seal that fails `validate_closed_batch`, or a `batch.json`
+The independent review's P2 finding is that the seal validation sits OUTSIDE the handler that appends INVALID: everything after the driver is unguarded, so a seal that fails `validate_closed_batch`, or a `batch.json`
 that cannot be read, propagates while the ledger keeps saying `RUNNING`. Anything that reads the ledger - an operator, a
 qualification report - then sees a run that never finished with no indication that it failed.
 

@@ -604,7 +604,7 @@ def _points(**overrides) -> dict:
 def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
     """PASS is the happy path only - including the point set - and any refusal reads INCOMPLETE.
 
-    The point clause is the one Task 11's live gate was missing: a campaign that executed no point
+    The point clause is the one the live gate was missing: a campaign that executed no point
     at all reported `W2_CAMPAIGN_PASS`. A verdict with no executed-point evidence, or with an
     unexecuted, duplicated, unselected or infrastructure-failed point, reads INCOMPLETE.
     """
@@ -628,7 +628,7 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
         {"served": {"count": 6, "devices": []}},
         {"served": {"count": 6, "devices": ["cpu"]}},
         {"refused": [{"reason": "DUPLICATE_REQUEST"}]},
-        # the clause that would have caught the empty Task 11 campaign
+        # the clause that would have caught the empty campaign
         {"points": _points(complete=False, committed={}, unexecuted_point_ids=["a", "b"])},
         {"points": _points(complete=False, duplicate_attempts=["a"])},
         {"points": _points(complete=False, unselected_attempts=["c"])},
@@ -679,7 +679,7 @@ def test_campaign_binds_the_selection_and_queue_it_executes(tmp_path):
     """Selection and queue are bound together, once, before any Worker can lease a point.
 
     Without this binding the campaign has no checked answer to "which points may run", and the
-    queue is the only issuer of per-point leases (plan Task 2/3).
+    queue is the only issuer of per-point leases .
     """
 
     from so101_demo.parallel_batch.queue import DurablePointQueue
@@ -740,7 +740,7 @@ def test_campaign_journal_publishes_committed_watermarks(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Task 7: the typed route, the service adapter's dispatch, and the fresh pre-child guard
+# the typed route, the service adapter's dispatch, and the fresh pre-child guard
 #
 # The adapter is the seam the service launches. It accepts exactly the flags the supervisor
 # sends - no more - so its dispatch key has to be derived from those flags plus the config
@@ -1072,7 +1072,7 @@ def test_the_adapter_guard_is_only_asked_once_per_campaign(tmp_path, monkeypatch
     assert calls == [1]
 
 
-def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
+def test_the_composed_campaign_accepts_a_single_worker_plan(tmp_path):
     """One composition drives both W1 profiles: one slot, one Worker, one domain."""
 
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_retry
@@ -1089,7 +1089,7 @@ def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
     assert campaign.plan.execution_profile == "MPS_W1_FULL_RESTART_RETRY"
 
 
-def test_the_n1_verdict_requires_the_single_worker_happy_path():
+def test_the_single_worker_verdict_requires_the_single_worker_happy_path():
     """A W1 pass is one Worker, three served requests on MPS and nothing refused."""
 
     from so101_demo.cli.macos_mps_single_worker_first_pass import campaign_status as n1_status

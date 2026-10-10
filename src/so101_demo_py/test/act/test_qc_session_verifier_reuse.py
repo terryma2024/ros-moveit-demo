@@ -1,4 +1,4 @@
-"""Phase B1: the QC repeats pure verifiers over unchanged files; a session runs each once, and nothing else about the verdict changes.
+"""The QC repeats pure verifiers over unchanged files; a session runs each once, and nothing else about the verdict changes.
 
 `qc_session` keeps a verifier's result only for the duration of one session, keyed on the arguments and on the signature of every
 file the call reads. These tests pin the contract (scope, invalidation, errors, sharing) and the equivalence of the faster

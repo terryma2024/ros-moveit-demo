@@ -1,4 +1,4 @@
-"""CP-3410: the backlog and receiver-lag bounds are frozen policy (episode_recorder), strictly loaded; the lag bound reaches the adapter.
+"""The backlog and receiver-lag bounds are frozen policy (episode_recorder), strictly loaded; the lag bound reaches the adapter.
 
 The backlog bound belonged to the retired chunk spool: it stays in the closed document (frozen manifests carry it) and nothing reads it."""
 import math

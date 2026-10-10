@@ -1,4 +1,4 @@
-"""CP-3456: the content-bound memo of the independent fresh-process QC.
+"""The content-bound memo of the independent fresh-process QC.
 
 The full QC recomputation of a 100 s episode (seal, physical audit, native QC) takes about five minutes. The Coordinator's result gate
 runs it twice under its state lock, the Worker's ResultStore once more, and the Coordinator's result acknowledgement has ten seconds.

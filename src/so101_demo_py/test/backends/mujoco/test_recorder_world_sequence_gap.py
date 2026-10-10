@@ -1,4 +1,4 @@
-"""Recorder round 10 (CP-3418): L2 81fa2857 sealed 378 rows and 756 frames and was INVALID.
+"""L2 81fa2857 sealed 378 rows and 756 frames and was INVALID.
 
 Reasons: "atomic evidence publisher sequence gap" (sticky hazard of the Recorder's world observer, first read 19 ms after the
 capture start), then LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID at the end of the recording (sim 50.5 s) and the seal failure. The

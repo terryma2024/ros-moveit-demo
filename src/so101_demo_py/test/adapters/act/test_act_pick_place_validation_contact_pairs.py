@@ -1,4 +1,4 @@
-"""Task 8 contact exceptions must come from one activated physical model."""
+"""pick-place validation contact exceptions must come from one activated physical model."""
 
 import hashlib
 import json

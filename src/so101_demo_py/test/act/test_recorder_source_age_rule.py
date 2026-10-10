@@ -1,4 +1,4 @@
-"""Recorder round 11 (CP-3420): L2 on VeUKeAls wrote row 0 and failed on row 1 with RECORDER_QUEUE_WRITE_FAILED, writer_error
+"""L2 on VeUKeAls wrote row 0 and failed on row 1 with RECORDER_QUEUE_WRITE_FAILED, writer_error
 ValueError EPISODE_SOURCE_STALE at recorder.py:184 `_audit`.
 
 Row 1 is the instant 11.9 s. The provider that minted it admits a source whose age is within 100 ms in INTEGER NANOSECONDS

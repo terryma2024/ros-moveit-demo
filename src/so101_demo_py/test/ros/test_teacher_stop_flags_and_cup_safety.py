@@ -1,4 +1,4 @@
-"""B1 (Teacher on MoveIt/JTC): stop flags, terminal stop routing, cup-safety and collision rules.
+"""Teacher on MoveIt/JTC: stop flags, terminal stop routing, cup-safety and collision rules.
 
 ROS-free. The numeric vectors are the activated contact-policy thresholds the broker used
 (`config/mujoco/contact_calibration.yaml:195-196`) and the nominal/fault contacts of the old

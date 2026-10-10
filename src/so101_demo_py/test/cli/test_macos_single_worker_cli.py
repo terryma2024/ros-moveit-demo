@@ -1,6 +1,6 @@
 """The two public W1 entry points and the one-shot guard handover across `exec`.
 
-Task 7 of the macOS service campaign closure plan. A W1 entry names exactly one profile: there is
+A W1 entry names exactly one profile: there is
 no `--batch-kind` switch to flip, and one entry never runs the other profile's document. The guard
 phase is a fresh observation every time - an existing `start-guard.json`, whatever it says and
 whoever wrote it, is audit material only - and the admission that crosses the `exec` into the
@@ -119,7 +119,7 @@ def test_the_first_pass_entry_refuses_a_retry_document(tmp_path):
     assert macos_mps_single_worker_first_pass.run(argv[1:]) == 1
 
 
-def test_each_entry_refuses_a_w2_document(tmp_path):
+def test_each_entry_refuses_a_two_worker_document(tmp_path):
     """A v4 exact-W2 document is not a W1 request."""
 
     for module in (macos_mps_single_worker_retry, macos_mps_single_worker_first_pass):
@@ -145,7 +145,7 @@ def test_each_entry_composes_exactly_one_slot_without_models(tmp_path, capsys):
     assert document["plan"]["selected_point_ids"] == ["p1", "p2"]
 
 
-def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
+def test_the_single_worker_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
     """The Worker's own lease - and therefore its evidence - names the approved profile.
 
     A Worker that only knew "I am a Worker" would make the profile a property of whoever spawned it;
@@ -593,7 +593,7 @@ def test_run_campaign_start_guard_uses_the_real_helper_for_the_cpu_and_ram_half(
     assert refused.checks["mps_accelerator"].reason == "MPS_ACCELERATOR_PROBE_MISSING"
 
 
-def test_the_w1_policy_of_the_installed_document_demands_the_mps_probe(tmp_path):
+def test_the_single_worker_policy_of_the_installed_document_demands_the_mps_probe(tmp_path):
     """A v5/v6 policy carries the floor, so the MPS admission is mandatory, not optional."""
 
     policy = load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG).start_guard

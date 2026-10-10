@@ -2305,7 +2305,7 @@ def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
         )
 
 
-def test_fixed_w4_starts_without_any_budget_authority(tmp_path):
+def test_fixed_four_worker_starts_without_any_budget_authority(tmp_path):
     """The plain v3 default path needs no profile, no promotion and no budget environment."""
 
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
@@ -2353,7 +2353,7 @@ def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
         probe_module.ProbeCoordinator.check = original
 
 
-def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path, monkeypatch):
+def test_production_adaptive_factory_builds_an_internal_eight_worker_pool(tmp_path, monkeypatch):
     from dataclasses import replace
 
     from so101_demo.cli.mujoco_parallel_batch import prepare_batch
@@ -2405,7 +2405,7 @@ def test_production_adaptive_factory_builds_an_internal_w8_pool(tmp_path, monkey
     assert pool.context.selector.choose("worker-08", ("task_start",)) == "task_start"
 
 
-def test_worker_process_environment_is_the_exact_task8_whitelist(tmp_path):
+def test_worker_process_environment_is_the_exact_pick_place_validation_whitelist(tmp_path):
     from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 

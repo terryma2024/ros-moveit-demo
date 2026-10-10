@@ -1,4 +1,4 @@
-"""Task 4 (approved measurement protocol v2): bounded calibration admission and dynamic neck binding.
+"""bounded calibration admission and dynamic neck binding.
 
 A calibration generation may admit exactly one measurement flight while the production child stays rejected; arm
 commands must byte-match the measurement plan; and a neck target may be dynamic only when it is uniquely derived

@@ -1,4 +1,4 @@
-"""P1-1 RED/GREEN - the bottom-io frame must be what the REAL detector declares.
+"""The bottom-io frame must be what the REAL detector declares.
 
 The verdict's P1-1: *"``pick_place_calibration_bottom_io`` 的 frame 必须返回真实 YoloSegDetector 所需的 DetectionFrame（含 rgb8、真实
 时间戳和 frame identity），不能返回 ndarray"*.

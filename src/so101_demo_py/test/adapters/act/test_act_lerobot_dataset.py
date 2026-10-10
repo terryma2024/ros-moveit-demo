@@ -48,7 +48,7 @@ def test_decode_png_refuses_anything_but_8_bit_rgb(tmp_path):
         decode_png(tmp_path / "absent.png")
 
 
-def test_the_d8_table_turns_a_stored_observation_into_the_runtime_observation(tmp_path, monkeypatch):
+def test_the_table_turns_a_stored_observation_into_the_runtime_observation(tmp_path, monkeypatch):
     from so101_demo.adapters.act.lerobot import decode_observation, load_training_view
     dataset, view = _view(tmp_path, monkeypatch, size=(9, 6))
     samples, root = load_training_view(view)

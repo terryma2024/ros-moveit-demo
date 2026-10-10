@@ -1,4 +1,4 @@
-"""Task 8P3: a self-contained bundle is admitted only through its committed receipt.
+"""a self-contained bundle is admitted only through its committed receipt.
 
 Receipt shape (the producer contract pinned here):
   {"schema_version", "kind": "task8_preparation_receipt", "bundle_root",
@@ -46,7 +46,7 @@ class ValidInputs:
             document = {"schema_version": 1, "kind": name, "payload": name}
             if name == "runtime_config":
                 # section 4.2: the runtime config is parsed, so the fixture carries a descriptor-shaped document
-                # whose CUDA policy is the one Task 8 live requires
+                # whose CUDA policy is the one pick-place validation requires
                 document = {"schema_version": 1, "head_search": {
                     "schema_version": 1,
                     "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",
@@ -59,7 +59,7 @@ class ValidInputs:
                     "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01,
                                "neck_goal_duration_s": 0.5}}}
             self.paths[name] = _write(root / f"{name}.json", document)
-        # the manifest is produced by Task 8P1/P2 inputs and bound into the bundle
+        # the manifest is produced from the preparation inputs and bound into the bundle
         self.manifest = _write(root / "manifest.json", {
             "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64})
 
@@ -208,7 +208,7 @@ def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path
         pick_place_validation_bundle_payload(broken / "preparation-receipt.json")
 
 
-def test_task8_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
+def test_pick_place_validation_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
     from so101_demo.act.pick_place_validation_artifact_bundle import require_pick_place_validation_payload
 
     payload = {"preparation_receipt_path": "/run/bundle/preparation-receipt.json",
@@ -218,7 +218,7 @@ def test_task8_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
                    dict(payload, preparation_receipt_path="relative/path")):
         with pytest.raises(ValueError, match="TASK8_PAYLOAD_INVALID"):
             require_pick_place_validation_payload(broken)
-    # a collection-only field in a Task 8 payload is refused, whichever side supplies the key list
+    # a collection-only field in a pick-place validation payload is refused, whichever side supplies the key list
     with pytest.raises(ValueError, match="TASK8_PAYLOAD_SHAPE_CONFLICT"):
         require_pick_place_validation_payload(dict(payload, collection_profile="formal"),
                               collection_only_keys=("collection_profile", "collection_output_root"))

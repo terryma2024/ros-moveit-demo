@@ -222,7 +222,7 @@ def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
         load_recorder_frozen_policy(tmp_path / "does-not-exist.json")
 
 
-def test_act_first_episode_run_refuses_a_forged_policy_before_creating_its_run_root(tmp_path):
+def test_diagnostic_episode_run_refuses_a_forged_policy_before_creating_its_run_root(tmp_path):
     from so101_demo.cli import act_diagnostic_episode
     from test_act_child_recorder_binding import frozen_child_inputs
     manifest_path, document, _ = frozen_child_inputs(tmp_path)

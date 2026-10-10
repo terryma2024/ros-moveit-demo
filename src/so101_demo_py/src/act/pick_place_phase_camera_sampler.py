@@ -1,4 +1,4 @@
-"""P1-3 (rereview 5): sample the phase-camera geometry from a headless MuJoCo model, at the model's own period.
+"""Sample the phase-camera geometry from a headless MuJoCo model, at the model's own period.
 
 The design is explicit about what may not be done here: *"不能从 XML 常量直接抄值后声称完成测量"* - the geometry must come
 from **samples**, with at least ten consecutive post-reset samples per anchor, strictly increasing source stamps, one

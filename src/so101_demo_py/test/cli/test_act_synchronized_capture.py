@@ -1,4 +1,4 @@
-"""Task 6 camera samples remain causal, lossless and unqualified."""
+"""Synchronized-capture camera samples remain causal, lossless and unqualified."""
 
 import hashlib
 import json

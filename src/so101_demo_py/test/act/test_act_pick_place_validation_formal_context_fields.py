@@ -33,7 +33,7 @@ def _formal_context(**extra):
         evidence_root="/data/work/so101-evidence/act-data/run",
         resource_binding={"bound_at_entry": True, "cpu_cores": 8, "gpu_device": 0},
         # the complete production-shaped descriptor: the shared rule is closed over the detector block, so a stub is
-        # refused by name (HEAD_SEARCH_CONFIG_INVALID) - the same completion the driver fixtures needed (CP-1578)
+        # refused by name (HEAD_SEARCH_CONFIG_INVALID) - the same completion the driver fixtures needed
         runtime_descriptor={"schema_version": 1, "head_search": {
             "schema_version": 1,
             "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt",

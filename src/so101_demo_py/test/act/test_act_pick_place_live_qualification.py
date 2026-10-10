@@ -1,4 +1,4 @@
-"""Task 8P4 RED: qualification is derived from complete live evidence, never asserted."""
+"""qualification is derived from complete live evidence, never asserted."""
 
 import hashlib
 import json
@@ -716,7 +716,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
                                     manifest_document_sha256=manifest["manifest_document_sha256"])
 
 
-# --- protocol v2 additions (Task 8): the five live-only fields ---------------------------------------------
+# --- additions: the five live-only fields ---------------------------------------------
 
 LIVE_FIELDS = ("grasp_occlusion_window_s", "support_distance_m", "release_stable_s",
                "retreat_distance_m", "placement_stable_s")
@@ -1045,7 +1045,7 @@ def test_the_world_distance_fallback_is_opt_in_and_not_the_default():
                                         allow_world_distance=True) == pytest.approx(0.004)
 
 
-def _r580_fixture(tmp_path):
+def _qualified_report_fixture(tmp_path):
     """One artifact whose samples reference a real contact record and a real wrist record."""
 
     import hashlib
@@ -1083,7 +1083,7 @@ def _r580_fixture(tmp_path):
 def test_record_extractors_bind_the_rules_to_the_records(tmp_path):
     from so101_demo.act.pick_place_live_qualification import LIVE_ONLY_FIELDS, record_live_extractors
 
-    artifact, samples = _r580_fixture(tmp_path)
+    artifact, samples = _qualified_report_fixture(tmp_path)
     # the occlusion rule applies no phase filter of its own - the caller's predicate owns the phase and owner
     # conditions - so this one counts occlusion only in CLOSE..RELEASE, exactly as the design's row describes
     def occluded_from_record(record):

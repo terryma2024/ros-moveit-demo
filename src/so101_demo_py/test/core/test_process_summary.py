@@ -186,7 +186,7 @@ def test_the_aggregation_runs_on_its_own_thread():
 
 # ---- replays of known runs (design 10.2) ----------------------------------------------------------------------------------------
 
-def test_replay_of_cp_3480_run_392e7925_peak_force_1940_at_step_41943():
+def test_replay_of_the_force_stop_run_peak_force_1940_at_step_41943():
     """The force-stop run: 1.940 N +- 0.005 at step 41943 +- 1 is the first step over the r10b limit in DESCEND_TO_PLACE."""
     data = json.loads((FIXTURES / "process_summary_force_stop_replay.json").read_text())
     value = ps.ProcessSummary(limits=CupSafetyLimits(**data["limits"]))
@@ -201,7 +201,7 @@ def test_replay_of_cp_3480_run_392e7925_peak_force_1940_at_step_41943():
     assert place["oracle_flags"] == [ps.FLAG_OVERLOAD]
 
 
-def test_replay_of_cp_3493_run_008b058f_left_compression_139_um_from_the_manifest_evidence():
+def test_replay_of_the_compression_violation_run_left_compression_139_um_from_the_manifest_evidence():
     """That run has no bag: the manifest's own contact evidence is replayed through the same metric."""
     data = json.loads((FIXTURES / "process_summary_compression_violation_replay.json").read_text())
     contacts = {group: [SimpleNamespace(**item) for item in items] for group, items in data["monitor_violation"]["contacts"].items()}

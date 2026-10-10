@@ -139,7 +139,7 @@ def make_runner(
     return AdaptiveBatchRunner(request, pools), request
 
 
-def test_startup_failure_falls_from_w8_to_w6(tmp_path):
+def test_startup_failure_falls_from_eight_worker_to_six_worker(tmp_path):
     pools = FakePools(startup_failure_levels={8})
     runner, _ = make_runner(tmp_path, pools)
 
@@ -186,7 +186,7 @@ def test_midrun_failure_preserves_terminal_results_and_requeues_only_remaining(t
     runner.close()
 
 
-def test_full_ladder_ends_in_infra_failed_after_w1_failure(tmp_path):
+def test_full_ladder_ends_in_infra_failed_after_single_worker_failure(tmp_path):
     pools = FakePools(startup_failure_levels={8, 6, 4, 2, 1})
     runner, _ = make_runner(tmp_path, pools)
 

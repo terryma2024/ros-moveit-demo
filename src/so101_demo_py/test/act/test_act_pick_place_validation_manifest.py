@@ -1,4 +1,4 @@
-"""Task 8 live manifests freeze exact prefix and full-restart cases."""
+"""pick-place validation manifests freeze exact prefix and full-restart cases."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
     assert output.read_bytes() == before
 
 
-def test_checked_in_anchor_file_has_measured_exp115_values():
+def test_checked_in_anchor_file_has_measured_values():
     import yaml
 
     path = PACKAGE_ROOT / "config/act/task8-live-anchors.yaml"

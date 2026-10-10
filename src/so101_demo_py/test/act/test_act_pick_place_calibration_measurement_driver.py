@@ -1,4 +1,4 @@
-"""Task 5 (approved measurement protocol v2): the production MuJoCo measurement driver.
+"""the production MuJoCo measurement driver.
 
 The driver acquires raw evidence for three anchors in order, each in its own FULL_RESTART identity, and seals only
 a CLOSED or INVALID batch. It emits raw records - never a verdict, never a label - and a failure in any anchor stops
@@ -90,7 +90,7 @@ def _context():
     return CalibrationMeasurementContext(runtime_descriptor={"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False,
                              # the shared rule is closed over the detector block, so the fixture supplies every member
                              # the production document carries - the thread and software-version fields included, which
-                             # is the same completion already applied to the admission and bundle fixtures (CP-1320)
+                             # is the same completion already applied to the admission and bundle fixtures
                              "torch_threads": 4, "torch_interop_threads": 2, "torch_version": "2.0",
                              "ultralytics_version": "8.0"}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}},
         generation="g1", contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
@@ -137,7 +137,7 @@ def test_every_index_row_carries_the_required_provenance_fields(tmp_path):
     rows = json.loads((path.parent / "index.json").read_bytes())["files"]   # the records have an indexed home
     assert rows, "the driver must register its raw records"
     # the provenance fields belong to the raw-record rows; the descriptor and index.json rows are artefacts of the
-    # seal's closure rather than of an anchor capture, so the assertion is scoped to the anchors (CP-1246)
+    # seal's closure rather than of an anchor capture, so the assertion is scoped to the anchors
     for row in [r for r in rows if str(r["payload_path"]).startswith("anchors/")]:
         assert INDEX_ROW_KEYS <= set(row), sorted(INDEX_ROW_KEYS - set(row))
         payload = path.parent / row["payload_path"]

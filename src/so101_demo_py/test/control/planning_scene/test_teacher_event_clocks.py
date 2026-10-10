@@ -1,4 +1,4 @@
-"""CP-3441: Teacher event and reporting clocks are current at the actual call; the ACM diff keeps the attached colour;
+"""Teacher event and reporting clocks are current at the actual call; the ACM diff keeps the attached colour;
 the stop proof's simulation clock matches its monotonic instant; only the final boundary `normal_stop` is published.
 None of this changes control: the tests only read stamps, scene message content and published events."""
 

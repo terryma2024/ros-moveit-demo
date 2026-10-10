@@ -1,4 +1,4 @@
-"""Task 8's phase boundaries must fail closed before a live adapter is attached."""
+"""pick-place validation's phase boundaries must fail closed before a live adapter is attached."""
 
 from __future__ import annotations
 
@@ -56,11 +56,11 @@ class FakePort:
         }
 
     def _with_raw(self, evidence):
-        """The raw block the amended contract requires (CP-2089/CP-2100).
+        """The raw block the amended contract requires.
 
         The runner records a phase in `_missing_raw` when its evidence lacks `physical_observation`, and that
         list is what makes `live_evidence_artifact` None. The phase documents carry the block; the set-down
-        document refuses the key (CP-2091), so it is deliberately not applied there.
+        document refuses the key, so it is deliberately not applied there.
         """
 
         return dict(evidence, physical_observation={
@@ -163,8 +163,8 @@ def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
     port = FakePort()
     result = PickPlaceRunner(port).run(request("full", None))
     assert result["completed_phases"] == list(PickPlaceRunner.PHASES)
-    # Task 3: a formal episode now requires the raw observation of every phase; this fake port supplies
-    # the port now supplies the raw observation the amended contract requires (CP-2100), so this run is a
+    # a formal episode now requires the raw observation of every phase; this fake port supplies
+    # the port now supplies the raw observation the amended contract requires, so this run is a
     # formal episode and seals an artifact; the phases and their order below are what this test is about
     assert result["formal_episode_eligible"] is True
     assert result["live_evidence_artifact"] is not None

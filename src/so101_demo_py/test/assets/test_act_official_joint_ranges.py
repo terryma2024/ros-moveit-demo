@@ -1,4 +1,4 @@
-"""R11: the ACT model's joint ranges follow the official SO-101 MJCF (so101_new_calib.xml, sha256
+"""The ACT model's joint ranges follow the official SO-101 MJCF (so101_new_calib.xml, sha256
 OFFICIAL_SHA below, local copy of the SO101 side-comparison download); the main model, the robot parameters and every
 frozen target stay as they were. Official strings are pinned here (the official copy is not in the repository)."""
 import glob
@@ -122,7 +122,7 @@ def test_every_config_joint_vector_lies_inside_the_act_range():
             except Exception:
                 continue
             walk(document, "", name)
-    # vacuity guard: 134 vectors remain after the CP-3529 retirement of the Task 6 profiles (it was 200+ with them)
+    # vacuity guard: 134 vectors remain after the retirement of the synchronized-capture profiles (it was 200+ with them)
     assert seen >= 100
 
 

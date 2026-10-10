@@ -1,4 +1,4 @@
-"""The collection request crosses every process boundary the way --collection always did (CP-3428, CP-3456).
+"""The collection request crosses every process boundary the way --collection always did.
 
 act_diagnostic_episode (CLI) -> CollectionOptions -> coordinator composition -> the Worker specification file -> the Worker process
 (`_build_worker_from_spec`) -> the Worker runtime. The record-only bag recorder is the data path exactly when the collection is on,

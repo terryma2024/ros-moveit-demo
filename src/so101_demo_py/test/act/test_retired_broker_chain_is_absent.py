@@ -1,4 +1,4 @@
-"""B3: the broker chain is gone and the Teacher's controllers are the stock JointTrajectoryController.
+"""The broker chain is gone and the Teacher's controllers are the stock JointTrajectoryController.
 
 Names are built from fragments so the repository-wide absence gate (`rg -w` over the deleted stems) stays meaningful.
 """

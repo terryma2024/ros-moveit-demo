@@ -1,6 +1,6 @@
-"""B1 fixture: a full collection-off pick-place through ExecuteTrajectory + JTC fakes, and the seams it needs.
+"""A full collection-off pick-place through ExecuteTrajectory + JTC fakes, and the seams it needs.
 
-`b1_pick_place_driver.py` builds the real execution adapter over fake action servers. The sys.modules assertion runs
+`pick_place_driver.py` builds the real execution adapter over fake action servers. The sys.modules assertion runs
 in a clean interpreter so that no other test's imports can mask a broker import.
 """
 
@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import b1_pick_place_driver as driver
+import pick_place_driver as driver
 from so101_demo.core.domain import State
 from paths import PACKAGE_ROOT, SOURCE_ROOT, TEST_IMPORT_PATH
 
@@ -59,7 +59,7 @@ def test_teacher_path_imports_no_broker_module_in_a_clean_interpreter(tmp_path):
     script = (
         "import json, sys, pathlib\n"
         f"sys.path[:0] = {[*map(str, TEST_IMPORT_PATH)]!r}\n"
-        "import b1_pick_place_driver as d\n"
+        "import pick_place_driver as d\n"
         "import so101_demo.ros.dynamic_runtime, so101_demo.ros.dynamic_mujoco_execution\n"
         "import so101_demo.backends.mujoco.reset, so101_demo.backends.mujoco.client\n"
         "before = d.broker_modules_loaded()\n"

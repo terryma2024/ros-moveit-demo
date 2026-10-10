@@ -590,7 +590,7 @@ def test_the_preflight_route_forwards_a_closed_profile_claim(tmp_path):
     assert payload["execution_config"]["worker_count"] == 1
 
 
-def test_the_capability_document_models_w1_w2_and_the_no_qualification_note():
+def test_the_capability_document_models_single_worker_two_worker_and_the_no_qualification_note():
     from so101_teleop.expert_validation.api import (
         CapabilitiesResponse,
         ExecutionProfileResponse,

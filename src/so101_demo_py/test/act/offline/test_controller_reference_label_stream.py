@@ -1,4 +1,4 @@
-"""B2 (plan R3 + R9.10 + re-review E): the label stream is the controller's own `controller_state`, gaps are counted.
+"""The label stream is the controller's own `controller_state`, gaps are counted.
 
 * the subscription is RELIABLE, KEEP_LAST, depth 1000;
 * the buffer holds at least 2 s by stamp and its age is measured from the stamp, not from the receipt;
@@ -129,7 +129,7 @@ def test_gaps_outside_the_window_and_neck_gaps_are_diagnostic_only():
 
 
 def test_a_gap_at_a_label_instant_is_invalid_and_so_is_a_gap_in_the_frames_around_it():
-    """CP-3439: the reference must be continuous at every row's t + 0.1 s: the frame there and one period either side."""
+    """The reference must be continuous at every row's t + 0.1 s: the frame there and one period either side."""
     for gap in ((1_098_000_000, 1_102_000_000),    # the frame at the label instant 1.100 is missing
                 (1_100_000_000, 1_104_000_000),    # the frame after it (1.102) is missing
                 (1_096_000_000, 1_100_000_000),    # the frame before it (1.098) is missing

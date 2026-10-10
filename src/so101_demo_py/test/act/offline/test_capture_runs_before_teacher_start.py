@@ -1,4 +1,4 @@
-"""Recorder round 12b (CP-3425): the capture is running before the Teacher starts.
+"""The capture is running before the Teacher starts.
 
 L2 5daa904e: the Teacher announced its reset as the oldest record of its own 3 s observer ring, stamped with a receipt time,
 10 ms before its first command, so no live capture start could satisfy verified_reset <= capture_start <= initial_capture <=
@@ -14,7 +14,7 @@ import time
 
 import pytest
 
-from b2_collection_fixtures import collection_materials
+from teacher_collection_fixtures import collection_materials
 from so101_demo.act.offline.engine import RC_VALID
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 from test_act_episode_recorder import NOT_EXHAUSTED, readback, result_of, teacher_script
@@ -122,7 +122,7 @@ def test_the_verified_reset_is_taken_from_the_producers_clock_of_the_first_world
 
 def test_the_teachers_reset_complete_cannot_name_evidence_older_than_the_recorders_own():
     from so101_demo.act.teacher_collection import validate_reset_complete_matches
-    from b2_collection_fixtures import envelope
+    from teacher_collection_fixtures import envelope
     identity = dict(session_id="s", attempt_id="a", reset_epoch=2)
     boundary = dict(kind="ACT_VERIFIED_RESET_BOUNDARY", schema_version=3, session_id="s", attempt_id="a", reset_epoch=2,
                     source_clock=dict(sim_time_ns=5_000_000, begin_monotonic_ns=8_000_000_000, end_monotonic_ns=8_000_000_100),

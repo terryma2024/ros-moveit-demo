@@ -6,7 +6,7 @@ node, with `rclpy.action.ActionClient` replaced by a fake that serves `/execute_
 `build_dynamic_actions`. Planning, IK and the MoveIt scene services are the only stubs; the clients, the monitor, the
 stop proof and the release path are the production code.
 
-`python -c "import b1_pick_place_driver as d; ..."` is how the sys.modules test uses it, in a clean interpreter.
+`python -c "import pick_place_driver as d; ..."` is how the sys.modules test uses it, in a clean interpreter.
 """
 
 from __future__ import annotations

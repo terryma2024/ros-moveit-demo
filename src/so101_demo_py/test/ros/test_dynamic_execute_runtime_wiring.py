@@ -1,4 +1,4 @@
-"""B1: `run_dynamic_execute` wires the stop flags, the deadline and rclpy's signal option; first-evidence reset boundary."""
+"""`run_dynamic_execute` wires the stop flags, the deadline and rclpy's signal option; first-evidence reset boundary."""
 
 import signal
 from types import SimpleNamespace

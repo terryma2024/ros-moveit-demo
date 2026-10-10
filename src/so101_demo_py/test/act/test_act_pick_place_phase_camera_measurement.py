@@ -1,6 +1,6 @@
-"""P1-3 (rereview4): the phase camera must MEASURE, not echo configuration.
+"""The phase camera must MEASURE, not echo configuration.
 
-The verdict's finding, verified in CP-1674: `PhaseCameraMatrixEvaluator.__call__(phase, index)` returns
+The verdict's finding, verified: `PhaseCameraMatrixEvaluator.__call__(phase, index)` returns
 `{phase, frame_index, row_count, occluders, camera{...}, matrix_sha256}` - all of it read from the admitted document,
 with `phase` and `index` echoed as labels. **No trajectory, target bbox, projection or visibility input exists**, so the
 observation is a function of the CONFIGURATION alone: change the cup, the camera pose or an occluder, and it cannot
@@ -110,7 +110,7 @@ def test_the_phase_path_is_sampled_at_the_admitted_period_with_inputs_and_result
 def test_the_formal_entrys_replay_rows_carry_a_measured_observation(tmp_path, monkeypatch):
     """P1-3's wiring half: a sealed batch's phase rows must say MEASURED, not ABSENT.
 
-    The evaluator measures (CP-1675), but the driver still calls it with `(phase, index)` alone, so a production
+    The evaluator measures, but the driver still calls it with `(phase, index)` alone, so a production
     replay writes `geometry_state: "ABSENT"` with an empty sample list. **The design's "2 ms projected sampling" is a
     property of the SEALED EVIDENCE**, so this reads the batch the formal entry seals rather than the evaluator in
     isolation - and it is the requirement the marker was introduced to make visible.

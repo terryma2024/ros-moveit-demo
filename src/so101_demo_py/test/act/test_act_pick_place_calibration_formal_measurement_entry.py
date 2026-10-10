@@ -1,4 +1,4 @@
-"""P1-1 (rereview4): the FORMAL measurement entry must execute.
+"""The FORMAL measurement entry must execute.
 
 The verdict's words: *"connect the real CLI -> admitted context -> production adapters with all required parameters and
 matching protocols. Add a RED/GREEN success test that does not use `--driver` and does not replace the whole providers

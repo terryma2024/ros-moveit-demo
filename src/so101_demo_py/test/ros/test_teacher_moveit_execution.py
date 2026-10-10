@@ -1,4 +1,4 @@
-"""B1: the Teacher's original MoveIt ExecuteTrajectory + JTC path, its stop paths and its safety port.
+"""The Teacher's original MoveIt ExecuteTrajectory + JTC path, its stop paths and its safety port.
 
 Fixture level: the real `RosDynamicMujocoExecution`, `MoveItExecutionClient` and `GripperClient` over fake action
 clients and a fake world observer. No ROS graph, no hardware.
@@ -755,7 +755,7 @@ def _pose(z=0.2176):
     return PoseEvidence((-0.0737, -0.2325, z), (0.0, 0.0, 0.0, 1.0))
 
 
-def test_r11_without_frozen_inputs_the_place_target_is_unchanged(tmp_path):
+def test_without_frozen_inputs_the_place_target_is_unchanged(tmp_path):
     value = make_adapter(tmp_path)
     original = _pose()
     assert value._place_target(State.DESCEND_TO_PLACE, original) is original

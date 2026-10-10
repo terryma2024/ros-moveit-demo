@@ -74,7 +74,7 @@ def test_a_missing_document_refuses(tmp_path):
     ({"preparation_receipt_path": "/nonexistent/receipt.json"}, "W8_QUALIFICATION_EVIDENCE_INVALID"),
 ])
 def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
-    """CP-2093: when the payload names a bundle it must open, and its evidence must agree.
+    """When the payload names a bundle it must open, and its evidence must agree.
 
     The positive path needs a committed prepared bundle; `test_act_pick_place_validation_artifact_bundle.py`'s `ValidInputs`
     fixture (lines 34-86) is the model for it, and that test belongs with the next increment.
@@ -86,7 +86,7 @@ def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
 
 
 def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consumes(tmp_path):
-    """CP-2103's first half: the bundle route the verifier's journal delegation depends on."""
+    """First half: the bundle route the verifier's journal delegation depends on."""
 
     from test_act_pick_place_validation_artifact_bundle import _inputs
 
@@ -104,7 +104,7 @@ def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consu
 
 
 def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
-    """CP-2104's second half, one step at a time: a prefix and a full row for real identities."""
+    """Second half, one step at a time: a prefix and a full row for real identities."""
 
     from test_act_pick_place_validation_artifact_bundle import _inputs
 
@@ -147,7 +147,7 @@ def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
 
 
 def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verifies(tmp_path):
-    """CP-2107: the verifier's positive path, end to end."""
+    """The verifier's positive path, end to end."""
 
     from test_act_pick_place_validation_artifact_bundle import _inputs
 

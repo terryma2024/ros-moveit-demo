@@ -45,7 +45,7 @@ from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_sl
 from paths import PACKAGE_ROOT
 
 #: The Task 11 selection ids, plus the anchors the first-pass binding contract requires.
-TASK11_IDS = ("cup_test_left_5cm", "sample_07_mid_center", "sample_12_far_left",
+DRAIN_POINT_IDS = ("cup_test_left_5cm", "sample_07_mid_center", "sample_12_far_left",
               "sample_16_far_right")
 
 
@@ -77,7 +77,7 @@ def _batch_binary(tmp_path: Path) -> Path:
     return binary
 
 
-def _selected(point_ids=TASK11_IDS) -> tuple[str, ...]:
+def _selected(point_ids=DRAIN_POINT_IDS) -> tuple[str, ...]:
     """The Task 11 ids, ordered after the four anchors the first-pass binding requires."""
 
     return ANCHOR_IDS + tuple(point_id for point_id in point_ids if point_id not in ANCHOR_IDS)
@@ -112,7 +112,7 @@ class _Plan:
     schema_version = 4
 
 
-class _W1Plan(_Plan):
+class _SingleWorkerPlan(_Plan):
     slots = exact_single_worker_slots()
     execution_profile = "MPS_W1_FIRST_PASS"
     batch_kind = "FIRST_PASS"

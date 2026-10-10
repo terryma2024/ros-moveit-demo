@@ -1,4 +1,4 @@
-"""D4 (code only): a spot_check_candidate receipt is refused everywhere by default and accepted only on the frozen-inputs
+"""A spot_check_candidate receipt is refused everywhere by default and accepted only on the frozen-inputs
 path of a preselected_target_diagnostic freeze. A run holding one can never be export eligible."""
 import copy
 import json

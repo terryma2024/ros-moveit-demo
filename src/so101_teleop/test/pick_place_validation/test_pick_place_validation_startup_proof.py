@@ -1,4 +1,4 @@
-"""A Task 8 startup receipt is scoped, fresh, and consumed at most once."""
+"""A pick-place validation startup receipt is scoped, fresh, and consumed at most once."""
 
 from dataclasses import asdict
 import hashlib

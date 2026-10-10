@@ -1,4 +1,4 @@
-"""CP-3449: the apply-bounded bracket.
+"""The apply-bounded bracket.
 
 Pilot bag 429dbf50: the Teacher's attach apply answered at 62.894 s, the grid row sat at 62.900 s, and the first planning-scene read
 that could follow the apply answered at 62.918 s. A row may only use a read that began after the apply and is not from the future, so
@@ -152,7 +152,7 @@ def _failed(sources, frozen_scene, at):
 
 
 def test_a_read_before_the_instant_keeps_the_read_rules(frozen_scene):
-    """Only a row with no usable read at or before it is served by the apply: with one, the 100 ms rule and CP-3440 B decide."""
+    """Only a row with no usable read at or before it is served by the apply: with one, the 100 ms rule and the scene bracket decide."""
     sources, anchor, after, t = sources_with(frozen_scene)
     before = moved(after, -0.020, call_id="before")      # a read that answered at t + 4 ms, before the row
     sources._planning_calls = deque([before, after], maxlen=64)

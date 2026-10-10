@@ -1,6 +1,6 @@
 """Composing exact W2: two slots, a resolved manifest, and a host that can honour the claim.
 
-Task 10 of the macOS MPS / private IPC plan. The composition has to satisfy three things at once:
+The composition has to satisfy three things at once:
 v3 must still load and behave exactly as before, v4 must be reachable on the host that can run it,
 and an exact-W2 campaign must always present two slots even when it has one point.
 """

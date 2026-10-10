@@ -257,7 +257,7 @@ def test_nonhead_gate_refuses_a_pass_without_its_measurements(tmp_path):
 
 
 def test_nonhead_gate_records_the_identity_but_requires_provenance_and_shape(tmp_path):
-    """CP-1928: a report measured for another revision is still usable, but must be well formed."""
+    """A report measured for another revision is still usable, but must be well formed."""
 
     for field, other in (("source_commit", "f" * 40), ("config_sha256", "f" * 64)):
         moved = _calibration_document(tmp_path)
@@ -577,7 +577,7 @@ def test_inspect_inputs_freezes_the_plan_anchor_and_the_installed_scene(tmp_path
                              "config_sha256", "evidence_root", "roles"}
     assert document["kind"] == CANDIDATES_KIND
     assert set(document["roles"]) == set(INPUT_ROLES)
-    # the milestone's frozen initial state, taken from the checked-in anchor file (EXP-115)
+    # the milestone's frozen initial state, taken from the checked-in anchor file
     anchor = document["roles"]["anchor_scene"]["identity"]
     assert anchor["scene_id"] == "default"
     assert anchor["seed"] == 0
@@ -628,7 +628,7 @@ def test_a_diagnostic_collection_record_is_never_trainable():
     assert not training_eligible(record(collection_mode="unknown"))
     assert not training_eligible(record(collection_mode=None))
     # a record that carries no mode at all keeps the pre-existing record-level semantics; the
-    # exporter boundary that refuses a missing mode is Task 4's
+    # exporter boundary that refuses a missing mode is the exporter's
     assert training_eligible({key: value for key, value in record().items()
                               if key != "collection_mode"})
 
@@ -831,7 +831,7 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
         assert _inspect_resource_thresholds(root)["status"] == "MISSING", label
 
 
-"""Task 1 of the non-head first-episode plan: explicit mode and closed scope binding.
+"""explicit mode and closed scope binding.
 
 The diagnostic mode replaces only target selection and the Head prerequisite. Robot, contact,
 controller, reset, collision, holding, release, sampling and identity gates all still apply, so
@@ -841,7 +841,7 @@ the formal mode must still require real Head qualification.
 
 
 def test_freeze_accepts_a_calibration_report_with_another_recorded_identity(tmp_path):
-    """CP-1928: a report measured for another revision is frozen as-is, with its identity recorded."""
+    """A report measured for another revision is frozen as-is, with its identity recorded."""
 
     registry = _registry(tmp_path)
     old_identity = tmp_path / "calibration-other-config.json"
@@ -856,7 +856,7 @@ def test_freeze_accepts_a_calibration_report_with_another_recorded_identity(tmp_
 
 
 def test_freeze_accepts_two_distinct_approved_calibration_reports(tmp_path):
-    """CP-1928 withdrew the one-report rule: each calibration role is validated on its own merits."""
+    """The one-report rule is withdrawn: each calibration role is validated on its own merits."""
 
     registry = _registry(tmp_path)
     other = tmp_path / "calibration-second.json"
@@ -872,7 +872,7 @@ def test_freeze_accepts_two_distinct_approved_calibration_reports(tmp_path):
 
 
 def test_freeze_accepts_an_identity_it_cannot_prove(tmp_path):
-    """CP-1928: the registry's identity is recorded provenance; it is no longer proved live."""
+    """The registry's identity is recorded provenance; it is no longer proved live."""
 
     registry = _registry(tmp_path)
     registry["source_commit"] = "f" * 40

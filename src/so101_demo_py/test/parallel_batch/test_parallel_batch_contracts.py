@@ -1081,7 +1081,7 @@ def test_macos_mps_single_worker_first_pass_document_resolves_its_profile():
 
 @pytest.mark.parametrize("version", [5, 6])
 @pytest.mark.parametrize("worker_count", [0, 2, 3, 4, 6, 8])
-def test_the_w1_profiles_are_exactly_one_worker(version, worker_count):
+def test_the_single_worker_profiles_are_exactly_one_worker(version, worker_count):
     """Any other count is a different platform claim these documents do not make."""
 
     contracts = contracts_module()
@@ -1107,7 +1107,7 @@ def test_the_w1_profiles_are_exactly_one_worker(version, worker_count):
         ("mps_process_memory_fraction", None),
     ],
 )
-def test_the_w1_profiles_refuse_cpu_fallback_and_linux_transport(version, key, value):
+def test_the_single_worker_profiles_refuse_cpu_fallback_and_linux_transport(version, key, value):
     """No CPU fallback, no CUDA device and no Linux transport on a W1 document."""
 
     contracts = contracts_module()
@@ -1121,7 +1121,7 @@ def test_the_w1_profiles_refuse_cpu_fallback_and_linux_transport(version, key, v
 
 
 @pytest.mark.parametrize("version", [5, 6])
-def test_the_w1_profiles_refuse_a_cuda_accelerator(version):
+def test_the_single_worker_profiles_refuse_a_cuda_accelerator(version):
     """The MPS combination is the only one either W1 profile admits."""
 
     contracts = contracts_module()
@@ -1139,7 +1139,7 @@ def test_the_w1_profiles_refuse_a_cuda_accelerator(version):
 
 
 @pytest.mark.parametrize("version", [5, 6])
-def test_the_w1_profiles_are_closed_against_unknown_fields(version, tmp_path):
+def test_the_single_worker_profiles_are_closed_against_unknown_fields(version, tmp_path):
     """An unknown top-level, execution or guard key is refused, including a profile key.
 
     The profile is a property of the schema, not a document field: a file that tries to name
@@ -1187,7 +1187,7 @@ def test_the_single_worker_profiles_share_every_closed_field_set_with_the_two_wo
     assert contracts.START_GUARD_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS == contracts.START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
 
 
-def test_the_w1_profiles_invent_no_budget_or_qualification_field():
+def test_the_single_worker_profiles_invent_no_budget_or_qualification_field():
     """A W1 profile is a routing fact, not a capacity or qualification claim."""
 
     contracts = contracts_module()
@@ -1330,7 +1330,7 @@ def test_the_single_worker_runtime_values_reuse_the_two_worker_freeze():
             assert getattr(config, name) == expected, name
 
 
-def test_the_any_schema_loader_selects_the_w1_profiles():
+def test_the_any_schema_loader_selects_the_single_worker_profiles():
     """The history-side loader is not left behind by the new schemas."""
 
     contracts = contracts_module()

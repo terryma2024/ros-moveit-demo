@@ -1,4 +1,4 @@
-"""Recorder round 12 (CP-3423): L2 on L8TrV4E3, 44 rows, INPUT_STALE and DYNAMIC_INITIAL_BOUNDARY_AFTER_FIRST_COMMAND.
+"""L2 on L8TrV4E3, 44 rows, INPUT_STALE and DYNAMIC_INITIAL_BOUNDARY_AFTER_FIRST_COMMAND.
 
 Two data-side defects found in the retained telemetry (the pacing problem is in rec12-pacing.md):
 

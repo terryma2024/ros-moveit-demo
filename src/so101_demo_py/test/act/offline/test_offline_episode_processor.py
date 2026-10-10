@@ -1,4 +1,4 @@
-"""P2: the offline episode processor over a small synthetic MCAP written with the real message types.
+"""The offline episode processor over a small synthetic MCAP written with the real message types.
 
 The bag is `offline_synthetic_bag`; the sources are `BagSyntheticSources` (real physics adapter, real controller reference port,
 real episode/lossless writer/engine/seal). The production sources (`OfflineRosSources`) are exercised on the pilot bag.
@@ -135,7 +135,7 @@ def test_data_outside_the_episode_window_is_ignored(tmp_path):
 
 
 def test_a_controller_gap_that_touches_no_label_instant_is_only_a_diagnostic_count(tmp_path):
-    """CP-3439: labels are at 1.1, 1.2, 1.3 and 1.4 s; the arm frame at 1.220 s is missing, 20 ms from the nearest label."""
+    """Labels are at 1.1, 1.2, 1.3 and 1.4 s; the arm frame at 1.220 s is missing, 20 ms from the nearest label."""
     bag = build_bag(tmp_path / "raw", drop=(("/arm_controller/controller_state", 160),))
     report, _ = run(tmp_path, bag)
     arm = report["continuity"]["/arm_controller/controller_state"]
@@ -152,7 +152,7 @@ def test_a_gripper_gap_at_or_next_to_a_label_instant_is_invalid(tmp_path, index)
 
 
 #: a camera frame that is really missing: the camera_info and the image of both cameras at one stamp (a camera_info lost on one
-#: camera with both images present is a diagnostic only, CP-3494)
+#: camera with both images present is a diagnostic only)
 MISSING_CAMERA_FRAME = tuple((topic, 2) for topic in ("/head_camera/camera_info", "/wrist_camera/camera_info",
                                                        "/head_camera/color", "/wrist_camera/color"))
 
@@ -396,7 +396,7 @@ def test_a_diagnostic_run_is_never_a_valid_result_and_never_exit_code_0_or_3(tmp
     assert any(reason.startswith("OFFLINE_CAMERA_GRID") for reason in report["scan_reasons"]), "the scan still names the defect"
 
 
-# ---- the episode window starts after the worker's last pre-Teacher pause (CP-3440 A) ------------------------------------------
+# ---- the episode window starts after the worker's last pre-Teacher pause ------------------------------------------
 
 def test_the_window_starts_at_the_first_unpaused_world_record_after_the_last_pause_before_the_reset(tmp_path):
     # world records every 12 ms from 0.900 s: index 3 is 0.936 s and 8 is 0.996 s (the verified reset is 1.0 s)

@@ -104,7 +104,7 @@ def test_options_accept_w16_reject_w17_and_require_enough_domains():
         AdaptiveWorkerOptions(16, (), 3, 120.0, 1, tuple(range(215, 230)))
 
 
-def test_options_allow_w1_without_a_fallback():
+def test_options_allow_single_worker_without_a_fallback():
     """The terminal W1 level remains a valid nonempty adaptive ladder."""
 
     from so101_demo.parallel_batch.adaptive_contracts import AdaptiveWorkerOptions

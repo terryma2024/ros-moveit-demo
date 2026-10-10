@@ -5,7 +5,7 @@ acquired - the ones a close-out depends on and the ones the existing CLI test do
 status of a real subprocess rather than only the exception, because that is what an operator's shell sees.
 
 What this file deliberately does NOT claim: the CLI close-out over a real case. That path runs live cases and needs the
-stack and the fourteen journals this batch is forbidden to take (CP-1572), so it is reported as an open boundary rather
+stack and the fourteen journals this batch is forbidden to take, so it is reported as an open boundary rather
 than tested here.
 """
 

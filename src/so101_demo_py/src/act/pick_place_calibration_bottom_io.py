@@ -1,4 +1,4 @@
-"""P1-1 (rereview 5), first half: the bottom-I/O values the formal entry must build for ITSELF.
+"""The bottom-I/O values the formal entry must build for ITSELF.
 
 The verdict's finding is that the formal entry reaches `SO101_TASK8_BOTTOM_IO_SEAM` for six values - the client, the
 detector factory, the frame source, the phase path, the target and the occluder geometry - so with nothing set in the

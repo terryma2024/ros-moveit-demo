@@ -1,4 +1,4 @@
-"""A Task 8 series needs fourteen independently retired case transactions."""
+"""A pick-place validation series needs fourteen independently retired case transactions."""
 
 import asyncio
 import hashlib

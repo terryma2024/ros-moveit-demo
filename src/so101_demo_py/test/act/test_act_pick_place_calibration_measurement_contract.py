@@ -1,4 +1,4 @@
-"""Task 8P2: the measurement contract is bound to frozen identities before measuring."""
+"""the measurement contract is bound to frozen identities before measuring."""
 
 import hashlib
 import json
@@ -66,7 +66,7 @@ def test_batch_close_is_one_way_and_identity_bound(tmp_path):
     assert document["status"] == "CLOSED"
 
 
-# --- Task 1 (approved measurement protocol v2): contract fixtures, batch closure, closed schemas -----------
+# --- contract fixtures, batch closure, closed schemas -----------
 
 HEAD_SEARCH_FIELDS = frozenset({
     "head_intrinsics_px", "head_translation_m", "head_rpy_rad", "yaw_zero_bearing_rad",

@@ -1,4 +1,4 @@
-"""P3 (CP-3456): the switch. The record-only bag recorder is the only data path; the offline processor builds the episode after the
+"""The switch. The record-only bag recorder is the only data path; the offline processor builds the episode after the
 Teacher ended and its verdict (episode seal, fresh-process QC) is the attempt's data verdict.
 
 Everything here runs with fakes: no stack, no ROS graph, no live process. The bag fault helper is tested on a real (tiny) bag.

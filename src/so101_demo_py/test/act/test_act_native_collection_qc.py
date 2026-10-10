@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from b2_collection_fixtures import collection_materials
+from teacher_collection_fixtures import collection_materials
 from test_act_scene_association import frozen_scene
 from paths import PACKAGE_ROOT
 

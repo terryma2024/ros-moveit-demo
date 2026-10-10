@@ -1,4 +1,4 @@
-"""Only owner-proved SEARCH may become a Task 8 physical phase result."""
+"""Only owner-proved SEARCH may become a pick-place validation physical phase result."""
 
 from dataclasses import replace
 from types import SimpleNamespace
@@ -96,7 +96,7 @@ class _PrefixSource:
 
 
 def test_the_scene_port_returns_the_ratified_observation_parts():
-    """CP-2017 step one: the record's parts come from the read the port already makes."""
+    """The record's parts come from the read the port already makes."""
 
     from types import SimpleNamespace
 

@@ -1,4 +1,4 @@
-"""B2 fixtures: complete TEACHER_EVENT_SCHEMA collection originals (no native dispatch, no broker stop proof). Not a test module."""
+"""Complete TEACHER_EVENT_SCHEMA collection originals (no native dispatch, no broker stop proof). Not a test module."""
 
 import copy
 

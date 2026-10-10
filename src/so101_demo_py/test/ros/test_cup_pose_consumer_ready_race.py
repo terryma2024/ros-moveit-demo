@@ -1,4 +1,4 @@
-"""CP-3441 live pilot 271xMMUN: the worker read the Teacher's READY receipt while it was being written and failed the
+"""A live pilot: the worker read the Teacher's READY receipt while it was being written and failed the
 gate ("dynamic consumer subscription is not ready"); the Teacher, waiting for a pose that never came, did not obey the
 stop request. The receipt is published atomically, a partial or empty receipt means "not yet", and the pose wait obeys
 the stop flags."""

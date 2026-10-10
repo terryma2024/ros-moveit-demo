@@ -400,7 +400,7 @@ def test_the_spawn_scope_binds_the_owner_birth_and_the_mps_selector():
     assert campaign.worker_count == 2
 
 
-def test_the_two_approved_w1_policies_demand_the_mps_probe(tmp_path, scope):
+def test_the_two_approved_single_worker_policies_demand_the_mps_probe(tmp_path, scope):
     """A v5/v6 policy carries the same floor, so the admission is mandatory there too."""
 
     from so101_demo.parallel_batch.contracts import (
@@ -640,7 +640,7 @@ def test_a_cpu_warn_admission_still_spawns_exactly_once(tmp_path):
     assert recorder.calls == 1, "a WARN admission spawns once, never twice"
 
 
-def test_a_w1_and_a_w2_campaign_cannot_hold_the_claim_at_the_same_time(tmp_path):
+def test_a_single_worker_and_a_two_worker_campaign_cannot_hold_the_claim_at_the_same_time(tmp_path):
     """One macOS service instance runs one campaign: the claim is the same MPS:DEFAULT flock."""
 
     from so101_demo.parallel_batch.campaign_supervisor import CLAIM_IDENTITY, CampaignBlocked

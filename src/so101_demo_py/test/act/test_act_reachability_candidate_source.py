@@ -1,4 +1,4 @@
-"""Task 10 closed inputs: the candidate-source document and the reachability-report port."""
+"""Closed inputs: the candidate-source document and the reachability-report port."""
 
 import hashlib
 import json

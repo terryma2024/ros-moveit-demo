@@ -1,4 +1,4 @@
-"""Recorder round 6 (CP-3410, user-authorized data-contract change): a late chunk is no longer a failure of the data.
+"""A late chunk (a user-authorized data-contract change) is no longer a failure of the data.
 
 OLD rule (removed): every chunk had to reach the Recorder within 100 ms of its newest sample's begin, else the data was INVALID
 (PHYSICS_RAW_CLOCK_INVALID, permanent). Measured: a single chunk 283 ms late, 26 chunks into a run, ended the L2 recording; the delay

@@ -1,4 +1,4 @@
-"""Task 8P3: the receipt schema must describe the validator, not an older idea of it."""
+"""the receipt schema must describe the validator, not an older idea of it."""
 
 import json
 

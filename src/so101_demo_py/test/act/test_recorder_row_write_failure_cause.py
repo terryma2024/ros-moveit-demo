@@ -1,4 +1,4 @@
-"""Recorder round 7 (CP-3412): L2 on W8BmUgyS wrote row 0's two PNGs and then failed with
+"""L2 on W8BmUgyS wrote row 0's two PNGs and then failed with
 RECORDER_QUEUE_WRITE_FAILED / writer_error = RecorderInfraError('RECORDER_WRITE_FAILED'): the wrapper hid the cause.
 
 The wrapper is `EpisodeRecorder.append`: `except (OSError, ValueError, TypeError) as error: raise RecorderInfraError(...) from error`

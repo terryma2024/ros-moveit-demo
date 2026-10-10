@@ -434,7 +434,7 @@ class _ByInstance:
                                points_world=np.array([[0.0, 0.0, 0.12], [0.0, 0.0, 0.12 + outcome]]))
 
 
-def _r6(outcomes, masks=None):
+def _ring_candidate_localizer(outcomes, masks=None):
     from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
 
     masks = masks or [[[0, 1, 1], [0, 0, 1]]] * len(outcomes)
@@ -443,58 +443,58 @@ def _r6(outcomes, masks=None):
         _broker_response(masks), camera_info="camera", depth_message="depth", lookup_exact=lambda *a: a)
 
 
-def test_r6_keeps_the_cup_and_drops_a_flat_ring_candidate():
-    localizer, call = _r6({"cand-0": 0.003, "cand-1": 0.09})      # the ring is the first (higher confidence) candidate
+def test_keeps_the_cup_and_drops_a_flat_ring_candidate():
+    localizer, call = _ring_candidate_localizer({"cand-0": 0.003, "cand-1": 0.09})      # the ring is the first (higher confidence) candidate
     assert call().instance_id == "cand-1"
     assert [c[0] for c in localizer.calls] == ["cand-0", "cand-1"], "every candidate is localized"
     assert all(c[1:3] == ("camera", "depth") for c in localizer.calls), "each against the same exact depth and TF"
 
 
-def test_r6_drops_a_candidate_whose_circle_fit_is_rejected():
+def test_drops_a_candidate_whose_circle_fit_is_rejected():
     from so101_demo.application.object_pose import LocalizationError
 
-    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("GEOMETRY_REJECTED", "radius 0.07 outside 0.04 +- 0.01")})
+    _, call = _ring_candidate_localizer({"cand-0": 0.09, "cand-1": LocalizationError("GEOMETRY_REJECTED", "radius 0.07 outside 0.04 +- 0.01")})
     assert call().instance_id == "cand-0"
-    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("DEPTH_INVALID", "30 valid points")})
+    _, call = _ring_candidate_localizer({"cand-0": 0.09, "cand-1": LocalizationError("DEPTH_INVALID", "30 valid points")})
     assert call().instance_id == "cand-0"
 
 
-def test_r6_two_cups_are_ambiguous_and_the_message_names_the_count():
-    _, call = _r6({"cand-0": 0.09, "cand-1": 0.08})
+def test_two_cups_are_ambiguous_and_the_message_names_the_count():
+    _, call = _ring_candidate_localizer({"cand-0": 0.09, "cand-1": 0.08})
     with pytest.raises(RuntimeError, match=r"BROKER_CANDIDATE_AMBIGUOUS: 2 of 2"):
         call()
 
 
-def test_r6_with_no_cup_among_several_candidates_is_a_geometry_rejection_so_the_policy_tries_its_next_model():
+def test_with_no_cup_among_several_candidates_is_a_geometry_rejection_so_the_policy_tries_its_next_model():
     from so101_demo.application.object_pose import LocalizationError
 
-    _, call = _r6({"cand-0": 0.003, "cand-1": 0.004})
+    _, call = _ring_candidate_localizer({"cand-0": 0.003, "cand-1": 0.004})
     with pytest.raises(LocalizationError, match=r"GEOMETRY_REJECTED: no candidate is a cup \(0 of 2\)") as error:
         call()
     assert error.value.code == "GEOMETRY_REJECTED"
 
 
-def test_r6_a_lone_flat_candidate_is_not_a_cup_and_a_lone_failure_keeps_its_own_error():
+def test_a_lone_flat_candidate_is_not_a_cup_and_a_lone_failure_keeps_its_own_error():
     from so101_demo.application.object_pose import LocalizationError
 
-    _, call = _r6({"cand-0": 0.003})
+    _, call = _ring_candidate_localizer({"cand-0": 0.003})
     with pytest.raises(LocalizationError, match="no candidate is a cup"):
         call()
-    _, call = _r6({"cand-0": LocalizationError("DEPTH_INVALID", "30 valid points")})
+    _, call = _ring_candidate_localizer({"cand-0": LocalizationError("DEPTH_INVALID", "30 valid points")})
     with pytest.raises(LocalizationError, match="DEPTH_INVALID: 30 valid points"):
         call()
 
 
-def test_r6_a_failure_of_the_shared_inputs_is_no_verdict_on_a_candidate():
+def test_a_failure_of_the_shared_inputs_is_no_verdict_on_a_candidate():
     from so101_demo.application.object_pose import LocalizationError
 
-    _, call = _r6({"cand-0": 0.09, "cand-1": LocalizationError("TF_UNAVAILABLE", "no transform")})
+    _, call = _ring_candidate_localizer({"cand-0": 0.09, "cand-1": LocalizationError("TF_UNAVAILABLE", "no transform")})
     with pytest.raises(LocalizationError, match="TF_UNAVAILABLE"):
         call()
 
 
-def test_r6_the_survivors_pose_is_the_localizers_result_for_its_mask_unchanged():
-    localizer, call = _r6({"cand-0": 0.003, "cand-1": 0.09})
+def test_the_survivors_pose_is_the_localizers_result_for_its_mask_unchanged():
+    localizer, call = _ring_candidate_localizer({"cand-0": 0.003, "cand-1": 0.09})
     assert call().center_world_xyz == (0.02, -0.28, 0.165)
 
 
@@ -578,7 +578,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
     assert localized.tf_timestamp_s == 12.0
 
 
-def test_production_port_factory_binds_every_task10_port_without_empty_side_effects():
+def test_production_port_factory_binds_every_production_port_without_empty_side_effects():
     from so101_demo.cli.mujoco_parallel_batch import RosWorkerRuntimePorts
 
     ports = RosWorkerRuntimePorts(
@@ -674,7 +674,7 @@ def test_f21_config_reuses_dynamic_age_and_orders_workspace_min_then_max():
 
 
 @pytest.mark.parametrize("source_now,accepted", [(12.0, True), (1000.0, False)])
-def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
+def test_model_policy_persists_admission_and_rejects_mixed_source_clock(
     tmp_path, source_now, accepted
 ):
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace

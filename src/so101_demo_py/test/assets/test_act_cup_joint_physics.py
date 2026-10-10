@@ -1,4 +1,4 @@
-"""D1: the ACT cup free joint is explicit (damping 0.01, frictionloss 0, armature 0), nothing else moved, every pinned
+"""The ACT cup free joint is explicit (damping 0.01, frictionloss 0, armature 0), nothing else moved, every pinned
 ACT identity follows, and the physics regressions that motivated the change hold (bounds from dfacts-exp)."""
 import json
 import math
@@ -44,7 +44,7 @@ def test_the_act_cup_joint_carries_the_three_explicit_values():
 
 
 @pytest.mark.parametrize("relative", sorted(UNCHANGED))
-def test_robot_defaults_and_the_non_act_scenes_are_byte_identical_to_pre_d1(relative):
+def test_robot_defaults_and_the_non_act_scenes_are_byte_identical_before_the_cup_joint_change(relative):
     assert sha(PACKAGE / relative) == UNCHANGED[relative]
 
 
@@ -74,7 +74,7 @@ def test_every_pinned_module_identity_is_the_derived_one(module):
 
 
 def test_every_pinned_json_identity_is_the_derived_one():
-    # CP-3529: the eight Task 6 / held-cup sealed profiles bound to the old model were retired; any pin that remains
+    # The eight synchronized-capture and held-cup sealed profiles bound to the old model were retired; any pin that remains
     # under config/mujoco/act must still be the derived identity.
     for path in sorted((PACKAGE / "config/mujoco/act").glob("*.json")):
         for key, value in _walk(json.loads(path.read_text()), {"scene_sha256", "model_sha256"}):

@@ -1,4 +1,4 @@
-"""B4b: the first-episode production composition selects the ACT station from the frozen inputs, not from ambient state.
+"""The first-episode production composition selects the ACT station from the frozen inputs, not from ambient state.
 
 The L1 run b4a1 launched the ORIGINAL pick-place profile (no neck controller) because the broker-era
 `DiagnosticEpisodeStation` had been deleted without a replacement and `ParallelWorkerRuntime` fell back to the default station.

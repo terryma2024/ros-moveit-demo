@@ -1,4 +1,4 @@
-"""CP-3421: the old two-character label of the source alignment was renamed to what it is. No identifier, reason code, file name, record kind or
+"""The old two-character label of the source alignment was renamed to what it is. No identifier, reason code, file name, record kind or
 comment in `src/so101_demo_py/src` or `test/` may use it again. The pattern is built from parts so that this file needs no
 allow-list entry for itself."""
 import re

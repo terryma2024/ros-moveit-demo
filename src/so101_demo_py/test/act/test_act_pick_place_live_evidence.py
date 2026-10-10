@@ -1,4 +1,4 @@
-"""Task 8P3: live evidence is a closed 10 Hz causal record, sealed only when complete.
+"""live evidence is a closed 10 Hz causal record, sealed only when complete.
 
 Canonical sample shape (pinned here):
   case_id/session_id/attempt_id/reset_epoch/release_epoch/physics_step/sim_time_s/phase
@@ -574,7 +574,7 @@ def test_published_case_row_translates_into_the_journal_row_shape():
                                 manifest_document_sha256="9" * 64)
 
 
-# --- protocol v2 additions (Task 7): nine phases, row provenance, release correlation ----------------------
+# --- additions: nine phases, row provenance, release correlation ----------------------
 
 LIVE_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
              "FINAL_CHECK")

@@ -1,4 +1,4 @@
-"""Task 2 (approved measurement protocol v2): pure formulas for the 21 + 7 fields.
+"""pure formulas for the 21 + 7 fields.
 
 Formulas consume only already validated indexed records - no filesystem guessing and no runtime imports - and
 return, per field, the configured limit, the observed summary, the reported value and the raw references the
@@ -79,7 +79,7 @@ def test_a_missing_raw_reference_is_refused_rather_than_defaulted():
         formulas.compute_head_search_fields({}, CONTRACT)
 
 
-# --- per-field boundary-pass and single-point-violation cases (plan Task 2 Step 1) --------------------------
+# --- per-field boundary-pass and single-point-violation cases  --------------------------
 
 BOX = {"x1": 100.0, "y1": 100.0, "x2": 200.0, "y2": 150.0}
 
@@ -319,7 +319,7 @@ def test_path_clearance_uses_the_minimum_and_refuses_a_non_allowlisted_contact()
 
 
 def test_every_registered_formula_is_covered_and_missing_evidence_names_its_field():
-    """Full 28-field evidence fixtures arrive with the Task 5 driver; here we prove the registry is complete and
+    """Full 28-field evidence fixtures arrive with the measurement driver; here we prove the registry is complete and
     that a partial payload is refused with the missing field named rather than silently defaulted."""
 
     formulas = _formulas()

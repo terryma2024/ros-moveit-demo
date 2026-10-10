@@ -1,4 +1,4 @@
-"""Recorder round 4 (CP-3407): the first row reached the recorder queue and its writer failed (RECORDER_QUEUE_WRITE_FAILED, 5.5 s
+"""The first row reached the recorder queue and its writer failed (RECORDER_QUEUE_WRITE_FAILED, 5.5 s
 after ready, capture start +0.1 s). The live physical audit row must satisfy the recorder's closed audit schema."""
 import copy
 import math

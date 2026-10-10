@@ -1,6 +1,6 @@
-"""D3 (R10): the explicit offline_fit_teacher_spot_check validation mode, bound into the fingerprinted payload.
+"""The explicit offline_fit_teacher_spot_check validation mode, bound into the fingerprinted payload.
 
-The default mode still demands the live cohort. The mode is the user's recorded rule deviation (CP-3389), so it lives in
+The default mode still demands the live cohort. The mode is the user's recorded rule deviation, so it lives in
 the payload (`live_collector_sha256` = sha256 of the canonical descriptor), which the activation fingerprint covers, and the
 envelope merely repeats it. Synthetic cohorts come from test_act_contact_calibration; nothing here qualifies a policy."""
 import copy

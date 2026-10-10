@@ -1,4 +1,4 @@
-"""P1-1: the PRODUCTION low-level client the default composition needs, over the real MuJoCo scene.
+"""The PRODUCTION low-level client the default composition needs, over the real MuJoCo scene.
 
 The composition's `PickPlaceValidationStackAdapter` delegates to exactly these methods - ``launch``, ``close``, ``cleanup``,
 ``readback``, ``run_search``, ``camera_info``, ``tf``, ``probe``, plus ``frame``, ``neck_feedback`` and ``command`` that

@@ -957,7 +957,7 @@ def test_transport_serve_failure_poison_runtime(tmp_path, monkeypatch):
     assert not f.runtime.healthy
 
 
-def test_container_entry_installs_task11_transport_from_exact_runtime_spec(
+def test_container_entry_installs_transport_from_exact_runtime_spec(
     tmp_path, monkeypatch
 ):
     from so101_demo.cli import parallel_perception_broker as cli

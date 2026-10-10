@@ -1,4 +1,4 @@
-"""P1-3 (rereview 5): the matrix is built from SAMPLES taken at the model's own period, not from constants."""
+"""The matrix is built from SAMPLES taken at the model's own period, not from constants."""
 
 from __future__ import annotations
 

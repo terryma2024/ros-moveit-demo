@@ -1,4 +1,4 @@
-"""P1-2 (rereview4): one ten-field identity rule, end to end, with no rewriting.
+"""One ten-field identity rule, end to end, with no rewriting.
 
 The verdict's finding: `pick_place_calibration_measurement_contract.py` preserves the input identity and then computes a BOUND-DOCUMENT
 self-digest that contains it; the CLI requires a sealed batch's identity to equal the admitted one exactly; and
@@ -6,7 +6,7 @@ self-digest that contains it; the CLI requires a sealed batch's identity to equa
 bound-document self-digest. Those are two different quantities, so - unless a fixture rewrites the field - a batch the
 formal entry seals is refused by the aggregator as a foreign contract.
 
-Measured before writing this file (CP-1672): with the repo's own fixtures,
+Measured before writing this file: with the repo's own fixtures,
     identity["measurement_contract_sha256"] (declared, admitted by the CLI) = 080808080808…
     bound_document["contract_sha256"]        (what the aggregator compares) = 53cb2428e922…
 so the two are NOT equal, and `batch_factory`'s rewrite is exactly the workaround the verdict calls "not an end-to-end
@@ -70,7 +70,7 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
     verdicts = next(iter(per_root.values()))
     assert verdicts, "and at least one field is reported"
 
-    # the owner's disposition (CP-1789): a field whose THRESHOLD is not approved reports UNMEASURED rather than a
+    # the owner's disposition: a field whose THRESHOLD is not approved reports UNMEASURED rather than a
     # comparison against a limit that does not exist
     from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 

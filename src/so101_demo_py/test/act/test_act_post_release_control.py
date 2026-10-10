@@ -1,4 +1,4 @@
-"""D2: the post_release control is realisable on the cleaned ACT model, and nothing else in the collector moved.
+"""The post_release control is realisable on the cleaned ACT model, and nothing else in the collector moved.
 
 With the cup joint's inherited frictionloss/armature gone, the cup no longer rides the scripted release: it stays against the
 fixed pad, so the 'no fingertip contact' predicate was never met. The release now opens to the policy's release_q6 and then

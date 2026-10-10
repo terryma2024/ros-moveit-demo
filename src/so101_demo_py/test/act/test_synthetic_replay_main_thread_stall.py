@@ -1,4 +1,4 @@
-"""Recorder round 2 (CP-3403, cleanup step 2): a synthetic replay at real rates with an injected 160 ms main-thread stall.
+"""A synthetic replay at real rates with an injected 160 ms main-thread stall.
 
 The Teacher script, the real PointEpisode (lossless writer, audit, seal, readback), the real physics adapter and the real
 engine are the ones `test_act_episode_recorder` uses. What changes is WHO delivers the sources and WHEN: the camera, numeric, chunk,
@@ -21,7 +21,7 @@ from test_act_episode_recorder import PointEpisode, IDENTITY, SCOPE, PROVENANCE,
 from test_act_seal_and_downgrade import recorder_physical_audit
 
 SIM0 = 0.15          # simulated clock at the replay's start
-PRE = tuple(round(0.2 + 0.1 * index, 1) for index in range(8))        # chunks before the first row: the pre-window stream (CP-3409)
+PRE = tuple(round(0.2 + 0.1 * index, 1) for index in range(8))        # chunks before the first row: the pre-window stream
 CHUNK_STAMPS = PRE + tuple(STAMPS)
 STEP_NS = 2_000_000
 
@@ -53,12 +53,12 @@ class ReadyAudit:
     def __call__(self, at_s):
         if not self.ready(at_s):
             raise ValueError("LIVE_PHYSICAL_SOURCE_UNAVAILABLE")
-        # exactly the thirteen values the live provider hands the capture through `PhysicalAuditAdapter` (CP-3407: the
+        # exactly the thirteen values the live provider hands the capture through `PhysicalAuditAdapter` (the
         # earlier replay used the test audit, which also carried session_id and attempt_id, and hid the L2 failure)
         from so101_demo.act.episode_assembly import PhysicalAuditAdapter
         full = recorder_physical_audit(at_s)
         row = {key: full[key] for key in PhysicalAuditAdapter.KEYS}
-        # the live controller record embeds the original /joint_states message, NaN effort included (CP-3412): the row must carry it
+        # the live controller record embeds the original /joint_states message, NaN effort included: the row must carry it
         from rosidl_runtime_py.convert import message_to_ordereddict
         from so101_demo.act.nonfinite import json_safe
         from sensor_msgs.msg import JointState
@@ -285,7 +285,7 @@ def test_the_replayed_recording_reads_back_in_a_fresh_process(tmp_path):
 
 
 def test_a_400_ms_spooler_stall_is_a_valid_recording_wherever_it_falls(tmp_path):
-    """CP-3410: a late chunk no longer fails the data. A 400 ms stall before the first row and one inside the recording
+    """A late chunk no longer fails the data. A 400 ms stall before the first row and one inside the recording
     (the L2 case 283 ms and worse) both seal VALID; the lateness is in the receipt diagnostics."""
     for position in (3, len(PRE) + 2):
         sub = tmp_path / f"stall-{position}"

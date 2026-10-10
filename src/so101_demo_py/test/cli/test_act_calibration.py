@@ -114,7 +114,7 @@ def test_unqualified_and_missing_evidence_cannot_start_collection(tmp_path):
     with pytest.raises(ValueError): require_qualified(measured)
 
 
-def test_task8_ready_requires_measured_five_checks_but_refuses_formal(tmp_path):
+def test_pick_place_calibration_ready_requires_measured_five_checks_but_refuses_formal(tmp_path):
     ready = report(tmp_path)
     ready["status"] = "TASK8_READY"
     ready["checks"]["release"] = "UNMEASURED"
@@ -131,7 +131,7 @@ def test_task8_ready_requires_measured_five_checks_but_refuses_formal(tmp_path):
         require_gate(ready, "task8_live")
 
 
-def test_task8_ready_refuses_unmeasured_or_premature_release_pass(tmp_path):
+def test_pick_place_calibration_ready_refuses_unmeasured_or_premature_release_pass(tmp_path):
     ready = report(tmp_path)
     ready["status"] = "TASK8_READY"
     ready["checks"]["release"] = "UNMEASURED"
@@ -152,7 +152,7 @@ def test_full_qualification_is_formal_gate_only(tmp_path):
         require_gate({"status": "CALIBRATION_REQUIRED", "checks": {}}, "task8_live")
 
 
-def test_preflight_cli_emits_task8_ready_only_for_verified_preflight(tmp_path, monkeypatch):
+def test_preflight_cli_emits_pick_place_calibration_ready_only_for_verified_preflight(tmp_path, monkeypatch):
     from ament_index_python import packages
     from so101_demo.cli import act_preflight
 

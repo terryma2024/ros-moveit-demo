@@ -244,7 +244,7 @@ def test_a_recorder_first_pre_motion_seal_passes_the_verifier_with_qc_not_run(tm
 
 # ---- the orchestrator exit code ----------------------------------------------------------------------------------------------
 
-D8F = dict(result_status="INDETERMINATE", teacher_execution_status="INDETERMINATE", teacher_task_result="UNCONFIRMED",
+PRE_MOTION_REFUSAL_FIELDS = dict(result_status="INDETERMINATE", teacher_execution_status="INDETERMINATE", teacher_task_result="UNCONFIRMED",
            act_data_status="INVALID", act_data_qc="NOT_RUN", export_eligible=False,
            receipt={"act_data_reason": PREFIX + STALE})
 
@@ -252,7 +252,7 @@ D8F = dict(result_status="INDETERMINATE", teacher_execution_status="INDETERMINAT
 def completion(monkeypatch, tmp_path, cleanup_error=None, **changes):
     from so101_demo.act import result_store
     from so101_demo.cli import act_diagnostic_episode
-    proof = {**D8F, **changes}
+    proof = {**PRE_MOTION_REFUSAL_FIELDS, **changes}
     context = dict(coordinator_root="coordinator", location="location", scope="scope", inputs_manifest="inputs")
     written = []
 

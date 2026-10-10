@@ -1,4 +1,4 @@
-"""P1-1 (rereview 5), first half: the occluder geometry must come from the MODEL, not from a stand-in's invention.
+"""The occluder geometry must come from the MODEL, not from a stand-in's invention.
 
 The seam hands the evaluator the same made-up geometry for every occluder
 (`{"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005}`), while the ACT scene's own geoms are elsewhere entirely. A
@@ -83,7 +83,7 @@ def test_a_missing_scene_is_refused_by_name(tmp_path):
 
 
 # ----------------------------------------------------------------------------------------------------------------------
-# the frame source: the model's own camera, rendered headless (CP-1798 proved this host can)
+# the frame source: the model's own camera, rendered headless
 # ----------------------------------------------------------------------------------------------------------------------
 
 def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():

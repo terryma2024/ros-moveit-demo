@@ -1,4 +1,4 @@
-"""Task 8P3 / Boundary IV item 2: the measurement entry consumes the descriptor from its context, and refuses one
+"""the measurement entry consumes the descriptor from its context, and refuses one
 whose CUDA policy the approved design forbids.
 
 Approved preparation design section 4.2 and section 6: the runtime config is parsed once at the entry, and internal
@@ -141,7 +141,7 @@ def test_a_descriptor_whose_head_search_payload_is_not_the_production_shape_is_r
     # the shape rule owns the closed document structure: an unknown field and a malformed block are its business. A
     # camera block whose *keys* are wrong is the deeper binding check's business, not this rule's, so it is not asserted
     # here - that path is covered by the binding suite (and asserting it here would make this test pass for the wrong
-    # reason or fail for one, which is exactly what CP-1231 recorded)
+    # reason or fail for one, which is exactly what an earlier run recorded)
     cases = {
         "extra field": lambda d: d["head_search"].update({"unexpected_field": 1}),
         "bad motion": lambda d: d["head_search"].update({"motion": "not-a-motion-block"}),
@@ -253,7 +253,7 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
         attempt_id = "attempt-1"
         search_start_rad = 0.0
 
-    # the per-run values are ARGUMENTS (CP-1635): the driver supplies them, so this test stands in for the driver
+    # the per-run values are ARGUMENTS: the driver supplies them, so this test stands in for the driver
     providers = build_real_providers(context=_Admitted(), descriptor=runtime, io_client=_Client(),
                                      yolo_detector_factory=_FakeYolo,
                                      session_id="session-1", attempt_id="attempt-1", search_start_rad=0.0)
@@ -341,7 +341,7 @@ def _invalid_sealing_driver(tmp_path):
         "        (kept.parent / f'phase-{phase}.json').write_bytes(\n"
         "            json.dumps({'phase': phase, 'source_stamp': index}).encode())\n"
         "    # the seal must carry the identity the ENTRY admitted: overriding a member - least of all with\n"
-        "    # another field - makes the seal disagree with it, which the entry refuses by name (CP-1641)\n"
+        "    # another field - makes the seal disagree with it, which the entry refuses by name\n"
         "    identity = dict(contract['identities'])\n"
         "    files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()\n"
         "             for path in sorted(root.rglob('*'))\n"

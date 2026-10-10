@@ -1,4 +1,4 @@
-"""Round 13 (CP-3427): L2 6062afd8 refused the verified reset with COLLECTION_RESET_RECEIPT_INVALID for 8 s.
+"""L2 6062afd8 refused the verified reset with COLLECTION_RESET_RECEIPT_INVALID for 8 s.
 
 The Recorder's first retained world record that still has its raw physics step was a record it received when it JOINED the
 transient-local world topic: published seconds earlier, received at the join. The V3 validator required the receipt to lie within

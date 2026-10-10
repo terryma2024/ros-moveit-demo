@@ -233,7 +233,7 @@ def _service(store):
     )
 
 
-def test_task8_admission_rejects_runtime_without_qualified_head_search(tmp_path):
+def test_pick_place_validation_admission_rejects_runtime_without_qualified_head_search(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,
@@ -364,7 +364,7 @@ def test_start_without_activation_receipt_creates_no_owner_resources(tmp_path):
         store.close()
 
 
-def test_task8_start_without_measured_calibration_reserves_nothing(tmp_path):
+def test_pick_place_calibration_start_without_measured_calibration_reserves_nothing(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     store = IntentStore.open(tmp_path / "state")
@@ -383,7 +383,7 @@ def test_task8_start_without_measured_calibration_reserves_nothing(tmp_path):
 
 
 @pytest.mark.parametrize("mutation", ("tamper", "unmeasured"))
-def test_task8_start_rejects_unverified_calibration_before_resources(tmp_path, mutation):
+def test_pick_place_calibration_start_rejects_unverified_calibration_before_resources(tmp_path, mutation):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
@@ -412,7 +412,7 @@ def test_task8_start_rejects_unverified_calibration_before_resources(tmp_path, m
 
 @pytest.mark.parametrize("field,other", (("source_commit", "c" * 40),
                                           ("config_sha256", "d" * 64)))
-def test_task8_start_records_a_calibration_identity_that_is_not_current(tmp_path, field, other):
+def test_pick_place_calibration_start_records_a_calibration_identity_that_is_not_current(tmp_path, field, other):
     """CP-1928 amendment: the report's recorded identity is provenance, not a comparison.
 
     The report must still be structurally valid - the same report with a malformed identity or an
@@ -515,7 +515,7 @@ def test_start_rejects_changed_artifact_bytes_before_any_resource(tmp_path, name
 
 
 @pytest.mark.parametrize("mutation", ("missing_prefix", "stale_source"))
-def test_task8_start_rejects_semantically_invalid_manifest_before_resources(tmp_path, mutation):
+def test_pick_place_validation_start_rejects_semantically_invalid_manifest_before_resources(tmp_path, mutation):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
@@ -572,7 +572,7 @@ def test_start_registry_race_does_not_commit_parent_or_gpu_lease(tmp_path):
         store.close()
 
 
-def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
+def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     store = IntentStore.open(tmp_path / "state")
@@ -596,7 +596,7 @@ def test_formal_w8_without_exact_qualification_has_no_resources(tmp_path):
         store.close()
 
 
-def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
+def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_independent_verifier(tmp_path):
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     base = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path,

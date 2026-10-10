@@ -27,12 +27,12 @@ MACOS_DOCUMENTS = {
 }
 LINUX_CUDA_DOCUMENT = CONFIG_DIR / "parallel_batch_linux_cuda.yaml"
 
-W2_CLAIM = {"execution_profile": "MPS_W2_FIRST_PASS", "batch_kind": "FIRST_PASS"}
-W1_RETRY_CLAIM = {
+TWO_WORKER_CLAIM = {"execution_profile": "MPS_W2_FIRST_PASS", "batch_kind": "FIRST_PASS"}
+SINGLE_WORKER_RETRY_CLAIM = {
     "execution_profile": "MPS_W1_FULL_RESTART_RETRY",
     "batch_kind": "FULL_RESTART_RETRY",
 }
-W1_FIRST_PASS_CLAIM = {
+SINGLE_WORKER_FIRST_PASS_CLAIM = {
     "execution_profile": "MPS_W1_FIRST_PASS",
     "batch_kind": "FIRST_PASS",
 }
@@ -43,7 +43,7 @@ MATRIX = {
     5: ("MPS_W1_FULL_RESTART_RETRY", 5, "SEQUENTIAL", 1, "FULL_RESTART_RETRY"),
     6: ("MPS_W1_FIRST_PASS", 6, "SEQUENTIAL", 1, "FIRST_PASS"),
 }
-CLAIMS = {4: W2_CLAIM, 5: W1_RETRY_CLAIM, 6: W1_FIRST_PASS_CLAIM}
+CLAIMS = {4: TWO_WORKER_CLAIM, 5: SINGLE_WORKER_RETRY_CLAIM, 6: SINGLE_WORKER_FIRST_PASS_CLAIM}
 
 
 def _selection(count):
@@ -424,7 +424,7 @@ def test_a_macos_mps_two_worker_document_refuses_a_single_worker_claim(tmp_path)
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 4, claim=W1_FIRST_PASS_CLAIM,
+        _macos_request(tmp_path, 4, claim=SINGLE_WORKER_FIRST_PASS_CLAIM,
                        mode="SEQUENTIAL", worker_count=1)
     )
 
@@ -438,7 +438,7 @@ def test_a_macos_mps_single_worker_retry_document_refuses_a_first_pass_claim(tmp
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 5, claim=W1_FIRST_PASS_CLAIM)
+        _macos_request(tmp_path, 5, claim=SINGLE_WORKER_FIRST_PASS_CLAIM)
     )
 
     assert receipt.admitted is False
@@ -450,7 +450,7 @@ def test_a_macos_mps_single_worker_first_pass_document_refuses_a_retry_claim(tmp
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 6, claim=W1_RETRY_CLAIM)
+        _macos_request(tmp_path, 6, claim=SINGLE_WORKER_RETRY_CLAIM)
     )
 
     assert receipt.admitted is False
@@ -462,7 +462,7 @@ def test_adaptive_is_refused_on_a_macos_document(tmp_path):
     from so101_teleop.expert_validation.preflight import UNSUPPORTED_ON_MACOS
 
     receipt = PreflightEngine(Resources(), platform="darwin").preflight(
-        _macos_request(tmp_path, 4, mode="ADAPTIVE", count=8, **W2_CLAIM)
+        _macos_request(tmp_path, 4, mode="ADAPTIVE", count=8, **TWO_WORKER_CLAIM)
     )
 
     assert receipt.admitted is False

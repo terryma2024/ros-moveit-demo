@@ -1,4 +1,4 @@
-"""B2: the offline engine turns a missing, foreign, retired-schema or gapped Teacher event into an INVALID verdict."""
+"""The offline engine turns a missing, foreign, retired-schema or gapped Teacher event into an INVALID verdict."""
 import json
 from types import SimpleNamespace
 

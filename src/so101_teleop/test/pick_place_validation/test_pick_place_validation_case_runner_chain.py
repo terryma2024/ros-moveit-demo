@@ -227,7 +227,7 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     # the release open event, and three adjacent 10 Hz support rows inside one release epoch
     rows = sealed["samples"]
     # the release open event and the 10 Hz adjacency are asserted on the rows the port recorded, because the sealed index
-    # deliberately carries references (relative_path + sha256) rather than the values themselves (CP-1191)
+    # deliberately carries references (relative_path + sha256) rather than the values themselves
     port_rows = [row for row in port.rows if isinstance(row, dict)]
     # build_live_evidence_sample flattens the contact block, so `released` is a top-level key of the built sample
     released_rows = [row for row in port_rows if row.get("released") is True]
@@ -241,7 +241,7 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
 
 
 def _seal_port_method(self, request):                                        # noqa: D401 - attached below
-    """The three steps the production port performs, in its own order (CP-1179)."""
+    """The three steps the production port performs, in its own order."""
 
     identity = {"case_id": request["scenario_id"], "session_id": request["session_id"],
                 "attempt_id": request["attempt_id"], "reset_epoch": self.reset_epoch,

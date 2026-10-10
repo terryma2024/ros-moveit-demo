@@ -19,7 +19,7 @@ def _imports(path: Path) -> set[str]:
     return found
 
 
-def test_the_first_episode_chain_does_not_consult_the_quality_contract():
+def test_the_diagnostic_episode_chain_does_not_consult_the_quality_contract():
     """The chain that produces the episode must not gate on the process-quality calibration contract."""
 
     chain = [SOURCE / "cli" / "act_diagnostic_episode.py",

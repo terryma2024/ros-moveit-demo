@@ -1,4 +1,4 @@
-"""CP-3428: the record-only process records every message of the topics it was given into a closed MCAP bag, reports RECORDING
+"""The record-only process records every message of the topics it was given into a closed MCAP bag, reports RECORDING
 only once its recording node subscribes, and reads the bag back at stop."""
 import threading
 import time

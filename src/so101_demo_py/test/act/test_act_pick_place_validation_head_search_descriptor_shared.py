@@ -1,4 +1,4 @@
-"""P1-2: ONE complete head-search validator, and both entries must refuse the same documents.
+"""ONE complete head-search validator, and both entries must refuse the same documents.
 
 Astra re-review #3, finding 2: `validate_head_search_shape` checked that the required fields were *present* but not
 that the document was a closed, correctly typed, correctly valued structure - so the measurement entry accepted

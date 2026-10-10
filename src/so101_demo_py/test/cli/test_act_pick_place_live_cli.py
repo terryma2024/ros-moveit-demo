@@ -1,4 +1,4 @@
-"""The Task 8 CLI must use unified admission and always settle owned children."""
+"""The pick-place validation CLI must use unified admission and always settle owned children."""
 
 from __future__ import annotations
 

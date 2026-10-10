@@ -1,4 +1,4 @@
-"""Recorder round 2 (CP-3403, cleanup step 2): the offline sources are served by the replay node, and the capture starts only on
+"""The offline sources are served by the replay node, and the capture starts only on
 an instant whose first row has every source.
 
 L2 evidence: the first grid instant was the seed pair's stamp (10.0 s) while the capture-start clock read 10.038 s and

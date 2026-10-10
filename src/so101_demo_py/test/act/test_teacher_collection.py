@@ -8,7 +8,7 @@ import copy
 
 import pytest
 
-from b2_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope, event_row, collection_materials, summary_row
+from teacher_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope, event_row, collection_materials, summary_row
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 
 

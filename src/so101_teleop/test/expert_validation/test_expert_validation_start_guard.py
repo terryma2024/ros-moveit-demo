@@ -226,7 +226,7 @@ def macos_service(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def macos_w2_only_service(tmp_path, monkeypatch):
+def macos_two_worker_only_service(tmp_path, monkeypatch):
     """A macOS service with only the W2 document installed: no W1 campaign can be invented."""
 
     layout = _macos_layout(
@@ -558,7 +558,7 @@ def _passing_mps_probe(calls):
 
 
 @DARWIN_ONLY
-def test_macos_capabilities_expose_only_w1_and_w2(macos_service):
+def test_macos_capabilities_expose_only_single_worker_and_two_worker(macos_service):
     import hashlib
 
     client = _Client(macos_service)
@@ -754,10 +754,10 @@ def test_a_macos_service_refuses_more_than_two_workers_and_adaptive(macos_servic
 
 
 def test_a_macos_service_refuses_a_profile_it_has_no_installed_document_for(
-        macos_w2_only_service):
+        macos_two_worker_only_service):
     """A W1 request on a W2-only install is a stable refusal, never an invented document."""
 
-    client = _Client(macos_w2_only_service)
+    client = _Client(macos_two_worker_only_service)
     lease = _lease(client)
     response = client.post(
         "/expert-validation/campaigns/preflight",

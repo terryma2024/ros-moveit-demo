@@ -1,4 +1,4 @@
-"""Recorder round 9 (CP-3416): the capture start is deterministic given healthy sources and never depends on Teacher pacing.
+"""The capture start is deterministic given healthy sources and never depends on Teacher pacing.
 
 L2 on rRQGirke: the Teacher PASSED and the capture never started in 96 s. `start_gate` said why: after the initial association
 the seed pair was refused as `seed_expired` on 12605 passes (the pair's stamp had to be >= the NEWEST world record, but a camera

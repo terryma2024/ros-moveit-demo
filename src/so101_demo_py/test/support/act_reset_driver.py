@@ -1,4 +1,4 @@
-"""B1b helper: an ACT (seven-joint, neck controller) reset through `MujocoResetClient` over fake services. No broker."""
+"""An ACT (seven-joint, neck controller) reset through `MujocoResetClient` over fake services. No broker."""
 import json
 import sys
 from types import SimpleNamespace

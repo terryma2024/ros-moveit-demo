@@ -99,7 +99,7 @@ def test_scenario_quota_mismatch_is_rejected_before_generation(tmp_path: Path) -
 
 def test_augmented_config_is_the_preregistered_contract() -> None:
     config_path = (
-        PACKAGE_ROOT / "config/perception/plastic_cup_grounding_dino_augmented_r3.yaml"
+        PACKAGE_ROOT / "config/perception/plastic_cup_grounding_dino_augmented.yaml"
     )
 
     config = load_dataset_config(config_path, generator_commit="b" * 40)

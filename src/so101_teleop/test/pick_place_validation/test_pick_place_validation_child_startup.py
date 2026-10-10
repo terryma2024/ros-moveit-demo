@@ -1,4 +1,4 @@
-"""The admitted child consumes its exact owner proof before Task 8 begins."""
+"""The admitted child consumes its exact owner proof before pick-place validation begins."""
 
 from dataclasses import asdict
 import json

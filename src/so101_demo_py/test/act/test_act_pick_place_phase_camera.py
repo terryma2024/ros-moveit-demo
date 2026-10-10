@@ -1,4 +1,4 @@
-"""Task 3 (approved measurement protocol v2): phase-camera replay and live coverage.
+"""phase-camera replay and live coverage.
 
 Replay rows arrive at 2 ms and live rows at 10 Hz, and the two time axes must stay separate: a replay result may
 satisfy geometric feasibility but may never be reported as live continuity. Everything here is deterministic and

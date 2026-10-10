@@ -134,7 +134,7 @@ def _read_batch(batch_root: Path, batch_id: str, campaign_id: str):
     ).read_after(AcceptedCoordinatorCursor.initial(binding))
 
 
-def test_the_recorded_w1_first_pass_carries_the_receipt_its_console_retry_needed():
+def test_the_recorded_single_worker_first_pass_carries_the_receipt_its_console_retry_needed():
     """The recorded 409's first pass: terminal-clean bytes, a genuine ``FAILED`` point, one receipt.
 
     The recorded store carried the receipt ``f43880c1…`` for ``bf16a`` while the durable column

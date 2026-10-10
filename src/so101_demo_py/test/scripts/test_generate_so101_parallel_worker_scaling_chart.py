@@ -69,7 +69,7 @@ def _worker_tick_x(root: ET.Element, worker: int) -> list[float]:
     ]
 
 
-def test_w8_series_points_and_labels_align_with_w8_ticks() -> None:
+def test_eight_worker_series_points_and_labels_align_with_eight_worker_ticks() -> None:
     generator = load_generator()
     rendered = generator.render_svg(generator.load_and_validate(DATA_PATH))
     root = ET.fromstring(rendered)

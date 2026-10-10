@@ -1,4 +1,4 @@
-"""Recorder round 3 (CP-3405): a reference that has not arrived yet is waited for; only a real gap is a missing publication.
+"""A reference that has not arrived yet is waited for; only a real gap is a missing publication.
 
 L2 rerun evidence: `COLLECTION_REFERENCE_EXACT_PUBLICATION_UNAVAILABLE` 80 ms after the capture started, at the first row's
 t+0.1 instant. The request is due when the SIM CLOCK (the /clock subscription) reaches the instant, while the controller_state

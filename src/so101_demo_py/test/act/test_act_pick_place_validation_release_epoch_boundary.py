@@ -3,7 +3,7 @@
 The recorder's seal used to require EVERY entry's `release_epoch` to EQUAL the identity's. But the epoch is created at
 the release: the phases before RELEASE are captured under epoch 0 and the phases after it under epoch 1, so a case with
 ten samples has entries in two epochs - truthfully. The rule therefore has to be "entries are non-decreasing in release
-epoch, and the last entry equals the identity", which is what the owner chose (CP-1612).
+epoch, and the last entry equals the identity", which is what the owner chose.
 
 What the rule must still refuse is unchanged: a sequence that goes BACKWARDS, and a last entry that disagrees with the
 identity that seals it.

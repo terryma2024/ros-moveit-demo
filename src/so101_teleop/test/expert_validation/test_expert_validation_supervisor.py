@@ -368,7 +368,7 @@ def test_adaptive_uses_one_wrapper_request_without_k(tmp_path):
         store.close()
 
 
-def test_each_retry_is_a_new_n1_single_point_batch_after_prior_cleanup(tmp_path):
+def test_each_retry_is_a_new_single_worker_single_point_batch_after_prior_cleanup(tmp_path):
     """One admitted retry is one command, one context and exactly one N1 batch."""
 
     from test_expert_validation_store import _retry_events, point_result_sha256

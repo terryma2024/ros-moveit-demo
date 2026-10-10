@@ -62,7 +62,7 @@ class _Service:
         return {"status": "PASSED"}
 
 
-def test_formal_run_needs_exact_w8_under_a_live_contract(tmp_path):
+def test_formal_run_needs_exact_eight_worker_under_a_live_contract(tmp_path):
     built = []
     manifest, files = _inputs(tmp_path)
     contract = _live_contract(tmp_path)

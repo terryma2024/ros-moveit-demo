@@ -36,7 +36,7 @@ INTEGRATION_GUIDE = (
     REPOSITORY_ROOT / "docs/guides/so101-mujoco-ros2-integration-guide.md"
 )
 UPSTREAM_010_COMMIT = "57fc6744844902d4532160b403fa95840c1d6f96"
-LOCAL_R11_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
+LOCAL_COMMIT = "f19a8cc3af61feccacb22a9f0d16cc972e3b2c08"
 CANDIDATE_COMMIT = "54463fce3bfa6192976e74113f5ed7152f708a3f"
 CANDIDATE_LABEL = "main"
 CLOSURE_DESIGN = (
@@ -62,7 +62,7 @@ def test_upgrade_candidate_provenance_is_identical_in_both_locks() -> None:
         assert candidate_lock["release"] == "0.1.0"
         assert candidate_lock["fork"]["tag"] == CANDIDATE_LABEL
         assert candidate_lock["fork"]["commit"] == CANDIDATE_COMMIT
-        assert candidate_lock["fork"]["lineage_commit"] == LOCAL_R11_COMMIT
+        assert candidate_lock["fork"]["lineage_commit"] == LOCAL_COMMIT
         assert candidate_lock["upstream"]["tag"] == "0.1.0"
         assert candidate_lock["upstream"]["commit"] == UPSTREAM_010_COMMIT
     assert runtime_lock["fork"] == lock["fork"]
@@ -108,7 +108,7 @@ def test_upgrade_candidate_gitlink_is_clean_and_contains_both_ancestries() -> No
         ).stdout
         == ""
     )
-    for ancestor in (UPSTREAM_010_COMMIT, LOCAL_R11_COMMIT):
+    for ancestor in (UPSTREAM_010_COMMIT, LOCAL_COMMIT):
         subprocess.run(
             [
                 "git",
@@ -185,7 +185,7 @@ def test_the_macos_mps_two_worker_document_bytes_are_frozen_by_the_single_worker
     assert digest == "2f9d7a87fe57a0440cdfd139c2ac42b7af86002edfcc2ed2ef3077568dc6b06b"
 
 
-def test_setup_installs_the_w1_public_entries() -> None:
+def test_setup_installs_the_single_worker_public_entries() -> None:
     """The W1 entry points are console scripts, exactly like the W2 one."""
 
     setup = DEMO_SETUP.read_text(encoding="utf-8")

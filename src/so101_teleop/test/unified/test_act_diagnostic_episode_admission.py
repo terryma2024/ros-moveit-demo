@@ -3,7 +3,7 @@
 `act_first_episode_diagnostic` is a distinct admission kind: it reuses the same reservation, GPU
 lease, contact activation and child ownership as the formal path, but it is fixed to one Worker,
 cannot claim qualification, and must present the frozen inputs plus the explicit diagnostic mode
-record. The formal and Task 8 payload schemas are unchanged, so neither can inherit these fields.
+record. The formal and pick-place validation payload schemas are unchanged, so neither can inherit these fields.
 """
 
 from __future__ import annotations
@@ -177,7 +177,7 @@ def test_diagnostic_requires_every_nonhead_check_but_no_head_search(tmp_path):
         store.close()
 
 
-def test_formal_and_task8_schemas_refuse_the_diagnostic_fields(tmp_path):
+def test_formal_and_pick_place_validation_schemas_refuse_the_diagnostic_fields(tmp_path):
     """The diagnostic fields are a schema error in both other kinds, so they cannot be inherited."""
 
     spec = _diagnostic_spec(tmp_path)
@@ -344,7 +344,7 @@ def test_diagnostic_refuses_a_frozen_resource_policy_without_stops(tmp_path):
 
 
 def test_diagnostic_accepts_a_frozen_set_whose_identity_is_not_current(tmp_path):
-    """CP-1928: the frozen manifest's source and config identity are recorded provenance.
+    """The frozen manifest's source and config identity are recorded provenance.
 
     The set still has to be internally sound: the same manifest with a substituted resource policy
     is refused by the resource derivation below.
@@ -396,7 +396,7 @@ def test_diagnostic_refuses_an_anchor_identity_the_bytes_do_not_describe(tmp_pat
 
 
 def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
-    """CP-1928 withdrew the one-report rule; each frozen report is validated on its own merits."""
+    """The one-report rule is withdrawn; each frozen report is validated on its own merits."""
 
     spec = _diagnostic_spec(tmp_path)
     manifest_path = Path(spec.payload["inputs_manifest_path"])
@@ -429,7 +429,7 @@ def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
 def test_diagnostic_refuses_a_secondary_report_that_breaks_its_contract(tmp_path, mutation):
     """Every frozen calibration report carries the same structural contract, not just the pinned one.
 
-    Distinct reports are allowed since CP-1928, so each one is validated on its own bytes; all outer
+    Distinct reports are allowed, so each one is validated on its own bytes; all outer
     hashes (frozen file, manifest, manifest digest, scope, payload) are refreshed so only the report's
     own contract can refuse it.
     """

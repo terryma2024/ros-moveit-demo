@@ -1,6 +1,6 @@
-"""P1-4 (rereview 5): a sealed event must say WHICH edge it was, and the evidence must describe its own grid.
+"""A sealed event must say WHICH edge it was, and the evidence must describe its own grid.
 
-The finding, read in CP-1803: `add_event(sample, reason)` validates the reason and then keeps it in
+The finding: `add_event(sample, reason)` validates the reason and then keeps it in
 `self._event_reasons` - the live window's own state - while `_SAMPLE_KEYS` (24 keys) has no `kind` and no `reason`.
 So a reader of the SEALED evidence cannot tell what a given event sample was, and `event_reasons` is a property of an
 object rather than of what was published. The second check is the packet's proposal 1: the sealed document records

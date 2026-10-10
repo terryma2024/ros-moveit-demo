@@ -1,6 +1,6 @@
-"""CP-3467: the broker runs the freeze's own detector; the CP-3460 pin of the image's baked `yolo_seg.py` is gone.
+"""The broker runs the freeze's own detector; the pin of the image's baked `yolo_seg.py` is gone.
 
-CP-3460 mounted the image's 09-24 `yolo_seg.py` over the freeze's package because the corrected detector (commit 828af7c91: the RGB
+An earlier pin mounted the image's 09-24 `yolo_seg.py` over the freeze's package because the corrected detector (commit 828af7c91: the RGB
 frame reaches Ultralytics as BGR) returns a second candidate, the red landing ring (0.36), next to the cup (0.97) and the Worker wanted
 exactly one. Rule R6 in `BrokerMaskLocalizer` (tests in `test_parallel_ros_runtime.py`) keeps the candidate that localizes as a cup and
 spans >= 0.05 m in z, so the pin is no longer needed. What stays: the freeze's package is mounted for contracts, IPC and runtime, its

@@ -1,4 +1,4 @@
-"""P1-1: the PRODUCTION low-level client, exercised against the real scene.
+"""The PRODUCTION low-level client, exercised against the real scene.
 
 Every other implementation of this surface lives in a test file; this one is the production client the default
 composition reaches when nothing is set in the environment, so the assertions here are about real values travelling

@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-import b1_pick_place_driver as driver
+import pick_place_driver as driver
 from so101_demo.act import teacher_event_stream as stream_module
 from so101_demo.core.domain import State
 

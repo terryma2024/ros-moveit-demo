@@ -1,4 +1,4 @@
-"""B1b: the ACT reset (neck controller, seven joints, scalar snapshot, neck readiness) works with no broker.
+"""The ACT reset (neck controller, seven joints, scalar snapshot, neck readiness) works with no broker.
 
 Decision 2: the ACT reset logic stays; only the broker, lease and reservation pieces are cut. `b1b-reset-cut.md`.
 """
@@ -30,7 +30,7 @@ def test_reset_entry_points_have_no_broker_parameters_and_the_act_profile_is_exp
 
 
 def test_seven_joint_act_reset_with_the_neck_controller_runs_with_no_broker_module_imported():
-    script = f"import sys; sys.path[:0] = {[*map(str, TEST_IMPORT_PATH)]!r}; import b1b_reset_driver as d; print('B1BJSON ' + __import__('json').dumps(d.run()))"
+    script = f"import sys; sys.path[:0] = {[*map(str, TEST_IMPORT_PATH)]!r}; import act_reset_driver as d; print('B1BJSON ' + __import__('json').dumps(d.run()))"
     done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120, check=False)
     line = next((x for x in done.stdout.splitlines() if x.startswith("B1BJSON ")), None)
     assert line is not None, done.stdout[-1500:] + done.stderr[-2500:]
