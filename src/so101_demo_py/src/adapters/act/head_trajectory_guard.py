@@ -26,25 +26,26 @@ from rosidl_runtime_py.convert import message_to_ordereddict
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from so101_demo.act.head_evidence_identity import canonical_bytes
+from so101_demo.act import head_neck_limits as limits
 from so101_demo.act.head_feedback import nanoseconds
 from .physics import model_sha256
 from .pick_place_neck_sweep import MujocoNeckSweepChecker
 
 
-_QUIET_VELOCITY = 0.04136050464213824
-_MAX_VELOCITY = 1.0
-_MAX_ACCELERATION = 2.0
-_MIN_DURATION_NS = 100_000_000
-_MAX_DURATION_NS = 5_000_000_000
-_LEAD_NS = 4_000_000
-_MIN_FIRST_OFFSET_NS = 50_000_000
-_MAX_FIRST_OFFSET_NS = 600_000_000
-_PATH_STEP_S = 0.002
-_CLEARANCE_M = 0.001
-_MAX_SAMPLES = 50_000
+_QUIET_VELOCITY = limits.QUIET_VELOCITY_RAD_S
+_MAX_VELOCITY = limits.MAX_VELOCITY_RAD_S
+_MAX_ACCELERATION = limits.MAX_ACCELERATION_RAD_S2
+_MIN_DURATION_NS = limits.MIN_DURATION_NS
+_MAX_DURATION_NS = limits.MAX_DURATION_NS
+_LEAD_NS = limits.HEADER_LEAD_NS
+_MIN_FIRST_OFFSET_NS = limits.MIN_FIRST_OFFSET_NS
+_MAX_FIRST_OFFSET_NS = limits.MAX_FIRST_OFFSET_NS
+_PATH_STEP_S = limits.PATH_STEP_S
+_CLEARANCE_M = limits.CLEARANCE_M
+_MAX_SAMPLES = limits.MAX_SAMPLES
 # Retain the original angular collision resolution as motion limits increase.
-_PATH_MAX_SPACING_MOTION_RAD = 0.001
-_PREFIX_MAX_SPACING_MOTION_RAD = _PATH_MAX_SPACING_MOTION_RAD
+_PATH_MAX_SPACING_MOTION_RAD = limits.PATH_MAX_SPACING_MOTION_RAD
+_PREFIX_MAX_SPACING_MOTION_RAD = limits.PREFIX_MAX_SPACING_MOTION_RAD
 
 
 @dataclass(frozen=True, slots=True)
@@ -349,7 +350,7 @@ class HeadTrajectoryGuard:
         neck_position = _finite(sample["positions"][0], "FEEDBACK_POSITION")
         neck_velocity = _finite(sample["velocities"][0], "FEEDBACK_VELOCITY")
         if (abs(neck_velocity) > _QUIET_VELOCITY
-                or abs(qpos[self._neck_qpos] - neck_position) > 0.002):
+                or abs(qpos[self._neck_qpos] - neck_position) > limits.MEASURED_POSITION_MISMATCH_RAD):
             raise PermissionError("HEAD_TRAJECTORY_MEASURED_ANCHOR_INVALID")
         now_wall_ns = nanoseconds(self.monotonic())
         scene_received_ns = nanoseconds(received)
@@ -385,7 +386,9 @@ class HeadTrajectoryGuard:
         duration_s = duration_ns * 1e-9
         first = snapshot.neck_position
         delta = target - first
-        envelope_radius = 0.002 + 0.4 * _QUIET_VELOCITY * (offset_s + 0.014)
+        envelope_radius = (limits.MEASURED_POSITION_MISMATCH_RAD
+                           + limits.PREFIX_ENVELOPE_VELOCITY_FACTOR * _QUIET_VELOCITY
+                           * (offset_s + limits.CONSUMING_TICK_ALLOWANCE_S))
         low, high = first - envelope_radius, first + envelope_radius
         if low < self.safe_interval[0] or high > self.safe_interval[1]:
             raise PermissionError("HEAD_TRAJECTORY_PREFIX_OUTSIDE_GEOMETRY")
@@ -470,14 +473,14 @@ class HeadTrajectoryGuard:
     def _prefix_offset_ns(position_mismatch_rad: float, velocity_rad_s: float) -> int:
         mismatch = _finite(position_mismatch_rad, "PREFIX_POSITION")
         velocity = _finite(velocity_rad_s, "PREFIX_VELOCITY")
-        if abs(mismatch) > 0.002 or abs(velocity) > _QUIET_VELOCITY:
+        if abs(mismatch) > limits.MEASURED_POSITION_MISMATCH_RAD or abs(velocity) > _QUIET_VELOCITY:
             raise PermissionError("HEAD_TRAJECTORY_MEASURED_ANCHOR_INVALID")
         # Reserve the native first-update timing allowance and a small pose
         # margin. The native guard independently checks its actual measured
         # prefix; this estimate never grants permission to bypass that check.
-        drift = abs(velocity) * 0.014 + 0.000002
+        drift = abs(velocity) * limits.CONSUMING_TICK_ALLOWANCE_S + 0.000002
         for offset_ns in range(_MIN_FIRST_OFFSET_NS, _MAX_FIRST_OFFSET_NS + 1, 10_000_000):
-            remaining = offset_ns * 1e-9 - 0.014
+            remaining = offset_ns * 1e-9 - limits.CONSUMING_TICK_ALLOWANCE_S
             bounded = True
             for position in (mismatch - drift, mismatch + drift):
                 extrema = quintic_extrema(position, velocity, 0., 0., 0., 0., remaining)
