@@ -122,7 +122,8 @@ def test_every_config_joint_vector_lies_inside_the_act_range():
             except Exception:
                 continue
             walk(document, "", name)
-    assert seen >= 200
+    # vacuity guard: 134 vectors remain after the CP-3529 retirement of the Task 6 profiles (it was 200+ with them)
+    assert seen >= 100
 
 
 def test_every_keyframe_and_the_srdf_home_lie_inside_the_act_range():
