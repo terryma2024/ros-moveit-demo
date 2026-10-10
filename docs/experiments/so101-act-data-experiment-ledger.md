@@ -69,11 +69,42 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3526
+latest_checkpoint: CP-3527
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3527 — user: pull the Head search line (merged into origin/codex/so101-act-data-0917a), merge it with the non-Head line, all UT green, one Head-search-only task PASS, one pick-place Teacher task PASS
+
+- User (2026-10-10): "head search的最新修复已经push到了远端。你需要pull下来，与当前non-head的部分合并，并确保UT测试都通过，第一个仅head search任务通过，和一次pick place teach任务通过。" They added: "head search的最新修复已经push到了远端并合并到了so101-act-data-0917a分支".
+- Remote facts (root, after fetch):
+  - origin/codex/so101-act-data-0917a = c5efe10f5 "Merge paused Head file-protocol checkpoint into SO-101 ACT data". Both parents are on the Head line (cf7766a9b, d1dc77b9b); it is 1 commit ahead of origin/codex/so101-head-file-protocol-1003 (d1dc77b9b).
+  - Local branch vs remote: 3508 / 2979, merge-base fd10ed022 (2026-09-24). The local line was rebased onto main after the Head line forked.
+  - git cherry: of 2977 Head-line commits, 2331 are patch-equivalent to local commits and 646 are Head-unique (the first is 86ccce49b, 2026-09-30, "define head search model identities").
+- Trial merge (scratch/merge-trial-head worktree, --no-commit): 143 conflicted files. Only 28 of them are touched by Head-unique commits, among them:
+  - act/head_search_binding.py, pick_place_runner.py, contracts.py, source_provenance.py;
+  - adapters/act/detector.py, ros_neck.py, broker_execution.py;
+  - so101_teleop/unified/*, teleop web app.tsx;
+  - so101_mujoco_support CMakeLists/package.xml;
+  - third_party/mujoco_ros2_control.
+
+  The other 115 are Head-side older states of local work.
+- Submodule third_party/mujoco_ros2_control: merge-base 54463fc. Local 16ca7bc (ControlTickGate lock-step, lossless /clock, sim-synchronous camera render; local only) vs Head 0d9df5e (+4: camera snapshots on actual sim time, physics clock rounding, cameras from physics-step observers, WIP clock diagnostics). Both touch the camera/clock paths, so a submodule merge commit is needed.
+- Head handoff (docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md on the Head line):
+  - Head search stability is NOT resolved; the investigation is PAUSED (nominal 120 s hold: one common 4 ms skip at 107.8 s, 59,999 < 60,000 updates).
+  - The clock fix lives only in an isolated copy "C" on antzb (AI-STATION-001) and is not in repo production source.
+  - Head-line ordinary baseline: 110 FAIL / 66 ERROR / 8,522 PASS.
+  - Evidence root /data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m is on antzb, not on ai-station (it is not in the CP-3521 deletion list; it was never here).
+  - Head YOLO weights: 52 head-model-* copies on antzb.
+- Merge strategy (root decision, CP-3394 recommended):
+  1. Files changed on the Head side but touched by no Head-unique commit: take the local version in full. This covers both conflicted and auto-merged files, so that an older Head-side state cannot re-introduce code the local line later reverted.
+  2. Files touched by Head-unique commits: a real 3-way merge, with the conflicts resolved by hand, keeping the local v3/Teacher/data behaviour and adding the Head behaviour.
+  3. Files only on the Head side: take them.
+  4. The act-data ledger: keep ours; the Head-side version is saved verbatim beside it for audit. The Head ledger and handoff files come in as they are.
+  5. Submodule: a merge commit in third_party/mujoco_ros2_control combining 16ca7bc with 0d9df5e.
+  6. Then the full UT for every package (so101_demo_py, so101_teleop, so101_mujoco_support, the native C++ packages including the submodule), then one Head-search-only task, then one pick-place Teacher task. No push.
+- Dispatched to a fresh Sonnet executor.
 
 ## CP-3526 — Phase C follow-ups committed (991188bd8): lock default, pinned pretrained backbone, offline eval on the export; gates 8202/0/190 and 163/0/3
 
