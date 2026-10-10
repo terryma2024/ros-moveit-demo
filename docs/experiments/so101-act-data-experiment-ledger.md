@@ -69,11 +69,44 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3540
+latest_checkpoint: CP-3541
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3541 — refactor inventories done; design written (6 gated phases); independent review dispatched
+
+- Inventory results:
+  - Versions: about 40 families. Ambiguous cases:
+    - parallel_batch: v3 is Linux CUDA, while v4/v5/v6 are three macOS MPS routes (parallel profiles);
+    - teacher_endpoint_v2 is a different axis from execution-policy v1/v2/v3;
+    - contact policy 4 is a different kind;
+    - the boundary schemas belong to two kinds.
+    - Risky deletions: production still defaults to teacher_execution_policy_v1 (dynamic_mujoco_execution.py:430, dynamic_runtime.py:536/822, first_episode_inputs.py:632); the parallel_batch v1/v2 carriers are bound into resource identity; sealed-format readers for result schema 1/2, QC 2, seal 1, snapshot 1, camera truth 1, HFA-009 v1.
+  - Process names:
+    - 14 shims, plus Task8Runner/Error/Port aliases;
+    - 15 act/task8_* modules, 9 task8 console scripts, task8 configs and kinds, about 193 TASK*_ codes;
+    - w1/w2/n1; first_episode; hs40 ids;
+    - test families b1–b4, c, d1–d4, p2/p3, rec*, r11, task8.
+    - External couplings: scripts/, web fixtures, .agents, setup.py, teleop CMake, sealed kinds and digest-bound configs.
+  - Tests:
+    - so101_demo_py has 578 flat test files and 18 bare-import helpers, with no __init__.py and unique basenames;
+    - about 287 (+73 teleop) parents[N] uses;
+    - teleop has 114 CMake registrations, guarded by test_ctest_registration, and a per-worker IPC conftest in test/teleop;
+    - the gate runner's duration map is basename-based.
+  - Large files: about 43 source files over 1200 lines; the largest are mujoco_parallel_batch 4488, head_search_calibration 3877, perception_benchmark reporting/runner 3068/2926, resources 2852, dynamic_mujoco_execution 2786, contracts 2729.
+- Design: docs/superpowers/specs/2026-10-10-so101-code-style-refactor-design.md.
+  - Decisions (CP-3394 recommended):
+    - R1: parallel profiles are not versions; keep them and rename them by meaning.
+    - R2: old sealed evidence becomes unreadable and stays on disk as history.
+    - R3: wire and sealed identifiers are renamed too, with no compatibility reader.
+    - R4: external callers change in lockstep, with new tooling versions.
+    - R5: no history rewrite; a rename-map doc.
+    - R6: versions leave names and stay as schema_version fields.
+  - Phases: A shims → B latest-only → C business names (code) → D business names (wire/sealed) → E test reorganisation → F file splits.
+  - Each phase ends with gates at 0/0 and separate commits for moves and content. Live checks after B, D and F. Guard tests: no versioned names, no process names, unique test basenames, module-size limit.
+- Independent design review (fresh Opus, read-only) dispatched.
 
 ## CP-3540 — user: code-style refactor (latest version only; business names; tests by module/component; split oversized files); inventory dispatched
 
