@@ -204,13 +204,13 @@ def test_campaign_skips_terminal_scenes_and_keeps_the_claim_on_failure(tmp_path)
     assert port.calls[-1][0] == "act-2"
 
 
-def test_campaign_config_consumes_the_real_v3_collection_config(tmp_path):
+def test_campaign_config_consumes_the_real_collection_config(tmp_path):
     import yaml
 
     from so101_demo.act.parallel_collection import campaign_config_from
 
     package = PACKAGE_ROOT
-    document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
+    document = yaml.safe_load((package / "config/act/parallel_collection.yaml").read_text())
     config = campaign_config_from(document, qualification=False)
     assert config == {"max_wave_size": document["qualification"]["max_wave_size"],
                       "qualification": False}
@@ -238,7 +238,7 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
     )
 
     package = PACKAGE_ROOT
-    document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
+    document = yaml.safe_load((package / "config/act/parallel_collection.yaml").read_text())
     config = campaign_config_from(document, qualification=False)
     scene_ids = tuple(f"act-{index:03d}" for index in range(45))
     assert tuple(map(len, partition_waves(scene_ids, max_wave_size=config["max_wave_size"]))) == (

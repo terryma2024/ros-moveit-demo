@@ -105,7 +105,7 @@ def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspec
     from so101_demo.act import first_episode_inputs
 
     package = PACKAGE_ROOT
-    document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_bytes())
+    document = yaml.safe_load((package / "config/act/parallel_collection.yaml").read_bytes())
     runtime = package / document["parallel_runtime"]["path"]
     assert runtime.name == "parallel_batch_act_offline.yaml"
     assert document["parallel_runtime"]["sha256"] == hashlib.sha256(runtime.read_bytes()).hexdigest()

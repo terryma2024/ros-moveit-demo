@@ -801,7 +801,7 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
     (root / "src/so101_demo_py/config/act").mkdir(parents=True)
     (root / "src/so101_demo_py/config/mujoco").mkdir(parents=True)
     (root / "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml").write_bytes(RUNTIME_YAML)
-    (root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml").write_bytes(COLLECTION_YAML)
+    (root / "src/so101_demo_py/config/act/parallel_collection.yaml").write_bytes(COLLECTION_YAML)
     ready = _inspect_resource_thresholds(root)
     assert ready["status"] == "READY"
     assert ready["identity"]["rtf_hard_stop"] == 0.5
@@ -819,7 +819,7 @@ def test_resource_role_refuses_missing_hard_stops(tmp_path):
         assert _inspect_resource_thresholds(root)["status"] == "MISSING", label
 
     runtime.write_bytes(RUNTIME_YAML)
-    collection = root / "src/so101_demo_py/config/act/parallel_collection_v3.yaml"
+    collection = root / "src/so101_demo_py/config/act/parallel_collection.yaml"
     for label, broken in (("not lossless", COLLECTION_YAML.replace(b"lossless: true",
                                                                   b"lossless: false")),
                           ("bad watermark order",

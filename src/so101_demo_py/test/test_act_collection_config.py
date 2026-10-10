@@ -10,7 +10,7 @@ from so101_demo.act.collection_config import load_collection_config
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-CONFIG = PACKAGE / "config/act/parallel_collection_v3.yaml"
+CONFIG = PACKAGE / "config/act/parallel_collection.yaml"
 PUBLIC = PACKAGE / "config/mujoco/parallel_batch_act_offline.yaml"
 
 
@@ -21,13 +21,13 @@ def _package_share(tmp_path):
     (share / "config/mujoco").mkdir(parents=True)
     (share / "config/act").mkdir(parents=True)
     (share / "config/mujoco/parallel_batch_act_offline.yaml").write_bytes(PUBLIC.read_bytes())
-    (share / "config/act/parallel_collection_v3.yaml").write_bytes(CONFIG.read_bytes())
+    (share / "config/act/parallel_collection.yaml").write_bytes(CONFIG.read_bytes())
     return share
 
 
 def test_collection_config_freezes_w8_and_recorder_backpressure(tmp_path):
     share = _package_share(tmp_path)
-    value = load_collection_config(share / "config/act/parallel_collection_v3.yaml",
+    value = load_collection_config(share / "config/act/parallel_collection.yaml",
                                    package_share=share)
     assert value["qualification"] == {
         "functional_worker_counts": [1, 2], "load_worker_count": 8,
@@ -49,7 +49,7 @@ def test_collection_config_freezes_w8_and_recorder_backpressure(tmp_path):
 
 def test_loader_binds_the_public_runtime_bytes_not_a_reparse(tmp_path):
     share = _package_share(tmp_path)
-    value = load_collection_config(share / "config/act/parallel_collection_v3.yaml",
+    value = load_collection_config(share / "config/act/parallel_collection.yaml",
                                    package_share=share)
     expected = hashlib.sha256((share / value["parallel_runtime"]["path"]).read_bytes()).hexdigest()
     assert value["parallel_runtime"]["sha256"] == expected
@@ -60,7 +60,7 @@ def test_loader_binds_the_public_runtime_bytes_not_a_reparse(tmp_path):
 ])
 def test_loader_rejects_unresolvable_parallel_runtime(tmp_path, mutation):
     share = _package_share(tmp_path)
-    path = share / "config/act/parallel_collection_v3.yaml"
+    path = share / "config/act/parallel_collection.yaml"
     document = yaml.safe_load(path.read_bytes())
     if mutation == "absolute_path":
         document["parallel_runtime"]["path"] = "/etc/passwd"
@@ -73,7 +73,7 @@ def test_loader_rejects_unresolvable_parallel_runtime(tmp_path, mutation):
         link.unlink()
         link.symlink_to(target)
     elif mutation == "outside_share":
-        document["parallel_runtime"]["path"] = "config/act/parallel_collection_v3.yaml"
+        document["parallel_runtime"]["path"] = "config/act/parallel_collection.yaml"
     else:
         document["parallel_runtime"]["sha256"] = "0" * 64
     path.write_text(yaml.safe_dump(document, sort_keys=False))
@@ -86,7 +86,7 @@ def test_loader_rejects_unresolvable_parallel_runtime(tmp_path, mutation):
 ])
 def test_loader_rejects_cuda_and_recorder_violations(tmp_path, mutation):
     share = _package_share(tmp_path)
-    path = share / "config/act/parallel_collection_v3.yaml"
+    path = share / "config/act/parallel_collection.yaml"
     document = yaml.safe_load(path.read_bytes())
     if mutation == "cpu_device":
         document["parallel_runtime"]["device"] = "cpu"
@@ -110,5 +110,5 @@ def test_frozen_yaml_matches_the_approved_design():
     assert document["parallel_runtime"]["path"] == "config/mujoco/parallel_batch_act_offline.yaml"
     assert document["parallel_runtime"]["sha256"] == \
         hashlib.sha256(PUBLIC.read_bytes()).hexdigest()
-    schema = json.loads((PACKAGE / "config/act/parallel-collection-v3-schema.json").read_text())
+    schema = json.loads((PACKAGE / "config/act/parallel-collection-schema.json").read_text())
     assert schema["properties"]["kind"]["const"] == "act_parallel_collection"

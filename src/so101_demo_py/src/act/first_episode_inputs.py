@@ -681,7 +681,7 @@ FROZEN_SEED = 0
 ANCHOR_FILE = "src/so101_demo_py/config/act/task8-live-anchors.yaml"
 ANCHOR_APPROVAL_FILE = "src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json"
 SCENE_FILE = "src/so101_demo_py/assets/mujoco/act/scene.xml"
-COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection_v3.yaml"
+COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection.yaml"
 RUNTIME_CONFIG_FILE = "src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml"   # CP-3456: stage bounds long enough for offline processing
 #: the design's section 5.1 document, which declares the two resource hard stops
 DEVELOPMENT_RUNTIME_FILE = "src/so101_demo_py/config/act/endpoint_pose_development_runtime.yaml"
