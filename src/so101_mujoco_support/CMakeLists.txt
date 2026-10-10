@@ -67,6 +67,14 @@ ament_target_dependencies(so101_broker_owned_trajectory_controller PUBLIC
   control_msgs controller_interface joint_trajectory_controller pluginlib rcl_interfaces rclcpp rclcpp_action)
 pluginlib_export_plugin_description_file(controller_interface so101_trajectory_controllers.xml)
 
+add_library(so101_head_neck_deadman STATIC src/head_neck_deadman.cpp)
+set_target_properties(so101_head_neck_deadman PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_features(so101_head_neck_deadman PUBLIC cxx_std_17)
+target_include_directories(so101_head_neck_deadman PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_head_neck_deadman PUBLIC Threads::Threads)
+
 add_library(so101_controller_reservation_protocol STATIC
   src/controller_reservation_protocol.cpp
   src/controller_reservation_provision.cpp
@@ -148,6 +156,12 @@ if(BUILD_TESTING)
   target_compile_features(test_physics_step_fence PRIVATE cxx_std_17)
   target_include_directories(test_physics_step_fence PRIVATE include)
   target_link_libraries(test_physics_step_fence so101_simulation_evidence_plugin)
+
+  ament_add_gtest(test_head_neck_deadman
+    test/test_head_neck_deadman.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_head_neck_deadman PRIVATE cxx_std_17)
+  target_link_libraries(test_head_neck_deadman so101_head_neck_deadman)
 
   ament_add_gtest(test_controller_ingress_witness
     test/test_controller_ingress_witness.cpp
