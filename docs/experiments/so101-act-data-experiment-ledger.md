@@ -69,11 +69,30 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3532
+latest_checkpoint: CP-3533
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3533 — pick-place Teacher run PASS on the merged tree (08742d4a, freeze SES69LkF, r11-headgeom); both user-requested live tasks done
+
+- Run 08742d4a-2355-479e-b694-75e57005ba24: live-r13 / r16, collection on, default point, diagnostic mode, domain 181; live rc 0, readback rc 0, watcher rc 0; 6 min 20 s wall, about 91 s sim.
+  - The freeze source manifest differs from the worktree only in two Head-CLI files from a29acbe53, which are not on the Teacher path (recorded, not enforced).
+- Teacher PASSED / COMPLETED / PASS; trace ends RETREAT → DONE. Endpoint (sim truth after controller stop + settle): xy 4.93 mm, z 0.15 mm, tilt 8.7e-6 rad, initial 0.48 mm (root also read the sealed manifest). The same about 5 mm xy offset as p10/p11 shows the geometry change did not move placement.
+- Data VALID, QC PASS (act_data_qc_v4), independent readback PASS (expect VALID), commit_sequence 312. export_eligible false (diagnostic).
+- Process summary:
+  - complete; no ORACLE flags;
+  - peaks in LIFT: compression 108.96/119.28 µm (margin about 10.3 µm), force 1.712/1.892 N;
+  - place tilt_compensated with no fallback; release displacement 4.1 mm / 3.9°; settle 2.84 s.
+- Camera on the unified lossless path:
+  - head 819 / wrist 819 acquisitions, 812 records;
+  - topic_loss_v2 0 lost in window; controller_state 2 ms grid 0 gaps, 0 stalls;
+  - 12 transport-loss messages, all attributed (2 head colour, 2 wrist colour; in-window or not unverified);
+  - no "Camera renderer did not finish" log.
+- Teardown: cleanup gates passed; 0 stack processes after the run.
+- User acceptance list (CP-3527): (1) pull + merge: DONE (97b4c499e and fixups); (2) all UT green: DONE (CP-3531); (3) first Head-search-only task PASS: DONE (CP-3532, seed 900000); (4) one pick-place Teacher PASS: DONE (this entry). Not pushed.
+- Next per CP-3530: design the stock-JTC refactor (Head neck off BrokerOwnedTrajectoryController; stop-proof replacement for the 120 s hold), then implement.
 
 ## CP-3532 — Head-search-only single case PASS on ai-station (seed 900000, nominal single cup); pick-place Teacher run next
 
