@@ -30,7 +30,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
         calibration_report_sha256="e" * 64)
     manifest_path = tmp_path / "manifest.json"
     write_new_manifest(manifest_path, manifest)
-    journal_root = tmp_path / "task8-live" / "cases"
+    journal_root = tmp_path / "pick-place-live" / "cases"
     journal_root.mkdir(parents=True)
     expected_hash = _h(manifest_path.read_bytes())
     calls = []

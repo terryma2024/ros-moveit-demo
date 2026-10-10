@@ -38,7 +38,7 @@ def test_reserved_producer_binds_original_inputs_and_publishes_qc(tmp_path, monk
     results.reserve_workspace(current,ResetBoundaryReceipt('reset-2','session-1',11.,.1))
     workspace=results.workspace(current)
     audit,seal=sealed_episode(tmp_path,episode_root=workspace.path/'episode',audit_lease=current,
-        outcome=dict(status='FAILED',reason='controlled stop',task8_success=False,stopped_confirmed=True))
+        outcome=dict(status='FAILED',reason='controlled stop',pick_place_validation_success=False,stopped_confirmed=True))
     expected=report(); expected['identity']=json.loads(audit.read_bytes())['identity']
     expected.update(inputs_sha256=SCOPE['inputs_sha256'],
         scope_sha256=hashlib.sha256(scope.read_bytes()).hexdigest(),
@@ -71,7 +71,7 @@ def test_reserved_workspace_and_actual_episode_publish_common_act_result(tmp_pat
     identity_bytes = (workspace.path / "workspace_identity.json").read_bytes()
     _, episode = sealed_episode(tmp_path, episode_root=workspace.path / "episode",
         audit_lease=current, outcome={"status": "FAILED", "reason": "fixture_stop",
-            "task8_success": False, "stopped_confirmed": True})
+            "pick_place_validation_success": False, "stopped_confirmed": True})
     original = episode.read_bytes()
     decision = _teacher_decision(workspace, "FAILED", AttemptStatus.FAILED)
     location = results.seal_attempt(current, decision)
@@ -138,7 +138,7 @@ def test_changed_original_workspace_metadata_cannot_be_published(tmp_path):
     workspace = results.workspace(current)
     sealed_episode(tmp_path, episode_root=workspace.path / "episode", audit_lease=current,
         outcome={"status": "FAILED", "reason": "fixture_stop",
-                 "task8_success": False, "stopped_confirmed": True})
+                 "pick_place_validation_success": False, "stopped_confirmed": True})
     path = workspace.path / "workspace_identity.json"
     metadata = json.loads(path.read_bytes())
     metadata["identity"]["worker_generation"] += 1
@@ -159,7 +159,7 @@ def test_selected_pass_without_original_native_physical_rows_publishes_invalid_d
     workspace = results.workspace(current)
     sealed_episode(tmp_path, episode_root=workspace.path / "episode", audit_lease=current,
         outcome={"status": "PASSED", "reason": "synthetic claim without native source",
-                 "task8_success": True, "stopped_confirmed": True})
+                 "pick_place_validation_success": True, "stopped_confirmed": True})
     # The Teacher passed; the episode's PASSED claim has no original native physical rows behind it. That is a data
     # verdict: the result is published with the Teacher's PASSED and INVALID, unexportable data.
     location = Path(results.seal_attempt(current, _teacher_decision(workspace, "PASSED", AttemptStatus.PASSED)))

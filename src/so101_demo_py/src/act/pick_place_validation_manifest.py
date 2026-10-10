@@ -94,7 +94,7 @@ def build_pick_place_validation_manifest(
     if type(calibration_report_path) is not str or not calibration_report_path:
         raise ValueError("TASK8_MANIFEST_CALIBRATION_PATH_INVALID")
     document = {
-        "schema_version": SCHEMA_VERSION, "kind": "ACT_TASK8_LIVE", "backend": "mujoco",
+        "schema_version": SCHEMA_VERSION, "kind": "ACT_PICK_PLACE_VALIDATION", "backend": "mujoco",
         "anchors": frozen_anchors, "anchors_sha256": _sha(frozen_anchors),
         **hashes, "calibration_report_path": calibration_report_path,
         "calibration_report_sha256": _require_hash(calibration_report_sha256),
@@ -108,7 +108,7 @@ def build_pick_place_validation_manifest(
 def require_pick_place_validation_manifest(value: object, *, expected_anchors_sha256: str | None = None) -> dict:
     if not isinstance(value, dict) or set(value) != _KEYS:
         raise ValueError("TASK8_MANIFEST_SCHEMA")
-    if (value["schema_version"] != SCHEMA_VERSION or value["kind"] != "ACT_TASK8_LIVE"
+    if (value["schema_version"] != SCHEMA_VERSION or value["kind"] != "ACT_PICK_PLACE_VALIDATION"
             or value["backend"] != "mujoco"):
         raise ValueError("TASK8_MANIFEST_ROLE_INVALID")
     _require_anchors(value["anchors"])

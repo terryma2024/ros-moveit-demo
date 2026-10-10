@@ -24,7 +24,7 @@
       "const": 2
     },
     "kind": {
-      "const": "ACT_TASK8_LIVE"
+      "const": "ACT_PICK_PLACE_VALIDATION"
     },
     "backend": {
       "const": "mujoco"

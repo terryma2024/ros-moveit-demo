@@ -32,7 +32,7 @@ from .qc_session import file_signature, session_memo, tree_signature
 _PROVENANCE_KEYS = frozenset({
     "source_sha256", "scene_sha256", "config_sha256", "policy_fingerprint", "seed",
 })
-_OUTCOME_KEYS = frozenset({"status", "reason", "task8_success", "stopped_confirmed"})
+_OUTCOME_KEYS = frozenset({"status", "reason", "pick_place_validation_success", "stopped_confirmed"})
 
 
 def _canonical(value: object) -> bytes:
@@ -292,9 +292,9 @@ class EpisodeRecorder:
             raise ValueError("EPISODE_OUTCOME_SCHEMA")
         if (outcome["status"] not in ("PASSED", "FAILED")
                 or not isinstance(outcome["reason"], str) or not outcome["reason"]
-                or type(outcome["task8_success"]) is not bool
+                or type(outcome["pick_place_validation_success"]) is not bool
                 or outcome["stopped_confirmed"] is not True
-                or outcome["task8_success"] != (outcome["status"] == "PASSED")):
+                or outcome["pick_place_validation_success"] != (outcome["status"] == "PASSED")):
             raise ValueError("EPISODE_OUTCOME_INVALID")
         if outcome["status"] == "PASSED":
             require_grid(self._times, self.dt_s)
@@ -332,7 +332,7 @@ class EpisodeRecorder:
                 "schema_version": 2,
                 "kind": "ACT_EPISODE_SEAL",
                 "status": outcome["status"], "reason": outcome["reason"],
-                "task8_success": outcome["task8_success"],
+                "pick_place_validation_success": outcome["pick_place_validation_success"],
                 "stopped_confirmed": True, "qc_passed": outcome["status"] == "PASSED",
                 "committed": False, "session_id": self.session_id,
                 "attempt_id": self.attempt_id, "reset_epoch": self.reset_epoch,
@@ -378,7 +378,7 @@ def verify_episode_seal(path: Path, *, audit_manifest: Path | None = None,
         raise ValueError("EPISODE_SEAL_MISSING")
     source_bytes = path.read_bytes()
     document = json.loads(source_bytes)
-    keys = {"schema_version", "kind", "status", "reason", "task8_success",
+    keys = {"schema_version", "kind", "status", "reason", "pick_place_validation_success",
             "stopped_confirmed", "qc_passed", "committed", "session_id",
             "attempt_id", "reset_epoch", "record_count", "provenance", "files",
             "manifest_sha256", "audit_manifest_sha256", "scope_sha256"}

@@ -24,7 +24,7 @@ def identities():
     from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES
 
     value = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
-    value.update(source_commit="0" * 40, anchors_sha256=_sha(PACKAGE / "config/act/task8-live-anchors.yaml"),
+    value.update(source_commit="0" * 40, anchors_sha256=_sha(PACKAGE / "config/act/pick-place-live-anchors.yaml"),
                  runtime_config_sha256="b" * 64)
     return value
 
@@ -143,7 +143,7 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
     raw = write_closed_json(root / "raw" / "default.json", {"value": 1})
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    batch = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+    batch = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
              "anchors": ["default", "left", "forward"], "batch_sha256": "0" * 64,
              "identity": identity,
              "files": _index_anchor_evidence(root, {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()},
@@ -338,7 +338,7 @@ def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
     digest = _hashlib.sha256(real.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity,
                 "files": _index_anchor_evidence(root, {"raw/real.json": digest, "raw/link.json": digest},
                                                 write_closed_json, _hashlib)}
@@ -369,7 +369,7 @@ def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path)
         digest = _hashlib.sha256((root / "raw" / "row.json").read_bytes()).hexdigest()
         identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
         identity["source_commit"] = "b" * 40
-        document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+        document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                     "anchors": ["default", "left", "forward"], "identity": identity,
                     "files": _index_anchor_evidence(root, {"raw/row.json": digest}, write_closed_json,
                                                     _hashlib),
@@ -401,7 +401,7 @@ def test_a_batch_that_does_not_cover_every_declared_anchor_is_refused(tmp_path):
     digest = _hashlib.sha256((root / "anchors" / "default" / "geometry-00.json").read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity,
                 "files": {"anchors/default/geometry-00.json": digest}}          # only one of three anchors
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
@@ -431,7 +431,7 @@ def test_a_driver_batch_that_misses_a_phase_for_an_anchor_is_refused(tmp_path):
             files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(root / "batch.json", document)
@@ -464,7 +464,7 @@ def test_a_driver_batch_whose_phase_stamps_go_backwards_is_refused(tmp_path):
             files[f"anchors/{anchor}/{written.name}"] = _hashlib.sha256(written.read_bytes()).hexdigest()
     identity = {name: "a" * 64 for name in IDENTITY_MEMBERS}
     identity["source_commit"] = "b" * 40
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED", "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = _hashlib.sha256(_seal_canonical(document)).hexdigest()
     write_closed_json(root / "batch.json", document)

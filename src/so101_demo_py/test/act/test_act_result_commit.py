@@ -53,7 +53,7 @@ def failed_episode(store, tmp_path, *, session_id="session-1"):
         {"start_s": 1., "end_s": 1., "label_cutoff_s": 1.})
     store.audit_manifest, store.scope = audit, scope
     return recorder.finish({"status": "FAILED", "reason": "search_failed",
-                            "task8_success": False, "stopped_confirmed": True},
+                            "pick_place_validation_success": False, "stopped_confirmed": True},
                            audit_manifest=audit, scope=scope)
 
 

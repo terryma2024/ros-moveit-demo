@@ -91,7 +91,7 @@ def _row(case_id, identity, manifest_document_sha256):
 
 
 def _write_journals(root, identity, manifest_document_sha256, *, skip=None, mutate=None):
-    cases = root / "task8-live" / "cases"
+    cases = root / "pick-place-live" / "cases"
     cases.mkdir(parents=True)
     for case in [*_manifest()["prefix_cases"], *_manifest()["full_cases"]]:
         case_id = case["case_id"]
@@ -184,7 +184,7 @@ def _campaign(tmp_path, manifest, identities, live_artifacts=None):
     """Fourteen journals plus the summary, written through the committed row shape."""
 
     case_root = tmp_path / "run"
-    (case_root / "task8-live" / "cases").mkdir(parents=True)
+    (case_root / "pick-place-live" / "cases").mkdir(parents=True)
     digests = []
     for case in [*manifest["prefix_cases"], *manifest["full_cases"]]:
         case_id = case["case_id"]
@@ -202,7 +202,7 @@ def _campaign(tmp_path, manifest, identities, live_artifacts=None):
                "contact_policy_fingerprint": identities["contact_policy_fingerprint"],
                "manifest_document_sha256": manifest["manifest_document_sha256"]}
         payload = json.dumps(row).encode()
-        (case_root / "task8-live" / "cases" / f"{case_id}.json").write_bytes(payload)
+        (case_root / "pick-place-live" / "cases" / f"{case_id}.json").write_bytes(payload)
         digests.append(hashlib.sha256(payload).hexdigest())
     summary_path = tmp_path / "campaign-result.json"
     summary_path.write_text(json.dumps({"status": "PASSED", "prefix_count": 9,
@@ -212,9 +212,9 @@ def _campaign(tmp_path, manifest, identities, live_artifacts=None):
 
 
 def _ready(identities, **overrides):
-    # the TASK8_READY/QUALIFIED calibration report is fixed at schema_version 1 (owner decision), while the
+    # the PICK_PLACE_CALIBRATION_READY/QUALIFIED calibration report is fixed at schema_version 1 (owner decision), while the
     # measurement contract it was produced under stays v2 - the two version numbers describe different documents
-    document = {"schema_version": 1, "status": "TASK8_READY", "source_commit": "0" * 40,
+    document = {"schema_version": 1, "status": "PICK_PLACE_CALIBRATION_READY", "source_commit": "0" * 40,
                 "config_sha256": "1" * 64,
                 "source_provenance_sha256": identities["source_provenance_sha256"],
                 "measurements": {},
@@ -291,14 +291,14 @@ def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
     ready_path = tmp_path / "ready.json"
     ready_path.write_text(json.dumps(_ready(identities)))
     output = tmp_path / "qualified.json"
-    assert cli.main(["--task8-ready", str(ready_path), "--preparation-receipt", str(receipt),
+    assert cli.main(["--pick-place-calibration-ready", str(ready_path), "--preparation-receipt", str(receipt),
                      "--campaign-result", str(summary_path), "--case-root", str(case_root),
                      "--output", str(output)]) == 0
     assert json.loads(output.read_bytes())["status"] == "QUALIFIED"
     assert str(output) in capsys.readouterr().out
     # a second run refuses to overwrite the published report
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
-        cli.main(["--task8-ready", str(ready_path), "--preparation-receipt", str(receipt),
+        cli.main(["--pick-place-calibration-ready", str(ready_path), "--preparation-receipt", str(receipt),
                   "--campaign-result", str(summary_path), "--case-root", str(case_root),
                   "--output", str(output)])
 
@@ -629,7 +629,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
     manifest_digest = _hashlib.sha256(manifest_path.read_bytes()).hexdigest()
 
     campaign_id = "case-298"
-    stack_root = tmp_path / "task8-live" / campaign_id / "stack"
+    stack_root = tmp_path / "pick-place-live" / campaign_id / "stack"
     child_root = tmp_path / "child"
     stack_root.mkdir(parents=True)
     child_root.mkdir()

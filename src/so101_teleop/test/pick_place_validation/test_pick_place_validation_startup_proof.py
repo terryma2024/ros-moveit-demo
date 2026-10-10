@@ -31,7 +31,7 @@ def prepared(tmp_path):
     )
     stack = OwnerKey(12345, 12345, 101, "f" * 64, "1" * 64)
     child_owner = OwnerKey(23456, 23456, 202, "0" * 64, "2" * 64)
-    root = tmp_path / "task8-live" / child.campaign_id / "stack"
+    root = tmp_path / "pick-place-live" / child.campaign_id / "stack"
     root.mkdir(parents=True)
     readiness = {
         "schema_version": 1, "session_id": child.mujoco_session_id,

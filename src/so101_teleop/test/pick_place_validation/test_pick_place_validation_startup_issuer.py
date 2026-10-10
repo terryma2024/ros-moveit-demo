@@ -27,7 +27,7 @@ CHILD_OWNER = OwnerKey(23456, 23456, 202, "c" * 64, "d" * 64)
 
 
 def prepared(tmp_path):
-    root = tmp_path / "task8-live" / "campaign-289" / "stack"
+    root = tmp_path / "pick-place-live" / "campaign-289" / "stack"
     root.mkdir(parents=True)
     context = SimpleNamespace(
         evidence_root=str(tmp_path), campaign_id="campaign-289",

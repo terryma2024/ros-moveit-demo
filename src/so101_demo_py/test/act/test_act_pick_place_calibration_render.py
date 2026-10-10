@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-DOCUMENTS = ("head-search-qualification.json", "task8-ready-support.json", "task8-ready-calibration.json",
+DOCUMENTS = ("head-search-qualification.json", "pick-place-calibration-ready-support.json", "pick-place-calibration-ready-calibration.json",
              "aggregation-receipt.json")
 
 
@@ -48,7 +48,7 @@ def _sealed_batch(root, *, anchors=("default", "left", "forward"), measurements=
     for name, payload in (extra_files or {}).items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_bytes(payload)
-    batch = {"schema_version": 2, "kind": "task8_calibration_batch", "status": status,
+    batch = {"schema_version": 2, "kind": "pick_place_calibration_batch", "status": status,
              "identity": identity or {"source_commit": "a" * 40, "config_sha256": "b" * 64,
                                       "source_provenance_sha256": "c" * 64,
                                       "measurement_plan_sha256": "d" * 64},

@@ -2,7 +2,7 @@
 
 A batch is only usable when it is sealed, its recorded file hashes still match, and every batch
 in the set shares one source provenance. Missing evidence is ``UNMEASURED``, out-of-contract
-evidence is ``FAIL``, a polluted batch is refused outright, and ``TASK8_READY`` is emitted only
+evidence is ``FAIL``, a polluted batch is refused outright, and ``PICK_PLACE_CALIBRATION_READY`` is emitted only
 when fov/collision/search/synchronization/execution all PASS while release/retreat stay
 ``UNMEASURED`` (the live qualification computes those from live journals).
 """
@@ -16,7 +16,7 @@ import re
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-BATCH_KIND = "task8_calibration_batch"
+BATCH_KIND = "pick_place_calibration_batch"
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 _ANCHORS = ("default", "left", "forward")
 _CHECKS = ("fov", "collision", "search", "synchronization", "execution")
@@ -134,7 +134,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     # the contract carries per-field comparators, so the five ready checks are folded from the per-field verdicts over the
     # repository's own CHECK_MEASUREMENTS groups - and release/retreat stay UNMEASURED, because those five live-only fields
-    # belong to the later 33-field QUALIFIED report and a TASK8_READY report must not claim them
+    # belong to the later 33-field QUALIFIED report and a PICK_PLACE_CALIBRATION_READY report must not claim them
         checks = dict(derived_checks(roots, contract))
         checks["release"] = "UNMEASURED"
         checks["retreat"] = "UNMEASURED"
@@ -206,7 +206,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
             source_commit=next(iter(batches))[1]["source_commit"],
             config_sha256=next(iter(batches))[1]["config_sha256"],
             source_provenance_sha256=source_provenance_sha256)
-        support_sample = _write(output_root / "task8-ready-support.json", support_document)
+        support_sample = _write(output_root / "pick-place-calibration-ready-support.json", support_document)
     report_measurements = {}
     if sample is not None:
         digest = _digest(sample)
@@ -222,7 +222,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
                                                             else digest))
     report = {
         "schema_version": SCHEMA_VERSION,
-        "status": "TASK8_READY" if ready and sample is not None else "CALIBRATION_REQUIRED",
+        "status": "PICK_PLACE_CALIBRATION_READY" if ready and sample is not None else "CALIBRATION_REQUIRED",
         "source_commit": next(iter(batches))[1]["source_commit"],
         "config_sha256": next(iter(batches))[1]["config_sha256"],
         "source_provenance_sha256": source_provenance_sha256,
@@ -233,7 +233,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
     # calibration-report.json, which is a name no definition in the tree uses
     report_path = _write(output_root / DOCUMENTS[2], report)
     receipt = {
-        "schema_version": SCHEMA_VERSION, "kind": "task8_calibration_aggregation_receipt",
+        "schema_version": SCHEMA_VERSION, "kind": "pick_place_calibration_aggregation_receipt",
         "batch_roots": [str(root) for root in roots],
         # the receipt names the CONTRACT DOCUMENT it aggregated - its self-digest, `BOUND_DOCUMENT_DIGEST_KEY` - which
         # is a different quantity from the ten-field identity's contract member the batches carry (P1-2)
@@ -243,7 +243,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
         "calibration_report_sha256": _digest(report_path),
         "head_search_qualification_sha256": _digest(sample) if sample is not None else None,
         # the receipt is the index of a publication, so every document it publishes is vouched for here
-        "task8_ready_support_sha256": _digest(support_sample) if support_sample is not None else None,
+        "pick_place_calibration_ready_support_sha256": _digest(support_sample) if support_sample is not None else None,
     }
     receipt_path = _write(output_root / DOCUMENTS[3], receipt)
     outputs = {"calibration_report": report_path, "aggregation_receipt": receipt_path}
@@ -251,7 +251,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
         outputs["head_search_qualification"] = sample
     if support_sample is not None:
         # the fourth canonical document: written to disk but previously invisible to the caller
-        outputs["task8_ready_support"] = support_sample
+        outputs["pick_place_calibration_ready_support"] = support_sample
     return outputs
 
 
@@ -365,7 +365,7 @@ def derived_phase_camera_checks(replay_rows, live_frames, window_kind: str, matr
 # read; a label never influences a verdict, and a number change always changes the bytes.
 
 ANCHOR_ORDER = ("default", "left", "forward")
-DOCUMENTS = ("head-search-qualification.json", "task8-ready-support.json", "task8-ready-calibration.json",
+DOCUMENTS = ("head-search-qualification.json", "pick-place-calibration-ready-support.json", "pick-place-calibration-ready-calibration.json",
              "aggregation-receipt.json")
 # the sealed-batch identity must at least carry the commit and the config/provenance digests; the richer
 # ten-member identity is the contract's, not the batch's, so extra members are accepted but not required
@@ -468,13 +468,13 @@ def render_pick_place_calibration(batch_root, contract: dict, publication_root) 
                                            "status": "PASS" if set(head.values()) == {"PASS"} else "FAIL",
                                            "contract_sha256": contract_sha256,
                                            "measurements": head},
-        "task8-ready-support.json": {"schema_version": 1, "kind": "task8_ready_support",
+        "pick-place-calibration-ready-support.json": {"schema_version": 1, "kind": "pick_place_calibration_ready_support",
                                      "status": "PASS" if set(support.values()) == {"PASS"} else "FAIL",
                                      "support": support},
-        "task8-ready-calibration.json": {"schema_version": 1, "kind": "task8_ready_calibration",
+        "pick-place-calibration-ready-calibration.json": {"schema_version": 1, "kind": "pick_place_calibration_ready_calibration",
                                          "identity": dict(batch["identity"]),
                                          "anchors": [entry for entry in batch["anchors"]]},   # names or records
-        "aggregation-receipt.json": {"schema_version": 1, "kind": "task8_aggregation_receipt",
+        "aggregation-receipt.json": {"schema_version": 1, "kind": "pick_place_validation_aggregation_receipt",
                                      "publication_root": str(publication), "fields": receipt_fields},
     }
     return {name: _canonical_bytes(documents[name]) for name in DOCUMENTS}

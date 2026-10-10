@@ -32,7 +32,7 @@ def prepared(tmp_path):
         campaign_id=context.campaign_id, worker_id="w00", execution_generation=7,
         mujoco_session_id="session-294", ros_domain_id=179,
     )
-    root = tmp_path / "task8-live" / context.campaign_id / "stack"
+    root = tmp_path / "pick-place-live" / context.campaign_id / "stack"
     root.mkdir(parents=True)
     readiness = json.dumps({
         "schema_version": 1, "session_id": child.mujoco_session_id,

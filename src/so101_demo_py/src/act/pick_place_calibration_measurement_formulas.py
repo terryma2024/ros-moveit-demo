@@ -108,7 +108,7 @@ def build_head_closed_sample(*, head_search, observed_lock_frames, measurements,
         for name, value in section.items():
             if isinstance(value, dict):
                 raise ValueError(f"CLOSED_SAMPLE_VALUE_INVALID: {name} must be a bare value")
-    return _sample("task8_head_search_closed_sample",
+    return _sample("pick_place_validation_head_search_closed_sample",
                    {"head_search": dict(head_search), "observed_lock_frames": list(observed_lock_frames),
                     "measurements": dict(measurements), "camera_measurements": dict(camera_measurements)},
                    source_commit=source_commit, config_sha256=config_sha256,
@@ -120,7 +120,7 @@ def build_support_closed_sample(*, support, source_commit: str, config_sha256: s
     for name, value in support.items():
         if isinstance(value, dict):
             raise ValueError(f"CLOSED_SAMPLE_VALUE_INVALID: {name} must be a bare value")
-    return _sample("task8_ready_support_sample", {"support": dict(support)}, source_commit=source_commit,
+    return _sample("pick_place_calibration_ready_support_sample", {"support": dict(support)}, source_commit=source_commit,
                    config_sha256=config_sha256, source_provenance_sha256=source_provenance_sha256)
 
 

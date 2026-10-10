@@ -106,7 +106,7 @@ def test_a_valid_run_executes_the_anchors_in_order_with_separate_identities(tmp_
     assert stack.launched == ANCHOR_ORDER
     assert stack.closed == ANCHOR_ORDER
     batch = json.loads(path.read_bytes())
-    assert batch["status"] == "CLOSED" and batch["kind"] == "task8_calibration_batch"
+    assert batch["status"] == "CLOSED" and batch["kind"] == "pick_place_calibration_batch"
     identities = {tuple(sorted(entry["identity"].items())) for entry in json.loads((path.parent / "index.json").read_bytes())["anchors"]}
     assert len(identities) == 3, "every anchor needs its own FULL_RESTART session/reset/attempt"
 

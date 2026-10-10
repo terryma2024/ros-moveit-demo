@@ -79,7 +79,7 @@ def make_pick_place_act_stack(context, child: ActChildLaunch, *,
                 or observer.is_symlink() or not observer.is_file()
                 or not os.access(observer, os.X_OK)):
             raise ValueError("scope")
-        stack_root = campaign_root / "task8-live" / campaign / "stack"
+        stack_root = campaign_root / "pick-place-live" / campaign / "stack"
         if (stack_root.parent.parent.is_symlink() or stack_root.parent.is_symlink()
                 or stack_root.exists() or stack_root.is_symlink()):
             raise ValueError("existing or linked scope")

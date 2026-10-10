@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
-  "description": "Mirrors the validator in act/task8_artifact_bundle.py, which does not load this file: admission enforces the contract in code, so this document describes it and a test compares the two so they cannot drift apart.",
+  "description": "Mirrors the validator in act/pick_place_validation_artifact_bundle.py, which does not load this file: admission enforces the contract in code, so this document describes it and a test compares the two so they cannot drift apart.",
   "properties": {
     "artifacts": {
       "additionalProperties": false,
@@ -265,7 +265,7 @@
       "type": "object"
     },
     "kind": {
-      "const": "task8_preparation_receipt"
+      "const": "pick_place_validation_preparation_receipt"
     },
     "manifest_path": {
       "minLength": 1,

@@ -43,7 +43,7 @@ def prepared(tmp_path, *, fail=None):
         ros_domain_id=179, namespace="/act/w1", controller_name="arm_controller_w1",
         mujoco_session_id="session-271", socket_root=str(ipc_root),
     )
-    stack_root = tmp_path / "task8-live" / child.campaign_id / "stack"
+    stack_root = tmp_path / "pick-place-live" / child.campaign_id / "stack"
     stack_root.mkdir(parents=True)
     context = SimpleNamespace(
         campaign_id=child.campaign_id, execution_generation=1,
@@ -180,7 +180,7 @@ def test_case_retirement_precedes_admission_release(tmp_path):
     assert child_receipt.is_file(), "the child retirement receipt is missing"
     child_document = json.loads(child_receipt.read_text())
     assert child_document["group_clear"] is True
-    stack_receipts = list((tmp_path / "task8-live").rglob("cleanup-receipt.json"))
+    stack_receipts = list((tmp_path / "pick-place-live").rglob("cleanup-receipt.json"))
     assert stack_receipts, "the stack retirement receipt is missing"
     assert all(json.loads(item.read_text())["group_clear"] is True for item in stack_receipts)
 
@@ -218,7 +218,7 @@ def test_alternative_in_root_stack_path_is_rejected_before_stack_start(tmp_path)
 
 def test_symlinked_stack_parent_is_rejected_before_stack_start(tmp_path):
     owner, spec, _, events = prepared(tmp_path)
-    scope = tmp_path / "task8-live"
+    scope = tmp_path / "pick-place-live"
     relocated = tmp_path / "relocated"
     scope.rename(relocated)
     scope.symlink_to(relocated, target_is_directory=True)

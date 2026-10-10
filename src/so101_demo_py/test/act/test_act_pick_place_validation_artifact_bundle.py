@@ -1,7 +1,7 @@
 """a self-contained bundle is admitted only through its committed receipt.
 
 Receipt shape (the producer contract pinned here):
-  {"schema_version", "kind": "task8_preparation_receipt", "bundle_root",
+  {"schema_version", "kind": "pick_place_validation_preparation_receipt", "bundle_root",
    "manifest_path", "artifacts": {name: {"relative_path", "sha256", "source_sha256"}},
    "identities": {...}, "receipt_sha256"}
 The seven business artifacts are source_provenance, runtime_config, collection_config,
@@ -61,7 +61,7 @@ class ValidInputs:
             self.paths[name] = _write(root / f"{name}.json", document)
         # the manifest is produced from the preparation inputs and bound into the bundle
         self.manifest = _write(root / "manifest.json", {
-            "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64})
+            "schema_version": 2, "kind": "ACT_PICK_PLACE_VALIDATION", "manifest_sha256": "f" * 64})
 
 
 def _inputs(tmp_path):
@@ -126,7 +126,7 @@ def test_receipt_records_every_artifact_hash_and_identity(valid_inputs, tmp_path
 
     receipt = Path(prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-003"))
     document = json.loads(receipt.read_text())
-    assert document["kind"] == "task8_preparation_receipt"
+    assert document["kind"] == "pick_place_validation_preparation_receipt"
     assert set(document["artifacts"]) == set(ARTIFACTS)
     for name, entry in document["artifacts"].items():
         bundled = receipt.parent / entry["relative_path"]
@@ -298,8 +298,8 @@ def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
     receipt = prepare_pick_place_validation_bundle(dataclasses.replace(inputs, manifest=manifest_path),
                                    tmp_path / "bundle-cli-plan")
     run_root = tmp_path / "run"
-    (run_root / "task8-live" / "cases").mkdir(parents=True)
-    (run_root / "task8-live" / "cases" / "full-01.json").write_text("{}")   # a taken case
+    (run_root / "pick-place-live" / "cases").mkdir(parents=True)
+    (run_root / "pick-place-live" / "cases" / "full-01.json").write_text("{}")   # a taken case
     monkeypatch.setattr(live_cli, "load_spec_file",
                         lambda path: type("S", (), {"payload": {}})())
     monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
@@ -333,5 +333,5 @@ def test_journal_run_root_reaches_the_composition_as_its_journal_parent(tmp_path
 
     run_root = tmp_path / "run"
     asyncio.run(live_cli.run_admitted_campaign(_Spec(), object(), tmp_path / "elsewhere.json",
-                                              journal_parent=run_root / "task8-live" / "cases"))
-    assert seen["parent"] == run_root / "task8-live" / "cases"
+                                              journal_parent=run_root / "pick-place-live" / "cases"))
+    assert seen["parent"] == run_root / "pick-place-live" / "cases"

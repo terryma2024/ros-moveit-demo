@@ -186,7 +186,7 @@
   "head_camera",
   "wrist_camera"
  ],
- "kind": "task8_phase_camera_matrix",
+ "kind": "pick_place_phase_camera_matrix",
  "occluders": [
   "fixed_fingertip_pad_visual",
   "gripper_visual_00",

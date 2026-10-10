@@ -3,20 +3,20 @@
   "default": {
    "neck_start_rad": 0.1,
    "requires_approved_value": false,
-   "source": "config/act/task8-live-anchors.yaml",
-   "source_sha256": "91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b"
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
   },
   "forward": {
    "neck_start_rad": 0.0,
    "requires_approved_value": false,
-   "source": "config/act/task8-live-anchors.yaml",
-   "source_sha256": "91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b"
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
   },
   "left": {
    "neck_start_rad": 0.0,
    "requires_approved_value": false,
-   "source": "config/act/task8-live-anchors.yaml",
-   "source_sha256": "91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b"
+   "source": "config/act/pick-place-live-anchors.yaml",
+   "source_sha256": "3f758a83077a8a597cf5c83c5bdb587fd6359b110db0a1885f9c65aa8689d278"
   }
  },
  "candidate_safe_interval": {
@@ -33,8 +33,8 @@
   "torch_version": null,
   "ultralytics_version": null
  },
- "kind": "task8_calibration_search_candidate",
- "notes": "Owner-approved: the three anchor starts are bound by value to config/act/task8-live-anchors.yaml (default 0.1 rad, left 0.0, forward 0.0), and [-2*pi, 2*pi] is approved as the bootstrap command envelope only. The 17 search configuration values remain null with requires_approved_value=true: they are still an independent design plus GPT-6 Astra/High review boundary and this file stays fail-closed until they are approved. lock_valid_neck_rad is a measured field, not a value to fill here.",
+ "kind": "pick_place_calibration_search_candidate",
+ "notes": "Owner-approved: the three anchor starts are bound by value to config/act/pick-place-live-anchors.yaml (default 0.1 rad, left 0.0, forward 0.0), and [-2*pi, 2*pi] is approved as the bootstrap command envelope only. The 17 search configuration values remain null with requires_approved_value=true: they are still an independent design plus GPT-6 Astra/High review boundary and this file stays fail-closed until they are approved. lock_valid_neck_rad is a measured field, not a value to fill here.",
  "schema_version": 1,
  "search_values": {
   "center_deadband_px": {

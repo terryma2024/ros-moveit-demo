@@ -105,7 +105,7 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     store = store_for(tmp_path)
     manifest_path, _ = sealed_episode(tmp_path, episode_root=store.episode_root,
                                       outcome={"status": "FAILED", "reason": "search_failed",
-                                               "task8_success": False, "stopped_confirmed": True})
+                                               "pick_place_validation_success": False, "stopped_confirmed": True})
     manifest = verify_audit_manifest(manifest_path)
     assert manifest["kind"] == "ACT_EPISODE_AUDIT"
     # QC no longer carries an endpoint_pose_v1 document: the audit is read for data integrity, and the Teacher's own
@@ -126,7 +126,7 @@ def test_a_failing_endpoint_verdict_no_longer_downgrades_a_teacher_pass(tmp_path
     manifest_path, episode_seal = sealed_episode(
         tmp_path, episode_root=store.episode_root,
         outcome={"status": "PASSED", "reason": "completed",
-                 "task8_success": True, "stopped_confirmed": True})
+                 "pick_place_validation_success": True, "stopped_confirmed": True})
     # a v2 seal is verified only when both artifacts are supplied, so the store is told where they are (CP-2765)
     # the store verifies before it publishes, so it is handed the pre-publish pair; the verifier is handed the
     # published one, because the publish renames working -> sealed (CP-2777)
@@ -155,7 +155,7 @@ def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path)
     manifest_path, episode_seal = sealed_episode(
         tmp_path, episode_root=store.episode_root,
         outcome={"status": "FAILED", "reason": "search_failed",
-                 "task8_success": False, "stopped_confirmed": True})
+                 "pick_place_validation_success": False, "stopped_confirmed": True})
     # the store verifies before it publishes, so it is handed the pre-publish pair; the verifier the published one
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
@@ -176,7 +176,7 @@ def test_result_verifier_resolves_each_lease_audit_against_original_common_scope
     manifest_path, episode_seal = sealed_episode(
         tmp_path, episode_root=store.episode_root,
         outcome={"status": "FAILED", "reason": "search_failed",
-                 "task8_success": False, "stopped_confirmed": True})
+                 "pick_place_validation_success": False, "stopped_confirmed": True})
     common_scope = tmp_path / "episode-scope.json"
     original_scope = (manifest_path.parent / "source.json").read_bytes()
     common_scope.write_bytes(original_scope)
@@ -209,7 +209,7 @@ def test_result_verifier_binds_both_actual_audit_lease_clock_bounds(tmp_path, fi
     manifest, episode_seal = sealed_episode(
         tmp_path, episode_root=store.episode_root, audit_lease=lease(),
         outcome={"status": "FAILED", "reason": "search_failed",
-                 "task8_success": False, "stopped_confirmed": True})
+                 "pick_place_validation_success": False, "stopped_confirmed": True})
     common_scope = tmp_path / "episode-scope.json"
     common_scope.write_bytes((manifest.parent / "source.json").read_bytes())
     store.audit_manifest, store.scope = manifest, common_scope
@@ -303,7 +303,7 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
     manifest_path, episode_seal = sealed_episode(
         tmp_path, episode_root=store.episode_root,
         outcome={"status": "FAILED", "reason": "search_failed",
-                 "task8_success": False, "stopped_confirmed": True})
+                 "pick_place_validation_success": False, "stopped_confirmed": True})
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
     sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
@@ -393,7 +393,7 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
             capture.drain()
         capture.finish(1.4, window={"start_s": 1.0, "end_s": 1.4, "label_cutoff_s": 1.4},
                        outcome={"status": "PASSED", "reason": "completed",
-                                "task8_success": True, "stopped_confirmed": True})
+                                "pick_place_validation_success": True, "stopped_confirmed": True})
         manifest, scope = episode_audit_pair(store.episode_root)
         store.audit_manifest = manifest
         store.scope = scope
@@ -518,7 +518,7 @@ def test_the_live_shape_assembles_and_seals(tmp_path):
         capture.drain()
     summary = capture.finish(1.4, window={"start_s": 1.0, "end_s": 1.4, "label_cutoff_s": 1.4},
                              outcome={"status": "PASSED", "reason": "completed",
-                                      "task8_success": True, "stopped_confirmed": True})
+                                      "pick_place_validation_success": True, "stopped_confirmed": True})
     assert summary.sample_count >= 1
     assert (episode_root / "seal.json").is_file()
 
@@ -540,7 +540,7 @@ def test_a_point_episode_records_frames_and_seals(tmp_path):
             episode.push(camera, stamp_s=stamp, pixels=frame)
         episode.push_numeric(stamp_s=stamp, arm=[0.0] * 6, neck=0.0)
     summary = episode.finish(1.3, outcome={"status": "FAILED", "reason": "search_failed",
-                                           "task8_success": False, "stopped_confirmed": True})
+                                           "pick_place_validation_success": False, "stopped_confirmed": True})
     assert summary.sample_count == 0 or summary.sample_count >= 0
     assert (episode_root / "seal.json").is_file()
 
@@ -567,7 +567,7 @@ def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
     with pytest.raises(ValueError, match="EPISODE_OUTCOME_MISSING"):
         sink.finish(1.4)
     sink.outcome = {"status": "FAILED", "reason": "search_failed",
-                    "task8_success": False, "stopped_confirmed": True}
+                    "pick_place_validation_success": False, "stopped_confirmed": True}
     for camera in ("wrist",):
         sink.record(camera, stamp_s=1.0, pixels=frame)
     episode.push_numeric(stamp_s=1.0, arm=[0.0] * 6, neck=0.0)

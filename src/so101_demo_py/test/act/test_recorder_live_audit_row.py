@@ -54,7 +54,7 @@ def test_a_capture_over_the_live_row_shape_seals_through_the_real_recorder(tmp_p
         capture.on_reference(reference(stamp + 0.1))
         capture.drain()
     capture.finish(1.3, window={"start_s": 1.0, "end_s": 1.3, "label_cutoff_s": 1.3},
-                   outcome={"status": "FAILED", "reason": "search_failed", "task8_success": False,
+                   outcome={"status": "FAILED", "reason": "search_failed", "pick_place_validation_success": False,
                             "stopped_confirmed": True})
     assert (root / "seal.json").is_file() and len(list((root / "frames").glob("*-head.png"))) >= 2
 

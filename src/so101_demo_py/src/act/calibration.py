@@ -107,7 +107,7 @@ def _validate_measurements(measurements, *, complete):
 def validate_partial(report):
     """Validate retained measurements while preserving the collection refusal."""
     # a partial report may or may not name its provenance: the field is optional here and
-    # becomes mandatory only for TASK8_READY/QUALIFIED reports
+    # becomes mandatory only for PICK_PLACE_CALIBRATION_READY/QUALIFIED reports
     allowed = {"schema_version", "status", "source_commit", "config_sha256",
                "source_provenance_sha256", "measurements", "checks", "live_campaign"}
     if not isinstance(report, dict) or not set(report) <= allowed or not {
@@ -183,11 +183,11 @@ def require_gate(report: dict, gate: str) -> None:
     if gate == "formal_collection":
         require_qualified(report)
         return
-    if gate not in ("pick_place_validation", "task8_live"):
+    if gate not in ("pick_place_validation", "pick_place_live"):
         raise ValueError("CALIBRATION_GATE_INVALID")
-    # a report that does not claim TASK8_READY is answered with the documented code before its
+    # a report that does not claim PICK_PLACE_CALIBRATION_READY is answered with the documented code before its
     # shape is judged, so an unready report never produces a field error
-    if not isinstance(report, dict) or report.get("status") != "TASK8_READY":
+    if not isinstance(report, dict) or report.get("status") != "PICK_PLACE_CALIBRATION_READY":
         raise ValueError("CALIBRATION_REQUIRED")
     # the gate is about the seven base fields being present and their values being valid; extra
     # provenance a caller carries (the live-campaign block, audit annotations) is not an error
@@ -197,7 +197,7 @@ def require_gate(report: dict, gate: str) -> None:
         raise ValueError("CALIBRATION_REQUIRED")
     require_source_provenance(report)
     if (report["schema_version"] != 1 or isinstance(report["schema_version"], bool)
-            or report["status"] != "TASK8_READY"
+            or report["status"] != "PICK_PLACE_CALIBRATION_READY"
             or not isinstance(report["source_commit"], str)
             or re.fullmatch(r"[0-9a-f]{40}", report["source_commit"]) is None):
         raise ValueError("CALIBRATION_REQUIRED")

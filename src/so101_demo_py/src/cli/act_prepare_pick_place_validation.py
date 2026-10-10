@@ -40,9 +40,8 @@ def main(argv: list[str] | None = None) -> int:
     _digest_regular_file(args.anchors)
     anchors_config = yaml.safe_load(args.anchors.read_bytes())
     if (not isinstance(anchors_config, dict)
-            or set(anchors_config) != {"schema_version", "measurement_experiment", "anchors"}
-            or anchors_config["schema_version"] != 1
-            or anchors_config["measurement_experiment"] != "EXP-115"):
+            or set(anchors_config) != {"schema_version", "anchors"}
+            or anchors_config["schema_version"] != 1):
         raise ValueError("TASK8_ANCHOR_CONFIG_INVALID")
     document = build_pick_place_validation_manifest(
         anchors_config["anchors"],

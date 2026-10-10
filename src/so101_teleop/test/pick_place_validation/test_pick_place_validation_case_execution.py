@@ -36,7 +36,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
     write_new_manifest(manifest_path, manifest)
     digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     campaign_id = "case-298"
-    stack_root = tmp_path / "task8-live" / campaign_id / "stack"
+    stack_root = tmp_path / "pick-place-live" / campaign_id / "stack"
     child_root = tmp_path / "child"
     stack_root.mkdir(parents=True)
     child_root.mkdir()

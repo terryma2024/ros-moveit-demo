@@ -60,7 +60,7 @@ def test_tampering_or_missing_case_is_refused(change):
 
 
 def test_writer_never_overwrites_an_existing_manifest(tmp_path):
-    path = tmp_path / "task8-live.json"
+    path = tmp_path / "pick-place-live.json"
     original = manifest()
     write_new_manifest(path, original)
     first = path.read_bytes()
@@ -74,7 +74,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
 
     anchors_path = tmp_path / "anchors.yaml"
     anchors_path.write_text(
-        "schema_version: 1\nmeasurement_experiment: EXP-115\nanchors:\n"
+        "schema_version: 1\nanchors:\n"
         "  default: {cup_start_m: [0.02, -0.28, 0.165], neck_start_rad: 0.1}\n"
         "  left: {cup_start_m: [-0.08, -0.28, 0.165], neck_start_rad: 0.0}\n"
         "  forward: {cup_start_m: [0.02, -0.36, 0.165], neck_start_rad: 0.0}\n"
@@ -85,7 +85,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
         path.write_text(json.dumps({"name": name}))
         paths.append(path)
     calibration = tmp_path / "calibration-report.json"
-    calibration.write_text(json.dumps({"status": "TASK8_READY"}))
+    calibration.write_text(json.dumps({"status": "PICK_PLACE_CALIBRATION_READY"}))
     output = tmp_path / "manifest.json"
     argv = ["--anchors", str(anchors_path), "--source", str(paths[0]),
             "--runtime-config", str(paths[1]), "--collection-config", str(paths[2]),
@@ -109,8 +109,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
 def test_checked_in_anchor_file_has_measured_values():
     import yaml
 
-    path = PACKAGE_ROOT / "config/act/task8-live-anchors.yaml"
+    path = PACKAGE_ROOT / "config/act/pick-place-live-anchors.yaml"
     document = yaml.safe_load(path.read_text())
-    assert set(document) == {"schema_version", "measurement_experiment", "anchors"}
-    assert document["measurement_experiment"] == "EXP-115"
+    assert set(document) == {"schema_version", "anchors"}
     assert document["anchors"] == ANCHORS

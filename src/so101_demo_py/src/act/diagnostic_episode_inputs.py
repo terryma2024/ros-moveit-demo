@@ -190,7 +190,7 @@ def _require_nonhead_gate(report) -> dict:
         raise ValueError("NONHEAD_SAFETY_NOT_READY")
     if report["schema_version"] != 1 or isinstance(report["schema_version"], bool):
         raise ValueError("NONHEAD_SAFETY_NOT_READY")
-    if report["status"] not in ("CALIBRATION_REQUIRED", "TASK8_READY", "QUALIFIED"):
+    if report["status"] not in ("CALIBRATION_REQUIRED", "PICK_PLACE_CALIBRATION_READY", "QUALIFIED"):
         raise ValueError("NONHEAD_SAFETY_NOT_READY")
     if not isinstance(report["source_commit"], str) or not _HEX40.fullmatch(report["source_commit"]):
         raise ValueError("NONHEAD_SAFETY_NOT_READY")
@@ -678,7 +678,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
 # the frozen default anchor of the milestone: scene id, seed and the two anchor literals
 FROZEN_SCENE_ID = "default"
 FROZEN_SEED = 0
-ANCHOR_FILE = "src/so101_demo_py/config/act/task8-live-anchors.yaml"
+ANCHOR_FILE = "src/so101_demo_py/config/act/pick-place-live-anchors.yaml"
 ANCHOR_APPROVAL_FILE = "src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json"
 SCENE_FILE = "src/so101_demo_py/assets/mujoco/act/scene.xml"
 COLLECTION_CONFIG_FILE = "src/so101_demo_py/config/act/parallel_collection.yaml"
@@ -814,27 +814,6 @@ def _git_commit(root: Path) -> str:
     return commit
 
 
-def _anchor_identity(root: Path) -> dict:
-    import yaml
-
-    document = yaml.safe_load((Path(root) / ANCHOR_FILE).read_text())
-    anchors = document.get("anchors") if isinstance(document, dict) else None
-    anchor = anchors.get(FROZEN_SCENE_ID) if isinstance(anchors, dict) else None
-    if not isinstance(anchor, dict) or set(anchor) != {"cup_start_m", "neck_start_rad"}:
-        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
-    cup = anchor["cup_start_m"]
-    if (not isinstance(cup, list) or len(cup) != 3
-            or any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in cup)):
-        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
-    neck = anchor["neck_start_rad"]
-    if isinstance(neck, bool) or not isinstance(neck, (int, float)):
-        raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
-    return {"scene_id": FROZEN_SCENE_ID, "seed": FROZEN_SEED,
-            "cup_start_m": [float(value) for value in cup], "neck_start_rad": float(neck),
-            "anchor_file_sha256": _digest(Path(root) / ANCHOR_FILE),
-            "measurement_experiment": document.get("measurement_experiment")}
-
-
 # the milestone's frozen initial state. It is a contract, not metadata a caller may assert: the
 # derived identity below is recomputed from the verified anchor bytes and compared against whatever
 # the registry claims, so hashing a consistent assertion cannot substitute for describing the bytes.
@@ -872,8 +851,7 @@ def anchor_identity_from_bytes(payload: bytes) -> dict:
         raise ValueError("NONHEAD_INPUT_BINDING_REQUIRED")
     return {"scene_id": FROZEN_ANCHOR_SCENE_ID, "seed": FROZEN_ANCHOR_SEED,
             "cup_start_m": list(FROZEN_ANCHOR_CUP_M), "neck_start_rad": FROZEN_ANCHOR_NECK_RAD,
-            "anchor_file_sha256": hashlib.sha256(payload).hexdigest(),
-            "measurement_experiment": document.get("measurement_experiment")}
+            "anchor_file_sha256": hashlib.sha256(payload).hexdigest()}
 
 
 def resource_policy_identity(runtime_bytes: bytes, collection_bytes: bytes, *,
@@ -945,7 +923,6 @@ def _inspect_anchor_scene(root: Path) -> dict:
         return _role("MISSING", "NONHEAD_INPUT_BINDING_REQUIRED",
                      "the anchor file does not carry the milestone's frozen default anchor",
                      None, [])
-    identity = dict(identity, measurement_experiment=_anchor_identity(root)["measurement_experiment"])
     approval_path = Path(root) / ANCHOR_APPROVAL_FILE
     approval = None
     if approval_path.is_file() and not approval_path.is_symlink():

@@ -17,9 +17,9 @@ from pathlib import Path
 # the approved measurement protocol: the contract carries the ten-member identity, the bound-file list and the
 # per-measurement metadata, and every field is recomputed from raw evidence
 SCHEMA_VERSION = 2
-KIND = "task8_calibration_measurement_contract"
-TEMPLATE_KIND = "task8_calibration_measurement_contract_template"
-BATCH_KIND = "task8_calibration_batch"
+KIND = "pick_place_calibration_measurement_contract"
+TEMPLATE_KIND = "pick_place_calibration_measurement_contract_template"
+BATCH_KIND = "pick_place_calibration_batch"
 #: the sealed measurement batch document is its own kind with its own version
 BATCH_SCHEMA_VERSION = 1
 _SHA = re.compile(r"[0-9a-f]{64}\Z")

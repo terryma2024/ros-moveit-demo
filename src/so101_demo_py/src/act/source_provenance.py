@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 
 SCHEMA_VERSION = 1
-KIND = "task8_live_source_provenance"
+KIND = "pick_place_live_source_provenance"
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -26,7 +26,7 @@ _ROLE_SPECS = (
     # (role, kind, source_rel, install_rel, overlay): `overlay` names the install root that OWNS the artefact, so
     # the provenance describes what the runtime actually loads. A `dependency` role is produced by its own package
     # in the dependency overlay and keeps that package's own lib directory; nothing is relocated between packages.
-    ("task8_runner", "verbatim_install",
+    ("pick_place_validation_runner", "verbatim_install",
      "src/so101_demo_py/src/act/pick_place_runner.py",
      "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/pick_place_runner.py", "worktree"),
     ("teleop_child", "verbatim_install",

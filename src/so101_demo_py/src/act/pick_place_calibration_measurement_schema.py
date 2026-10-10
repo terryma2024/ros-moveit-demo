@@ -15,7 +15,7 @@ import re
 import tempfile
 from pathlib import Path
 
-BATCH_KIND = "task8_calibration_batch"
+BATCH_KIND = "pick_place_calibration_batch"
 BATCH_STATUSES = ("CLOSED", "INVALID")
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}\Z")

@@ -51,7 +51,7 @@ def _inputs(tmp_path):
                                   "config_sha256": config_sha256,
                                   "source_provenance_sha256": PROVENANCE}))
     digest = hashlib.sha256(sample.read_bytes()).hexdigest()
-    report = {"status": "TASK8_READY", "source_commit": source_commit,
+    report = {"status": "PICK_PLACE_CALIBRATION_READY", "source_commit": source_commit,
               "source_provenance_sha256": PROVENANCE,
               "config_sha256": config_sha256, "measurements": {
         key: {"value": value, "sample_path": str(sample), "sample_sha256": digest}

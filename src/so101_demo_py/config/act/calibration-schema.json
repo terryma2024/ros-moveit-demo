@@ -51,7 +51,7 @@
     "status": {
       "enum": [
         "CALIBRATION_REQUIRED",
-        "TASK8_READY",
+        "PICK_PLACE_CALIBRATION_READY",
         "QUALIFIED"
       ]
     },

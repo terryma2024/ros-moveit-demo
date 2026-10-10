@@ -451,7 +451,7 @@ class OfflineEngine:
             status, reason = "PASSED", "completed"
         else:
             status, reason = "FAILED", "TEACHER_TASK_NOT_PASSED: " + str(terminal.get("teacher_task_result"))
-        outcome = {"status": status, "reason": reason[:_REASON_CHARS], "task8_success": status == "PASSED",
+        outcome = {"status": status, "reason": reason[:_REASON_CHARS], "pick_place_validation_success": status == "PASSED",
                    "stopped_confirmed": True}
         try:
             episode.finish(float(self.sources.end_time_s(self)), outcome=outcome)

@@ -25,7 +25,7 @@ def _require_paths(manifest_path: Path, journal_root: Path) -> dict:
             or ".." in journal_root.parts or journal_root.is_symlink()
             or not journal_root.is_dir()
             or journal_root.name != "cases"
-            or journal_root.parent.name != "task8-live"
+            or journal_root.parent.name != "pick-place-live"
             or journal_root.parent.is_symlink()
             or journal_root.parent.parent.is_symlink()):
         raise ValueError("TASK8_CAMPAIGN_PATH_INVALID")

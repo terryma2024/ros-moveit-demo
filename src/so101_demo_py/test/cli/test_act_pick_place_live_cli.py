@@ -95,7 +95,7 @@ def test_missing_full_restart_owner_refuses_before_admission(tmp_path, monkeypat
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker)
-    journal = tmp_path / "task8-live" / "cases.jsonl"
+    journal = tmp_path / "pick-place-live" / "cases.jsonl"
     journal.parent.mkdir()
     # the static proof is the installed production composition: removing it must
     # still refuse before admission, exactly as an absent owner factory did

@@ -800,7 +800,7 @@ def _mujoco_stack_actions(
     plugin_config_filename: str = "mujoco_plugins.yaml",
 ) -> _MujocoStackActions:
     if plugin_config_filename not in {
-        "mujoco_plugins.yaml", "act_diagnostic_plugins.yaml", "task6_route_plugins.yaml",
+        "mujoco_plugins.yaml", "act_diagnostic_plugins.yaml", "act_camera_plugins.yaml",
     }:
         raise RuntimeError("unsupported MuJoCo plugin configuration")
     scene = LaunchConfiguration("mujoco_scene").perform(context)

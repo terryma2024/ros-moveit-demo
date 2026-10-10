@@ -6,7 +6,7 @@ from so101_demo.act import pick_place_validation_artifact_bundle as module
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-SCHEMA = json.loads((PACKAGE / "config/act/task8-preparation-receipt-schema.json").read_text())
+SCHEMA = json.loads((PACKAGE / "config/act/pick-place-validation-preparation-receipt-schema.json").read_text())
 
 
 def test_the_schema_matches_the_validators_own_constants():

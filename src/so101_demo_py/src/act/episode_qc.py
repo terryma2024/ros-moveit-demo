@@ -5,7 +5,7 @@ was pointed at, exactly as ``verify_audit_manifest`` listed it, and keeps every 
 labels, real camera acquisition, t+0.1 s references, seal and readback, native collection boundaries).
 
 It does **not** judge the task. Task success is the Teacher's ``teacher_endpoint`` result; the episode seal's
-``task8_success`` is not a QC criterion (design D2, "Old QC path").
+``pick_place_validation_success`` is not a QC criterion (design D2, "Old QC path").
 Instead ``verify_teacher_references`` cross-checks that the recording is consistent with the start and end source
 references the Teacher manifest recorded: that is data integrity, and it never reads the Teacher's PASS/FAIL.
 
@@ -702,7 +702,7 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
     The caller supplies the original run scope and original frozen input set. Episode-local copies cannot substitute
     for either external binding. Every data check is unchanged: the sealed episode and audit, the physical rows, the
     complete native collection boundaries and the original-source verification all still raise on any defect. What is
-    gone is the task judgement: neither the episode seal's ``task8_success`` nor ``endpoint_pose_v1`` is a criterion.
+    gone is the task judgement: neither the episode seal's ``pick_place_validation_success`` nor ``endpoint_pose_v1`` is a criterion.
     The only added check is ``verify_teacher_references``, a data-integrity cross-check against the Teacher manifest
     (default ``<attempt>/dynamic/dynamic-execute-manifest.json``, beside the episode). A legal report remains separate
     from the Coordinator's durable commit authority.

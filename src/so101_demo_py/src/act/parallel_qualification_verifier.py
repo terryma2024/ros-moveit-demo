@@ -83,8 +83,8 @@ def verify_eight_worker_qualification(qualified_path, payload) -> bool:
     for expected in block["journal_sha256"]:
         if not isinstance(expected, str) or len(expected) != 64:
             raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")
-        # the producer writes one journal per case under `<case_root>/task8-live/cases/<case_id>.json`
-        cases = case_root / "task8-live" / "cases"
+        # the producer writes one journal per case under `<case_root>/pick-place-live/cases/<case_id>.json`
+        cases = case_root / "pick-place-live" / "cases"
         if not any(_digest(path) == expected for path in cases.glob("*.json")):
             # a journal the document names is missing or has changed
             raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")

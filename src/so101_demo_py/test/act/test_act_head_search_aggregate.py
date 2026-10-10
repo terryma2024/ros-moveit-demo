@@ -168,7 +168,7 @@ def test_a_complete_fixture_set_qualifies_and_publishes_the_plan_documents(tmp_p
     from so101_demo.act.head_search_qualification import require_gate
 
     with pytest.raises(ValueError, match="TASK8"):
-        require_gate(report, "task8_live")
+        require_gate(report, "pick_place_live")
 
 
 def test_the_declared_gate_list_is_exactly_the_plan_and_task_gates() -> None:

@@ -168,7 +168,7 @@ def build_phase_camera_matrix(*, scene_path, anchors, phases, image_width: int =
     head = next(iter(sampled["anchors"].values()))["cameras"]["head_camera"]
     return {
         "schema_version": 1,
-        "kind": "task8_phase_camera_matrix",
+        "kind": "pick_place_phase_camera_matrix",
         "status": "FROZEN",
         "occluders": list(EXPECTED_OCCLUDERS),
         "cameras": list(sampled["cameras"]),

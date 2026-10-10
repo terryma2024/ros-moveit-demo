@@ -339,7 +339,7 @@ def _derived_config_sha(source_root) -> str:
                                      separators=(",", ":")).encode()).hexdigest()
 
 
-ANCHOR_YAML = (b"schema_version: 1\nmeasurement_experiment: EXP-115\nanchors:\n"
+ANCHOR_YAML = (b"schema_version: 1\nanchors:\n"
                b"  default:\n    cup_start_m: [0.02, -0.28, 0.165]\n    neck_start_rad: 0.1\n")
 RUNTIME_YAML = (b"start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
                 b"  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"
@@ -359,8 +359,7 @@ def _derived_anchor_identity(payload: bytes) -> dict:
     return {"scene_id": "default", "seed": 0,
             "cup_start_m": [float(value) for value in anchor["cup_start_m"]],
             "neck_start_rad": float(anchor["neck_start_rad"]),
-            "anchor_file_sha256": hashlib.sha256(payload).hexdigest(),
-            "measurement_experiment": document.get("measurement_experiment")}
+            "anchor_file_sha256": hashlib.sha256(payload).hexdigest()}
 
 
 def _derived_resource_identity(runtime_bytes: bytes, collection_bytes: bytes) -> dict:
@@ -640,7 +639,7 @@ def test_freeze_accepts_the_production_input_formats(tmp_path):
         "scene_model": b"<mujoco><worldbody><body name='cup'/></worldbody></mujoco>\n",
         "reset_recipe": b"def pick_place_reset_targets(model, manifest, request):\n    return None\n",
         "reference_interpolation": b"class MoveItExpertActionTap:\n    def reference(self, at_s):\n        return at_s\n",
-        "anchor_scene": (b"schema_version: 1\nmeasurement_experiment: EXP-115\nanchors:\n"
+        "anchor_scene": (b"schema_version: 1\nanchors:\n"
                          b"  default:\n    cup_start_m: [0.02, -0.28, 0.165]\n    neck_start_rad: 0.1\n"),
         "runtime_config": (b"start_guard:\n  timeout_s: 2.0\n  cpu_busy_warn_fraction: 0.9\n"
                            b"  ram_minimum_bytes: 1073741824\n  ram_minimum_fraction: 0.05\n"

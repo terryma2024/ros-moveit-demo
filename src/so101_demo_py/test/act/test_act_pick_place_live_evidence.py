@@ -259,11 +259,11 @@ def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
     run_root = tmp_path / "run"
     run_root.mkdir()
     journal = resolve_case_journal_path(run_root, "prefix-01")
-    assert journal == run_root / "task8-live" / "cases" / "prefix-01.json"
+    assert journal == run_root / "pick-place-live" / "cases" / "prefix-01.json"
     journal.write_text("{}")
     with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
         resolve_case_journal_path(run_root, "prefix-01")     # never spliced into a continuation
-    (run_root / "task8-live" / "campaign-result.json").write_text("{}")
+    (run_root / "pick-place-live" / "campaign-result.json").write_text("{}")
     with pytest.raises(ValueError, match="TASK8_CAMPAIGN_JOURNAL_EXISTS"):
         resolve_case_journal_path(run_root, "full-01")
     for bad in ("../escape", "prefix-1", "PREFIX-01", "", 7):
@@ -273,11 +273,11 @@ def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
 
 def _journal_row(**overrides):
     row = {"case_id": "full-01", "mode": "full", "status": "PASSED",
-           "live_evidence_path": "/run/task8-live/cases/full-01-live.json",
+           "live_evidence_path": "/run/pick-place-live/cases/full-01-live.json",
            "live_evidence_sha256": "b" * 64,
-           "child_retirement_receipt_path": "/run/task8-live/cases/full-01-child.json",
+           "child_retirement_receipt_path": "/run/pick-place-live/cases/full-01-child.json",
            "child_retirement_receipt_sha256": "c" * 64,
-           "stack_retirement_receipt_path": "/run/task8-live/cases/full-01-stack.json",
+           "stack_retirement_receipt_path": "/run/pick-place-live/cases/full-01-stack.json",
            "stack_retirement_receipt_sha256": "d" * 64,
            "source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
            "contact_policy_fingerprint": "a" * 64, "manifest_document_sha256": "9" * 64}
@@ -339,7 +339,7 @@ def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tm
     assert [case_id for case_id, _ in plan] == [f"prefix-{i:02d}" for i in range(1, 10)] + \
         [f"full-{i:02d}" for i in range(1, 6)]
     assert len({path for _, path in plan}) == 14
-    assert all(path.parent == tmp_path / "task8-live" / "cases" for _, path in plan)
+    assert all(path.parent == tmp_path / "pick-place-live" / "cases" for _, path in plan)
     assert all(not path.exists() for _, path in plan)
     # a conflicting existing journal stops the run before it starts
     plan[0][1].write_text("{}")

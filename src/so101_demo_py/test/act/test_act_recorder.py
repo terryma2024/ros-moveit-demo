@@ -43,7 +43,7 @@ def audit(at_s, *, release_epoch=0, release_event=False, reset_epoch=2,
 
 def outcome(status="PASSED"):
     return {"status": status, "reason": "complete" if status == "PASSED" else "search_failed",
-            "task8_success": status == "PASSED", "stopped_confirmed": True}
+            "pick_place_validation_success": status == "PASSED", "stopped_confirmed": True}
 
 
 def test_grid_rejects_missing_or_repeated_ticks():

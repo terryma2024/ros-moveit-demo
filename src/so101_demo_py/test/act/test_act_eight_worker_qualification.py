@@ -15,7 +15,7 @@ def _document(tmp_path, **overrides):
     case_root = tmp_path / "campaign"
     case_root.mkdir(parents=True, exist_ok=True)
     digests = []
-    cases = case_root / "task8-live" / "cases"
+    cases = case_root / "pick-place-live" / "cases"
     cases.mkdir(parents=True, exist_ok=True)
     for index in range(14):                      # nine prefix cases and five fulls, all distinct
         journal = cases / f"{'prefix' if index < 9 else 'full'}-{index % 9 + 1:02d}.json"
@@ -163,7 +163,7 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
     inputs = _inputs(tmp_path)
     # the frozen manifest lists cases as objects with a `case_id` whose shape is `[a-z]+-NN`
     inputs.manifest.write_text(json.dumps({
-        "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64,
+        "schema_version": 2, "kind": "ACT_PICK_PLACE_VALIDATION", "manifest_sha256": "f" * 64,
         "prefix_cases": [{"case_id": case_id} for case_id in prefixes],
         "full_cases": [{"case_id": case_id} for case_id in fulls]}))
     receipt = prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle")
@@ -176,7 +176,7 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
     child.write_bytes(b'{"retired": "child"}')
     stack.write_bytes(b'{"retired": "stack"}')
     digests = []
-    cases = case_root / "task8-live" / "cases"
+    cases = case_root / "pick-place-live" / "cases"
     cases.mkdir(parents=True, exist_ok=True)
     for case_id in prefixes + fulls:
         directory = cases

@@ -260,7 +260,7 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
     if _regular_digest(weights, "HEAD_SEARCH_WEIGHTS_INVALID") != detector["weights_sha256"]:
         raise ValueError("HEAD_SEARCH_WEIGHTS_INVALID")
     try:
-        if calibration["status"] not in ("TASK8_READY", "QUALIFIED"):
+        if calibration["status"] not in ("PICK_PLACE_CALIBRATION_READY", "QUALIFIED"):
             raise ValueError("CALIBRATION_REQUIRED")
         provenance = calibration.get("source_provenance_sha256")
         if type(provenance) is not str or _SHA.fullmatch(provenance) is None:

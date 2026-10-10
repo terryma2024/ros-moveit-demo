@@ -1,7 +1,7 @@
 {
  "bound_files": {
   "activation_receipt": "approved contact policy activation receipt",
-  "anchor_config": "config/act/task8-live-anchors.yaml",
+  "anchor_config": "config/act/pick-place-live-anchors.yaml",
   "contact_policy": "approved contact policy document carrying policy_fingerprint",
   "controller_config": "config/mujoco/act/ros2_controllers.yaml",
   "cuda_device_policy": "CUDA-only device policy",
@@ -20,7 +20,7 @@
   "torch_ultralytics_versions": "training/inference interpreter versions",
   "urdf": "assets/mujoco/act/so101.urdf"
  },
- "kind": "task8_calibration_measurement_contract_template",
+ "kind": "pick_place_calibration_measurement_contract_template",
  "measurements": {
   "center_deadband_px": {
    "comparator": "lock_frame_error_leq_configured_limit",

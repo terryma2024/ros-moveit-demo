@@ -20,7 +20,7 @@ ALLOWED_OCCLUDERS = (
 def _matrix():
     return {
         "schema_version": 1,
-        "kind": "task8_phase_camera_matrix",
+        "kind": "pick_place_phase_camera_matrix",
         "occluders": list(ALLOWED_OCCLUDERS),
         "cameras": list(CAMERAS),
         "phases": [{"phase": phase, "cameras": list(CAMERAS),

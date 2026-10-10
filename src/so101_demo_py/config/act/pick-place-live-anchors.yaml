@@ -1,5 +1,4 @@
 schema_version: 1
-measurement_experiment: EXP-115
 anchors:
   default:
     cup_start_m: [0.02, -0.28, 0.165]

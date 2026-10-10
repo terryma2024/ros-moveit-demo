@@ -29,7 +29,7 @@ def main(arguments=None):
         # recorded, not compared with the installed profile
         if measured.get("status") == "QUALIFIED":
             require_gate(measured, "formal_collection")
-        elif measured.get("status") == "TASK8_READY":
+        elif measured.get("status") == "PICK_PLACE_CALIBRATION_READY":
             require_gate(measured, "pick_place_validation")
         else:
             validate_partial(measured)
@@ -39,7 +39,7 @@ def main(arguments=None):
     with options.output.open("x") as stream:
         json.dump(report,stream,indent=2); stream.write("\n")
     print(report["status"])
-    return 0 if report["status"] in ("TASK8_READY", "QUALIFIED") else 2
+    return 0 if report["status"] in ("PICK_PLACE_CALIBRATION_READY", "QUALIFIED") else 2
 
 
 if __name__ == "__main__":

@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     lifecycle = ActCampaignLifecycle(services.act_workload, owner)
     run_root = None
     if args.journal_run_root is not None:
-        run_root = Path(args.journal_run_root) / "task8-live" / "cases"
+        run_root = Path(args.journal_run_root) / "pick-place-live" / "cases"
     result = asyncio.run(run_admitted_campaign(spec, lifecycle, args.journal,
                                                journal_parent=run_root))
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))

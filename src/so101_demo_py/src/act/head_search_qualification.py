@@ -29,7 +29,7 @@ HEAD_ONLY_OPERATIONS = (
     "TELEOP_ACCEPTANCE",
 )
 #: what a head-only qualification never grants, whatever its status reads
-REFUSED_GATES = ("task8_live", "task8_ready", "release", "recorder", "retreat", "pick")
+REFUSED_GATES = ("pick_place_live", "pick_place_calibration_ready", "release", "recorder", "retreat", "pick")
 SUBCOMMANDS = ("run", "verify-promoted-config", "qualify", "serve-teleop")
 
 

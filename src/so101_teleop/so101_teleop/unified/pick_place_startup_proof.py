@@ -84,7 +84,7 @@ class PickPlaceStartupProofConsumer:
                     or not campaign_root.is_absolute() or ".." in campaign_root.parts
                     or self.child.campaign_id != campaign_id):
                 raise ValueError("scope")
-            root = campaign_root / "task8-live" / campaign_id / "stack"
+            root = campaign_root / "pick-place-live" / campaign_id / "stack"
             if (not root.is_dir()
                     or any(part.is_symlink() for part in (
                         campaign_root, root.parent.parent, root.parent, root,

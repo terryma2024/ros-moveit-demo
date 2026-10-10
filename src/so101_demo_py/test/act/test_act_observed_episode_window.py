@@ -39,7 +39,7 @@ def point(tmp_path, *, commanded):
 def test_point_seal_window_uses_actual_acquisitions_and_last_label(tmp_path):
     episode, root = point(tmp_path, commanded=True)
     summary = episode.finish(1.3, outcome={"status": "FAILED", "reason": "fixture_stop",
-        "task8_success": False, "stopped_confirmed": True})
+        "pick_place_validation_success": False, "stopped_confirmed": True})
     # Acceptance at t+0.1 must have passed, not merely reached the terminal clock.
     assert summary.sample_count == 2
     window = verify_audit_manifest(root / "audit" / "audit-manifest.json")["window"]
@@ -54,7 +54,7 @@ def test_point_seal_window_uses_actual_acquisitions_and_last_label(tmp_path):
 def test_no_command_window_never_invents_command_or_label(tmp_path):
     episode, root = point(tmp_path, commanded=False)
     episode.finish(1.3, outcome={"status": "FAILED", "reason": "before_dispatch",
-        "task8_success": False, "stopped_confirmed": True})
+        "pick_place_validation_success": False, "stopped_confirmed": True})
     window = verify_audit_manifest(root / "audit" / "audit-manifest.json")["window"]
     assert window["outcome"] == "no_command"
     assert window["first_command_s"] is None and window["label_cutoff_s"] is None
@@ -65,7 +65,7 @@ def test_physical_end_without_actual_rgb_coverage_cannot_seal(tmp_path):
     episode, root = point(tmp_path, commanded=True)
     with pytest.raises(ValueError, match="AUDIT_WINDOW_INVALID"):
         episode.finish(1.4, outcome={"status": "FAILED", "reason": "missing_tail",
-            "task8_success": False, "stopped_confirmed": True})
+            "pick_place_validation_success": False, "stopped_confirmed": True})
     assert not (root / "seal.json").exists()
 
 
@@ -81,7 +81,7 @@ def test_original_unselected_camera_tail_is_retained_in_the_window(tmp_path):
         episode.capture.on_acquisition(frame, ZERO)
         episode.capture.sampler.stamps[camera].append(1.35)
     episode.finish(1.3, outcome={"status": "FAILED", "reason": "fixture_stop",
-        "task8_success": False, "stopped_confirmed": True})
+        "pick_place_validation_success": False, "stopped_confirmed": True})
     window = verify_audit_manifest(root / "audit" / "audit-manifest.json")["window"]
     assert window["collection_end_s"] == 1.35
     assert window["physics_end_s"] == 1.3
@@ -94,7 +94,7 @@ def test_original_unselected_camera_tail_is_retained_in_the_window(tmp_path):
 def test_diagnostic_window_recomputes_original_camera_inventory_and_labels(tmp_path, change):
     episode, root = point(tmp_path, commanded=True)
     episode.finish(1.3, outcome={"status": "FAILED", "reason": "fixture_stop",
-        "task8_success": False, "stopped_confirmed": True})
+        "pick_place_validation_success": False, "stopped_confirmed": True})
     path = root / "audit" / "audit-manifest.json"
     original = path.read_bytes()
     assert verify_audit_manifest(path)["window"]["label_cutoff_s"] == 1.1
@@ -129,7 +129,7 @@ def test_diagnostic_window_recomputes_original_camera_inventory_and_labels(tmp_p
 def test_unused_original_camera_tail_cannot_escape_episode_identity_or_sequence(tmp_path, change):
     episode, root = point(tmp_path, commanded=True)
     episode.finish(1.3, outcome={"status": "FAILED", "reason": "fixture_stop",
-        "task8_success": False, "stopped_confirmed": True})
+        "pick_place_validation_success": False, "stopped_confirmed": True})
     original_manifest = root / "audit/audit-manifest.json"
     original_sha = hashlib.sha256(original_manifest.read_bytes()).hexdigest()
     assert verify_audit_manifest(original_manifest)["window"]["collection_end_s"] == 1.3

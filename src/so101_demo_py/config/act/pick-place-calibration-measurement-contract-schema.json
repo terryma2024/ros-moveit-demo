@@ -22,7 +22,7 @@
      "const": 1
     },
     "kind": {
-     "const": "task8_calibration_measurement_contract"
+     "const": "pick_place_calibration_measurement_contract"
     },
     "identities": {
      "type": "object",
@@ -120,7 +120,7 @@
      "const": 2
     },
     "kind": {
-     "const": "task8_calibration_measurement_contract"
+     "const": "pick_place_calibration_measurement_contract"
     },
     "identities": {
      "type": "object",

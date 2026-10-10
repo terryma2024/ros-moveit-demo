@@ -2953,7 +2953,7 @@ class ReportWriter:
         if not parent.is_dir():
             raise ValueError("output_root parent must be an existing directory")
         temporary = Path(
-            tempfile.mkdtemp(dir=parent, prefix=f".{target.name}.task8-")
+            tempfile.mkdtemp(dir=parent, prefix=f".{target.name}.staging-")
         )
         scenario_fields = (
             "section", "platform", "model", "config", "scenario",

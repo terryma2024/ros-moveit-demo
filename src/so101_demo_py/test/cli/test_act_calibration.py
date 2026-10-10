@@ -116,40 +116,40 @@ def test_unqualified_and_missing_evidence_cannot_start_collection(tmp_path):
 
 def test_pick_place_calibration_ready_requires_measured_five_checks_but_refuses_formal(tmp_path):
     ready = report(tmp_path)
-    ready["status"] = "TASK8_READY"
+    ready["status"] = "PICK_PLACE_CALIBRATION_READY"
     ready["checks"]["release"] = "UNMEASURED"
     ready["checks"]["retreat"] = "UNMEASURED"
     del ready["measurements"]["release_stable_s"]
     del ready["measurements"]["retreat_distance_m"]
     del ready["measurements"]["placement_stable_s"]
     require_gate(ready, "pick_place_validation")
-    require_gate(ready, "task8_live")
+    require_gate(ready, "pick_place_live")
     with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
         require_gate(ready, "formal_collection")
     ready["measurements"].pop("path_clearance_m")
     with pytest.raises(ValueError, match="CALIBRATION_CHECK_EVIDENCE_MISSING"):
-        require_gate(ready, "task8_live")
+        require_gate(ready, "pick_place_live")
 
 
 def test_pick_place_calibration_ready_refuses_unmeasured_or_premature_release_pass(tmp_path):
     ready = report(tmp_path)
-    ready["status"] = "TASK8_READY"
+    ready["status"] = "PICK_PLACE_CALIBRATION_READY"
     ready["checks"]["release"] = "UNMEASURED"
     ready["checks"]["retreat"] = "UNMEASURED"
     ready["checks"]["execution"] = "UNMEASURED"
     with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
-        require_gate(ready, "task8_live")
+        require_gate(ready, "pick_place_live")
     ready["checks"]["execution"] = "PASS"
     ready["checks"]["release"] = "PASS"
     with pytest.raises(ValueError, match="CALIBRATION_REQUIRED"):
-        require_gate(ready, "task8_live")
+        require_gate(ready, "pick_place_live")
 
 
 def test_full_qualification_is_formal_gate_only(tmp_path):
     measured = report(tmp_path)
     require_gate(measured, "formal_collection")
     with pytest.raises(ValueError):
-        require_gate({"status": "CALIBRATION_REQUIRED", "checks": {}}, "task8_live")
+        require_gate({"status": "CALIBRATION_REQUIRED", "checks": {}}, "pick_place_live")
 
 
 def test_preflight_cli_emits_pick_place_calibration_ready_only_for_verified_preflight(tmp_path, monkeypatch):
@@ -173,14 +173,14 @@ def test_preflight_cli_emits_pick_place_calibration_ready_only_for_verified_pref
     ready = report(tmp_path)
     ready["source_commit"] = json.loads(baseline.read_text())["source_commit"]
     ready["config_sha256"] = json.loads(baseline.read_text())["config_sha256"]
-    ready["status"] = "TASK8_READY"
+    ready["status"] = "PICK_PLACE_CALIBRATION_READY"
     ready["checks"]["release"] = ready["checks"]["retreat"] = "UNMEASURED"
     measured = tmp_path / "measured.json"
     measured.write_text(json.dumps(ready))
     output = tmp_path / "ready.json"
     assert act_preflight.main(["--output", str(output), "--source-root", str(source),
                                "--measured-report", str(measured)]) == 0
-    assert json.loads(output.read_text())["status"] == "TASK8_READY"
+    assert json.loads(output.read_text())["status"] == "PICK_PLACE_CALIBRATION_READY"
 
 
 @pytest.mark.parametrize("mutation", ("hash","unit","nan","extra","check","bool"))

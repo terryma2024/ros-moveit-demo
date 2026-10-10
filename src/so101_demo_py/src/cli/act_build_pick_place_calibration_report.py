@@ -38,7 +38,7 @@ def main(argv=None) -> int:
     report = json.loads(rendered["head-search-qualification.json"])
     # the published report must satisfy the production gate: an unqualified dataset fails here rather than
     # producing a quiet artefact, and the runtime binding check belongs with the live producer
-    require_gate(report, "task8_live")
+    require_gate(report, "pick_place_live")
     print(published)
     return 0
 

@@ -133,7 +133,7 @@ class PickPlaceCaseOwner:
             if (not isinstance(campaign_id, str)
                     or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", campaign_id) is None):
                 raise MutationError("TASK8_CASE_STACK_SCOPE_INVALID")
-            expected_stack_root = campaign_root / "task8-live" / campaign_id / "stack"
+            expected_stack_root = campaign_root / "pick-place-live" / campaign_id / "stack"
             if (stack_launch.session_id != child.mujoco_session_id
                     or stack_launch.ros_domain_id != child.ros_domain_id
                     or stack_root != expected_stack_root

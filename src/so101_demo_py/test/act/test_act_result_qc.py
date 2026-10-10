@@ -59,7 +59,7 @@ def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_o
     audit=writer.seal(dict(start_s=1.,end_s=1.,label_cutoff_s=1.))
     store.audit_manifest=audit
     passing=qc=='PASS'
-    seal=recorder.finish(dict(status='FAILED',reason='controlled stop',task8_success=False,stopped_confirmed=True),
+    seal=recorder.finish(dict(status='FAILED',reason='controlled stop',pick_place_validation_success=False,stopped_confirmed=True),
         audit_manifest=audit,scope=scope)
     expected=report();expected['identity']=writer.identity
     expected.update(inputs_sha256='a'*64,
@@ -190,7 +190,7 @@ def setup_result(tmp_path, monkeypatch, seal_outcome='PASSED'):
     store = ActCollectionResultStore(tmp_path/'w00/attempts/point-1/attempt-1', current,
         clock=lambda:15., inputs_manifest=inputs)
     audit, seal = sealed_episode(tmp_path, episode_root=store.episode_root, audit_lease=current,
-        outcome=dict(status=seal_outcome, reason='controlled completion', task8_success=seal_outcome == 'PASSED',
+        outcome=dict(status=seal_outcome, reason='controlled completion', pick_place_validation_success=seal_outcome == 'PASSED',
                      stopped_confirmed=True))
     store.audit_manifest, store.scope = audit, audit.parent/'source.json'
     document = report()

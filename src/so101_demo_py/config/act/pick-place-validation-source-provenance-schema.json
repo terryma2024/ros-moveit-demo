@@ -16,7 +16,7 @@
       "const": 1
     },
     "kind": {
-      "const": "task8_live_source_provenance"
+      "const": "pick_place_live_source_provenance"
     },
     "repository_head": {
       "type": "string",

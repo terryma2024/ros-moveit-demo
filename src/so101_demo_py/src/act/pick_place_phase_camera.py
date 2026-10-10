@@ -17,7 +17,7 @@ REPLAY_GRID_S = 0.002
 REPLAY_SPACING_MAX_S = 0.005
 LIVE_MIN_VISIBLE_FRACTION = 0.80
 LIVE_MAX_OUT_OF_FRAME_FRACTION = 0.02
-WINDOW_KINDS = ("calibration_live", "task8_live")
+WINDOW_KINDS = ("calibration_live", "pick_place_live")
 
 #: group-0 visual geoms the approved matrix permits to occlude the cup; anything else is refused
 ALLOWED_OCCLUDER_OWNERS = (

@@ -15,7 +15,7 @@
       "const": 1
     },
     "kind": {
-      "const": "task8_live_evidence"
+      "const": "pick_place_live_evidence"
     },
     "identity": {
       "type": "object",

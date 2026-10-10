@@ -2,7 +2,7 @@
 
 Nothing here trusts a status: the campaign summary, every case journal, both retirement receipts
 and the release/retreat samples are re-checked, and a failure leaves no `QUALIFIED` behind. The
-input `TASK8_READY` report is read-only; the qualification report is a new immutable document.
+input `PICK_PLACE_CALIBRATION_READY` report is read-only; the qualification report is a new immutable document.
 """
 
 from __future__ import annotations
@@ -128,7 +128,7 @@ def validate_case_journals(case_root: Path, manifest: dict, *, identities: dict,
     rows = []
     for case_id in require_campaign_cases(manifest):
         mode = "phase_prefix" if case_id.startswith("prefix-") else "full"
-        journal = case_root / "task8-live" / "cases" / f"{case_id}.json"
+        journal = case_root / "pick-place-live" / "cases" / f"{case_id}.json"
         journal = require_regular_file(journal, "TASK8_QUALIFICATION_JOURNAL_MISSING")
         try:
             row = json.loads(journal.read_bytes())
@@ -150,7 +150,7 @@ _QUALIFICATION_CHECKS = ("fov", "collision", "search", "synchronization", "execu
 def build_pick_place_validation_qualified_report(calibration_ready_report: Path, preparation_receipt: Path,
                                  campaign_result: Path, case_root: Path, output: Path, *,
                                  live_extractors=None, contract=None) -> Path:
-    """Upgrade a `TASK8_READY` report to `QUALIFIED` from a complete live campaign.
+    """Upgrade a `PICK_PLACE_CALIBRATION_READY` report to `QUALIFIED` from a complete live campaign.
 
     The input report is read-only and is never rewritten; the output is a new document written
     atomically and only if every gate passes. A failure raises and leaves **no** output behind.
@@ -169,7 +169,7 @@ def build_pick_place_validation_qualified_report(calibration_ready_report: Path,
         ready = json.loads(ready_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("TASK8_QUALIFICATION_READY_INVALID") from error
-    if type(ready) is not dict or set(ready) != _READY_KEYS or ready["status"] != "TASK8_READY":
+    if type(ready) is not dict or set(ready) != _READY_KEYS or ready["status"] != "PICK_PLACE_CALIBRATION_READY":
         raise ValueError("TASK8_QUALIFICATION_READY_INVALID")
     checks = ready["checks"]
     if type(checks) is not dict or any(checks.get(name) != "PASS"
@@ -333,7 +333,7 @@ def derive_live_measurements(full_runs, contract) -> dict:
 def build_qualified_measurements(ready_measurements: dict, live_runs, contract) -> dict:
     """Copy the ready measurements **by value** and add exactly the five live-only entries.
 
-    The ready report is never mutated: the caller gets a new mapping, so the `TASK8_READY` document it came from
+    The ready report is never mutated: the caller gets a new mapping, so the `PICK_PLACE_CALIBRATION_READY` document it came from
     keeps its own contents and digest. The five additions come from `derive_live_measurements`, so they carry the
     plan's extrema directions and, where a run supplies its own frames, the raw support-distance rule.
     """

@@ -130,7 +130,7 @@ def _calibration(tmp_path, *, status, head_search):
     } for name, (unit, size) in REQUIRED_MEASUREMENTS.items()}
     checks = {name: "PASS" for name in (
         "fov", "collision", "search", "synchronization", "execution", "release", "retreat")}
-    if status == "TASK8_READY":
+    if status == "PICK_PLACE_CALIBRATION_READY":
         checks["release"] = checks["retreat"] = "UNMEASURED"
     report = {"schema_version": 1, "status": status, "source_commit": "a" * 40,
               "config_sha256": "b" * 64, "source_provenance_sha256": "c" * 64,
@@ -138,7 +138,7 @@ def _calibration(tmp_path, *, status, head_search):
     if status == "QUALIFIED":
         # a QUALIFIED report must trace to the live campaign that produced it (8P4)
         report["live_campaign"] = {
-            "case_root": str(tmp_path / "task8-live"),
+            "case_root": str(tmp_path / "pick-place-live"),
             "campaign_result_sha256": "d" * 64,
             "preparation_receipt_sha256": "e" * 64,
             "journal_sha256": ["f" * 64] * 14,
@@ -149,7 +149,7 @@ def _calibration(tmp_path, *, status, head_search):
 
 
 def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="mujoco",
-                calibration_status="TASK8_READY", valid_head_search=True):
+                calibration_status="PICK_PLACE_CALIBRATION_READY", valid_head_search=True):
     weights = tmp_path / "head-best.pt"
     if not weights.exists():
         weights.write_bytes(b"synthetic-local-head-weights")
@@ -387,7 +387,7 @@ def test_pick_place_calibration_start_rejects_unverified_calibration_before_reso
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
-    calibration_path = tmp_path / "calibration-TASK8_READY.json"
+    calibration_path = tmp_path / "calibration-PICK_PLACE_CALIBRATION_READY.json"
     report = json.loads(calibration_path.read_text())
     if mutation == "tamper":
         report["checks"]["fov"] = "FAIL"
@@ -422,7 +422,7 @@ def test_pick_place_calibration_start_records_a_calibration_identity_that_is_not
     fingerprint, proposal_path, receipt_path, receipt = _write_policy(tmp_path)
     receipt_path.write_text(json.dumps(receipt))
     spec = _start_spec(tmp_path, fingerprint, proposal_path, receipt_path)
-    calibration_path = tmp_path / "calibration-TASK8_READY.json"
+    calibration_path = tmp_path / "calibration-PICK_PLACE_CALIBRATION_READY.json"
     report = json.loads(calibration_path.read_text())
     # the report and the sample it measures are one evidence pair: move both, so the binding
     # between them still holds and only the identity compared with the installed profile changed

@@ -836,7 +836,7 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     frames_at(capture, minter, (1.0, 1.1, 1.2))
     capture.finish(1.2, window={"start_s": 1.0, "end_s": 1.2, "label_cutoff_s": 1.2},
                    outcome={"status": "FAILED", "reason": "search_failed",
-                            "task8_success": False, "stopped_confirmed": True})
+                            "pick_place_validation_success": False, "stopped_confirmed": True})
     print("SEALED audit:", [str(p) for p in sealed])
     assert sealed, "the capture must seal the audit it was given"
     manifest_path = Path(sealed[0])

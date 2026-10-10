@@ -30,7 +30,7 @@ PHASE_DURATION_S = 0.02                      # ten samples at the admitted perio
 def _matrix_document():
     """The admitted phase-camera matrix's shape, as the evaluator reads it today."""
 
-    return {"schema_version": 1, "kind": "task8_phase_camera_matrix", "matrix_sha256": "a" * 64,
+    return {"schema_version": 1, "kind": "pick_place_phase_camera_matrix", "matrix_sha256": "a" * 64,
             "occluders": ["fixed_fingertip_00", "jaw_visual_00"],
             "camera": {"frame_id": "head_camera_frame", "width_px": 640, "height_px": 480, "horizontal_fov_rad": 1.0,
                        "position_m": [0.0, 0.0, 0.5], "rpy_rad": [0.0, 0.0, 0.0]}}
@@ -155,7 +155,7 @@ def test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused():
     assert shipped["phases"], "and an empty phase list cannot bind a measurement"
     assert shipped["camera"]["width_px"] and shipped["camera"]["horizontal_fov_rad"] > 0.0
 
-    scaffold = {"schema_version": 1, "kind": "task8_phase_camera_matrix",
+    scaffold = {"schema_version": 1, "kind": "pick_place_phase_camera_matrix",
                 "occluders": list(shipped["occluders"]), "phases": [],
                 "cameras": ["head_camera", "wrist_camera"], "status": "SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION"}
     import tempfile

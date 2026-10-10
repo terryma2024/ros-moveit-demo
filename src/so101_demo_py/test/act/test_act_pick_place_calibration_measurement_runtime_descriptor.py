@@ -346,7 +346,7 @@ def _invalid_sealing_driver(tmp_path):
         "    files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()\n"
         "             for path in sorted(root.rglob('*'))\n"
         "             if path.is_file() and path.name != 'batch.json'}\n"
-        "    document = {'schema_version': 1, 'kind': 'task8_calibration_batch', 'status': 'INVALID',\n"
+        "    document = {'schema_version': 1, 'kind': 'pick_place_calibration_batch', 'status': 'INVALID',\n"
         "                'error_code': 'ANCHOR_FAILED', 'cleanup': 'confirmed', 'contamination': None,\n"
         "                'identity': identity, 'anchors': ['default'], 'files': files}\n"
         "    document['batch_sha256'] = hashlib.sha256(_canonical(document)).hexdigest()\n"

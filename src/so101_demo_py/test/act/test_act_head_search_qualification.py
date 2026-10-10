@@ -71,7 +71,7 @@ def test_head_only_report_does_not_grant_pick_place_calibration_ready(tmp_path: 
     report = _qualified_report(tmp_path / "qualified")
     assert report["status"] == HEAD_SEARCH_QUALIFIED
     with pytest.raises(ValueError, match="TASK8"):
-        require_gate(report, "task8_live")
+        require_gate(report, "pick_place_live")
     for refused_gate in ("release", "recorder", "retreat", "pick"):
         with pytest.raises(ValueError, match="TASK8"):
             require_gate(report, refused_gate)

@@ -73,7 +73,7 @@ def seal_valid(root, contract):
     files = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
              for path in sorted(root.rglob("*"))
              if path.is_file() and path.name != "batch.json"}
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED",
                 "cleanup": "confirmed", "contamination": None, "identity": identity,
                 "anchors": ["default"], "files": files}
     document["batch_sha256"] = hashlib.sha256(_canonical(document)).hexdigest()
@@ -114,13 +114,13 @@ def test_offline_report_cli_publishes_the_documents_and_refuses_any_override(tmp
         assert builder.main(arguments) == 0
     except ValueError:
         pass          # an unqualified fixture must be refused loudly by the production gate, not quietly written
-    for name in ("head-search-qualification.json", "task8-ready-support.json",
-                 "task8-ready-calibration.json", "aggregation-receipt.json"):
+    for name in ("head-search-qualification.json", "pick-place-calibration-ready-support.json",
+                 "pick-place-calibration-ready-calibration.json", "aggregation-receipt.json"):
         assert (out / name).is_file(), name
     assert not (out / "calibration-report.json").exists()
     # exactly one sealed batch is accepted, and no status override exists to smuggle a verdict in
     with pytest.raises(SystemExit):
-        builder.main(arguments + ["--status", "TASK8_READY"])
+        builder.main(arguments + ["--status", "PICK_PLACE_CALIBRATION_READY"])
     # `--batch-root` may be repeated by argparse, so the one-batch rule is a runtime contract check
     with pytest.raises(ValueError, match="ONE_V2_SEALED_BATCH_REQUIRED"):
         builder.main(["--contract", str(bound), "--identities", str(identities),
@@ -206,7 +206,7 @@ def _sealed_batch(root, payload, identities=None, extra_files=None,
 
     # a CLOSED batch must CARRY its cleanup proof: the validator requires presence, because a seal that does not say
     # whether the workspace was cleaned is the state the review's item 4 was about
-    document = {"schema_version": 1, "kind": "task8_calibration_batch", "status": "CLOSED",
+    document = {"schema_version": 1, "kind": "pick_place_calibration_batch", "status": "CLOSED",
                 "cleanup": {"group_clear": True},
                 "anchors": ["default", "left", "forward"], "identity": identity, "files": files}
     document["batch_sha256"] = hashlib.sha256(_seal_canonical(document)).hexdigest()
@@ -370,7 +370,7 @@ def test_every_cited_sample_reads_back_from_disk_with_its_recorded_hash(tmp_path
 
 
 def test_a_batch_yields_a_report_that_passes_the_pick_place_live_gate(tmp_path):
-    """Boundary IV's publishing half: the 28-field TASK8_READY must satisfy require_gate(report, "task8_live").
+    """Boundary IV's publishing half: the 28-field PICK_PLACE_CALIBRATION_READY must satisfy require_gate(report, "pick_place_live").
 
     The gate wants the five PICK_PLACE_READY_CHECKS to PASS, release and retreat to be UNMEASURED, and every field of
     every ready check to be present - 28 fields - each cited to its approved closed sample.
@@ -386,8 +386,8 @@ def test_a_batch_yields_a_report_that_passes_the_pick_place_live_gate(tmp_path):
     outputs = aggregate_pick_place_calibration((batch,), contract, tmp_path / "out")
     report = json.loads(Path(outputs["calibration_report"]).read_text())
 
-    require_gate(report, "task8_live")
-    assert report["status"] == "TASK8_READY"
+    require_gate(report, "pick_place_live")
+    assert report["status"] == "PICK_PLACE_CALIBRATION_READY"
     assert len(report["measurements"]) == 28
     assert report["checks"]["release"] == "UNMEASURED"
     assert report["checks"]["retreat"] == "UNMEASURED"
@@ -537,9 +537,9 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
     batch = _closed_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
     outputs = aggregate_pick_place_calibration((batch,), contract, tmp_path / "out")
     report = json.loads(Path(outputs["calibration_report"]).read_text())
-    require_gate(report, "task8_live")
+    require_gate(report, "pick_place_live")
     bound = validate_head_search_binding(runtime, report)
-    assert bound is not None, "a TASK8_READY report binds to a matching runtime descriptor"
+    assert bound is not None, "a PICK_PLACE_CALIBRATION_READY report binds to a matching runtime descriptor"
 
 
 def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_path):

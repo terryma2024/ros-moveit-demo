@@ -17,7 +17,7 @@ from dataclasses import dataclass, fields as dataclass_fields
 from pathlib import Path
 
 SCHEMA_VERSION = 2
-KIND = "task8_preparation_receipt"
+KIND = "pick_place_validation_preparation_receipt"
 RECEIPT_NAME = "preparation-receipt.json"
 MANIFEST_NAME = "manifest.json"
 _SHA = re.compile(r"[0-9a-f]{64}\Z")

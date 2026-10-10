@@ -81,7 +81,7 @@ def test_verifier_uses_exact_durable_execution_lease_and_exact_finalizing_lease(
             capture.drain()
         capture.finish(1.3, window={"start_s": 1., "end_s": 1.3, "label_cutoff_s": 1.1},
             outcome={"status": "PASSED" if historical_pass else "FAILED", "reason": "fixture_stop",
-                     "task8_success": historical_pass,
+                     "pick_place_validation_success": historical_pass,
                      "stopped_confirmed": True})
         now["s"] = 4.
         if historical_pass:

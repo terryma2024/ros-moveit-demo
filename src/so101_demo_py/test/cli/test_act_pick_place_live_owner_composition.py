@@ -93,7 +93,7 @@ def test_admitted_campaign_routes_through_the_production_composition(tmp_path, m
 
     spec, context = prepared(tmp_path)
     calls = _records(monkeypatch)
-    journal = tmp_path / "task8-live" / "cases.jsonl"
+    journal = tmp_path / "pick-place-live" / "cases.jsonl"
     journal.parent.mkdir()
     asyncio.run(cli.run_admitted_campaign(spec, StubLifecycle(tmp_path), journal))
     assert calls["campaign"], "the production full-restart campaign entry was never called"
@@ -113,7 +113,7 @@ def test_each_case_gets_a_fresh_owner_bound_to_the_admitted_spec(tmp_path, monke
 
     spec, context = prepared(tmp_path)
     calls = _records(monkeypatch)
-    journal = tmp_path / "task8-live" / "cases.jsonl"
+    journal = tmp_path / "pick-place-live" / "cases.jsonl"
     journal.parent.mkdir()
     asyncio.run(cli.run_admitted_campaign(spec, StubLifecycle(tmp_path), journal))
     owners = calls["owners"]
@@ -131,7 +131,7 @@ def test_unavailable_composition_still_admits_nothing(tmp_path, monkeypatch):
     spec, context = prepared(tmp_path)
     worker = Worker(context)
     lifecycle = Lifecycle(context, worker)
-    journal = tmp_path / "task8-live" / "cases.jsonl"
+    journal = tmp_path / "pick-place-live" / "cases.jsonl"
     journal.parent.mkdir()
     monkeypatch.setattr(cli, "trusted_full_restart_composition", lambda: None)
     with pytest.raises(ValueError, match="FULL_RESTART_PROOF_UNAVAILABLE"):

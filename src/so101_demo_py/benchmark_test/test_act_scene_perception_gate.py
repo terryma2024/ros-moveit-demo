@@ -45,7 +45,7 @@ def _share():
 
 
 SCENE = _share() / "assets" / "mujoco" / "act" / "scene.xml"
-ANCHORS = _share() / "config" / "act" / "task8-live-anchors.yaml"
+ANCHORS = _share() / "config" / "act" / "pick-place-live-anchors.yaml"
 IMAGE = os.environ.get("SO101_ACT_SCENE_GATE_IMAGE", "so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1")
 YOLO_WEIGHTS = Path(os.environ.get("SO101_ACT_SCENE_GATE_YOLO", "/data/work/models/so101-perception/yolo11n-seg-plastic-cup/best.pt"))
 GROUNDED = Path(os.environ.get("SO101_ACT_SCENE_GATE_GROUNDED",
