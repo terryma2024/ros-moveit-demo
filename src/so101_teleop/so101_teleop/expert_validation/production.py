@@ -237,7 +237,7 @@ class ProductionRuntimeLayout:
         adaptive = _required_file(
             environment,
             "SO101_VALIDATION_ADAPTIVE_CONFIG",
-            demo_share / "config/mujoco/parallel_adaptive_workers_v1.yaml",
+            demo_share / "config/mujoco/adaptive_worker_pool.yaml",
         )
         coordinator = _required_file(
             environment,

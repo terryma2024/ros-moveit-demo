@@ -305,7 +305,7 @@ def production_pool(tmp_path, summary, **composition_state):
     options = dc_replace(
         load_adaptive_worker_options(
             PACKAGE_ROOT
-            / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+            / "config/mujoco/adaptive_worker_pool.yaml"
         ),
         worker_count=1,
         fallback_worker_counts=(),

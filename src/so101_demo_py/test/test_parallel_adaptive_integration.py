@@ -15,7 +15,7 @@ from paths import PACKAGE_ROOT, REPOSITORY
 PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
-ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 
 import pytest
 
@@ -431,7 +431,7 @@ def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
         for _destination, sources in captured["data_files"]
         for source in sources
     }
-    assert "config/mujoco/parallel_adaptive_workers_v1.yaml" in installed
+    assert "config/mujoco/adaptive_worker_pool.yaml" in installed
     assert (
         "so101_parallel_batch_cleanup = "
         "so101_demo.cli.parallel_batch_cleanup:main"
@@ -541,7 +541,7 @@ def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
         "--grounded-manifest-sha256", "b" * 64, "--run-mode", "dry_run",
     ])
     worker_options, adaptive_path = cli._adaptive_options(options)
-    assert Path(adaptive_path).name == "parallel_adaptive_workers_v1.yaml"
+    assert Path(adaptive_path).name == "adaptive_worker_pool.yaml"
     assert worker_options.worker_count >= 1
     source = Path(cli.__file__).read_text(encoding="utf-8")
     assert "parallel_batch_linux_cuda.yaml" in source

@@ -17,7 +17,7 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 
 
 class SimulatedCrash(BaseException):

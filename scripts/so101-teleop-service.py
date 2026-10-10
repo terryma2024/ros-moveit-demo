@@ -129,7 +129,7 @@ def layout(cfg: dict[str, object]) -> dict[str, Path]:
         "config": demo / "share/so101_demo_py/config/mujoco" / str(cfg["config"]),
         "points": demo / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml",
         "coordinator": demo / "lib/so101_demo_py" / str(cfg["coordinator"]),
-        "adaptive_config": demo / "share/so101_demo_py/config/mujoco/parallel_adaptive_workers_v1.yaml",
+        "adaptive_config": demo / "share/so101_demo_py/config/mujoco/adaptive_worker_pool.yaml",
         "adaptive_wrapper": demo / "lib/so101_demo_py/run_so101_adaptive_batch.zsh",
     }
 

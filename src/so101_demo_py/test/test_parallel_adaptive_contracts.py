@@ -7,7 +7,7 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 
 
 def test_default_options_form_the_frozen_fallback_ladder():
@@ -225,7 +225,7 @@ def test_adaptive_config_path_must_be_absolute():
     )
 
     with pytest.raises(ContractError, match="ABSOLUTE_EVIDENCE_ROOT"):
-        load_adaptive_worker_options(Path("parallel_adaptive_workers_v1.yaml"))
+        load_adaptive_worker_options(Path("adaptive_worker_pool.yaml"))
 
 
 @pytest.mark.parametrize(

@@ -24,7 +24,7 @@ from paths import PACKAGE_ROOT
 PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"
-ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
+ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/adaptive_worker_pool.yaml"
 YOLO_SHA = "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
 GROUNDED_SHA = "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
 
