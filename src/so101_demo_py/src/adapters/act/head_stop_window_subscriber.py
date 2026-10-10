@@ -38,6 +38,8 @@ class StopWindowSubscriber:
         self._receipt = None
         self.node = self.executor = self.thread = self._subscription = None
         self.callback_thread_names = set()
+        self._floor_sim_ns = None
+        self.below_floor = 0
         self.received = 0
         self.callback_errors = []
 
@@ -110,6 +112,10 @@ class StopWindowSubscriber:
                 sample['sim_ns'] = None
             with self._lock:
                 self.received += 1
+                if (self._floor_sim_ns is not None and valid and type(sim_ns) is int
+                        and sim_ns <= self._floor_sim_ns):
+                    self.below_floor += 1
+                    return
                 done = self._window.observe(now_mono_ns=self._monotonic_ns(), **sample)
             if done is not None and self._on_complete is not None:
                 self._on_complete(done)
@@ -139,13 +145,16 @@ class StopWindowSubscriber:
         with self._lock:
             self._window.void(reason)
 
-    def rearm(self):
+    def rearm(self, floor_sim_ns=None):
+        """Forget the latched window; samples stamped <= ``floor_sim_ns`` no longer count."""
         with self._lock:
             self._window.rearm()
+            self._floor_sim_ns = floor_sim_ns
 
     def snapshot(self):
         with self._lock:
             return dict(resets=dict(self._window.resets), voids=list(self._window.voids),
                         pending=self._window.pending_count, observed=self._window.observed,
-                        received=self.received, completed=self._window.completed,
+                        received=self.received, below_floor=self.below_floor,
+                        completed=self._window.completed,
                         callback_errors=list(self.callback_errors))

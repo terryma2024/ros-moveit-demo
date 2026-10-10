@@ -164,3 +164,23 @@ def test_start_twice_is_refused(rig):
     subscriber = started(rig)
     with pytest.raises(PermissionError, match='STOP_WINDOW_ALREADY_STARTED'):
         subscriber.start()
+
+
+def test_rearm_with_a_floor_ignores_samples_stamped_at_or_below_it(rig):
+    subscriber = started(rig)
+    rig.publish(0, 51)
+    assert wait_for(lambda: subscriber.completed is not None)
+    floor = BASE_SIM + 60 * STOP_WINDOW_STEP_NS
+    subscriber.rearm(floor_sim_ns=floor)
+    rig.publish(51, 61)  # indices 51..111; index 60 is the floor itself
+    assert wait_for(lambda: subscriber.completed is not None)
+    assert subscriber.completed['first_sim_ns'] == floor + STOP_WINDOW_STEP_NS
+    assert subscriber.snapshot()['below_floor'] == 10  # indices 51..60
+
+
+def test_rearm_without_a_floor_clears_an_earlier_floor(rig):
+    subscriber = started(rig)
+    subscriber.rearm(floor_sim_ns=BASE_SIM + 1000 * STOP_WINDOW_STEP_NS)
+    subscriber.rearm()
+    rig.publish(0, 51)
+    assert wait_for(lambda: subscriber.completed is not None)

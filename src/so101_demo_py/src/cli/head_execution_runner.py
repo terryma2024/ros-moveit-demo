@@ -57,6 +57,36 @@ def _require_resource(handle, name, attribute, code, detail):
     return resource
 
 
+def _start_shadow(stack, inputs, runtime, *, environ=None):
+    """Start the shadow stop window when SO101_HEAD_SHADOW_STOP_WINDOW_DIR names a directory.
+
+    The shadow observes ``controller_state`` beside the broker stack and writes its own log; it never
+    gates, delays or records into the sealed run. A misconfigured switch fails the run loudly.
+    """
+    import os
+    from so101_demo.adapters.act.head_shadow_stop_window import (
+        ENVIRONMENT_VARIABLE, shadow_from_environment)
+    environ = os.environ if environ is None else environ
+    if environ.get(ENVIRONMENT_VARIABLE) is None:
+        return None
+    shadow = shadow_from_environment(context=stack.node.context, run_id=inputs.run['run_id'],
+                                     environ=environ)
+    shadow.start()
+    runtime.bind_stop_window_observer(shadow.on_raw_stop_confirmed)
+    return shadow
+
+
+def _finish_shadow(shadow):
+    """Wait (bounded) for the shadow end window and close its log; never raises into the run."""
+    if shadow is None:
+        return None
+    try:
+        from so101_demo.act import head_neck_limits
+        return shadow.finish(timeout_s=head_neck_limits.STOP_WINDOW_DEADLINE_S + 3.)
+    except Exception:
+        return None
+
+
 def _bind_originals(composition, capture, port, observer, runtime):
     """Deliver originals to the local observer and, when enabled, the writer."""
     from so101_demo.adapters.act.head_original_router import HeadOriginalRouter
@@ -135,7 +165,9 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
     if original_owner is not None:
         original_owner.retain_originals_until_close(runtime)
     owner = exposure = None
+    shadow = None
     try:
+        shadow = _start_shadow(stack, inputs, runtime)
         scene = handle.get('scene')
         if scene is not None:
             scene.bind_fault(runtime.fault)
@@ -214,6 +246,8 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
             _bind_prepared_transport(composition,handle,runtime,guard)
             if composition.event_log_enabled:
                 composition.emit('EXECUTION_OWNER_DESCRIPTOR', owner_bridge.descriptor())
+            if shadow is not None:
+                shadow.note_first_goal()
             receipt = owner_bridge.submit_target(config['required_search_domain_rad'][0])
             if handle.get('camera_relay') is not None:
                 handle['camera_relay'].cut_after_sdk_return(receipt)
@@ -227,6 +261,7 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
                              emit=(lambda stage, error: composition.emit(
                                  'EXECUTION_LOOP_RETIRE_FAILED', {'stage': stage, 'error': error}))
                              if composition.event_log_enabled else None)
+        _finish_shadow(shadow)
         if composition.event_log_enabled:
             composition.emit('EXECUTION_LOOP_RETIREMENT', {'failures': report, 'outcomes': outcomes})
         composition.finish_resource_lifetime('search_runtime', confirmed=not any(report.values()))
