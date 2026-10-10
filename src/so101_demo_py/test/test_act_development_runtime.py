@@ -8,7 +8,7 @@ import yaml
 from so101_demo.act.endpoint_pose_acceptance import load_development_runtime
 from paths import PACKAGE_ROOT
 
-RUNTIME = PACKAGE_ROOT / "config/act/endpoint_pose_development_runtime_v1.yaml"
+RUNTIME = PACKAGE_ROOT / "config/act/endpoint_pose_development_runtime.yaml"
 
 
 def test_the_authorized_runtime_defaults_load_exactly():

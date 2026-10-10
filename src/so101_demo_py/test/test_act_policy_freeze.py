@@ -28,7 +28,7 @@ def freeze(tmp_path, **overrides):
     files = {**POLICY_FILES, **overrides}
     return freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)), tmp_path / "inputs",
                          mode="preselected_target_diagnostic", **files,
-                         runtime_policy=CONFIG / "endpoint_pose_development_runtime_v1.yaml")
+                         runtime_policy=CONFIG / "endpoint_pose_development_runtime.yaml")
 
 
 def rehash(manifest_path, document):

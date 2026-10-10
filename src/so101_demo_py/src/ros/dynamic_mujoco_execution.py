@@ -252,7 +252,7 @@ class RosDynamicMujocoExecution:
         self._monotonic = time.monotonic
         from ..act.endpoint_pose_acceptance import load_development_runtime
 
-        runtime_policy_path = urdf_path.parents[2] / "config/act/endpoint_pose_development_runtime_v1.yaml"
+        runtime_policy_path = urdf_path.parents[2] / "config/act/endpoint_pose_development_runtime.yaml"
         self._release_runtime_policy = load_development_runtime(runtime_policy_path)
         # The release scope is (session, reset epoch, attempt). There is no lease: nothing here asks for one.
         lease = parallel_identity.get("parallel_lease_identity")

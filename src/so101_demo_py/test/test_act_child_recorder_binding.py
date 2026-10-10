@@ -47,7 +47,7 @@ def frozen_child_inputs(tmp_path):
                                  teacher_endpoint=config / "teacher_endpoint.yaml",
         teacher_execution_policy=config / "teacher_execution_policy.yaml",
         episode_recorder_policy=config / "episode_recorder.yaml",
-                                 runtime_policy=config / "endpoint_pose_development_runtime_v1.yaml")
+                                 runtime_policy=config / "endpoint_pose_development_runtime.yaml")
     root = manifest_path.parent
     snapshot = freeze_execution_snapshot(REPOSITORY, root / "execution")
     document = json.loads(manifest_path.read_bytes())
