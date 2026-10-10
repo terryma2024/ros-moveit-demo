@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3543
+latest_checkpoint: CP-3544
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3544 — refactor step 0 done (HEAD 47ad1a4c4), gates 0/0; rename map decided; phase A dispatched
+
+- Step 0 commits:
+  - 6c0594be7: path constants. demo parents[N] 249 → 0 (211 files, 293 expressions); teleop 67 → 0 (49 files). Subprocess helper scripts keep their own __file__.
+  - 75deb8a1c: helpers moved to test/support; same-package sys.path inserts dropped (demo 49 → 10; the remaining 10 are cross-package or tools).
+  - 380a858b6: unique-basename guards for demo, teleop and quik.
+  - 47ad1a4c4: three AST-scoped ratchet guards in test/repo (scanner style_inventory.py, classifier style_classification.py). One allowlist TSV with classification, target, confidence and reason per entry; unused-entry and format checks. RED/GREEN shown (empty allowlist, bogus entry, probe file).
+  - Teleop path constants are named teleop_paths.py, to avoid a `paths` module collision.
+- Allowlists: versioned 509, process 344, wire 358, 1211 in total. Rename map docs/experiments/so101-code-style-rename-map-20261010.md (1423 lines), generated from the TSV.
+- Gates (refactor-20261010-step0/gate):
+  - fresh 10-package build rc 0;
+  - demo with grounded-sam: 11322 pass, 0 fail, 165 skip;
+  - colcon on 9 packages: 1918 tests, 0 err, 0 fail;
+  - scripts teleop service: 10 pass.
+  - Collection ids identical before and after the rewrites (demo 11405, plus 82 new repo tests; teleop 1285).
+- Root decisions on the 128 uncertain rows: recorded in the rename map, commit 804b5abfd. Highlights:
+  - accepted parallel_batch profile and file names, HEADROOM for TASK14, SYNCHRONIZED_CAPTURE for TASK6, act_camera_plugins.yaml, headless_safe, SAMPLE_MANIFEST_*, CALIBRATION_*_CONTRACT_INVALID;
+  - the perception *_v1 dataset and candidate configs are PERMANENT;
+  - the policy v1 directories are flattened;
+  - collision rule: the latest member takes the plain name, qualified if the name is generic;
+  - CORRECTION: e2e_acceptance manifest v2 is the general profile and is kept (SCHEMA_GENERAL / SCHEMA_TEACHER); only v1 is deleted;
+  - the kept measurement contract references the retired task6_visible_approach_v1.json, and that reference is removed in phase B.
+- Dispatched phase A: write the decided targets into the TSV, then delete the shims, aliases and retired console scripts.
 
 ## CP-3543 — refactor design re-review PASS-WITH-CHANGES; revision 2.1; step 0 dispatched
 
