@@ -11,9 +11,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import SUPPORT_DIR
 
 
-PROBE_PATH = Path(__file__).with_name("macos_camera_topic_probe.py")
+PROBE_PATH = SUPPORT_DIR / "macos_camera_topic_probe.py"
 SPEC = importlib.util.spec_from_file_location("macos_camera_topic_probe", PROBE_PATH)
 assert SPEC is not None and SPEC.loader is not None
 PROBE = importlib.util.module_from_spec(SPEC)

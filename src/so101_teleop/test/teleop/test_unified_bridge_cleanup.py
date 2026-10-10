@@ -16,15 +16,11 @@ import asyncio
 import json
 import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:  # the bridge test owns the Rig this one reuses
-    sys.path.insert(0, str(HERE))
 
 from test_unified_bridge import HelperLaunch, Rig  # noqa: E402
 

@@ -10,9 +10,8 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from paths import PACKAGE_ROOT, TEST_ROOT
+from paths import PACKAGE_ROOT, SUPPORT_DIR, TEST_ROOT
 
-TEST_DIR = TEST_ROOT
 BROKER_PARAMETERS = {"control_context", "broker_connection", "initial_empty_retirement", "operation_guard"}
 
 
@@ -31,7 +30,7 @@ def test_reset_entry_points_have_no_broker_parameters_and_the_act_profile_is_exp
 
 
 def test_seven_joint_act_reset_with_the_neck_controller_runs_with_no_broker_module_imported():
-    script = f"import sys; sys.path.insert(0, {str(TEST_DIR)!r}); import b1b_reset_driver as d; print('B1BJSON ' + __import__('json').dumps(d.run()))"
+    script = f"import sys; sys.path[:0] = [{str(SUPPORT_DIR)!r}, {str(TEST_ROOT)!r}]; import b1b_reset_driver as d; print('B1BJSON ' + __import__('json').dumps(d.run()))"
     done = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, timeout=120, check=False)
     line = next((x for x in done.stdout.splitlines() if x.startswith("B1BJSON ")), None)
     assert line is not None, done.stdout[-1500:] + done.stderr[-2500:]

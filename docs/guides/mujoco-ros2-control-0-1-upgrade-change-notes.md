@@ -297,7 +297,7 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 
 修改/新增：
 
-- `src/so101_demo_py/test/macos_camera_topic_probe.py`
+- `src/so101_demo_py/test/support/macos_camera_topic_probe.py`
 - `src/so101_demo_py/test/test_macos_camera_topic_probe_behavior.py`
 - `src/so101_demo_py/test/test_mujoco_camera_plugin_contract.py`
 
@@ -336,7 +336,7 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 | SO-101 原子物理证据 | `src/so101_mujoco_support/include/.../simulation_evidence_plugin.hpp` |
 | 依赖安装与验证 | `scripts/install-mujoco-ros2-control.zsh`、`scripts/check_backend_integration.py` |
 | 固定版本与接口 | `src/so101_demo_py/config/{dependency-lock.yaml,mujoco/dependency-lock.yaml}` |
-| camera runtime probe | `src/so101_demo_py/test/macos_camera_topic_probe.py` |
+| camera runtime probe | `src/so101_demo_py/test/support/macos_camera_topic_probe.py` |
 | 全过程台账 | `docs/experiments/mujoco-ros2-control-0-1-upgrade-experiment-ledger.md` |
 
 ## 8. 验证结果

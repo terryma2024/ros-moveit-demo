@@ -7,7 +7,7 @@ import sys
 import time
 
 from test_act_head_paused_admission import admission_peer_cpu_slot
-from paths import TEST_ROOT
+from paths import SUPPORT_DIR, TEST_ROOT
 
 def test_other_worker_guard_assembly_waits_for_the_live_peer(tmp_path,tmp_path_factory):
     ready=tmp_path/'ready'; entered=tmp_path/'model_entered'
@@ -34,7 +34,7 @@ except RuntimeError as error:
 else:raise AssertionError('fixture skipped actual model constructor')
 """
     env=dict(os.environ)
-    env['PYTHONPATH']=str(TEST_ROOT)+os.pathsep+str(TEST_ROOT)+os.pathsep+env.get('PYTHONPATH','')
+    env['PYTHONPATH']=str(TEST_ROOT)+os.pathsep+str(SUPPORT_DIR)+os.pathsep+env.get('PYTHONPATH','')
     child=None; blocked=False
     try:
         with admission_peer_cpu_slot(tmp_path_factory):

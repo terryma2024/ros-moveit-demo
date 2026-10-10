@@ -14,12 +14,12 @@ import re
 import subprocess
 import sys
 from collections import deque
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import SUPPORT_DIR
 
-BENCH = Path(__file__).with_name("act_contact_throughput_bench.py")
+BENCH = SUPPORT_DIR / "act_contact_throughput_bench.py"
 
 
 def _run_bench(*, gil, count=2000, contacts=12, rate=0):

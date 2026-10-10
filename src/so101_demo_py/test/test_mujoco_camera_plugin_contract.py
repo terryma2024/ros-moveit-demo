@@ -1,11 +1,11 @@
 from xml.etree import ElementTree
 
 import yaml
-from paths import PACKAGE_ROOT, REPOSITORY, SOURCE_ROOT
+from paths import PACKAGE_ROOT, REPOSITORY, SOURCE_ROOT, SUPPORT_DIR
 
 PACKAGE = PACKAGE_ROOT
 FORK = REPOSITORY / "third_party" / "mujoco_ros2_control"
-PROBE = PACKAGE / "test/macos_camera_topic_probe.py"
+PROBE = SUPPORT_DIR / "macos_camera_topic_probe.py"
 CAMERA_PLUGIN_XML = FORK / "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml"
 CAMERA_PLUGIN_SOURCE = FORK / "mujoco_ros2_control_plugins/src/camera_plugin.cpp"
 

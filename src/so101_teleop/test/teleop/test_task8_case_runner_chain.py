@@ -6,10 +6,8 @@ set, the release ordering and the evidence binding asserted here are the product
 
 import hashlib
 import time
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_task8_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCES, _identity,  # noqa: E402
                                                        _raw_records)
 from so101_demo.act.task8_live_evidence import build_live_evidence_sample      # noqa: E402

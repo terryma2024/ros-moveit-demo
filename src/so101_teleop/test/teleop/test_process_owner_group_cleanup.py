@@ -16,15 +16,10 @@ from dataclasses import replace
 import json
 import os
 import subprocess
-import sys
 import time
-from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:  # this directory owns the request/owner fixtures
-    sys.path.insert(0, str(HERE))
 
 import so101_teleop.expert_validation.process_owner as process_owner_module  # noqa: E402
 from so101_teleop.expert_validation.process_owner import (  # noqa: E402

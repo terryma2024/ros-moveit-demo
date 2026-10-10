@@ -17,9 +17,6 @@ import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS fixed control endpoint")
 
-HERE = Path(__file__).resolve().parent
-if str(HERE) not in sys.path:  # the control suite owns the short-root helper this file reuses
-    sys.path.insert(0, str(HERE))
 
 from test_expert_validation_control import _short_private_root  # noqa: E402
 

@@ -15,9 +15,8 @@ import pytest
 
 import b1_pick_place_driver as driver
 from so101_demo.core.domain import State
-from paths import PACKAGE_ROOT, SOURCE_ROOT, TEST_ROOT
+from paths import PACKAGE_ROOT, SOURCE_ROOT, SUPPORT_DIR, TEST_ROOT
 
-TEST_DIR = TEST_ROOT
 SRC = PACKAGE_ROOT / "src"
 TELEOP_SRC = SOURCE_ROOT / "so101_teleop" / "so101_teleop"
 FORWARD_MOTION_STATES = (State.MOVE_ABOVE_OBJECT, State.DESCEND, State.MICRO_LIFT, State.LIFT,
@@ -59,7 +58,7 @@ def test_release_published_a_normal_stop_event_built_from_the_joint_state_proof(
 def test_teacher_path_imports_no_broker_module_in_a_clean_interpreter(tmp_path):
     script = (
         "import json, sys, pathlib\n"
-        f"sys.path.insert(0, {str(TEST_DIR)!r})\n"
+        f"sys.path[:0] = [{str(SUPPORT_DIR)!r}, {str(TEST_ROOT)!r}]\n"
         "import b1_pick_place_driver as d\n"
         "import so101_demo.ros.dynamic_runtime, so101_demo.ros.dynamic_mujoco_execution\n"
         "import so101_demo.backends.mujoco.reset, so101_demo.backends.mujoco.client\n"
