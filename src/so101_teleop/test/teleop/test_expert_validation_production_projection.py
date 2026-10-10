@@ -102,12 +102,12 @@ def test_cancel_api_rejects_same_campaign_with_a_different_active_batch(tmp_path
 
 
 def _coordinator_for_control_projection(service, request):
-    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode, load_parallel_runtime_config_v3
+    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_v3
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
 
     journal = CoordinatorJournal.create(request.batch_root / "coordinator", request.batch_id)
     config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
-    batch = BatchRequestV2(request.batch_id, RunMode.EXECUTE, request.selected_point_ids, 1, request.batch_root, BatchKindV2.FIRST_PASS)
+    batch = BatchRequest(request.batch_id, RunMode.EXECUTE, request.selected_point_ids, 1, request.batch_root, BatchKind.FIRST_PASS)
     coordinator = BatchCoordinator(journal, batch, config=load_parallel_runtime_config_v3(config), result_port=None)
     coordinator.register_worker("worker-01", generation=1)
     return coordinator, journal
@@ -183,14 +183,14 @@ def test_cancel_command_replays_durably_and_conflicting_target_never_contacts_ow
         config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
         program = '''
 import os, pathlib, time
-from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode, load_parallel_runtime_config_v3
+from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_v3
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 root = pathlib.Path(os.environ["TEST_BATCH_ROOT"])
 with CoordinatorJournal.create(root / "coordinator", "b001") as journal:
     import json
-    batch = BatchRequestV2("b001", RunMode.EXECUTE, tuple(json.loads(os.environ["TEST_POINT_IDS"])), 1, root, BatchKindV2.FIRST_PASS)
+    batch = BatchRequest("b001", RunMode.EXECUTE, tuple(json.loads(os.environ["TEST_POINT_IDS"])), 1, root, BatchKind.FIRST_PASS)
     coordinator = BatchCoordinator(journal, batch, config=load_parallel_runtime_config_v3(os.environ["TEST_CONFIG"]), result_port=None)
     coordinator.register_worker("worker-01", generation=1)
     path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])

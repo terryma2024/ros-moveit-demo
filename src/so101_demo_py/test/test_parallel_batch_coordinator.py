@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    BatchKindV2, BatchRequestV2, RunMode, ValidationStatus, WorkerState,
+    BatchKind, BatchRequest, RunMode, ValidationStatus, WorkerState,
     load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -74,8 +74,8 @@ def make(tmp_path):
         else:
             # Fixed execution migrated to the version-two no-quota contract; the retained
             # v1 request type stays importable for historical reading only.
-            request = BatchRequestV2('batch-a', mode, points, workers, root,
-                                     BatchKindV2.FIRST_PASS)
+            request = BatchRequest('batch-a', mode, points, workers, root,
+                                     BatchKind.FIRST_PASS)
         clock, results = (Clock() if clock_port is None else clock_port), Results()
         config = load_parallel_runtime_config_v3(
             PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')

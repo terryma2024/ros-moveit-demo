@@ -1,7 +1,7 @@
 """The macOS fixed-Coordinator control endpoint: one wire, one set of validators.
 
 The Linux path serves this wire from :class:`parallel_batch.web_control.FixedCoordinatorControlServer`,
-which is built around a `BatchRequestV2` coordinator with a durable journal. The macOS
+which is built around a `BatchRequest` coordinator with a durable journal. The macOS
 campaign is a v4-native composition with no such journal, so it needs its own endpoint - but not its
 own *wire*. Everything that defines the contract is reused from ``web_control``: the request field
 set, the identifier and token patterns, the unsigned-field list the request hash is taken over, the

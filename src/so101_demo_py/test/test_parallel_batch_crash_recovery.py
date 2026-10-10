@@ -9,7 +9,7 @@ from so101_demo.parallel_batch import artifacts
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
     AttemptStatus,
-    BatchKindV2, BatchRequestV2,
+    BatchKind, BatchRequest,
     PointStatus,
     RunMode,
     WorkerState,
@@ -114,7 +114,7 @@ class Harness:
         self.clock = Clock()
         self.results = Results()
         self.crash_hook = CrashHook()
-        self.request = BatchRequestV2("batch-crash", RunMode.EXECUTE, ("p1", "p2"), 1, root, BatchKindV2.FIRST_PASS)
+        self.request = BatchRequest("batch-crash", RunMode.EXECUTE, ("p1", "p2"), 1, root, BatchKind.FIRST_PASS)
         self.journal = CoordinatorJournal.create(root, self.request.batch_id)
         self.coordinator = BatchCoordinator(
             self.journal,
@@ -259,7 +259,7 @@ def test_real_artifact_crash_is_adjudicated_from_fsync_and_seal_state(
         {"worker-01": worker_root}, RunMode.EXECUTE,
         expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
     )
-    request = BatchRequestV2("batch-real-seal", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKindV2.FIRST_PASS)
+    request = BatchRequest("batch-real-seal", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKind.FIRST_PASS)
     journal = CoordinatorJournal.create(tmp_path, request.batch_id)
     coordinator = BatchCoordinator(
         journal, request, config=CONFIG, clock=clock, result_port=result_port
@@ -318,7 +318,7 @@ def test_real_prestart_late_seal_is_terminal_and_cannot_be_released_for_retry(
         {"worker-01": worker_root}, RunMode.EXECUTE,
         expected_final_cup_pose_world=EXPECTED_FINAL_CUP_POSE_WORLD,
     )
-    request = BatchRequestV2("batch-real-late", RunMode.EXECUTE, ("p1", "p2"), 1, tmp_path, BatchKindV2.FIRST_PASS)
+    request = BatchRequest("batch-real-late", RunMode.EXECUTE, ("p1", "p2"), 1, tmp_path, BatchKind.FIRST_PASS)
     journal = CoordinatorJournal.create(tmp_path, request.batch_id)
     coordinator = BatchCoordinator(
         journal, request, config=CONFIG, clock=clock, result_port=result_port
@@ -685,7 +685,7 @@ def test_coordinator_fault_hook_brackets_durable_events_without_becoming_authori
 ):
     """The injected hook observes boundaries; journal state still owns recovery."""
     observed = []
-    request = BatchRequestV2("batch-hook", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKindV2.FIRST_PASS)
+    request = BatchRequest("batch-hook", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKind.FIRST_PASS)
     results = Results()
     with CoordinatorJournal.create(tmp_path, request.batch_id) as journal:
         coordinator = BatchCoordinator(
@@ -720,7 +720,7 @@ def test_fault_hook_crash_after_fsync_replays_one_k_debit(tmp_path):
             fired = True
             raise RuntimeError("injected crash")
 
-    request = BatchRequestV2("batch-after-fsync", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKindV2.FIRST_PASS)
+    request = BatchRequest("batch-after-fsync", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKind.FIRST_PASS)
     results = Results()
     journal = CoordinatorJournal.create(tmp_path, request.batch_id)
     coordinator = BatchCoordinator(

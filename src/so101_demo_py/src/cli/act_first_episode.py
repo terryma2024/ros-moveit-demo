@@ -624,7 +624,7 @@ def _run(arguments) -> int:
         print(f"act_first_episode: {error}", file=sys.stderr)
         return 2
     from so101_demo.core.task_points import TaskPoint
-    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode
+    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode
 
     root = Path(arguments.root)
     if root.exists():
@@ -638,9 +638,9 @@ def _run(arguments) -> int:
                       cup_position_world_m=tuple(endpoint_targets["initial_target"][:3]))
     # the composition reads selected_point_ids off this request, so it is the versioned contract rather than the
     # application-layer one: one point, one worker, an execute run and a fresh first pass
-    request = BatchRequestV2(batch_id=batch_id, run_mode=RunMode.EXECUTE, selected_point_ids=(point.id,),
+    request = BatchRequest(batch_id=batch_id, run_mode=RunMode.EXECUTE, selected_point_ids=(point.id,),
                              worker_count=1, evidence_root=(root / "run").resolve(),
-                             batch_kind=BatchKindV2.FIRST_PASS)
+                             batch_kind=BatchKind.FIRST_PASS)
     # ProductionBatchComposition owns the run's journal and Coordinator.
     from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
 

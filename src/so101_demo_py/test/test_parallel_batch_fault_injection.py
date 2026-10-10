@@ -7,7 +7,7 @@ import pytest
 
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
-    BatchKindV2, BatchRequestV2,
+    BatchKind, BatchRequest,
     ExecutionKind,
     InferenceRequest,
     ModelOutcome,
@@ -66,7 +66,7 @@ def make_coordinator(tmp_path, clock, points=("p1", "p2")):
     journal = CoordinatorJournal.create(tmp_path, "batch-broker")
     coordinator = BatchCoordinator(
         journal,
-        BatchRequestV2("batch-broker", RunMode.EXECUTE, points, 1, tmp_path, BatchKindV2.FIRST_PASS),
+        BatchRequest("batch-broker", RunMode.EXECUTE, points, 1, tmp_path, BatchKind.FIRST_PASS),
         config=CONFIG,
         clock=clock,
         result_port=NoResults(),

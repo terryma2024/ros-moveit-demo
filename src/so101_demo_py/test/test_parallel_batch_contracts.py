@@ -113,8 +113,8 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
     """A mixed attempt/validation identity could authorize the wrong sealed workspace."""
 
     from so101_demo.parallel_batch.contracts import (
-        BatchKindV2,
-        BatchRequestV2,
+        BatchKind,
+        BatchRequest,
         ContractError,
         ExecutionKind,
         InferenceRequest,
@@ -122,13 +122,13 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
     )
 
     with pytest.raises(ContractError, match="ABSOLUTE_EVIDENCE_ROOT"):
-        BatchRequestV2(
+        BatchRequest(
             batch_id="batch-1",
             run_mode=RunMode.DRY_RUN,
             selected_point_ids=("task_start",),
             worker_count=1,
             evidence_root=Path("relative/evidence"),
-            batch_kind=BatchKindV2.FIRST_PASS,
+            batch_kind=BatchKind.FIRST_PASS,
         )
     request_fields = dict(
         request_id="request-1",
@@ -318,8 +318,8 @@ def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
     """Float schema versions and string selections must not be normalized into valid inputs."""
 
     from so101_demo.parallel_batch.contracts import (
-        BatchKindV2,
-        BatchRequestV2,
+        BatchKind,
+        BatchRequest,
         ContractError,
         RunMode,
         load_parallel_runtime_config_v3,
@@ -332,37 +332,37 @@ def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
     with pytest.raises(ContractError, match="SCHEMA_VERSION"):
         load_parallel_runtime_config_v3(path)
     with pytest.raises(ContractError, match="POINT_ID_SEQUENCE"):
-        BatchRequestV2(
+        BatchRequest(
             batch_id="batch-1",
             run_mode=RunMode.DRY_RUN,
             selected_point_ids="abc",
             worker_count=1,
             evidence_root=Path("/tmp/parallel-evidence"),
-            batch_kind=BatchKindV2.FIRST_PASS,
+            batch_kind=BatchKind.FIRST_PASS,
         )
 
 
 def test_batch_request_rejects_duplicate_empty_and_overbound_selection_controls():
     """Duplicate IDs and counts beyond frozen admission limits must fail before leasing."""
 
-    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, ContractError, RunMode
+    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, ContractError, RunMode
 
     shared = dict(
         batch_id="batch-1",
         run_mode=RunMode.DRY_RUN,
         evidence_root=Path("/tmp/parallel-evidence"),
-        batch_kind=BatchKindV2.FIRST_PASS,
+        batch_kind=BatchKind.FIRST_PASS,
     )
     with pytest.raises(ContractError, match="UNIQUE_POINT_IDS"):
-        BatchRequestV2(
+        BatchRequest(
             **shared,
             selected_point_ids=("task_start", "task_start"),
             worker_count=1,
         )
     with pytest.raises(ContractError, match="EMPTY_ID"):
-        BatchRequestV2(**shared, selected_point_ids=("",), worker_count=1)
+        BatchRequest(**shared, selected_point_ids=("",), worker_count=1)
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
-        BatchRequestV2(
+        BatchRequest(
             **shared,
             selected_point_ids=("task_start",),
             worker_count=9,
@@ -498,37 +498,37 @@ def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mod
 
 @pytest.mark.parametrize("workers", [1, 2, 8])
 def test_fixed_batch_contract_supports_exact_count_through_eight(tmp_path, workers):
-    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode
-    request = BatchRequestV2("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
-                             workers, tmp_path, BatchKindV2.FIRST_PASS)
+    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode
+    request = BatchRequest("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
+                             workers, tmp_path, BatchKind.FIRST_PASS)
     assert request.worker_count == workers
 
 
 def test_fixed_batch_nine_is_outside_supported_range(tmp_path):
-    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode, ContractError
+    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, ContractError
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
-        BatchRequestV2("nine", RunMode.EXECUTE, ("p1",), 9, tmp_path, BatchKindV2.FIRST_PASS)
+        BatchRequest("nine", RunMode.EXECUTE, ("p1",), 9, tmp_path, BatchKind.FIRST_PASS)
 
 
 def test_v2_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path):
     from so101_demo.parallel_batch.contracts import (
-        BatchKindV2, BatchRequestV2, ContractError, RunMode)
-    request = BatchRequestV2("batch-a", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
-                             2, tmp_path, BatchKindV2.FIRST_PASS)
+        BatchKind, BatchRequest, ContractError, RunMode)
+    request = BatchRequest("batch-a", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
+                             2, tmp_path, BatchKind.FIRST_PASS)
     assert request.schema_version == 2
     assert not hasattr(request, "max_points_per_worker")
-    retry = BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1",), 1, tmp_path,
-                           BatchKindV2.FULL_RESTART_RETRY)
+    retry = BatchRequest("batch-retry", RunMode.EXECUTE, ("p1",), 1, tmp_path,
+                           BatchKind.FULL_RESTART_RETRY)
     assert retry.selected_point_ids == ("p1",)
     with pytest.raises(ContractError):
-        BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1", "p2"), 1, tmp_path,
-                       BatchKindV2.FULL_RESTART_RETRY)
+        BatchRequest("batch-retry", RunMode.EXECUTE, ("p1", "p2"), 1, tmp_path,
+                       BatchKind.FULL_RESTART_RETRY)
     with pytest.raises(ContractError):
-        BatchRequestV2("batch-retry", RunMode.EXECUTE, ("p1",), 2, tmp_path,
-                       BatchKindV2.FULL_RESTART_RETRY)
+        BatchRequest("batch-retry", RunMode.EXECUTE, ("p1",), 2, tmp_path,
+                       BatchKind.FULL_RESTART_RETRY)
     with pytest.raises(ContractError):
-        BatchRequestV2("batch-nine", RunMode.EXECUTE, ("p1",), 9, tmp_path,
-                       BatchKindV2.FIRST_PASS)
+        BatchRequest("batch-nine", RunMode.EXECUTE, ("p1",), 9, tmp_path,
+                       BatchKind.FIRST_PASS)
 
 
 def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
@@ -654,45 +654,6 @@ def test_require_v3_execution_refuses_every_legacy_version():
         with pytest.raises(contracts.ContractError,
                            match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
             contracts.require_v3_execution(request_version, config_version)
-
-
-def test_v3_request_round_trips_and_history_reads_never_become_active(tmp_path):
-    import so101_demo.parallel_batch.contracts as contracts
-
-    request = contracts.BatchRequestV3(
-        batch_id="v3-batch", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=("p1", "p2"),
-        worker_count=4, evidence_root=tmp_path, batch_kind=contracts.BatchKindV3.FIRST_PASS)
-    document = contracts.batch_request_to_document(request)
-    assert document["schema_version"] == 3
-    assert set(document) == set(contracts.REQUEST_V3_FIELDS)
-    restored = contracts.batch_request_from_document(document, for_execution=True)
-    assert restored == request
-
-    legacy = {"schema_version": 2, "batch_id": "old", "run_mode": "EXECUTE",
-              "selected_point_ids": ["p1"], "worker_count": 1,
-              "evidence_root": str(tmp_path), "batch_kind": "FIRST_PASS",
-              "profile_sha256": "0" * 64}
-    with pytest.raises(contracts.ContractError,
-                       match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
-        contracts.batch_request_from_document(legacy, for_execution=True)
-    history_view = contracts.batch_request_from_document(legacy, for_execution=False)
-    assert isinstance(history_view, dict) and not isinstance(history_view, contracts.BatchRequestV3)
-    assert history_view["profile_sha256"] == "0" * 64
-
-
-def test_v3_request_keeps_retry_single_point_n1(tmp_path):
-    import so101_demo.parallel_batch.contracts as contracts
-
-    contracts.BatchRequestV3(
-        batch_id="retry-one", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=("p1",),
-        worker_count=1, evidence_root=tmp_path,
-        batch_kind=contracts.BatchKindV3.FULL_RESTART_RETRY)
-    for point_ids, workers in ((("p1", "p2"), 1), (("p1",), 2)):
-        with pytest.raises(contracts.ContractError, match="RETRY_SINGLE_POINT_N1"):
-            contracts.BatchRequestV3(
-                batch_id="retry-bad", run_mode=contracts.RunMode.EXECUTE, selected_point_ids=point_ids,
-                worker_count=workers, evidence_root=tmp_path,
-                batch_kind=contracts.BatchKindV3.FULL_RESTART_RETRY)
 
 
 def test_gpu_selector_requires_an_explicit_well_formed_choice():

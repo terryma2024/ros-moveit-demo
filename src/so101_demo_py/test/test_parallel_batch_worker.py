@@ -10,7 +10,7 @@ import pytest
 
 from so101_demo.parallel_batch.contracts import (
     AttemptStatus,
-    BatchKindV2, BatchRequestV2,
+    BatchKind, BatchRequest,
     ExecutionKind,
     LeaseIdentity,
     RunMode,
@@ -1659,7 +1659,7 @@ def test_port_exceptions_fail_closed_and_never_escape_as_authorization(failure):
 
 def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
     clock = Clock()
-    request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKindV2.FIRST_PASS)
+    request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKind.FIRST_PASS)
     journal = CoordinatorJournal.create(tmp_path, "batch-a")
 
     class DurableResults:

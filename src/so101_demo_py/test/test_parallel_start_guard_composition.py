@@ -15,8 +15,8 @@ import pytest
 
 from so101_demo.parallel_batch import start_guard_probe as probe_module
 from so101_demo.parallel_batch.contracts import (
-    BatchKindV3,
-    BatchRequestV3,
+    BatchKind,
+    BatchRequest,
     ContractError,
     RunMode,
     load_parallel_runtime_config_v3,
@@ -150,19 +150,11 @@ def test_budget_modules_are_absent_from_the_composition_import_graph():
 
 
 def test_fixed_request_keeps_every_slot_when_points_are_fewer(tmp_path):
-    request = BatchRequestV3(batch_id="lg-t5-fixed", run_mode=RunMode.EXECUTE,
+    request = BatchRequest(batch_id="lg-t5-fixed", run_mode=RunMode.EXECUTE,
                              selected_point_ids=("p1",), worker_count=4,
-                             evidence_root=tmp_path, batch_kind=BatchKindV3.FIRST_PASS)
+                             evidence_root=tmp_path, batch_kind=BatchKind.FIRST_PASS)
     assert request.worker_count == 4  # never min(worker_count, points)
     assert len(request.selected_point_ids) == 1
-    document = json.loads(json.dumps({"schema_version": 3, "batch_id": request.batch_id,
-                                      "run_mode": str(request.run_mode),
-                                      "selected_point_ids": list(request.selected_point_ids),
-                                      "worker_count": request.worker_count,
-                                      "evidence_root": str(request.evidence_root),
-                                      "batch_kind": str(request.batch_kind)}))
-    from so101_demo.parallel_batch.contracts import batch_request_from_document
-    assert batch_request_from_document(document, for_execution=True) == request
 
 
 def test_no_active_path_imports_the_retired_budget_chain():

@@ -41,7 +41,7 @@ import time
 # need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
 # resolve its layout, and the child inherits the same path.
 from so101_demo.parallel_batch.contracts import (
-    BatchKindV2,
+    BatchKind,
     ContractError,
     ExecutionProfile,
     ParallelRuntimeConfigV4,
@@ -170,7 +170,7 @@ def require_retry_binding(arguments, route) -> dict:
     if not values:
         return {}
     is_retry_route = (
-        str(route.batch_kind) == str(BatchKindV2.FULL_RESTART_RETRY)
+        str(route.batch_kind) == str(BatchKind.FULL_RESTART_RETRY)
         and str(route.execution_profile) == str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY))
     if not is_retry_route:
         raise ServiceCampaignError(

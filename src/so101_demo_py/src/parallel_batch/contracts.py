@@ -584,7 +584,7 @@ def _closed_mapping_fields(name: str, document: object, expected: set[str],
     return dict(document)
 
 
-class BatchKindV2(StrEnum):
+class BatchKind(StrEnum):
     FIRST_PASS = "FIRST_PASS"
     FULL_RESTART_RETRY = "FULL_RESTART_RETRY"
     ADAPTIVE_POOL = "ADAPTIVE_POOL"
@@ -616,13 +616,13 @@ def load_runtime_config_any_schema(path: Path):
 
 
 @dataclass(frozen=True, slots=True)
-class BatchRequestV2:
+class BatchRequest:
     batch_id: str
     run_mode: RunMode
     selected_point_ids: tuple[str, ...]
     worker_count: int
     evidence_root: Path
-    batch_kind: BatchKindV2
+    batch_kind: BatchKind
     schema_version: int = 2
 
     def __post_init__(self) -> None:
@@ -630,7 +630,7 @@ class BatchRequestV2:
             raise ContractError("SCHEMA_VERSION")
         object.__setattr__(self, "batch_id", _require_id("batch_id", self.batch_id))
         _require_enum("run_mode", self.run_mode, RunMode)
-        _require_enum("batch_kind", self.batch_kind, BatchKindV2)
+        _require_enum("batch_kind", self.batch_kind, BatchKind)
         if not isinstance(self.selected_point_ids, (list, tuple)):
             raise ContractError("POINT_ID_SEQUENCE")
         point_ids = tuple(
@@ -649,7 +649,7 @@ class BatchRequestV2:
             "evidence_root",
             _require_absolute_path("evidence_root", self.evidence_root),
         )
-        if self.batch_kind is BatchKindV2.FULL_RESTART_RETRY and (
+        if self.batch_kind is BatchKind.FULL_RESTART_RETRY and (
             len(point_ids) != 1 or self.worker_count != 1
         ):
             raise ContractError("RETRY_SINGLE_POINT_N1")
@@ -955,107 +955,6 @@ def require_v3_execution(request_version: int, config_version: int) -> None:
     if request_version != 3 or config_version != 3:
         raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
 
-
-#: Version three keeps the functional batch-kind semantics of version two.
-BatchKindV3 = BatchKindV2
-
-
-@dataclass(frozen=True, slots=True)
-class BatchRequestV3:
-    """A new execution request. It carries no budget hash, profile or approval reference."""
-
-    batch_id: str
-    run_mode: RunMode
-    selected_point_ids: tuple[str, ...]
-    worker_count: int
-    evidence_root: Path
-    batch_kind: BatchKindV3
-    schema_version: int = 3
-
-    def __post_init__(self) -> None:
-        if type(self.schema_version) is not int or self.schema_version != 3:
-            raise ContractError("SCHEMA_VERSION")
-        object.__setattr__(self, "batch_id", _require_id("batch_id", self.batch_id))
-        _require_enum("run_mode", self.run_mode, RunMode)
-        _require_enum("batch_kind", self.batch_kind, BatchKindV2)
-        if not isinstance(self.selected_point_ids, (list, tuple)):
-            raise ContractError("POINT_ID_SEQUENCE")
-        point_ids = tuple(
-            _require_id("point_id", point_id) for point_id in self.selected_point_ids
-        )
-        if not point_ids or len(point_ids) != len(set(point_ids)):
-            raise ContractError("UNIQUE_POINT_IDS")
-        object.__setattr__(self, "selected_point_ids", point_ids)
-        object.__setattr__(
-            self, "worker_count", _require_positive_int("worker_count", self.worker_count)
-        )
-        if self.worker_count > _FROZEN_MAX_WORKER_COUNT:
-            raise ContractError("MAX_WORKER_COUNT")
-        object.__setattr__(
-            self,
-            "evidence_root",
-            _require_absolute_path("evidence_root", self.evidence_root),
-        )
-        if self.batch_kind is BatchKindV2.FULL_RESTART_RETRY and (
-            len(point_ids) != 1 or self.worker_count != 1
-        ):
-            raise ContractError("RETRY_SINGLE_POINT_N1")
-
-
-REQUEST_V3_FIELDS = ("schema_version", "batch_id", "run_mode", "selected_point_ids",
-                     "worker_count", "evidence_root", "batch_kind")
-
-
-def batch_request_to_document(request: BatchRequestV3) -> dict:
-    """Serialize an active request for the CLI/Web producer and the allocator consumer."""
-
-    if not isinstance(request, BatchRequestV3):
-        raise ContractError("REQUEST_TYPE")
-    return {
-        "schema_version": 3,
-        "batch_id": request.batch_id,
-        "run_mode": str(request.run_mode),
-        "selected_point_ids": list(request.selected_point_ids),
-        "worker_count": request.worker_count,
-        "evidence_root": str(request.evidence_root),
-        "batch_kind": str(request.batch_kind),
-    }
-
-
-def batch_request_from_document(document: object, *, for_execution: bool
-                                ) -> "BatchRequestV3 | dict":
-    """Read a request record.
-
-    ``for_execution=True`` accepts only the active version and is the only path that can
-    produce something the allocator will run. ``for_execution=False`` is the history reader:
-    version 1 and 2 documents are returned as plain read-only mappings and are never
-    converted into an active request.
-    """
-
-    if not isinstance(document, Mapping):
-        raise ContractError("REQUEST_MAPPING")
-    version = document.get("schema_version")
-    if not for_execution:
-        if version in (1, 2):
-            return dict(document)
-        if version != 3:
-            raise ContractError(f"UNKNOWN_SCHEMA_VERSION: {version!r}")
-    elif version != 3:
-        raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
-    unknown = set(document) - set(REQUEST_V3_FIELDS)
-    missing = set(REQUEST_V3_FIELDS) - set(document)
-    if unknown:
-        raise ContractError(f"UNKNOWN_REQUEST_FIELD: {sorted(unknown)!r}")
-    if missing:
-        raise ContractError(f"MISSING_REQUEST_FIELD: {sorted(missing)!r}")
-    return BatchRequestV3(
-        batch_id=document["batch_id"],
-        run_mode=RunMode(document["run_mode"]),
-        selected_point_ids=tuple(document["selected_point_ids"]),
-        worker_count=document["worker_count"],
-        evidence_root=Path(document["evidence_root"]),
-        batch_kind=BatchKindV3(document["batch_kind"]),
-    )
 
 # --------------------------------------------------------------------------------------
 # Version 4: the closed platform-combination contract
@@ -1505,9 +1404,6 @@ def require_v4_execution(request_version: int, config_version: int) -> None:
         raise ContractError("CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION")
 
 
-#: Version four keeps the functional batch-kind semantics of versions two and three.
-BatchKindV4 = BatchKindV2
-
 
 # --------------------------------------------------------------------------------------
 # Versions 5 and 6: the two closed macOS W1 profiles
@@ -1569,7 +1465,7 @@ class ExecutionRoute:
 
     schema_version: int
     execution_profile: ExecutionProfile
-    batch_kind: BatchKindV2
+    batch_kind: BatchKind
     worker_count: int
 
     def __post_init__(self) -> None:
@@ -1577,7 +1473,7 @@ class ExecutionRoute:
             raise ContractError("SCHEMA_VERSION")
         try:
             object.__setattr__(self, "execution_profile", ExecutionProfile(self.execution_profile))
-            object.__setattr__(self, "batch_kind", BatchKindV2(self.batch_kind))
+            object.__setattr__(self, "batch_kind", BatchKind(self.batch_kind))
         except ValueError as error:
             raise ContractError("EXECUTION_PROFILE_UNKNOWN") from error
         if isinstance(self.worker_count, bool) or self.worker_count not in (1, 2):
@@ -1594,13 +1490,13 @@ class ExecutionRoute:
 #: The whole support matrix. Three rows, no N>2 and no adaptive row.
 APPROVED_EXECUTION_ROUTES: tuple[ExecutionRoute, ...] = (
     ExecutionRoute(schema_version=4, execution_profile=ExecutionProfile.MPS_W2_FIRST_PASS,
-                   batch_kind=BatchKindV2.FIRST_PASS, worker_count=V4_PLATFORM_WORKER_COUNT),
+                   batch_kind=BatchKind.FIRST_PASS, worker_count=V4_PLATFORM_WORKER_COUNT),
     ExecutionRoute(schema_version=5,
                    execution_profile=ExecutionProfile.MPS_W1_FULL_RESTART_RETRY,
-                   batch_kind=BatchKindV2.FULL_RESTART_RETRY,
+                   batch_kind=BatchKind.FULL_RESTART_RETRY,
                    worker_count=V5_PLATFORM_WORKER_COUNT),
     ExecutionRoute(schema_version=6, execution_profile=ExecutionProfile.MPS_W1_FIRST_PASS,
-                   batch_kind=BatchKindV2.FIRST_PASS, worker_count=V6_PLATFORM_WORKER_COUNT),
+                   batch_kind=BatchKind.FIRST_PASS, worker_count=V6_PLATFORM_WORKER_COUNT),
 )
 
 _ROUTE_BY_PROFILE: Mapping[ExecutionProfile, ExecutionRoute] = MappingProxyType({
@@ -1647,10 +1543,10 @@ def resolve_execution_route(*, schema_version: object, execution_profile: object
         # retry all land here: the profile belongs to exactly one schema.
         raise ContractError("PROFILE_SCHEMA_MISMATCH")
     try:
-        kind = BatchKindV2(batch_kind)
+        kind = BatchKind(batch_kind)
     except (ValueError, TypeError) as error:
         raise ContractError("BATCH_KIND_UNKNOWN") from error
-    if kind is BatchKindV2.ADAPTIVE_POOL:
+    if kind is BatchKind.ADAPTIVE_POOL:
         raise ContractError("ADAPTIVE_UNSUPPORTED_ON_MACOS")
     if isinstance(worker_count, bool) or worker_count != route.worker_count:
         raise ContractError("PLATFORM_WORKER_COUNT_UNSUPPORTED")
@@ -1728,8 +1624,8 @@ class ParallelRuntimeConfigV5:
         return ExecutionProfile.MPS_W1_FULL_RESTART_RETRY
 
     @property
-    def batch_kind(self) -> BatchKindV2:
-        return BatchKindV2.FULL_RESTART_RETRY
+    def batch_kind(self) -> BatchKind:
+        return BatchKind.FULL_RESTART_RETRY
 
     @property
     def mps_minimum_headroom_bytes(self) -> int | None:
@@ -1816,8 +1712,8 @@ class ParallelRuntimeConfigV6:
         return ExecutionProfile.MPS_W1_FIRST_PASS
 
     @property
-    def batch_kind(self) -> BatchKindV2:
-        return BatchKindV2.FIRST_PASS
+    def batch_kind(self) -> BatchKind:
+        return BatchKind.FIRST_PASS
 
     @property
     def mps_minimum_headroom_bytes(self) -> int | None:

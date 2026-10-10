@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .contracts import (
-    BatchKindV2,
+    BatchKind,
     ExecutionProfile,
     ParallelRuntimeConfigV5,
     ParallelRuntimeConfigV6,
@@ -44,8 +44,8 @@ MPS_W1_FULL_RESTART_RETRY = str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY)
 MPS_W1_FIRST_PASS = str(ExecutionProfile.MPS_W1_FIRST_PASS)
 
 #: The only batch kind each profile admits. It is carried by the request, never inferred.
-W1_RETRY_BATCH_KIND = str(BatchKindV2.FULL_RESTART_RETRY)
-W1_FIRST_PASS_BATCH_KIND = str(BatchKindV2.FIRST_PASS)
+W1_RETRY_BATCH_KIND = str(BatchKind.FULL_RESTART_RETRY)
+W1_FIRST_PASS_BATCH_KIND = str(BatchKind.FIRST_PASS)
 
 #: The schema-v5/v6 document names, for the manifest's provenance fields.
 V5_CONFIG_BASENAME = "parallel_batch_v5_macos_mps_w1_retry.yaml"

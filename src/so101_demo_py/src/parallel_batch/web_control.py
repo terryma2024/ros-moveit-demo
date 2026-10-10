@@ -29,7 +29,7 @@ from so101_demo.runtime.unix_address import (
 #: disagree about where an endpoint may live. Mirrored by the teleop supervisor, which imports it.
 CANONICAL_CONTROL_SOCKET_ROOT = Path(f"/private/tmp/so101-control-{os.getuid()}")
 
-from .contracts import BatchKindV2, BatchRequestV2
+from .contracts import BatchKind, BatchRequest
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
@@ -105,8 +105,8 @@ class FixedCoordinatorControlServer:
     def __init__(self, *, coordinator, campaign_id: str, control_token: str, path: Path):
         # The closed schema-1 wire serves fixed batches only. Adaptive pools keep their own control path.
         request = coordinator.request
-        if not isinstance(request, BatchRequestV2) or request.batch_kind not in {
-                BatchKindV2.FIRST_PASS, BatchKindV2.FULL_RESTART_RETRY}:
+        if not isinstance(request, BatchRequest) or request.batch_kind not in {
+                BatchKind.FIRST_PASS, BatchKind.FULL_RESTART_RETRY}:
             raise WebControlError("FIXED_COORDINATOR_REQUEST_REQUIRED")
         if not isinstance(campaign_id, str) or _IDENTIFIER.fullmatch(campaign_id) is None:
             raise WebControlError("CAMPAIGN_ID_INVALID")

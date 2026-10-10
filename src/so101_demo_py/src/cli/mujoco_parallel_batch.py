@@ -30,8 +30,8 @@ from so101_demo.parallel_batch.artifacts import (
     write_recovery_receipt,
 )
 from so101_demo.parallel_batch.contracts import (
-    BatchKindV2,
-    BatchRequestV2,
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.adaptive_contracts import (
@@ -148,7 +148,7 @@ def _take_fixed_web_control(spec: PreparedBatch) -> _FixedWebControl | None:
     values = {key: os.environ.pop(key) for key in keys if key in os.environ}
     if len(values) != len(keys):
         raise CliError("FIXED_CONTROL_ENV_INCOMPLETE")
-    if not isinstance(spec.request, BatchRequestV2):
+    if not isinstance(spec.request, BatchRequest):
         raise CliError("FIXED_CONTROL_REQUEST_REQUIRED")
     token, campaign, epoch, socket_path = (values[key] for key in keys)
     if re.fullmatch(r"[0-9a-f]{64}", token) is None:
@@ -174,7 +174,7 @@ class _Parser(argparse.ArgumentParser):
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
     start_guard: object | None
-    request: BatchRequestV2 | PoolRequest | None
+    request: BatchRequest | PoolRequest | None
     adaptive_request: AdaptiveBatchRequest | None
     config: RuntimeConfig
     config_path: Path
@@ -1277,8 +1277,8 @@ def prepare_batch(
             )
             if contract_version != 2:
                 raise ContractError("LEGACY_CONTRACT_EXECUTION_FORBIDDEN")
-            batch_kind = BatchKindV2(options.batch_kind or "FIRST_PASS")
-            request = BatchRequestV2(
+            batch_kind = BatchKind(options.batch_kind or "FIRST_PASS")
+            request = BatchRequest(
                 options.batch_id,
                 mode,
                 selected,

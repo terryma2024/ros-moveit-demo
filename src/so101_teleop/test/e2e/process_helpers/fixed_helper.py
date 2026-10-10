@@ -31,8 +31,8 @@ for _entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
 from so101_demo.parallel_batch.artifacts import verify_attempt
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
-    BatchKindV2,
-    BatchRequestV2,
+    BatchKind,
+    BatchRequest,
     RunMode,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -67,7 +67,7 @@ def _atomic_write(path: Path, data: bytes) -> None:
 class _HelperCoordinator:
     """Minimal in-process coordinator state owned by the control endpoint."""
 
-    def __init__(self, request: BatchRequestV2, journal: CoordinatorJournal) -> None:
+    def __init__(self, request: BatchRequest, journal: CoordinatorJournal) -> None:
         self.request = request
         self.journal = journal
         self.terminal_reason: str | None = None
@@ -234,10 +234,10 @@ def _canonical_first_pass(args: argparse.Namespace, spec: dict, batch_root: Path
 
     journal = CoordinatorJournal.create(batch_root / "journal", args.batch_id)
     coordinator = _HelperCoordinator(
-        BatchRequestV2(
+        BatchRequest(
             batch_id=args.batch_id, run_mode=RunMode.EXECUTE,
             selected_point_ids=tuple(points), worker_count=args.worker_count,
-            evidence_root=batch_root, batch_kind=BatchKindV2.FIRST_PASS,
+            evidence_root=batch_root, batch_kind=BatchKind.FIRST_PASS,
         ),
         journal,
     )
@@ -345,13 +345,13 @@ def main(argv: list[str]) -> int:
 
     journal = CoordinatorJournal.create(batch_root / "coordinator", args.batch_id)
     coordinator = _HelperCoordinator(
-        BatchRequestV2(
+        BatchRequest(
             batch_id=args.batch_id,
             run_mode=RunMode.EXECUTE,
             selected_point_ids=tuple(args.point_id),
             worker_count=args.worker_count,
             evidence_root=batch_root,
-            batch_kind=BatchKindV2.FIRST_PASS,
+            batch_kind=BatchKind.FIRST_PASS,
         ),
         journal,
     )

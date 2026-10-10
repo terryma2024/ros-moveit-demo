@@ -11,7 +11,7 @@ import pytest
 
 from so101_demo.parallel_batch import artifacts as api
 from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity, BatchKindV2, BatchRequestV2, LeaseIdentity, PointStatus, RunMode, ValidationIdentity,
+    AttemptIdentity, BatchKind, BatchRequest, LeaseIdentity, PointStatus, RunMode, ValidationIdentity,
     load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
@@ -932,7 +932,7 @@ def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, m
     )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
-        request = BatchRequestV2('batch-a', mode, ('point-1',), 1, tmp_path, BatchKindV2.FIRST_PASS)
+        request = BatchRequest('batch-a', mode, ('point-1',), 1, tmp_path, BatchKind.FIRST_PASS)
         config = load_parallel_runtime_config_v3(
             PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
@@ -1047,7 +1047,7 @@ def test_adapter_requires_parent_durability_after_rename_failure(
     )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
-        request = BatchRequestV2('batch-a', mode, ('point-1',), 1, tmp_path, BatchKindV2.FIRST_PASS)
+        request = BatchRequest('batch-a', mode, ('point-1',), 1, tmp_path, BatchKind.FIRST_PASS)
         config = load_parallel_runtime_config_v3(
             PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
