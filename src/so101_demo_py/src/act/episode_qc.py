@@ -4,7 +4,7 @@ Data QC answers one question: is the recording itself valid training data? It re
 was pointed at, exactly as ``verify_audit_manifest`` listed it, and keeps every data check (lossless rows, causal
 labels, real camera acquisition, t+0.1 s references, seal and readback, native collection boundaries).
 
-It does **not** judge the task. Task success is the Teacher's ``teacher_endpoint_v2`` result; the old
+It does **not** judge the task. Task success is the Teacher's ``teacher_endpoint`` result; the old
 ``endpoint_pose_v1`` rule and the episode seal's ``task8_success`` are no longer QC criteria (design D2, "Old QC path").
 Instead ``verify_teacher_references`` cross-checks that the recording is consistent with the start and end source
 references the Teacher manifest recorded: that is data integrity, and it never reads the Teacher's PASS/FAIL.

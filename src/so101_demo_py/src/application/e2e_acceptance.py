@@ -1,7 +1,7 @@
 """ROS-free validation of correlated SO-101 MuJoCo E2E evidence.
 
 Acceptance of a new run (dynamic manifest v2) is decided by the Teacher's own ``teacher_task_result`` (the
-``teacher_endpoint_v2`` judgement: cup start/end pose and final upright) plus the genuine protections: the run finished
+``teacher_endpoint`` judgement: cup start/end pose and final upright) plus the genuine protections: the run finished
 normally with no failure, and the evidence is correlated to this workflow, request, session, reset epoch, perception
 input and frozen policy. Process-quality facts (the exact state trace, carry contact, micro-lift, release support,
 final-readback stillness, support contact and heights, Planning Scene shadow agreement) are still computed and reported as

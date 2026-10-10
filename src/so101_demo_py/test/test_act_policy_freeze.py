@@ -1,4 +1,4 @@
-"""The frozen policy set (A4c): `teacher_endpoint_v2` + `teacher_execution_policy_v1` + `episode_recorder_v1` replace the
+"""The frozen policy set (A4c): `teacher_endpoint` + `teacher_execution_policy_v1` + `episode_recorder_v1` replace the
 endpoint_pose_v1 `endpoint_policy`, each frozen with its full effective values and its sha256.
 
 The Teacher and the Recorder load their policies from the frozen manifest at runtime and refuse a mismatch: the Teacher
@@ -19,7 +19,7 @@ from test_act_first_episode_scope import _registry, _write_registry
 from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"
-POLICY_FILES = {"teacher_endpoint": CONFIG / "teacher_endpoint_v2.yaml",
+POLICY_FILES = {"teacher_endpoint": CONFIG / "teacher_endpoint.yaml",
                 "teacher_execution_policy": CONFIG / "teacher_execution_policy_v1.yaml",
                 "episode_recorder_policy": CONFIG / "episode_recorder_v1.yaml"}
 
@@ -46,9 +46,9 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
     manifest_path = freeze(tmp_path)
     document = json.loads(manifest_path.read_bytes())
     assert "endpoint_policy" not in document, "the endpoint_pose_v1 binding is replaced, not carried"
-    loaders = {"teacher_endpoint_v2": load_teacher_endpoint_policy, "teacher_execution_policy_v1": load_teacher_execution_policy,
+    loaders = {"teacher_endpoint": load_teacher_endpoint_policy, "teacher_execution_policy_v1": load_teacher_execution_policy,
                "episode_recorder_v1": load_recorder_policy}
-    sources = {"teacher_endpoint_v2": POLICY_FILES["teacher_endpoint"],
+    sources = {"teacher_endpoint": POLICY_FILES["teacher_endpoint"],
                "teacher_execution_policy_v1": POLICY_FILES["teacher_execution_policy"],
                "episode_recorder_v1": POLICY_FILES["episode_recorder_policy"]}
     assert set(POLICY_BINDINGS) == set(loaders) | {"teacher_execution_policy_v2", "teacher_execution_policy_v3"}   # v2/v3 are frozen instead of v1, never beside it
@@ -62,7 +62,7 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
         assert binding["policy_sha256"] == effective["policy_sha256"]
         assert binding["values"] == {key: value for key, value in effective.items() if key != "policy_sha256"}
     # the full effective values are readable without the YAML: the tolerances, the deadlines and the Recorder bounds
-    assert document["teacher_endpoint_v2"]["values"]["tolerances"]["final_xy_m"] == 0.020
+    assert document["teacher_endpoint"]["values"]["tolerances"]["final_xy_m"] == 0.020
     assert document["teacher_execution_policy_v1"]["values"]["execution_deadline_s"] == 180.0
     assert document["episode_recorder_v1"]["values"]["ready_timeout_s"] > 0
 
@@ -118,7 +118,7 @@ def test_a_policy_that_fails_its_closed_loader_is_refused_before_anything_is_wri
 def test_a_changed_or_inconsistent_policy_binding_is_refused(tmp_path, fault):
     manifest_path = freeze(tmp_path)
     document = json.loads(manifest_path.read_bytes())
-    binding = document["teacher_endpoint_v2"]
+    binding = document["teacher_endpoint"]
     policy_file = manifest_path.parent / binding["path"]
     if fault == "file_bytes":
         policy_file.write_bytes(policy_file.read_bytes() + b"# edited after the freeze\n")
@@ -142,7 +142,7 @@ def test_a_changed_or_inconsistent_policy_binding_is_refused(tmp_path, fault):
         elsewhere = tmp_path / "elsewhere.yaml"
         elsewhere.write_bytes(original)
         policy_file.symlink_to(elsewhere)
-    with pytest.raises(ValueError, match="INPUTS_POLICY_BINDING_INVALID: teacher_endpoint_v2"):
+    with pytest.raises(ValueError, match="INPUTS_POLICY_BINDING_INVALID: teacher_endpoint"):
         verify_frozen_inputs(manifest_path)
 
 
@@ -192,7 +192,7 @@ def test_the_teacher_loads_its_snapshot_and_policies_from_the_frozen_manifest(tm
 
 
 @pytest.mark.parametrize("name, change", [
-    ("teacher_endpoint_v2", lambda values: values["tolerances"].update(final_xy_m=0.5)),
+    ("teacher_endpoint", lambda values: values["tolerances"].update(final_xy_m=0.5)),
     ("teacher_execution_policy_v1", lambda values: values.update(execution_deadline_s=999.0)),
     ("episode_recorder_v1", lambda values: values.update(ready_timeout_s=3.0))])
 def test_a_consistently_forged_policy_that_differs_from_the_execution_snapshot_is_refused_everywhere(
@@ -216,9 +216,9 @@ def test_a_frozen_set_without_the_teacher_policies_is_refused_by_the_teacher_loa
     from test_act_child_recorder_binding import frozen_child_inputs
     manifest_path, _, _ = frozen_child_inputs(tmp_path)
     document = json.loads(manifest_path.read_bytes())
-    document.pop("teacher_endpoint_v2")
+    document.pop("teacher_endpoint")
     rehash(manifest_path, document)
-    with pytest.raises(ValueError, match="INPUTS_TEACHER_POLICY_REQUIRED: teacher_endpoint_v2"):
+    with pytest.raises(ValueError, match="INPUTS_TEACHER_POLICY_REQUIRED: teacher_endpoint"):
         load_teacher_frozen_inputs(manifest_path)
 
 
@@ -242,7 +242,7 @@ def test_act_first_episode_run_refuses_a_forged_policy_before_creating_its_run_r
     from so101_demo.cli import act_first_episode
     from test_act_child_recorder_binding import frozen_child_inputs
     manifest_path, document, _ = frozen_child_inputs(tmp_path)
-    forge_a_consistent_policy(manifest_path, "teacher_endpoint_v2",
+    forge_a_consistent_policy(manifest_path, "teacher_endpoint",
                               lambda values: values["tolerances"].update(final_xy_m=0.5))
     root = tmp_path / "live"
     assert act_first_episode.main(["run", "--inputs", str(manifest_path.parent), "--root", str(root),
@@ -287,7 +287,7 @@ def test_a_freeze_binds_v2_instead_of_v1_and_the_teacher_names_it(tmp_path):
     assert frozen_execution_policy_name(frozen) == "teacher_execution_policy_v2"
     assert loaded["files"]["config/act/" + V2_NAME]["sha256"] == binding["file_sha256"]
     assert set(verify_policy_bindings(frozen, manifest_path, loaded)) == {
-        "teacher_endpoint_v2", "teacher_execution_policy_v2", "episode_recorder_v1"}
+        "teacher_endpoint", "teacher_execution_policy_v2", "episode_recorder_v1"}
 
 
 def test_a_schema_2_document_cannot_be_bound_as_v1_nor_a_schema_1_one_as_v2():

@@ -426,7 +426,7 @@ class RosDynamicMujocoExecution:
         try:
             config_dir = Path(urdf_path).parents[2] / "config/act"
             self._teacher_config_dir = config_dir
-            endpoint_path = config_dir / "teacher_endpoint_v2.yaml"
+            endpoint_path = config_dir / "teacher_endpoint.yaml"
             execution_path = config_dir / "teacher_execution_policy_v1.yaml"
             endpoint_bytes, execution_bytes = endpoint_path.read_bytes(), execution_path.read_bytes()
         except (OSError, IndexError) as error:

@@ -63,7 +63,7 @@ def _teacher_fields() -> dict[str, object]:
     }
     return {
         "teacher_execution_status": "COMPLETED",
-        "teacher_task_result": {"rule_version": "teacher_endpoint_v2", "result": "PASS", "reasons": [],
+        "teacher_task_result": {"rule_version": "teacher_endpoint", "result": "PASS", "reasons": [],
                                 "start_observation": observation, "end_observation": observation},
         "teacher_start_observation": observation,
         "teacher_end_observation": observation,

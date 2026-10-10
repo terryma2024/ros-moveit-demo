@@ -1253,7 +1253,7 @@ def _teacher_v2_fields(failed, *, result="PASS", reasons=(), execution=None):
     start = _teacher_v2_observation([-0.02, -0.28, 0.165], 1.0)
     end = None if failed or result == "UNCONFIRMED" else _teacher_v2_observation([-0.08, -0.25, 0.1648], 9.0)
     task = {
-        "rule_version": "teacher_endpoint_v2", "policy_sha256": "b" * 64,
+        "rule_version": "teacher_endpoint", "policy_sha256": "b" * 64,
         "result": "UNCONFIRMED" if failed else result, "reasons": ["END_OBSERVATION_UNCONFIRMED: x"] if failed
         else list(reasons), "measured": {},
         "start_target": {"position": [-0.02, -0.28, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}},

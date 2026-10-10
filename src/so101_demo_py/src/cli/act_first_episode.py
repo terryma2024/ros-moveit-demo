@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--candidates", required=True)
     prepare.add_argument("--mode", default="formal", choices=MODES)
     prepare.add_argument("--teacher-endpoint", required=True,
-                         help="teacher_endpoint_v2 policy file, frozen with its sha256 and full effective values")
+                         help="teacher_endpoint policy file, frozen with its sha256 and full effective values")
     prepare.add_argument("--teacher-execution-policy", required=True,
                          help="teacher_execution_policy file (v1 constant place offset or v2 tilt-compensated place height), frozen with its sha256 and full effective values")
     prepare.add_argument("--episode-recorder-policy", required=True,
@@ -127,7 +127,7 @@ def _preflight(arguments) -> int:
     report = {
         "mode": arguments.mode,
         "inputs_sha256": manifest["inputs_sha256"],
-        "teacher_endpoint_v2": manifest.get("teacher_endpoint_v2"),
+        "teacher_endpoint": manifest.get("teacher_endpoint"),
         "teacher_execution_policy_v1": manifest.get("teacher_execution_policy_v1"),
         "teacher_execution_policy_v2": manifest.get("teacher_execution_policy_v2"),
         "teacher_execution_policy_v3": manifest.get("teacher_execution_policy_v3"),

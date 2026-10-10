@@ -1,4 +1,4 @@
-"""Data QC cross-checks the recording against the Teacher's teacher_endpoint_v2 start and end references.
+"""Data QC cross-checks the recording against the Teacher's teacher_endpoint start and end references.
 
 This is data integrity, not task success: the Teacher's PASS/FAIL never enters it (design D2, "Old QC path").
 """

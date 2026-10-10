@@ -98,7 +98,7 @@ def make_sealed_attempt(worker_root, identity, *, succeeded=True):
         # the 10-05 Teacher contract: the Teacher's own outcome decides PASSED, data QC is separate (DISABLED here)
         "schema": SCHEMA_V2, "teacher_execution_status": "COMPLETED",
         "teacher_task_result": {
-            "rule_version": "teacher_endpoint_v2", "policy_sha256": "a" * 64, "result": "PASS", "reasons": [],
+            "rule_version": "teacher_endpoint", "policy_sha256": "a" * 64, "result": "PASS", "reasons": [],
             "measured": {}, "start_target": start_target, "end_target": end_target,
             "start_observation": start_observation, "end_observation": end_observation},
         "teacher_start_observation": start_observation, "teacher_end_observation": end_observation,

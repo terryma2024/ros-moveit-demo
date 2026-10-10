@@ -46,7 +46,7 @@ def teacher_result(result: str = "PASS", reasons=(), *, end: bool = True) -> dic
     start_observation = observation([-0.02, -0.28, 0.165], 1.0)
     end_observation = observation([-0.08, -0.25, 0.165], 9.0) if end else None
     return {
-        "rule_version": "teacher_endpoint_v2",
+        "rule_version": "teacher_endpoint",
         "policy_sha256": "a" * 64,
         "result": result,
         "reasons": list(reasons),

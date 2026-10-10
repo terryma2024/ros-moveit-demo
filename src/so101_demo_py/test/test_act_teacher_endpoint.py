@@ -1,4 +1,4 @@
-"""Controls for the teacher_endpoint_v2 rule and the Teacher execution policy (pure, standalone)."""
+"""Controls for the teacher_endpoint rule and the Teacher execution policy (pure, standalone)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from so101_demo.act.teacher_endpoint import (
 from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"
-ENDPOINT_YAML = CONFIG / "teacher_endpoint_v2.yaml"
+ENDPOINT_YAML = CONFIG / "teacher_endpoint.yaml"
 EXECUTION_YAML = CONFIG / "teacher_execution_policy_v1.yaml"
 
 
@@ -62,7 +62,7 @@ def _run(policy, start=None, end=None, **kw):
 
 
 def test_endpoint_config_loads_with_expected_values(policy):
-    assert policy["rule_version"] == "teacher_endpoint_v2"
+    assert policy["rule_version"] == "teacher_endpoint"
     assert policy["tolerances"] == {
         "initial_position_m": 0.010, "initial_axis_rad": 0.15, "final_xy_m": 0.020,
         "final_z_m": 0.010, "final_axis_rad": 0.15, "settle_s": 0.5,
@@ -164,7 +164,7 @@ def test_pass_case(policy):
     result = _run(policy)
     assert result["result"] == "PASS"
     assert result["reasons"] == []
-    assert result["rule_version"] == "teacher_endpoint_v2"
+    assert result["rule_version"] == "teacher_endpoint"
     assert result["policy_sha256"] == policy["policy_sha256"]
     m = result["measured"]
     assert m["initial_position_error_m"] == pytest.approx(0.0, abs=1e-12)

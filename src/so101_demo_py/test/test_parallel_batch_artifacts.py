@@ -86,7 +86,7 @@ def teacher_v2_fields(*, execution='COMPLETED', result='PASS', end=True):
     start = observation([-0.02, -0.28, 0.165], 1.0)
     final = observation([-0.08, -0.25, 0.1648], 9.0) if end else None
     task = {
-        'rule_version': 'teacher_endpoint_v2', 'policy_sha256': 'c' * 64, 'result': result,
+        'rule_version': 'teacher_endpoint', 'policy_sha256': 'c' * 64, 'result': result,
         'reasons': [] if result == 'PASS' else ['END_OBSERVATION_UNCONFIRMED: observation is missing'],
         'measured': {},
         'start_target': {'position': [-0.02, -0.28, 0.165], 'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0}},

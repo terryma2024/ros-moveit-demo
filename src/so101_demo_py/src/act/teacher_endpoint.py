@@ -1,4 +1,4 @@
-"""The Teacher endpoint rule ``teacher_endpoint_v2`` and the Teacher execution policy (pure, standalone).
+"""The Teacher endpoint rule ``teacher_endpoint`` and the Teacher execution policy (pure, standalone).
 
 Task success is answered by one start pose and one end pose read from the executed world against frozen
 targets. This module owns the two closed policy documents and the pure judgement; it reads no runtime state.
@@ -18,7 +18,7 @@ import yaml
 ENDPOINT_KIND = "ACT_TEACHER_ENDPOINT_POLICY"
 EXECUTION_KIND = "ACT_TEACHER_EXECUTION_POLICY"
 SCHEMA_VERSION = 1
-RULE_VERSION = "teacher_endpoint_v2"
+RULE_VERSION = "teacher_endpoint"
 ENDPOINT_FIELDS = frozenset({"kind", "schema_version", "rule_version", "tolerances"})
 TOLERANCE_UNITS = {
     "initial_position_m": "m",

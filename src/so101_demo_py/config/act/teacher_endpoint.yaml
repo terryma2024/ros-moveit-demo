@@ -1,11 +1,11 @@
-# SO-101 Teacher endpoint rule teacher_endpoint_v2.
+# SO-101 Teacher endpoint rule teacher_endpoint.
 #
 # Task success is answered by one start pose and one end pose read from the executed world, against these
 # empirical development tolerances. settle_s is the wait after the controller is confirmed stopped and before
 # the single end snapshot. The file is frozen into the attempt inputs with its sha256 before the attempt.
 kind: ACT_TEACHER_ENDPOINT_POLICY
 schema_version: 1
-rule_version: teacher_endpoint_v2
+rule_version: teacher_endpoint
 tolerances:
   initial_position_m: 0.010
   initial_axis_rad: 0.15

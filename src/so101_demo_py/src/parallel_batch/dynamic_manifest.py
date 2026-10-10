@@ -22,7 +22,7 @@ EXECUTION_STATUSES = frozenset({
 FAILED_EXECUTIONS = frozenset({"FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE"})
 TASK_RESULTS = frozenset({"PASS", "FAIL", "UNCONFIRMED"})
 DATA_STATUSES = frozenset({"VALID", "INVALID", "DISABLED", "PENDING_QC"})
-RULE_VERSION = "teacher_endpoint_v2"
+RULE_VERSION = "teacher_endpoint"
 _TASK_FIELDS = frozenset({
     "rule_version", "policy_sha256", "result", "reasons", "measured", "start_target", "end_target",
     "start_observation", "end_observation",

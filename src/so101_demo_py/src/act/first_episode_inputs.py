@@ -60,12 +60,12 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
 #: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
 #: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
 _MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy", "execution_snapshot",
-                                "teacher_endpoint_v2", "teacher_execution_policy_v1", "teacher_execution_policy_v2", "teacher_execution_policy_v3",
+                                "teacher_endpoint", "teacher_execution_policy_v1", "teacher_execution_policy_v2", "teacher_execution_policy_v3",
                                 "episode_recorder_v1"})
 #: The three policy bindings that replaced the endpoint_pose_v1 `endpoint_policy` (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
 POLICY_BINDINGS = {
-    "teacher_endpoint_v2": ("teacher_endpoint_v2.yaml", "config/act/teacher_endpoint_v2.yaml"),
+    "teacher_endpoint": ("teacher_endpoint.yaml", "config/act/teacher_endpoint.yaml"),
     "teacher_execution_policy_v1": ("teacher_execution_policy_v1.yaml", "config/act/teacher_execution_policy_v1.yaml"),
     "teacher_execution_policy_v2": ("teacher_execution_policy_v2.yaml", "config/act/teacher_execution_policy_v2.yaml"),
     "teacher_execution_policy_v3": ("teacher_execution_policy_v3.yaml", "config/act/teacher_execution_policy_v3.yaml"),
@@ -348,7 +348,7 @@ _JSON_ROLES = frozenset({"contact_proposal", "contact_activation", "path_policy"
 def _policy_loader(name: str):
     """The closed loader of one frozen policy; every refusal is a ValueError."""
 
-    if name == "teacher_endpoint_v2":
+    if name == "teacher_endpoint":
         from .teacher_endpoint import load_teacher_endpoint_policy as loader
     elif name in EXECUTION_POLICY_BINDINGS:
         from .teacher_endpoint import load_teacher_execution_policy
@@ -637,7 +637,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
         except (OSError, yaml.YAMLError, AttributeError) as error:
             raise ValueError("INPUTS_POLICY_BINDING_INVALID: teacher_execution_policy_v1") from error
         execution_name = {version_: name_ for name_, version_ in EXECUTION_POLICY_BINDINGS.items()}.get(version, execution_name)
-    for name, source in (("teacher_endpoint_v2", teacher_endpoint),
+    for name, source in (("teacher_endpoint", teacher_endpoint),
                          (execution_name, teacher_execution_policy),
                          ("episode_recorder_v1", episode_recorder_policy)):
         if source is None:
