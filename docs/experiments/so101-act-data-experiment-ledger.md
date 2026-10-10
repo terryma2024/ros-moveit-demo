@@ -69,11 +69,31 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3550
+latest_checkpoint: CP-3551
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3551 — SUPPORT_NOT_PROVED diagnosed (read-only): the general path has never placed on the table; not a phase-B regression
+
+- OBSERVED, the predicate:
+  - _require_supported_bilateral (ros/dynamic_mujoco_execution.py:2019, called from _supported_release_preflight) requires actual_table_support (pick_place_live_evidence.py:449: cup–table contact with normal_force > 0 and signed_distance ≤ support_distance_max_m 0.002) plus bilateral fingertip contacts.
+  - The general path always runs this check (`not self._teacher_run()`); the Teacher path never does.
+- OBSERVED, the measured state: cup_test_forward_5cm (fixbatch fixed-n2, worker-02) at the terminal sample:
+  - cup z 0.182648, table_contact false, left/right contacts 4/4, max force 3.19 N;
+  - resolved DESCEND_TO_PLACE z = 0.217634413, which is exactly the raw place.tcp_world z from config/policies/dynamic_cup_pick/mujoco.yaml with no offset.
+- OBSERVED, why no offset reaches the general path: _place_target applies any offset only when `_execution_snapshot_root` is set, and that is set only in the Teacher frozen-inputs branch (dynamic_runtime.py:920). This was identical before phase B (a5a2bf99f^:2517). Phase B removed only Teacher-gated code; the general path read only the three common fields from the old v1 file, and those values are unchanged.
+- OBSERVED, history: the same 15 mm hover (offline offset 0 → cup z 0.18012 against rest 0.165; support first true at −12.75 mm) was found on the Teacher path at CP-3395/3397/3398, which is where −13.25 mm and later the tilt-compensated height came from. main has the same place pose and no support gate, so it drops the cup from the hover.
+- INFERRED: the general support-gated release has never passed live. The scene-frame defect (CP-3548) masked this independent latent defect.
+- Planned fix after phase D (CP-3394, recommended):
+  - a constant general place offset place_descend_offset_m −0.01325 in general_runtime_policy.yaml and its loader (range ±0.05 m);
+  - _place_target applies it to DESCEND_TO_PLACE when there is no snapshot root and the run is not a Teacher run;
+  - the support gate stays on.
+  - RED tests: the general DESCEND_TO_PLACE z equals hover + offset; other states and Teacher runs are unchanged; the loader requires the field and rejects out-of-range values.
+  - Live: rerun fixed-N and adaptive; table_contact must be true at DETACH_MOVEIT with cup z ≈ 0.167.
+  - Caveat: the offset was calibrated on the Teacher grasp; compare the general object.cup_to_tcp_grasp with the Teacher's frozen grasp before trusting it.
+- Notes: /tmp/so101-debug-act-data-66c42e4c/support-not-proved-diag/.
 
 ## CP-3550 — fix batch done (HEAD 978e39122): scene frames published, SCENE_SOURCE_ABSENT fail-fast, dead-coordinator projection, Mapping lint; general path now reaches the next gate DYNAMIC_RELEASE_SUPPORT_NOT_PROVED
 
