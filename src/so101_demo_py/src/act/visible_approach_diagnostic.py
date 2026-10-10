@@ -17,7 +17,7 @@ from so101_demo.adapters.act.physics import model_sha256
 _SCENE_SHA = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
 _PLUGIN_SHA = "612212d5a61c74c4086c0cf2b229cfb5552e58055f8744ee0e9e4d46db655fae"
 _PROFILE_SHA = "b9c73aa3ee5e75c049f13c9f39aea692fa7635c05290a7a2c74d09d2c4c0e687"
-_MODEL_SHA = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
+_MODEL_SHA = "17c415d9541be3c13ce43d8650a0879b5b2d7f62177cca7601500fd94d3d878e"
 _PROFILE_KEYS = frozenset({
     "schema_version", "kind", "eligible_for_collection", "model_sha256",
     "scene_sha256", "source_route_sha256", "cup_start_m", "joint_start_rad",

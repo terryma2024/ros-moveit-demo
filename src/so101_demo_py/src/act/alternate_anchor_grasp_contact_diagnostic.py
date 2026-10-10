@@ -17,7 +17,7 @@ from so101_demo.adapters.act.phase_contact_allowlist import PhaseContactAllowlis
 
 
 _SCENE_SHA = "ea7e18df15dd67e8beddcc35d66eab6fda128145a7877b578fc641d282c114cb"
-_MODEL_SHA = "b3b2e83cc275b0dcfcce7b91ae95031bb242433ec0e4626bff052cf3bccb8114"
+_MODEL_SHA = "17c415d9541be3c13ce43d8650a0879b5b2d7f62177cca7601500fd94d3d878e"
 _PLUGIN_SHA = "612212d5a61c74c4086c0cf2b229cfb5552e58055f8744ee0e9e4d46db655fae"
 _ANCHORS_SHA = "91bbecbfd0914507ff7e55cd554960ce089375b5944809732512e645de42d10b"
 _PROFILE_SHA = "1466bd37e05c5ff8c1a7e6ffed2efdfbdecc87a7234ed1148ac5f84988769ac7"

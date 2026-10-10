@@ -17,22 +17,22 @@ PACKAGE = Path(__file__).resolve().parents[1]
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 GOLDEN = {
-    "no_contact:0": "520cc6dcd81ef646f54ab99607ca7d24f72f4927b75f11393520e57625e874b0",
-    "no_contact:7": "cb79bc31a65e12b3bc8f1bf373b74ba284398fc25f4fd8b3a7f5e4dd9a9c36f3",
-    "table_only:0": "bc0026a363986059367fc6c296ca4f8ab9ffecf7ca5e68fc3948c3cfee29dc72",
-    "table_only:7": "b1de41d787fb958ca8c1d7cd3075ef06e07840331fdc37d45d9bb23700b41d4e",
-    "left_only:0": "b1a5702f9fee3eeb2530cca04204f175761cf5beaded92c32d8cd81e3b308ef4",
-    "left_only:7": "7cc9c0ebdb4fc280bad042a79d8567f5ff017f3492c851dfea60345907fa8428",
-    "right_only:0": "5ab7fd5be8d03e41b67976e25a0e3236a385af1e935714c09d3687e80f27125b",
-    "right_only:7": "333be6a6213ac22092ad22eb39fb68816cd7e1e959e10d4b556218567d2e66e6",
-    "bilateral_touch:0": "4214347c8c64c7b8927e01731386ede979c7775c60cb34f927090fa968019e2f",
-    "bilateral_touch:7": "f8cfe7a79c78e6f6331adb3b7174a302617061eb49fd31064fcc35b0ff02193a",
-    "over_compression:0": "4aba4aac70efc8c96612a8db2b8ef86613730cf25b6e7e92c7abb32f47f57eeb",
-    "over_compression:7": "5bf2778ebbde0e39d19e29ec45bcb7b037882f3411696799f9881cc92ba438f8",
-    "micro_lift_slip:0": "e0e06aee6229bc619d0b74b075c6079c327a03cc629ca3974f4d38a7d1621816",
-    "micro_lift_slip:7": "6a5086afdd5b43fc68e4c1fc37255ffeb79b6938226983a7bcb37c227a8f28e5",
-    "stable_hold:0": "7b5c6d08d65ea22f5c54f82ad590fe0db78f7034d6df826e8df89f59f1b0b6df",
-    "stable_hold:7": "3feed5ab83a3218bdcb56e22ba56385a2519b9e3a3473d7c46e7c56b95c7f632",
+    "no_contact:0": "bf4826ead84092ef0badacbb7776a2b8fd48f03edafc24881a872cb6b4b4307e",
+    "no_contact:7": "cb2f4d7b5cf6408fcf04f5da347c5d50e3c85d145257c420e92266384a347e3d",
+    "table_only:0": "f12b04e2163421007ee8884ea0ee7596edb5f8bb73e161887b53463a006747f1",
+    "table_only:7": "261901d42b2bfbff587736cc9874b7e94c0433d38e55b14cadb6288246733943",
+    "left_only:0": "f4470ad4a163f9d94104af2db7c68535366dd20ee567f5c4ab7fd6c9b762bf8b",
+    "left_only:7": "e3056136d869fc3e341567ed124f118cef47949c4e5c54a1a7b3ccd3aaeb567c",
+    "right_only:0": "abe79a18f6fd928ac75f2ef1d980861ad626735982ffb2a23718cb743d3fa494",
+    "right_only:7": "cf28cbfb04a5e628ebd41fccfc2497fda642cbafe91e30f78b2b3e5247f25c15",
+    "bilateral_touch:0": "2b368bdc07fe5e8d7f260a4f0edbb860c6bd59914f4059683ce061cdb645c771",
+    "bilateral_touch:7": "70f9630e7b0082ccdb5fe1183753f00de1c1dd75795aa96683b8383027e1ec62",
+    "over_compression:0": "2ae2725fe04c800ed3edf23f31a55eea1c051ddc0857d0654ff569ab38672ab9",
+    "over_compression:7": "4767ebb508bde3900b0fcf97389b3a6dcac93156e6cb2408b79b77191a253126",
+    "micro_lift_slip:0": "5b18b43da897b43ac49c6587d0985ffccd4cb2bc70078b250a64ab87f29181d4",
+    "micro_lift_slip:7": "4b775fb8c99ca24723dab6ab63c7013a2428cd2fa7de6cc366833710ad2eaaa1",
+    "stable_hold:0": "d88c68de4c0dec69df251a092adc35708b4bd75024720887082e115a350075c2",
+    "stable_hold:7": "5efd43ed70755da56cb1253b22d159a3dca2eb6f47897b857388c4c4454e7a40",
 }
 
 
