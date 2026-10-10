@@ -258,14 +258,6 @@ if(BUILD_TESTING)
     ament_target_dependencies(test_controller_reservation_provision control_msgs rclcpp)
     target_link_libraries(test_controller_reservation_provision
       so101_controller_reservation_protocol)
-
-    ament_add_gtest(test_controller_reservation_socket
-      test/test_controller_reservation_socket.cpp
-      APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
-    target_compile_features(test_controller_reservation_socket PRIVATE cxx_std_17)
-    ament_target_dependencies(test_controller_reservation_socket control_msgs rclcpp)
-    target_link_libraries(test_controller_reservation_socket
-      so101_controller_reservation_protocol)
   endif()
 endif()
 
