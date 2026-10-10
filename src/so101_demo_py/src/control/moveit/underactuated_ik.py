@@ -346,8 +346,14 @@ class UnderactuatedPoseIk:
 
     @staticmethod
     def orientation_error_rad(actual: PoseEvidence, target: PoseEvidence) -> float:
-        dot = abs(sum(a * b for a, b in zip(actual.orientation_xyzw, target.orientation_xyzw)))
-        return 2.0 * math.acos(min(1.0, max(-1.0, dot)))
+        # theta = 2*acos(|a.b|) loses half the digits near zero (acos'(1) is infinite: a 1e-16 rounding of |a.b| became 3e-8 rad
+        # and made an identical pose "differ"). For unit quaternions theta = 4*atan2(|a - s*b|, |a + s*b|), s = sign(a.b),
+        # which is exactly 0 for identical inputs and keeps full relative accuracy.
+        a, b = actual.orientation_xyzw, target.orientation_xyzw
+        sign = -1.0 if sum(x * y for x, y in zip(a, b)) < 0.0 else 1.0
+        difference = math.sqrt(sum((x - sign * y) ** 2 for x, y in zip(a, b)))
+        total = math.sqrt(sum((x + sign * y) ** 2 for x, y in zip(a, b)))
+        return 4.0 * math.atan2(difference, total)
 
     def _residual(self, positions: np.ndarray, target: PoseEvidence) -> np.ndarray:
         return self._residual_from_matrix(
