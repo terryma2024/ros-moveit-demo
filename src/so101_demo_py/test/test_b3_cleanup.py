@@ -33,12 +33,16 @@ def test_the_act_controller_yaml_is_the_original_stock_config_plus_the_stock_nec
     assert "so101_mujoco_support/" not in text and "enable_topic_command" not in text
 
 
+# CP-3527 (Head merge): the Head Search line owns a neck port (ros_neck, whose qualification readback builds it through its
+# broker-controller stand-in, i.e. broker_execution) and a controller reservation client/provision stack for its owned neck
+# controller. Those are Head-line modules, not the broker chain this gate retires: the broker, the ROS broker driver, the
+# leased action client and the console script stay deleted.
 DELETED_MODULES = [
     ("adapters/act", "_".join(parts)) for parts in (
-        ("command", "broker"), ("ros", "broker"), ("broker", "execution"), ("leased", "action", "client"),
-        ("controller", "reservation", "client"), ("dispatch", "transaction"), ("teacher", "native", "runtime"),
+        ("command", "broker"), ("ros", "broker"), ("leased", "action", "client"),
+        ("dispatch", "transaction"), ("teacher", "native", "runtime"),
         ("teacher", "bound", "authority"), ("teacher", "cup", "safety"), ("teacher", "physics", "source"),
-        ("pick", "place", "child", "port"), ("pick", "place", "sources"), ("ros", "neck"))
+        ("pick", "place", "child", "port"), ("pick", "place", "sources"))
 ] + [("act", "_".join(parts)) for parts in (
     ("native", "dispatch"), ("native", "stop"), ("broker", "stop", "policy"), ("teacher", "bound", "timing"),
     ("contact", "live", "session"))] + [("cli", "act_command_" + "broker"), ("runtime", "teacher_worker_" + "lifecycle")]
@@ -51,14 +55,15 @@ def test_a_deleted_module_is_not_importable_and_has_no_file(package, module):
 
 
 def test_the_c_plus_plus_broker_chain_is_gone_and_the_evidence_plugin_stays():
+    # CP-3527: the Head Search owned neck controller (broker_owned_trajectory_controller, the controller reservation
+    # protocol/socket/provision and bound_reservation) is Head-line native code and is built again; the native sampler
+    # of the retired broker chain stays gone and the Teacher's controllers stay the stock JointTrajectoryController.
     support = REPOSITORY / "src/so101_mujoco_support"
-    gone = ["src/broker_owned" + "_trajectory_controller.cpp", "src/native_sampler" + "_c_api.cpp",
-            "src/controller_reservation" + "_socket.cpp", "so101_trajectory" + "_controllers.xml",
-            "include/so101_mujoco_support/bound" + "_reservation.hpp"]
+    gone = ["src/native_sampler" + "_c_api.cpp"]
     assert not any((support / name).exists() for name in gone)
     cmake = (support / "CMakeLists.txt").read_text()
     assert "so101_simulation_evidence_plugin" in cmake and "test_physics_step_fence" in cmake
-    assert "reserv" + "ation" not in cmake and "native_trajectory" + "_sampler" not in cmake
+    assert "native_trajectory" + "_sampler" not in cmake
 
 
 def test_the_vendored_jtc_is_not_in_the_worktree_and_the_snapshot_does_not_read_it():

@@ -9,7 +9,7 @@ from so101_demo.adapters.act.head_stopped_capture import StoppedHeadCapture
 from so101_demo.adapters.act.head_original_router import HeadOriginalRouter
 
 
-def setup(monkeypatch):
+def _router_setup(monkeypatch):  # not `setup`: pytest 7 treats a module-level setup() as an xunit module hook
     row = observer_setup(monkeypatch, clock=FakeTime(wall=10., sim=1.),
                          camera_frame='head_camera_frame', bind_port_sink=False)
     node, port, primary = row.node, row.port, row.observer
@@ -28,7 +28,7 @@ def setup(monkeypatch):
 
 
 def test_actual_original_callbacks_feed_shared_primary_after_the_one_binding(monkeypatch):
-    node,port,primary,capture,router,events,faults,originals=setup(monkeypatch)
+    node,port,primary,capture,router,events,faults,originals=_router_setup(monkeypatch)
     try:
         router.bind_primary(primary)
         capture._image(image());capture._info(info())
@@ -46,7 +46,7 @@ def test_actual_original_callbacks_feed_shared_primary_after_the_one_binding(mon
 
 
 def test_invalid_original_joint_faults_before_arm_without_waiting_for_a_poll(monkeypatch):
-    _,port,primary,_,router,_,faults,originals=setup(monkeypatch)
+    _,port,primary,_,router,_,faults,originals=_router_setup(monkeypatch)
     try:
         router.bind_primary(primary);bad=sample(1.01);bad.velocity=[];port._feedback(bad)
         assert primary.failed and primary.local_state.faulted and primary._closed_admission and faults
@@ -56,7 +56,7 @@ def test_invalid_original_joint_faults_before_arm_without_waiting_for_a_poll(mon
 
 
 def test_router_cannot_rebind_the_original_primary(monkeypatch):
-    _,port,primary,_,router,_,faults,_=setup(monkeypatch)
+    _,port,primary,_,router,_,faults,_=_router_setup(monkeypatch)
     try:
         router.bind_primary(primary)
         with pytest.raises(PermissionError):router.bind_primary(primary)
@@ -64,7 +64,7 @@ def test_router_cannot_rebind_the_original_primary(monkeypatch):
 
 
 def test_retiring_live_original_input_latches_primary_before_it_disappears(monkeypatch):
-    _,port,primary,_,router,_,faults,_=setup(monkeypatch)
+    _,port,primary,_,router,_,faults,_=_router_setup(monkeypatch)
     try:
         router.bind_primary(primary)
         router.retire()
@@ -73,7 +73,7 @@ def test_retiring_live_original_input_latches_primary_before_it_disappears(monke
 
 
 def test_retirement_fault_callback_sees_latched_admission_before_input_is_removed(monkeypatch):
-    _,port,primary,_,router,_,_,_=setup(monkeypatch);calls=[]
+    _,port,primary,_,router,_,_,_=_router_setup(monkeypatch);calls=[]
     def fault(reason):
         assert primary.failed and primary.local_state.faulted and primary._closed_admission
         assert not router._closed and not router._lock.locked()
@@ -87,7 +87,7 @@ def test_retirement_fault_callback_sees_latched_admission_before_input_is_remove
 
 
 def test_primary_binding_does_not_seed_or_replay_previous_cached_metadata(monkeypatch):
-    node,port,primary,capture,router,_,_,_=setup(monkeypatch)
+    node,port,primary,capture,router,_,_,_=_router_setup(monkeypatch)
     try:
         capture._image(image());capture._info(info());capture.take_image()
         router.bind_primary(primary)
