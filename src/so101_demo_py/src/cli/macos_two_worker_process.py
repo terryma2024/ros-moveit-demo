@@ -1,4 +1,4 @@
-"""One macOS W2 campaign Worker: register with the supervisor, then drive three round trips.
+"""One macOS two-worker campaign Worker: register with the supervisor, then drive three round trips.
 
 The registered ACK is written first and atomically. The supervisor refuses to promote a Worker that
 has not acknowledged, so a Worker that reaches the task loop without one cannot exist.
@@ -42,7 +42,7 @@ if len(station_arguments) == 3:
     config = default_task_station_config(station_session, Path(station_root))
     environment = station_environment(base=dict(os.environ))
     environment["ROS_DOMAIN_ID"] = station_domain
-    # Owner-tree cooperation (Task 6): exactly one STATION intent may exist per station spawn, so
+    # Owner-tree cooperation: exactly one STATION intent may exist per station spawn, so
     # only the boundary that actually calls `Popen` writes it - `runtime.task_stack` - and this
     # Worker writes no record of its own, not even on the station's failure paths, because the
     # abandonment of a station that never started is that same boundary's job. What the Worker
@@ -106,12 +106,12 @@ try:
     infer_results = []
     if lease_argument:
         # The Worker now speaks the production path: it reads the identity the entry point bound for it
-        # and asks the shared Broker through `W2BrokerPort`, so its inference is a real model call gated
+        # and asks the shared Broker through `TwoWorkerBrokerPort`, so its inference is a real model call gated
         # by the one-time table instead of an IPC-shape probe.
         from types import SimpleNamespace
 
         from so101_demo.parallel_batch.contracts import ExecutionKind
-        from so101_demo.runtime.macos_w2_broker_port import BrokerAuthority, W2BrokerPort
+        from so101_demo.runtime.macos_two_worker_broker_port import BrokerAuthority, TwoWorkerBrokerPort
         from so101_demo.runtime.parallel_ipc_darwin import DarwinPermissionOnlyClient as _DarwinClient
 
         lease_identity = {name: lease_document.get(name)
@@ -121,7 +121,7 @@ try:
             broker_max_frame_bytes=8 * 1024 * 1024,
             executing_hard_timeout_s=float(lease_document.get("deadline_s", 240.0)),
             broker_recovery_timeout_s=90.0)
-        port = W2BrokerPort(
+        port = TwoWorkerBrokerPort(
             coordinator=lambda: authority, authority=authority, config=port_config,
             resources=SimpleNamespace(worker_root=Path(lease_document["worker_root"])),
             connection=_DarwinClient(endpoint_path=endpoint))

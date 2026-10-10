@@ -568,7 +568,7 @@ class WorkerResourceAllocator:
         self._start_guard = start_guard
         self.allocation_policy = (
             AllocationPolicy(
-            # v4's exact-W2 platform claim, not the inherited v3 field: `max_worker_count` stays
+            # v4's exact two-worker platform claim, not the inherited v3 field: `max_worker_count` stays
             # frozen at its v3 value, and `AllocationPolicy` requires
             # `len(ros_domain_ids) >= max_worker_count`.
             config.worker_count if isinstance(config, ParallelRuntimeConfigMacosMpsTwoWorker)
@@ -1761,13 +1761,13 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _load_cli_config(path):
-    """The active execution document: v3 unchanged, v4 added for macOS MPS W2; v1 stays read-only.
+    """The active execution document: v3 unchanged, v4 added for macOS MPS two-worker; v1 stays read-only.
 
-    The schema gate lives in one place (`w2_composition.load_execution_config`) so the CLI, this
+    The schema gate lives in one place (`two_worker_composition.load_execution_config`) so the CLI, this
     allocator and the offline tests cannot disagree about which documents may execute.
     """
 
-    from .w2_composition import load_execution_config
+    from .two_worker_composition import load_execution_config
 
     try:
         return load_execution_config(Path(path))

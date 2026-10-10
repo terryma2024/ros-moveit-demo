@@ -74,7 +74,7 @@ class ExecutionProfile:
 
 
 def _execution_mode_for_worker_count(worker_count: int) -> str:
-    """W1 is one sequential Worker; W2 is two parallel ones. There is no third shape."""
+    """single-worker is one sequential Worker; two-worker is two parallel ones. There is no third shape."""
 
     if worker_count == 1:
         return "SEQUENTIAL"
@@ -109,7 +109,7 @@ def macos_execution_profiles() -> tuple[ExecutionProfile, ...]:
 #: The macOS support matrix this service advertises: exactly three combinations.
 MACOS_EXECUTION_PROFILES: tuple[ExecutionProfile, ...] = macos_execution_profiles()
 
-#: The only worker counts macOS may offer: W1 and W2.
+#: The only worker counts macOS may offer: single-worker and two-worker.
 MACOS_WORKER_COUNTS: tuple[int, ...] = (1, 2)
 
 #: The installed document each profile resolves to, beside the configured execution document.
@@ -190,7 +190,7 @@ def macos_execution_profile_for_config(config) -> ExecutionProfile | None:
 def describe_execution_document(path: Path, *, platform: str | None = None) -> ExecutionDocument:
     """Load one installed execution document: real bytes, real hash, real platform combination."""
 
-    from so101_demo.parallel_batch.w2_composition import load_execution_config_for_schema
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config_for_schema
 
     resolved = Path(path)
     config = load_execution_config_for_schema(resolved, platform=platform)
@@ -425,7 +425,7 @@ class PreflightEngine:
     def _macos_key_reasons(self, request, profile: ExecutionProfile) -> list[str]:
         """The routing key must be named exactly; the point count never supplies it.
 
-        The key is resolved against the shared closed matrix, so a v4 document claiming W1 and a
+        The key is resolved against the shared closed matrix, so a v4 document claiming single-worker and a
         v5 document claiming first-pass are refused here for the same reason the adapter refuses
         them: the combination is not in the table.
         """

@@ -138,7 +138,7 @@ def test_the_context_carries_the_optional_parent_token(tmp_path):
 @pytest.mark.parametrize(
     "argv",
     [
-        ["/usr/bin/python3", "-m", "so101_demo.cli.macos_w2_worker", "ack.json", "--slot", "0"],
+        ["/usr/bin/python3", "-m", "so101_demo.cli.macos_two_worker_process", "ack.json", "--slot", "0"],
         ["launcher"],
         [],
         ["/opt/venv/bin/python", "π", "--flag=1", "value with spaces"],
@@ -165,7 +165,7 @@ def test_command_fingerprint_excludes_the_launcher():
 
 
 def test_begin_writes_the_exact_intent_document_before_it_returns(tmp_path):
-    argv = ["/usr/bin/python3", "-m", "so101_demo.cli.macos_w2_campaign", "--batch-id", BATCH]
+    argv = ["/usr/bin/python3", "-m", "so101_demo.cli.macos_two_worker_campaign", "--batch-id", BATCH]
     recorder = OwnerSpawnRecorder.begin(
         context=_context(tmp_path),
         role="CAMPAIGN",

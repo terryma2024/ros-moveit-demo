@@ -17,13 +17,13 @@ from so101_demo.parallel_batch.contracts import (
     ParallelRuntimeConfigLinuxCuda,
     ParallelRuntimeConfigMacosMpsTwoWorker,
 )
-from so101_demo.parallel_batch.w2_composition import (
-    EXACT_W2_WORKERS,
+from so101_demo.parallel_batch.two_worker_composition import (
+    EXACT_TWO_WORKERS,
     CompositionError,
-    W2CampaignPlan,
+    TwoWorkerCampaignPlan,
     assert_no_host_platform_calls,
-    compose_w2_campaign,
-    exact_w2_slots,
+    compose_two_worker_campaign,
+    exact_two_worker_slots,
     load_execution_config,
     load_execution_config_for_schema,
 )
@@ -97,15 +97,15 @@ def test_two_slots_exist_even_for_a_single_point():
     slot count is a platform claim rather than a point assignment.
     """
 
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
     assert slots.slot_ids == ("slot-0", "slot-1")
     assert slots.assigned_points == (("slot-0", None), ("slot-1", None))
     assert slots.idle_slots == ("slot-0", "slot-1")
-    assert len(slots.slot_ids) == EXACT_W2_WORKERS
+    assert len(slots.slot_ids) == EXACT_TWO_WORKERS
 
 
 def test_slots_never_assign_points_for_a_longer_campaign():
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
     assert [point for _slot, point in slots.assigned_points] == [None, None]
     document = slots.to_document()
     assert document["slot_ids"] == ["slot-0", "slot-1"]
@@ -114,7 +114,7 @@ def test_slots_never_assign_points_for_a_longer_campaign():
 
 
 def test_no_points_at_all_still_yields_two_idle_slots():
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
     assert slots.idle_slots == ("slot-0", "slot-1")
 
 
@@ -136,14 +136,14 @@ def _darwin_plan(tmp_path, **overrides):
         "broker_birth_identity": 99,
     }
     arguments.update(overrides)
-    return compose_w2_campaign(**arguments)
+    return compose_two_worker_campaign(**arguments)
 
 
 def test_the_plan_resolves_every_platform_value(tmp_path):
     """The manifest records resolved values: no `auto`, and the real platform combination."""
 
     plan = _darwin_plan(tmp_path)
-    assert isinstance(plan, W2CampaignPlan)
+    assert isinstance(plan, TwoWorkerCampaignPlan)
     document = plan.to_document()
     assert document["schema_version"] == 4
     assert document["accelerator"] == "mps"
@@ -203,16 +203,16 @@ def test_the_plan_refuses_a_worker_count_that_is_not_two(tmp_path):
     config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     object.__setattr__(config, "worker_count", 4)
     with pytest.raises(CompositionError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
-        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
+        compose_two_worker_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=tmp_path)
-    assert EXACT_W2_WORKERS == 2
+    assert EXACT_TWO_WORKERS == 2
 
 
 def test_the_plan_refuses_a_relative_evidence_root(tmp_path):
     config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     with pytest.raises(CompositionError, match="EVIDENCE_ROOT"):
-        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
+        compose_two_worker_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="b",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=Path("relative/root"))
 
@@ -220,7 +220,7 @@ def test_the_plan_refuses_a_relative_evidence_root(tmp_path):
 def test_the_plan_refuses_a_missing_campaign_id(tmp_path):
     config = load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG)
     with pytest.raises(CompositionError, match="CAMPAIGN_ID"):
-        compose_w2_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="",
+        compose_two_worker_campaign(config=config, config_path=MACOS_MPS_TWO_WORKER_CONFIG, campaign_id="",
                             batch_id="batch", selected_point_ids=("p1",),
                             evidence_root=tmp_path)
 

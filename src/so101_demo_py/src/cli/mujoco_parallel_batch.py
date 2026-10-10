@@ -1109,14 +1109,14 @@ def compose_default_start_guard(policy):
 
 
 def _load_runtime_config(path: Path):
-    """New execution loads the closed document: v3 unchanged, v4 added for macOS MPS W2.
+    """New execution loads the closed document: v3 unchanged, v4 added for macOS MPS two-worker.
 
-    The gate is delegated to `w2_composition.load_execution_config` so the CLI, the resource
+    The gate is delegated to `two_worker_composition.load_execution_config` so the CLI, the resource
     allocator and the offline tests cannot drift apart on which schemas are executable. v1 and v2
     remain history only, exactly as before.
     """
 
-    from so101_demo.parallel_batch.w2_composition import load_execution_config
+    from so101_demo.parallel_batch.two_worker_composition import load_execution_config
 
     return load_execution_config(Path(path))
 
@@ -1437,7 +1437,7 @@ def _identity(lease, mode):
 
 
 class _ArtifactResults:
-    """Produce reviewed Task 4 artifacts for the Worker and verify recovery receipts."""
+    """Produce reviewed artifacts for the Worker and verify recovery receipts."""
 
     def __init__(self, worker_roots: Mapping[str, Path], mode: RunMode, *,
                  collection_scope=None, collection_inputs_manifest=None, clock=time.monotonic):
@@ -2473,7 +2473,7 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         runtime_kwargs = runtime_ports.kwargs()
         runtime_kwargs["reserve_workspace"] = results.reserve_workspace
         runtime_kwargs["pose_receive_timeout_s"] = teacher_execution_bound_s(config)
-        # the scope document this worker's episode belongs to, if the specification names one (CP-2862): the path
+        # the scope document this worker's episode belongs to, if the specification names one: the path
         # travels in the specification because that is how every other fact from outside the worker arrives here,
         # and a worker whose specification omits it records nothing, exactly as before.
         _scope_path = document.get("episode_scope_path")
@@ -2497,8 +2497,8 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
         # frozen manifest to build it from: `_frozen` is act_first_episode.py's name and lives in that
         # process, not this one. Whether the batch path is given the frozen set, or the composition that
         # already reads it writes the document, is the one question left before the last wire is complete
-        # (CP-2862). Until then the port is absent, which is the state every existing caller is in.
-        # Recording happens in the episode's own process, not here (CP-2861): the physical facts the row audit
+        # Until then the port is absent, which is the state every existing caller is in.
+        # Recording happens in the episode's own process, not here: the physical facts the row audit
         # needs live on the far side of a subprocess boundary, so an episode opened here would see the parent's
         # frames and boundaries rather than the episode's. The parent still owns the result port and the commit.
         broker_proxy = _WorkerBrokerProxy(
@@ -2716,7 +2716,7 @@ class ProductionBatchComposition:
         self.journal = None
         self._startup_stage = "constructor"
         try:
-            # the scope document the episodes of this run belong to (CP-2862). Optional: a composition told nothing about
+            # the scope document the episodes of this run belong to. Optional: a composition told nothing about
             # it produces workers whose specifications omit the field, which is the behaviour every existing caller has.
             # Popped rather than read: _initialize names its keywords one by one and takes no **kwargs, so a key left
             # in the mapping would reach it as an unexpected argument and fail the whole run at construction.
@@ -2795,7 +2795,7 @@ class ProductionBatchComposition:
         self._container_runner = container_runner
         # the spec is written before any builder runs (3002 vs 3110), so this cannot be inferred from the command:
         # it is declared, defaulting to the repository's long-standing container route, and the container-free CLI
-        # path says otherwise explicitly (CP-2680/2681)
+        # path says otherwise explicitly
         if type(container_brokers) is not bool:
             raise ValueError("CONTAINER_BROKERS_INVALID")
         self._uses_production_broker_container = container_brokers
@@ -3137,7 +3137,7 @@ class ProductionBatchComposition:
             "yolo_weights_sha256": self.spec.yolo_weights_sha256,
             "grounded_manifest_sha256": self.spec.grounded_manifest_sha256,
             # the container route mounts runtime_root at /runtime; a host run names the copy itself, which sits
-            # beside the spec (CP-2541)
+            # beside the spec
             "config_path": ("/runtime/runtime-config.yaml" if self._uses_production_broker_container
                             else str(config_copy)),
             "request_deadline_s": self.spec.config.heartbeat_timeout_s,
@@ -3281,8 +3281,7 @@ class ProductionBatchComposition:
                 gid=os.getgid(),
                 batch_id=self.spec.request.batch_id,
                 broker_generation=self.broker_generation,
-                # CP-3459: the baked package of the image is replaced by the running, qualified one; its detector (the freeze's
-                # own, CP-3467) is what the broker runs, and the run records its hash
+                # The baked package of the image is replaced by the running, qualified one; its detector is what the broker runs, and the run records its hash
                 source_package=package,
             )
             if os.environ.get("SO101_QUALIFIED_FREEZE"):

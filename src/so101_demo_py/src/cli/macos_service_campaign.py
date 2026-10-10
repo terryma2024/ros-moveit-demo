@@ -4,12 +4,12 @@ The service launches a fixed coordinator with one fixed argv (``supervisor.FIXED
 and expects it to open the control socket named by ``SO101_FIXED_CONTROL_SOCKET``. On Linux that argv
 is ``so101_parallel_batch``; on macOS that runner refuses the host
 (``CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION``, then ``GPU_TARGET_UNAVAILABLE``), and the entry point
-that does run here - ``so101_demo.cli.macos_w2_campaign`` - takes a different set of flags and has no
+that does run here - ``so101_demo.cli.macos_two_worker_campaign`` - takes a different set of flags and has no
 control path at all.
 
 This module is the typed adapter between the two. It is deliberately narrow:
 
-* it **validates** what it was asked to do instead of passing it along - run mode, exact-W2 worker
+* it **validates** what it was asked to do instead of passing it along - run mode, exact two-worker worker
   count, the weights and manifest digests, the config schema, the campaign identity the service put in
   the environment - and refuses by name;
 * it runs the real campaign as an **owned child in its own process group**, so a stop is a group stop
@@ -55,7 +55,7 @@ from so101_demo.parallel_batch.start_guard_probe import (
     StartGuardRefused,
     run_campaign_start_guard,
 )
-from so101_demo.parallel_batch.w2_composition import (
+from so101_demo.parallel_batch.two_worker_composition import (
     CompositionError,
     load_execution_config_for_schema,
 )
@@ -68,19 +68,19 @@ from so101_demo.runtime.owner_records import (
     spawner_token_from_environment,
 )
 
-#: The exact-W2 worker count, kept for the refusal vocabulary this adapter has always used.
-EXACT_W2_WORKERS = 2
+#: The exact two-worker worker count, kept for the refusal vocabulary this adapter has always used.
+EXACT_TWO_WORKERS = 2
 
-#: The launcher this adapter drives for exact W2. The two W1 routes are named by the table below.
-CAMPAIGN_MODULE = "so101_demo.cli.macos_w2_campaign"
+#: The launcher this adapter drives for exact two-worker. The two single-worker routes are named by the table below.
+CAMPAIGN_MODULE = "so101_demo.cli.macos_two_worker_campaign"
 
 #: The closed dispatch table: ``(schema_version, execution_profile)`` -> the one entry point that
 #: executes it. There is no default entry, no generic ``--batch-kind`` fallback and no cross-profile
 #: reuse: a key that is not in this table is refused by name before anything is spawned.
 ROUTE_MODULES = {
-    (4, str(ExecutionProfile.MPS_W2_FIRST_PASS)): "so101_demo.cli.macos_w2_campaign",
-    (5, str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY)): "so101_demo.cli.macos_n1_retry",
-    (6, str(ExecutionProfile.MPS_W1_FIRST_PASS)): "so101_demo.cli.macos_n1_first_pass",
+    (4, str(ExecutionProfile.MPS_TWO_WORKER_FIRST_PASS)): "so101_demo.cli.macos_two_worker_campaign",
+    (5, str(ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY)): "so101_demo.cli.macos_mps_single_worker_retry",
+    (6, str(ExecutionProfile.MPS_SINGLE_WORKER_FIRST_PASS)): "so101_demo.cli.macos_mps_single_worker_first_pass",
 }
 
 #: The config class each admitted schema must resolve to.
@@ -171,7 +171,7 @@ def require_retry_binding(arguments, route) -> dict:
         return {}
     is_retry_route = (
         str(route.batch_kind) == str(BatchKind.FULL_RESTART_RETRY)
-        and str(route.execution_profile) == str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY))
+        and str(route.execution_profile) == str(ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY))
     if not is_retry_route:
         raise ServiceCampaignError(
             "RETRY_BINDING_UNSUPPORTED",
@@ -218,7 +218,7 @@ def resolve_request(arguments, *, environment=None, platform=None) -> AdapterRou
     environment = os.environ if environment is None else environment
     if arguments.run_mode != "execute":
         raise ServiceCampaignError("RUN_MODE_UNSUPPORTED", str(arguments.run_mode))
-    if arguments.worker_count not in (1, EXACT_W2_WORKERS):
+    if arguments.worker_count not in (1, EXACT_TWO_WORKERS):
         raise ServiceCampaignError(
             "PLATFORM_WORKER_COUNT_UNSUPPORTED", str(arguments.worker_count)
         )
@@ -537,7 +537,7 @@ def adapter_start_guard(route: AdapterRoute, arguments, *, guard=None,
     never reused - there is no cache here to reuse. The returned document is the audit record.
     """
 
-    from so101_demo.cli.macos_w2_campaign import guard_document
+    from so101_demo.cli.macos_two_worker_campaign import guard_document
 
     environment = os.environ if environment is None else environment
     runner = guard or run_campaign_start_guard

@@ -189,7 +189,7 @@ class OwnedProcessGroup:
         if environment is not None:
             merged_environment.update(environment)
         # The STATION intent is written here, by the boundary that calls Popen, and only here:
-        # `macos_w2_worker` owns the station but writes no record of its own, so one station spawn
+        # `macos_two_worker_process` owns the station but writes no record of its own, so one station spawn
         # produces exactly one intent.
         recorder = self._owner_recorder(spec)
         if recorder is not None:

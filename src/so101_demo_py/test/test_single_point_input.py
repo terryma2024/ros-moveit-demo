@@ -315,7 +315,7 @@ def test_business_result_requires_the_durable_chain(tmp_path: Path) -> None:
 
 
 def test_worker_lease_document_carries_the_single_point_input(tmp_path: Path) -> None:
-    from so101_demo.cli.macos_w2_campaign import lease_worker_execution
+    from so101_demo.cli.macos_two_worker_campaign import lease_worker_execution
 
     selection = _selection_module()
     queue_module = _queue_module()

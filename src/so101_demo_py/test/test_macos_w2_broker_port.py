@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from so101_demo.runtime.macos_w2_broker_port import (
+from so101_demo.runtime.macos_two_worker_broker_port import (
     BrokerAuthority,
-    W2BrokerPort,
-    W2BrokerPortError,
+    TwoWorkerBrokerPort,
+    TwoWorkerBrokerPortError,
     authority_from_document,
 )
 
@@ -47,13 +47,13 @@ def test_authority_document_is_reduced_and_refuses_bad_generations() -> None:
         {"healthy": True, "broker_socket_path": "/x"},
         {"healthy": True, "broker_generation": 2, "broker_socket_path": ""},
     ):
-        with pytest.raises(W2BrokerPortError):
+        with pytest.raises(TwoWorkerBrokerPortError):
             authority_from_document(document)
 
 
 def test_port_refuses_a_non_positive_initial_generation() -> None:
-    with pytest.raises(W2BrokerPortError, match="BROKER_GENERATION_AUTHORITY"):
-        W2BrokerPort(
+    with pytest.raises(TwoWorkerBrokerPortError, match="BROKER_GENERATION_AUTHORITY"):
+        TwoWorkerBrokerPort(
             coordinator=lambda: BrokerAuthority(True, 1, "/x"),
             authority=BrokerAuthority(True, 0, "/x"),
             config=_Config(),
@@ -68,7 +68,7 @@ def test_cancel_waits_for_health_then_sends_one_message() -> None:
         BrokerAuthority(True, 1, "/new.sock"),
     ]
     clients: list[_Client] = []
-    port = W2BrokerPort(
+    port = TwoWorkerBrokerPort(
         coordinator=lambda: answers.pop(0),
         authority=BrokerAuthority(True, 1, "/old.sock"),
         config=_Config(),
@@ -87,19 +87,19 @@ def test_cancel_waits_for_health_then_sends_one_message() -> None:
 
 
 def test_refresh_refuses_a_generation_rollback() -> None:
-    port = W2BrokerPort(
+    port = TwoWorkerBrokerPort(
         coordinator=lambda: BrokerAuthority(True, 2, "/x"),
         authority=BrokerAuthority(True, 3, "/x"),
         config=_Config(),
         client_factory=_factory([]),
     )
-    with pytest.raises(W2BrokerPortError, match="BROKER_GENERATION_ROLLBACK"):
+    with pytest.raises(TwoWorkerBrokerPortError, match="BROKER_GENERATION_ROLLBACK"):
         port.refresh(wait_until_healthy=False)
 
 
 def test_refresh_times_out_instead_of_waiting_forever() -> None:
     ticks = iter([0.0, 2.0, 4.0, 6.0])
-    port = W2BrokerPort(
+    port = TwoWorkerBrokerPort(
         coordinator=lambda: BrokerAuthority(False, 1, "/x"),
         authority=BrokerAuthority(True, 1, "/x"),
         config=_Config(),
@@ -107,7 +107,7 @@ def test_refresh_times_out_instead_of_waiting_forever() -> None:
         clock=lambda: next(ticks),
         sleep=lambda _s: None,
     )
-    with pytest.raises(W2BrokerPortError, match="BROKER_RECOVERY_TIMEOUT"):
+    with pytest.raises(TwoWorkerBrokerPortError, match="BROKER_RECOVERY_TIMEOUT"):
         port.refresh(wait_until_healthy=True)
 
 
@@ -122,7 +122,7 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
         seen["sent"] = send("yolo", before_send=None)
         return "admitted"
 
-    port = W2BrokerPort(
+    port = TwoWorkerBrokerPort(
         coordinator=lambda: BrokerAuthority(True, 1, "/x"),
         authority=BrokerAuthority(True, 1, "/x"),
         config=_Config(),
@@ -147,13 +147,13 @@ def test_request_model_uses_the_positional_perception_contract() -> None:
     assert seen["request_one"] == ("lease", "yolo", "yolo", None)
 
     # A port built without a runner is the one that must refuse: `ParallelWorker` never passes one.
-    unbound = W2BrokerPort(
+    unbound = TwoWorkerBrokerPort(
         coordinator=lambda: BrokerAuthority(True, 1, "/x"),
         authority=BrokerAuthority(True, 1, "/x"),
         config=_Config(),
         client_factory=_factory([]),
     )
-    with pytest.raises(W2BrokerPortError, match="PERCEPTION_RUNNER_REQUIRED"):
+    with pytest.raises(TwoWorkerBrokerPortError, match="PERCEPTION_RUNNER_REQUIRED"):
         unbound.request_model(
             "lease", "yolo", snapshot="snap", start_event_id="e1",
             start_event_type="attempt_started", reset_epoch=1,

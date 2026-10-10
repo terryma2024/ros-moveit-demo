@@ -17,16 +17,16 @@ import pytest
 from so101_demo.parallel_batch.campaign_supervisor import CampaignSupervisor
 from so101_demo.parallel_batch.inference_registry import InferenceRegistry
 from so101_demo.parallel_batch.input_snapshot import SnapshotRegistry, SnapshotStore
-from so101_demo.parallel_batch.macos_w2_campaign import (
+from so101_demo.parallel_batch.macos_two_worker_campaign import (
     CampaignInventory,
     CampaignPorts,
-    MacosW2Campaign,
-    MacosW2CampaignError,
+    MacosTwoWorkerCampaign,
+    MacosTwoWorkerCampaignError,
     read_inventory,
 )
 from so101_demo.parallel_batch.pool_recovery import INFRASTRUCTURE_FAILURE, RecoveryFacts
-from so101_demo.parallel_batch.w2_composition import (
-    W2CampaignPlan, compose_w2_campaign, load_execution_config)
+from so101_demo.parallel_batch.two_worker_composition import (
+    TwoWorkerCampaignPlan, compose_two_worker_campaign, load_execution_config)
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
@@ -46,7 +46,7 @@ def _catalog(tmp_path) -> Path:
 
 
 def _plan(tmp_path):
-    return compose_w2_campaign(
+    return compose_two_worker_campaign(
         config=load_execution_config(MACOS_MPS_TWO_WORKER_CONFIG), config_path=MACOS_MPS_TWO_WORKER_CONFIG,
         campaign_id="b-composed", batch_id="batch-composed",
         selected_point_ids=("p1", "p2"), evidence_root=tmp_path,
@@ -57,7 +57,7 @@ def _campaign(tmp_path, **port_overrides):
     plan = _plan(tmp_path)
     supervisor = CampaignSupervisor("b-composed", state_root=tmp_path / "supervisor")
     ports = CampaignPorts(model_factories={"yolo": lambda: object()}, **port_overrides)
-    return MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor, ports=ports)
+    return MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor, ports=ports)
 
 
 # --------------------------------------------------------------------------------------
@@ -106,20 +106,20 @@ def test_the_composition_refuses_a_plan_that_is_not_mps(tmp_path):
 
     plan = replace(_plan(tmp_path), accelerator="cuda")
     supervisor = CampaignSupervisor("x", state_root=tmp_path / "sup")
-    with pytest.raises(MacosW2CampaignError, match="PLAN_NOT_MPS"):
-        MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
+    with pytest.raises(MacosTwoWorkerCampaignError, match="PLAN_NOT_MPS"):
+        MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor,
                         ports=CampaignPorts(model_factories={}))
 
 
 def test_the_composition_refuses_a_slot_count_that_is_not_two(tmp_path):
     from dataclasses import replace
 
-    from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+    from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
 
-    plan = replace(_plan(tmp_path), slots=exact_w2_slots(), worker_count=3)
+    plan = replace(_plan(tmp_path), slots=exact_two_worker_slots(), worker_count=3)
     supervisor = CampaignSupervisor("x", state_root=tmp_path / "sup")
-    with pytest.raises(MacosW2CampaignError, match="SLOT_COUNT_MISMATCH"):
-        MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
+    with pytest.raises(MacosTwoWorkerCampaignError, match="SLOT_COUNT_MISMATCH"):
+        MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor,
                         ports=CampaignPorts(model_factories={}))
 
 
@@ -131,9 +131,9 @@ def test_the_two_slots_are_capacity_only_and_assign_no_points(tmp_path):
     leasing impossible and would silently drop every selected point after the second.
     """
 
-    from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+    from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
 
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
 
     assert slots.slot_ids == ("slot-0", "slot-1")
     assert slots.assigned_points == (("slot-0", None), ("slot-1", None))
@@ -150,12 +150,12 @@ def test_a_mixed_platform_plan_is_refused_by_the_composition(tmp_path):
 
     from dataclasses import replace
 
-    from so101_demo.parallel_batch.w2_composition import CompositionError
+    from so101_demo.parallel_batch.two_worker_composition import CompositionError
 
     plan = replace(_plan(tmp_path), ipc_transport="proc_fd_unix")
     supervisor = CampaignSupervisor("x", state_root=tmp_path / "sup")
     with pytest.raises(CompositionError, match="PLATFORM_COMBINATION"):
-        MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
+        MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor,
                         ports=CampaignPorts(model_factories={}))
 
 
@@ -260,7 +260,7 @@ def test_an_empty_campaign_directory_is_residue_not_a_live_stack(tmp_path):
     blocking condition would make one crashed run refuse every later campaign on the host.
     """
 
-    from so101_demo.parallel_batch.macos_w2_campaign import read_inventory
+    from so101_demo.parallel_batch.macos_two_worker_campaign import read_inventory
 
     ipc_base = tmp_path / "so101-ipc"
     (ipc_base / "b-empty-residue").mkdir(parents=True)
@@ -285,7 +285,7 @@ def test_campaign_ports_expose_the_worker_simulation_seams() -> None:
     the shared Broker through the v4 port.
     """
 
-    from so101_demo.parallel_batch.macos_w2_campaign import CampaignPorts
+    from so101_demo.parallel_batch.macos_two_worker_campaign import CampaignPorts
 
     default = CampaignPorts(model_factories={})
     assert default.worker_station is None
@@ -311,17 +311,17 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
 
     import json
 
-    from so101_demo.cli.macos_w2_campaign import bind_worker_requests, build_worker_leases
+    from so101_demo.cli.macos_two_worker_campaign import bind_worker_requests, build_worker_leases
     from so101_demo.parallel_batch.queue import DurablePointQueue
     from so101_demo.parallel_batch.selection import build_first_pass_selection
-    from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+    from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
 
     catalog = _catalog(tmp_path)
     point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
                  "cup_test_right_5cm")
 
     class _Plan:
-        slots = exact_w2_slots()
+        slots = exact_two_worker_slots()
         selected_point_ids = point_ids
 
     binding = build_first_pass_selection(
@@ -396,7 +396,7 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
 
     import json
 
-    from so101_demo.cli.macos_w2_campaign import IMPLEMENTED_OPERATIONS, admission_decision
+    from so101_demo.cli.macos_two_worker_campaign import IMPLEMENTED_OPERATIONS, admission_decision
 
     bound = "a" * 64
     good = json.dumps({"input_sha256": bound})
@@ -445,7 +445,7 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
 
     import json
 
-    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
 
     def write(path: Path, payload) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -497,7 +497,7 @@ def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> 
     The tree below is the recorded one, field for field.
     """
 
-    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
 
     root = tmp_path
     batch = root / "w1-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
@@ -545,7 +545,7 @@ def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp
     terminal document is a station artefact, not an execution, and is not listed.
     """
 
-    from so101_demo.cli.macos_w2_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
 
     root = tmp_path
 
@@ -609,7 +609,7 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
     unexecuted, duplicated, unselected or infrastructure-failed point, reads INCOMPLETE.
     """
 
-    from so101_demo.cli.macos_w2_campaign import campaign_status
+    from so101_demo.cli.macos_two_worker_campaign import campaign_status
 
     good = dict(cleanup_complete=True, results=[{}, {}],
                 workers=[{"worker_id": "w1", "status": "ACTIVE"},
@@ -647,7 +647,7 @@ def test_campaign_cli_exposes_the_fault_switches_with_safe_defaults() -> None:
     this session hit twice - so the names and the off-by-default values are pinned here.
     """
 
-    from so101_demo.cli.macos_w2_campaign import build_parser
+    from so101_demo.cli.macos_two_worker_campaign import build_parser
 
     parser = build_parser()
     options = parser.parse_args([
@@ -699,18 +699,18 @@ def test_campaign_binds_the_selection_and_queue_it_executes(tmp_path):
 
     assert campaign.selection_sha256 == binding.selection_sha256
     assert campaign.queue is queue
-    with pytest.raises(MacosW2CampaignError, match="SELECTION_ALREADY_BOUND"):
+    with pytest.raises(MacosTwoWorkerCampaignError, match="SELECTION_ALREADY_BOUND"):
         campaign.bind_selection(binding=binding, queue=queue)
-    with pytest.raises(MacosW2CampaignError, match="SELECTION_TYPE"):
+    with pytest.raises(MacosTwoWorkerCampaignError, match="SELECTION_TYPE"):
         _campaign(tmp_path / "second").bind_selection(binding=object(), queue=queue)
-    with pytest.raises(MacosW2CampaignError, match="QUEUE_TYPE"):
+    with pytest.raises(MacosTwoWorkerCampaignError, match="QUEUE_TYPE"):
         _campaign(tmp_path / "third").bind_selection(binding=binding, queue=object())
 
 
 def test_campaign_journal_publishes_committed_watermarks(tmp_path):
     """The macOS campaign's standard events are durable *and* watermarked before they are ACKed."""
 
-    from so101_demo.cli.macos_w2_campaign import (
+    from so101_demo.cli.macos_two_worker_campaign import (
         commit_campaign_terminal, open_campaign_journal)
     from so101_demo.parallel_batch.journal import (
         CoordinatorJournal, JournalCorruption)
@@ -754,11 +754,11 @@ MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG = PACKAGE / "config/mujoco/parallel_ba
 
 ROUTES = (
     (MACOS_MPS_TWO_WORKER_CONFIG, 2, "MPS_W2_FIRST_PASS", "FIRST_PASS",
-     "so101_demo.cli.macos_w2_campaign"),
+     "so101_demo.cli.macos_two_worker_campaign"),
     (MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, 1, "MPS_W1_FULL_RESTART_RETRY", "FULL_RESTART_RETRY",
-     "so101_demo.cli.macos_n1_retry"),
+     "so101_demo.cli.macos_mps_single_worker_retry"),
     (MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, 1, "MPS_W1_FIRST_PASS", "FIRST_PASS",
-     "so101_demo.cli.macos_n1_first_pass"),
+     "so101_demo.cli.macos_mps_single_worker_first_pass"),
 )
 
 
@@ -1075,13 +1075,13 @@ def test_the_adapter_guard_is_only_asked_once_per_campaign(tmp_path, monkeypatch
 def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
     """One composition drives both W1 profiles: one slot, one Worker, one domain."""
 
-    from so101_demo.parallel_batch.w1_composition import compose_w1_retry
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_retry
 
-    plan = compose_w1_retry(
+    plan = compose_single_worker_retry(
         config=load_execution_config(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, campaign_id="b-w1",
         batch_id="batch-w1", selected_point_ids=("p1",), evidence_root=tmp_path)
     supervisor = CampaignSupervisor("b-w1", state_root=tmp_path / "supervisor")
-    campaign = MacosW2Campaign(plan=plan, address=object(), supervisor=supervisor,
+    campaign = MacosTwoWorkerCampaign(plan=plan, address=object(), supervisor=supervisor,
                                ports=CampaignPorts(model_factories={}))
 
     assert campaign.plan.worker_count == 1
@@ -1092,7 +1092,7 @@ def test_the_composed_campaign_accepts_a_w1_plan(tmp_path):
 def test_the_n1_verdict_requires_the_single_worker_happy_path():
     """A W1 pass is one Worker, three served requests on MPS and nothing refused."""
 
-    from so101_demo.cli.macos_n1_first_pass import campaign_status as n1_status
+    from so101_demo.cli.macos_mps_single_worker_first_pass import campaign_status as n1_status
 
     good = dict(cleanup_complete=True, results=[{}],
                 workers=[{"worker_id": "w1", "status": "ACTIVE"}],

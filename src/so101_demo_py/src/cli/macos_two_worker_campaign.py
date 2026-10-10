@@ -1,4 +1,4 @@
-"""The macOS MPS W2 campaign entry point.
+"""The macOS MPS two-worker campaign entry point.
 
 `mujoco_parallel_batch` is the Linux container path: it requires a broker image, a CUDA device and
 `proc_fd_unix`. This is its macOS counterpart, and it exists because the v4 contract had no
@@ -46,10 +46,10 @@ from ..parallel_batch.contracts import (
 )
 from ..parallel_batch import point_drain
 from ..parallel_batch.inference_registry import InferenceRegistry
-from ..parallel_batch.macos_w2_campaign import (
+from ..parallel_batch.macos_two_worker_campaign import (
     CampaignPorts,
-    MacosW2Campaign,
-    MacosW2CampaignError,
+    MacosTwoWorkerCampaign,
+    MacosTwoWorkerCampaignError,
     read_inventory,
 )
 from ..parallel_batch.queue import DurablePointQueue
@@ -64,28 +64,28 @@ from ..parallel_batch.start_guard_probe import (
     publish_guard_handover,
     run_campaign_start_guard,
 )
-from ..parallel_batch.w1_composition import (
-    MPS_W1_FIRST_PASS,
-    MPS_W1_FULL_RESTART_RETRY,
-    W1_FIRST_PASS_BATCH_KIND,
-    W1_RETRY_BATCH_KIND,
-    compose_w1_first_pass,
-    compose_w1_retry,
+from ..parallel_batch.single_worker_composition import (
+    MPS_SINGLE_WORKER_FIRST_PASS,
+    MPS_SINGLE_WORKER_FULL_RESTART_RETRY,
+    SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
+    SINGLE_WORKER_RETRY_BATCH_KIND,
+    compose_single_worker_first_pass,
+    compose_single_worker_retry,
 )
-from ..parallel_batch.w2_composition import (
+from ..parallel_batch.two_worker_composition import (
     CompositionError,
-    compose_w2_campaign,
+    compose_two_worker_campaign,
     load_execution_config_for_schema,
 )
 from ..runtime.unix_address import PRIVATE_TMP, DarwinPrivatePathUnixAddress
 
-#: The v4 exact-W2 profile this module is the entry point for.
-MPS_W2_FIRST_PASS = "MPS_W2_FIRST_PASS"
-W2_FIRST_PASS_BATCH_KIND = "FIRST_PASS"
+#: The v4 exact two-worker profile this module is the entry point for.
+MPS_TWO_WORKER_FIRST_PASS = "MPS_W2_FIRST_PASS"
+TWO_WORKER_FIRST_PASS_BATCH_KIND = "FIRST_PASS"
 
 
-#: The worker child module, spawned as `python -m so101_demo.cli.macos_w2_worker`.
-_WORKER_MODULE = "so101_demo.cli.macos_w2_worker"
+#: The worker child module, spawned as `python -m so101_demo.cli.macos_two_worker_process`.
+_WORKER_MODULE = "so101_demo.cli.macos_two_worker_process"
 
 
 def lease_worker_execution(*, queue, binding, worker_id: str, slot_id: str,
@@ -126,13 +126,13 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
     """Write each Worker's lease document from the durable queue, one point per Worker.
 
     There is no capacity-only form left: a lease that carries no single-point input is a lease the
-    Worker refuses (`POINTS_PATH_MISSING`), which is exactly the gap Task 11's live gate found. The
+    Worker refuses (`POINTS_PATH_MISSING`), which is exactly the gap the live gate found. The
     frame is created once; a later run reuses it rather than rewriting evidence.
     """
 
     if binding is None or queue is None:
-        raise MacosW2CampaignError("SELECTION_QUEUE_REQUIRED", "a binding and a queue are required")
-    # One Worker per capacity slot: exact W2 creates two, each W1 profile exactly one.
+        raise MacosTwoWorkerCampaignError("SELECTION_QUEUE_REQUIRED", "a binding and a queue are required")
+    # One Worker per capacity slot: exact two-worker creates two, each single-worker profile exactly one.
     if worker_ids is None:
         worker_ids = tuple(f"w{index + 1}" for index in range(len(plan.slots.slot_ids)))
     leases: dict[str, dict] = {}
@@ -154,7 +154,7 @@ def build_worker_leases(*, plan, batch_id: str, evidence_root: Path,
 def open_campaign_journal(*, evidence_root: Path, campaign_id: str, batch_id: str):
     """Open the batch's standard journal and commit CAMPAIGN_STARTED before anything runs.
 
-    The macOS W1/W2 compositions reuse the existing `CoordinatorJournal`: the coordinator is the
+    The macOS single-worker/two-worker compositions reuse the existing `CoordinatorJournal`: the coordinator is the
     single writer, every returned event is already fsynced *and* covered by a published committed
     watermark, and the projection side reads that prefix instead of polling terminal files.
     """
@@ -223,20 +223,20 @@ def bind_worker_requests(campaign, leases: dict[str, dict], *, ready,
 
 def campaign_status(*, cleanup_complete: bool, results, workers, served, refused,
                     points) -> str:
-    """The exact-W2 verdict: the same rule `campaign_verdict` applies to every route.
+    """The exact two-worker verdict: the same rule `campaign_verdict` applies to every route.
 
     It requires the whole happy path *and* the executed point set: cleanup complete, one result
     document per Worker spawn, every spawn `ACTIVE`, at least six served requests whose devices are
     exactly `["mps"]`, no refused request at all, and `points["complete"]` - every selected point
     executed exactly once, with its evidence, and no unselected point attempted. A verdict that
-    asserted nothing about the point set is what let Task 11's empty campaigns report PASS.
+    asserted nothing about the point set is what let empty campaigns report PASS.
     """
 
     spec = CampaignRouteSpec(
-        execution_profile=MPS_W2_FIRST_PASS, batch_kind=W2_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_w2_campaign",
+        execution_profile=MPS_TWO_WORKER_FIRST_PASS, batch_kind=TWO_WORKER_FIRST_PASS_BATCH_KIND,
+        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_two_worker_campaign",
         worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
-        composer=compose_w2_campaign)
+        composer=compose_two_worker_campaign)
     return campaign_verdict(spec=spec, cleanup_complete=cleanup_complete, results=results,
                             workers=workers, served=served, refused=refused, points=points)
 
@@ -396,7 +396,7 @@ def served_admission_split(served) -> tuple[list[dict], list[dict]]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="so101_macos_w2_campaign",
+        prog="so101_macos_two_worker_campaign",
         description="Run one exact-W2 macOS MPS campaign with the published model set.",
     )
     parser.add_argument("--config", type=Path, required=True,
@@ -694,20 +694,20 @@ class CampaignRouteSpec:
 
 ROUTE_SPECS: tuple[CampaignRouteSpec, ...] = (
     CampaignRouteSpec(
-        execution_profile=MPS_W2_FIRST_PASS, batch_kind=W2_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_w2_campaign",
+        execution_profile=MPS_TWO_WORKER_FIRST_PASS, batch_kind=TWO_WORKER_FIRST_PASS_BATCH_KIND,
+        config_class=ParallelRuntimeConfigMacosMpsTwoWorker, module="so101_demo.cli.macos_two_worker_campaign",
         worker_ids=("w1", "w2"), default_point_ids=("p1", "p2"), minimum_served=6,
-        composer=compose_w2_campaign),
+        composer=compose_two_worker_campaign),
     CampaignRouteSpec(
-        execution_profile=MPS_W1_FULL_RESTART_RETRY, batch_kind=W1_RETRY_BATCH_KIND,
-        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, module="so101_demo.cli.macos_n1_retry",
+        execution_profile=MPS_SINGLE_WORKER_FULL_RESTART_RETRY, batch_kind=SINGLE_WORKER_RETRY_BATCH_KIND,
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, module="so101_demo.cli.macos_mps_single_worker_retry",
         worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
-        composer=compose_w1_retry),
+        composer=compose_single_worker_retry),
     CampaignRouteSpec(
-        execution_profile=MPS_W1_FIRST_PASS, batch_kind=W1_FIRST_PASS_BATCH_KIND,
-        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, module="so101_demo.cli.macos_n1_first_pass",
+        execution_profile=MPS_SINGLE_WORKER_FIRST_PASS, batch_kind=SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
+        config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, module="so101_demo.cli.macos_mps_single_worker_first_pass",
         worker_ids=("w1",), default_point_ids=("p1",), minimum_served=3,
-        composer=compose_w1_first_pass),
+        composer=compose_single_worker_first_pass),
 )
 
 
@@ -875,7 +875,7 @@ def bind_campaign_selection(*, arguments, plan, spec):
 
     from ..parallel_batch.selection import SelectionError, load_point_catalog
 
-    retry = spec.batch_kind == W1_RETRY_BATCH_KIND
+    retry = spec.batch_kind == SINGLE_WORKER_RETRY_BATCH_KIND
     point_ids = tuple(arguments.point_id)
     catalog_argument = getattr(arguments, "catalog", None)
     expected_catalog_sha256 = getattr(arguments, "catalog_sha256", None)
@@ -1104,7 +1104,7 @@ def _drive_campaign(arguments, argv, plan, spec, document) -> int:
         yolo_weights=arguments.yolo_weights.resolve(),
         grounded_root=arguments.grounded_root.resolve()))
     registry = InferenceRegistry(campaign_id=arguments.campaign_id)
-    campaign = MacosW2Campaign(plan=plan, address=address, supervisor=supervisor, ports=ports,
+    campaign = MacosTwoWorkerCampaign(plan=plan, address=address, supervisor=supervisor, ports=ports,
                                registry=registry)
     # The immutable selection and the durable queue exist before the first process does. A
     # selection the binding contract refuses - fewer than four points, a missing anchor, an unknown
@@ -1488,7 +1488,7 @@ def campaign_verdict(*, spec, cleanup_complete, results, workers, served, refuse
     durable evidence, every `PASSED` point with its physical manifest, no duplicate attempt and no
     unselected point ever attempted.
 
-    The point clause is the one Task 11's live gate was missing: without it a campaign that executed
+    The point clause is the one the live gate was missing: without it a campaign that executed
     nothing at all reported `W2_CAMPAIGN_PASS`. A refused request - even a deliberate probe - still
     reads INCOMPLETE by construction.
     """
@@ -1505,26 +1505,26 @@ def campaign_verdict(*, spec, cleanup_complete, results, workers, served, refuse
 
 
 def run(argv: list[str] | None = None) -> int:
-    """The v4 exact-W2 entry point. The profile is this module's; it is not a flag."""
+    """The v4 exact two-worker entry point. The profile is this module's; it is not a flag."""
 
     arguments = build_parser().parse_args(argv)
     arguments_argv = list(sys.argv[1:] if argv is None else argv)
     try:
         return run_routed(argv=arguments_argv, arguments=arguments,
-                          execution_profile=MPS_W2_FIRST_PASS)
+                          execution_profile=MPS_TWO_WORKER_FIRST_PASS)
     except RefusedRun as refusal:
         print(json.dumps({"status": "REFUSED", "stage": refusal.stage, "detail": refusal.detail},
                          indent=2, sort_keys=True))
         return refusal.exit_code
 
 
-def build_w1_parser(execution_profile: str) -> argparse.ArgumentParser:
-    """The W1 parser. One entry point per profile: there is no `--batch-kind` switch."""
+def build_single_worker_parser(execution_profile: str) -> argparse.ArgumentParser:
+    """The single-worker parser. One entry point per profile: there is no `--batch-kind` switch."""
 
     spec = route_spec(execution_profile)
-    retry = spec.batch_kind == W1_RETRY_BATCH_KIND
+    retry = spec.batch_kind == SINGLE_WORKER_RETRY_BATCH_KIND
     parser = argparse.ArgumentParser(
-        prog="so101_macos_n1_retry" if retry else "so101_macos_n1_first_pass",
+        prog="so101_macos_single_worker_retry" if retry else "so101_macos_single_worker_first_pass",
         description=f"Run one macOS MPS W1 campaign ({spec.execution_profile}) with one Worker.")
     parser.add_argument("--config", type=Path, required=True,
                         help=f"the schema-v{5 if retry else 6} macOS MPS W1 document")
@@ -1567,13 +1567,13 @@ def build_w1_parser(execution_profile: str) -> argparse.ArgumentParser:
     return parser
 
 
-def run_w1(argv: list[str] | None = None, *, execution_profile: str) -> int:
-    """The W1 entry point for one named profile. A different profile's document is refused."""
+def run_single_worker(argv: list[str] | None = None, *, execution_profile: str) -> int:
+    """The single-worker entry point for one named profile. A different profile's document is refused."""
 
     spec = route_spec(execution_profile)
     if spec.worker_count != 1:
         raise ContractError(f"NOT_A_W1_PROFILE: {execution_profile}")
-    arguments = build_w1_parser(execution_profile).parse_args(argv)
+    arguments = build_single_worker_parser(execution_profile).parse_args(argv)
     arguments_argv = list(sys.argv[1:] if argv is None else argv)
     try:
         return run_routed(argv=arguments_argv, arguments=arguments,
@@ -1595,7 +1595,7 @@ def main(argv: list[str] | None = None) -> int:
         environment = dict(os.environ)
         environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
         os.execve(sys.executable, [sys.executable, "-m",
-                                   "so101_demo.cli.macos_w2_campaign", *arguments], environment)
+                                   "so101_demo.cli.macos_two_worker_campaign", *arguments], environment)
     try:
         return run(arguments)
     except Exception as error:  # noqa: BLE001 - a refusal is reported, never a traceback alone
@@ -1604,8 +1604,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
-def main_w1(execution_profile: str, argv: list[str] | None = None) -> int:
-    """The W1 launcher: same fallback pin, then the profile's own entry point."""
+def main_single_worker(execution_profile: str, argv: list[str] | None = None) -> int:
+    """The single-worker launcher: same fallback pin, then the profile's own entry point."""
 
     spec = route_spec(execution_profile)
     arguments = list(sys.argv[1:] if argv is None else argv)
@@ -1614,7 +1614,7 @@ def main_w1(execution_profile: str, argv: list[str] | None = None) -> int:
         environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
         os.execve(sys.executable, [sys.executable, "-m", spec.module, *arguments], environment)
     try:
-        return run_w1(arguments, execution_profile=execution_profile)
+        return run_single_worker(arguments, execution_profile=execution_profile)
     except Exception as error:  # noqa: BLE001 - a refusal is reported, never a traceback alone
         print(json.dumps({"status": "ERROR", "error": f"{type(error).__name__}: {error}"},
                          indent=2, sort_keys=True))

@@ -889,7 +889,7 @@ _FROZEN_RUNTIME_VALUES_LINUX_CUDA = {
     "sam_max_mask_area_ratio": 0.50,
 }
 
-#: CP-3456: version three only. Two stage bounds are floors, not pins: a data pipeline with offline processing after the Teacher
+#: Version three only. Two stage bounds are floors, not pins: a data pipeline with offline processing after the Teacher
 #: needs the stage and the lease to last longer than the original values (the Teacher's own execution deadline is a separate,
 #: unchanged policy). The original values stay valid. Versions four to six keep the exact pins above.
 _MINIMUM_RUNTIME_VALUES_LINUX_CUDA = {"lease_duration_s": 300.0, "executing_hard_timeout_s": 240.0}
@@ -934,7 +934,7 @@ def load_parallel_runtime_config_linux_cuda(path: Path) -> ParallelRuntimeConfig
     return parse_parallel_runtime_config_linux_cuda(_load_closed_yaml(path))
 
 
-#: CP-3457: the bound on one Teacher execution (the wait for the Teacher child, the Worker's `TEACHER_EXECUTION_DEADLINE` guard, the
+#: The bound on one Teacher execution (the wait for the Teacher child, the Worker's `TEACHER_EXECUTION_DEADLINE` guard, the
 #: perception broker's RPC deadlines, the pose wait). It is the frozen value of the original coupling and it is not a stage bound:
 #: raising `executing_hard_timeout_s` (the Coordinator's stage) for offline processing must not raise it.
 TEACHER_EXECUTION_BOUND_S = 240.0
@@ -989,7 +989,7 @@ MACOS_MPS_TWO_WORKER_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...
     ("mps", "mps", "darwin_private_path_unix", "cgl"),
 )
 
-#: The only worker count this platform contract supports. W1/W4/W6/W8 are out of scope and
+#: The only worker count this platform contract supports. single-worker/W4/W6/eight-worker are out of scope and
 #: the design forbids extrapolating any cross-N qualification from this value.
 MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT = 2
 
@@ -1095,7 +1095,7 @@ class AcceleratorSelectionMacosMpsTwoWorker:
 
 @dataclass(frozen=True, slots=True)
 class ParallelRuntimeConfigMacosMpsTwoWorker:
-    """The closed version-four document: exact W2 on the named macOS platform combination."""
+    """The closed version-four document: exact two-worker on the named macOS platform combination."""
 
     schema_version: int
     backend: str
@@ -1167,7 +1167,7 @@ class ParallelRuntimeConfigMacosMpsTwoWorker:
         if combination not in MACOS_MPS_TWO_WORKER_PLATFORM_COMBINATIONS:
             raise ContractError("PLATFORM_COMBINATION_UNSUPPORTED")
 
-        # Exact W2. Any other count is a different platform claim this contract does not make.
+        # Exact two-worker. Any other count is a different platform claim this contract does not make.
         if isinstance(self.worker_count, bool) or self.worker_count != MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT:
             raise ContractError("PLATFORM_WORKER_COUNT_UNSUPPORTED")
 
@@ -1348,35 +1348,35 @@ def require_macos_mps_two_worker_execution(request_version: int, config_version:
 
 
 # --------------------------------------------------------------------------------------
-# Versions 5 and 6: the two closed macOS W1 profiles
+# Versions 5 and 6: the two closed macOS single-worker profiles
 #
-# The platform support matrix is fixed: exact W2 first-pass is version 4, W1 full-restart retry
-# is version 5, W1 first-pass is version 6. Each new document admits exactly one combination -
+# The platform support matrix is fixed: exact two-worker first-pass is version 4, single-worker full-restart retry
+# is version 5, single-worker first-pass is version 6. Each new document admits exactly one combination -
 # the Darwin MPS one, at exactly one Worker - and the routing key
 # `(schema_version, execution_profile, batch_kind, worker_count)` is resolved against a closed
-# table instead of being inferred. The v4 document and its exact-W2 meaning are untouched.
+# table instead of being inferred. The v4 document and its exact two-worker meaning are untouched.
 # --------------------------------------------------------------------------------------
 
 
 class ExecutionProfile(StrEnum):
     """The closed set of approved macOS execution profiles."""
 
-    MPS_W2_FIRST_PASS = "MPS_W2_FIRST_PASS"
-    MPS_W1_FULL_RESTART_RETRY = "MPS_W1_FULL_RESTART_RETRY"
-    MPS_W1_FIRST_PASS = "MPS_W1_FIRST_PASS"
+    MPS_TWO_WORKER_FIRST_PASS = "MPS_W2_FIRST_PASS"
+    MPS_SINGLE_WORKER_FULL_RESTART_RETRY = "MPS_W1_FULL_RESTART_RETRY"
+    MPS_SINGLE_WORKER_FIRST_PASS = "MPS_W1_FIRST_PASS"
 
 
-#: The only worker counts the W1 profiles support. W1 is a platform claim, not a shrunken W2.
+#: The only worker counts the single-worker profiles support. single-worker is a platform claim, not a shrunken two-worker.
 MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT = 1
 MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT = 1
 
-#: The W1 profiles admit exactly one platform combination: the Darwin MPS one.
-W1_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
+#: The single-worker profiles admit exactly one platform combination: the Darwin MPS one.
+SINGLE_WORKER_PLATFORM_COMBINATIONS: tuple[tuple[str, str, str, str], ...] = (
     ("mps", "mps", "darwin_private_path_unix", "cgl"),
 )
 
 #: v5 and v6 restate the v4 freeze with their own schema and worker count. They add no field and
-#: redefine no functional value: the shape is the v4 shape at W1.
+#: redefine no functional value: the shape is the v4 shape at single-worker.
 FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY: Mapping[str, object] = MappingProxyType({
     **FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER,
     "schema_version": 5,
@@ -1431,13 +1431,13 @@ class ExecutionRoute:
 
 #: The whole support matrix. Three rows, no N>2 and no adaptive row.
 APPROVED_EXECUTION_ROUTES: tuple[ExecutionRoute, ...] = (
-    ExecutionRoute(schema_version=4, execution_profile=ExecutionProfile.MPS_W2_FIRST_PASS,
+    ExecutionRoute(schema_version=4, execution_profile=ExecutionProfile.MPS_TWO_WORKER_FIRST_PASS,
                    batch_kind=BatchKind.FIRST_PASS, worker_count=MACOS_MPS_TWO_WORKER_PLATFORM_WORKER_COUNT),
     ExecutionRoute(schema_version=5,
-                   execution_profile=ExecutionProfile.MPS_W1_FULL_RESTART_RETRY,
+                   execution_profile=ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY,
                    batch_kind=BatchKind.FULL_RESTART_RETRY,
                    worker_count=MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT),
-    ExecutionRoute(schema_version=6, execution_profile=ExecutionProfile.MPS_W1_FIRST_PASS,
+    ExecutionRoute(schema_version=6, execution_profile=ExecutionProfile.MPS_SINGLE_WORKER_FIRST_PASS,
                    batch_kind=BatchKind.FIRST_PASS, worker_count=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT),
 )
 
@@ -1481,7 +1481,7 @@ def resolve_execution_route(*, schema_version: object, execution_profile: object
         raise ContractError("EXECUTION_PROFILE_UNKNOWN") from error
     route = _ROUTE_BY_PROFILE[profile]
     if route.schema_version != schema_version:
-        # A v4 document claiming W1, a v5 document claiming first-pass or a v6 document claiming
+        # A v4 document claiming single-worker, a v5 document claiming first-pass or a v6 document claiming
         # retry all land here: the profile belongs to exactly one schema.
         raise ContractError("PROFILE_SCHEMA_MISMATCH")
     try:
@@ -1499,7 +1499,7 @@ def resolve_execution_route(*, schema_version: object, execution_profile: object
 
 @dataclass(frozen=True, slots=True)
 class ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
-    """The closed version-five document: W1 ``FULL_RESTART_RETRY`` on Darwin/MPS."""
+    """The closed version-five document: single-worker ``FULL_RESTART_RETRY`` on Darwin/MPS."""
 
     schema_version: int
     backend: str
@@ -1553,7 +1553,7 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
     )
 
     def __post_init__(self) -> None:
-        _validate_w1_profile(
+        _validate_single_worker_profile(
             self,
             schema_version=5,
             worker_count=MACOS_MPS_SINGLE_WORKER_RETRY_PLATFORM_WORKER_COUNT,
@@ -1563,7 +1563,7 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
 
     @property
     def execution_profile(self) -> ExecutionProfile:
-        return ExecutionProfile.MPS_W1_FULL_RESTART_RETRY
+        return ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY
 
     @property
     def batch_kind(self) -> BatchKind:
@@ -1582,12 +1582,12 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
         return self.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
 
     def resolved_manifest(self) -> dict:
-        return _w1_resolved_manifest(self)
+        return _single_worker_resolved_manifest(self)
 
 
 @dataclass(frozen=True, slots=True)
 class ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
-    """The closed version-six document: W1 ``FIRST_PASS`` on Darwin/MPS."""
+    """The closed version-six document: single-worker ``FIRST_PASS`` on Darwin/MPS."""
 
     schema_version: int
     backend: str
@@ -1641,7 +1641,7 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
     )
 
     def __post_init__(self) -> None:
-        _validate_w1_profile(
+        _validate_single_worker_profile(
             self,
             schema_version=6,
             worker_count=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_PLATFORM_WORKER_COUNT,
@@ -1651,7 +1651,7 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
 
     @property
     def execution_profile(self) -> ExecutionProfile:
-        return ExecutionProfile.MPS_W1_FIRST_PASS
+        return ExecutionProfile.MPS_SINGLE_WORKER_FIRST_PASS
 
     @property
     def batch_kind(self) -> BatchKind:
@@ -1670,13 +1670,13 @@ class ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
         return self.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
 
     def resolved_manifest(self) -> dict:
-        return _w1_resolved_manifest(self)
+        return _single_worker_resolved_manifest(self)
 
 
-def _validate_w1_profile(config: object, *, schema_version: int, worker_count: int,
+def _validate_single_worker_profile(config: object, *, schema_version: int, worker_count: int,
                          frozen_runtime_values: Mapping[str, object],
                          darwin_values: Mapping[str, object]) -> None:
-    """The closed validation the two W1 profiles share, in the v4 order and vocabulary."""
+    """The closed validation the two single-worker profiles share, in the v4 order and vocabulary."""
 
     if type(config.schema_version) is not int or config.schema_version != schema_version:
         raise ContractError("SCHEMA_VERSION")
@@ -1693,7 +1693,7 @@ def _validate_w1_profile(config: object, *, schema_version: int, worker_count: i
     combination = (
         str(config.accelerator.kind), config.requested_device, str(transport), config.mujoco_gl,
     )
-    if combination not in W1_PLATFORM_COMBINATIONS:
+    if combination not in SINGLE_WORKER_PLATFORM_COMBINATIONS:
         # A CPU device, a CPU fallback or the Linux transport is a different platform claim.
         raise ContractError("PLATFORM_COMBINATION_UNSUPPORTED")
 
@@ -1767,8 +1767,8 @@ def _validate_w1_profile(config: object, *, schema_version: int, worker_count: i
         raise ContractError("ROS_DOMAIN_IDS")
 
 
-def _w1_resolved_manifest(config: object) -> dict:
-    """The resolved platform values a W1 manifest records; never ``auto`` and never a budget."""
+def _single_worker_resolved_manifest(config: object) -> dict:
+    """The resolved platform values a single-worker manifest records; never ``auto`` and never a budget."""
 
     return {
         "schema_version": config.schema_version,
@@ -1790,8 +1790,8 @@ def _w1_resolved_manifest(config: object) -> dict:
     }
 
 
-def _parse_w1_document(document: object, *, schema_version: int, config_class):
-    """Validate a W1 document against the closed v4-shaped schema, at its own version."""
+def _parse_single_worker_document(document: object, *, schema_version: int, config_class):
+    """Validate a single-worker document against the closed v4-shaped schema, at its own version."""
 
     top = _closed_mapping_fields("CONFIG", document, set(MACOS_MPS_TWO_WORKER_CONFIG_FIELDS))
     if type(top["schema_version"]) is not int or top["schema_version"] != schema_version:
@@ -1837,15 +1837,15 @@ def _parse_w1_document(document: object, *, schema_version: int, config_class):
 
 
 def parse_parallel_runtime_config_macos_mps_single_worker_retry(document: object) -> ParallelRuntimeConfigMacosMpsSingleWorkerRetry:
-    """Validate a version-five document: W1 ``FULL_RESTART_RETRY`` on Darwin/MPS only."""
+    """Validate a version-five document: single-worker ``FULL_RESTART_RETRY`` on Darwin/MPS only."""
 
-    return _parse_w1_document(document, schema_version=5, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
+    return _parse_single_worker_document(document, schema_version=5, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
 
 
 def parse_parallel_runtime_config_macos_mps_single_worker_first_pass(document: object) -> ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass:
-    """Validate a version-six document: W1 ``FIRST_PASS`` on Darwin/MPS only."""
+    """Validate a version-six document: single-worker ``FIRST_PASS`` on Darwin/MPS only."""
 
-    return _parse_w1_document(document, schema_version=6, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
+    return _parse_single_worker_document(document, schema_version=6, config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
 
 
 def load_parallel_runtime_config_macos_mps_single_worker_retry(path: Path) -> ParallelRuntimeConfigMacosMpsSingleWorkerRetry:

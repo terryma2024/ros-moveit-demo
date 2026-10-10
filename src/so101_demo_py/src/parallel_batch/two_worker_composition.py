@@ -1,13 +1,13 @@
-"""Compose an exact-W2 macOS MPS campaign: the resolved plan and the manifest it must record.
+"""Compose an exact two-worker macOS MPS campaign: the resolved plan and the manifest it must record.
 
-Task 10 of the macOS MPS / private IPC plan. Neither the CLI nor the resource allocator may keep
+Neither the CLI nor the resource allocator may keep
 its v3-only schema gate, because that would make the whole v4 contract unreachable; but widening
 that gate must not change one byte of v3 behavior. This module does both:
 
 * `load_execution_config` keeps the v3 document exactly as it was and adds the v4 branch;
 * `load_execution_config_for_schema` refuses a v4 *platform* claim on a host that cannot honour it,
   which is what makes "Linux v4 is not executed here" a checked fact;
-* `compose_w2_campaign` produces the resolved plan and the manifest fields the design requires:
+* `compose_two_worker_campaign` produces the resolved plan and the manifest fields the design requires:
   resolved accelerator, IPC transport, GL backend, exact worker count, Broker identity, model
   provenance, snapshot root and the supervisor receipt.
 
@@ -37,15 +37,15 @@ from .contracts import (
     require_macos_mps_two_worker_execution,
 )
 
-#: Exact W2. The design's platform claim is this number and no other.
-EXACT_W2_WORKERS = 2
+#: Exact two-worker. The design's platform claim is this number and no other.
+EXACT_TWO_WORKERS = 2
 
 #: The schema-v4 document name, for the manifest's provenance fields.
 MACOS_MPS_TWO_WORKER_CONFIG_BASENAME = "parallel_batch_macos_mps_two_worker.yaml"
 
 
 class CompositionError(RuntimeError):
-    """An exact-W2 campaign cannot be composed from these inputs."""
+    """An exact two-worker campaign cannot be composed from these inputs."""
 
     def __init__(self, reason: str, detail: str = "") -> None:
         super().__init__(f"{reason}: {detail}" if detail else reason)
@@ -82,8 +82,8 @@ def load_execution_config_for_schema(path: Path, *, platform: str | None = None)
     The Darwin `mps + darwin_private_path_unix` combination may only be executed on Darwin:
     asking for it elsewhere fails loudly instead of silently attempting an impossible launch.
 
-    The rule is the same for every approved Darwin/MPS profile: v4 (W2 first-pass), v5 (W1 retry)
-    and v6 (W1 first-pass) all take this MPS path, and a non-Darwin host refuses all three. The v3
+    The rule is the same for every approved Darwin/MPS profile: v4 (two-worker first-pass), v5 (single-worker retry)
+    and v6 (single-worker first-pass) all take this MPS path, and a non-Darwin host refuses all three. The v3
     branch is untouched and remains host-agnostic.
     """
 
@@ -102,11 +102,11 @@ def load_execution_config_for_schema(path: Path, *, platform: str | None = None)
 
 
 @dataclass(frozen=True)
-class W2Slots:
+class TwoWorkerSlots:
     """The two fixed slots as *capacity*. They own no point.
 
     The design is explicit that this is not a capacity calculation: two slots exist because the
-    platform claim is exact W2, so a campaign still runs two Workers even when fewer points were
+    platform claim is exact two-worker, so a campaign still runs two Workers even when fewer points were
     selected. Which point a Worker executes is decided per lease by the durable shared queue
     (`parallel_batch.queue`), so a slot never holds a static assignment.
     """
@@ -133,14 +133,14 @@ class W2Slots:
         }
 
 
-def exact_w2_slots() -> W2Slots:
-    """Return the two exact-W2 capacity slots; point assignment belongs to the queue."""
+def exact_two_worker_slots() -> TwoWorkerSlots:
+    """Return the two exact two-worker capacity slots; point assignment belongs to the queue."""
 
-    return W2Slots(slot_ids=("slot-0", "slot-1"))
+    return TwoWorkerSlots(slot_ids=("slot-0", "slot-1"))
 
 
 @dataclass(frozen=True)
-class W2CampaignPlan:
+class TwoWorkerCampaignPlan:
     """The resolved plan a supervisor can execute and a manifest can record."""
 
     schema_version: int
@@ -155,7 +155,7 @@ class W2CampaignPlan:
     ipc_transport: str
     mujoco_gl: str
     worker_count: int
-    slots: W2Slots
+    slots: TwoWorkerSlots
     broker_pid: int | None
     broker_birth_identity: int | None
     model_provenance: Mapping[str, object]
@@ -210,14 +210,14 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id: str,
+def compose_two_worker_campaign(*, config, config_path: Path, campaign_id: str, batch_id: str,
                         selected_point_ids: tuple[str, ...], evidence_root: Path,
                         broker_pid: int | None = None,
-                        broker_birth_identity: int | None = None) -> W2CampaignPlan:
-    """Resolve one exact-W2 campaign. Refuses anything that is not exact W2."""
+                        broker_birth_identity: int | None = None) -> TwoWorkerCampaignPlan:
+    """Resolve one exact two-worker campaign. Refuses anything that is not exact two-worker."""
 
     if isinstance(config, (ParallelRuntimeConfigMacosMpsSingleWorkerRetry, ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)):
-        # No cross-profile reuse: a W1 document is not a shrunken W2 request.
+        # No cross-profile reuse: a single-worker document is not a shrunken two-worker request.
         raise CompositionError(
             "CONFIG_SCHEMA_MISMATCH",
             f"exact W2 requires a v4 document, not {type(config).__name__}",
@@ -232,7 +232,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
 
     if isinstance(config, ParallelRuntimeConfigMacosMpsTwoWorker):
         require_macos_mps_two_worker_execution(4, config.schema_version)
-        if config.worker_count != EXACT_W2_WORKERS:
+        if config.worker_count != EXACT_TWO_WORKERS:
             raise CompositionError(
                 "PLATFORM_WORKER_COUNT_UNSUPPORTED", str(config.worker_count))
         accelerator = str(config.accelerator.kind)
@@ -251,14 +251,14 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
         selector = f"{config.gpu_device.selector_kind}:{config.gpu_device.selector}"
         ipc_transport = str(IpcTransport.PROC_FD_UNIX)
         mujoco_gl = "egl"
-        worker_count = EXACT_W2_WORKERS
+        worker_count = EXACT_TWO_WORKERS
         headroom = None
         fraction = None
         snapshot_limit = 0
         requested_device = config.requested_device
         allow_cpu_fallback = config.allow_cpu_fallback
 
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
     if worker_count != len(slots.slot_ids):
         raise CompositionError(
             "SLOT_COUNT_MISMATCH", f"{worker_count} workers for {len(slots.slot_ids)} slots")
@@ -270,7 +270,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
         "yolo_imgsz": config.yolo_imgsz,
     }
 
-    return W2CampaignPlan(
+    return TwoWorkerCampaignPlan(
         schema_version=config.schema_version,
         campaign_id=campaign_id,
         batch_id=batch_id,
@@ -300,7 +300,7 @@ def compose_w2_campaign(*, config, config_path: Path, campaign_id: str, batch_id
     )
 
 
-def assert_no_host_platform_calls(plan: W2CampaignPlan) -> None:
+def assert_no_host_platform_calls(plan: TwoWorkerCampaignPlan) -> None:
     """The Darwin plan must not claim an NVML or `/proc/self/fd` dependency, and vice versa."""
 
     if plan.accelerator == "mps":

@@ -1,4 +1,4 @@
-"""The Worker-side Broker port for the macOS W2 campaign: permission-only, generation-checked.
+"""The Worker-side Broker port for the macOS two-worker campaign: permission-only, generation-checked.
 
 This is the v4 port of `cli/mujoco_parallel_batch._WorkerBrokerProxy`. Two things differ, and both
 follow from schema v4 rather than from taste:
@@ -23,7 +23,7 @@ from typing import Callable, Mapping
 from .parallel_ipc_darwin import DarwinPermissionOnlyClient
 
 
-class W2BrokerPortError(RuntimeError):
+class TwoWorkerBrokerPortError(RuntimeError):
     """The port cannot serve a request under its current authority."""
 
 
@@ -36,7 +36,7 @@ class BrokerAuthority:
     endpoint_path: str
 
 
-class W2BrokerPort:
+class TwoWorkerBrokerPort:
     """One Worker's permission-only channel to the shared MPS Broker."""
 
     def __init__(
@@ -55,7 +55,7 @@ class W2BrokerPort:
         if not isinstance(authority, BrokerAuthority):
             raise TypeError("a BrokerAuthority is required")
         if type(authority.generation) is not int or authority.generation <= 0:
-            raise W2BrokerPortError("BROKER_GENERATION_AUTHORITY")
+            raise TwoWorkerBrokerPortError("BROKER_GENERATION_AUTHORITY")
         self.coordinator = coordinator
         self.config = config
         self.broker_generation = authority.generation
@@ -79,9 +79,9 @@ class W2BrokerPort:
         """Adopt a newer generation, or fail closed if the authority went backwards."""
 
         if not isinstance(authority, BrokerAuthority):
-            raise W2BrokerPortError("BROKER_AUTHORITY_INVALID")
+            raise TwoWorkerBrokerPortError("BROKER_AUTHORITY_INVALID")
         if authority.generation < self.broker_generation:
-            raise W2BrokerPortError("BROKER_GENERATION_ROLLBACK")
+            raise TwoWorkerBrokerPortError("BROKER_GENERATION_ROLLBACK")
         if authority.generation != self.broker_generation or self.connection is None:
             self.connection = self._connect(authority)
             self.broker_generation = authority.generation
@@ -98,11 +98,11 @@ class W2BrokerPort:
         authority = self.coordinator()
         while wait_until_healthy and not authority.healthy:
             if self._clock() >= deadline:
-                raise W2BrokerPortError("BROKER_RECOVERY_TIMEOUT")
+                raise TwoWorkerBrokerPortError("BROKER_RECOVERY_TIMEOUT")
             self._sleep(0.05)
             authority = self.coordinator()
         if not authority.healthy:
-            raise W2BrokerPortError("BROKER_UNHEALTHY")
+            raise TwoWorkerBrokerPortError("BROKER_UNHEALTHY")
         self._adopt(authority)
         return authority
 
@@ -119,7 +119,7 @@ class W2BrokerPort:
         self.refresh(wait_until_healthy=False)
         runner = self.perception_runner if perception_runner is None else perception_runner
         if runner is None:
-            raise W2BrokerPortError("PERCEPTION_RUNNER_REQUIRED")
+            raise TwoWorkerBrokerPortError("PERCEPTION_RUNNER_REQUIRED")
         def send(model_id, before_send=None):
             return self.request_one(
                 lease,
@@ -201,7 +201,7 @@ class W2BrokerPort:
             # lives inside that mapping, not on the response itself.
             error = getattr(response, "error", None) or {}
             code = error.get("code") if isinstance(error, Mapping) else None
-            refusal = W2BrokerPortError(
+            refusal = TwoWorkerBrokerPortError(
                 f"BROKER_INFER_REFUSED: {code or getattr(response, 'status', 'UNKNOWN')}"
             )
             # The raw frame the server sent, kept on the refusal so a caller's evidence can show what
@@ -232,15 +232,15 @@ def authority_from_document(document: Mapping[str, object]) -> BrokerAuthority:
     """Reduce a Coordinator authority document to the fields a Worker is allowed to act on."""
 
     if not isinstance(document, Mapping):
-        raise W2BrokerPortError("BROKER_AUTHORITY_INVALID")
+        raise TwoWorkerBrokerPortError("BROKER_AUTHORITY_INVALID")
     try:
         healthy = bool(document["healthy"])
         generation = document["broker_generation"]
         endpoint_path = str(document["broker_socket_path"])
     except KeyError as error:
-        raise W2BrokerPortError(f"BROKER_AUTHORITY_INCOMPLETE: {error}") from error
+        raise TwoWorkerBrokerPortError(f"BROKER_AUTHORITY_INCOMPLETE: {error}") from error
     if type(generation) is not int or generation <= 0:
-        raise W2BrokerPortError("BROKER_GENERATION_AUTHORITY")
+        raise TwoWorkerBrokerPortError("BROKER_GENERATION_AUTHORITY")
     if not endpoint_path:
-        raise W2BrokerPortError("BROKER_ENDPOINT_MISSING")
+        raise TwoWorkerBrokerPortError("BROKER_ENDPOINT_MISSING")
     return BrokerAuthority(healthy=healthy, generation=generation, endpoint_path=endpoint_path)

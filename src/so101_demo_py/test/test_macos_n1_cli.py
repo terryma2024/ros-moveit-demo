@@ -19,8 +19,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.cli import macos_n1_first_pass, macos_n1_retry
-from so101_demo.cli.macos_w2_campaign import (
+from so101_demo.cli import macos_mps_single_worker_first_pass, macos_mps_single_worker_retry
+from so101_demo.cli.macos_two_worker_campaign import (
     GUARD_RESULT_FD_VARIABLE,
     campaign_guard_scope,
     broker_phase_guard,
@@ -90,12 +90,12 @@ def _entry_argv(module, config, tmp_path, *, points=("p1",), extra=()):
 def test_each_public_entry_names_exactly_one_profile():
     """The routing key is fixed by the entry point, not by a flag."""
 
-    assert macos_n1_retry.EXECUTION_PROFILE == "MPS_W1_FULL_RESTART_RETRY"
-    assert macos_n1_retry.BATCH_KIND == "FULL_RESTART_RETRY"
-    assert macos_n1_first_pass.EXECUTION_PROFILE == "MPS_W1_FIRST_PASS"
-    assert macos_n1_first_pass.BATCH_KIND == "FIRST_PASS"
+    assert macos_mps_single_worker_retry.EXECUTION_PROFILE == "MPS_W1_FULL_RESTART_RETRY"
+    assert macos_mps_single_worker_retry.BATCH_KIND == "FULL_RESTART_RETRY"
+    assert macos_mps_single_worker_first_pass.EXECUTION_PROFILE == "MPS_W1_FIRST_PASS"
+    assert macos_mps_single_worker_first_pass.BATCH_KIND == "FIRST_PASS"
 
-    for module in (macos_n1_retry, macos_n1_first_pass):
+    for module in (macos_mps_single_worker_retry, macos_mps_single_worker_first_pass):
         accepted = {option for action in module.build_parser()._actions
                     for option in action.option_strings}
         assert "--batch-kind" not in accepted
@@ -108,21 +108,21 @@ def test_each_public_entry_names_exactly_one_profile():
 def test_the_retry_entry_refuses_a_first_pass_document(tmp_path):
     """No cross-profile reuse: v6 through the retry entry is a refusal, not a fallback."""
 
-    argv = _entry_argv(macos_n1_retry, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path, extra=["--skip-models"])
-    assert macos_n1_retry.run(argv[1:]) == 1
+    argv = _entry_argv(macos_mps_single_worker_retry, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path, extra=["--skip-models"])
+    assert macos_mps_single_worker_retry.run(argv[1:]) == 1
 
 
 def test_the_first_pass_entry_refuses_a_retry_document(tmp_path):
     """And the other way round."""
 
-    argv = _entry_argv(macos_n1_first_pass, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, extra=["--skip-models"])
-    assert macos_n1_first_pass.run(argv[1:]) == 1
+    argv = _entry_argv(macos_mps_single_worker_first_pass, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, extra=["--skip-models"])
+    assert macos_mps_single_worker_first_pass.run(argv[1:]) == 1
 
 
 def test_each_entry_refuses_a_w2_document(tmp_path):
     """A v4 exact-W2 document is not a W1 request."""
 
-    for module in (macos_n1_retry, macos_n1_first_pass):
+    for module in (macos_mps_single_worker_retry, macos_mps_single_worker_first_pass):
         argv = _entry_argv(module, MACOS_MPS_TWO_WORKER_CONFIG, tmp_path / module.__name__, extra=["--skip-models"])
         assert module.run(argv[1:]) == 1
 
@@ -131,9 +131,9 @@ def test_each_entry_refuses_a_w2_document(tmp_path):
 def test_each_entry_composes_exactly_one_slot_without_models(tmp_path, capsys):
     """`--skip-models` proves the route and the plan, and is never a pass."""
 
-    argv = _entry_argv(macos_n1_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path, points=("p1", "p2"),
+    argv = _entry_argv(macos_mps_single_worker_first_pass, MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, tmp_path, points=("p1", "p2"),
                        extra=["--skip-models"])
-    assert macos_n1_first_pass.run(argv[1:]) == 3
+    assert macos_mps_single_worker_first_pass.run(argv[1:]) == 3
     document = json.loads(capsys.readouterr().out)
 
     assert document["status"] == "COMPOSED_ONLY"
@@ -154,11 +154,11 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
 
     import json as _json
 
-    from so101_demo.cli.macos_w2_campaign import build_worker_leases
+    from so101_demo.cli.macos_two_worker_campaign import build_worker_leases
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
     from so101_demo.parallel_batch.queue import DurablePointQueue
     from so101_demo.parallel_batch.selection import build_first_pass_selection
-    from so101_demo.parallel_batch.w1_composition import compose_w1_first_pass
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
                  "cup_test_right_5cm")
@@ -169,7 +169,7 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
         catalog_path=catalog, point_ids=point_ids, campaign_id="b-n1", batch_id="b-n1",
         config_sha256="c" * 64, runtime_closure_sha256="d" * 64)
     queue = DurablePointQueue(root=tmp_path / "queue", binding=binding)
-    plan = compose_w1_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
+    plan = compose_single_worker_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
                                  config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1", batch_id="b-n1",
                                  selected_point_ids=point_ids, evidence_root=tmp_path)
     leases = build_worker_leases(plan=plan, batch_id="b-n1", evidence_root=tmp_path,
@@ -184,7 +184,7 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
 
     # The Worker child is a script (`sys.argv` drives it), so the check that it records the
     # identity it was handed is made against its source rather than by importing it.
-    worker_source = (PACKAGE / "src/cli/macos_w2_worker.py").read_text()
+    worker_source = (PACKAGE / "src/cli/macos_two_worker_process.py").read_text()
     for name in ("execution_profile", "batch_kind", "schema_version"):
         assert name in worker_source, "the Worker must record the profile it executed"
 
@@ -193,8 +193,8 @@ def test_the_w1_lease_names_the_profile_the_worker_executes(tmp_path, capsys):
 def test_the_retry_entry_keeps_the_full_restart_batch_kind(tmp_path, capsys):
     """The retry entry composes the retry route, with one slot and one domain."""
 
-    argv = _entry_argv(macos_n1_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, extra=["--skip-models"])
-    assert macos_n1_retry.run(argv[1:]) == 3
+    argv = _entry_argv(macos_mps_single_worker_retry, MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG, tmp_path, extra=["--skip-models"])
+    assert macos_mps_single_worker_retry.run(argv[1:]) == 3
     document = json.loads(capsys.readouterr().out)
     assert document["plan"]["execution_profile"] == "MPS_W1_FULL_RESTART_RETRY"
     assert document["plan"]["batch_kind"] == "FULL_RESTART_RETRY"
@@ -385,7 +385,7 @@ def test_the_torch_import_of_the_guard_phase_does_not_cross_the_exec(tmp_path):
     marker = tmp_path / "torch-imported.txt"
     phase_two = (
         "import json, os, sys\n"
-        "from so101_demo.cli.macos_w2_campaign import (\n"
+        "from so101_demo.cli.macos_two_worker_campaign import (\n"
         "    GUARD_RESULT_FD_VARIABLE, broker_phase_guard, campaign_guard_scope)\n"
         "guard = broker_phase_guard(os.environ,\n"
         "                           scope=campaign_guard_scope(batch_id='b-n1', worker_count=1),\n"
@@ -402,7 +402,7 @@ def test_the_torch_import_of_the_guard_phase_does_not_cross_the_exec(tmp_path):
         from so101_demo.parallel_batch.start_guard import StartGuardPolicy
         from so101_demo.parallel_batch.start_guard_probe import (
             publish_guard_handover, run_campaign_start_guard)
-        from so101_demo.cli.macos_w2_campaign import (
+        from so101_demo.cli.macos_two_worker_campaign import (
             GUARD_RESULT_FD_VARIABLE, GUARD_PHASE_VARIABLE, GUARD_PHASE, BROKER_PHASE,
             campaign_guard_scope)
 
@@ -453,9 +453,9 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
     on-disk record is audit only.
     """
 
-    import so101_demo.cli.macos_w2_campaign as cli
+    import so101_demo.cli.macos_two_worker_campaign as cli
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
-    from so101_demo.parallel_batch.w1_composition import compose_w1_first_pass
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     class _ExecCalled(Exception):
         pass
@@ -478,7 +478,7 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
 
     arguments = SimpleNamespace(evidence_root=tmp_path, batch_id="b-n1", campaign_id="b-n1")
     config = load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)
-    plan = compose_w1_first_pass(config=config, config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1",
+    plan = compose_single_worker_first_pass(config=config, config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1",
                                  batch_id="b-n1", selected_point_ids=("p1",),
                                  evidence_root=tmp_path)
     document: dict = {}
@@ -486,7 +486,7 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
         cli._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
                              cli.route_spec("MPS_W1_FIRST_PASS"), document)
 
-    assert captured["argv"][:3] == [sys.executable, "-m", "so101_demo.cli.macos_n1_first_pass"]
+    assert captured["argv"][:3] == [sys.executable, "-m", "so101_demo.cli.macos_mps_single_worker_first_pass"]
     environment = captured["environment"]
     assert environment[cli.GUARD_PHASE_VARIABLE] == cli.BROKER_PHASE
     assert environment["PYTORCH_ENABLE_MPS_FALLBACK"] == "0"
@@ -506,9 +506,9 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
                                                                               monkeypatch):
     """A FAIL admission returns a refusal document and never reaches the exec."""
 
-    import so101_demo.cli.macos_w2_campaign as cli
+    import so101_demo.cli.macos_two_worker_campaign as cli
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
-    from so101_demo.parallel_batch.w1_composition import compose_w1_first_pass
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     monkeypatch.setattr(cli.os, "execve",
                         lambda *_: pytest.fail("a refused admission must not exec"))
@@ -519,7 +519,7 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
                         lambda arguments, **kwargs: real_guard_phase(
                             arguments, **{**kwargs, "probe": None}))
     arguments = SimpleNamespace(evidence_root=tmp_path, batch_id="b-n1", campaign_id="b-n1")
-    plan = compose_w1_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
+    plan = compose_single_worker_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
                                  config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1", batch_id="b-n1",
                                  selected_point_ids=("p1",), evidence_root=tmp_path)
     document: dict = {}
@@ -540,9 +540,9 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
     built and no Worker exists.
     """
 
-    import so101_demo.cli.macos_w2_campaign as cli
+    import so101_demo.cli.macos_two_worker_campaign as cli
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
-    from so101_demo.parallel_batch.w1_composition import compose_w1_first_pass
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     def refused_guard_phase(arguments, **kwargs):
         result = run_campaign_start_guard(policy=kwargs["policy"], batch_id=kwargs["batch_id"],
@@ -561,7 +561,7 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
         cancel_second_worker_after_served=0, crash_broker_after_served=0,
         point_id=point_ids, catalog=PACKAGE / "config/mujoco/moveit_expert_validation_points.yaml",
         catalog_sha256=None, retry_root=None)
-    plan = compose_w1_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
+    plan = compose_single_worker_first_pass(config=load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG),
                                  config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1", batch_id="b-n1",
                                  selected_point_ids=point_ids, evidence_root=tmp_path)
     document: dict = {"status": "PENDING"}

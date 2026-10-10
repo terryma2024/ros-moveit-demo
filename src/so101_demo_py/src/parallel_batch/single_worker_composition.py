@@ -1,14 +1,14 @@
-"""Compose a macOS W1 campaign: one slot, one Worker, one ROS domain, one named profile.
+"""Compose a macOS single-worker campaign: one slot, one Worker, one ROS domain, one named profile.
 
-Task 7 of the macOS service campaign closure plan. The design's support matrix has exactly two W1
-profiles - v5 is ``MPS_W1_FULL_RESTART_RETRY`` and v6 is ``MPS_W1_FIRST_PASS`` - and each admits
+The macOS service campaign design's support matrix has exactly two single-worker
+profiles - v5 is ``MPS_SINGLE_WORKER_FULL_RESTART_RETRY`` and v6 is ``MPS_SINGLE_WORKER_FIRST_PASS`` - and each admits
 exactly one combination of ``(schema_version, execution_profile, batch_kind, worker_count)``. This
-module is the W1 counterpart of :mod:`so101_demo.parallel_batch.w2_composition`, and it mirrors
+module is the single-worker counterpart of :mod:`so101_demo.parallel_batch.two_worker_composition`, and it mirrors
 that module's structure and its honesty:
 
-* the loader is shared (`w2_composition.load_execution_config`), so the installed v5/v6 YAML takes
+* the loader is shared (`two_worker_composition.load_execution_config`), so the installed v5/v6 YAML takes
   the same MPS path the v4 document takes and a Linux host refuses all three;
-* a W1 composition is **not** a capacity calculation. One slot exists because the platform claim
+* a single-worker composition is **not** a capacity calculation. One slot exists because the platform claim
   is exactly one Worker, never because one point was selected: `selected_point_ids` is recorded
   and handed to the durable queue, and a plan is byte-identical whether one point or ten were
   chosen;
@@ -31,21 +31,21 @@ from .contracts import (
     require_macos_mps_single_worker_retry_execution,
     require_macos_mps_single_worker_first_pass_execution,
 )
-from .w2_composition import (
+from .two_worker_composition import (
     CompositionError,
     _sha256_file,
 )
 
-#: Exact W1. Any other count is a different platform claim these profiles do not make.
-EXACT_W1_WORKERS = 1
+#: Exact single-worker. Any other count is a different platform claim these profiles do not make.
+EXACT_SINGLE_WORKERS = 1
 
 #: The profile names the routing table and the manifests use.
-MPS_W1_FULL_RESTART_RETRY = str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY)
-MPS_W1_FIRST_PASS = str(ExecutionProfile.MPS_W1_FIRST_PASS)
+MPS_SINGLE_WORKER_FULL_RESTART_RETRY = str(ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY)
+MPS_SINGLE_WORKER_FIRST_PASS = str(ExecutionProfile.MPS_SINGLE_WORKER_FIRST_PASS)
 
 #: The only batch kind each profile admits. It is carried by the request, never inferred.
-W1_RETRY_BATCH_KIND = str(BatchKind.FULL_RESTART_RETRY)
-W1_FIRST_PASS_BATCH_KIND = str(BatchKind.FIRST_PASS)
+SINGLE_WORKER_RETRY_BATCH_KIND = str(BatchKind.FULL_RESTART_RETRY)
+SINGLE_WORKER_FIRST_PASS_BATCH_KIND = str(BatchKind.FIRST_PASS)
 
 #: The schema-v5/v6 document names, for the manifest's provenance fields.
 MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME = "parallel_batch_macos_mps_single_worker_retry.yaml"
@@ -53,12 +53,12 @@ MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME = "parallel_batch_macos_mps_s
 
 
 @dataclass(frozen=True)
-class W1Slots:
+class SingleWorkerSlots:
     """The single fixed slot as *capacity*. It owns no point.
 
-    One slot exists because the platform claim is exact W1, so the campaign still runs one Worker
+    One slot exists because the platform claim is exact single-worker, so the campaign still runs one Worker
     even when nothing was selected. Which point that Worker executes is decided per lease by the
-    durable shared queue (`parallel_batch.queue`), exactly as for W2.
+    durable shared queue (`parallel_batch.queue`), exactly as for two-worker.
     """
 
     slot_ids: tuple[str, ...]
@@ -83,15 +83,15 @@ class W1Slots:
         }
 
 
-def exact_w1_slots() -> W1Slots:
-    """Return the single W1 capacity slot; point assignment belongs to the queue."""
+def exact_single_worker_slots() -> SingleWorkerSlots:
+    """Return the single single-worker capacity slot; point assignment belongs to the queue."""
 
-    return W1Slots(slot_ids=("slot-0",))
+    return SingleWorkerSlots(slot_ids=("slot-0",))
 
 
 @dataclass(frozen=True)
-class W1CampaignPlan:
-    """The resolved W1 plan a supervisor can execute and a manifest can record."""
+class SingleWorkerCampaignPlan:
+    """The resolved single-worker plan a supervisor can execute and a manifest can record."""
 
     schema_version: int
     execution_profile: str
@@ -107,7 +107,7 @@ class W1CampaignPlan:
     ipc_transport: str
     mujoco_gl: str
     worker_count: int
-    slots: W1Slots
+    slots: SingleWorkerSlots
     broker_pid: int | None
     broker_birth_identity: int | None
     model_provenance: Mapping[str, object]
@@ -158,12 +158,12 @@ class W1CampaignPlan:
         }
 
 
-def _compose_w1(*, config, config_path: Path, campaign_id: str, batch_id: str,
+def _compose_single_worker(*, config, config_path: Path, campaign_id: str, batch_id: str,
                 selected_point_ids: tuple[str, ...], evidence_root: Path,
                 schema_version: int, execution_profile: str, batch_kind: str,
                 config_class, config_basename: str,
-                broker_pid: int | None, broker_birth_identity: int | None) -> W1CampaignPlan:
-    """Resolve one W1 campaign. Refuses any other profile, schema or platform claim."""
+                broker_pid: int | None, broker_birth_identity: int | None) -> SingleWorkerCampaignPlan:
+    """Resolve one single-worker campaign. Refuses any other profile, schema or platform claim."""
 
     if not isinstance(config, config_class):
         raise CompositionError(
@@ -180,12 +180,12 @@ def _compose_w1(*, config, config_path: Path, campaign_id: str, batch_id: str,
     if not root.is_absolute():
         raise CompositionError("EVIDENCE_ROOT", "must be absolute")
 
-    # Exact W1. The count comes from the profile, never from the length of the selection: that is
+    # Exact single-worker. The count comes from the profile, never from the length of the selection: that is
     # what keeps "a plan is the same plan whether one point or ten were selected" a checked fact.
-    worker_count = EXACT_W1_WORKERS
+    worker_count = EXACT_SINGLE_WORKERS
     if config.worker_count != worker_count:
         raise CompositionError("PLATFORM_WORKER_COUNT_UNSUPPORTED", str(config.worker_count))
-    slots = exact_w1_slots()
+    slots = exact_single_worker_slots()
     if worker_count != len(slots.slot_ids):
         raise CompositionError(
             "SLOT_COUNT_MISMATCH", f"{worker_count} workers for {len(slots.slot_ids)} slots")
@@ -193,7 +193,7 @@ def _compose_w1(*, config, config_path: Path, campaign_id: str, batch_id: str,
         raise CompositionError(
             "ROS_DOMAIN_IDS", f"{len(config.ros_domain_ids)} domains for {worker_count} workers")
 
-    plan = W1CampaignPlan(
+    plan = SingleWorkerCampaignPlan(
         schema_version=schema_version,
         execution_profile=execution_profile,
         batch_kind=batch_kind,
@@ -232,35 +232,35 @@ def _compose_w1(*, config, config_path: Path, campaign_id: str, batch_id: str,
     return plan
 
 
-def compose_w1_retry(*, config, config_path: Path, campaign_id: str, batch_id: str,
+def compose_single_worker_retry(*, config, config_path: Path, campaign_id: str, batch_id: str,
                      selected_point_ids: tuple[str, ...], evidence_root: Path,
                      broker_pid: int | None = None,
-                     broker_birth_identity: int | None = None) -> W1CampaignPlan:
-    """Resolve the v5 W1 `FULL_RESTART_RETRY` campaign. Refuses every other document."""
+                     broker_birth_identity: int | None = None) -> SingleWorkerCampaignPlan:
+    """Resolve the v5 single-worker `FULL_RESTART_RETRY` campaign. Refuses every other document."""
 
-    return _compose_w1(
+    return _compose_single_worker(
         config=config, config_path=config_path, campaign_id=campaign_id, batch_id=batch_id,
         selected_point_ids=selected_point_ids, evidence_root=evidence_root, schema_version=5,
-        execution_profile=MPS_W1_FULL_RESTART_RETRY, batch_kind=W1_RETRY_BATCH_KIND,
+        execution_profile=MPS_SINGLE_WORKER_FULL_RESTART_RETRY, batch_kind=SINGLE_WORKER_RETRY_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsSingleWorkerRetry, config_basename=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_BASENAME,
         broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
 
 
-def compose_w1_first_pass(*, config, config_path: Path, campaign_id: str, batch_id: str,
+def compose_single_worker_first_pass(*, config, config_path: Path, campaign_id: str, batch_id: str,
                           selected_point_ids: tuple[str, ...], evidence_root: Path,
                           broker_pid: int | None = None,
-                          broker_birth_identity: int | None = None) -> W1CampaignPlan:
-    """Resolve the v6 W1 `FIRST_PASS` campaign. Refuses every other document."""
+                          broker_birth_identity: int | None = None) -> SingleWorkerCampaignPlan:
+    """Resolve the v6 single-worker `FIRST_PASS` campaign. Refuses every other document."""
 
-    return _compose_w1(
+    return _compose_single_worker(
         config=config, config_path=config_path, campaign_id=campaign_id, batch_id=batch_id,
         selected_point_ids=selected_point_ids, evidence_root=evidence_root, schema_version=6,
-        execution_profile=MPS_W1_FIRST_PASS, batch_kind=W1_FIRST_PASS_BATCH_KIND,
+        execution_profile=MPS_SINGLE_WORKER_FIRST_PASS, batch_kind=SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
         config_class=ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass, config_basename=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_BASENAME,
         broker_pid=broker_pid, broker_birth_identity=broker_birth_identity)
 
 
-def assert_no_host_platform_calls(plan: W1CampaignPlan) -> None:
+def assert_no_host_platform_calls(plan: SingleWorkerCampaignPlan) -> None:
     """The Darwin plan must not claim an NVML or `/proc/self/fd` dependency, and vice versa."""
 
     from .contracts import IpcTransport

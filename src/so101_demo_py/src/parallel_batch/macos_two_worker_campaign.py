@@ -1,8 +1,8 @@
-"""A composed macOS MPS W2 campaign: the pieces from Tasks 3-9 driven as one runnable unit.
+"""A composed macOS MPS two-worker campaign: the separately tested pieces driven as one runnable unit.
 
-Tasks 2-9 produced separately tested libraries (supervisor, MPS broker bootstrap, private Unix
+Separately tested libraries (supervisor, MPS broker bootstrap, private Unix
 address, permission-only v4 RPC, immutable snapshots, one-time request registry, whole-pool
-recovery). Nothing yet composed them, which is why the Task 13 runtime smoke had to hand-assemble
+recovery). Nothing yet composed them, which is why the runtime smoke had to hand-assemble
 its own sequence. This module is that composition, and it is the macOS counterpart of the Linux
 container path in `parallel_ros_runtime`.
 
@@ -29,17 +29,17 @@ from .campaign_supervisor import ACTIVE, CampaignSupervisor
 from .inference_registry import InferenceRegistry
 from .input_snapshot import SnapshotRegistry, SnapshotStore
 from .pool_recovery import INFRASTRUCTURE_FAILURE, BrokerPoolRecovery, RecoveryFacts
-from .w1_composition import W1CampaignPlan, assert_no_host_platform_calls as assert_w1_platform
-from .w2_composition import W2CampaignPlan, assert_no_host_platform_calls
+from .single_worker_composition import SingleWorkerCampaignPlan, assert_no_host_platform_calls as assert_single_worker_platform
+from .two_worker_composition import TwoWorkerCampaignPlan, assert_no_host_platform_calls
 
-#: Roles the composed campaign spawns. Exact W2: one broker, two workers.
-W2_ROLES = ("broker", "worker-0", "worker-1")
+#: Roles the composed campaign spawns. Exact two-worker: one broker, two workers.
+TWO_WORKER_ROLES = ("broker", "worker-0", "worker-1")
 
-#: Every plan this composition can drive: exact W2 (v4) and the two W1 profiles (v5, v6).
-ComposedPlan = W2CampaignPlan | W1CampaignPlan
+#: Every plan this composition can drive: exact two-worker (v4) and the two single-worker profiles (v5, v6).
+ComposedPlan = TwoWorkerCampaignPlan | SingleWorkerCampaignPlan
 
 
-class MacosW2CampaignError(RuntimeError):
+class MacosTwoWorkerCampaignError(RuntimeError):
     """The composed campaign cannot proceed. Never a warning."""
 
     def __init__(self, reason: str, detail: str = "") -> None:
@@ -107,7 +107,7 @@ class CampaignPorts:
     #: `parallel_worker_runtime.task_station_config`.
     worker_station: Callable[[object], object] | None = None
     #: Build the Worker-side Broker port. `None` keeps the IPC-only Worker; the simulation driver
-    #: passes a factory returning `macos_w2_broker_port.W2BrokerPort` with the perception runner
+    #: passes a factory returning `macos_two_worker_broker_port.TwoWorkerBrokerPort` with the perception runner
     #: and the Coordinator authority already bound.
     worker_broker: Callable[..., object] | None = None
 
@@ -141,22 +141,22 @@ class CampaignOutcome:
         }
 
 
-class MacosW2Campaign:
-    """One composed macOS MPS campaign: exact W2 (v4) or exactly one W1 Worker (v5/v6)."""
+class MacosTwoWorkerCampaign:
+    """One composed macOS MPS campaign: exact two-worker (v4) or exactly one single-worker Worker (v5/v6)."""
 
     def __init__(self, *, plan: ComposedPlan, address, supervisor: CampaignSupervisor,
                  ports: CampaignPorts, registry: InferenceRegistry | None = None,
                  snapshots: SnapshotRegistry | None = None) -> None:
-        if not isinstance(plan, (W2CampaignPlan, W1CampaignPlan)):
-            raise MacosW2CampaignError("PLAN_TYPE", type(plan).__name__)
+        if not isinstance(plan, (TwoWorkerCampaignPlan, SingleWorkerCampaignPlan)):
+            raise MacosTwoWorkerCampaignError("PLAN_TYPE", type(plan).__name__)
         if plan.accelerator != "mps":
-            raise MacosW2CampaignError("PLAN_NOT_MPS", plan.accelerator)
+            raise MacosTwoWorkerCampaignError("PLAN_NOT_MPS", plan.accelerator)
         if plan.worker_count != len(plan.slots.slot_ids):
-            raise MacosW2CampaignError("SLOT_COUNT_MISMATCH", str(plan.worker_count))
-        # The host-boundary check is the plan's own: a W1 plan carries three approved profiles'
-        # worth of Darwin pins, an exact-W2 plan carries v4's.
-        if isinstance(plan, W1CampaignPlan):
-            assert_w1_platform(plan)
+            raise MacosTwoWorkerCampaignError("SLOT_COUNT_MISMATCH", str(plan.worker_count))
+        # The host-boundary check is the plan's own: a single-worker plan carries three approved profiles'
+        # worth of Darwin pins, an exact two-worker plan carries v4's.
+        if isinstance(plan, SingleWorkerCampaignPlan):
+            assert_single_worker_platform(plan)
         else:
             assert_no_host_platform_calls(plan)
         self.plan = plan
@@ -184,13 +184,13 @@ class MacosW2Campaign:
         from .selection import FirstPassSelectionBinding, RetrySelectionBinding
 
         if self._selection is not None or self._queue is not None:
-            raise MacosW2CampaignError("SELECTION_ALREADY_BOUND", self.plan.campaign_id)
+            raise MacosTwoWorkerCampaignError("SELECTION_ALREADY_BOUND", self.plan.campaign_id)
         if not isinstance(binding, (FirstPassSelectionBinding, RetrySelectionBinding)):
-            raise MacosW2CampaignError("SELECTION_TYPE", type(binding).__name__)
+            raise MacosTwoWorkerCampaignError("SELECTION_TYPE", type(binding).__name__)
         if not isinstance(queue, DurablePointQueue):
-            raise MacosW2CampaignError("QUEUE_TYPE", type(queue).__name__)
+            raise MacosTwoWorkerCampaignError("QUEUE_TYPE", type(queue).__name__)
         if queue.selection_sha256 != binding.selection_sha256:
-            raise MacosW2CampaignError(
+            raise MacosTwoWorkerCampaignError(
                 "SELECTION_MISMATCH", f"{queue.selection_sha256} != {binding.selection_sha256}")
         self._selection = binding
         self._queue = queue

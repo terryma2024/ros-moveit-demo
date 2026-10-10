@@ -40,8 +40,8 @@ from test_parallel_selection import (  # noqa: F401 - shared catalog fixtures
     _selection_module,
 )
 
-from so101_demo.parallel_batch.w1_composition import exact_w1_slots
-from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+from so101_demo.parallel_batch.single_worker_composition import exact_single_worker_slots
+from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
 from paths import PACKAGE_ROOT
 
 #: The Task 11 selection ids, plus the anchors the first-pass binding contract requires.
@@ -65,9 +65,9 @@ def _input_module():
 
 
 def _cli():
-    spec = importlib.util.find_spec("so101_demo.cli.macos_w2_campaign")
+    spec = importlib.util.find_spec("so101_demo.cli.macos_two_worker_campaign")
     assert spec is not None, "the W2 campaign entry point is not implemented yet"
-    return importlib.import_module("so101_demo.cli.macos_w2_campaign")
+    return importlib.import_module("so101_demo.cli.macos_two_worker_campaign")
 
 
 def _batch_binary(tmp_path: Path) -> Path:
@@ -105,7 +105,7 @@ def _binding_and_queue(tmp_path: Path, point_ids=None):
 class _Plan:
     """The capacity-only plan the campaign body records; it owns no point."""
 
-    slots = exact_w2_slots()
+    slots = exact_two_worker_slots()
     selected_point_ids = _selected()
     execution_profile = "MPS_W2_FIRST_PASS"
     batch_kind = "FIRST_PASS"
@@ -113,7 +113,7 @@ class _Plan:
 
 
 class _W1Plan(_Plan):
-    slots = exact_w1_slots()
+    slots = exact_single_worker_slots()
     execution_profile = "MPS_W1_FIRST_PASS"
     batch_kind = "FIRST_PASS"
     schema_version = 6
@@ -249,7 +249,7 @@ def _fabricate_worker_evidence(*, pick_root: Path, batch_id: str, point_id: str,
 
 def _fake_spawn(*, drain, binding, evidence_root: Path, binary: Path, calls: list,
                 status: str = "SUCCEEDED", with_evidence: bool = True):
-    """A stand-in for `cli/macos_w2_worker.py`: it reads the lease and writes its result.
+    """A stand-in for `cli/macos_two_worker_process.py`: it reads the lease and writes its result.
 
     It performs the same readback the Worker performs (`pick_place_request`), refuses a lease it
     cannot execute, and writes its result document - so a drain driven through it is driven
@@ -539,7 +539,7 @@ def test_every_served_response_is_admitted_immediately_so_the_table_stays_bounde
     from so101_demo.parallel_batch.inference_registry import InferenceRegistry
 
     class _Campaign:
-        """`MacosW2Campaign.admit_response`, over a real registry with a tiny capacity."""
+        """`MacosTwoWorkerCampaign.admit_response`, over a real registry with a tiny capacity."""
 
         def __init__(self):
             self.registry = InferenceRegistry(campaign_id="c", capacity=2)
@@ -610,7 +610,7 @@ def test_the_worker_reads_its_lease_before_it_uses_it() -> None:
     fills, and the whole post-station body must sit under one `try/finally`.
     """
 
-    source = (PACKAGE_ROOT / "src/cli/macos_w2_worker.py").read_text()
+    source = (PACKAGE_ROOT / "src/cli/macos_two_worker_process.py").read_text()
     assignment = source.index("lease_document = json.loads(")
     first_use = source.index("lease_identity = {name: lease_document.get(name)")
     assert assignment < first_use
@@ -712,9 +712,9 @@ MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG = (PACKAGE_ROOT
 def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
                 campaign_id: str = "retry-campaign"):
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
-    from so101_demo.parallel_batch.w1_composition import compose_w1_retry
+    from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_retry
 
-    return compose_w1_retry(
+    return compose_single_worker_retry(
         config=load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), config_path=MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG,
         campaign_id=campaign_id, batch_id="retry-batch",
         selected_point_ids=(point_id,), evidence_root=tmp_path)
@@ -722,7 +722,7 @@ def _retry_plan(tmp_path: Path, *, point_id: str = "cup_test_forward_5cm",
 
 def _retry_arguments(tmp_path: Path, extra=(), *, campaign_id: str = "retry-campaign"):
     cli = _cli()
-    parser = cli.build_w1_parser("MPS_W1_FULL_RESTART_RETRY")
+    parser = cli.build_single_worker_parser("MPS_W1_FULL_RESTART_RETRY")
     base = ["--config", str(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG), "--campaign-id", campaign_id,
             "--batch-id", "retry-batch", "--evidence-root", str(tmp_path / "retry-evidence"),
             "--yolo-weights", str(tmp_path / "yolo.pt"),

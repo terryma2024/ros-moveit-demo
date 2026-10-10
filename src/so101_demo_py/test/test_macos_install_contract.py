@@ -191,9 +191,9 @@ def test_setup_installs_the_w1_public_entries() -> None:
     setup = DEMO_SETUP.read_text(encoding="utf-8")
 
     assert '"so101_macos_service_campaign = ' in setup
-    assert '"so101_macos_n1_retry = so101_demo.cli.macos_n1_retry:main"' in setup
-    assert '"so101_macos_n1_first_pass = so101_demo.cli.macos_n1_first_pass:main"' in setup
-    for module in ("macos_n1_retry", "macos_n1_first_pass"):
+    assert '"so101_macos_single_worker_retry = so101_demo.cli.macos_mps_single_worker_retry:main"' in setup
+    assert '"so101_macos_single_worker_first_pass = so101_demo.cli.macos_mps_single_worker_first_pass:main"' in setup
+    for module in ("macos_mps_single_worker_retry", "macos_mps_single_worker_first_pass"):
         assert (REPOSITORY_ROOT / f"src/so101_demo_py/src/cli/{module}.py").is_file()
 
 

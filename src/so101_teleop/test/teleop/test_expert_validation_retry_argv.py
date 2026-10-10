@@ -169,16 +169,16 @@ def test_a_retry_for_a_profile_the_route_does_not_execute_is_refused(tmp_path):
 def test_the_retry_flags_are_the_macos_mps_single_worker_retry_routes_own_flags():
     """The retry argv speaks the v5 parser's vocabulary, never a parallel one.
 
-    ``so101_demo.cli.macos_w2_campaign`` is imported as a *module* by the macOS campaign entry
+    ``so101_demo.cli.macos_two_worker_campaign`` is imported as a *module* by the macOS campaign entry
     points; the executable this service launches is the ``macos_service_campaign`` adapter in front
     of it. The adapter must parse and forward these same flags before a service-driven retry can be
     delivered, so the names are pinned against the route that consumes them.
     """
 
-    from so101_demo.cli import macos_w2_campaign as campaign
+    from so101_demo.cli import macos_two_worker_campaign as campaign
     from so101_demo.parallel_batch.contracts import ExecutionProfile
 
-    parser = campaign.build_w1_parser(str(ExecutionProfile.MPS_W1_FULL_RESTART_RETRY))
+    parser = campaign.build_single_worker_parser(str(ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY))
     accepted = {option for action in parser._actions for option in action.option_strings}
 
     assert set(RETRY_COORDINATOR_FLAGS) <= accepted

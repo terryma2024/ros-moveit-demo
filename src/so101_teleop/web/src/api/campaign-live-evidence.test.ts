@@ -864,7 +864,7 @@ function macosScenario(options: MacosOptions): MacosScenario {
       execution_profile: options.executionProfile,
       batch_kind: options.batchKind,
       worker_count: options.workerCount,
-      module: "so101_demo.cli.macos_w2_campaign",
+      module: "so101_demo.cli.macos_two_worker_campaign",
       config_path: join(root, "route.yaml"),
       config_sha256: sha256("config"),
     },
