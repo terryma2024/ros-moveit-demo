@@ -8,6 +8,7 @@ mask decides which frames count, and a frame that is malformed is refused rather
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from pathlib import Path
 
 _JOINTS = 6
@@ -58,6 +59,34 @@ def masked_joint_rmse(predicted: list, target: list, valid: list) -> list:
     return [math.sqrt(sum((predictions[position][joint] - targets[position][joint]) ** 2
                           for position in range(len(indices))) / len(indices))
             for joint in range(_JOINTS)]
+
+
+class _DatasetFrames(Sequence):
+    """The rows of one exported episode as frames, decoded on demand: an episode is ~1600 frames of ~1 MB each."""
+
+    def __init__(self, rows: list, root: Path) -> None:
+        self._rows, self._root = rows, root
+
+    def __len__(self) -> int:
+        return len(self._rows)
+
+    def __getitem__(self, index):
+        from so101_demo.adapters.act.lerobot import decode_observation
+
+        row = self._rows[index]
+        # the runtime observation keys (head / wrist), decoded through the D8 table
+        return {"observation": decode_observation(row["observation"], self._root), "action": row["action"], "valid": True}
+
+
+def _dataset_episodes(root: Path) -> list:
+    """The offline_test episodes of an exported dataset, read through the same digest-verified reader as training."""
+
+    from so101_demo.adapters.act.lerobot import load_exported_samples
+
+    samples, resolved = load_exported_samples(root)
+    return [{"episode_id": sample["scene_id"], "split": "offline_test", "status": "PASSED",
+             "frames": _DatasetFrames(sample["rows"], resolved)}
+            for sample in samples if sample["split"] == "offline_test"]
 
 
 FREEZE_FIELDS = ("bundle_sha256", "dataset_manifest_sha256", "campaign_index_sha256",
@@ -125,9 +154,12 @@ def evaluate_offline(manifest_path, bundle_path, freeze_path, output, *, policy_
     if hashlib.sha256(manifest_file.read_bytes()).hexdigest() != freeze["dataset_manifest_sha256"]:
         raise ValueError("FREEZE_MANIFEST_MISMATCH")
     manifest = json.loads(manifest_file.read_bytes())
-    episodes = [episode for episode in manifest.get("episodes", [])
-                if isinstance(episode, dict) and episode.get("split") == "offline_test"
-                and episode.get("status") == "PASSED"]
+    if isinstance(manifest, dict) and manifest.get("kind") == "act_dataset_export":
+        episodes = _dataset_episodes(manifest_file.parent)
+    else:
+        episodes = [episode for episode in manifest.get("episodes", [])
+                    if isinstance(episode, dict) and episode.get("split") == "offline_test"
+                    and episode.get("status") == "PASSED"]
     if len(episodes) < MIN_OFFLINE_TEST_EPISODES:
         raise ValueError("OFFLINE_TEST_EPISODES_INSUFFICIENT")
     if any(episode.get("cross_split_chunk") for episode in episodes):
@@ -139,7 +171,7 @@ def evaluate_offline(manifest_path, bundle_path, freeze_path, output, *, policy_
     for episode in episodes:
         model.reset()                                  # a fresh model state per episode
         frames = episode.get("frames")
-        if not isinstance(frames, list) or not frames:
+        if not isinstance(frames, Sequence) or isinstance(frames, (str, bytes)) or not len(frames):
             raise ValueError("EPISODE_FRAMES_INVALID")
         predicted, target, valid = [], [], []
         for frame in frames:

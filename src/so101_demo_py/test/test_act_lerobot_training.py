@@ -11,6 +11,9 @@ pytestmark = pytest.mark.skipif(
     any(importlib.util.find_spec(name) is None for name in ("torch", "lerobot", "PIL", "numpy")),
     reason="the training interpreter owns torch and LeRobot")
 
+if importlib.util.find_spec("torch") is not None:
+    import torch
+
 from act_training_fixture import synthetic_dataset  # noqa: E402
 
 CONFIG = Path(__file__).resolve().parents[1] / "config/act/training.yaml"
@@ -20,7 +23,7 @@ SPLITS = {"act-1": "train", "act-2": "train", "act-3": "validation"}
 def _config(steps=3, batch_size=2):
     from so101_demo.act.training_config import load_training_config
     config = load_training_config(CONFIG)
-    config["training"] = {**config["training"], "steps": steps, "batch_size": batch_size}
+    config["training"] = {**config["training"], "steps": steps, "batch_size": batch_size, "pretrained_backbone": None}
     return config
 
 
@@ -150,3 +153,68 @@ def test_loader_workers_do_not_need_a_short_temp_directory(tmp_path, monkeypatch
                         trainer=lambda cfg, view, out: train_act_bundle(cfg, view, out, requirements_sha256="a" * 64, device="cpu",
                                                                         num_workers=2))
     assert outcome["status"] == "COMPLETED"
+
+
+def _fake_resnet18_weights(path, seed=0):
+    """A real-shaped torchvision ResNet18 state dict (fc included, like the ImageNet file), randomly initialised, saved offline."""
+    import torchvision
+    torch.manual_seed(seed)
+    torch.save(torchvision.models.resnet18().state_dict(), path)
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _backbone_config(digest, steps=2):
+    config = _config(steps=steps)
+    config["training"]["pretrained_backbone"] = {"name": "ResNet18_Weights.IMAGENET1K_V1", "sha256": digest}
+    return config
+
+
+def test_the_pretrained_backbone_loads_offline_into_the_policy_and_the_bundle_records_it(tmp_path, monkeypatch):
+    import socket
+    import urllib.request
+
+    from so101_demo.act.training import train_act
+    from so101_demo.act.bundle import load_bundle
+    from so101_demo.adapters.act import lerobot
+    from so101_demo.adapters.act.lerobot import build_policy_from_bundle, train_act_bundle
+
+    weights = tmp_path / "resnet18.pth"
+    digest = _fake_resnet18_weights(weights)
+
+    def no_network(*args, **kwargs):
+        raise AssertionError("the loading path must be offline")
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    monkeypatch.setattr(urllib.request, "urlopen", no_network)
+    monkeypatch.setattr(torch.hub, "load_state_dict_from_url", no_network)
+    loaded = {}
+    real = lerobot._load_backbone
+
+    def spy(policy, path, expected_sha256):
+        real(policy, path, expected_sha256)
+        loaded["conv1"] = policy.model.backbone.conv1.weight.detach().clone()
+    monkeypatch.setattr(lerobot, "_load_backbone", spy)
+    dataset = synthetic_dataset(tmp_path, monkeypatch, splits=SPLITS)
+    train_act(config=_backbone_config(digest), requirements={"status": "RESOLVED"}, dataset=dataset,
+              owner={"device": "cuda", "run_root": str(tmp_path)}, output=tmp_path / "bundle",
+              trainer=lambda cfg, view, out: train_act_bundle(cfg, view, out, requirements_sha256="a" * 64, device="cpu",
+                                                              backbone_weights=weights))
+    expected = torch.load(weights, weights_only=True)["conv1.weight"]
+    assert torch.equal(loaded["conv1"], expected)                        # the file's tensors, not a random init
+    bundle = load_bundle(tmp_path / "bundle" / "bundle.json")
+    assert bundle["normalization"]["pretrained_backbone"] == {"name": "ResNet18_Weights.IMAGENET1K_V1", "sha256": digest}
+    # inference needs neither the weights file nor the network: the backbone lives inside policy.safetensors
+    weights.unlink()
+    assert build_policy_from_bundle(tmp_path / "bundle", device="cpu") is not None
+
+
+def test_a_backbone_whose_bytes_do_not_match_the_pinned_hash_is_refused_at_load(tmp_path):
+    from so101_demo.adapters.act.lerobot import _act_config, _load_backbone
+    from lerobot.policies.act.modeling_act import ACTPolicy
+
+    weights = tmp_path / "resnet18.pth"
+    digest = _fake_resnet18_weights(weights)
+    policy = ACTPolicy(_act_config(10, 1, [3, 32, 32], "cpu"))
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_HASH_MISMATCH"):
+        _load_backbone(policy, weights, "0" * 64)
+    _load_backbone(policy, weights, digest)
+    assert _act_config(10, 1, [3, 32, 32], "cpu").pretrained_backbone_weights is None       # LeRobot never downloads

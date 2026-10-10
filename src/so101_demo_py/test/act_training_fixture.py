@@ -65,3 +65,22 @@ class Monkey:
 
     def setattr(self, target, name, value):
         setattr(target, name, value)
+
+
+def write_freeze(directory, bundle_path, manifest_path):
+    """The six-digest freeze `act_offline_evaluate` verifies, over a bundle and a dataset export manifest.
+
+    The campaign index, split manifest, calibration and runtime config are stand-in documents (the freeze only pins their bytes)."""
+    import hashlib
+    import json
+    from pathlib import Path
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    files = {"bundle_sha256": Path(bundle_path), "dataset_manifest_sha256": Path(manifest_path)}
+    for name in ("campaign_index", "split_manifest", "calibration", "runtime_config"):
+        path = directory / f"{name}.json"
+        path.write_text(json.dumps({"name": name}))
+        files[f"{name}_sha256"] = path
+    (directory / "freeze.json").write_text(json.dumps({key: hashlib.sha256(path.read_bytes()).hexdigest() for key, path in files.items()}))
+    (directory / "freeze-paths.json").write_text(json.dumps({key: str(path) for key, path in files.items()}))
+    return directory / "freeze.json"

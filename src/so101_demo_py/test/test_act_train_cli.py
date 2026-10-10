@@ -108,7 +108,7 @@ def test_the_production_trainer_receives_the_requirements_lock_digest(tmp_path, 
     lock = _resolved_lock(tmp_path)
     seen = {}
 
-    def recorder(config_, dataset, output, *, requirements_sha256=None):
+    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None):
         seen.update(requirements_sha256=requirements_sha256, dataset=dataset, output=output)
         return {"schema_version": 1, "kind": "act_bundle"}
     monkeypatch.setattr(cli, "_trainer", recorder)
@@ -198,3 +198,44 @@ def test_main_builds_its_owner_from_the_gpu_binding_when_no_factory_is_injected(
     assert cli.main(_argv(manifest, index, binding, config, tmp_path / "bundle"), trainer=lambda *_a: {"kind": "act_bundle"},
                     requirements_path=_resolved_lock(tmp_path)) == 0
     assert seen == {"binding": binding, "run_root": tmp_path / "bundle.run"}
+
+
+def test_the_default_requirements_lock_exists_and_is_a_resolved_lock():
+    from so101_demo.cli.act_train import REQUIREMENTS_LOCK, default_requirements_lock
+
+    assert REQUIREMENTS_LOCK.is_file() and default_requirements_lock() == REQUIREMENTS_LOCK
+    assert require_resolved_requirements(REQUIREMENTS_LOCK)["status"] == "RESOLVED"
+    assert REQUIREMENTS_LOCK.read_bytes() == SOURCE_LOCK.read_bytes()
+
+
+def test_the_default_lock_falls_back_to_the_installed_share_layout(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    from so101_demo.cli import act_train
+
+    share = tmp_path / "share"
+    (share / "config/act").mkdir(parents=True)
+    (share / "config/act/requirements.lock").write_text("x")
+    module = types.ModuleType("ament_index_python.packages")
+    module.get_package_share_directory = lambda name: str(share)
+    monkeypatch.setitem(sys.modules, "ament_index_python", types.ModuleType("ament_index_python"))
+    monkeypatch.setitem(sys.modules, "ament_index_python.packages", module)
+    monkeypatch.setattr(act_train, "_SOURCE_ROOT", tmp_path / "absent")          # not a source tree
+    assert act_train.default_requirements_lock() == share / "config/act/requirements.lock"
+
+
+def test_the_cli_hands_the_backbone_weights_path_to_the_trainer(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    seen = {}
+
+    def recorder(config_, dataset, output, *, requirements_sha256=None, backbone_weights=None):
+        seen["weights"] = backbone_weights
+        return {"schema_version": 1, "kind": "act_bundle"}
+    monkeypatch.setattr(cli, "_trainer", recorder)
+    owner = {"device": "cuda", "run_root": str(tmp_path)}
+    weights = tmp_path / "resnet18.pth"
+    assert cli.main([*_argv(manifest, index, binding, config, tmp_path / "bundle"), "--backbone-weights", str(weights)],
+                    owner_factory=lambda **_: owner, requirements_path=_resolved_lock(tmp_path)) == 0
+    assert seen["weights"] == weights

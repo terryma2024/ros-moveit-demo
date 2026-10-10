@@ -10,7 +10,7 @@ table, computes train-only normalisation statistics (with a std floor), trains a
 bundle carrying the frozen action semantics and those statistics. LeRobot 0.6.1 keeps normalisation in separate processors, not in
 the policy, so this adapter owns it: the statistics live in the bundle, the trainer normalises state and action with them, and
 `LerobotPolicy.infer` normalises the state and de-normalises the action chunk with the same numbers. The policy is built with
-`NormalizationMode.IDENTITY` and no pretrained backbone weights (no network at run time). Both the policy factory and the training
+`NormalizationMode.IDENTITY`; the pinned ImageNet ResNet18 backbone is loaded from a local, hash-verified file (never downloaded). Both the policy factory and the training
 entry point are injectable so the wiring is testable without a GPU; the real LeRobot names used here were read from the resolved
 interpreter (lerobot 0.6.1: `ACTPolicy`, `ACTConfig`, `predict_action_chunk`, `reset`).
 """
@@ -346,7 +346,7 @@ def load_training_view(view) -> tuple:
     export manifest. The manifest copy must still equal the dataset's, every episode and frame digest is re-verified, and the view's
     samples must equal what the whitelist reads from the dataset now."""
 
-    from so101_demo.act.training import TRAINING_SAMPLES_FILE, load_training_samples, require_exported_dataset
+    from so101_demo.act.training import TRAINING_SAMPLES_FILE
 
     view = Path(view)
     try:
@@ -364,11 +364,22 @@ def load_training_view(view) -> tuple:
         raise ValueError("TRAINING_VIEW_DATASET_MISMATCH") from error
     if dataset_manifest != view_manifest:
         raise ValueError("TRAINING_VIEW_DATASET_MISMATCH")
-    manifest = require_exported_dataset(root)                    # episode and frame digests
-    samples = load_training_samples(root, manifest=manifest)
+    samples, root = load_exported_samples(root)
     if document["samples"] != samples:
         raise ValueError("TRAINING_VIEW_SAMPLES_MISMATCH")
-    return samples, root.resolve()
+    return samples, root
+
+
+def load_exported_samples(dataset_root) -> tuple:
+    """(samples, resolved root) of an exported dataset: episode and frame digests re-verified, rows read through the whitelist.
+
+    The one reader training (through a view) and offline evaluation share."""
+
+    from so101_demo.act.training import load_training_samples, require_exported_dataset
+
+    root = Path(dataset_root)
+    manifest = require_exported_dataset(root)                    # episode and frame digests
+    return load_training_samples(root, manifest=manifest), root.resolve()
 
 
 def compute_statistics(samples: list, *, std_floor: float) -> dict:
@@ -431,7 +442,33 @@ def _require_trainable_config(config: dict, requirements_sha256: str) -> None:
         raise ValueError("TRAINING_REQUIREMENTS_SHA256_INVALID")
 
 
-def _run_training(config: dict, view: Path, target: Path, device: str, num_workers: int | None) -> dict:
+def _read_backbone_bytes(path, expected_sha256: str) -> bytes:
+    """The pinned backbone file, read once and hash-verified."""
+
+    try:
+        data = Path(path).read_bytes()
+    except OSError as error:
+        raise ValueError("TRAINING_BACKBONE_MISSING") from error
+    if hashlib.sha256(data).hexdigest() != expected_sha256:
+        raise ValueError("TRAINING_BACKBONE_HASH_MISMATCH")
+    return data
+
+
+def _load_backbone(policy, path, expected_sha256: str) -> None:
+    """Load the pinned ImageNet ResNet18 weights into the policy's backbone from local bytes (no download, no network).
+
+    LeRobot would fetch `pretrained_backbone_weights` from the network; the adapter builds the policy without it and loads the
+    verified file instead. The classifier head (`fc.*`) is not part of ACT's backbone and is dropped; everything else must fit."""
+
+    import io
+
+    import torch
+
+    state = torch.load(io.BytesIO(_read_backbone_bytes(path, expected_sha256)), map_location="cpu", weights_only=True)
+    policy.model.backbone.load_state_dict({key: value for key, value in state.items() if not key.startswith("fc.")}, strict=True)
+
+
+def _run_training(config: dict, view: Path, target: Path, device: str, num_workers: int | None, backbone_weights=None) -> dict:
     """The LeRobot training loop; returns the normalisation block the bundle records."""
 
     import time
@@ -494,8 +531,11 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
                                          persistent_workers=workers > 0, drop_last=False,
                                          timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
     policy = ACTPolicy(_act_config(chunk_size, action_cfg["execution_prefix"], image_shape, device,
-                                   learning_rate=hyper["learning_rate"])).to(device)
-    policy.train()
+                                   learning_rate=hyper["learning_rate"]))
+    backbone = hyper["pretrained_backbone"]
+    if backbone is not None:
+        _load_backbone(policy, backbone_weights, backbone["sha256"])
+    policy.to(device).train()
     optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
 
     log, step = [], 0
@@ -522,20 +562,28 @@ def _run_training(config: dict, view: Path, target: Path, device: str, num_worke
         {"schema_version": 1, "kind": "act_training_log", "device": str(device), "seed": seed, "steps_requested": hyper["steps"],
          "batch_size": hyper["batch_size"], "learning_rate": hyper["learning_rate"], "train_samples": len(index),
          "elapsed_s": time.monotonic() - started, "steps": log}, sort_keys=True, allow_nan=False) + chr(10))
-    return {**stats, "image_shape": list(image_shape)}
+    return {**stats, "image_shape": list(image_shape), "pretrained_backbone": backbone}
 
 
 def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_sha256: str, device: str = "cuda",
-                     num_workers: int | None = None) -> dict:
+                     num_workers: int | None = None, backbone_weights=None) -> dict:
     """Train an ACT policy over a training view and leave a bundle in ``output`` (design 2026-10-10 section 3.3).
 
     ``dataset`` is the training view `train_act` hands to a trainer. ``output`` receives `policy.safetensors`, `bundle.json` and
-    `training-log.json`; the returned document is the bundle."""
+    `training-log.json`; the returned document is the bundle. ``backbone_weights`` is the local path of the pretrained backbone file
+    the config pins by hash; it is verified here, before anything is written, and again when it is loaded."""
 
     _require_trainable_config(config, requirements_sha256)
+    pinned = config["training"]["pretrained_backbone"]
+    if pinned is None and backbone_weights is not None:
+        raise ValueError("TRAINING_BACKBONE_NOT_CONFIGURED")
+    if pinned is not None:
+        if backbone_weights is None:
+            raise ValueError("TRAINING_BACKBONE_PATH_REQUIRED")
+        _read_backbone_bytes(backbone_weights, pinned["sha256"])
 
     def train(cfg, view, target):
-        return _run_training(cfg, view, target, device, num_workers)
+        return _run_training(cfg, view, target, device, num_workers, backbone_weights)
 
     document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config)
     bundle_path = Path(output) / BUNDLE_FILE

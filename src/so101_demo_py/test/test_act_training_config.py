@@ -133,3 +133,30 @@ def test_a_v2_configuration_must_carry_the_training_block(tmp_path):
     document["schema_version"] = 3
     with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
         load_training_config(_write(tmp_path, document))
+
+
+# ---- pretrained backbone (closed v2 field: {name, sha256} or null) ---------------------------------------------------------------------
+
+
+def test_the_shipped_configuration_names_the_imagenet_resnet18_backbone_by_hash():
+    backbone = load_training_config(CONFIG)["training"]["pretrained_backbone"]
+    assert backbone == {"name": "ResNet18_Weights.IMAGENET1K_V1",
+                        "sha256": "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec"}
+
+
+def test_no_pretrained_backbone_is_an_explicit_null(tmp_path):
+    assert _load(tmp_path, **{"training.pretrained_backbone": None})["training"]["pretrained_backbone"] is None
+
+
+@pytest.mark.parametrize("value", [{"name": "x"}, {"name": "x", "sha256": "short"}, {"name": "", "sha256": "a" * 64},
+                                   {"name": "x", "sha256": "a" * 64, "path": "/w"}, "ResNet18", {"name": 3, "sha256": "a" * 64}])
+def test_a_malformed_backbone_field_is_refused(tmp_path, value):
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_INVALID"):
+        _load(tmp_path, **{"training.pretrained_backbone": value})
+
+
+def test_the_backbone_field_is_part_of_the_v2_training_block_only(tmp_path):
+    document = yaml.safe_load(CONFIG.read_text())
+    del document["training"]["pretrained_backbone"]
+    with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
+        load_training_config(_write(tmp_path, document))

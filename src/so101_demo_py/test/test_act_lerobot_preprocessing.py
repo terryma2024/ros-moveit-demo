@@ -47,3 +47,37 @@ def test_the_trainer_refuses_a_schema_v1_config_and_a_missing_requirements_diges
     v1 = {**config, "schema_version": 1}
     with pytest.raises(ValueError, match="TRAINING_CONFIG_V2_REQUIRED"):
         train_act_bundle(v1, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64)
+
+
+def _ready_config(**backbone):
+    from so101_demo.act.training_config import load_training_config
+    from so101_demo.adapters.act.lerobot import preprocessing_sha256
+    config = load_training_config(CONFIG)
+    config["frozen"]["preprocessing_sha256"] = preprocessing_sha256()
+    return config
+
+
+def test_the_backbone_weights_are_required_present_and_hash_verified_before_any_training(tmp_path):
+    from so101_demo.adapters.act.lerobot import train_act_bundle
+    config = _ready_config()
+    assert config["training"]["pretrained_backbone"] is not None
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_PATH_REQUIRED"):
+        train_act_bundle(config, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64)
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_MISSING"):
+        train_act_bundle(config, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64,
+                         backbone_weights=tmp_path / "absent.pth")
+    weights = tmp_path / "resnet18.pth"
+    weights.write_bytes(b"not the pinned weights")
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_HASH_MISMATCH"):
+        train_act_bundle(config, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64, backbone_weights=weights)
+    assert not (tmp_path / "out").exists()
+
+
+def test_weights_are_refused_when_the_config_names_no_backbone(tmp_path):
+    from so101_demo.adapters.act.lerobot import train_act_bundle
+    config = _ready_config()
+    config["training"]["pretrained_backbone"] = None
+    weights = tmp_path / "w.pth"
+    weights.write_bytes(b"x")
+    with pytest.raises(ValueError, match="TRAINING_BACKBONE_NOT_CONFIGURED"):
+        train_act_bundle(config, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64, backbone_weights=weights)

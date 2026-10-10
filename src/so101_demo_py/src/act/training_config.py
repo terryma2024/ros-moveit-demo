@@ -17,7 +17,7 @@ import yaml
 _CONFIG_KEYS = frozenset({"schema_version", "kind", "action", "observation", "normalization", "frozen"})
 # schema v2 adds the optimisation hyper-parameters and the normalisation std floor; v1 stays readable but cannot be trained from
 _CONFIG_KEYS_V2 = _CONFIG_KEYS | {"training"}
-_TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size"})
+_TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size", "pretrained_backbone"})
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
 _FROZEN_KEYS = frozenset({"seed", "preprocessing_sha256"})
@@ -92,6 +92,13 @@ def load_training_config(path) -> dict:
             raise ValueError("TRAINING_BATCH_SIZE_INVALID")
         if not _positive_float(training["learning_rate"]):
             raise ValueError("TRAINING_LEARNING_RATE_INVALID")
+        backbone = training["pretrained_backbone"]
+        if backbone is not None and (
+                not isinstance(backbone, dict) or set(backbone) != {"name", "sha256"}
+                or not isinstance(backbone["name"], str) or not backbone["name"]
+                or not isinstance(backbone["sha256"], str) or len(backbone["sha256"]) != 64):
+            # the weights are pinned by name and hash (null = a randomly initialised backbone); the file path is a run argument
+            raise ValueError("TRAINING_BACKBONE_INVALID")
 
     frozen = document["frozen"]
     if not isinstance(frozen, dict) or set(frozen) != _FROZEN_KEYS:

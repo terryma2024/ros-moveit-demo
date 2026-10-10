@@ -20,11 +20,28 @@ from so101_demo.act.training import attach_episode_content, train_act
 from so101_demo.act.training_config import load_training_config
 from so101_demo.act.training_requirements import require_resolved_requirements
 
-_PACKAGE = Path(__file__).resolve().parents[1]
-REQUIREMENTS_LOCK = _PACKAGE / "config" / "act" / "requirements.lock"
+_SOURCE_ROOT = Path(__file__).resolve().parents[2]          # src/so101_demo_py in the source tree (config/ is its sibling of src/)
+_LOCK_RELATIVE = Path("config") / "act" / "requirements.lock"
 
 
-def _trainer(_config, _dataset, _output, *, requirements_sha256=None):
+def default_requirements_lock() -> Path:
+    """The lock beside the source tree, else the installed share directory (the pattern the other CLIs use)."""
+
+    source = _SOURCE_ROOT / _LOCK_RELATIVE
+    if source.is_file():
+        return source
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        installed = Path(get_package_share_directory("so101_demo_py")) / _LOCK_RELATIVE
+    except Exception:                      # no ament index in the training interpreter: the source path is the answer
+        return source
+    return installed if installed.is_file() else source
+
+
+REQUIREMENTS_LOCK = default_requirements_lock()
+
+
+def _trainer(_config, _dataset, _output, *, requirements_sha256=None, backbone_weights=None):
     """Train in the training interpreter, where the pinned dependencies live.
 
     ``requirements_sha256`` is the digest of the resolved lock this run validated; it is the provenance of the weights."""
@@ -37,7 +54,8 @@ def _trainer(_config, _dataset, _output, *, requirements_sha256=None):
         from so101_demo.adapters.act.lerobot import train_act_bundle
     except ImportError as error:
         raise ValueError("TRAINING_ADAPTER_UNAVAILABLE") from error
-    return train_act_bundle(_config, _dataset, _output, requirements_sha256=requirements_sha256)
+    return train_act_bundle(_config, _dataset, _output, requirements_sha256=requirements_sha256,
+                            backbone_weights=backbone_weights)
 
 
 class ProcessTableArbiter:
@@ -109,6 +127,8 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--device", required=True)
+    parser.add_argument("--backbone-weights", type=Path, default=None,
+                        help="local pretrained backbone file; its sha256 must equal training.pretrained_backbone.sha256")
     args = parser.parse_args(argv)
 
     if args.device != "cuda":
@@ -135,7 +155,7 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
     owner = _owner(args, dataset_sha256, config_sha256, args.gpu_binding, owner_factory)
     if trainer is None:
         lock_sha256 = hashlib.sha256(Path(requirements_path or REQUIREMENTS_LOCK).read_bytes()).hexdigest()
-        trainer = functools.partial(_trainer, requirements_sha256=lock_sha256)
+        trainer = functools.partial(_trainer, requirements_sha256=lock_sha256, backbone_weights=args.backbone_weights)
     outcome = train_act(config=config, requirements=requirements, dataset=dataset, owner=owner,
                         output=args.output, trainer=trainer)
     print(json.dumps({"status": outcome["status"], "episode_count": outcome["episode_count"],

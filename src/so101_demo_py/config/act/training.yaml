@@ -13,10 +13,17 @@ normalization:
   split: train
   # floor for the per-dimension std: the neck sin/cos state dimensions have zero spread under a fixed head
   std_floor: 0.01
+# PROVISIONAL: steps, learning_rate, batch_size and std_floor are smoke-level placeholders. They are to be tuned on real formal
+# data after the first formal campaign (Head Search); do not read them as validated values.
 training:
   steps: 20000
   learning_rate: 1.0e-5
   batch_size: 8
+  # ImageNet ResNet18 (torchvision ResNet18_Weights.IMAGENET1K_V1, https://download.pytorch.org/models/resnet18-f37072fd.pth); the file
+  # is given to the trainer by path and is hash-verified, never downloaded. null = random initialisation.
+  pretrained_backbone:
+    name: ResNet18_Weights.IMAGENET1K_V1
+    sha256: f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec
 frozen:
   seed: 20260924
   # sha256 of adapters/act/lerobot.py PREPROCESSING (the D8 decode table and image scaling). Quoted: an all-digit hash is a YAML integer
