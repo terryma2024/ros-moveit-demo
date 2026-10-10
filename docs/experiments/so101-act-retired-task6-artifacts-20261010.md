@@ -44,3 +44,4 @@ Modules and tests that only these artifacts used were removed with them; the sta
 | `src/so101_demo_py/test/test_act_task6_full_contact_diagnostic.py` | test | `eaaf4c985575feaa72e211bdc568a4eee8c544ca08261911dd137493de9fef8e` | 2b2abaa08 2026-10-08 |
 | `src/so101_demo_py/test/test_act_task6_route_diagnostic.py` | test | `7e7ce7690bfe9426bee9bfbc3d7946babd4d2ee69bbb841fb6f00a02f9ff3ed8` | 2b2abaa08 2026-10-08 |
 | `src/so101_demo_py/test/test_act_visible_approach_candidate.py` | test | `6aa1bc9a048472827f1d8d1f51cf533e544b576e24c890c9331c523e51914d99` | 04bf5a277 2026-09-27 |
+| `src/so101_demo_py/config/mujoco/act/held_cup_transfer_evidence_v3.json` | evidence record of the retired transfer profile (no reader) | `8571c5b59e1981247e0378d4b1d3c5d05a2995701f209f8285825a7e620d44e5` | 2b2abaa08 2026-10-08 |

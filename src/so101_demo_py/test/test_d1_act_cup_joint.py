@@ -59,9 +59,7 @@ def _walk(value, keys):
             yield from _walk(item, keys)
 
 
-PIN_MODULES = ("contact_collector", "contact_diagnostic", "alternate_anchor_grasp_contact_diagnostic",
-               "grasp_contact_transition_diagnostic", "held_cup_micro_lift_candidate", "held_cup_transfer_profile",
-               "held_cup_transfer_schedule", "visible_approach_diagnostic")
+PIN_MODULES = ("contact_collector", "contact_diagnostic")
 
 
 @pytest.mark.parametrize("module", PIN_MODULES)
