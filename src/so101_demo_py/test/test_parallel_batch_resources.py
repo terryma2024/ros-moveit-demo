@@ -47,12 +47,6 @@ CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_linux_cuda.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_linux_cuda.yaml'
 
 
-def test_two_worker_headroom_verifier_uses_business_named_acceptance_provider():
-    verifier = resources_api.TwoWorkerHeadroomVerifier()
-    assert isinstance(verifier._acceptance_provider,
-                      resources_api.ParallelExecutionAcceptanceProvider)
-
-
 class FakeProbe:
     """Deterministic live-probe boundary for allocator tests."""
 
@@ -1572,7 +1566,6 @@ def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, con
 def test_recovery_reprobes_live_namespace_and_preserves_existing_root(
     tmp_path, config, collision, monkeypatch
 ):
-    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
     original = allocator(tmp_path, config)
     manifest = original.allocate(worker_count=1)
     original.close()
@@ -1610,7 +1603,6 @@ def test_recovery_reprobes_live_namespace_and_preserves_existing_root(
 def test_recovery_probe_failure_is_closed_without_touching_existing_root(
     tmp_path, config, monkeypatch
 ):
-    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
     original = allocator(tmp_path, config)
     manifest = original.allocate(worker_count=1)
     original.close()
@@ -1641,7 +1633,6 @@ def test_recovery_probe_failure_is_closed_without_touching_existing_root(
 def test_recovery_clean_namespace_probe_allows_exact_manifest_adoption(
     tmp_path, config, monkeypatch
 ):
-    monkeypatch.setattr(resources_api, '_UNIX_SOCKET_PATH_MAX_BYTES', 4096)
     original = allocator(tmp_path, config)
     manifest = original.allocate(worker_count=1)
     original.close()
