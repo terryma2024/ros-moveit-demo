@@ -251,7 +251,7 @@ true merge 保留官方 `0.1.0` 的包结构和功能，包括：
 - `src/so101_demo_py/config/dependency-lock.yaml`
 - `src/so101_demo_py/config/mujoco/dependency-lock.yaml`
 - `scripts/check_backend_integration.py`
-- `src/so101_demo_py/test/test_macos_install_contract.py`
+- `src/so101_demo_py/test/packaging/test_macos_install_contract.py`
 
 两份 lock 同时固定：
 
@@ -298,8 +298,8 @@ contract 会拒绝 dirty submodule、错误 origin、错误 gitlink、错误 HEA
 修改/新增：
 
 - `src/so101_demo_py/test/support/macos_camera_topic_probe.py`
-- `src/so101_demo_py/test/test_macos_camera_topic_probe_behavior.py`
-- `src/so101_demo_py/test/test_mujoco_camera_plugin_contract.py`
+- `src/so101_demo_py/test/scripts/test_macos_camera_topic_probe_behavior.py`
+- `src/so101_demo_py/test/assets/test_mujoco_camera_plugin_contract.py`
 
 探针改为同一 invocation 内的两个完全隔离阶段：
 

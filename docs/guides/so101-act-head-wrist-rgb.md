@@ -78,20 +78,20 @@ package directory, with the test interpreter and the worktree overlay sourced:
 
 ```zsh
 python -m pytest \
-  test/test_act_bundle.py test/test_act_training.py test/test_act_training_config.py \
-  test/test_act_training_requirements.py test/test_act_train_cli.py \
-  test/test_act_offline_evaluation.py test/test_act_policy.py \
-  test/test_act_inference_process.py test/test_act_inference_worker.py \
-  test/test_act_session.py test/test_act_composition.py test/test_act_session_cli.py \
-  test/test_act_evaluation.py -q
+  test/act/test_act_bundle.py test/act/test_act_training.py test/act/test_act_training_config.py \
+  test/act/test_act_training_requirements.py test/cli/test_act_train_cli.py \
+  test/act/test_act_offline_evaluation.py test/act/test_act_policy.py \
+  test/act/test_act_inference_process.py test/cli/test_act_inference_worker.py \
+  test/act/test_act_session.py test/runtime/test_act_composition.py test/cli/test_act_session_cli.py \
+  test/cli/test_act_evaluation.py -q
 ```
 
 The parallel collection and gateway tests live in their own packages:
 
 ```zsh
-python -m pytest test/test_act_parallel_collection.py test/test_act_parallel_collection_recovery.py \
-  test/test_act_parallel_collection_integration.py \
-  test/test_act_gpu_workload_client.py test/test_act_collection.py -q
+python -m pytest test/act/test_act_parallel_collection.py test/act/test_act_parallel_collection_recovery.py \
+  test/cli/test_act_parallel_collection_integration.py \
+  test/adapters/act/test_act_gpu_workload_client.py test/act/test_act_collection.py -q
 ```
 
 On ai-station, point `TMPDIR`, `TMP` and `TEMP` at a fresh directory under the task's evidence root before

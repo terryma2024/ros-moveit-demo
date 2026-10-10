@@ -156,7 +156,7 @@ docker run --rm --gpus all \
 
 ### 让它在测试里挡住
 
-新增 `src/so101_demo_py/test/test_image_build_context.py`，思路是从 `setup.py` 自己反推，而不是把 `/scripts/...` 写死在测试里：
+新增 `src/so101_demo_py/test/packaging/test_image_build_context.py`，思路是从 `setup.py` 自己反推，而不是把 `/scripts/...` 写死在测试里：
 
 1. 用 `ast` 解析 `setup.py`，收集所有以 `../` 开头的字符串常量；
 2. 找到 Dockerfile 里复制包的那条 `COPY`，把它的目标目录和这些相对路径拼起来，得到镜像内必需路径；

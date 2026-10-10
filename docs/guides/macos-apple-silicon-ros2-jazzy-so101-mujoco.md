@@ -234,7 +234,7 @@ package gate 默认排除标记为 `explicit_ml` 的 Torch/SAM 集成用例，�
 
 ```zsh
 /opt/ros/jazzy/.venv/bin/python -m pytest -m explicit_ml \
-  src/so101_demo_py/test/test_sam_decoder_runtime.py
+  src/so101_demo_py/test/training/test_sam_decoder_runtime.py
 ```
 
 如果 pytest 在收集测试前就因 ROS overlay 或 dylib 导入失败退出，应先修复环境，不要把它记成

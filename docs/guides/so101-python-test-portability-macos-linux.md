@@ -115,7 +115,7 @@ zombie 的定义也必须一致。macOS 的 `psutil` 路径已经把 `STATUS_ZOM
 `Popen` 子进程执行有界回收。对应实现与回归测试见：
 
 - [`parallel_processes.py`](../../src/so101_demo_py/src/runtime/parallel_processes.py)
-- [`test_parallel_processes.py`](../../src/so101_demo_py/test/test_parallel_processes.py)
+- [`test_parallel_processes.py`](../../src/so101_demo_py/test/runtime/test_parallel_processes.py)
 
 平台分支本身也要测试。适合注入 `platform` 参数的代码，直接参数化 `darwin` 和 `linux`；读取
 `sys.platform` 的旧边界可以用 `monkeypatch`。只有真实依赖 MPS、Darwin dylib 或 Linux procfs
