@@ -69,11 +69,24 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3525
+latest_checkpoint: CP-3526
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3526 — Phase C follow-ups committed (991188bd8): lock default, pinned pretrained backbone, offline eval on the export; gates 8202/0/190 and 163/0/3
+
+- (1) default_requirements_lock() uses the source tree, else the package share. RED 2 → GREEN 9.
+- (2) ResNet18 IMAGENET1K_V1 is at <root>/models/resnet18-imagenet1k-v1/resnet18-f37072fd.pth (https://download.pytorch.org/models/resnet18-f37072fd.pth, sha256 f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec, 46,830,571 B).
+  - Config training.pretrained_backbone {name, sha256}. Missing path, missing file, hash mismatch or not configured is refused before torch work. The weights are loaded from the verified bytes with weights_only=True, and LeRobot is built without a download.
+  - The bundle records the backbone. Loading is offline-tested (socket/urlopen/hub blocked; conv1 equals the file).
+  - The torch RED was weak (missing helper); accepted.
+- (3) act_offline_evaluate reads the act_dataset_export through the shared digest-verified reader and feeds runtime keys head/wrist uint8. A tampered frame is refused before inference. RED 2 → GREEN 21 (one refusal test already passed).
+- Smoke with the backbone, run.yGBKMXHv: loss 85.18 → 2.12 against 85.16 → 2.16 without it (synthetic data, no conclusion). Offline eval: 10 episodes, 600 targets, mean MAE 0.166 rad (fixture extrapolation, not a policy measure).
+- training.yaml values are marked PROVISIONAL pending real-data tuning.
+- Deletion candidates: smoke runs icMkzk7C, vT9Y51Ap, FPrBNDmt and the follow-up scratch.
+- Item 3 is complete up to real-data training, which needs formal episodes (item 4, blocked on Head Search per U1).
 
 ## CP-3525 — Phase C committed (8cc0bcb26): export frames + LeRobot trainer + bundle loader; ordinary gate 8185/0/188, training gate 144/0/3; GPU smoke 500 steps PASS; follow-ups dispatched
 
