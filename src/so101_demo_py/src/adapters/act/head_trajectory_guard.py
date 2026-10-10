@@ -48,6 +48,35 @@ _PATH_MAX_SPACING_MOTION_RAD = limits.PATH_MAX_SPACING_MOTION_RAD
 _PREFIX_MAX_SPACING_MOTION_RAD = limits.PREFIX_MAX_SPACING_MOTION_RAD
 
 
+def check_dispatch_against_controller_state(proof, sample, *, current_ros_ns, now_mono_ns):
+    """Approximate, before dispatch, what the broker checked at the consuming tick (design section 2).
+
+    The broker refused a goal whose first point had already passed, whose header led the first point by
+    more than 14 ms, or whose measured first-update state (|v| <= 0.04136, |dq| <= 0.002) was not close
+    to the first point. The stock controller does none of that, so the owner checks the latest
+    ``controller_state`` sample here instead. A sample is at most 200 ms old and finite.
+    """
+    if sample is None:
+        raise PermissionError("HEAD_TRAJECTORY_CONTROLLER_STATE_MISSING")
+    position, velocity = sample.get("feedback_position"), sample.get("feedback_velocity")
+    if not all(type(value) in (int, float) and math.isfinite(value) for value in (position, velocity)):
+        raise PermissionError("HEAD_TRAJECTORY_CONTROLLER_STATE_NON_FINITE")
+    age_ns = now_mono_ns - sample["receive_mono_ns"]
+    if not 0 <= age_ns <= limits.STOP_WINDOW_MAX_AGE_NS:
+        raise PermissionError("HEAD_TRAJECTORY_CONTROLLER_STATE_STALE")
+    if abs(velocity) > limits.QUIET_VELOCITY_RAD_S:
+        raise PermissionError("HEAD_TRAJECTORY_CONTROLLER_PREFIX_VELOCITY")
+    first_position = proof["typed_curve"]["positions_rad"][0]
+    if abs(position - first_position) > limits.MEASURED_POSITION_MISMATCH_RAD:
+        raise PermissionError("HEAD_TRAJECTORY_CONTROLLER_PREFIX_MISMATCH")
+    first_offset = proof["first_point_offset_ns"]
+    remaining_ns = proof["header_stamp_ns"] + first_offset - current_ros_ns
+    if remaining_ns <= limits.STOP_WINDOW_STEP_NS:
+        raise PermissionError("HEAD_TRAJECTORY_GOAL_LATE")
+    if remaining_ns > first_offset + limits.CONSUMING_TICK_ALLOWANCE_NS:
+        raise PermissionError("HEAD_TRAJECTORY_HEADER_LEAD")
+
+
 @dataclass(frozen=True, slots=True)
 class PreparedHeadTrajectory:
     """Immutable CDR and canonical provenance issued by one guard instance."""
@@ -176,7 +205,11 @@ class HeadTrajectoryGuard:
                  scene_observer, node, model_xml_path, geometry_path,
                  geometry_sha256: str,
                  simulation_session_id: str, reset_epoch: int,
-                 monotonic=time.monotonic, expected_mujoco_version="3.12.0"):
+                 monotonic=time.monotonic, expected_mujoco_version="3.12.0",
+                 controller_state_source=None):
+        if controller_state_source is not None and not callable(controller_state_source):
+            raise ValueError("HEAD_TRAJECTORY_SOURCE_INVALID")
+        self.controller_state_source = controller_state_source
         if type(checker) is not MujocoNeckSweepChecker:
             raise ValueError("HEAD_TRAJECTORY_CHECKER_INVALID")
         if (mujoco.mj_versionString() != expected_mujoco_version
@@ -707,6 +740,10 @@ class HeadTrajectoryGuard:
                     proof["search_deadline_ns"], proof["header_stamp_ns"],
                     proof["last_point_offset_ns"], current_ros_ns, now_wall_ns)):
             raise PermissionError("HEAD_TRAJECTORY_PREPARED_HEADER_EXPIRED")
+        if self.controller_state_source is not None:
+            check_dispatch_against_controller_state(
+                proof, self.controller_state_source(), current_ros_ns=current_ros_ns,
+                now_mono_ns=time.monotonic_ns())
         return proof
 
     def is_current(self) -> bool:

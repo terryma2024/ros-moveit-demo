@@ -927,3 +927,28 @@ def _capture_error(errors, callback):
         callback()
     except Exception as error:
         errors.append(error)
+
+
+def test_revalidation_consults_the_controller_state_source_when_one_is_bound(composed):
+    import time
+    config, events, owned, faults, servers, calls = composed
+    sender = HeadInventoryDispatcher(**config)
+    guard = config['guard']
+    prepared = guard.prepare(.05)
+    first = prepared.proof['typed_curve']['positions_rad'][0]
+
+    def fresh(**change):
+        sample = dict(sim_ns=1, receive_mono_ns=time.monotonic_ns(), feedback_position=first,
+                      feedback_velocity=0.0, reference_position=first, reference_velocity=0.0)
+        sample.update(change)
+        return sample
+    guard.controller_state_source = lambda: None
+    with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_CONTROLLER_STATE_MISSING'):
+        guard.revalidate(prepared)
+    guard.controller_state_source = lambda: fresh(feedback_position=first + .01)
+    with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_CONTROLLER_PREFIX_MISMATCH'):
+        guard.revalidate(prepared)
+    guard.controller_state_source = lambda: fresh()
+    assert guard.revalidate(prepared)['requested_target_rad'] == .05
+    guard.controller_state_source = None
+    assert guard.revalidate(prepared)['requested_target_rad'] == .05

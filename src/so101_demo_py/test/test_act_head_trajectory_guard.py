@@ -343,3 +343,81 @@ def test_collision_replay_refuses_clearance_margin_mutated_after_guard_binding(g
     guard.checker.model.geom_margin[:] = 0.
     with pytest.raises(PermissionError, match="HEAD_TRAJECTORY_COLLISION_POLICY_MUTATED"):
         guard._check_collision_pose(state.qpos, .1)
+
+
+# ---- pre-dispatch checks against the latest controller_state (design section 2, approximated) ----------
+
+from so101_demo.adapters.act.head_trajectory_guard import check_dispatch_against_controller_state  # noqa: E402
+
+_CS_HEADER = 20_000_000_000
+_CS_FIRST_OFFSET = 100_000_000
+_CS_NOW_ROS = _CS_HEADER - 4_000_000
+_CS_MONO = 5_000_000_000_000
+
+
+def _cs_proof(**change):
+    value = dict(header_stamp_ns=_CS_HEADER, first_point_offset_ns=_CS_FIRST_OFFSET,
+                 typed_curve=dict(positions_rad=[0.1, 0.4], times_from_start_ns=[_CS_FIRST_OFFSET, 1_100_000_000]))
+    value.update(change)
+    return value
+
+
+def _cs_sample(**change):
+    value = dict(sim_ns=_CS_NOW_ROS - 2_000_000, receive_mono_ns=_CS_MONO - 10_000_000,
+                 feedback_position=0.1005, feedback_velocity=0.01, reference_position=0.1, reference_velocity=0.0)
+    value.update(change)
+    return value
+
+
+def _cs_check(proof=None, sample=None, **kwargs):
+    arguments = dict(current_ros_ns=_CS_NOW_ROS, now_mono_ns=_CS_MONO)
+    arguments.update(kwargs)
+    return check_dispatch_against_controller_state(_cs_proof() if proof is None else proof,
+                                                  _cs_sample() if sample is None else sample, **arguments)
+
+
+def test_a_fresh_quiet_sample_near_the_first_point_passes():
+    assert _cs_check() is None
+
+
+@pytest.mark.parametrize('sample_change,code', [
+    (dict(receive_mono_ns=_CS_MONO - 201_000_000), 'HEAD_TRAJECTORY_CONTROLLER_STATE_STALE'),
+    (dict(feedback_position=float('nan')), 'HEAD_TRAJECTORY_CONTROLLER_STATE_NON_FINITE'),
+    (dict(feedback_velocity=float('inf')), 'HEAD_TRAJECTORY_CONTROLLER_STATE_NON_FINITE'),
+    (dict(feedback_velocity=0.0415), 'HEAD_TRAJECTORY_CONTROLLER_PREFIX_VELOCITY'),
+    (dict(feedback_velocity=-0.0415), 'HEAD_TRAJECTORY_CONTROLLER_PREFIX_VELOCITY'),
+    (dict(feedback_position=0.1021), 'HEAD_TRAJECTORY_CONTROLLER_PREFIX_MISMATCH'),
+    (dict(feedback_position=0.0979), 'HEAD_TRAJECTORY_CONTROLLER_PREFIX_MISMATCH'),
+])
+def test_a_stale_non_finite_moving_or_displaced_sample_refuses_the_dispatch(sample_change, code):
+    with pytest.raises(PermissionError, match=code):
+        _cs_check(sample=_cs_sample(**sample_change))
+
+
+def test_the_velocity_bound_is_inclusive_and_the_position_bound_is_2_milliradians():
+    assert _cs_check(sample=_cs_sample(feedback_velocity=0.04136050464213824,
+                                       feedback_position=0.10199)) is None
+
+
+def test_no_sample_at_all_refuses_the_dispatch():
+    with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_CONTROLLER_STATE_MISSING'):
+        check_dispatch_against_controller_state(_cs_proof(), None, current_ros_ns=_CS_NOW_ROS,
+                                                now_mono_ns=_CS_MONO)
+
+
+def test_a_goal_that_arrives_after_its_first_point_is_late():
+    first_absolute = _CS_HEADER + _CS_FIRST_OFFSET
+    for now in (first_absolute + 5_000_000, first_absolute, first_absolute - 2_000_000):
+        with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_GOAL_LATE'):
+            _cs_check(current_ros_ns=now)
+    # one tick (2 ms) of margin is the least the consuming update needs
+    with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_HEADER_LEAD|HEAD_TRAJECTORY_GOAL_LATE'):
+        _cs_check(current_ros_ns=first_absolute - 2_000_000)
+
+
+def test_a_header_lead_longer_than_the_first_offset_plus_14ms_refuses_the_dispatch():
+    # remaining = first absolute - now; it may not exceed the first offset + 14 ms
+    boundary = _CS_HEADER - 14_000_000
+    assert _cs_check(current_ros_ns=boundary) is None
+    with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_HEADER_LEAD'):
+        _cs_check(current_ros_ns=boundary - 1)
