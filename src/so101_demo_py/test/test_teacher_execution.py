@@ -23,13 +23,13 @@ from test_b1_teacher_stop_core import COMPRESSION_LIMIT_M, FORCE_LIMIT_N, eviden
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V3 = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy.yaml")
+TEACHER_POLICY = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy.yaml")
 HOVER_Z = 0.2176344
 
 
-def v3_adapter(tmp_path, **kwargs):
+def teacher_adapter(tmp_path, **kwargs):
     value = make_adapter(tmp_path, **kwargs)
-    value._execution_policy = V3
+    value._execution_policy = TEACHER_POLICY
     value._document = {"schema": SCHEMA_TEACHER}
     value._write = lambda: None
     value._process_summary = ProcessSummary(limits=CupSafetyLimits(FORCE_LIMIT_N, COMPRESSION_LIMIT_M))
@@ -49,8 +49,8 @@ def run_monitor(value, state=State.MOVE_ABOVE_PLACE):
     evidence(left=(FORCE_LIMIT_N,), right=(FORCE_LIMIT_N,)),         # summed cup force above the activated limit
     evidence(distance=-(COMPRESSION_LIMIT_M * 4)),                   # fingertip compression above the activated limit
 ], ids=["single-contact", "summed-force", "compression"])
-def test_force_and_compression_no_longer_stop_the_v3_monitor_but_stop_v2(tmp_path, sample):
-    value = v3_adapter(tmp_path)
+def test_force_and_compression_no_longer_stop_the_teacher_monitor_but_stop_a_general_run(tmp_path, sample):
+    value = teacher_adapter(tmp_path)
     value.observer.put(sample)
     run_monitor(value)
     old = make_adapter(tmp_path)
@@ -59,8 +59,8 @@ def test_force_and_compression_no_longer_stop_the_v3_monitor_but_stop_v2(tmp_pat
         run_monitor(old)
 
 
-def test_a_collision_or_hazard_latch_no_longer_stops_v3(tmp_path):
-    value = v3_adapter(tmp_path)
+def test_a_collision_or_hazard_latch_no_longer_stops_the_teacher(tmp_path):
+    value = teacher_adapter(tmp_path)
     value._collision_watch = SimpleNamespace(hazard="DYNAMIC_COLLISION_STOP", detail="pair")
     value._physics_hazard_watch = SimpleNamespace(
         hazard="DYNAMIC_PHYSICS_HAZARD", detail="x", limit_code="DYNAMIC_CUP_FORCE_EXCEEDED", gaps=5, limits=None,
@@ -74,12 +74,12 @@ def test_a_collision_or_hazard_latch_no_longer_stops_v3(tmp_path):
 def test_session_epoch_and_non_finite_state_are_simulation_integrity_stops(tmp_path):
     for change, code in ((dict(simulation_session_id="other"), "SIM_INTEGRITY_SESSION_MISMATCH"),
                          (dict(reset_epoch=2), "SIM_INTEGRITY_RESET_EPOCH_MISMATCH"), (dict(paused=True), "SIM_INTEGRITY_RESET_EPOCH_MISMATCH")):
-        value = v3_adapter(tmp_path)
+        value = teacher_adapter(tmp_path)
         value.observer.put(replace(evidence(), **change))
         with pytest.raises(TeacherStop) as stop:
             run_monitor(value)
         assert stop.value.code == code
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     good = evidence()
     object.__setattr__(good.object_state, "position_world", (math.nan, 0.0, 0.0))     # the dataclass refuses it at construction
     value.observer.put(good)
@@ -89,14 +89,14 @@ def test_session_epoch_and_non_finite_state_are_simulation_integrity_stops(tmp_p
 
 
 def test_a_silent_joint_state_or_world_stream_is_a_stop_after_one_second_with_its_own_code(tmp_path):
-    joint = v3_adapter(tmp_path)
+    joint = teacher_adapter(tmp_path)
     joint._joint_state_received_monotonic_s = 90.0
     run_monitor(joint)
     joint._now[0] += 1.1
     with pytest.raises(TeacherStop) as stop:
         run_monitor(joint)
     assert stop.value.code == "TEACHER_JOINT_STATE_UNAVAILABLE"
-    world = v3_adapter(tmp_path)
+    world = teacher_adapter(tmp_path)
     world.observer.put(evidence(), received=50.0)                    # stale evidence, fresh joint states
     run_monitor(world)
     world._now[0] += 1.1
@@ -106,8 +106,8 @@ def test_a_silent_joint_state_or_world_stream_is_a_stop_after_one_second_with_it
     assert stop.value.code == "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE"
 
 
-def test_the_helper_codes_become_the_v3_codes_only_in_v3(tmp_path):
-    v3, old = v3_adapter(tmp_path), make_adapter(tmp_path)
+def test_the_helper_codes_become_the_teacher_codes_only_in_a_teacher_run(tmp_path):
+    v3, old = teacher_adapter(tmp_path), make_adapter(tmp_path)
     for raw, mapped in (("DYNAMIC_SESSION_MISMATCH", "SIM_INTEGRITY_SESSION_MISMATCH"),
                         ("DYNAMIC_RESET_EPOCH_MISMATCH", "SIM_INTEGRITY_RESET_EPOCH_MISMATCH"),
                         ("DYNAMIC_EVIDENCE_TIMEOUT", "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE"),
@@ -118,7 +118,7 @@ def test_the_helper_codes_become_the_v3_codes_only_in_v3(tmp_path):
 
 
 def test_perform_state_reports_the_mapped_code(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._initial = evidence()
     value._phase_finish = lambda *args: None
 
@@ -131,7 +131,7 @@ def test_perform_state_reports_the_mapped_code(tmp_path):
 
 # ---- status mapping -------------------------------------------------------------------------------------------------------
 
-def test_the_v3_status_mapping(tmp_path):
+def test_the_teacher_status_mapping(tmp_path):
     def status(code):
         return RosDynamicMujocoExecution._teacher_execution_status(
             SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code=code)),
@@ -146,8 +146,8 @@ def test_the_v3_status_mapping(tmp_path):
     assert status("TEACHER_USER_STOP") == "STOPPED_USER" and status("TEACHER_DEADLINE") == "DEADLINE"
 
 
-def test_the_manifest_fields_name_the_v3_schema_the_failure_class_and_the_summary(tmp_path):
-    value = v3_adapter(tmp_path)
+def test_the_manifest_fields_name_the_teacher_schema_the_failure_class_and_the_summary(tmp_path):
+    value = teacher_adapter(tmp_path)
     value._document["teacher_process_summary"] = {"schema": "teacher_process_summary_v1"}
     failed = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="SIM_INTEGRITY_NON_FINITE_STATE"))
     fields = value._teacher_manifest_fields(failed, {"physical_action_proven_absent": False}, None, None)
@@ -159,7 +159,7 @@ def test_the_manifest_fields_name_the_v3_schema_the_failure_class_and_the_summar
 
 # ---- failure boundary without recovery ------------------------------------------------------------------------------------
 
-def test_the_failure_boundary_of_a_v3_trace_is_the_state_before_error():
+def test_the_failure_boundary_of_a_trace_is_the_state_before_error():
     from so101_demo.core.workflow import TEACHER_WORKFLOW
     trace = (State.IDLE, State.PREPARE_OPEN_GRIPPER, State.MOVE_ABOVE_OBJECT, State.ERROR)
     failure = SimpleNamespace(code="MOVEIT_EXECUTION_FAILED")
@@ -171,7 +171,7 @@ def test_the_failure_boundary_of_a_v3_trace_is_the_state_before_error():
 # ---- release sequence (5a) ------------------------------------------------------------------------------------------------
 
 def test_the_arm_stop_wait_passes_on_a_stopped_arm_and_times_out_with_its_own_code(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._wait_progress = lambda: value._now.__setitem__(0, value._now[0] + 0.05)
     value._wait_arm_stopped()
     value._joint_velocities = {name: 0.0021 for name in (*ARM, "6")}     # just above 0.002 rad/s
@@ -186,7 +186,7 @@ def test_the_arm_stop_wait_passes_on_a_stopped_arm_and_times_out_with_its_own_co
 
 
 def test_open_gripper_records_the_release_marker_from_a_fresh_snapshot_without_any_release_proof(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value.observer.put(evidence(other=(), step=4321))                    # nothing supports the cup: v2 would refuse
     value._ik = SimpleNamespace(forward=lambda joints: SimpleNamespace(position_m=(0.0, 0.0, 0.2), orientation_xyzw=(0.0, 0.0, 0.0, 1.0)))
     commands = []
@@ -200,7 +200,7 @@ def test_open_gripper_records_the_release_marker_from_a_fresh_snapshot_without_a
 
 
 def test_detach_uses_a_fresh_snapshot_not_the_release_preflight(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._task_geometry = None                                            # ends the method right after the source check
     value._supported_release_preflight = lambda: pytest.fail("v3 has no release preflight")
     with pytest.raises(RuntimeError, match="DYNAMIC_DETACH_SYNC_SOURCE_INVALID"):
@@ -208,7 +208,7 @@ def test_detach_uses_a_fresh_snapshot_not_the_release_preflight(tmp_path):
 
 
 def test_the_fixed_dwells_wait_simulation_time_not_a_predicate(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     clock = [1000]
     states = []
 
@@ -227,7 +227,7 @@ def test_the_fixed_dwells_wait_simulation_time_not_a_predicate(tmp_path):
 
 
 def test_a_dwell_that_never_advances_ends_the_attempt(tmp_path):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._snapshot = lambda: evidence()
     import so101_demo.ros.dynamic_mujoco_execution as module
     ticks = iter(range(0, 1000, 3))
@@ -243,9 +243,9 @@ def test_a_dwell_that_never_advances_ends_the_attempt(tmp_path):
 
 # ---- the final normal_stop (D5) -------------------------------------------------------------------------------------------
 
-def test_the_final_normal_stop_age_comes_from_the_execution_policy_in_v3(tmp_path):
+def test_the_final_normal_stop_age_comes_from_the_execution_policy_in_a_teacher_run(tmp_path):
     value, _ = release_adapter(tmp_path)
-    value._execution_policy = V3
+    value._execution_policy = TEACHER_POLICY
     value._release_runtime_policy = None                                   # the release policy is not part of v3
     events = []
     value._publish_teacher_event = lambda kind, payload: events.append((kind, payload))
@@ -264,7 +264,7 @@ def geometry():
 
 
 def place_adapter(tmp_path, geometry, measurement):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._execution_snapshot_root = PACKAGE
     value._place_geometry = lambda: geometry
 
@@ -290,7 +290,7 @@ def test_a_nominal_measurement_gives_the_tilt_compensated_target_and_a_valid_rec
     record = value._document["place_height"]
     assert record["mode"] == "tilt_compensated" and record["fallback_reason"] is None
     assert target.position_m == (0.1, -0.2, record["target_tcp_z_m"])
-    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(TEACHER_POLICY))
 
 
 @pytest.mark.parametrize("measurement,reason", [
@@ -301,13 +301,13 @@ def test_a_nominal_measurement_gives_the_tilt_compensated_target_and_a_valid_rec
     (RuntimeError("scene parse error"), "MEASUREMENT_FAILED"),
     (ph.PlaceHeightRefused(ph.MEASUREMENT_FAILED, "geometry"), "MEASUREMENT_FAILED"),
 ])
-def test_every_fallback_reason_uses_the_v1_target_and_never_refuses(tmp_path, geometry, measurement, reason):
+def test_every_fallback_reason_uses_the_constant_offset_target_and_never_refuses(tmp_path, geometry, measurement, reason):
     value = place_adapter(tmp_path, geometry, measurement)
     target = place(value)
     record = value._document["place_height"]
     assert record["mode"] == "fallback_reference" and record["fallback_reason"] == reason
     assert target.position_m[2] == pytest.approx(HOVER_Z - 0.01325, abs=1e-12) == record["constant_offset_target_tcp_z_m"]
-    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(TEACHER_POLICY))
 
 
 def test_the_target_deviation_and_scene_hash_reasons(tmp_path, geometry):
@@ -321,7 +321,7 @@ def test_the_target_deviation_and_scene_hash_reasons(tmp_path, geometry):
     place(value)
     record = value._document["place_height"]
     assert record["fallback_reason"] == "SCENE_HASH_MISMATCH"
-    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(TEACHER_POLICY))
 
 
 @pytest.mark.parametrize("failure,code", [
@@ -339,7 +339,7 @@ def test_a_stop_during_the_measurement_keeps_its_code_and_is_not_a_fallback(tmp_
 # ---- process summary ------------------------------------------------------------------------------------------------------
 
 def finish_adapter(tmp_path, *, done=True):
-    value = v3_adapter(tmp_path)
+    value = teacher_adapter(tmp_path)
     value._stop_suspended = False
     value._stream_emit = lambda *args, **kwargs: None
     value._stream_manifest_block = lambda: None
@@ -422,7 +422,7 @@ def real_observer_adapter(tmp_path, monkeypatch):
     from so101_demo.backends.mujoco import observer as world_module
     monkeypatch.setattr(world_module, "convert_message", lambda message: message)
     value = make_adapter(tmp_path)
-    value._execution_policy = V3
+    value._execution_policy = TEACHER_POLICY
     value._document = {}
     value._write = lambda: None
     value.observer = world_module.MujocoWorldObserver(SimpleNamespace(create_subscription=lambda *a: object()), "s", max_age_s=0.5,
@@ -432,7 +432,7 @@ def real_observer_adapter(tmp_path, monkeypatch):
     return value, world_module
 
 
-def test_truncated_evidence_lasting_more_than_a_second_does_not_abort_v3_and_marks_the_summary_incomplete(tmp_path, monkeypatch):
+def test_truncated_evidence_lasting_more_than_a_second_does_not_abort_the_teacher_and_marks_the_summary_incomplete(tmp_path, monkeypatch):
     value, _ = real_observer_adapter(tmp_path, monkeypatch)
     value._snapshot = lambda: pytest.fail("the monitor must not block")
     monitor = value._motion_monitor(State.LIFT)
@@ -460,7 +460,7 @@ def test_truncated_evidence_lasting_more_than_a_second_does_not_abort_v3_and_mar
             old_monitor()
 
 
-def test_a_truncated_snapshot_is_usable_in_v3_for_the_detach_source_check(tmp_path, monkeypatch):
+def test_a_truncated_snapshot_is_usable_for_the_detach_source_check(tmp_path, monkeypatch):
     value, _ = real_observer_adapter(tmp_path, monkeypatch)
     value._now[0] += 0.1
     value.observer.accept(evidence(step=2000, truncated=True), received_at_s=value._now[0])
@@ -500,6 +500,6 @@ def test_a_summary_stays_complete_when_both_streams_delivered(tmp_path):
 def test_the_activation_sets_the_silence_limit_from_the_execution_policy(tmp_path):
     value = make_adapter(tmp_path)
     value._document = {}
-    value._execution_policy = V3
+    value._execution_policy = TEACHER_POLICY
     value._activate_teacher_run()
-    assert value._process_summary.silence_limit_s == V3["state_unavailable_stop_s"] == 1.0
+    assert value._process_summary.silence_limit_s == TEACHER_POLICY["state_unavailable_stop_s"] == 1.0

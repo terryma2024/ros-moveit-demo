@@ -267,7 +267,7 @@ def test_compose_finetuned_bundle_rejects_checkpoint_hash_before_destination_cre
     assert not destination.exists()
 
 
-def test_schema_v2_verifier_rejects_rehashed_non_generic_prompt(tmp_path: Path) -> None:
+def test_schema_verifier_rejects_rehashed_non_generic_prompt(tmp_path: Path) -> None:
     """Catch a valid outer hash disguising prompt drift in a fine-tuned bundle."""
 
     source_root, source_sha = _source_bundle(tmp_path / "source-bundle")

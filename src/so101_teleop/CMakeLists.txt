@@ -179,7 +179,7 @@ so101_add_pytest_test(test_task8_case_runner_chain test/teleop/test_task8_case_r
   so101_add_pytest_test(test_expert_validation_operator_recovery test/teleop/test_expert_validation_operator_recovery.py)
   so101_add_pytest_test(test_expert_validation_owner_tree test/teleop/test_expert_validation_owner_tree.py)
   so101_add_pytest_test(test_expert_validation_supervisor test/teleop/test_expert_validation_supervisor.py)
-  so101_add_pytest_test(test_expert_validation_v2_contract test/teleop/test_expert_validation_v2_contract.py)
+  so101_add_pytest_test(test_expert_validation_campaign_contract test/teleop/test_expert_validation_campaign_contract.py)
   so101_add_pytest_test(test_unified_gate test/test_unified_gate.py)
   so101_add_pytest_test(test_unified_arbiter test/teleop/test_unified_arbiter.py)
   so101_add_pytest_test(test_unified_instances test/teleop/test_unified_instances.py)

@@ -84,7 +84,7 @@ def test_provider_answering_for_a_different_n_is_refused():
         adapter.require_start(6, runtime_identity="R")
 
 
-def test_v1_contract_is_refused_without_silently_accepting_it():
+def test_a_retired_contract_version_is_refused_without_silently_accepting_it():
     adapter = BudgetAdapter(AvailableSource(contract_version=1))
     with pytest.raises(MutationError, match="CONTRACT_VERSION_UNSUPPORTED"):
         adapter.require_start(4, runtime_identity="R")

@@ -16,7 +16,7 @@ from so101_demo.core.domain import ActionResult, ActionStatus, Failure, FailureC
 from so101_demo.ros import dynamic_mujoco_execution as module
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution, _ExecutionFailed
 
-from test_teacher_execution_v3 import v3_adapter
+from test_teacher_execution import teacher_adapter
 from test_b1_teacher_execution import make_adapter
 
 CODE = "TEACHER_INJECTED_EXECUTION_FAILURE"
@@ -35,7 +35,7 @@ def executing(value, outcome=None):
 # ---- (a) the hook at LIFT under v3 --------------------------------------------------------------------------------------------
 
 def test_the_hook_turns_a_succeeded_lift_execute_into_the_failed_result_of_a_real_execute_failure(tmp_path):
-    value = executing(v3_adapter(tmp_path))
+    value = executing(teacher_adapter(tmp_path))
     value.inject_failure_at = State.LIFT
     with pytest.raises(_ExecutionFailed) as caught:
         value._execute_planned(object(), State.LIFT, None)
@@ -50,14 +50,14 @@ def test_the_hook_turns_a_succeeded_lift_execute_into_the_failed_result_of_a_rea
 
 
 def test_the_hook_fires_once(tmp_path):
-    value = executing(v3_adapter(tmp_path))
+    value = executing(teacher_adapter(tmp_path))
     value.inject_failure_at = State.LIFT
     with pytest.raises(_ExecutionFailed):
         value._execute_planned(object(), State.LIFT, None)
     assert value._execute_planned(object(), State.LIFT, None).status is ActionStatus.SUCCEEDED
 
 
-def test_the_injected_failure_ends_in_a_v3_error_manifest_that_validates_with_the_cup_held(tmp_path):
+def test_the_injected_failure_ends_in_a_teacher_error_manifest_that_validates_with_the_cup_held(tmp_path):
     """Pinned to the live verdict of p11 (injected case f6bc2e3d): validate -> FAILED, e2e -> UNCONFIRMED with exactly one failure."""
     from test_dynamic_manifest_teacher import teacher_error, validate
     from so101_demo.application import e2e_acceptance as e2e
@@ -80,11 +80,11 @@ def test_the_pinned_verdict_is_specific_to_a_failed_attempt(tmp_path):
 
 # ---- (b) unset: no effect -----------------------------------------------------------------------------------------------------
 
-def test_unset_or_another_state_or_a_non_v3_policy_has_no_effect(tmp_path):
-    unset = executing(v3_adapter(tmp_path))
+def test_unset_or_another_state_or_a_general_run_has_no_effect(tmp_path):
+    unset = executing(teacher_adapter(tmp_path))
     assert getattr(unset, "inject_failure_at", None) is None
     assert unset._execute_planned(object(), State.LIFT, None).status is ActionStatus.SUCCEEDED
-    other = executing(v3_adapter(tmp_path))
+    other = executing(teacher_adapter(tmp_path))
     other.inject_failure_at = State.LIFT
     assert other._execute_planned(object(), State.MOVE_ABOVE_PLACE, None).status is ActionStatus.SUCCEEDED
     v2 = executing(make_adapter(tmp_path))
@@ -94,7 +94,7 @@ def test_unset_or_another_state_or_a_non_v3_policy_has_no_effect(tmp_path):
 
 def test_a_real_controller_failure_keeps_its_own_code_when_the_hook_is_set(tmp_path):
     failed = ActionResult(ActionStatus.FAILED, Failure(FailureCategory.EXECUTION, "MOVEIT_EXECUTION_FAILED", "real"))
-    value = executing(v3_adapter(tmp_path), failed)
+    value = executing(teacher_adapter(tmp_path), failed)
     value.inject_failure_at = State.LIFT
     with pytest.raises(_ExecutionFailed) as caught:
         value._execute_planned(object(), State.LIFT, None)

@@ -16,7 +16,7 @@ def _fixed_body(**changes):
     return body
 
 
-def test_v2_fixed_config_is_mode_and_count_only():
+def test_fixed_config_is_mode_and_count_only():
     configuration = CampaignConfiguration(**_fixed_body())
     assert configuration.worker_count == 2
     assert not hasattr(configuration, 'max_points_per_worker')
@@ -28,7 +28,7 @@ def test_v2_fixed_config_is_mode_and_count_only():
         CampaignConfiguration(**_fixed_body(execution_mode='SEQUENTIAL', worker_count=2))
 
 
-def test_v2_adaptive_config_keeps_its_own_fields_without_quota():
+def test_adaptive_config_keeps_its_own_fields_without_quota():
     configuration = CampaignConfiguration(
         contract_version=3, service_session_id='browser-a', lease_id='lease-a',
         lease_generation=1, manifest_id='manifest-20', execution_mode='ADAPTIVE',

@@ -27,7 +27,7 @@ def _probes(**changes):
     return QualificationProbes(**values)
 
 
-def test_v1_registry_exposes_three_explicit_modes():
+def test_registry_exposes_three_explicit_modes():
     registry = ExecutorRegistry.v1(_probes())
     capability = registry.require("moveit_expert", "validate_pick_place")
     assert capability.execution_modes == ("SEQUENTIAL", "PARALLEL", "ADAPTIVE")

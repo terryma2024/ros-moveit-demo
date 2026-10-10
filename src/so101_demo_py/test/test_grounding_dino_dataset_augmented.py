@@ -86,7 +86,7 @@ def _source(tmp_path: Path) -> Path:
     return source
 
 
-def test_schema_v2_conversion_verifies_occlusion_and_profiles_small_targets(
+def test_schema_conversion_verifies_occlusion_and_profiles_small_targets(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -118,7 +118,7 @@ def test_schema_v2_conversion_verifies_occlusion_and_profiles_small_targets(
     assert profile["test"] == {"sample_count": 1, "sealed": True}
 
 
-def test_schema_v2_truth_persists_visible_rle_for_unmeasured_instance(
+def test_schema_truth_persists_visible_rle_for_unmeasured_instance(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -135,7 +135,7 @@ def test_schema_v2_truth_persists_visible_rle_for_unmeasured_instance(
     assert int(mask.sum()) == instance["visible_pixel_count"] == 64
 
 
-def test_schema_v2_conversion_fails_closed_on_tampered_occlusion_rle(
+def test_schema_conversion_fails_closed_on_tampered_occlusion_rle(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -153,7 +153,7 @@ def test_schema_v2_conversion_fails_closed_on_tampered_occlusion_rle(
         )
 
 
-def test_schema_v2_conversion_fails_closed_on_tampered_unmeasured_visible_rle(
+def test_schema_conversion_fails_closed_on_tampered_unmeasured_visible_rle(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -171,7 +171,7 @@ def test_schema_v2_conversion_fails_closed_on_tampered_unmeasured_visible_rle(
         )
 
 
-def test_schema_v2_conversion_rejects_scenario_quota_manifest_mismatch(
+def test_schema_conversion_rejects_scenario_quota_manifest_mismatch(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -189,7 +189,7 @@ def test_schema_v2_conversion_rejects_scenario_quota_manifest_mismatch(
         )
 
 
-def test_schema_v2_conversion_rejects_seed_overlap_across_splits(
+def test_schema_conversion_rejects_seed_overlap_across_splits(
     tmp_path: Path,
 ) -> None:
     source = _source(tmp_path)
@@ -238,7 +238,7 @@ def test_polygon_normalization_is_not_accepted_as_trainer_box_normalization() ->
         _box_truth(legacy, width=100, height=80)
 
 
-def test_official_schema_v2_export_uses_exact_visible_mask_box(tmp_path: Path) -> None:
+def test_official_schema_export_uses_exact_visible_mask_box(tmp_path: Path) -> None:
     source = _source(tmp_path)
     output = tmp_path / "converted"
     convert_dataset(source, output, source_archive_sha256="a" * 64, converter_commit="b" * 40)

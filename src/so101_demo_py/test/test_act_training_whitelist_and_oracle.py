@@ -139,7 +139,7 @@ def test_the_loader_still_checks_the_export_digests(tmp_path, monkeypatch):
 POLICY = {"schema_version": 3, "policy_sha256": "e" * 64, "cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
 
 
-def v3_manifest(*, overload=None, collision=None, incomplete=False, limits=True):
+def teacher_manifest(*, overload=None, collision=None, incomplete=False, limits=True):
     value = ProcessSummary()
     if limits:
         value.limits = type("L", (), {"maximum_safe_force_n": 3.0, "maximum_compression_distance_m": 1e-4})()
@@ -172,11 +172,11 @@ def resolve(entries, tmp_path):
 
 
 @pytest.mark.parametrize("manifest,flag,phase", [
-    (v3_manifest(overload="force"), "ORACLE_CUP_OVERLOAD", "LIFT"),
-    (v3_manifest(overload="compression"), "ORACLE_CUP_OVERLOAD", "DESCEND_TO_PLACE"),
-    (v3_manifest(collision=True), "ORACLE_COLLISION", "DESCEND_TO_PLACE"),
-    (v3_manifest(incomplete=True), "INCOMPLETE", "PHYSICS_GAP"),
-    (v3_manifest(limits=False), "INCOMPLETE", "THRESHOLDS_UNAVAILABLE"),
+    (teacher_manifest(overload="force"), "ORACLE_CUP_OVERLOAD", "LIFT"),
+    (teacher_manifest(overload="compression"), "ORACLE_CUP_OVERLOAD", "DESCEND_TO_PLACE"),
+    (teacher_manifest(collision=True), "ORACLE_COLLISION", "DESCEND_TO_PLACE"),
+    (teacher_manifest(incomplete=True), "INCOMPLETE", "PHYSICS_GAP"),
+    (teacher_manifest(limits=False), "INCOMPLETE", "THRESHOLDS_UNAVAILABLE"),
 ], ids=["force-overload", "compression-overload", "collision", "incomplete", "no-thresholds"])
 @pytest.mark.parametrize("direct", [False, True])
 def test_an_oracle_flagged_or_incomplete_episode_is_refused_by_both_boundaries_and_stays_committed(
@@ -190,15 +190,15 @@ def test_an_oracle_flagged_or_incomplete_episode_is_refused_by_both_boundaries_a
     assert after == before                                             # the sealed episode and its evidence are untouched
 
 
-@pytest.mark.parametrize("manifest", [v3_manifest(), {"schema": "so101-dynamic-execute", "schema_version": 1}], ids=["clean-v3", "v2-no-summary"])
-def test_a_clean_v3_episode_and_a_policy_v2_episode_are_accepted(tmp_path, monkeypatch, manifest):
+@pytest.mark.parametrize("manifest", [teacher_manifest(), {"schema": "so101-dynamic-execute", "schema_version": 1}], ids=["clean-teacher", "general-no-summary"])
+def test_a_clean_episode_and_a_policy_episode_are_accepted(tmp_path, monkeypatch, manifest):
     entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": manifest})
     assert len(resolve(entries, tmp_path)) == 1
     assert export(entries, tmp_path)["scene_count"] == 1
 
 
 def test_a_tampered_summary_that_hides_its_flag_is_refused(tmp_path, monkeypatch):
-    manifest = v3_manifest(collision=True)
+    manifest = teacher_manifest(collision=True)
     manifest["teacher_process_summary"]["flags"]["ORACLE_COLLISION"] = []
     entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": manifest})
     with pytest.raises(ValueError, match="EXPORT_EPISODE_ORACLE_EXCLUDED: INCOMPLETE"):
@@ -206,9 +206,9 @@ def test_a_tampered_summary_that_hides_its_flag_is_refused(tmp_path, monkeypatch
 
 
 def test_the_teacher_manifest_must_be_the_one_the_qc_bound(tmp_path, monkeypatch):
-    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": v3_manifest()})
+    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": teacher_manifest()})
     location = tmp_path / "controlled-v2-export-0" / "sealed"
-    (location / "dynamic" / "dynamic-execute-manifest.json").write_text(json.dumps(v3_manifest(collision=True)))
+    (location / "dynamic" / "dynamic-execute-manifest.json").write_text(json.dumps(teacher_manifest(collision=True)))
     with pytest.raises(ValueError, match="EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND"):
         export(entries, tmp_path)
     (location / "dynamic" / "dynamic-execute-manifest.json").unlink()
@@ -218,7 +218,7 @@ def test_the_teacher_manifest_must_be_the_one_the_qc_bound(tmp_path, monkeypatch
 
 @pytest.mark.parametrize("direct", [False, True])
 def test_the_diagnostic_mode_refusal_keeps_precedence_over_the_oracle_exclusion(tmp_path, monkeypatch, direct):
-    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": v3_manifest(collision=True)},
+    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": teacher_manifest(collision=True)},
                                       proof_overrides={"act-1": {"collection_mode": "preselected_target_diagnostic"}})
     from so101_demo.act import collection_scope
     real = collection_scope.read_collection_scope
@@ -229,7 +229,7 @@ def test_the_diagnostic_mode_refusal_keeps_precedence_over_the_oracle_exclusion(
 
 
 def test_a_failed_qc_or_teacher_status_still_reports_its_own_refusal_first(tmp_path, monkeypatch):
-    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": v3_manifest(collision=True)},
+    entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": teacher_manifest(collision=True)},
                                       proof_overrides={"act-1": {"result_status": "FAILED"}})
     with pytest.raises(ValueError, match="EXPORT_EPISODE_NOT_PASSED"):
         export(entries, tmp_path)

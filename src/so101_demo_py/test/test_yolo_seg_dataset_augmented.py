@@ -246,7 +246,7 @@ class _MeasuredRenderer:
         pass
 
 
-def test_schema_v2_manifest_and_truth_persist_measured_occlusion(tmp_path: Path) -> None:
+def test_schema_manifest_and_truth_persist_measured_occlusion(tmp_path: Path) -> None:
     fixture = tmp_path / "fixture.xml"
     fixture.write_text("<mujoco/>", encoding="utf-8")
     config = DatasetConfig(

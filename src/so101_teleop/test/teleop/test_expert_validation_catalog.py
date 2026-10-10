@@ -80,7 +80,7 @@ def test_selection_is_stable_and_uses_only_catalog_ids() -> None:
 
 
 @pytest.mark.parametrize("total_points", [3, 21, True])
-def test_selection_rejects_counts_outside_v1_contract(total_points: object) -> None:
+def test_selection_rejects_counts_outside_the_catalog_contract(total_points: object) -> None:
     with pytest.raises(CatalogError, match="TOTAL_POINTS_RANGE"):
         select_catalog_points(total_points=total_points)  # type: ignore[arg-type]
 

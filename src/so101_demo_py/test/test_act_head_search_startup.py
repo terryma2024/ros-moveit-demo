@@ -11,7 +11,7 @@ from so101_demo.act.head_search_binding import validate_head_search_binding
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V2 = PACKAGE / "config/mujoco/act/head_search_runtime.json"
+RUNTIME_CONFIG = PACKAGE / "config/mujoco/act/head_search_runtime.json"
 
 FIELDS = (
     "horizontal_fov_rad",
@@ -35,7 +35,7 @@ FIELDS = (
 
 
 def _config() -> dict:
-    return json.loads(V2.read_text(encoding="utf-8"))
+    return json.loads(RUNTIME_CONFIG.read_text(encoding="utf-8"))
 
 
 def test_the_shipped_config_declares_the_seventeen_values_and_its_identities() -> None:
