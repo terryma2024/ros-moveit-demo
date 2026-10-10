@@ -1,6 +1,6 @@
 # SO-101 code-style refactor: latest-only versions, business names, test layout, file splits
 
-Status: design revision 2, 2026-10-10. Owner: root (Claude Opus 5.5). Execution: one Claude Sonnet 5.5 executor at a time. Ledger: CP-3540, CP-3541, CP-3542.
+Status: design revision 2.1 (re-review PASS-WITH-CHANGES, amendments in §9), 2026-10-10. Owner: root (Claude Opus 5.5). Execution: one Claude Sonnet 5.5 executor at a time. Ledger: CP-3540, CP-3541, CP-3542.
 
 Revision 1 failed independent review, with 14 findings. The reviewer was a fresh Opus instance; AGENTS.md names Astra for this role, and the deviation is recorded. This revision applies every finding together with the user's answers given on 2026-10-10.
 
@@ -161,3 +161,35 @@ The macOS v4/v5/v6 routes cannot run on ai-station. They are recorded as deferre
 ## 8. Order and stops
 
 Step 0 → A → B → C → D → F, with a root review stop after each. The test reorganisation is folded into step 0 and phase C.
+
+## 9. Revision 2.1 amendments (re-review PASS-WITH-CHANGES; these supersede conflicting rows above)
+
+- **N1, resource identity.** No new identity value is introduced.
+  - `canonical_sha256` moves to `parallel_batch/canonical_json.py`, and its five live importers are repointed: `runtime_closure`, `macos_dlopen_probe`, `point_drain`, `queue` and `selection`.
+  - The rest of `resource_identity.py` is v2 history with no live caller. It is deleted together with `test_parallel_resource_identity.py`.
+  - The provenance pin at `mujoco_parallel_batch.py:881` is repointed to `linux_cuda`.
+  - The §7 receipt-regeneration risk is withdrawn.
+- **N2, execution policy.** Policy v1 is the superseded Teacher constant-offset policy, not a general profile. Option 1 applies:
+  - Teacher policies v1 and v2 are deleted.
+  - A small `general_runtime_policy.yaml` is added. It holds only the three common fields, `state_max_age_s`, `state_unavailable_stop_s` and `execution_deadline_s`, and the general path loads it at `ros/dynamic_mujoco_execution.py:430` and `ros/dynamic_runtime.py:536,822`.
+  - Teacher binders (`first_episode_inputs.py:632`, `frozen_runtime_inputs.py:12-13,46-48`, `_select_execution_policy`) accept only `teacher_execution_policy.yaml`, which was v3.
+  - The non-v3 Teacher branches are deleted: `_compensated_place_target`, the constant-offset branch at `:2524-2527`, the `if self._v3() else` forks at `:1050`, `:1065`, `:1562` and `:1880`, and the v1/v2 part of `_check_place_geometry_before_motion`.
+- **N3, place height.** This family is restored. The v3 strategy is kept (`core/place_height.py`, record schema renamed without a version). The v1/v2 compensation paths are deleted. The v1 offset number stays only as the v3 fallback field value.
+- **N4, manifest coupling.**
+  - The Teacher readers accept only `so101-teacher-execute`: `act/offline/engine.py:49`, `act/episode_qc.py:448-450`, `act/teacher_process.py:18`.
+  - `parallel_batch/dynamic_manifest.py:488-492` couples the Teacher policy to the Teacher manifest, and general to general.
+  - `runtime/parallel_ros_runtime.py:1782` drops v1.
+- **parallel_batch details.**
+  - `BatchRequestV3` and its document helpers are deleted; `w2_composition.py:258` is repointed.
+  - U3 needs no route-table row. Linux v3 (`linux_cuda`) is already admissible for adaptive runs through `load_execution_config`. The work is:
+    - repoint the defaults: teleop `production.py:235`, `run_so101_adaptive_worker_scaling.zsh:58`, `so101-teleop-service.py:132`;
+    - reconcile the adaptive allocator override, `AllocationPolicy(max_worker_count, ros_domain_ids 215–230)` at `cli/mujoco_parallel_batch.py:2816-2824`, with the frozen `linux_cuda` values (`max_worker_count 8`, domains 181–188, `_FROZEN_MAX_WORKER_COUNT = 8` against `_MAX_ADAPTIVE_WORKER_COUNT = 16`).
+  - Live check 4 proves the result.
+- **N5, bisectable commits.** A rename commit includes its importer fixes (git detects renames by similarity). Pure `git mv` commits are used only where nothing imports the path, which means test files and data.
+- **N6, guard activation.**
+  - All three guards land in step 0 as allowlist ratchets, seeded with every current hit. An allowlist may only shrink, and the unused-entry check enforces that.
+  - Each allowlist must be empty, except for permanent reasoned entries, at these points: the versioned-name guard at the end of B, the process-name guard at the end of C, the wire-string guard at the end of D.
+  - The module-size guard turns on at the end of F.
+- **N7, §4 gate details.**
+  - Every pytest and colcon test run uses a fresh `<evidence_root>/scratch/<run-id>/tmp`. `TMPDIR`, `TMP` and `TEMP` are verified through the test interpreter's `tempfile.gettempdir()` (AGENTS.md).
+  - The benchmark gate command is exactly `colcon test --packages-select so101_demo_py --pytest-args benchmark_test`, followed by `colcon test-result`.

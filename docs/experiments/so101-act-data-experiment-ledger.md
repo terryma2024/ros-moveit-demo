@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3542
+latest_checkpoint: CP-3543
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3543 — refactor design re-review PASS-WITH-CHANGES; revision 2.1; step 0 dispatched
+
+- Re-review: findings 1, 5–14 RESOLVED; 2, 3, 4 PARTIAL. New issues:
+  - N1: resource_identity's live importers use only canonical_sha256; the rest has no live caller, so no new identity is needed.
+  - N2: policy v1 is the superseded Teacher constant-offset policy, not a general profile.
+  - N3: the place-height family was missing.
+  - N4: the manifest row contradicted itself.
+  - N5: pure-mv commits don't build.
+  - N6: guard activation was unscheduled.
+  - N7: the scratch rule and benchmark command were missing from the gates.
+- Revision 2.1 (§9 of the design):
+  - canonical_json module; resource_identity history deleted.
+  - Teacher policies v1/v2 deleted; new general_runtime_policy.yaml with the three common fields; Teacher binders accept only teacher_execution_policy; non-v3 Teacher branches deleted.
+  - Place height v3 only.
+  - Teacher readers accept only so101-teacher-execute.
+  - BatchRequestV3 deleted.
+  - U3 needs no route-table row: repoint the defaults and reconcile the adaptive allocator override with the linux_cuda frozen values.
+  - Rename commits include their importer fixes.
+  - Guards land in step 0 as shrinking allowlist ratchets, with ordered must-empty points (versioned at end of B, process names at end of C, wire strings at end of D; module size at end of F).
+  - Scratch TMPDIR rule and the exact benchmark command added.
+- Dispatched step 0 to a fresh Sonnet executor.
 
 ## CP-3542 — refactor design review FAIL (14 findings); user answers U1–U4; design revision 2; re-review dispatched
 
