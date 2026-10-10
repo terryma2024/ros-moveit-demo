@@ -5,6 +5,9 @@ import time
 from collections import deque
 from so101_demo.act.contracts import fields,finite,identifier,integer,sha256,vector
 
+# A scene source armed this long ago that has accepted no frame has no working publisher. Healthy frames arrive at the
+# simulator's publish rate (100 Hz), so a second is a wide margin and well inside the release age bound's reach.
+SCENE_SOURCE_ABSENT_AFTER_S=1.0
 SCENE_KEYS=frozenset(('simulation_session_id','reset_epoch','simulation_step','paused',
     'simulation_time_s','model_sha256','qpos','qvel',
     'clock_interval_begin_monotonic_ns','clock_interval_end_monotonic_ns'))
@@ -26,6 +29,7 @@ class SceneStateObserver:
         self._history=deque(maxlen=history_capacity)
         self._geometry_version=0;self._geometry_key=None
         self._history_version=0  # bumps whenever the retained frames change (lets readers cache derived verdicts)
+        self.armed_monotonic_s=None
 
     def reset(self,session_id,reset_epoch,*,source_floor_s):
         identifier(session_id);integer(reset_epoch,minimum=1);floor=finite(source_floor_s,nonnegative=True)
@@ -36,6 +40,13 @@ class SceneStateObserver:
             self.last=self.received=self.hazard=None
             self._history.clear();self._history_version+=1
             self._geometry_version=0;self._geometry_key=None
+            self.armed_monotonic_s=finite(self.monotonic(),nonnegative=True)
+
+    def silent_for_s(self):
+        """Seconds since the source was armed while no frame has been accepted since; None once a frame arrived (or if never armed)."""
+        with self._lock:
+            if self.armed_monotonic_s is None or self.last is not None or self.hazard:return None
+            return finite(self.monotonic(),nonnegative=True)-self.armed_monotonic_s
 
     def accept(self,frame):
         with self._lock:

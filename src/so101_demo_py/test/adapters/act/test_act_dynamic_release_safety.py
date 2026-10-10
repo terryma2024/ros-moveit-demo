@@ -336,3 +336,53 @@ def test_a_pending_candidate_that_ages_out_records_the_same_facts_with_the_same_
     assert facts["ended_by"] == "pending_candidate_expired" and facts["pending_step"] == 501 and facts["pending_age_s"] > 0.2
     assert facts["newest_evidence_age_s"] is not None and facts["waiting_for_scene_frame"] >= 1
     assert commands == [] and value._release_authorization is None
+
+
+def _silent_scene_value(*, bound_s_ago):
+    """A boundary whose scene observer was bound `bound_s_ago` seconds before now and has accepted no frame."""
+    from so101_demo.adapters.act.scene_state import SceneStateObserver
+
+    value, selected, commands = boundary()
+    clock = value._monotonic
+    value._monotonic = lambda: clock() - bound_s_ago
+    silent = SceneStateObserver(model_sha256="a" * 64, nq=1, nv=1, max_age_s=0.5,
+                                monotonic=lambda: value._monotonic())
+    silent.reset("s", 1, source_floor_s=0.0)
+    value._monotonic = clock
+    value._scene_source_observer = silent
+    return value, selected, commands
+
+
+def test_a_scene_source_that_never_produced_a_frame_fails_fast_as_absent():
+    """The release path needs a scene frame for every candidate. An observer bound well over a second ago that has
+    accepted nothing has no publisher: say so at the first preflight instead of waiting out the age bound."""
+    import json
+
+    value, _, commands = _silent_scene_value(bound_s_ago=2.0)
+    started = value._monotonic()
+    with pytest.raises(RuntimeError) as absent:
+        value._supported_release_preflight()
+    message = str(absent.value)
+    assert message.split(":")[0] == "DYNAMIC_SCENE_SOURCE_ABSENT"
+    facts = value._document["scene_source_absent"]
+    assert json.loads(message.split(": ", 1)[1]) == json.loads(json.dumps(facts, sort_keys=True, default=str))
+    assert facts["silent_for_s"] >= 1.0 and facts["frames_accepted"] == 0
+    assert value._monotonic() == started       # no waiting
+    assert commands == [] and value._release_authorization is None
+
+
+def test_a_scene_source_bound_moments_ago_is_not_yet_absent():
+    value, _, commands = _silent_scene_value(bound_s_ago=0.3)
+    with pytest.raises(RuntimeError) as late:
+        value._supported_release_preflight()
+    assert str(late.value).split(":")[0] != "DYNAMIC_SCENE_SOURCE_ABSENT"
+    assert "scene_source_absent" not in value._document and commands == []
+
+
+def test_a_scene_source_that_produced_frames_is_never_absent():
+    value, commands = _unavailable_value()    # frames were accepted; the candidate's own frame is missing
+    proof = value._normal_stop_proof()
+    value._monotonic = (lambda base=value._monotonic: base() + 5.0)
+    with pytest.raises(RuntimeError) as late:
+        value._first_source_after_stop(proof, previous_step=500, previous_sequence=5)
+    assert str(late.value).split(":")[0] != "DYNAMIC_SCENE_SOURCE_ABSENT"

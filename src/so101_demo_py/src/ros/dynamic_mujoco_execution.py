@@ -1900,12 +1900,21 @@ class RosDynamicMujocoExecution:
         return proof
 
     def _first_source_after_stop(self, proof, *, previous_step, previous_sequence):
-        from ..adapters.act.scene_state import SceneStateObserver
+        from ..adapters.act.scene_state import SCENE_SOURCE_ABSENT_AFTER_S, SceneStateObserver
 
         age, _ = self._release_bounds()
         scene_observer = getattr(self, "_scene_source_observer", None)
         if not isinstance(scene_observer, SceneStateObserver):
             raise RuntimeError("DYNAMIC_RELEASE_SOURCE_CLOCK_REQUIRED")
+        silent_for_s = scene_observer.silent_for_s()
+        if silent_for_s is not None and silent_for_s >= SCENE_SOURCE_ABSENT_AFTER_S:
+            # No scene frame was ever accepted since the source was armed: there is no publisher, and waiting out the
+            # age bound would only end as a late DYNAMIC_RELEASE_SOURCE_EXPIRED that hides the cause.
+            facts = {"silent_for_s": silent_for_s, "frames_accepted": 0,
+                     "absent_after_s": SCENE_SOURCE_ABSENT_AFTER_S,
+                     "stop_confirmed_wall_s": proof["stop_confirmed_wall_s"]}
+            self._document["scene_source_absent"] = facts
+            raise RuntimeError("DYNAMIC_SCENE_SOURCE_ABSENT: " + json.dumps(facts, sort_keys=True, default=str))
         deadline = self._monotonic() + age
         # The owner may read its epoch after confirming stop. That later observation
         # cannot move FIRST past a source already generated after stop confirmation.
