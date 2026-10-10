@@ -75,6 +75,18 @@ target_include_directories(so101_head_neck_deadman PUBLIC
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(so101_head_neck_deadman PUBLIC Threads::Threads)
 
+add_library(so101_head_neck_trajectory_controller SHARED
+  src/head_neck_trajectory_controller.cpp)
+target_compile_features(so101_head_neck_trajectory_controller PUBLIC cxx_std_17)
+target_include_directories(so101_head_neck_trajectory_controller PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries(so101_head_neck_trajectory_controller PUBLIC
+  joint_trajectory_controller::joint_trajectory_controller)
+target_link_libraries(so101_head_neck_trajectory_controller PRIVATE so101_head_neck_deadman)
+ament_target_dependencies(so101_head_neck_trajectory_controller PUBLIC
+  control_msgs controller_interface joint_trajectory_controller pluginlib rcl_interfaces rclcpp rclcpp_action)
+
 add_library(so101_controller_reservation_protocol STATIC
   src/controller_reservation_protocol.cpp
   src/controller_reservation_provision.cpp
@@ -162,6 +174,17 @@ if(BUILD_TESTING)
     APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
   target_compile_features(test_head_neck_deadman PRIVATE cxx_std_17)
   target_link_libraries(test_head_neck_deadman so101_head_neck_deadman)
+
+  ament_add_gtest(test_head_neck_trajectory_controller
+    test/test_head_neck_trajectory_controller.cpp
+    APPEND_LIBRARY_DIRS ${so101_test_library_dirs})
+  target_compile_features(test_head_neck_trajectory_controller PRIVATE cxx_std_17)
+  target_include_directories(test_head_neck_trajectory_controller PRIVATE include)
+  ament_target_dependencies(test_head_neck_trajectory_controller
+    control_msgs controller_interface hardware_interface lifecycle_msgs
+    pluginlib rcl_interfaces rclcpp rclcpp_action trajectory_msgs)
+  target_link_libraries(test_head_neck_trajectory_controller
+    so101_head_neck_trajectory_controller so101_head_neck_deadman)
 
   ament_add_gtest(test_controller_ingress_witness
     test/test_controller_ingress_witness.cpp
@@ -276,7 +299,7 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS so101_simulation_evidence_plugin
-  so101_broker_owned_trajectory_controller EXPORT export_${PROJECT_NAME}
+  so101_broker_owned_trajectory_controller so101_head_neck_trajectory_controller EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib LIBRARY DESTINATION lib RUNTIME DESTINATION bin)
 install(TARGETS graceful_shutdown_move_group RUNTIME DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY include/ DESTINATION include)
