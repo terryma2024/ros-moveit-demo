@@ -69,11 +69,21 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3529
+latest_checkpoint: CP-3530
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3530 — user: refactor to stock JTC after both live tasks pass
+
+- User (2026-10-10): "可以在head search 和 pick place都跑通了以后，重构成统一标准JTC".
+- Scope of the deferred refactor:
+  - the Head neck moves from so101_mujoco_support/BrokerOwnedTrajectoryController (action-only, SOGB v2 per-goal reservation, ingress/stop witness) to the stock joint_trajectory_controller/JointTrajectoryController that the ACT/Teacher arm, gripper and neck already use;
+  - then remove the controller, the reservation protocol and its provision/client modules and tests;
+  - the Head stop proof keeps an equivalent from /joint_states feedback.
+- Order: Head-search single case PASS → pick-place Teacher PASS → design for the refactor (including what replaces the stop witness for the 120 s hold) → implementation.
+- Until then the controller stays, and the tooling revision (CP-3529 decision 2) allows its files.
 
 ## CP-3529 — host-path audit done (guard test), IK exact-zero fix, dangling import removed; 43 old-hash tests and the 8 artifacts to be retired; freeze tooling to admit the Head-owned neck controller; remaining red items assigned
 
