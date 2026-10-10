@@ -32,7 +32,7 @@ def observation(step, *, session="session-1", epoch=3, time_s=None):
 def manifest(*, task="PASS", start=None, end=None):
     start = observation(1200) if start is None else start
     end = observation(8500) if end is None else end
-    return {"schema": "so101-dynamic-mujoco-execute-v2", "teacher_execution_status": "COMPLETED",
+    return {"schema": "so101-teacher-execute", "schema_version": 1, "teacher_execution_status": "COMPLETED",
             "teacher_task_result": {"result": task, "start_observation": start, "end_observation": end},
             "teacher_start_observation": start, "teacher_end_observation": end}
 
@@ -76,7 +76,7 @@ def test_missing_or_inconsistent_references_fail_data_qc_with_a_specific_code(fa
     if fault == "no_manifest":
         document = None
     if fault == "wrong_schema":
-        document["schema"] = "so101-dynamic-mujoco-execute-v1"
+        document["schema"] = "so101-dynamic-execute"          # the general manifest is not the Teacher's
     if fault == "no_start":
         document["teacher_start_observation"] = None
     if fault == "no_end":

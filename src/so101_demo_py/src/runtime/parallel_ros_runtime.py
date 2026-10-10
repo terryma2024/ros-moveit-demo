@@ -1775,13 +1775,13 @@ class ParallelRosRuntimePorts:
         }
         if type(document) is not dict or not required.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
-        # Exactly three versions are known: v2 and v3 (Teacher policy v3, minimal runtime gates) carry the Teacher result, v1 is
-        # read-only legacy. Anything else is rejected rather than silently read with the old coupled meaning.
-        schema = document["schema"]
-        if type(schema) is not str or schema not in {
-                "so101-dynamic-mujoco-execute-v1", "so101-dynamic-mujoco-execute-v2", "so101-dynamic-mujoco-execute-v3"}:
+        # Exactly two manifests are known, the general one and the Teacher one (minimal runtime gates); both carry the Teacher result.
+        # Anything else is rejected rather than silently read with another meaning.
+        from ..application.e2e_acceptance import SCHEMA_GENERAL, SCHEMA_TEACHER, is_manifest_of
+
+        if not is_manifest_of(document, SCHEMA_GENERAL, SCHEMA_TEACHER):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
-        if schema.endswith(("-v2", "-v3")) and not {
+        if not {
                 "teacher_execution_status", "teacher_task_result", "act_data_status", "process_diagnostics",
                 "teacher_start_observation", "teacher_end_observation"}.issubset(document):
             raise ValueError("DYNAMIC_MANIFEST_SCHEMA")
@@ -1839,11 +1839,6 @@ class ParallelRosRuntimePorts:
             ),
             frozen_execution_policy=self.dependencies.get("teacher_execution_policy"),
         )
-        if schema.endswith("-v1"):
-            # legacy evidence of the coupled contract: nothing positive is claimed about the Teacher or its data
-            return outcome, "DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY", dict(
-                teacher_execution_status="INDETERMINATE", teacher_task_result="UNCONFIRMED",
-                act_data_status="INVALID", act_data_reason="DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY")
         task = document["teacher_task_result"]
         # The Teacher manifest carries no data verdict (constant DISABLED); the Recorder's replaces it afterwards.
         data_status = document["act_data_status"]

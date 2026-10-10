@@ -1,12 +1,11 @@
 """ROS-free validation of correlated SO-101 MuJoCo E2E evidence.
 
-Acceptance of a new run (dynamic manifest v2) is decided by the Teacher's own ``teacher_task_result`` (the
+Acceptance of a run (dynamic manifest) is decided by the Teacher's own ``teacher_task_result`` (the
 ``teacher_endpoint`` judgement: cup start/end pose and final upright) plus the genuine protections: the run finished
 normally with no failure, and the evidence is correlated to this workflow, request, session, reset epoch, perception
 input and frozen policy. Process-quality facts (the exact state trace, carry contact, micro-lift, release support,
 final-readback stillness, support contact and heights, Planning Scene shadow agreement) are still computed and reported as
-``process_diagnostics`` but never fail a Teacher pass. A manifest v1 is legacy read-only evidence: it is never accepted as
-new-run success, and its old strict findings are listed in ``legacy_findings`` for audit.
+``process_diagnostics`` but never fail a Teacher pass.
 """
 
 from __future__ import annotations
@@ -55,10 +54,19 @@ FINAL_SUPPORT_HEIGHT_RANGE_M = (0.155, 0.175)
 FINAL_MAX_UPRIGHT_TILT_RAD = 0.15
 FINAL_MAX_LINEAR_SPEED_M_S = 0.001
 FINAL_MAX_ANGULAR_SPEED_RAD_S = 0.05
-SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
-SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
-#: Teacher execution policy v3 (minimal runtime gates): the same success trace, a `teacher_process_summary_v1` beside the result
-SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
+#: the dynamic manifest of the general runtime (with its recovery chain)
+SCHEMA_GENERAL = "so101-dynamic-execute"
+#: the dynamic manifest of a Teacher run (minimal runtime gates): the same success trace, a `teacher_process_summary` beside the result
+SCHEMA_TEACHER = "so101-teacher-execute"
+MANIFEST_SCHEMA_VERSION = 1
+
+
+def is_manifest_of(document: object, *schemas: str) -> bool:
+    """True when ``document`` is a dynamic manifest of one of ``schemas`` at the current ``schema_version``."""
+    return (type(document) is dict and document.get("schema") in schemas
+            and type(document.get("schema_version")) is int and document["schema_version"] == MANIFEST_SCHEMA_VERSION)
+
+
 _TEACHER_RESULTS = frozenset({"PASS", "FAIL", "UNCONFIRMED"})
 
 
@@ -71,7 +79,6 @@ class AcceptanceReport:
     manifest_schema: str | None = None
     teacher_task_result: str | None = None
     process_diagnostics: tuple[str, ...] = ()
-    legacy_findings: tuple[str, ...] = ()
 
     def to_document(self) -> dict[str, object]:
         return {
@@ -82,7 +89,6 @@ class AcceptanceReport:
             "manifest_schema": self.manifest_schema,
             "teacher_task_result": self.teacher_task_result,
             "process_diagnostics": list(self.process_diagnostics),
-            "legacy_findings": list(self.legacy_findings),
         }
 
 
@@ -276,7 +282,7 @@ def _validate_dynamic_contract(
     events = dynamic.get("state_events")
     release_marker = _integer(dynamic.get("release_marker_sequence"))
     if (
-        dynamic.get("schema") not in {SCHEMA_V1, SCHEMA_V2, SCHEMA_V3}
+        not is_manifest_of(dynamic, SCHEMA_GENERAL, SCHEMA_TEACHER)
         or dynamic.get("status") != "DONE"
         or dynamic.get("current_state") != "DONE"
         or dynamic.get("failure") is not None
@@ -306,7 +312,7 @@ def _process_summary_valid(value: object) -> bool:
 
 
 def _validate_teacher_result(dynamic: dict[str, Any], failures: list[str]) -> str | None:
-    """The Teacher endpoint: acceptance of a v2 run is `teacher_task_result` PASS from a COMPLETED execution."""
+    """The Teacher endpoint: acceptance of a run is `teacher_task_result` PASS from a COMPLETED execution."""
     task = _mapping(dynamic.get("teacher_task_result"))
     result = None if task is None else task.get("result")
     if result not in _TEACHER_RESULTS:
@@ -322,7 +328,7 @@ def _validate_dynamic_process(
     policy: dict[str, object] | None,
     failures: list[str],
 ) -> None:
-    """Process-quality facts of the state machine run. Failures here are diagnostics for a v2 manifest."""
+    """Process-quality facts of the state machine run. Failures here are diagnostics beside the Teacher's result."""
     if policy is None:
         _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
         return
@@ -575,17 +581,12 @@ def validate_e2e_evidence(document: dict[str, object]) -> AcceptanceReport:
     _validate_identity(expected, dynamic, perception, mujoco, scene, failures)
     contract_ok = _validate_dynamic_contract(dynamic, perception, failures)
     manifest_schema = None if dynamic is None else dynamic.get("schema")
-    legacy = manifest_schema == SCHEMA_V1
     teacher_result = None
-    if legacy:
-        # a manifest v1 is read-only legacy evidence of the old coupled contract: never new-run success
-        _append(failures, "E2E_LEGACY_MANIFEST_READ_ONLY")
-    elif contract_ok and manifest_schema in {SCHEMA_V2, SCHEMA_V3}:
+    if contract_ok:
         teacher_result = _validate_teacher_result(dynamic, failures)
-        if manifest_schema == SCHEMA_V3 and not _process_summary_valid(dynamic.get("teacher_process_summary")):
+        if manifest_schema == SCHEMA_TEACHER and not _process_summary_valid(dynamic.get("teacher_process_summary")):
             _append(failures, "E2E_DYNAMIC_EVIDENCE_INVALID")
-    # process-quality facts: computed for every manifest, but they only gate the legacy (v1) record, which is
-    # rejected anyway; for a v2 run they are audit-only diagnostics beside the Teacher's result
+    # process-quality facts are computed for every manifest, but they are audit-only diagnostics beside the Teacher's result
     process: list[str] = []
     if dynamic is not None and perception is not None and contract_ok:
         _validate_dynamic_process(dynamic, policy, process)
@@ -597,14 +598,7 @@ def validate_e2e_evidence(document: dict[str, object]) -> AcceptanceReport:
     planning_scene_outcome = _validate_scene(
         scene, mujoco, mujoco_pose, policy, process
     )
-    diagnostics: tuple[str, ...] = ()
-    legacy_findings: tuple[str, ...] = ()
-    if legacy:
-        legacy_findings = tuple(process)
-        for code in process:
-            _append(failures, code)
-    else:
-        diagnostics = tuple(dict.fromkeys(_diagnostic_code(code) for code in process))
+    diagnostics = tuple(dict.fromkeys(_diagnostic_code(code) for code in process))
     return AcceptanceReport(
         accepted=not failures,
         failures=tuple(failures),
@@ -613,5 +607,4 @@ def validate_e2e_evidence(document: dict[str, object]) -> AcceptanceReport:
         manifest_schema=manifest_schema if type(manifest_schema) is str else None,
         teacher_task_result=teacher_result,
         process_diagnostics=diagnostics,
-        legacy_findings=legacy_findings,
     )

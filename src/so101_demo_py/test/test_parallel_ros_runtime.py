@@ -1202,7 +1202,7 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
         "world_primitive_counts": {"plastic_cup": 13},
     }
     document = {
-        "schema": "so101-dynamic-mujoco-execute-v2",
+        "schema": "so101-dynamic-execute", "schema_version": 1,
         "parallel_lease_identity": {
             "batch_id": lease.batch_id,
             "coordinator_epoch": lease.coordinator_epoch,
@@ -1234,11 +1234,11 @@ def _dynamic_execute_manifest(lease, *, session_id, policy_path, status="DONE"):
             "capture_errors": [],
         } if failed else None),
     }
-    document.update(_teacher_v2_fields(failed))
+    document.update(_teacher_general_fields(failed))
     return document
 
 
-def _teacher_v2_observation(position, time_s):
+def _teacher_general_observation(position, time_s):
     return {
         "position": list(position),
         "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
@@ -1247,11 +1247,11 @@ def _teacher_v2_observation(position, time_s):
     }
 
 
-def _teacher_v2_fields(failed, *, result="PASS", reasons=(), execution=None):
+def _teacher_general_fields(failed, *, result="PASS", reasons=(), execution=None):
     """The Teacher-owned v2 fields: a clean DONE run passes; a pre-motion ERROR is a FAILED execution."""
 
-    start = _teacher_v2_observation([-0.02, -0.28, 0.165], 1.0)
-    end = None if failed or result == "UNCONFIRMED" else _teacher_v2_observation([-0.08, -0.25, 0.1648], 9.0)
+    start = _teacher_general_observation([-0.02, -0.28, 0.165], 1.0)
+    end = None if failed or result == "UNCONFIRMED" else _teacher_general_observation([-0.08, -0.25, 0.1648], 9.0)
     task = {
         "rule_version": "teacher_endpoint", "policy_sha256": "b" * 64,
         "result": "UNCONFIRMED" if failed else result, "reasons": ["END_OBSERVATION_UNCONFIRMED: x"] if failed
@@ -2276,11 +2276,11 @@ def _execute_with_ports(tmp_path, monkeypatch, document_factory, *, wait_status=
         ("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"], "INDETERMINATE"),
     ],
 )
-def test_v2_worker_classifies_the_teacher_task_result(
+def test_general_worker_classifies_the_teacher_task_result(
         tmp_path, monkeypatch, result, reasons, expected_status):
     def build(lease, policy):
         document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
-        document.update(_teacher_v2_fields(False, result=result, reasons=reasons))
+        document.update(_teacher_general_fields(False, result=result, reasons=reasons))
         return document
 
     receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
@@ -2309,24 +2309,7 @@ def test_worker_rejects_unknown_manifest_versions(tmp_path, monkeypatch, schema)
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
 
 
-def test_worker_treats_a_v1_manifest_as_read_only_legacy_and_never_passes(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
-
-    def build(lease, policy):
-        document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
-        document["schema"] = "so101-dynamic-mujoco-execute-v1"
-        for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
-                    "teacher_end_observation", "act_data_status", "process_diagnostics"):
-            document.pop(key)
-        return document
-
-    receipt = _execute_with_manifest(tmp_path, monkeypatch, build)
-
-    assert receipt.decision.status is AttemptStatus.INDETERMINATE
-    assert receipt.decision.reason == "DYNAMIC_MANIFEST_LEGACY_V1_READ_ONLY"
-
-
-def test_v2_worker_rejects_a_pass_whose_execution_did_not_complete(tmp_path, monkeypatch):
+def test_general_worker_rejects_a_pass_whose_execution_did_not_complete(tmp_path, monkeypatch):
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
     def build(lease, policy):
@@ -2358,10 +2341,10 @@ def test_a_done_run_with_audit_only_process_diagnostics_still_passes(tmp_path, m
 RC_DATA_INVALID = 3 << 8   # the retired "Teacher COMPLETED, data INVALID" code: no process returns it any more
 
 
-def _v2_with(data_status, *, result="PASS", reasons=(), status="DONE"):
+def _general_with(data_status, *, result="PASS", reasons=(), status="DONE"):
     def build(lease, policy):
         document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status=status)
-        document.update(_teacher_v2_fields(status != "DONE", result=result, reasons=reasons))
+        document.update(_teacher_general_fields(status != "DONE", result=result, reasons=reasons))
         document["act_data_status"] = data_status
         return document
     return build
@@ -2371,14 +2354,14 @@ def test_a_done_run_with_the_retired_data_invalid_exit_code_is_unverifiable(tmp_
     """REPLACED_BY the Recorder verdict: exit 3 used to say 'Teacher COMPLETED, data INVALID'; the Teacher has no data
     side now, so a DONE manifest ending with anything but exit 0 is an inconsistent receipt and claims nothing."""
     from so101_demo.parallel_batch.contracts import AttemptStatus
-    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _v2_with("DISABLED"), wait_status=RC_DATA_INVALID)
+    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _general_with("DISABLED"), wait_status=RC_DATA_INVALID)
     assert receipt.decision.status is AttemptStatus.INDETERMINATE
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
     assert receipt.decision.act_data_status == "INVALID"
 
 
 def test_done_with_exit_0_carries_the_teacher_fields_and_the_constant_disabled_data_status(tmp_path, monkeypatch):
-    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _v2_with("DISABLED"))
+    ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _general_with("DISABLED"))
 
     assert receipt.decision.status.value == "PASSED"
     assert (receipt.decision.teacher_execution_status, receipt.decision.teacher_task_result) == ("COMPLETED", "PASS")
@@ -2388,7 +2371,7 @@ def test_done_with_exit_0_carries_the_teacher_fields_and_the_constant_disabled_d
 
 def test_a_teacher_task_fail_with_exit_0_is_a_fail_with_disabled_data(tmp_path, monkeypatch):
     ports, receipt, lease = _execute_with_ports(
-        tmp_path, monkeypatch, _v2_with("DISABLED", result="FAIL", reasons=["FINAL_XY_OUT_OF_TOLERANCE"]))
+        tmp_path, monkeypatch, _general_with("DISABLED", result="FAIL", reasons=["FINAL_XY_OUT_OF_TOLERANCE"]))
 
     assert receipt.decision.status.value == "FAILED"
     assert receipt.decision.reason == "TEACHER_TASK_FAIL:FINAL_XY_OUT_OF_TOLERANCE"
@@ -2397,15 +2380,15 @@ def test_a_teacher_task_fail_with_exit_0_is_a_fail_with_disabled_data(tmp_path, 
 
 @pytest.mark.parametrize(
     "case",
-    ["exit3_disabled", "exit3_v1", "exit1_done"],
+    ["exit3_disabled", "exit3_retired_schema", "exit1_done"],
 )
 def test_inconsistent_exit_code_and_manifest_never_classify(tmp_path, monkeypatch, case):
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
     def build(lease, policy):
-        document = _v2_with("DISABLED")(lease, policy)
-        if case == "exit3_v1":
-            document["schema"] = "so101-dynamic-mujoco-execute-v1"
+        document = _general_with("DISABLED")(lease, policy)
+        if case == "exit3_retired_schema":
+            document["schema"] = "so101-dynamic-mujoco-execute-v1"      # the retired manifest: no longer read at all
             for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
                         "teacher_end_observation", "act_data_status", "process_diagnostics"):
                 document.pop(key)
@@ -2538,7 +2521,7 @@ def test_the_worker_binds_the_manifest_to_the_frozen_execution_policy(tmp_path):
     identity = {name: 1 for name in ("batch_id", "coordinator_epoch", "worker_id", "worker_generation", "point_id", "attempt_id",
                                      "lease_generation")}
     document = {
-        "schema": "so101-dynamic-mujoco-execute-v2", "parallel_lease_identity": identity, "status": "DONE",
+        "schema": "so101-dynamic-execute", "schema_version": 1, "parallel_lease_identity": identity, "status": "DONE",
         "current_state": "DONE", "failure": None, "simulation_session_id": "session-1", "expected_reset_epoch": 3,
         "policy_path": "p", "policy_sha256": "a" * 64, "state_trace": [], "transition_count": 0, "state_events": [],
         "planning_attempts": [], "final_samples": [], "planning_scene_readback": {}, "release_marker_sequence": None,

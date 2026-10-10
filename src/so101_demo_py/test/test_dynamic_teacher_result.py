@@ -18,7 +18,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 START = (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
-SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+SCHEMA_GENERAL = "so101-dynamic-execute"
 ARM_AND_GRIPPER = (*RosDynamicMujocoExecution._ARM_JOINTS, "6")
 
 
@@ -157,13 +157,13 @@ def test_teacher_only_start_observation_is_read_before_the_first_motion_without_
     assert targets["end_target"]["position"] == pytest.approx(list(_end_pose()[:3]))
 
 
-def test_teacher_only_done_run_with_endpoint_pass_gives_v2_pass_and_disabled_data():
+def test_teacher_only_done_run_with_endpoint_pass_gives_general_pass_and_disabled_data():
     adapter = _adapter()
     _begin(adapter)
 
     document = _finished(adapter, _end_pose()[:3], _end_pose()[3:])
 
-    assert document["schema"] == SCHEMA_V2
+    assert document["schema"] == SCHEMA_GENERAL and document["schema_version"] == 1
     assert document["status"] == "DONE"
     assert document["teacher_execution_status"] == "COMPLETED"
     task = document["teacher_task_result"]

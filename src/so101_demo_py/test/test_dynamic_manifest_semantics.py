@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import math
 
 import pytest
 
 from so101_demo.core.domain import State
 from so101_demo.core.workflow import SO101_WORKFLOW
-from paths import PACKAGE_ROOT
 
 
 DONE_TRACE = [
@@ -27,7 +25,7 @@ MOTION_STATES = {
 }
 
 
-SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
+SCHEMA_GENERAL = "so101-dynamic-execute"
 START_TARGET = {"position": [-0.02, -0.28, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
 END_TARGET = {"position": [-0.08, -0.25, 0.165], "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0}}
 TRUSTED_FINAL = [-0.08, -0.25, 0.165, 0.0, 0.0, 0.0, 1.0]
@@ -60,7 +58,7 @@ def teacher_result(result: str = "PASS", reasons=(), *, end: bool = True) -> dic
 
 def teacher_fields(execution: str, result: dict[str, object]) -> dict[str, object]:
     return {
-        "schema": SCHEMA_V2,
+        "schema": SCHEMA_GENERAL, "schema_version": 1,
         "teacher_execution_status": execution,
         "teacher_task_result": result,
         "teacher_start_observation": result["start_observation"],
@@ -290,13 +288,13 @@ def test_failure_trace_wrong_policy_transition_is_rejected():
 
 # ---- manifest v2: the Teacher outcome comes from the Teacher fields (Phase A1b) ---------------------------------
 
-def v2_done(result: str, reasons=()) -> dict[str, object]:
+def general_done(result: str, reasons=()) -> dict[str, object]:
     document = manifest()
     document.update(teacher_fields("COMPLETED", teacher_result(result, reasons, end=result != "UNCONFIRMED")))
     return document
 
 
-def v2_error(execution: str) -> dict[str, object]:
+def general_error(execution: str) -> dict[str, object]:
     document = manifest(
         ["IDLE", "PREPARE_OPEN_GRIPPER", "MOVE_ABOVE_OBJECT", "RECOVER_RETREAT", "ERROR"], status="ERROR")
     document.update(teacher_fields(execution, teacher_result("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: x"],
@@ -304,44 +302,44 @@ def v2_error(execution: str) -> dict[str, object]:
     return document
 
 
-def test_v2_completed_pass_is_the_only_passed_outcome():
+def test_general_completed_pass_is_the_only_passed_outcome():
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    assert validate(v2_done("PASS"), "DONE") is AttemptStatus.PASSED
+    assert validate(general_done("PASS"), "DONE") is AttemptStatus.PASSED
 
 
-def test_v2_completed_task_fail_is_failed():
+def test_general_completed_task_fail_is_failed():
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    document = v2_done("FAIL", ["FINAL_XY_OUT_OF_TOLERANCE"])
+    document = general_done("FAIL", ["FINAL_XY_OUT_OF_TOLERANCE"])
     assert validate(document, "DONE") is AttemptStatus.FAILED
 
 
-def test_v2_completed_unconfirmed_is_indeterminate():
+def test_general_completed_unconfirmed_is_indeterminate():
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    document = v2_done("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"])
+    document = general_done("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"])
     assert validate(document, "DONE") is AttemptStatus.INDETERMINATE
 
 
 @pytest.mark.parametrize("execution", ["FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE"])
-def test_v2_failed_and_stopped_executions_are_failed(execution):
+def test_general_failed_and_stopped_executions_are_failed(execution):
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    assert validate(v2_error(execution), "ERROR") is AttemptStatus.FAILED
+    assert validate(general_error(execution), "ERROR") is AttemptStatus.FAILED
 
 
-def test_v2_indeterminate_execution_is_indeterminate():
+def test_general_indeterminate_execution_is_indeterminate():
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    assert validate(v2_error("INDETERMINATE"), "ERROR") is AttemptStatus.INDETERMINATE
+    assert validate(general_error("INDETERMINATE"), "ERROR") is AttemptStatus.INDETERMINATE
 
 
-def test_v2_process_quality_contradictions_no_longer_decide_a_done_run():
+def test_general_process_quality_contradictions_no_longer_decide_a_done_run():
     """REPLACED_BY: the old DONE contract (velocity, table/fingertip contact, release order, scene) is audit-only."""
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
-    document = v2_done("PASS")
+    document = general_done("PASS")
     final = document["final_samples"][0]
     final.update(table_contact=False, left_contact_count=2, publisher_sequence=800,
                  cup_linear_velocity_world_m_s=[0.5, 0.0, 0.0])
@@ -350,8 +348,8 @@ def test_v2_process_quality_contradictions_no_longer_decide_a_done_run():
     assert validate(document, "DONE") is AttemptStatus.PASSED
 
 
-def test_v2_pass_requires_a_completed_execution():
-    error = v2_error("FAILED")
+def test_general_pass_requires_a_completed_execution():
+    error = general_error("FAILED")
     error["teacher_task_result"]["result"] = "PASS"
     with pytest.raises(ValueError, match="TEACHER_RESULT|TEACHER_STATUS"):
         validate(error, "ERROR")
@@ -359,7 +357,7 @@ def test_v2_pass_requires_a_completed_execution():
 
 @pytest.mark.parametrize("schema", [None, "so101-dynamic-mujoco-execute-v4", "so101-dynamic-mujoco-execute-v0", 2])
 def test_unknown_or_missing_manifest_versions_are_rejected(schema):
-    document = v2_done("PASS")
+    document = general_done("PASS")
     if schema is None:
         document.pop("schema")
     else:
@@ -368,23 +366,23 @@ def test_unknown_or_missing_manifest_versions_are_rejected(schema):
         validate(document, "DONE")
 
 
-def test_legacy_v1_manifest_is_read_only_and_never_passes():
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+@pytest.mark.parametrize("version", [None, 0, 2, "1", True])
+def test_a_manifest_without_its_current_schema_version_is_rejected(version):
+    document = general_done("PASS")
+    if version is None:
+        document.pop("schema_version")
+    else:
+        document["schema_version"] = version
+    with pytest.raises(ValueError, match="SCHEMA"):
+        validate(document, "DONE")
 
-    legacy = manifest()
-    legacy["schema"] = "so101-dynamic-mujoco-execute-v1"
-    for key in ("teacher_execution_status", "teacher_task_result", "teacher_start_observation",
-                "teacher_end_observation", "act_data_status", "process_diagnostics"):
-        legacy.pop(key)
-    assert validate(legacy, "DONE") is AttemptStatus.INDETERMINATE
 
-
-def test_v2_trusted_final_target_must_match_the_frozen_end_target():
-    validate(v2_done("PASS"), "DONE", trusted=TRUSTED_FINAL)
+def test_general_trusted_final_target_must_match_the_frozen_end_target():
+    validate(general_done("PASS"), "DONE", trusted=TRUSTED_FINAL)
     with pytest.raises(ValueError, match="TRUSTED_FINAL_TARGET"):
-        validate(v2_done("PASS"), "DONE", trusted=[0.5, 0.5, 0.165, 0.0, 0.0, 0.0, 1.0])
+        validate(general_done("PASS"), "DONE", trusted=[0.5, 0.5, 0.165, 0.0, 0.0, 0.0, 1.0])
     with pytest.raises(ValueError, match="TRUSTED_FINAL_TARGET"):
-        validate(v2_done("PASS"), "DONE", trusted=[0.0] * 7)
+        validate(general_done("PASS"), "DONE", trusted=[0.0] * 7)
 
 
 # ---- C2: a terminal stop goes straight to ERROR from any state (R9.2) ----------------------------------------------

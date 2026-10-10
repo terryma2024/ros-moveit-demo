@@ -18,6 +18,9 @@ from ..application.e2e_acceptance import (
     FINAL_MAX_UPRIGHT_TILT_RAD,
     FINAL_SUPPORT_HEIGHT_RANGE_M,
     FINAL_XY_TOLERANCE_M,
+    MANIFEST_SCHEMA_VERSION,
+    SCHEMA_GENERAL,
+    SCHEMA_TEACHER,
 )
 from ..control.gripper.client import GripperClient
 from ..control.moveit.deterministic_horizon import (
@@ -54,9 +57,6 @@ from .teacher_safety import evaluate_cup_contacts
 from .teacher_stop import TeacherStop
 
 
-MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
-#: the manifest of a Teacher run (minimal runtime gates): no recovery states, a place record and a process summary
-MANIFEST_SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 #: The Teacher run's failure codes of the evidence and joint-state streams (the codes raised by the shared helpers are mapped to these
 #: where the failure becomes the attempt's: the helpers keep their own codes for the general runtime)
 _TEACHER_CODE_MAP = {
@@ -309,7 +309,8 @@ class RosDynamicMujocoExecution:
         self._scene_service_calls: list[dict] = []
         self._load_teacher_policies(urdf_path)
         self._document: dict[str, object] = {
-            "schema": MANIFEST_SCHEMA,
+            "schema": SCHEMA_GENERAL,
+            "schema_version": MANIFEST_SCHEMA_VERSION,
             "status": "RUNNING",
             "simulation_session_id": session_id,
             "expected_reset_epoch": expected_reset_epoch,
@@ -485,7 +486,7 @@ class RosDynamicMujocoExecution:
         summary = ProcessSummary(limits=getattr(self, "_safety_limits", None))
         summary.silence_limit_s = float(self._execution_policy["state_unavailable_stop_s"])
         self._process_summary = summary
-        self._document["schema"] = MANIFEST_SCHEMA_V3
+        self._document["schema"] = SCHEMA_TEACHER
         observer = getattr(self, "observer", None)
         if observer is not None and hasattr(observer, "add_tap"):
             observer.add_tap(lambda evidence, receipt: summary.offer_world(evidence))
@@ -721,7 +722,8 @@ class RosDynamicMujocoExecution:
             }
         return {
             **teacher_run_fields,
-            "schema": MANIFEST_SCHEMA_V3 if self._teacher_run() else MANIFEST_SCHEMA,
+            "schema": SCHEMA_TEACHER if self._teacher_run() else SCHEMA_GENERAL,
+            "schema_version": MANIFEST_SCHEMA_VERSION,
             "teacher_execution_status": execution,
             "teacher_task_result": task,
             "teacher_start_observation": start_observation,
@@ -2582,7 +2584,7 @@ class RosDynamicMujocoExecution:
     def _require_fresh_joint_state(self) -> None:
         """k is computed from the joint state: it must be younger than the execution policy's ``state_max_age_s``."""
 
-        from ..core.place_height import MEASUREMENT_FAILED, PlaceHeightRefused
+        from ..core.place_height import MEASUREMENT_FAILED
 
         policy = getattr(self, "_execution_policy", None) or {}
         max_age = policy.get("state_max_age_s", _DEFAULT_STATE_MAX_AGE_S)

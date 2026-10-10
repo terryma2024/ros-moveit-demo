@@ -24,6 +24,7 @@ import stat
 import uuid
 from pathlib import Path
 
+from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
 from so101_demo.act.endpoint_pose_acceptance import RULE_VERSION, THRESHOLD_UNITS, evaluate_endpoint_pose  # legacy v2 only
 from so101_demo.act.episode_audit import verify_audit_manifest
 from so101_demo.act.qc_session import active, cached_lines, file_signature, load_model, session_memo
@@ -445,9 +446,6 @@ TEACHER_REFERENCE_CODES = frozenset({
     "TEACHER_REFERENCE_PHYSICS_STEP_ABSENT", "TEACHER_REFERENCE_PHYSICS_TIME_MISMATCH"})
 _REFERENCE_FIELDS = frozenset({"session_id", "reset_epoch", "simulation_step", "simulation_time_s",
                                "publisher_sequence"})
-_TEACHER_MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
-#: Teacher policy v3 (minimal runtime gates) writes the same start/end references under its own schema
-_TEACHER_MANIFEST_SCHEMAS = frozenset({_TEACHER_MANIFEST_SCHEMA, "so101-dynamic-mujoco-execute-v3"})
 _TIME_TOLERANCE_S = 1e-6
 
 
@@ -475,7 +473,7 @@ def _reference(value):
 def verify_teacher_references(document, *, identity, window, physics_steps) -> dict:
     """Data integrity: is the recording consistent with the Teacher's recorded start and end source references?
 
-    ``document`` is the Teacher manifest (v2) or None; ``physics_steps`` are the verified raw physics samples of the
+    ``document`` is the Teacher manifest or None; ``physics_steps`` are the verified raw physics samples of the
     episode. The Teacher's PASS/FAIL is never read: a Teacher FAIL with consistent data passes here, and export is gated
     by the Teacher result elsewhere. The checks, in order, each with its own reason code: the manifest and both
     references exist; both belong to this session and reset epoch; the recording window covers the start reference
@@ -497,7 +495,7 @@ def verify_teacher_references(document, *, identity, window, physics_steps) -> d
     def result(code):
         return {"status": "FAIL" if code else "PASS", "reason": code or "", "details": details}
 
-    if (type(document) is not dict or document.get("schema") not in _TEACHER_MANIFEST_SCHEMAS):
+    if not is_manifest_of(document, SCHEMA_TEACHER):
         return result("TEACHER_REFERENCE_MANIFEST_MISSING")
     start = _reference(document.get("teacher_start_observation"))
     end = _reference(document.get("teacher_end_observation"))

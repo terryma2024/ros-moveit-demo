@@ -28,6 +28,7 @@ import threading
 import time
 from pathlib import Path
 
+from ...application.e2e_acceptance import MANIFEST_SCHEMA_VERSION, SCHEMA_TEACHER
 from ..exception_chain import chain_text
 from ..qc_session import qc_session
 from ..teacher_event_stream import (
@@ -46,7 +47,6 @@ MIN_STEP_S = 0.001
 _MAX_REASONS = 16
 _REASON_CHARS = 300
 _CHAIN_FACTS = frozenset({"writer_error", "exception_chain"})
-_TEACHER_MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
 
 
 def _publish_json(path: Path, document: dict, *, replace: bool = False) -> None:
@@ -415,7 +415,7 @@ class OfflineEngine:
             self.latch("RECORDER_FINAL_CHECK_FAILED: " + self._reason(error))
 
     def _teacher_document(self) -> dict:
-        return {"schema": _TEACHER_MANIFEST_SCHEMA, "teacher_start_observation": self.start_obs,
+        return {"schema": SCHEMA_TEACHER, "schema_version": MANIFEST_SCHEMA_VERSION, "teacher_start_observation": self.start_obs,
                 "teacher_end_observation": self.end_obs}
 
     def _reference_check(self, *, window, steps, identity) -> dict:

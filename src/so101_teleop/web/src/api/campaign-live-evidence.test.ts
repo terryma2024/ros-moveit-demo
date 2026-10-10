@@ -392,7 +392,7 @@ describe("assertCampaignBatchEvidence", () => {
 // no cleanup document, so the verifier has to pick the branch from the batch's own bytes.
 // ---------------------------------------------------------------------------------------------
 
-const MACOS_DYNAMIC_SCHEMA = "so101-dynamic-mujoco-execute-v1";
+const MACOS_DYNAMIC_SCHEMA = "so101-dynamic-execute";
 
 type MacosOptions = {
   batchId: string;

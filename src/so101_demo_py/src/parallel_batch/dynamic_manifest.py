@@ -6,16 +6,12 @@ import math
 import re
 from collections.abc import Mapping
 
+from ..application.e2e_acceptance import SCHEMA_GENERAL, SCHEMA_TEACHER, is_manifest_of
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
 from ..core.workflow import SIM_INTEGRITY_CODES, SO101_WORKFLOW, TEACHER_WORKFLOW, TERMINAL_STOP_CODES
 from .contracts import AttemptStatus
 
-SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
-SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
-#: Teacher policy v3 (minimal runtime gates, design 2026-10-10): no recovery states, a `teacher_place_height` record and a
-#: `teacher_process_summary_v1`. Chosen by the frozen Teacher execution policy version.
-SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 EXECUTION_STATUSES = frozenset({
     "COMPLETED", "FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE", "INDETERMINATE",
 })
@@ -252,7 +248,7 @@ def _target_valid(value: object) -> bool:
 def _place_height_contract(
     document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
 ) -> None:
-    """v3: a finished run carries a `teacher_place_height` record (tilt_compensated or fallback_reference); an ERROR run may stop before the
+    """Teacher manifest: a finished run carries a `teacher_place_height` record (tilt_compensated or fallback_reference); an ERROR run may stop before the
     measurement, so its record is optional but still bound when present. With the frozen policy the record is checked against it."""
 
     from ..core.place_height import PlaceHeightPolicy, validate_document
@@ -269,7 +265,7 @@ def _place_height_contract(
 
 
 def _process_summary_contract(document: Mapping[str, object], frozen_execution_policy: Mapping[str, object] | None) -> None:
-    """v3: the `teacher_process_summary_v1` is present and coherent, names the provenance and agrees with the place record."""
+    """Teacher manifest: the `teacher_process_summary_v1` is present and coherent, names the provenance and agrees with the place record."""
 
     from ..core.process_summary import validate_summary
 
@@ -293,7 +289,7 @@ def _process_summary_contract(document: Mapping[str, object], frozen_execution_p
 
 
 def _failure_class_contract(document: Mapping[str, object], execution: object) -> None:
-    """v3: `failure_class = sim_integrity` exactly for a FAILED attempt whose failure is a SIM_INTEGRITY code (design 5b)."""
+    """Teacher manifest: `failure_class = sim_integrity` exactly for a FAILED attempt whose failure is a SIM_INTEGRITY code (design 5b)."""
 
     failure = document.get("failure")
     code = failure.split(":", 1)[0] if isinstance(failure, str) else None
@@ -308,9 +304,9 @@ def _teacher_contract(
     document: Mapping[str, object], expected_status: str, reset_epoch: int,
     expected_final_cup_pose_world: object,
     frozen_execution_policy: Mapping[str, object] | None = None,
-    schema: str = SCHEMA_V2,
+    schema: str = SCHEMA_GENERAL,
 ) -> AttemptStatus:
-    """Structural integrity of the v2 Teacher fields, then the Teacher outcome they declare.
+    """Structural integrity of the Teacher fields, then the Teacher outcome they declare.
 
     The worker does not re-judge process quality: PASSED needs a COMPLETED execution and an endpoint PASS.
     """
@@ -335,7 +331,7 @@ def _teacher_contract(
         _fail("TEACHER_RESULT")
     if (execution == "COMPLETED") != (expected_status == "DONE"):
         _fail("TEACHER_STATUS")
-    if schema == SCHEMA_V3:
+    if schema == SCHEMA_TEACHER:
         _place_height_contract(document, expected_status, frozen_execution_policy)
         _process_summary_contract(document, frozen_execution_policy)
         _failure_class_contract(document, execution)
@@ -379,14 +375,14 @@ def _error_contract(
     reset_epoch: int,
     events: list[dict[str, object]],
     boundary: State,
-    schema: str = SCHEMA_V2,
+    schema: str = SCHEMA_GENERAL,
 ) -> None:
     if not isinstance(document.get("failure"), str) or not document["failure"]:
         _fail("ERROR")
     evidence = document.get("failure_evidence")
-    v3 = schema == SCHEMA_V3
-    # v3: a simulation-integrity failure is a broken simulator, so its evidence capture may fail; it is then recorded, not hidden
-    sim_integrity = v3 and document["failure"].split(":", 1)[0] in SIM_INTEGRITY_CODES
+    teacher_run = schema == SCHEMA_TEACHER
+    # Teacher run: a simulation-integrity failure is a broken simulator, so its evidence capture may fail; it is then recorded, not hidden
+    sim_integrity = teacher_run and document["failure"].split(":", 1)[0] in SIM_INTEGRITY_CODES
     if (
         type(evidence) is not dict
         or evidence.get("failure_boundary_state") != boundary.value
@@ -405,9 +401,9 @@ def _error_contract(
         return
     sample = evidence.get("terminal_sample")
     scene = evidence.get("planning_scene_readback")
-    # A terminal stop skips the RECOVER_* chain, so the cup may still be attached to the MoveIt scene. In v3 every failure ends in
+    # A terminal stop skips the RECOVER_* chain, so the cup may still be attached to the MoveIt scene. In a Teacher run every failure ends in
     # ERROR from the state it happened in, with the cup attached or detached in MoveIt.
-    stopped_in_place = v3 or any(
+    stopped_in_place = teacher_run or any(
         _terminal_stop_edge(document, State(current), State(following))
         for current, following in zip(document["state_trace"], document["state_trace"][1:])
     )
@@ -435,10 +431,9 @@ def validate_dynamic_manifest_semantics(
 ) -> AttemptStatus:
     """Reject structurally incoherent manifests and return the Teacher outcome they declare.
 
-    Only the exact v2 and v3 schemas carry a Teacher outcome (v3: Teacher policy v3, no recovery states, a v3 place record and a process summary). A v1 manifest is read-only legacy evidence of the old
-    process-quality contract: it is structurally checked and never classified PASSED or FAILED. Any other schema,
-    or none, is rejected. Process-quality observations (contacts, velocities, release order, scene shadow) are
-    audit-only and never decide the outcome.
+    Only the two exact schemas carry a Teacher outcome: the general manifest (with its recovery states) and the Teacher manifest
+    (no recovery states, a place record and a process summary). Any other schema, or none, is rejected. Process-quality
+    observations (contacts, velocities, release order, scene shadow) are audit-only and never decide the outcome.
     """
 
     if expected_status not in {"DONE", "ERROR"}:
@@ -451,19 +446,17 @@ def validate_dynamic_manifest_semantics(
         or expected_reset_epoch < 0
     ):
         _fail("STATUS")
-    schema = document.get("schema")
-    if type(schema) is not str or schema not in {SCHEMA_V1, SCHEMA_V2, SCHEMA_V3}:
+    if not is_manifest_of(document, SCHEMA_GENERAL, SCHEMA_TEACHER):
         _fail("SCHEMA")
-    if frozen_execution_policy is not None and (frozen_execution_policy.get("schema_version") == 3) != (schema == SCHEMA_V3):
-        _fail("SCHEMA")      # the manifest schema follows the frozen Teacher execution policy version
-    workflow = TEACHER_WORKFLOW if schema == SCHEMA_V3 else SO101_WORKFLOW
+    schema = document["schema"]
+    if frozen_execution_policy is not None and schema != SCHEMA_TEACHER:
+        _fail("SCHEMA")      # the frozen Teacher execution policy belongs to the Teacher manifest; the general manifest has none
+    workflow = TEACHER_WORKFLOW if schema == SCHEMA_TEACHER else SO101_WORKFLOW
     states, boundaries = _trace_contract(document, expected_status, workflow)
     boundary = boundaries[0] if boundaries else None
     events = _event_contract(document, states, boundary, workflow)
     _planning_contract(document, states, workflow)
     if expected_status == "ERROR":
         _error_contract(document, expected_reset_epoch, events, boundary, schema)
-    if schema == SCHEMA_V1:
-        return AttemptStatus.INDETERMINATE
     return _teacher_contract(
         document, expected_status, expected_reset_epoch, expected_final_cup_pose_world, frozen_execution_policy, schema)

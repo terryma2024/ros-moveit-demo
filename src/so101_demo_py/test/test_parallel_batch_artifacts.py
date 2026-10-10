@@ -73,7 +73,7 @@ def populated(root, **kwargs):
     return result
 
 
-def teacher_v2_fields(*, execution='COMPLETED', result='PASS', end=True):
+def teacher_general_fields(*, execution='COMPLETED', result='PASS', end=True):
     """The Teacher-owned manifest v2 fields (the Teacher outcome is read from them, not recomputed)."""
 
     def observation(position, time_s):
@@ -94,7 +94,7 @@ def teacher_v2_fields(*, execution='COMPLETED', result='PASS', end=True):
         'start_observation': start, 'end_observation': final,
     }
     return {
-        'schema': 'so101-dynamic-mujoco-execute-v2',
+        'schema': 'so101-dynamic-execute', 'schema_version': 1,
         'teacher_execution_status': execution, 'teacher_task_result': task,
         'teacher_start_observation': start, 'teacher_end_observation': final,
         'act_data_status': 'DISABLED', 'process_diagnostics': [],
@@ -148,7 +148,7 @@ def valid_dynamic_manifest(who, session):
             )
         events.append(item)
     return {
-        **teacher_v2_fields(),
+        **teacher_general_fields(),
         'parallel_lease_identity': asdict(who),
         'simulation_session_id': session,
         'expected_reset_epoch': 7,
@@ -258,7 +258,7 @@ def complete_error_execute(root, *, status, physical_action_proven_absent):
     detached_scene = manifest['planning_scene_readback']
     boundary = 'IDLE' if physical_action_proven_absent else 'PREPARE_OPEN_GRIPPER'
     manifest.update(
-        **teacher_v2_fields(
+        **teacher_general_fields(
             execution='FAILED' if physical_action_proven_absent else 'INDETERMINATE',
             result='UNCONFIRMED', end=False),
         status='ERROR',

@@ -71,17 +71,16 @@ def _teacher_fields() -> dict[str, object]:
 
 
 @pytest.fixture
-def accepted_document(legacy_v1_document) -> dict[str, object]:
-    """A new-run (manifest v2) document: the Teacher passed and every process fact also looks good."""
-    document = copy.deepcopy(legacy_v1_document)
-    document["dynamic"]["schema"] = "so101-dynamic-mujoco-execute-v2"
+def accepted_document(evidence_document) -> dict[str, object]:
+    """An accepted document: the Teacher passed and every process fact also looks good."""
+    document = copy.deepcopy(evidence_document)
     document["dynamic"].update(_teacher_fields())
     return document
 
 
 @pytest.fixture
-def legacy_v1_document() -> dict[str, object]:
-    """The superseded manifest v1 evidence shape: read-only legacy, never accepted as new-run success."""
+def evidence_document() -> dict[str, object]:
+    """The correlated evidence shape of one run, before the Teacher's result is attached."""
     pick = {
         "publisher_sequence": 20,
         "reset_epoch": 7,
@@ -164,7 +163,8 @@ def legacy_v1_document() -> dict[str, object]:
             "reset_epoch": 7,
         },
         "dynamic": {
-            "schema": "so101-dynamic-mujoco-execute-v1",
+            "schema": "so101-dynamic-execute",
+            "schema_version": 1,
             "workflow_id": "workflow-001",
             "request_id": "request-001",
             "simulation_session_id": "session-001",
@@ -273,7 +273,7 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
     report = validate_e2e_evidence(accepted_document)
     assert report.accepted is True
     assert report.failures == ()
-    assert report.manifest_schema == "so101-dynamic-mujoco-execute-v2"
+    assert report.manifest_schema == "so101-dynamic-execute"
     assert report.teacher_task_result == "PASS" and report.process_diagnostics == ()
     assert report.physical_outcome["stable"] is True
     assert report.planning_scene_outcome["pose_matches_mujoco"] is True
@@ -302,6 +302,7 @@ def test_complete_correlated_evidence_is_accepted(accepted_document) -> None:
         ),
         (("policy", "sha256"), "b" * 64, "E2E_DYNAMIC_EVIDENCE_INVALID"),
         (("dynamic", "schema"), "so101-dynamic-mujoco-execute-v4", "E2E_DYNAMIC_EVIDENCE_INVALID"),
+        (("dynamic", "schema_version"), 2, "E2E_DYNAMIC_EVIDENCE_INVALID"),
     ],
 )
 def test_contract_and_protection_facts_still_reject_a_teacher_pass(
@@ -429,7 +430,7 @@ def test_acceptance_follows_the_teacher_task_result_not_the_process_facts(
 
 
 @pytest.mark.parametrize("change", ["absent", "not_a_mapping", "no_result", "unknown_result"])
-def test_a_v2_manifest_without_a_usable_teacher_result_is_rejected(accepted_document, change) -> None:
+def test_a_general_manifest_without_a_usable_teacher_result_is_rejected(accepted_document, change) -> None:
     from so101_demo.application.e2e_acceptance import validate_e2e_evidence
 
     document = copy.deepcopy(accepted_document)
@@ -444,28 +445,6 @@ def test_a_v2_manifest_without_a_usable_teacher_result_is_rejected(accepted_docu
     report = validate_e2e_evidence(document)
     assert report.accepted is False
     assert "E2E_TEACHER_RESULT_MISSING" in report.failures
-
-
-def test_a_manifest_v1_is_read_only_legacy_and_never_accepted(legacy_v1_document) -> None:
-    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
-
-    # the old document is complete and every strict process fact holds, and it is still not new-run success
-    report = validate_e2e_evidence(legacy_v1_document)
-    assert report.accepted is False
-    assert report.failures == ("E2E_LEGACY_MANIFEST_READ_ONLY",)
-    assert report.manifest_schema == "so101-dynamic-mujoco-execute-v1"
-    assert report.physical_outcome["stable"] is True
-    json.dumps(report.to_document(), allow_nan=False)
-
-
-def test_a_manifest_v1_keeps_reporting_its_old_strict_findings_for_audit(legacy_v1_document) -> None:
-    from so101_demo.application.e2e_acceptance import validate_e2e_evidence
-
-    legacy_v1_document["mujoco_final"]["table_contact"] = False
-    report = validate_e2e_evidence(legacy_v1_document)
-    assert report.accepted is False
-    assert report.failures[0] == "E2E_LEGACY_MANIFEST_READ_ONLY"
-    assert "E2E_MUJOCO_FINAL_INVALID" in report.legacy_findings
 
 
 def test_cross_domain_source_timestamps_are_not_compared(accepted_document) -> None:
@@ -802,14 +781,3 @@ def test_acceptance_cli_rejects_a_teacher_fail_even_with_a_perfect_final_readbac
     assert "E2E_TEACHER_TASK_NOT_PASSED" in captured.err
 
 
-def test_acceptance_cli_rejects_a_legacy_v1_manifest(tmp_path, legacy_v1_document, capsys) -> None:
-    _write_cli_inputs(tmp_path, legacy_v1_document)
-    readback = {
-        "mujoco_final": legacy_v1_document["mujoco_final"],
-        "planning_scene_final": legacy_v1_document["planning_scene_final"],
-    }
-
-    assert _run_cli(tmp_path, readback) == 1
-
-    captured = capsys.readouterr()
-    assert '"failure_code":"E2E_LEGACY_MANIFEST_READ_ONLY"' in captured.out

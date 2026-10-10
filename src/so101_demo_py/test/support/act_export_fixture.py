@@ -74,7 +74,7 @@ def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),pro
         seal_sha256=write_sealed_episode(location,episode_content,frame=frame)
         qc=report();qc['identity'].update(mode='formal',scene_id=scene_id);qc['episode_seal_sha256']=seal_sha256
         # the Teacher manifest of the sealed result, bound by the QC reference check (default: a policy v2 manifest, which has no summary)
-        teacher_manifest=(teacher_manifests or {}).get(scene_id,{'schema':'so101-dynamic-mujoco-execute-v2'})
+        teacher_manifest=(teacher_manifests or {}).get(scene_id,{'schema':'so101-dynamic-execute', 'schema_version': 1})
         (location/'dynamic').mkdir()
         (location/'dynamic'/'dynamic-execute-manifest.json').write_text(json.dumps(teacher_manifest,sort_keys=True))
         qc['checks']['teacher_reference_consistency']['details']['teacher_manifest_sha256']=hashlib.sha256(

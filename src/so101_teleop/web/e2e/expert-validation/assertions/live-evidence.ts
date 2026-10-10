@@ -137,7 +137,7 @@ export type ExecutionBatchKind = "FIRST_PASS" | "FULL_RESTART_RETRY";
 export type CampaignBatchLayout = "LINUX_FIXED" | "MACOS_COMPOSED";
 
 /** The document schema every composed-campaign dynamic execute manifest carries. */
-export const MACOS_DYNAMIC_MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v1";
+export const MACOS_DYNAMIC_MANIFEST_SCHEMA = "so101-dynamic-execute";
 
 /** The verdicts the composed campaign's own `campaign-result.json` may close on. */
 export const MACOS_TERMINAL_STATUSES = [

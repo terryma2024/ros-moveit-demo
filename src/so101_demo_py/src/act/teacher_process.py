@@ -1,6 +1,6 @@
-"""The Teacher's process telemetry as the data side sees it (policy v3, design 2026-10-10 sections 7 to 9).
+"""The Teacher's process telemetry as the data side sees it (design 2026-10-10 sections 7 to 9).
 
-The Teacher manifest of policy v3 carries a `teacher_process_summary_v1`. The data side copies it, with the Teacher policy version, the
+The Teacher manifest carries a `teacher_process_summary_v1`. The data side copies it, with the Teacher policy version, the
 cup-pose source and the verdict source, into a metadata document beside the sealed episode (the sealed episode itself is never
 rewritten). The same manifest decides whether the episode is training-eligible: an oracle flag or an incomplete summary excludes it.
 Collision, contact and force data never enter a training sample (`bundle.TRAINING_FIELDS`)."""
@@ -11,22 +11,22 @@ import hashlib
 import json
 from pathlib import Path
 
+from ..application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
 from ..core.process_summary import SCHEMA as SUMMARY_SCHEMA, oracle_exclusion, validate_summary
 
 METADATA_SCHEMA = "teacher_process_metadata_v1"
 METADATA_FILE = "teacher-process-metadata.json"
-TEACHER_MANIFEST_SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 EXCLUDED_CODE = "EXPORT_EPISODE_ORACLE_EXCLUDED"
 
 
 def metadata_document(manifest_bytes: bytes) -> dict | None:
-    """The episode metadata of a v3 Teacher manifest (its raw bytes), or None for any other schema. Raises ValueError for a v3
+    """The episode metadata of a Teacher manifest (its raw bytes), or None for any other schema. Raises ValueError for a Teacher
     manifest whose summary or provenance is unreadable: the metadata would then be a claim nothing supports."""
     try:
         manifest = json.loads(manifest_bytes)
     except (UnicodeError, ValueError) as error:
         raise ValueError("TEACHER_PROCESS: manifest unreadable") from error
-    if type(manifest) is not dict or manifest.get("schema") != TEACHER_MANIFEST_SCHEMA_V3:
+    if not is_manifest_of(manifest, SCHEMA_TEACHER):
         return None
     summary = manifest.get("teacher_process_summary")
     validate_summary(summary)
@@ -46,7 +46,7 @@ def metadata_document(manifest_bytes: bytes) -> dict | None:
 
 
 def write_metadata(manifest_path, output_dir) -> dict | None:
-    """Write `teacher-process-metadata.json` into `output_dir` for a v3 Teacher manifest and return the document (None otherwise).
+    """Write `teacher-process-metadata.json` into `output_dir` for a Teacher manifest and return the document (None otherwise).
     The file is written once, atomically; an existing identical file is accepted, a different one is refused."""
     document = metadata_document(Path(manifest_path).read_bytes())
     if document is None:
@@ -65,12 +65,12 @@ def write_metadata(manifest_path, output_dir) -> dict | None:
 
 def exclusion_of_manifest(manifest_bytes: bytes) -> tuple[str, str] | None:
     """(flag, phase) when the episode of this Teacher manifest is not training-eligible, else None. A manifest of another schema
-    carries no summary and is not judged here; an unreadable v3 summary is itself an exclusion (``INCOMPLETE``)."""
+    carries no summary and is not judged here; an unreadable Teacher summary is itself an exclusion (``INCOMPLETE``)."""
     try:
         manifest = json.loads(manifest_bytes)
     except (UnicodeError, ValueError):
         return ("INCOMPLETE", "teacher manifest unreadable")
-    if type(manifest) is not dict or manifest.get("schema") != TEACHER_MANIFEST_SCHEMA_V3:
+    if not is_manifest_of(manifest, SCHEMA_TEACHER):
         return None
     return oracle_exclusion(manifest.get("teacher_process_summary"))
 

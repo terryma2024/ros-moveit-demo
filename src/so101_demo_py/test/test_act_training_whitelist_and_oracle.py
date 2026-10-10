@@ -155,7 +155,7 @@ def v3_manifest(*, overload=None, collision=None, incomplete=False, limits=True)
         value.offer_collision(2, 2.6, "table_collision", "upper_arm_collision", -1e-4, 0.4)
     if incomplete:
         value.note_incomplete("PHYSICS_GAP")
-    return {"schema": "so101-dynamic-mujoco-execute-v3", "teacher_process_summary": value.build(policy=POLICY)}
+    return {"schema": "so101-teacher-execute", "schema_version": 1, "teacher_process_summary": value.build(policy=POLICY)}
 
 
 def export(entries, tmp_path):
@@ -190,7 +190,7 @@ def test_an_oracle_flagged_or_incomplete_episode_is_refused_by_both_boundaries_a
     assert after == before                                             # the sealed episode and its evidence are untouched
 
 
-@pytest.mark.parametrize("manifest", [v3_manifest(), {"schema": "so101-dynamic-mujoco-execute-v2"}], ids=["clean-v3", "v2-no-summary"])
+@pytest.mark.parametrize("manifest", [v3_manifest(), {"schema": "so101-dynamic-execute", "schema_version": 1}], ids=["clean-v3", "v2-no-summary"])
 def test_a_clean_v3_episode_and_a_policy_v2_episode_are_accepted(tmp_path, monkeypatch, manifest):
     entries = complete_export_entries(tmp_path, monkeypatch, ("act-1",), teacher_manifests={"act-1": manifest})
     assert len(resolve(entries, tmp_path)) == 1

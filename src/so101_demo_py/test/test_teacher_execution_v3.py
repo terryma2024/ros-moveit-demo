@@ -9,11 +9,12 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
+from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER
 from so101_demo.core import place_height as ph
 from so101_demo.core.domain import ActionStatus, State
 from so101_demo.core.process_summary import ProcessSummary
 from so101_demo.ros.dynamic_mujoco_execution import (
-    MANIFEST_SCHEMA_V3, RosDynamicMujocoExecution, _JointStateStale)
+    RosDynamicMujocoExecution, _JointStateStale)
 from so101_demo.ros.teacher_safety import CupSafetyLimits
 from so101_demo.ros.teacher_stop import TeacherStop
 
@@ -29,7 +30,7 @@ HOVER_Z = 0.2176344
 def v3_adapter(tmp_path, **kwargs):
     value = make_adapter(tmp_path, **kwargs)
     value._execution_policy = V3
-    value._document = {"schema": MANIFEST_SCHEMA_V3}
+    value._document = {"schema": SCHEMA_TEACHER}
     value._write = lambda: None
     value._process_summary = ProcessSummary(limits=CupSafetyLimits(FORCE_LIMIT_N, COMPRESSION_LIMIT_M))
     value._release_marker_sequence, value._scene_readback, value._final_samples = None, None, []
@@ -150,7 +151,7 @@ def test_the_manifest_fields_name_the_v3_schema_the_failure_class_and_the_summar
     value._document["teacher_process_summary"] = {"schema": "teacher_process_summary_v1"}
     failed = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="SIM_INTEGRITY_NON_FINITE_STATE"))
     fields = value._teacher_manifest_fields(failed, {"physical_action_proven_absent": False}, None, None)
-    assert fields["schema"] == MANIFEST_SCHEMA_V3 and fields["teacher_execution_status"] == "FAILED"
+    assert fields["schema"] == SCHEMA_TEACHER and fields["teacher_execution_status"] == "FAILED"
     assert fields["failure_class"] == "sim_integrity" and fields["teacher_process_summary"]["schema"] == "teacher_process_summary_v1"
     other = SimpleNamespace(status=SimpleNamespace(value="ERROR"), failure=SimpleNamespace(code="MOVEIT_EXECUTION_FAILED"))
     assert value._teacher_manifest_fields(other, {"physical_action_proven_absent": False}, None, None)["failure_class"] is None
@@ -407,7 +408,7 @@ def test_the_activation_taps_the_observer_and_makes_a_sequence_gap_telemetry(tmp
     value.observer.add_tap = taps.append
     value.observer._on_sequence_gap = None
     value._activate_teacher_run()
-    assert value._document["schema"] == MANIFEST_SCHEMA_V3 and len(taps) == 1
+    assert value._document["schema"] == SCHEMA_TEACHER and len(taps) == 1
     taps[0](evidence(), 1.0)
     assert len(value._process_summary._worlds) == 1
     value.observer._on_sequence_gap(1, 3)

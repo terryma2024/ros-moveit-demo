@@ -8,7 +8,7 @@ from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.workflow import SO101_WORKFLOW
 from so101_demo.parallel_batch.artifacts import AttemptWorkspace
 from so101_demo.parallel_batch.contracts import RunMode
-from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_V2
+from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_GENERAL
 
 
 def make_sealed_attempt(worker_root, identity, *, succeeded=True):
@@ -96,7 +96,7 @@ def make_sealed_attempt(worker_root, identity, *, succeeded=True):
     end_observation = observation(end_target["position"], 40.0)
     workspace.write_json("dynamic/dynamic-execute-manifest.json", {
         # the 10-05 Teacher contract: the Teacher's own outcome decides PASSED, data QC is separate (DISABLED here)
-        "schema": SCHEMA_V2, "teacher_execution_status": "COMPLETED",
+        "schema": SCHEMA_GENERAL, "schema_version": 1, "teacher_execution_status": "COMPLETED",
         "teacher_task_result": {
             "rule_version": "teacher_endpoint", "policy_sha256": "a" * 64, "result": "PASS", "reasons": [],
             "measured": {}, "start_target": start_target, "end_target": end_target,

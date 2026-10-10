@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_V2
+from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_GENERAL
 
 # outcome -> (teacher_execution_status, teacher_task_result)
 OUTCOMES = {
@@ -29,7 +29,7 @@ def write_manifest(working: Path, fields: dict, *, status=None) -> Path:
     path = directory / "dynamic-execute-manifest.json"
     done = fields["execution_status"] == "COMPLETED"
     path.write_text(json.dumps({
-        "schema": SCHEMA_V2, "status": status or ("DONE" if done else "ERROR"),
+        "schema": SCHEMA_GENERAL, "schema_version": 1, "status": status or ("DONE" if done else "ERROR"),
         "teacher_execution_status": fields["execution_status"],
         "teacher_task_result": {"result": fields["task_result"]},
         # the Teacher manifest holds no data verdict of its own (A4c): the data status is the independent Recorder's, so the

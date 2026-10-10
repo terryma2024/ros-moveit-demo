@@ -226,7 +226,7 @@ def formal_episode(tmp_path):
     from test_act_qc_report_publication import report
     manifest = root / "sealed" / "dynamic" / "dynamic-execute-manifest.json"
     manifest.parent.mkdir()
-    manifest.write_text('{"schema": "so101-dynamic-mujoco-execute-v2"}')
+    manifest.write_text('{"schema": "so101-dynamic-execute", "schema_version": 1}')
     qc = report()
     qc["checks"]["teacher_reference_consistency"]["details"]["teacher_manifest_sha256"] = hashlib.sha256(manifest.read_bytes()).hexdigest()
     episode_qc.write_qc_report(qc, root / "sealed" / "qc-report.json")

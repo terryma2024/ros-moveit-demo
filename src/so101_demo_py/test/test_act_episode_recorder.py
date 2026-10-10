@@ -294,7 +294,7 @@ def readback(working):
     seal = verify_episode_seal(root / "seal.json", audit_manifest=audit_manifest, scope=scope)
     manifest = verify_audit_manifest(audit_manifest)
     events = episode_qc.read_verified_rows(root / "audit", "events.jsonl")
-    document = {"schema": "so101-dynamic-mujoco-execute-v2",
+    document = {"schema": "so101-teacher-execute", "schema_version": 1,
                 "teacher_start_observation": observation(START_STEP), "teacher_end_observation": observation(END_STEP)}
     references = episode_qc.verify_teacher_references(
         document, identity=manifest["identity"], window=manifest["window"],
