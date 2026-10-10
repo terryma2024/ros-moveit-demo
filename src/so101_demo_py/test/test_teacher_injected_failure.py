@@ -153,13 +153,13 @@ def test_the_teacher_cli_accepts_the_flag_and_defaults_it_off():
     assert build_parser().parse_args(["--inject-failure-at", "LIFT"]).inject_failure_at == "LIFT"
 
 
-@pytest.mark.parametrize(("policy", "refused"), [("teacher_execution_policy_v3", False), ("teacher_execution_policy_v2", True)])
-def test_the_teacher_refuses_the_injection_unless_the_freeze_is_policy_v3(tmp_path, monkeypatch, policy, refused):
-    import test_teacher_runtime_v3 as runtime_tests
+@pytest.mark.parametrize(("frozen_inputs", "refused"), [(True, False), (False, True)])
+def test_the_teacher_refuses_the_injection_unless_the_run_has_frozen_inputs(tmp_path, monkeypatch, frozen_inputs, refused):
+    import test_teacher_runtime as runtime_tests
     original = runtime_tests._options
     monkeypatch.setattr(runtime_tests, "_options", lambda path: _with_injection(original(path)))
-    code, execution, _watches, events = runtime_tests.v3_run(tmp_path, monkeypatch, name=policy,
-                                                              simulator_x=-0.2 if not refused else -0.03)
+    code, execution, _watches, events = runtime_tests.teacher_run(tmp_path, monkeypatch, frozen_inputs=frozen_inputs,
+                                                                   simulator_x=-0.2 if not refused else -0.03)
     if refused:
         assert code == 1 and "runner.run" not in events
     else:

@@ -22,13 +22,13 @@ from test_b1_teacher_stop_core import COMPRESSION_LIMIT_M, FORCE_LIMIT_N, eviden
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V3 = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy_v3.yaml")
+V3 = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy.yaml")
 HOVER_Z = 0.2176344
 
 
 def v3_adapter(tmp_path, **kwargs):
     value = make_adapter(tmp_path, **kwargs)
-    value._teacher_execution_policy = V3
+    value._execution_policy = V3
     value._document = {"schema": MANIFEST_SCHEMA_V3}
     value._write = lambda: None
     value._process_summary = ProcessSummary(limits=CupSafetyLimits(FORCE_LIMIT_N, COMPRESSION_LIMIT_M))
@@ -123,7 +123,7 @@ def test_perform_state_reports_the_mapped_code(tmp_path):
 
     def broken(state):
         raise RuntimeError("DYNAMIC_EVIDENCE_TIMEOUT")
-    value._perform_v3_state = broken
+    value._perform_teacher_state = broken
     result = value._perform_state(State.WAIT_GRASP_STABLE, None)
     assert result.status is ActionStatus.FAILED and result.failure.code == "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE"
 
@@ -192,7 +192,7 @@ def test_open_gripper_records_the_release_marker_from_a_fresh_snapshot_without_a
     value._command_gripper = lambda *args, **kwargs: commands.append((args, kwargs))
     value._supported_release_preflight = lambda: pytest.fail("v3 has no release preflight")
     value._normal_stop_proof = lambda: pytest.fail("v3 has no release stop proof")
-    value._perform_v3_state(State.OPEN_GRIPPER)
+    value._perform_teacher_state(State.OPEN_GRIPPER)
     assert value._release_marker_sequence == 4321 and len(commands) == 1
     assert commands[0][1]["before"].publisher_sequence == 4321
     assert value._process_summary._poses["release_start"]["left_contacts"] == 1
@@ -218,10 +218,10 @@ def test_the_fixed_dwells_wait_simulation_time_not_a_predicate(tmp_path):
         return sample
     value._snapshot = snapshot
     value._ik = SimpleNamespace(forward=lambda joints: SimpleNamespace(position_m=(0.0, 0.0, 0.2), orientation_xyzw=(0.0, 0.0, 0.0, 1.0)))
-    value._perform_v3_state(State.WAIT_GRASP_STABLE)
+    value._perform_teacher_state(State.WAIT_GRASP_STABLE)
     assert len(states) == 2 and value._state_events[-1]["dwell_s"] == 0.25
     assert "grasp_stable" in value._process_summary._poses
-    value._perform_v3_state(State.WAIT_RELEASE_SETTLE)
+    value._perform_teacher_state(State.WAIT_RELEASE_SETTLE)
     assert value._state_events[-1]["dwell_s"] == 0.5 and len(value._final_samples) == 1
 
 
@@ -244,7 +244,7 @@ def test_a_dwell_that_never_advances_ends_the_attempt(tmp_path):
 
 def test_the_final_normal_stop_age_comes_from_the_execution_policy_in_v3(tmp_path):
     value, _ = release_adapter(tmp_path)
-    value._teacher_execution_policy = V3
+    value._execution_policy = V3
     value._release_runtime_policy = None                                   # the release policy is not part of v3
     events = []
     value._publish_teacher_event = lambda kind, payload: events.append((kind, payload))
@@ -335,13 +335,6 @@ def test_a_stop_during_the_measurement_keeps_its_code_and_is_not_a_fallback(tmp_
     assert value._failure_code(raised.value)[0] == code and "place_height" not in value._document
 
 
-def test_the_scene_geometry_check_before_motion_does_not_refuse_in_v3(tmp_path):
-    value = v3_adapter(tmp_path)
-    value._execution_snapshot_root = PACKAGE
-    value._place_geometry = lambda: pytest.fail("v3 loads the geometry at the measurement, where a mismatch selects the fallback")
-    value._check_place_geometry_before_motion()
-
-
 # ---- process summary ------------------------------------------------------------------------------------------------------
 
 def finish_adapter(tmp_path, *, done=True):
@@ -413,7 +406,7 @@ def test_the_activation_taps_the_observer_and_makes_a_sequence_gap_telemetry(tmp
     taps = []
     value.observer.add_tap = taps.append
     value.observer._on_sequence_gap = None
-    value._activate_v3()
+    value._activate_teacher_run()
     assert value._document["schema"] == MANIFEST_SCHEMA_V3 and len(taps) == 1
     taps[0](evidence(), 1.0)
     assert len(value._process_summary._worlds) == 1
@@ -428,12 +421,12 @@ def real_observer_adapter(tmp_path, monkeypatch):
     from so101_demo.backends.mujoco import observer as world_module
     monkeypatch.setattr(world_module, "convert_message", lambda message: message)
     value = make_adapter(tmp_path)
-    value._teacher_execution_policy = V3
+    value._execution_policy = V3
     value._document = {}
     value._write = lambda: None
     value.observer = world_module.MujocoWorldObserver(SimpleNamespace(create_subscription=lambda *a: object()), "s", max_age_s=0.5,
                                                       subscription_depth=256, monotonic=lambda: value._now[0])
-    value._activate_v3()
+    value._activate_teacher_run()
     value._process_summary.limits = CupSafetyLimits(FORCE_LIMIT_N, COMPRESSION_LIMIT_M)
     return value, world_module
 
@@ -506,6 +499,6 @@ def test_a_summary_stays_complete_when_both_streams_delivered(tmp_path):
 def test_the_activation_sets_the_silence_limit_from_the_execution_policy(tmp_path):
     value = make_adapter(tmp_path)
     value._document = {}
-    value._teacher_execution_policy = V3
-    value._activate_v3()
+    value._execution_policy = V3
+    value._activate_teacher_run()
     assert value._process_summary.silence_limit_s == V3["state_unavailable_stop_s"] == 1.0

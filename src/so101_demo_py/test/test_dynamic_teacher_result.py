@@ -8,7 +8,8 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.act.teacher_event_stream import StreamEventSink
-from so101_demo.act.teacher_endpoint import load_teacher_endpoint_policy, load_teacher_execution_policy
+from so101_demo.act.general_runtime_policy import load_general_runtime_policy
+from so101_demo.act.teacher_endpoint import load_teacher_endpoint_policy
 from so101_demo.core.domain import ActionStatus, Failure, FailureCategory, State
 from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
 from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
@@ -76,8 +77,7 @@ def _adapter(*, start=START, joint_speed=0.0):
         input_pose=SimpleNamespace(pose_world=SimpleNamespace(values=start)), reset_epoch=3)
     adapter._teacher_endpoint_policy = load_teacher_endpoint_policy(
         PACKAGE / "config/act/teacher_endpoint.yaml")
-    adapter._teacher_execution_policy = load_teacher_execution_policy(
-        PACKAGE / "config/act/teacher_execution_policy_v1.yaml")
+    adapter._execution_policy = load_general_runtime_policy(PACKAGE / "config/act/general_runtime_policy.yaml")
     adapter._teacher_policy_files = {"endpoint": {"path": "e", "file_sha256": "1" * 64},
                                      "execution": {"path": "x", "file_sha256": "2" * 64}}
     adapter._teacher_config_error = None
@@ -492,9 +492,9 @@ def test_teacher_policies_load_from_the_share_config_dir_and_record_path_and_sha
     assert endpoint["path"] == str(PACKAGE / "config/act/teacher_endpoint.yaml")
     assert endpoint["file_sha256"] == hashlib.sha256(
         (PACKAGE / "config/act/teacher_endpoint.yaml").read_bytes()).hexdigest()
-    assert execution["path"] == str(PACKAGE / "config/act/teacher_execution_policy_v1.yaml")
+    assert execution["path"] == str(PACKAGE / "config/act/general_runtime_policy.yaml")
     assert endpoint["policy_sha256"] == adapter._teacher_endpoint_policy["policy_sha256"]
-    assert execution["policy_sha256"] == adapter._teacher_execution_policy["policy_sha256"]
+    assert execution["policy_sha256"] == adapter._execution_policy["policy_sha256"]
 
 
 def test_missing_or_invalid_policy_files_become_a_config_error_not_a_crash(tmp_path):
@@ -506,7 +506,7 @@ def test_missing_or_invalid_policy_files_become_a_config_error_not_a_crash(tmp_p
     config = tmp_path / "config/act"
     config.mkdir(parents=True)
     (config / "teacher_endpoint.yaml").write_text("kind: nope\n")
-    (config / "teacher_execution_policy_v1.yaml").write_bytes(
-        (PACKAGE / "config/act/teacher_execution_policy_v1.yaml").read_bytes())
+    (config / "general_runtime_policy.yaml").write_bytes(
+        (PACKAGE / "config/act/general_runtime_policy.yaml").read_bytes())
     adapter._load_teacher_policies(tmp_path / "assets/mujoco/so101.urdf")
     assert adapter._teacher_config_error.startswith("TEACHER_ENDPOINT_POLICY_INVALID")

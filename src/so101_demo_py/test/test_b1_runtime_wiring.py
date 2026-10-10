@@ -25,7 +25,7 @@ def _run(tmp_path, *, no_option=False):
     original_execution = runtime.execution
     def execution(*args, **kwargs):
         value = original_execution(*args, **kwargs)
-        value._teacher_execution_policy = {"execution_deadline_s": 180.0}
+        value._execution_policy = {"execution_deadline_s": 180.0}
         holder["execution"] = value
         return value
     runtime.execution = execution

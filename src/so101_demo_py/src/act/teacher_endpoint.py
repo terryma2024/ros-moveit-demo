@@ -17,6 +17,7 @@ import yaml
 
 ENDPOINT_KIND = "ACT_TEACHER_ENDPOINT_POLICY"
 EXECUTION_KIND = "ACT_TEACHER_EXECUTION_POLICY"
+EXECUTION_POLICY_FILE = "teacher_execution_policy.yaml"
 SCHEMA_VERSION = 1
 RULE_VERSION = "teacher_endpoint"
 ENDPOINT_FIELDS = frozenset({"kind", "schema_version", "rule_version", "tolerances"})
@@ -28,27 +29,23 @@ TOLERANCE_UNITS = {
     "final_axis_rad": "rad",
     "settle_s": "s",
 }
-EXECUTION_FIELDS = frozenset({
-    "kind", "schema_version", "state_max_age_s", "state_unavailable_stop_s", "execution_deadline_s",
-    "gripper_close_target_rad", "carry_max_velocity_scaling", "carry_max_acceleration_scaling",
-    "place_descend_offset_m",
-})
+#: The fields every execution policy shares (the general runtime policy holds exactly these three).
 EXECUTION_VALUES = ("state_max_age_s", "state_unavailable_stop_s", "execution_deadline_s")
-#: Policy v2 (CP-3394/CP-3480): the place height is computed from the measured cup tilt instead of a constant offset. The constant
-#: `place_descend_offset_m` is not part of v2 (the document cannot express it); v1 stays the constant-offset policy, byte for byte.
-EXECUTION_SCHEMA_V2 = 2
 PLACE_HEIGHT_FIELDS = frozenset({
     "place_height_mode", "place_touchdown_guard_m", "place_tracking_offset_m", "place_tilt_min_rad", "place_tilt_max_rad",
     "place_grasp_offset_m", "place_grasp_offset_half_band_m", "place_target_max_deviation_m", "place_geometry_scene_sha256",
     "place_reference_offset_m",
 })
-EXECUTION_FIELDS_V2 = (EXECUTION_FIELDS - {"place_descend_offset_m"}) | PLACE_HEIGHT_FIELDS
-#: Policy v3 (CP-3502, CP-3504): the minimal runtime gates. The v2 fields plus the fixed dwells, the arm-stop wait of the release
-#: sequence and the provenance of the cup pose (broker RGB-D) and of the verdict (simulator truth).
-EXECUTION_SCHEMA_V3 = 3
-V3_NUMBER_FIELDS = ("grasp_stable_dwell_s", "release_settle_dwell_s", "arm_stop_wait_s", "arm_stop_velocity_rad_s")
-V3_PROVENANCE = {"cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
-EXECUTION_FIELDS_V3 = EXECUTION_FIELDS_V2 | frozenset(V3_NUMBER_FIELDS) | frozenset(V3_PROVENANCE)
+#: The Teacher execution policy (schema 3, CP-3502, CP-3504): the minimal runtime gates. The motion and carry values, the
+#: tilt-compensated place height, the fixed dwells, the arm-stop wait of the release sequence and the provenance of the cup pose
+#: (broker RGB-D) and of the verdict (simulator truth).
+EXECUTION_SCHEMA = 3
+NUMBER_FIELDS = ("grasp_stable_dwell_s", "release_settle_dwell_s", "arm_stop_wait_s", "arm_stop_velocity_rad_s")
+TEACHER_POLICY_PROVENANCE = {"cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
+TEACHER_EXECUTION_FIELDS = (
+    frozenset({"kind", "schema_version", "gripper_close_target_rad", "carry_max_velocity_scaling",
+               "carry_max_acceleration_scaling", *EXECUTION_VALUES})
+    | PLACE_HEIGHT_FIELDS | frozenset(NUMBER_FIELDS) | frozenset(TEACHER_POLICY_PROVENANCE))
 QUATERNION_NORM_TOLERANCE = 1e-6
 WORLD_FRAME = "world"
 
@@ -99,20 +96,16 @@ def load_teacher_endpoint_policy(source) -> dict:
 
 
 def load_teacher_execution_policy(source) -> dict:
-    """Load and validate the Teacher execution policy (schema 1: constant place offset; schema 2: tilt-compensated place height)
-    from YAML bytes or a path, with its sha256. An unknown schema, an unknown place height mode, a missing or extra field is
-    refused (``TEACHER_EXECUTION_POLICY_INVALID``)."""
+    """Load and validate the Teacher execution policy (schema 3: tilt-compensated place height) from YAML bytes or a path, with
+    its sha256. An unknown schema, an unknown place height mode, a missing or extra field is refused
+    (``TEACHER_EXECUTION_POLICY_INVALID``)."""
 
     code = "TEACHER_EXECUTION_POLICY_INVALID"
     document = _load_document(source, code)
-    if not isinstance(document, dict):
+    if not isinstance(document, dict) or set(document) != TEACHER_EXECUTION_FIELDS:
         raise ValueError(f"{code}: not the closed policy document")
-    version = document.get("schema_version")
-    expected = ({SCHEMA_VERSION: EXECUTION_FIELDS, EXECUTION_SCHEMA_V2: EXECUTION_FIELDS_V2,
-                 EXECUTION_SCHEMA_V3: EXECUTION_FIELDS_V3}.get(version) if type(version) is int else None)
-    if expected is None or set(document) != expected:
-        raise ValueError(f"{code}: not the closed policy document")
-    if document["kind"] != EXECUTION_KIND:
+    version = document["schema_version"]
+    if document["kind"] != EXECUTION_KIND or type(version) is not int or version != EXECUTION_SCHEMA:
         raise ValueError(f"{code}: unknown kind or schema version")
     policy = {"kind": EXECUTION_KIND, "schema_version": version}
     for key in EXECUTION_VALUES:
@@ -128,13 +121,6 @@ def load_teacher_execution_policy(source) -> dict:
                 or not 0 < value <= 1):
             raise ValueError(f"{code}: {key} is not a finite scaling in (0, 1]")
         policy[key] = float(value)
-    if version == SCHEMA_VERSION:
-        offset = document["place_descend_offset_m"]
-        if (isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset)
-                or not -0.05 <= offset <= 0.05):
-            raise ValueError(f"{code}: place_descend_offset_m is not a finite offset within 0.05 m")
-        policy["place_descend_offset_m"] = float(offset)
-        return {**policy, "policy_sha256": _sha256(policy)}
     from ..core.place_height import MODE, PlaceHeightPolicy
 
     if document["place_height_mode"] != MODE:
@@ -153,17 +139,16 @@ def load_teacher_execution_policy(source) -> dict:
         PlaceHeightPolicy.from_document(policy)
     except (ValueError, TypeError, KeyError) as error:
         raise ValueError(f"{code}: {error}") from error
-    if version == EXECUTION_SCHEMA_V3:
-        for key in V3_NUMBER_FIELDS:
-            policy[key] = _real(document[key], key, code, allow_zero=False)
-        if not 0.0 < policy["arm_stop_wait_s"] <= 5.0 or not 0.0 < policy["arm_stop_velocity_rad_s"] <= 0.01:
-            raise ValueError(f"{code}: arm_stop_wait_s or arm_stop_velocity_rad_s is out of range")
-        if policy["grasp_stable_dwell_s"] > 5.0 or policy["release_settle_dwell_s"] > 5.0:
-            raise ValueError(f"{code}: a dwell exceeds 5 s")
-        for key, wanted in V3_PROVENANCE.items():
-            if document[key] != wanted:
-                raise ValueError(f"{code}: {key} is not {wanted}")
-            policy[key] = wanted
+    for key in NUMBER_FIELDS:
+        policy[key] = _real(document[key], key, code, allow_zero=False)
+    if not 0.0 < policy["arm_stop_wait_s"] <= 5.0 or not 0.0 < policy["arm_stop_velocity_rad_s"] <= 0.01:
+        raise ValueError(f"{code}: arm_stop_wait_s or arm_stop_velocity_rad_s is out of range")
+    if policy["grasp_stable_dwell_s"] > 5.0 or policy["release_settle_dwell_s"] > 5.0:
+        raise ValueError(f"{code}: a dwell exceeds 5 s")
+    for key, wanted in TEACHER_POLICY_PROVENANCE.items():
+        if document[key] != wanted:
+            raise ValueError(f"{code}: {key} is not {wanted}")
+        policy[key] = wanted
     return {**policy, "policy_sha256": _sha256(policy)}
 
 

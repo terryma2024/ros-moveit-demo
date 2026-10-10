@@ -185,7 +185,7 @@ def test_a_silent_chunk_stream_stops_after_the_unavailable_bound(tmp_path):
     no_snapshot(value)
     monitor = value._motion_monitor(State.MOVE_ABOVE_PLACE)
     monitor()
-    stop_after = value._teacher_execution_policy["state_unavailable_stop_s"]
+    stop_after = value._execution_policy["state_unavailable_stop_s"]
     value._now[0] += 0.1
     value.observer.put(evidence())
     value._joint_state_received_monotonic_s = value._now[0]

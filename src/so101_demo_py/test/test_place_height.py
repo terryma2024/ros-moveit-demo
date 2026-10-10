@@ -13,8 +13,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
-V1 = PACKAGE / "config/act/teacher_execution_policy_v1.yaml"
-V2 = PACKAGE / "config/act/teacher_execution_policy_v2.yaml"
+V2 = PACKAGE / "config/act/teacher_execution_policy.yaml"
 OLD_TARGET_Z = 0.2176344 - 0.01325                    # the v1 constant-offset target of the retained bags
 THETA = math.radians(4.04)
 
@@ -62,19 +61,8 @@ def test_the_policy_pins_the_scene_the_geometry_was_fitted_for(geometry, policy)
 
 # ---- policy v2 ---------------------------------------------------------------------------------------------------------------------
 
-def test_v1_is_byte_identical_and_v2_loads_without_the_constant_offset():
-    assert hashlib.sha256(V1.read_bytes()).hexdigest() == "af0a56995b211bf6008a938e5437a1246a54cdabfc81623004f6493591cd96b9"
-    one, two = load_teacher_execution_policy(V1), load_teacher_execution_policy(V2)
-    assert one["schema_version"] == 1 and one["place_descend_offset_m"] == -0.01325 and "place_height_mode" not in one
-    assert two["schema_version"] == 2 and two["place_height_mode"] == "tilt_compensated" and "place_descend_offset_m" not in two
-    for key in ("state_max_age_s", "state_unavailable_stop_s", "execution_deadline_s", "gripper_close_target_rad",
-                "carry_max_velocity_scaling", "carry_max_acceleration_scaling"):
-        assert one[key] == two[key], key
-    assert one["policy_sha256"] != two["policy_sha256"]
-
-
 @pytest.mark.parametrize("change", [
-    {"place_height_mode": "constant"}, {"place_height_mode": None}, {"schema_version": 3}, {"schema_version": "2"},
+    {"place_height_mode": "constant"}, {"place_height_mode": None}, {"schema_version": 2}, {"schema_version": "3"},
     {"place_touchdown_guard_m": 0.0}, {"place_touchdown_guard_m": -0.0003}, {"place_touchdown_guard_m": 0.00005},
     {"place_touchdown_guard_m": 0.0011}, {"place_touchdown_guard_m": float("nan")},
     {"place_touchdown_guard_m": 0.0003}, {"place_touchdown_guard_m": 0.0006}, {"place_touchdown_guard_m": 0.0008},
@@ -98,12 +86,9 @@ def test_the_loader_refuses_missing_extra_and_mixed_fields(policy_document):
         del missing[key]
         with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
             load_teacher_execution_policy(yaml.safe_dump(missing).encode())
-    extra = dict(policy_document, place_descend_offset_m=-0.01325)                       # v2 cannot express the constant
+    extra = dict(policy_document, place_descend_offset_m=-0.01325)                       # the policy cannot express the constant
     with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
         load_teacher_execution_policy(yaml.safe_dump(extra).encode())
-    v1_with_v2_field = dict(yaml.safe_load(V1.read_bytes()), place_height_mode="tilt_compensated")
-    with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
-        load_teacher_execution_policy(yaml.safe_dump(v1_with_v2_field).encode())
 
 
 def ph_fields():

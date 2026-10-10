@@ -533,17 +533,20 @@ def _finish_failed_execution(execution: Any, error: Exception) -> None:
     execution.finish(FailedResult())
 
 
-def _teacher_state_max_age_s(share_dir, policy_file="teacher_execution_policy_v1.yaml"):
-    """The frozen Teacher execution policy's state age, or None when it cannot be read.
+def _execution_state_max_age_s(share_dir, *, teacher_run: bool):
+    """The execution policy's state age (the Teacher policy of a Teacher run, else the general runtime policy), or None when it
+    cannot be read.
 
     An unreadable policy is refused where the execution loads it (no motion without it); this only sizes the
     scene observer the release preflight joins against.
     """
-    from ..act.teacher_endpoint import load_teacher_execution_policy
+    from ..act.general_runtime_policy import GENERAL_RUNTIME_FILE, load_general_runtime_policy
+    from ..act.teacher_endpoint import EXECUTION_POLICY_FILE, load_teacher_execution_policy
 
+    loader, file_name = ((load_teacher_execution_policy, EXECUTION_POLICY_FILE) if teacher_run
+                         else (load_general_runtime_policy, GENERAL_RUNTIME_FILE))
     try:
-        return load_teacher_execution_policy(
-            Path(share_dir) / "config/act" / policy_file)["state_max_age_s"]
+        return loader(Path(share_dir) / "config/act" / file_name)["state_max_age_s"]
     except (OSError, ValueError):
         return None
 
@@ -631,7 +634,7 @@ def run_dynamic_execute(
     frozen = None
     manifest_option = getattr(options, "frozen_inputs_manifest", None)
     if manifest_option is not None:
-        from ..act.frozen_runtime_inputs import frozen_execution_policy_name, load_teacher_frozen_inputs
+        from ..act.frozen_runtime_inputs import load_teacher_frozen_inputs
         try:
             frozen, execution_inputs, share_dir = load_teacher_frozen_inputs(Path(manifest_option))
         except Exception as error:
@@ -640,13 +643,13 @@ def run_dynamic_execute(
             emit_failure(failure_code)
             print(status_line("ERROR", failure=failure_code, message=error), file=status_stream)
             return 1
-    # Teacher execution policy v3 (the minimal runtime gates): the simulator comparison of the perceived cup pose (S05) is telemetry
-    v3_policy = frozen is not None and frozen_execution_policy_name(frozen).endswith("_v3")
+    # A Teacher run (frozen inputs, the minimal runtime gates): the simulator comparison of the perceived cup pose (S05) is telemetry
+    teacher_run = frozen is not None
     inject_failure_at = getattr(options, "inject_failure_at", None)
     if inject_failure_at is not None:
-        # CP-3513: the diagnostic injection is refused by name, before any motion, unless the freeze is policy v3 and the state is LIFT
-        refusal = None if v3_policy and inject_failure_at == "LIFT" else (
-            "TEACHER_INJECTION_REQUIRES_POLICY_V3" if not v3_policy else f"TEACHER_INJECTION_STATE_UNSUPPORTED: {inject_failure_at}")
+        # CP-3513: the diagnostic injection is refused by name, before any motion, unless the run has frozen inputs and the state is LIFT
+        refusal = None if teacher_run and inject_failure_at == "LIFT" else (
+            "TEACHER_INJECTION_REQUIRES_FROZEN_INPUTS" if not teacher_run else f"TEACHER_INJECTION_STATE_UNSUPPORTED: {inject_failure_at}")
         if refusal is not None:
             finish_setup("rejected", refusal.split(":")[0])
             emit_failure(refusal.split(":")[0])
@@ -818,8 +821,7 @@ def run_dynamic_execute(
         if binder is not None:
             model_path = (share_dir / execution_inputs["scene_path"] if execution_inputs is not None
                           else share_dir / "assets/mujoco/scene.xml")
-            scene_age = _teacher_state_max_age_s(
-                share_dir, f"{frozen_execution_policy_name(frozen)}.yaml" if frozen is not None else "teacher_execution_policy_v1.yaml")
+            scene_age = _execution_state_max_age_s(share_dir, teacher_run=teacher_run)
             scene_source_binding = binder(node, session_id=options.session_id,
                 reset_epoch=options.expected_reset_epoch, model_path=model_path,
                 expected_model=execution_inputs, max_age_s=.1,
@@ -840,7 +842,7 @@ def run_dynamic_execute(
         mark("prepare_dynamic_cup_scene.begin")
         perception_error = None
         perception_error_failed = False
-        if v3_policy:
+        if teacher_run:
             # telemetry only: a pose that cannot be compared (degenerate quaternion, missing truth) never refuses the run
             try:
                 from ..application.cup_pose_preflight import perception_error as measure_perception_error
@@ -853,20 +855,20 @@ def run_dynamic_execute(
             loaded.template,
             geometry,
             task_scene,
-            **({"perception_gate": False} if v3_policy else {}),
+            **({"perception_gate": False} if teacher_run else {}),
         )
         mark("prepare_dynamic_cup_scene.end")
         mark("validate_cup_scene.1.observe.begin")
         observed = truth_observer.observe(5.0)
         mark("validate_cup_scene.1.observe.end")
         mark("validate_cup_scene.1.check.begin")
-        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if v3_policy else {}))
+        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if teacher_run else {}))
         mark("validate_cup_scene.1.check.end")
         mark("validate_cup_scene.2.observe.begin")
         observed = truth_observer.observe(5.0)
         mark("validate_cup_scene.2.observe.end")
         mark("validate_cup_scene.2.check.begin")
-        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if v3_policy else {}))
+        validate_cup_scene(sample, observed, loaded.template, **({"perception_gate": False} if teacher_run else {}))
         mark("validate_cup_scene.2.check.end")
         mark("resolve_motion_targets.begin")
         targets = runtime.resolve_motion_targets(sample, loaded.template)
@@ -916,8 +918,8 @@ def run_dynamic_execute(
             execution.inject_failure_at = State(inject_failure_at)
         if execution_inputs is not None:
             execution._execution_snapshot_root = share_dir
-            # the freeze names the execution policy (v1 constant place offset, v2 tilt-compensated place height)
-            execution._select_execution_policy(f"{frozen_execution_policy_name(frozen)}.yaml")
+            # the freeze names the Teacher execution policy
+            execution._select_execution_policy()
         if scene_source_binding is not None:
             execution._scene_source_observer = scene_source_binding.observer
             execution._scene_source_binding = scene_source_binding
@@ -927,52 +929,37 @@ def run_dynamic_execute(
             # The activated contact policy's cup force/compression limits and the collision geometry, from the same
             # frozen inputs the broker-era Teacher read. A mismatch refuses before any motion.
             from . import teacher_safety
-            if v3_policy:
-                # v3: the r10b limits and the collision geometry are only the thresholds and the pair filter of the telemetry. The watches
-                # subscribe but record (never latch); a failed load marks the summary incomplete and refuses nothing (design 2, S09).
-                summary = execution._process_summary
-                execution._perception_error = perception_error
-                if perception_error_failed:
-                    summary.note_incomplete("PERCEPTION_ERROR_UNAVAILABLE")
-                try:
-                    safety = teacher_safety.load_frozen_safety(Path(manifest_option))
-                except Exception as error:  # noqa: BLE001 - non-gating in v3
-                    safety = None
-                    execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(error)}"
-                if safety is not None:
-                    execution._safety_limits = summary.limits = safety.limits
-                    watch = teacher_safety.CollisionWatch(
-                        process_pairs=safety.process_pairs, known_geoms=safety.known_geoms, session_id=options.session_id,
-                        reset_epoch=options.expected_reset_epoch, record_only=True, tap=summary,
-                        clock=execution._monotonic)
-                    watch.attach(node)
-                    execution._collision_watch = watch
-                else:
-                    summary.note_incomplete("COLLISION_GEOMETRY_UNAVAILABLE")
-                hazards = teacher_safety.PhysicsHazardWatch(
-                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=None,
-                    state_getter=lambda: execution._safety_state, clock=execution._monotonic, record_only=True, tap=summary)
-                hazards.attach(node)
-                hazards.arm()
-                execution._physics_hazard_watch = hazards
-            else:
+            # the r10b limits and the collision geometry are only the thresholds and the pair filter of the telemetry. The watches
+            # subscribe but record (never latch); a failed load marks the summary incomplete and refuses nothing (design 2, S09).
+            summary = execution._process_summary
+            execution._perception_error = perception_error
+            if perception_error_failed:
+                summary.note_incomplete("PERCEPTION_ERROR_UNAVAILABLE")
+            try:
                 safety = teacher_safety.load_frozen_safety(Path(manifest_option))
-                execution._safety_limits = safety.limits
+            except Exception as error:  # noqa: BLE001 - non-gating
+                safety = None
+                execution._safety_limits_error = f"SAFETY_LOAD_FAILED:{_failure_code(error)}"
+            if safety is not None:
+                execution._safety_limits = summary.limits = safety.limits
                 watch = teacher_safety.CollisionWatch(
-                    process_pairs=safety.process_pairs, known_geoms=safety.known_geoms,
-                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch)
+                    process_pairs=safety.process_pairs, known_geoms=safety.known_geoms, session_id=options.session_id,
+                    reset_epoch=options.expected_reset_epoch, record_only=True, tap=summary,
+                    clock=execution._monotonic)
                 watch.attach(node)
                 execution._collision_watch = watch
-                hazards = teacher_safety.PhysicsHazardWatch(
-                    session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=safety.limits,
-                    state_getter=lambda: execution._safety_state, clock=execution._monotonic)
-                hazards.attach(node)
-                hazards.arm()
-                execution._physics_hazard_watch = hazards
+            else:
+                summary.note_incomplete("COLLISION_GEOMETRY_UNAVAILABLE")
+            hazards = teacher_safety.PhysicsHazardWatch(
+                session_id=options.session_id, reset_epoch=options.expected_reset_epoch, limits=None,
+                state_getter=lambda: execution._safety_state, clock=execution._monotonic, record_only=True, tap=summary)
+            hazards.attach(node)
+            hazards.arm()
+            execution._physics_hazard_watch = hazards
         execution._stop_flags = stop_flags
-        # Policy v3 (the minimal runtime gates) runs its own workflow definition: the same forward states, no RECOVER_* chain.
+        # A Teacher run (the minimal runtime gates) runs its own workflow definition: the same forward states, no RECOVER_* chain.
         workflow_options = {}
-        if (getattr(execution, "_teacher_execution_policy", None) or {}).get("schema_version") == 3:
+        if teacher_run:
             from ..core.workflow import TEACHER_WORKFLOW
             workflow_options = {"workflow": TEACHER_WORKFLOW}
         mark("build_actions.begin")
@@ -993,7 +980,7 @@ def run_dynamic_execute(
         finish_setup("accepted")
         # The attempt deadline is frozen here, from the frozen execution policy. The watchdog thread only sets a flag:
         # the monitor, the gripper hook and the state machine read it on the executing thread.
-        deadline_s = (getattr(execution, "_teacher_execution_policy", None) or {}).get("execution_deadline_s")
+        deadline_s = (getattr(execution, "_execution_policy", None) or {}).get("execution_deadline_s")
         if deadline_s is not None:
             stop_flags.arm_deadline(deadline_s)
             watchdog = DeadlineWatchdog(stop_flags)

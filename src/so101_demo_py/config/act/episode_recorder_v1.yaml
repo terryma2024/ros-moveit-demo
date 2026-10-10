@@ -4,7 +4,7 @@
 kind: ACT_EPISODE_RECORDER_POLICY
 schema_version: 1
 # The Recorder ends at the Teacher terminal event, on SIGTERM, or after this many seconds, whichever is first. It must
-# outlast the Teacher's independent execution deadline (180 s, teacher_execution_policy_v1) plus start-up and finish.
+# outlast the Teacher's independent execution deadline (180 s, teacher_execution_policy) plus start-up and finish.
 max_duration_s: 300.0
 # Recorder-side bound on Teacher events waiting to be handled (the Teacher publishes at most 64 at a time).
 event_inbox_capacity: 256

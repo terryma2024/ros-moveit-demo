@@ -60,19 +60,16 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
 #: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
 #: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
 _MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy", "execution_snapshot",
-                                "teacher_endpoint", "teacher_execution_policy_v1", "teacher_execution_policy_v2", "teacher_execution_policy_v3",
-                                "episode_recorder_v1"})
+                                "teacher_endpoint", "teacher_execution_policy", "episode_recorder_v1"})
 #: The three policy bindings that replaced the endpoint_pose_v1 `endpoint_policy` (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
 POLICY_BINDINGS = {
     "teacher_endpoint": ("teacher_endpoint.yaml", "config/act/teacher_endpoint.yaml"),
-    "teacher_execution_policy_v1": ("teacher_execution_policy_v1.yaml", "config/act/teacher_execution_policy_v1.yaml"),
-    "teacher_execution_policy_v2": ("teacher_execution_policy_v2.yaml", "config/act/teacher_execution_policy_v2.yaml"),
-    "teacher_execution_policy_v3": ("teacher_execution_policy_v3.yaml", "config/act/teacher_execution_policy_v3.yaml"),
+    "teacher_execution_policy": ("teacher_execution_policy.yaml", "config/act/teacher_execution_policy.yaml"),
     "episode_recorder_v1": ("episode_recorder_v1.yaml", "config/act/episode_recorder_v1.yaml"),
 }
-#: the execution policy bindings and the policy schema each one holds (exactly one is frozen with an attempt)
-EXECUTION_POLICY_BINDINGS = {"teacher_execution_policy_v1": 1, "teacher_execution_policy_v2": 2, "teacher_execution_policy_v3": 3}
+#: the execution policy binding frozen with an attempt
+EXECUTION_POLICY_BINDING = "teacher_execution_policy"
 _POLICY_BINDING_FIELDS = frozenset({"path", "file_sha256", "bytes", "policy_sha256", "values"})
 _MANIFEST_FIELDS = _MANIFEST_REQUIRED | _MANIFEST_OPTIONAL
 _MANIFEST_ROLE_FIELDS = frozenset({"path", "sha256", "bytes", "approval", "identity"})
@@ -310,9 +307,6 @@ def read_inputs_manifest(path: Path) -> dict:
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if document["kind"] != MANIFEST_KIND or document["schema_version"] != MANIFEST_SCHEMA_VERSION:
         raise ValueError("INPUTS_MANIFEST_INVALID")
-    # exactly one execution binding: a manifest carrying both v1 and v2 names two policies for one attempt
-    if sum(name in document for name in EXECUTION_POLICY_BINDINGS) > 1:
-        raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["source_commit"], str) or not _HEX40.fullmatch(document["source_commit"]):
         raise ValueError("INPUTS_MANIFEST_INVALID")
     if not isinstance(document["config_sha256"], str) or not _HEX64.fullmatch(document["config_sha256"]):
@@ -350,14 +344,8 @@ def _policy_loader(name: str):
 
     if name == "teacher_endpoint":
         from .teacher_endpoint import load_teacher_endpoint_policy as loader
-    elif name in EXECUTION_POLICY_BINDINGS:
-        from .teacher_endpoint import load_teacher_execution_policy
-
-        def loader(payload, _version=EXECUTION_POLICY_BINDINGS[name]):
-            policy = load_teacher_execution_policy(payload)
-            if policy["schema_version"] != _version:     # a v1 binding holds a schema 1 document, a v2 binding a schema 2 one
-                raise ValueError(f"TEACHER_EXECUTION_POLICY_INVALID: binding {name} holds a schema {policy['schema_version']} policy")
-            return policy
+    elif name == EXECUTION_POLICY_BINDING:
+        from .teacher_endpoint import load_teacher_execution_policy as loader
     else:
         from .offline.policy import load_recorder_policy as loader
     return loader
@@ -629,16 +617,8 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
             raise ValueError("INPUT_MODE_INVALID")
         extra["mode"] = mode
     policy_payloads = {}
-    execution_name = "teacher_execution_policy_v1"
-    if teacher_execution_policy is not None:
-        # the binding follows the document: schema 2 is the tilt-compensated place height policy
-        try:
-            version = yaml.safe_load(Path(teacher_execution_policy).read_bytes()).get("schema_version")
-        except (OSError, yaml.YAMLError, AttributeError) as error:
-            raise ValueError("INPUTS_POLICY_BINDING_INVALID: teacher_execution_policy_v1") from error
-        execution_name = {version_: name_ for name_, version_ in EXECUTION_POLICY_BINDINGS.items()}.get(version, execution_name)
     for name, source in (("teacher_endpoint", teacher_endpoint),
-                         (execution_name, teacher_execution_policy),
+                         (EXECUTION_POLICY_BINDING, teacher_execution_policy),
                          ("episode_recorder_v1", episode_recorder_policy)):
         if source is None:
             continue

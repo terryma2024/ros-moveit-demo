@@ -1,0 +1,8 @@
+# SO-101 general runtime policy: the state-freshness and deadline bounds of the general (non-Teacher) dynamic pick-place
+# runtime. These are the three fields every execution policy shares; the Teacher's own policy is
+# teacher_execution_policy.yaml. Not the ACT 10 Hz / 100 ms data contract.
+kind: ACT_GENERAL_RUNTIME_POLICY
+schema_version: 1
+state_max_age_s: 0.5
+state_unavailable_stop_s: 1.0
+execution_deadline_s: 180.0

@@ -2451,13 +2451,13 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     broker_proxy = None
     frozen_execution_policy = None
     if act_profile and mode is not RunMode.DRY_RUN:
-        # the manifest the worker writes is bound to this policy: place_height is required for v2 and rejected for v1
+        # the manifest the worker writes is bound to the frozen Teacher execution policy (its place_height record)
         try:
             from ..act.first_episode_inputs import verify_frozen_inputs
-            from ..act.frozen_runtime_inputs import frozen_execution_policy_name
+            from ..act.frozen_runtime_inputs import EXECUTION_POLICY_BINDING
 
             frozen = verify_frozen_inputs(Path(document["episode_inputs_manifest"]))
-            frozen_execution_policy = dict(frozen[frozen_execution_policy_name(frozen)]["values"])
+            frozen_execution_policy = dict(frozen[EXECUTION_POLICY_BINDING]["values"])
         except (OSError, KeyError, TypeError, ValueError) as error:
             raise CliError("WORKER_EPISODE_INPUT_INVALID") from error
     if mode is not RunMode.DRY_RUN:

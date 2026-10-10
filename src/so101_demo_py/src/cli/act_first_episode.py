@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--teacher-endpoint", required=True,
                          help="teacher_endpoint policy file, frozen with its sha256 and full effective values")
     prepare.add_argument("--teacher-execution-policy", required=True,
-                         help="teacher_execution_policy file (v1 constant place offset or v2 tilt-compensated place height), frozen with its sha256 and full effective values")
+                         help="teacher_execution_policy file (tilt-compensated place height), frozen with its sha256 and full effective values")
     prepare.add_argument("--episode-recorder-policy", required=True,
                          help="episode_recorder_v1 file, frozen with its sha256 and full effective values")
     prepare.add_argument("--runtime-policy", required=True)
@@ -128,9 +128,7 @@ def _preflight(arguments) -> int:
         "mode": arguments.mode,
         "inputs_sha256": manifest["inputs_sha256"],
         "teacher_endpoint": manifest.get("teacher_endpoint"),
-        "teacher_execution_policy_v1": manifest.get("teacher_execution_policy_v1"),
-        "teacher_execution_policy_v2": manifest.get("teacher_execution_policy_v2"),
-        "teacher_execution_policy_v3": manifest.get("teacher_execution_policy_v3"),
+        "teacher_execution_policy": manifest.get("teacher_execution_policy"),
         "episode_recorder_v1": manifest.get("episode_recorder_v1"),
         "runtime_policy": manifest.get("runtime_policy"),
         "roles": sorted(manifest["roles"]),

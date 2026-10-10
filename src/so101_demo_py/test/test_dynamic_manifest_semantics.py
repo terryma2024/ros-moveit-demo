@@ -177,91 +177,12 @@ def test_valid_complete_done_manifest_is_accepted():
     validate(manifest(), "DONE")
 
 
-def _place_height_document():
-    from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
-    from so101_demo.core import place_height as ph
-
-    package = PACKAGE_ROOT
-    policy = ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(package / "config/act/teacher_execution_policy_v2.yaml"))
-    geometry = ph.cup_geometry_from_scene(package / "assets/mujoco/act/scene.xml")
-    return ph.plan_place_height(0.0705, policy.grasp_offset_m, 0.2176344 - 0.01325, geometry, policy)
-
-
-def test_a_manifest_with_a_consistent_place_height_document_is_accepted():
+def test_a_general_manifest_carries_no_place_height_record():
+    """Only a Teacher run measures and records a place height; the general runtime never does."""
     document = manifest()
-    document["place_height"] = _place_height_document()
-    validate(document, "DONE")
-
-
-@pytest.mark.parametrize("change", [
-    {"target_tcp_z_m": 0.21}, {"guard_m": 0.0}, {"mode": "constant"}, {"tilt_rad": float("nan")}, {"refused": "SOMETHING_ELSE"}])
-def test_a_manifest_with_an_inconsistent_place_height_document_is_rejected(change):
-    document = manifest()
-    document["place_height"] = {**_place_height_document(), **change}
+    document["place_height"] = {"mode": "tilt_compensated", "refused": "TEACHER_PLACE_MEASUREMENT_FAILED"}
     with pytest.raises(ValueError, match="PLACE_HEIGHT"):
         validate(document, "DONE")
-
-
-# ---- CP-3483: the place_height record is bound to the frozen execution policy of the run --------------------------------------------
-
-def _frozen_policy(version):
-    from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
-
-    return load_teacher_execution_policy(
-        PACKAGE_ROOT / f"config/act/teacher_execution_policy_v{version}.yaml")
-
-
-def _validate_frozen(document, policy, status="DONE"):
-    from so101_demo.parallel_batch.dynamic_manifest import validate_dynamic_manifest_semantics
-
-    return validate_dynamic_manifest_semantics(
-        document, expected_status=status, expected_reset_epoch=17, frozen_execution_policy=policy)
-
-
-def test_a_v2_run_must_carry_a_place_height_record_that_matches_the_frozen_policy():
-    policy = _frozen_policy(2)
-    document = manifest()
-    document["place_height"] = _place_height_document()
-    _validate_frozen(document, policy)
-    missing = manifest()
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        _validate_frozen(missing, policy)
-
-
-@pytest.mark.parametrize("change", [
-    {"guard_m": 0.0005}, {"tracking_offset_m": 0.0003}, {"scene_sha256": "0" * 64}, {"tilt_rad": 0.2}, {"grasp_offset_m": 0.0382}])
-def test_a_v2_record_that_leaves_the_frozen_policy_is_rejected_even_when_self_consistent(change):
-    """A record that is the formula applied to its own (other) inputs passes the structural check; only the frozen policy rejects it."""
-    document = manifest()
-    record = _place_height_document()
-    record.update(change)
-    record["target_tcp_z_m"] = (record["geometry"]["table_top_z_m"] + record["geometry"]["half_height_m"] * math.cos(record["tilt_rad"])
-                                + record["geometry"]["rim_radius_m"] * math.sin(record["tilt_rad"]) + record["grasp_offset_m"]
-                                + record["tracking_offset_m"] - record["guard_m"])
-    document["place_height"] = record
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        _validate_frozen(document, _frozen_policy(2))
-
-
-def test_a_v2_error_run_may_stop_before_the_measurement_but_a_present_record_is_still_bound():
-    policy = _frozen_policy(2)
-    trace = ["IDLE", "PREPARE_OPEN_GRIPPER", "MOVE_ABOVE_OBJECT", "RECOVER_RETREAT", "ERROR"]
-    document = manifest(trace, status="ERROR")
-    _validate_frozen(document, policy, "ERROR")
-    document["place_height"] = {**_place_height_document(), "guard_m": 0.0005}
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        _validate_frozen(document, policy, "ERROR")
-    document["place_height"] = {"mode": "tilt_compensated", "refused": "TEACHER_PLACE_MEASUREMENT_FAILED"}
-    _validate_frozen(document, policy, "ERROR")
-
-
-def test_a_v1_run_carries_no_place_height_record():
-    policy = _frozen_policy(1)
-    _validate_frozen(manifest(), policy)
-    document = manifest()
-    document["place_height"] = _place_height_document()
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        _validate_frozen(document, policy)
 
 
 @pytest.mark.parametrize(

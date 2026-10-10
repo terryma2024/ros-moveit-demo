@@ -64,7 +64,7 @@ def harness(ctx, *, stream=None, binding=None):
     adapter._selected_release_source = ReceivedSimulationEvidence(ctx.world, time.monotonic())
     adapter._monotonic = time.monotonic
     adapter._release_runtime_policy = {"safety_release": {"support_distance_max_m": .002}}
-    adapter._teacher_execution_policy = {"state_max_age_s": 60.0}
+    adapter._execution_policy = {"state_max_age_s": 60.0}
     adapter._record = lambda *args, **kwargs: None
     if binding is not None:
         adapter._scene_source_binding = binding

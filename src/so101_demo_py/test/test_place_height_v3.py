@@ -10,7 +10,7 @@ from so101_demo.core import place_height as ph
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V3 = PACKAGE / "config/act/teacher_execution_policy_v3.yaml"
+V3 = PACKAGE / "config/act/teacher_execution_policy.yaml"
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 HOVER_Z = 0.2176344
 OLD_TARGET = HOVER_Z - 0.01325

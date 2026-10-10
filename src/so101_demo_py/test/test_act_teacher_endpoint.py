@@ -18,7 +18,7 @@ from paths import PACKAGE_ROOT
 
 CONFIG = PACKAGE_ROOT / "config/act"
 ENDPOINT_YAML = CONFIG / "teacher_endpoint.yaml"
-EXECUTION_YAML = CONFIG / "teacher_execution_policy_v1.yaml"
+EXECUTION_YAML = CONFIG / "teacher_execution_policy.yaml"
 
 
 def _quat_z(angle):
@@ -277,7 +277,7 @@ def test_bad_targets_raise_from_evaluate(policy):
 def test_c3_the_execution_policy_freezes_the_calibration_close_target():
     policy = load_teacher_execution_policy(EXECUTION_YAML)
     assert policy["gripper_close_target_rad"] == pytest.approx(-0.0476086, abs=1e-7)
-    assert "contact_calibration" in EXECUTION_YAML.read_text() or "model-parity" in EXECUTION_YAML.read_text()
+    assert "grasp_close_q6" in EXECUTION_YAML.read_text()
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), True, "x", None, 0.5, -0.5])
@@ -297,8 +297,6 @@ def test_c6_the_execution_policy_freezes_the_carry_scaling():
     policy = load_teacher_execution_policy(EXECUTION_YAML)
     assert policy["carry_max_velocity_scaling"] == 0.03
     assert policy["carry_max_acceleration_scaling"] == 0.0075
-    text = EXECUTION_YAML.read_text()
-    assert "CP-3382" in text and "C5" in text
 
 
 @pytest.mark.parametrize("key", ["carry_max_velocity_scaling", "carry_max_acceleration_scaling"])
@@ -309,25 +307,5 @@ def test_c6_the_policy_refuses_a_missing_or_invalid_carry_scaling(key, bad):
     with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
         load_teacher_execution_policy(yaml.safe_dump(doc).encode())
     doc.pop(key)
-    with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
-        load_teacher_execution_policy(yaml.safe_dump(doc).encode())
-
-
-# ---- R11: ACT-only place descent offset ----------------------------------------------------------------------------
-
-def test_r11_the_policy_freezes_the_place_descend_offset_with_its_rationale():
-    policy = load_teacher_execution_policy(EXECUTION_YAML)
-    assert policy["place_descend_offset_m"] == -0.01325
-    text = EXECUTION_YAML.read_text()
-    assert "support-before-open" in text and "r11-exp" in text
-
-
-@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf"), True, "x", None, 0.06, -0.06])
-def test_r11_the_policy_refuses_an_invalid_or_missing_place_descend_offset(bad):
-    doc = yaml.safe_load(EXECUTION_YAML.read_text())
-    doc["place_descend_offset_m"] = bad
-    with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
-        load_teacher_execution_policy(yaml.safe_dump(doc).encode())
-    doc.pop("place_descend_offset_m")
     with pytest.raises(ValueError, match="TEACHER_EXECUTION_POLICY_INVALID"):
         load_teacher_execution_policy(yaml.safe_dump(doc).encode())

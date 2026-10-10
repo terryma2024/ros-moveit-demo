@@ -19,7 +19,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
-FROZEN = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy_v3.yaml")
+FROZEN = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy.yaml")
 POLICY = ph.PlaceHeightPolicy.from_document(FROZEN)
 
 

@@ -40,6 +40,7 @@ from ..control.trajectory.executor import (
 from ..application.staged_approach import maximum_joint_error
 from ..core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from ..core.place_height import PlaceHeightRefused
+from ..act.teacher_endpoint import EXECUTION_KIND, EXECUTION_POLICY_FILE
 from ..core.workflow import SIM_INTEGRITY_CODES, TERMINAL_STOP_CODES, TERMINAL_STOP_CODES_TEACHER
 from ..core.dynamic_pick import (
     DynamicPickTemplate,
@@ -54,11 +55,11 @@ from .teacher_stop import TeacherStop
 
 
 MANIFEST_SCHEMA = "so101-dynamic-mujoco-execute-v2"
-#: the manifest of Teacher policy v3 (minimal runtime gates): no recovery states, a v3 place record and a process summary
+#: the manifest of a Teacher run (minimal runtime gates): no recovery states, a place record and a process summary
 MANIFEST_SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
-#: v3 failure codes of the evidence and joint-state streams (the v1/v2 coded errors raised by the shared helpers are mapped to these
-#: where the failure becomes the attempt's: the helpers keep their codes for v1/v2)
-_V3_CODE_MAP = {
+#: The Teacher run's failure codes of the evidence and joint-state streams (the codes raised by the shared helpers are mapped to these
+#: where the failure becomes the attempt's: the helpers keep their own codes for the general runtime)
+_TEACHER_CODE_MAP = {
     "DYNAMIC_SESSION_MISMATCH": "SIM_INTEGRITY_SESSION_MISMATCH",
     "DYNAMIC_RESET_EPOCH_MISMATCH": "SIM_INTEGRITY_RESET_EPOCH_MISMATCH",
     "DYNAMIC_EVIDENCE_TIMEOUT": "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE",
@@ -75,22 +76,22 @@ _CONTROLLER_UNSETTLED_CODES = frozenset({
 })
 # Plan start drift: the plan's first point against the latest measured arm joints (same bound as `qualified_phases`).
 _PLAN_START_DRIFT_MAX_RAD = 0.01
-# Defaults for a partially constructed adapter only; the frozen `teacher_execution_policy_v1.yaml` is always used when
-# it is loaded, and the Teacher refuses to start without it.
+# Defaults for a partially constructed adapter only; the loaded execution policy (`general_runtime_policy.yaml`, or the frozen
+# `teacher_execution_policy.yaml` of a Teacher run) is always used when it is loaded, and the Teacher refuses to start without it.
 _DEFAULT_STATE_MAX_AGE_S = 0.5
 #: tolerance of the 100 ms place-height stability window, on both sides (simulation time is a float sum of steps)
 _WINDOW_TOLERANCE_S = 1e-6
 _DEFAULT_STATE_UNAVAILABLE_STOP_S = 1.0
-#: v3: how long `finish` waits for the off-thread process summary before it records a failed one
+#: Teacher run: how long `finish` waits for the off-thread process summary before it records a failed one
 _SUMMARY_JOIN_S = 5.0
-#: v3: the failure codes that are not from the Teacher's own motion (they are the attempt's `failure_class = sim_integrity` or operator stops)
-_V3_FAILED_CODES = frozenset({"TEACHER_ARM_NOT_STOPPED", "TEACHER_DWELL_TIMEOUT", "TEACHER_INJECTED_EXECUTION_FAILURE"})
+#: Teacher run: the failure codes that are not from the Teacher's own motion (they are the attempt's `failure_class = sim_integrity` or operator stops)
+_TEACHER_FAILED_CODES = frozenset({"TEACHER_ARM_NOT_STOPPED", "TEACHER_DWELL_TIMEOUT", "TEACHER_INJECTED_EXECUTION_FAILURE"})
 #: CP-3513: the failure code of the diagnostic-only injected execution failure (an execution failure, status FAILED)
 INJECTED_EXECUTION_FAILURE = "TEACHER_INJECTED_EXECUTION_FAILURE"
 
 
 def _evidence_is_finite(value) -> bool:
-    """False when the cup state of a world sample holds a non-finite number (v3: `SIM_INTEGRITY_NON_FINITE_STATE`)."""
+    """False when the cup state of a world sample holds a non-finite number (Teacher run: `SIM_INTEGRITY_NON_FINITE_STATE`)."""
     state = value.object_state
     return all(math.isfinite(item) for group in (state.position_world, state.orientation_xyzw, state.linear_velocity_world,
                                                  state.angular_velocity_world) for item in group)
@@ -105,7 +106,7 @@ class _ExecutionFailed(RuntimeError):
 
 
 class _JointStateStale(PlaceHeightRefused):
-    """The joint state ``k`` needs was older than ``state_max_age_s`` (v2 refusal code unchanged; v3 selects ``JOINT_STATE_STALE``)."""
+    """The joint state ``k`` needs was older than ``state_max_age_s`` (the Teacher run selects ``JOINT_STATE_STALE``)."""
 
 
 def _mark_phase(name):
@@ -413,28 +414,29 @@ class RosDynamicMujocoExecution:
     # reads the episode recorder, the capture or the phase port, so a Teacher without a recorder runs unchanged.
 
     def _load_teacher_policies(self, urdf_path) -> None:
-        """Load both frozen Teacher policy documents from the installed share config dir the runtime already uses."""
+        """Load the Teacher endpoint policy and the general runtime policy from the installed share config dir the runtime already uses."""
 
         import hashlib
 
-        from ..act.teacher_endpoint import load_teacher_endpoint_policy, load_teacher_execution_policy
+        from ..act.general_runtime_policy import GENERAL_RUNTIME_FILE, load_general_runtime_policy
+        from ..act.teacher_endpoint import load_teacher_endpoint_policy
 
         self._teacher_config_error = None
         self._teacher_policy_files = {}
         self._teacher_endpoint_policy = None
-        self._teacher_execution_policy = None
+        self._execution_policy = None
         try:
             config_dir = Path(urdf_path).parents[2] / "config/act"
             self._teacher_config_dir = config_dir
             endpoint_path = config_dir / "teacher_endpoint.yaml"
-            execution_path = config_dir / "teacher_execution_policy_v1.yaml"
+            execution_path = config_dir / GENERAL_RUNTIME_FILE
             endpoint_bytes, execution_bytes = endpoint_path.read_bytes(), execution_path.read_bytes()
         except (OSError, IndexError) as error:
             self._teacher_config_error = f"TEACHER_POLICY_UNAVAILABLE: {error}"
             return
         try:
             self._teacher_endpoint_policy = load_teacher_endpoint_policy(endpoint_bytes)
-            self._teacher_execution_policy = load_teacher_execution_policy(execution_bytes)
+            self._execution_policy = load_general_runtime_policy(execution_bytes)
         except ValueError as error:
             self._teacher_config_error = str(error)
             return
@@ -442,11 +444,11 @@ class RosDynamicMujocoExecution:
             "endpoint": {"path": str(endpoint_path), "file_sha256": hashlib.sha256(endpoint_bytes).hexdigest(),
                          "policy_sha256": self._teacher_endpoint_policy["policy_sha256"]},
             "execution": {"path": str(execution_path), "file_sha256": hashlib.sha256(execution_bytes).hexdigest(),
-                          "policy_sha256": self._teacher_execution_policy["policy_sha256"]},
+                          "policy_sha256": self._execution_policy["policy_sha256"]},
         }
 
-    def _select_execution_policy(self, file_name: str) -> None:
-        """Load the execution policy the freeze names (``teacher_execution_policy_v1.yaml`` or ``..._v2.yaml``) instead of the default."""
+    def _select_execution_policy(self, file_name: str = EXECUTION_POLICY_FILE) -> None:
+        """Load the Teacher execution policy the freeze names instead of the general runtime policy, and start the Teacher run."""
 
         import hashlib
 
@@ -460,29 +462,28 @@ class RosDynamicMujocoExecution:
             raw = path.read_bytes()
             policy = load_teacher_execution_policy(raw)
         except (OSError, ValueError) as error:
-            self._teacher_execution_policy = None
+            self._execution_policy = None
             self._teacher_config_error = f"TEACHER_POLICY_UNAVAILABLE: {error}"
             return
-        self._teacher_execution_policy = policy
+        self._execution_policy = policy
         files = getattr(self, "_teacher_policy_files", None)
         if files:
             files["execution"] = {"path": str(path), "file_sha256": hashlib.sha256(raw).hexdigest(),
                                   "policy_sha256": policy["policy_sha256"]}
-        if policy.get("schema_version") == 3:
-            self._activate_v3()
+        self._activate_teacher_run()
 
-    def _v3(self) -> bool:
-        """True for Teacher execution policy v3, the minimal runtime gates (design 2026-10-10)."""
-        return (getattr(self, "_teacher_execution_policy", None) or {}).get("schema_version") == 3
+    def _teacher_run(self) -> bool:
+        """True for a Teacher run: its execution policy is the Teacher's (the minimal runtime gates, design 2026-10-10)."""
+        return (getattr(self, "_execution_policy", None) or {}).get("kind") == EXECUTION_KIND
 
-    def _activate_v3(self) -> None:
-        """Policy v3: the v3 manifest schema, and the process-telemetry collector fed by taps on the existing streams.
+    def _activate_teacher_run(self) -> None:
+        """Teacher run: the Teacher manifest schema, and the process-telemetry collector fed by taps on the existing streams.
 
         The taps only append (they run inside the control thread's spin); the summary is aggregated off the control thread."""
         from ..core.process_summary import ProcessSummary
 
         summary = ProcessSummary(limits=getattr(self, "_safety_limits", None))
-        summary.silence_limit_s = float(self._teacher_execution_policy["state_unavailable_stop_s"])
+        summary.silence_limit_s = float(self._execution_policy["state_unavailable_stop_s"])
         self._process_summary = summary
         self._document["schema"] = MANIFEST_SCHEMA_V3
         observer = getattr(self, "observer", None)
@@ -492,16 +493,16 @@ class RosDynamicMujocoExecution:
             # sustained truncated contact lists must never age the control evidence into an abort: accept them, mark the summary
             observer._accept_truncated = True
         if observer is not None and hasattr(observer, "_on_sequence_gap"):
-            # a gap in the world stream is telemetry completeness in v3, not a hazard
+            # a gap in the world stream is telemetry completeness in a Teacher run, not a hazard
             observer._on_sequence_gap = lambda previous, following: summary.note_incomplete("WORLD_SEQUENCE_GAP")
 
     def _failure_code(self, error) -> tuple[str, str]:
-        """(code, message) of an exception; in v3 the evidence and joint-state codes are the SIM_INTEGRITY / JOINT_STATE ones."""
+        """(code, message) of an exception; in a Teacher run the evidence and joint-state codes are the SIM_INTEGRITY / JOINT_STATE ones."""
         message = str(error)
         raw = message.split(":", 1)[0] or "DYNAMIC_EXECUTION_FAILED"
-        if not self._v3() or raw not in _V3_CODE_MAP:
+        if not self._teacher_run() or raw not in _TEACHER_CODE_MAP:
             return raw, message
-        code = _V3_CODE_MAP[raw]
+        code = _TEACHER_CODE_MAP[raw]
         return code, code + message[len(raw):]
 
     @staticmethod
@@ -557,7 +558,6 @@ class RosDynamicMujocoExecution:
             return None
         from ..act.teacher_endpoint import validate_task_targets
 
-        self._check_place_geometry_before_motion()
         start_target, end_target = self._teacher_targets()
         try:
             validate_task_targets(policy, start_target, end_target)
@@ -580,34 +580,6 @@ class RosDynamicMujocoExecution:
             "received_monotonic_ns": boundary.get("received_monotonic_ns", time.monotonic_ns())})
         self._stream_emit("teacher_start_observation", {"observation": copy.deepcopy(observation)})
         return snapshot
-
-    def _check_place_geometry_before_motion(self) -> None:
-        """Policy v2 only: load and hash-check the scene geometry before any motion, so a bad scene refuses at the start of the
-        run instead of with the cup held at the place pose. Raises a terminal ``TEACHER_PLACE_*`` stop."""
-
-        policy = getattr(self, "_teacher_execution_policy", None)
-        if (policy is None or not policy.get("place_height_mode") or self._v3()   # v3: a scene mismatch selects the fallback (section 4)
-                or getattr(self, "_execution_snapshot_root", None) is None):
-            return
-        from ..core.place_height import (
-            HEIGHT_OUT_OF_BOUNDS, MEASUREMENT_FAILED, PlaceHeightPolicy, PlaceHeightRefused)
-
-        try:
-            height_policy = PlaceHeightPolicy.from_document(policy)
-            geometry = self._place_geometry()
-            if geometry.scene_sha256 != height_policy.scene_sha256:
-                raise PlaceHeightRefused(
-                    HEIGHT_OUT_OF_BOUNDS, "the scene model is not the one the place geometry was fitted for")
-        except PlaceHeightRefused as refusal:
-            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": refusal.code,
-                                             "detail": str(refusal)[:300]}
-            self._write()
-            raise TeacherStop(refusal.code, str(refusal)) from refusal
-        except Exception as error:
-            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": MEASUREMENT_FAILED,
-                                             "detail": f"{type(error).__name__}: {error}"[:300]}
-            self._write()
-            raise TeacherStop(MEASUREMENT_FAILED, f"{type(error).__name__}: {error}"[:300]) from error
 
     def _verified_reset_boundary(self):
         """The first retained `SimulationEvidence` of this session and the expected reset epoch, or None.
@@ -676,7 +648,7 @@ class RosDynamicMujocoExecution:
         """(observation or None, problem or None): stop check first, then settle_s, then ONE snapshot."""
 
         policy = getattr(self, "_teacher_endpoint_policy", None)
-        execution_policy = getattr(self, "_teacher_execution_policy", None)
+        execution_policy = getattr(self, "_execution_policy", None)
         if policy is None or execution_policy is None:
             return None, "TEACHER_ENDPOINT_POLICY_UNAVAILABLE"
         try:
@@ -698,8 +670,8 @@ class RosDynamicMujocoExecution:
             return "STOPPED_USER"
         if code == "TEACHER_DEADLINE":
             return "DEADLINE"
-        # v3 (design 5b): a simulation-integrity failure and an execution precondition that did not hold are FAILED, not a stop
-        if code in SIM_INTEGRITY_CODES or code in _V3_FAILED_CODES:
+        # Teacher run (design 5b): a simulation-integrity failure and an execution precondition that did not hold are FAILED, not a stop
+        if code in SIM_INTEGRITY_CODES or code in _TEACHER_FAILED_CODES:
             return "FAILED"
         if not config_code and code != "TEACHER_CANCEL_UNSETTLED" and (code in TERMINAL_STOP_CODES or code.startswith(
                 ("DYNAMIC_RELEASE_", "DYNAMIC_NORMAL_STOP_", "TEACHER_"))):
@@ -710,7 +682,7 @@ class RosDynamicMujocoExecution:
         return "FAILED"
 
     def _teacher_manifest_fields(self, result, failure_evidence, end_observation, end_problem) -> dict[str, object]:
-        """The v2 Teacher fields. PASS only for a COMPLETED execution whose endpoint judgement is PASS."""
+        """The Teacher fields. PASS only for a COMPLETED execution whose endpoint judgement is PASS."""
 
         from ..act.teacher_endpoint import RULE_VERSION, evaluate_teacher_endpoint
 
@@ -739,17 +711,17 @@ class RosDynamicMujocoExecution:
         if execution != "COMPLETED" and task["result"] == "PASS":
             task["result"] = "UNCONFIRMED"
             task["reasons"] = ["TEACHER_EXECUTION_NOT_COMPLETED", *task["reasons"]]
-        v3_fields: dict[str, object] = {}
-        if self._v3():
+        teacher_run_fields: dict[str, object] = {}
+        if self._teacher_run():
             code = "" if result.failure is None else result.failure.code
-            v3_fields = {
+            teacher_run_fields = {
                 # SIM_INTEGRITY is a failure class of FAILED, not a new status (design 5b): the attempt is infrastructure, not Teacher
                 "failure_class": "sim_integrity" if code in SIM_INTEGRITY_CODES else None,
                 "teacher_process_summary": self._document.get("teacher_process_summary"),
             }
         return {
-            **v3_fields,
-            "schema": MANIFEST_SCHEMA_V3 if self._v3() else MANIFEST_SCHEMA,
+            **teacher_run_fields,
+            "schema": MANIFEST_SCHEMA_V3 if self._teacher_run() else MANIFEST_SCHEMA,
             "teacher_execution_status": execution,
             "teacher_task_result": task,
             "teacher_start_observation": start_observation,
@@ -838,7 +810,7 @@ class RosDynamicMujocoExecution:
         end_observation = end_problem = None
         if done:
             end_observation, end_problem = self._take_teacher_end_observation()
-        if self._v3():
+        if self._teacher_run():
             self._document["teacher_process_summary"] = self._build_process_summary(end_observation)
         self._document.update(self._teacher_manifest_fields(result, failure_evidence, end_observation, end_problem))
         self._stream_emit("teacher_end_observation", {
@@ -868,7 +840,7 @@ class RosDynamicMujocoExecution:
         """The `teacher_process_summary_v1` document, aggregated on its own thread and awaited with a bound. Never raises."""
         from ..core.process_summary import failure_summary
 
-        policy = getattr(self, "_teacher_execution_policy", None)
+        policy = getattr(self, "_execution_policy", None)
         try:
             summary = self._process_summary
             if summary.limits is None and getattr(self, "_safety_limits", None) is not None:
@@ -914,7 +886,7 @@ class RosDynamicMujocoExecution:
         return None
 
     def _capture_failure_evidence(self, result) -> dict[str, object]:
-        if self._v3():
+        if self._teacher_run():
             from ..core.workflow import TEACHER_WORKFLOW
             boundary = self._failure_boundary(result.state_trace, result.failure, TEACHER_WORKFLOW)
         else:
@@ -1047,8 +1019,8 @@ class RosDynamicMujocoExecution:
         *,
         after_generation: int | None = None,
     ) -> tuple[float, ...]:
-        if self._v3():   # v3: joint states unavailable for more than state_unavailable_stop_s end the attempt (design 2)
-            timeout_s = min(timeout_s, float(self._teacher_execution_policy["state_unavailable_stop_s"]))
+        if self._teacher_run():   # Teacher run: joint states unavailable for more than state_unavailable_stop_s end the attempt (design 2)
+            timeout_s = min(timeout_s, float(self._execution_policy["state_unavailable_stop_s"]))
         deadline = time.monotonic() + timeout_s
         while any(name not in self._positions for name in self._ARM_JOINTS) or (
             after_generation is not None and self._joint_state_generation <= after_generation
@@ -1061,8 +1033,8 @@ class RosDynamicMujocoExecution:
     def _snapshot(self):
         from ..backends.mujoco.observer import EvidenceStale
 
-        v3 = self._v3()
-        deadline = time.monotonic() + (float(self._teacher_execution_policy["state_unavailable_stop_s"]) if v3 else 2.0)
+        teacher_run = self._teacher_run()
+        deadline = time.monotonic() + (float(self._execution_policy["state_unavailable_stop_s"]) if teacher_run else 2.0)
         while time.monotonic() < deadline:
             self._wait_progress()
             try:
@@ -1073,7 +1045,7 @@ class RosDynamicMujocoExecution:
                 raise RuntimeError("DYNAMIC_SESSION_MISMATCH")
             if value.reset_epoch != self._expected_reset_epoch or value.paused:
                 raise RuntimeError("DYNAMIC_RESET_EPOCH_MISMATCH")
-            if v3 and not _evidence_is_finite(value):
+            if teacher_run and not _evidence_is_finite(value):
                 raise RuntimeError("SIM_INTEGRITY_NON_FINITE_STATE")
             return value
         raise RuntimeError("DYNAMIC_EVIDENCE_TIMEOUT")
@@ -1466,13 +1438,13 @@ class RosDynamicMujocoExecution:
 
         Unlike `_snapshot` this never waits and never spins: `executor.execute` has just called `progress()`. The
         safety checks that need the sample count as unavailable when the newest evidence or joint state is older than
-        `state_max_age_s`. (A truncated sample never reaches this point in v1/v2, where the observer rejects it, and in v3 it is accepted:
+        `state_max_age_s`. (A truncated sample never reaches this point in the general runtime, where the observer rejects it, and in a Teacher run it is accepted:
         its cup state is valid and the contact lists are only telemetry.) Unavailability longer than `state_unavailable_stop_s` is a
         stop. The identity checks of `_snapshot` (session, pause, reset epoch) apply to the latest sample.
         """
         from ..backends.mujoco.observer import EvidenceStale
 
-        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        policy = getattr(self, "_execution_policy", None) or {}
         max_age = policy.get("state_max_age_s", _DEFAULT_STATE_MAX_AGE_S)
         stop_after = policy.get("state_unavailable_stop_s", _DEFAULT_STATE_UNAVAILABLE_STOP_S)
         now = self._monotonic()
@@ -1487,19 +1459,19 @@ class RosDynamicMujocoExecution:
             if since is None:
                 since = self._unavailable_since = now
             if now - since > stop_after:
-                # v3 splits the one code: a silent joint state cannot be commanded blind, a silent world stream is a broken simulator
+                # a Teacher run splits the one code: a silent joint state cannot be commanded blind, a silent world stream is a broken simulator
                 code = "DYNAMIC_STATE_UNAVAILABLE_STOP"
-                if self._v3():
+                if self._teacher_run():
                     code = "TEACHER_JOINT_STATE_UNAVAILABLE" if not joint_fresh else "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE"
                 raise TeacherStop(code, f"necessary state unavailable for {now - since:.3f}s (limit {stop_after}s)")
             return None
         self._unavailable_since = None
-        v3 = self._v3()
+        teacher_run = self._teacher_run()
         if value.simulation_session_id != self._session_id:
-            raise TeacherStop("SIM_INTEGRITY_SESSION_MISMATCH" if v3 else "DYNAMIC_SESSION_MISMATCH")
+            raise TeacherStop("SIM_INTEGRITY_SESSION_MISMATCH" if teacher_run else "DYNAMIC_SESSION_MISMATCH")
         if value.reset_epoch != self._expected_reset_epoch or value.paused:
-            raise TeacherStop("SIM_INTEGRITY_RESET_EPOCH_MISMATCH" if v3 else "DYNAMIC_RESET_EPOCH_MISMATCH")
-        if v3 and not _evidence_is_finite(value):
+            raise TeacherStop("SIM_INTEGRITY_RESET_EPOCH_MISMATCH" if teacher_run else "DYNAMIC_RESET_EPOCH_MISMATCH")
+        if teacher_run and not _evidence_is_finite(value):
             raise TeacherStop("SIM_INTEGRITY_NON_FINITE_STATE")
         return value
 
@@ -1511,10 +1483,10 @@ class RosDynamicMujocoExecution:
         3. with the robot contact watch: a collision pair outside the cup process pairs.
         Everything else the broker checked about the process (hold, stability, contact timing) stays audit-only.
 
-        Policy v3 (design section 3): none of these stops the Teacher. Force, compression and collisions are process telemetry
+        Teacher run (design section 3): none of these stops the Teacher. Force, compression and collisions are process telemetry
         (`teacher_process_summary_v1`); the identity and availability checks stay in `_monitor_sample` and `_snapshot`.
         """
-        if self._v3():
+        if self._teacher_run():
             return
         if value.maximum_normal_force_n > self._MAX_FORCE_N:
             self._record_monitor_violation(state or State.IDLE, "DYNAMIC_FORCE_LIMIT_EXCEEDED", value)
@@ -1555,11 +1527,11 @@ class RosDynamicMujocoExecution:
     def _step_evidence_available(self, plugin, baseline_gaps: int) -> None:
         """P4/P9 for the per-step stream: a gap since the goal began, or silence beyond the bound, is a stop."""
 
-        if plugin is None or plugin.limits is None or self._v3():
+        if plugin is None or plugin.limits is None or self._teacher_run():
             return
         if plugin.gaps > baseline_gaps:
             raise TeacherStop("DYNAMIC_STATE_UNAVAILABLE_STOP", "per-step physics evidence gap: " + plugin.gap_detail)
-        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        policy = getattr(self, "_execution_policy", None) or {}
         now = self._monotonic()
         last = plugin.last_chunk_monotonic_s
         if last is None:
@@ -1571,8 +1543,8 @@ class RosDynamicMujocoExecution:
 
     def _motion_monitor(self, state: State):
         """Per-trajectory monitor, also the gripper's. It raises (and the client cancels the goal) for: a stop flag,
-        state unavailable too long and an identity change. Policy v1/v2 also stop on the force limits and a collision
-        (`_enforce_safety`); in v3 those are telemetry and the monitor never stops for them. Every process check is audit-only (D3)."""
+        state unavailable too long and an identity change. The general runtime also stops on the force limits and a collision
+        (`_enforce_safety`); in a Teacher run those are telemetry and the monitor never stops for them. Every process check is audit-only (D3)."""
 
         carried = state in {
             State.MICRO_LIFT,
@@ -1592,7 +1564,7 @@ class RosDynamicMujocoExecution:
             if step_watch is not None:
                 if not goal_gaps:
                     goal_gaps.append(step_watch.gaps)
-                if not self._v3():   # v3: the per-step stream is telemetry (gaps and silence mark the summary incomplete)
+                if not self._teacher_run():   # Teacher run: the per-step stream is telemetry (gaps and silence mark the summary incomplete)
                     if step_watch.limit_code is not None:
                         self._enforce_step_limit(state, step_watch)
                     self._step_evidence_available(step_watch, goal_gaps[0])
@@ -1657,10 +1629,10 @@ class RosDynamicMujocoExecution:
         self._emit_phase_begin("arm")
         executed = self._trajectory.execute(
             trajectory, getattr(self, "_execute_timeout_s", 45.0), monitor=monitor)
-        if (executed.status is ActionStatus.SUCCEEDED and self._v3() and getattr(self, "inject_failure_at", None) is state
+        if (executed.status is ActionStatus.SUCCEEDED and self._teacher_run() and getattr(self, "inject_failure_at", None) is state
                 and not getattr(self, "_injected_failure_fired", False)):
             # CP-3513, diagnostic only: the execute really succeeded (the arm moved, the cup is held); report it as the failed result a
-            # failed execute returns, once, so everything after this line is the real v3 failure path
+            # failed execute returns, once, so everything after this line is the real Teacher failure path
             self._injected_failure_fired = True
             executed = ActionResult(ActionStatus.FAILED, Failure(
                 FailureCategory.EXECUTION, INJECTED_EXECUTION_FAILURE,
@@ -1810,7 +1782,7 @@ class RosDynamicMujocoExecution:
         timeout_s = getattr(self, "_gripper_timeout_s", 15.0)
         # The gripper goal has the arm goal's stop path: the same monitor, a raise cancels the goal.
         monitor = self._motion_monitor(state)
-        if state in (State.OPEN_GRIPPER, State.RECOVER_OPEN_GRIPPER) and not self._v3():
+        if state in (State.OPEN_GRIPPER, State.RECOVER_OPEN_GRIPPER) and not self._teacher_run():
             def before_dispatch():
                 self._check_selected_release_freshness(before)
                 self._emit_phase_begin("gripper")
@@ -1843,7 +1815,7 @@ class RosDynamicMujocoExecution:
         from ..act.contracts import finite
 
         try:
-            age = finite(self._teacher_execution_policy["state_max_age_s"])
+            age = finite(self._execution_policy["state_max_age_s"])
             distance = finite(self._release_runtime_policy["safety_release"]["support_distance_max_m"])
             if age <= 0 or distance <= 0:
                 raise ValueError("release bounds")
@@ -1876,13 +1848,13 @@ class RosDynamicMujocoExecution:
         """
         from ..backends.mujoco.observer import EvidenceStale
 
-        # v3: the age bound is the execution policy's (the release policy is not part of v3)
-        age = float(self._teacher_execution_policy["state_max_age_s"]) if self._v3() else self._release_bounds()[0]
+        # Teacher run: the age bound is the execution policy's (the release policy is not part of it)
+        age = float(self._execution_policy["state_max_age_s"]) if self._teacher_run() else self._release_bounds()[0]
         scope = self._release_scope()
         result = getattr(self, "_last_arm_result", None)
         if result not in ("SUCCEEDED", "CONTROLLER_FAILED"):
             raise RuntimeError("DYNAMIC_NORMAL_STOP_UNCONFIRMED")
-        confirmed = self._controllers_stopped_at(self._teacher_execution_policy)
+        confirmed = self._controllers_stopped_at(self._execution_policy)
         if confirmed is None:
             raise RuntimeError("DYNAMIC_NORMAL_STOP_UNCONFIRMED")
         if not 0 <= self._monotonic() - confirmed <= age:
@@ -2224,14 +2196,14 @@ class RosDynamicMujocoExecution:
         from ..act.scene_association import source_geometry
         from ..control.planning_scene.task_scene import _collision_object, verify_task_scene
 
-        # v3 (design 5a): a fresh snapshot supplies the cup pose; there is no release preflight
+        # Teacher run (design 5a): a fresh snapshot supplies the cup pose; there is no release preflight
         before = (self._supported_release_preflight()
-                  if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._v3() else self._snapshot())
+                  if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._teacher_run() else self._snapshot())
         if (not isinstance(self._task_geometry, TaskGeometry)
                 or not isinstance(before, SimulationEvidence)
                 or before.simulation_session_id != self._session_id
                 or before.reset_epoch != self._expected_reset_epoch
-                or before.paused or (before.truncated and not self._v3()) or before.object_state.body != "plastic_cup"):
+                or before.paused or (before.truncated and not self._teacher_run()) or before.object_state.body != "plastic_cup"):
             raise RuntimeError("DYNAMIC_DETACH_SYNC_SOURCE_INVALID")
         expected_geometry = source_geometry(self._task_geometry, before)
         cup = expected_geometry.object("plastic_cup")
@@ -2257,7 +2229,7 @@ class RosDynamicMujocoExecution:
             _collision_object(cup, expected_geometry.frame_id)
         ]
         def before_dispatch():
-            if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._v3():
+            if state in (State.DETACH_MOVEIT, State.RECOVER_DETACH_MOVEIT) and not self._teacher_run():
                 self._check_selected_release_freshness(before)
         start = len(getattr(self, "_scene_service_calls", ()))
         # The physics snapshot this request's cup pose was derived from, named on the scene_operation event so an
@@ -2335,7 +2307,7 @@ class RosDynamicMujocoExecution:
         xy_error = math.dist(actual.position_world[:2], expected.values[:2])
         q = actual.orientation_xyzw
         upright = self._upright_tilt_rad(q)
-        if not self._v3() and (
+        if not self._teacher_run() and (
             xy_error > FINAL_XY_TOLERANCE_M
             or not (
                 FINAL_SUPPORT_HEIGHT_RANGE_M[0]
@@ -2383,7 +2355,7 @@ class RosDynamicMujocoExecution:
             self._emit_phase_begin(None)
 
     def _summary_phase(self, kind, state, status=None, code=None) -> None:
-        """v3: the phase bounds for the process summary (simulation time, the same instant the stream event carries)."""
+        """Teacher run: the phase bounds for the process summary (simulation time, the same instant the stream event carries)."""
         summary = getattr(self, "_process_summary", None)
         if summary is None:
             return
@@ -2433,7 +2405,7 @@ class RosDynamicMujocoExecution:
         finally:
             _mark_phase('runner.first_state.end')
 
-    # ---- policy v3 states (design 2026-10-10 sections 3 and 5a): fixed dwells, the release sequence --------------------------------
+    # ---- Teacher states (design 2026-10-10 sections 3 and 5a): fixed dwells, the release sequence --------------------------------
 
     def _fixed_dwell(self, duration_s: float):
         """(first snapshot, last snapshot) of a dwell of `duration_s` of simulation time. No predicate: the wait is a fixed time."""
@@ -2447,7 +2419,7 @@ class RosDynamicMujocoExecution:
         return before, after
 
     def _note_pose(self, label: str, value, **facts) -> None:
-        """v3: the cup (simulator truth) and the TCP (forward kinematics) at a named instant, for slip and release telemetry."""
+        """Teacher run: the cup (simulator truth) and the TCP (forward kinematics) at a named instant, for slip and release telemetry."""
         summary = getattr(self, "_process_summary", None)
         if summary is None:
             return
@@ -2463,7 +2435,7 @@ class RosDynamicMujocoExecution:
     def _wait_arm_stopped(self) -> None:
         """Release sequence step 1 (design 5a): at most `arm_stop_wait_s` for every arm joint to be at most `arm_stop_velocity_rad_s`
         on a fresh joint state. An execution precondition, not a safety proof: a timeout ends the attempt (``TEACHER_ARM_NOT_STOPPED``)."""
-        policy = self._teacher_execution_policy
+        policy = self._execution_policy
         limit, wait_s, max_age = (float(policy["arm_stop_velocity_rad_s"]), float(policy["arm_stop_wait_s"]),
                                   float(policy["state_max_age_s"]))
         clock = self._monotonic
@@ -2479,8 +2451,8 @@ class RosDynamicMujocoExecution:
                 raise RuntimeError(f"TEACHER_ARM_NOT_STOPPED: the arm joints did not reach {limit} rad/s within {wait_s} s")
             self._wait_progress()
 
-    def _perform_v3_state(self, state: State) -> None:
-        policy = self._teacher_execution_policy
+    def _perform_teacher_state(self, state: State) -> None:
+        policy = self._execution_policy
         if state is State.WAIT_GRASP_STABLE:
             dwell = float(policy["grasp_stable_dwell_s"])
             before, after = self._fixed_dwell(dwell)
@@ -2509,22 +2481,15 @@ class RosDynamicMujocoExecution:
     def _place_target(self, state: State, target):
         """The DESCEND_TO_PLACE target for frozen inputs; every other target and run is untouched.
 
-        Policy v1: lowered by the constant ACT offset. Policy v2: computed from the cup tilt and the grasp offset measured on the
-        evidence now (``core.place_height``); a measurement outside what was calibrated raises a ``TEACHER_PLACE_*`` terminal stop
-        before any motion (the cup stays held, nothing is released). Called from ``_perform_state`` under
-        ``_safety_state = DESCEND_TO_PLACE`` and before ``_phase_open``, so the force limits are enforced while it measures."""
+        The tilt-compensated place height (``core.place_height``) is computed from the cup tilt and the grasp offset measured on
+        the evidence now. Called from ``_perform_state`` under ``_safety_state = DESCEND_TO_PLACE`` and before ``_phase_open``."""
 
         if state is not State.DESCEND_TO_PLACE or target is None or getattr(self, "_execution_snapshot_root", None) is None:
             return target
-        policy = getattr(self, "_teacher_execution_policy", None)
-        if policy is not None and policy.get("place_height_mode"):
-            if policy.get("schema_version") == 3:
-                return self._place_target_v3(target, policy)
-            return self._compensated_place_target(target, policy)
-        if policy is None or "place_descend_offset_m" not in policy:
-            raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: place_descend_offset_m")
-        x, y, z = target.position_m
-        return PoseEvidence((x, y, z + float(policy["place_descend_offset_m"])), target.orientation_xyzw)
+        policy = getattr(self, "_execution_policy", None)
+        if policy is None or not policy.get("place_height_mode"):
+            raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: place_height_mode")
+        return self._teacher_place_target(target, policy)
 
     def _place_geometry(self):
         from ..core.place_height import cup_geometry_from_scene
@@ -2535,38 +2500,9 @@ class RosDynamicMujocoExecution:
             self._place_geometry_value = geometry
         return geometry
 
-    def _compensated_place_target(self, target, policy) -> PoseEvidence:
-        from ..core.place_height import (
-            MEASUREMENT_FAILED, PlaceHeightPolicy, PlaceHeightRefused, plan_place_height)
-
-        x, y, z = target.position_m
-        height_policy = PlaceHeightPolicy.from_document(policy)
-        try:
-            theta, k = self._measure_place_height()
-            document = plan_place_height(theta, k, z + height_policy.reference_offset_m, self._place_geometry(), height_policy)
-        except PlaceHeightRefused as refusal:
-            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": refusal.code,
-                                             "detail": str(refusal)[:300]}
-            self._write()
-            raise
-        except Exception as error:
-            # a stop that already has its own terminal code (force limit, user stop, ...) keeps it
-            if isinstance(error, TeacherStop) or str(error).split(":")[0] in TERMINAL_STOP_CODES:
-                raise
-            # anything else (scene parse error, no cup body, evidence or joint-state timeout) is terminal as well: the cup stays
-            # held; it must never reach RECOVER_LIFT_TO_SAFE_HEIGHT at the place pose
-            failure = PlaceHeightRefused(MEASUREMENT_FAILED, f"{type(error).__name__}: {error}"[:300])
-            self._document["place_height"] = {"mode": policy["place_height_mode"], "refused": MEASUREMENT_FAILED,
-                                             "detail": str(failure)[:300]}
-            self._write()
-            raise failure from error
-        self._document["place_height"] = document
-        self._write()
-        return PoseEvidence((x, y, document["target_tcp_z_m"]), target.orientation_xyzw)
-
-    def _place_target_v3(self, target, policy) -> PoseEvidence:
-        """Policy v3 (design section 4): the tilt-compensated target is a strategy. Outside what was calibrated, or when the measurement
-        fails, the v1 target (hover z + ``place_reference_offset_m``) is used and the closed reason is recorded (``teacher_place_height_v3``).
+    def _teacher_place_target(self, target, policy) -> PoseEvidence:
+        """Design section 4: the tilt-compensated target is a strategy. Outside what was calibrated, or when the measurement
+        fails, the fallback target (hover z + ``place_reference_offset_m``) is used and the closed reason is recorded (``teacher_place_height``).
         Nothing here refuses; a stop (operator, joint state, simulation integrity) keeps its own code."""
         from ..core import place_height as ph
 
@@ -2648,7 +2584,7 @@ class RosDynamicMujocoExecution:
 
         from ..core.place_height import MEASUREMENT_FAILED, PlaceHeightRefused
 
-        policy = getattr(self, "_teacher_execution_policy", None) or {}
+        policy = getattr(self, "_execution_policy", None) or {}
         max_age = policy.get("state_max_age_s", _DEFAULT_STATE_MAX_AGE_S)
         received = getattr(self, "_joint_state_received_monotonic_s", None)
         age = None if received is None else self._monotonic() - received
@@ -2661,7 +2597,7 @@ class RosDynamicMujocoExecution:
         template = (self._template.velocity_scaling, self._template.acceleration_scaling)
         if getattr(self, "_execution_snapshot_root", None) is None or state not in self._CARRY_STATES:
             return template
-        policy = getattr(self, "_teacher_execution_policy", None)
+        policy = getattr(self, "_execution_policy", None)
         if (policy is None or "carry_max_velocity_scaling" not in policy
                 or "carry_max_acceleration_scaling" not in policy):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: carry scaling")
@@ -2672,7 +2608,7 @@ class RosDynamicMujocoExecution:
 
         if getattr(self, "_execution_snapshot_root", None) is None:
             return self._CLOSE_Q6
-        policy = getattr(self, "_teacher_execution_policy", None)
+        policy = getattr(self, "_execution_policy", None)
         if policy is None or "gripper_close_target_rad" not in policy:
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: gripper_close_target_rad")
         return float(policy["gripper_close_target_rad"])
@@ -2711,10 +2647,10 @@ class RosDynamicMujocoExecution:
                         self._set_touch_collision(False)
                 else:
                     self._motion(state, target)
-                    if state is State.DESCEND_TO_PLACE and self._v3():
+                    if state is State.DESCEND_TO_PLACE and self._teacher_run():
                         self._wait_arm_stopped()
-            elif self._v3() and state in (State.WAIT_GRASP_STABLE, State.OPEN_GRIPPER, State.WAIT_RELEASE_SETTLE):
-                self._perform_v3_state(state)
+            elif self._teacher_run() and state in (State.WAIT_GRASP_STABLE, State.OPEN_GRIPPER, State.WAIT_RELEASE_SETTLE):
+                self._perform_teacher_state(state)
             elif state is State.PREPARE_OPEN_GRIPPER:
                 self._command_gripper(state, self._PREOPEN_Q6)
             elif state is State.CLOSE_GRIPPER:

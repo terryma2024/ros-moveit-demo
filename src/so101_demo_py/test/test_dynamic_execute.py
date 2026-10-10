@@ -181,7 +181,7 @@ def test_actual_dynamic_detach_verifies_full_source_derived_geometry(change):
     # This geometry-only fixture assumes release safety at its explicit seam.
     # The separate supported-release tests exercise that preflight itself.
     adapter._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
-    adapter._teacher_execution_policy = {"state_max_age_s": 0.5}
+    adapter._execution_policy = {"state_max_age_s": 0.5}
     adapter._monotonic = lambda: 10.0
     from so101_demo.core.simulation.types import ReceivedSimulationEvidence
     adapter._selected_release_source = ReceivedSimulationEvidence(source, 10.0)

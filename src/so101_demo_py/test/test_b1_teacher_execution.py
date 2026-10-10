@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from so101_demo.act.general_runtime_policy import load_general_runtime_policy
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 from so101_demo.backends.mujoco.observer import EvidenceStale
 from so101_demo.control.gripper.client import GripperClient
@@ -25,7 +26,8 @@ from test_b1_teacher_stop_core import (
 )
 from paths import PACKAGE_ROOT
 
-EXECUTION_POLICY = PACKAGE_ROOT / "config/act/teacher_execution_policy_v1.yaml"
+GENERAL_RUNTIME_POLICY = PACKAGE_ROOT / "config/act/general_runtime_policy.yaml"
+TEACHER_POLICY = PACKAGE_ROOT / "config/act/teacher_execution_policy.yaml"
 ARM = ("1", "2", "3", "4", "5")
 
 
@@ -57,7 +59,7 @@ def make_adapter(tmp_path, *, limits=True, flags=True, clock_start=100.0):
     value._now = now
     value._monotonic = lambda: now[0]
     value._session_id, value._expected_reset_epoch = "s", 1
-    value._teacher_execution_policy = load_teacher_execution_policy(EXECUTION_POLICY)
+    value._execution_policy = load_general_runtime_policy(GENERAL_RUNTIME_POLICY)
     value._document = {}
     value._evidence_file = tmp_path / "dynamic-execute-manifest.json"
     value._state_events, value._planning_attempts = [], []
@@ -596,7 +598,7 @@ def test_normal_stop_proof_needs_the_preceding_trajectory_result_and_confirmed_j
 @pytest.mark.parametrize("kwargs", [{"velocity": 0.01}, {"trajectory_result": None}, {"trajectory_result": "TIMED_OUT"}])
 def test_normal_stop_proof_refuses_a_moving_arm_or_a_missing_or_unfinished_trajectory_result(tmp_path, kwargs):
     value, _ = release_adapter(tmp_path, **kwargs)
-    value._teacher_execution_policy = {**value._teacher_execution_policy, "state_unavailable_stop_s": 0.05}
+    value._execution_policy = {**value._execution_policy, "state_unavailable_stop_s": 0.05}
     with pytest.raises(RuntimeError, match="DYNAMIC_NORMAL_STOP_UNCONFIRMED"):
         value._normal_stop_proof()
 
@@ -680,14 +682,15 @@ def test_c3_frozen_inputs_use_the_policy_close_target_and_the_plain_pick_place_k
     value = make_adapter(tmp_path)
     assert value._close_target_q6() == -0.0485          # no frozen inputs: unchanged from main
     value._execution_snapshot_root = tmp_path           # frozen inputs
-    assert value._close_target_q6() == value._teacher_execution_policy["gripper_close_target_rad"]
+    value._execution_policy = load_teacher_execution_policy(TEACHER_POLICY)
+    assert value._close_target_q6() == value._execution_policy["gripper_close_target_rad"]
     assert value._close_target_q6() == pytest.approx(-0.0476086, abs=1e-7)
 
 
 def test_c3_frozen_inputs_without_the_policy_value_refuse(tmp_path):
     value = make_adapter(tmp_path)
     value._execution_snapshot_root = tmp_path
-    value._teacher_execution_policy = None
+    value._execution_policy = None
     with pytest.raises(RuntimeError, match="TEACHER_POLICY_UNAVAILABLE"):
         value._close_target_q6()
 
@@ -700,6 +703,7 @@ def _planned_requests(tmp_path, state, *, frozen):
                                       planning_group="arm", tcp_link="tcp")
     if frozen:
         value._execution_snapshot_root = tmp_path
+        value._execution_policy = load_teacher_execution_policy(TEACHER_POLICY)
     seen = []
 
     class Planning:
@@ -739,38 +743,19 @@ def test_c6_frozen_inputs_without_the_carry_values_refuse(tmp_path):
     value = make_adapter(tmp_path)
     value._execution_snapshot_root = tmp_path
     value._template = SimpleNamespace(velocity_scaling=0.03, acceleration_scaling=0.03)
-    value._teacher_execution_policy = {"policy_sha256": "x"}
+    value._execution_policy = {"policy_sha256": "x"}
     with pytest.raises(RuntimeError, match="TEACHER_POLICY_UNAVAILABLE"):
         value._planning_scaling(State.MOVE_ABOVE_PLACE)
 
 
-# ---- R11: the ACT-only place descent offset reaches the DESCEND_TO_PLACE target and nothing else ----------------------
+# ---- the place target is untouched without frozen inputs ---------------------------------------------------------------
 
 def _pose(z=0.2176):
     from so101_demo.ports.evidence import PoseEvidence
     return PoseEvidence((-0.0737, -0.2325, z), (0.0, 0.0, 0.0, 1.0))
 
 
-def test_r11_frozen_inputs_lower_only_the_descend_to_place_target(tmp_path):
-    value = make_adapter(tmp_path)
-    value._execution_snapshot_root = tmp_path
-    lowered = value._place_target(State.DESCEND_TO_PLACE, _pose())
-    assert lowered.position_m[2] == pytest.approx(0.2176 + value._teacher_execution_policy["place_descend_offset_m"])
-    assert tuple(lowered.position_m[:2]) == (-0.0737, -0.2325) and tuple(lowered.orientation_xyzw) == (0.0, 0.0, 0.0, 1.0)
-    for state in (State.MOVE_ABOVE_PLACE, State.LIFT, State.DESCEND, State.RETREAT, State.RECOVER_RETREAT):
-        original = _pose()
-        assert value._place_target(state, original) is original
-
-
 def test_r11_without_frozen_inputs_the_place_target_is_unchanged(tmp_path):
     value = make_adapter(tmp_path)
     original = _pose()
     assert value._place_target(State.DESCEND_TO_PLACE, original) is original
-
-
-def test_r11_frozen_inputs_without_the_offset_refuse(tmp_path):
-    value = make_adapter(tmp_path)
-    value._execution_snapshot_root = tmp_path
-    value._teacher_execution_policy = {"policy_sha256": "x"}
-    with pytest.raises(RuntimeError, match="TEACHER_POLICY_UNAVAILABLE"):
-        value._place_target(State.DESCEND_TO_PLACE, _pose())

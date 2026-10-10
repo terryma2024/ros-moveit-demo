@@ -205,7 +205,7 @@ def test_actual_dynamic_detach_applies_the_selected_source_geometry_and_records_
     adapter._selected_release_source_scene = (document["source"]["scene_state"], document["source"]["scene_received_monotonic_ns"] * 1e-9)
     adapter._monotonic = time.monotonic
     adapter._release_runtime_policy = {"safety_release": {"support_distance_max_m": .002}}
-    adapter._teacher_execution_policy = {"state_max_age_s": .5}
+    adapter._execution_policy = {"state_max_age_s": .5}
     adapter._write = lambda: None
     adapter._record = lambda *args, **kwargs: None
     adapter._apply_scene, adapter._get_scene = object(), object()

@@ -7,11 +7,11 @@ import pytest
 
 from so101_demo.core.domain import State, ActionStatus
 from so101_demo.core.simulation.types import ContactEvidence, ObjectState, SimulationEvidence, ReceivedSimulationEvidence
-from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
+from so101_demo.act.general_runtime_policy import load_general_runtime_policy
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 from paths import PACKAGE_ROOT
 
-EXECUTION_POLICY = PACKAGE_ROOT / "config/act/teacher_execution_policy_v1.yaml"
+GENERAL_RUNTIME_POLICY = PACKAGE_ROOT / "config/act/general_runtime_policy.yaml"
 
 
 def world(*, step=501, sequence=6, supported=True, bilateral=True):
@@ -49,10 +49,10 @@ def boundary(*, change="positive", clock=10.05):
         selected = replace(selected, other_object_contacts=tuple(
             replace(item, normal_force_n=0.0) for item in selected.other_object_contacts))
     value._session_id, value._expected_reset_epoch = "s", 1
-    # The release freshness bound is the Teacher execution policy's state_max_age_s (0.5 s). The ACT rgb_sync age is
+    # The release freshness bound is the execution policy's state_max_age_s (0.5 s). The ACT rgb_sync age is
     # deliberately absent from this policy: nothing in the release path may read it.
     value._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
-    value._teacher_execution_policy = load_teacher_execution_policy(EXECUTION_POLICY)
+    value._execution_policy = load_general_runtime_policy(GENERAL_RUNTIME_POLICY)
     value._monotonic = lambda: now[0]
     value._progress = lambda: now.__setitem__(0, now[0] + 0.005)
     value._snapshot = lambda: baseline
@@ -239,7 +239,7 @@ def test_release_bounds_are_the_teacher_state_age_and_the_support_distance():
                                     {"state_max_age_s": "0.5"}])
 def test_release_bounds_refuse_a_missing_or_unusable_teacher_state_age(policy):
     value, _, _ = boundary()
-    value._teacher_execution_policy = policy
+    value._execution_policy = policy
     with pytest.raises(RuntimeError, match="DYNAMIC_RELEASE_POLICY_INVALID"):
         value._release_bounds()
 
@@ -325,7 +325,7 @@ def test_a_pending_candidate_that_ages_out_records_the_same_facts_with_the_same_
     with scene._lock:
         scene._history.clear()
     value._release_runtime_policy = {"safety_release": {"support_distance_max_m": 0.002}}
-    value._teacher_execution_policy = {**value._teacher_execution_policy, "state_max_age_s": 0.2}
+    value._execution_policy = {**value._execution_policy, "state_max_age_s": 0.2}
     value._joint_state_received_monotonic_s = 10.03
     with pytest.raises(RuntimeError) as expired:
         value._supported_release_preflight()

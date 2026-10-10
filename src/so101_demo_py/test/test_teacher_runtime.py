@@ -1,5 +1,5 @@
-"""Teacher policy v3 at the runtime entry: the perceived-vs-truth difference (S05) is telemetry, the safety limits are non-gating,
-the watches record instead of stopping (design 2026-10-10 sections 2, 3 and 7). The v1/v2 entry is covered by the untouched tests."""
+"""A Teacher run at the runtime entry: the perceived-vs-truth difference (S05) is telemetry, the safety limits are non-gating,
+the watches record instead of stopping (design 2026-10-10 sections 2, 3 and 7). The general entry is covered by the other tests."""
 import math
 import sys
 from types import SimpleNamespace
@@ -52,21 +52,21 @@ def test_the_perception_error_is_xy_z_and_yaw_free_tilt():
     assert perception_error(_sample(0.003), yawed)["tilt_deg"] == pytest.approx(0.0, abs=1e-6)
 
 
-# ---- run_dynamic_execute with a v3 freeze ---------------------------------------------------------------------------------
+# ---- run_dynamic_execute with a Teacher freeze ---------------------------------------------------------------------------------
 
-class V3Execution:
-    """The `_FakeExecution` of the shared fixtures plus what the v3 entry touches."""
+class TeacherExecution:
+    """The `_FakeExecution` of the shared fixtures plus what the Teacher entry touches."""
 
     def __init__(self, events, faults):
         self.events = events
         self.observer = object()
-        self._teacher_execution_policy = {"schema_version": 3, "execution_deadline_s": 180.0}
+        self._execution_policy = {"schema_version": 3, "execution_deadline_s": 180.0}
         self._process_summary = ProcessSummary()
         self._monotonic = lambda: 1.0
         self._safety_state = None
 
-    def _select_execution_policy(self, name):
-        self.policy_name = name
+    def _select_execution_policy(self):
+        self.policy_selected = True
 
     def finish(self, result):
         self.events.append("execution.finish")
@@ -75,7 +75,7 @@ class V3Execution:
         self.events.append("execution.close")
 
 
-def v3_run(tmp_path, monkeypatch, *, name="teacher_execution_policy_v3", safety_fails=False, simulator_x=-0.2):
+def teacher_run(tmp_path, monkeypatch, *, safety_fails=False, simulator_x=-0.2, frozen_inputs=True):
     from so101_demo.act import frozen_runtime_inputs
     from so101_demo.ros import teacher_safety
     events, built, attached = [], {}, []
@@ -83,8 +83,7 @@ def v3_run(tmp_path, monkeypatch, *, name="teacher_execution_policy_v3", safety_
                        scene=RecordingTaskScenePort())
 
     def execution(*args, **kwargs):
-        built["execution"] = V3Execution(events, frozenset())
-        built["execution"]._teacher_execution_policy["schema_version"] = 3 if name.endswith("v3") else 2
+        built["execution"] = TeacherExecution(events, frozenset())
         return built["execution"]
     runtime.execution = execution
     plain_actions, plain_runner = runtime.build_actions, runtime.runner
@@ -96,7 +95,6 @@ def v3_run(tmp_path, monkeypatch, *, name="teacher_execution_policy_v3", safety_
     frozen = {"runtime_policy": {"sha256": "x", "kind": "k"}}
     monkeypatch.setattr(frozen_runtime_inputs, "load_teacher_frozen_inputs",
                         lambda path: (frozen, {"scene_path": "assets/mujoco/act/scene.xml"}, PACKAGE))
-    monkeypatch.setattr(frozen_runtime_inputs, "frozen_execution_policy_name", lambda value: name)
 
     def load(path):
         if safety_fails:
@@ -106,7 +104,7 @@ def v3_run(tmp_path, monkeypatch, *, name="teacher_execution_policy_v3", safety_
     monkeypatch.setattr(teacher_safety.CollisionWatch, "attach", lambda self, node: attached.append(("collision", self)))
     monkeypatch.setattr(teacher_safety.PhysicsHazardWatch, "attach", lambda self, node: attached.append(("hazard", self)))
     options = _options(tmp_path)
-    options.frozen_inputs_manifest = tmp_path / "inputs-manifest.json"
+    options.frozen_inputs_manifest = tmp_path / "inputs-manifest.json" if frozen_inputs else None
     from so101_demo.ros.dynamic_runtime import run_dynamic_execute
     code = run_dynamic_execute(options, _runtime=runtime)
     run.workflows = (built.get("actions_workflow"), built.get("runner_workflow"))
@@ -117,44 +115,33 @@ def run():
     """placeholder attribute holder"""
 
 
-def test_a_v3_run_does_not_refuse_a_perceived_pose_far_from_truth_and_records_the_error(tmp_path, monkeypatch):
-    code, execution, watches, events = v3_run(tmp_path, monkeypatch)
+def test_a_teacher_run_does_not_refuse_a_perceived_pose_far_from_truth_and_records_the_error(tmp_path, monkeypatch):
+    code, execution, watches, events = teacher_run(tmp_path, monkeypatch)
     assert code == 0 and "runner.run" in events
     assert execution._perception_error["xy_mm"] == pytest.approx(170.0, abs=1.0) and execution._perception_error["tilt_deg"] == 0.0
 
 
-def test_a_v3_run_builds_actions_and_runner_with_the_v3_workflow(tmp_path, monkeypatch):
+def test_a_teacher_run_builds_actions_and_runner_with_the_teacher_workflow(tmp_path, monkeypatch):
     from so101_demo.core.workflow import TEACHER_WORKFLOW
-    v3_run(tmp_path, monkeypatch)
+    teacher_run(tmp_path, monkeypatch)
     assert run.workflows == (TEACHER_WORKFLOW, TEACHER_WORKFLOW)
-    v3_run(tmp_path, monkeypatch, name="teacher_execution_policy_v2", simulator_x=-0.03)
+    teacher_run(tmp_path, monkeypatch, frozen_inputs=False, simulator_x=-0.03)
     assert run.workflows == (None, None)
 
 
-def test_the_same_divergence_still_refuses_before_motion_with_a_v2_freeze(tmp_path, monkeypatch):
-    code, execution, _watches, events = v3_run(tmp_path, monkeypatch, name="teacher_execution_policy_v2")
-    assert code == 1 and "runner.run" not in events and execution is None
-
-
-def test_the_v3_watches_subscribe_but_only_record(tmp_path, monkeypatch):
-    code, execution, watches, _events = v3_run(tmp_path, monkeypatch)
+def test_the_teacher_watches_subscribe_but_only_record(tmp_path, monkeypatch):
+    code, execution, watches, _events = teacher_run(tmp_path, monkeypatch)
     assert code == 0 and set(watches) == {"collision", "hazard"}
     assert watches["collision"]._record_only and watches["hazard"]._record_only
     assert watches["hazard"].limits is None and execution._physics_hazard_watch is watches["hazard"]
     assert execution._safety_limits is execution._process_summary.limits
 
 
-def test_a_safety_load_failure_is_not_a_refusal_in_v3_but_marks_the_summary_incomplete(tmp_path, monkeypatch):
-    code, execution, watches, _events = v3_run(tmp_path, monkeypatch, safety_fails=True)
+def test_a_safety_load_failure_is_not_a_refusal_in_a_teacher_run_but_marks_the_summary_incomplete(tmp_path, monkeypatch):
+    code, execution, watches, _events = teacher_run(tmp_path, monkeypatch, safety_fails=True)
     assert code == 0 and set(watches) == {"hazard"}
     assert execution._safety_limits_error.startswith("SAFETY_LOAD_FAILED")
     assert "COLLISION_GEOMETRY_UNAVAILABLE" in execution._process_summary.build()["incomplete_reasons"]
-
-
-def test_a_safety_load_failure_still_refuses_with_a_v2_freeze(tmp_path, monkeypatch):
-    code, _execution, _watches, events = v3_run(tmp_path, monkeypatch, name="teacher_execution_policy_v2", safety_fails=True,
-                                               simulator_x=-0.03)
-    assert code == 1 and "runner.run" not in events
 
 
 def test_a_degenerate_quaternion_never_refuses_the_run_and_marks_the_summary_incomplete(tmp_path, monkeypatch):
@@ -168,7 +155,7 @@ def test_a_degenerate_quaternion_never_refuses_the_run_and_marks_the_summary_inc
         object.__setattr__(pose, "orientation_xyzw", (0.0, 0.0, 0.0, 0.0))        # the constructor refuses it; the truth bridge could still deliver it
         return value.__class__(**{**{name: getattr(value, name) for name in value.__dataclass_fields__}, "simulator_pose_world": pose})
     monkeypatch.setattr(sys.modules[__name__], "_observation", degenerate)
-    code, execution, _watches, events = v3_run(tmp_path, monkeypatch)
+    code, execution, _watches, events = teacher_run(tmp_path, monkeypatch)
     assert code == 0 and "runner.run" in events
     assert execution._perception_error is None
     assert "PERCEPTION_ERROR_UNAVAILABLE" in execution._process_summary.build()["incomplete_reasons"]

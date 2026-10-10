@@ -252,39 +252,6 @@ def _target_valid(value: object) -> bool:
 def _place_height_contract(
     document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
 ) -> None:
-    """The place_height record against the frozen execution policy of the run.
-
-    Without the frozen policy the record is only checked structurally. With it: a v2 (tilt_compensated) run that finished carries
-    a place_height record that is the formula applied to its own measurement within the frozen bounds (an ERROR run may stop
-    before the measurement, so its record is optional but still bound when present); a v1 run carries none."""
-
-    from ..core.place_height import PlaceHeightPolicy, validate_document as validate_place_height
-
-    present = "place_height" in document
-    if frozen_execution_policy is None:
-        if present:
-            try:
-                validate_place_height(document["place_height"])
-            except ValueError:
-                _fail("PLACE_HEIGHT")
-        return
-    if not frozen_execution_policy.get("place_height_mode"):
-        if present:
-            _fail("PLACE_HEIGHT")
-        return
-    if not present:
-        if expected_status == "DONE":
-            _fail("PLACE_HEIGHT")
-        return
-    try:
-        validate_place_height(document["place_height"], PlaceHeightPolicy.from_document(frozen_execution_policy))
-    except (ValueError, KeyError, TypeError):
-        _fail("PLACE_HEIGHT")
-
-
-def _place_height_contract_v3(
-    document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
-) -> None:
     """v3: a finished run carries a `teacher_place_height_v3` record (tilt_compensated or fallback_v1); an ERROR run may stop before the
     measurement, so its record is optional but still bound when present. With the frozen policy the record is checked against it."""
 
@@ -369,11 +336,11 @@ def _teacher_contract(
     if (execution == "COMPLETED") != (expected_status == "DONE"):
         _fail("TEACHER_STATUS")
     if schema == SCHEMA_V3:
-        _place_height_contract_v3(document, expected_status, frozen_execution_policy)
+        _place_height_contract(document, expected_status, frozen_execution_policy)
         _process_summary_contract(document, frozen_execution_policy)
         _failure_class_contract(document, execution)
-    else:
-        _place_height_contract(document, expected_status, frozen_execution_policy)
+    elif "place_height" in document:
+        _fail("PLACE_HEIGHT")      # only a Teacher run measures and records a place height
     if result in {"PASS", "FAIL"}:
         if (
             execution != "COMPLETED"
