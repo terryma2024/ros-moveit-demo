@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3549
+latest_checkpoint: CP-3550
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3550 — fix batch done (HEAD 978e39122): scene frames published, SCENE_SOURCE_ABSENT fail-fast, dead-coordinator projection, Mapping lint; general path now reaches the next gate DYNAMIC_RELEASE_SUPPORT_NOT_PROVED
+
+- Commits, each with a recorded RED run:
+  - 62b71880d: general mujoco_plugins.yaml gains robot_contact_roots [base] and buffer 5000 (scalar_joint_audit_names is not needed by the release preflight);
+  - a52589548: DYNAMIC_SCENE_SOURCE_ABSENT after 1.0 s with no accepted frame (observer armed-time / silent_for_s); the Teacher path is untouched;
+  - 95dc81f75: teleop projection of a dead owner with no terminal event gives CLEANING_UP, then INFRA_FAILED with COORDINATOR_EXITED_NON_TERMINAL; absent, foreign or live-group owners stay RUNNING; adaptive is covered too; `terminal_reason` added to CampaignProjectionResponse;
+  - 978e39122: Mapping import.
+- Gates (fixbatch-20261011/gates/final): build rc 0; demo 11223 pass, 0 fail; colcon 1925 tests, 0/0; scripts 12 pass.
+- Live:
+  - (a) fixed-N through the service (PARALLEL, 2 workers, 4 points), run twice: every point FAILED (valid), status COMPLETED_WITH_FAILURES, cleanup complete. No SOURCE_EXPIRED, no INDETERMINATE, no stuck RUNNING.
+  - (b) adaptive (2 workers, fallback 1, 2 points): both FAILED, COMPLETED_WITH_FAILURES, cleanup complete, no fallback triggered.
+  - (c) /so101/simulation/scene_state has 1 publisher (mujoco_ros2_control_node) in domains 181 and 182.
+  - Teardown proofs with --no-daemon.
+- New first failing gate on the general path: DYNAMIC_RELEASE_SUPPORT_NOT_PROVED at DETACH_MOVEIT. The cup is at z ≈ 0.1825 m against a table rest height of 0.165 m: fingertip contacts on both sides, no table contact, so the cup is still held about 17.5 mm above the table at detach. Previously masked by the scene-frame failure; not yet known whether this predates the refactor.
+- Item 4 (adaptive fallback RESET_EPOCH_MISMATCH): NOT proven.
+  - The CP-3548 pause-leak hypothesis is refuted: separate ros-home dirs, no generation overlap, no pause after the last resume.
+  - Remaining hypotheses: a stale or replayed paused/epoch frame reaching the observer; a fallback-only single-worker difference.
+  - Discriminating experiment: enrich the error with the frame's paused/epoch/step/age and the observer history; force a first-generation failure (inject_so101_parallel_fault.py) and compare against a plain single-worker run. Not reproducible right now, because the first-generation failure no longer happens.
+- Other open items:
+  - a coordinator that dies before writing a journal leaves the campaign STARTED and cleanup refuses with CAMPAIGN_ACTIVE (needs a decision on journal-less cleanup evidence);
+  - pre-existing lint: an undefined `numpy` in a string annotation at adapters/act/lerobot.py:306;
+  - service PORT_UNAVAILABLE right after a stop, and CONTROLLER_ALREADY_BOUND from an unreleased driver.
+- Decision (CP-3394, recommended): the refactor continues with phase D (sole writer). A read-only diagnosis of SUPPORT_NOT_PROVED on the general path runs in parallel, including a pre-refactor comparison from the existing evidence where possible. Fixes go after phase D.
 
 ## CP-3549 — refactor phase C done (HEAD 82796df78, 15 commits), gates 0/0; general-path fix batch dispatched before phase D
 
