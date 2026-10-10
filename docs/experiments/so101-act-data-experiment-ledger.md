@@ -69,11 +69,27 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3533
+latest_checkpoint: CP-3534
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3534 — stock-JTC refactor: research done, user decisions, design written, independent review dispatched
+
+- Research (read-only):
+  - The in-tree ACT ros2_controllers.yaml is already stock for all three controllers. Only the Head inputs ros2-controllers-file-v1.yaml selects BrokerOwnedTrajectoryController, and it has no in-tree generator.
+  - On a functional case the Head runtime uses SOGB v2 per-goal reservation, the prearm/ARM 80-byte stop-witness proof (51 × 2 ms, ≤ 0.002 rad/s), native close via libso101_head_revocation_transport, and the raw /joint_states stop proof (3 samples).
+  - The broker's head-mode checks: goal shape, duration and peak v/a, measured-prefix envelope, hold on fault/NaN, revocation latch, single-owner admission.
+  - The 120 s hold reads the SOTM0001 per-update streams (period, body time, update_id, loss counters). The CP-HFP-1028 4 ms skip is a CM/clock issue.
+  - Deletion scope: about 146 C++ gtests plus the Python reservation, revocation and native modules; the Head runtime, campaign and audit tests are rewritten.
+- User decisions (AskUserQuestion, 2026-10-10): (1) the Head-mode safety checks move to the Python pre-dispatch side (Recommended); (2) the Head calibration/qualification line is ported, not removed (Recommended).
+- Design: docs/superpowers/specs/2026-10-10-so101-head-neck-stock-jtc-design.md.
+  - HeadDispatchGuard with the broker's exact limits from the same frozen policy; a single-sender graph check; fault/NaN → cancel + raw-stop proof; a per-run revocation latch.
+  - The stop proof becomes a 51-sample controller_state window (startup and end) plus the existing raw stop.
+  - 120 s hold criterion: ≥ 60,000 controller_state stamps at exactly 2 ms with no gaps, plus topic-loss accounting; period, body time and native close are dropped.
+  - Acceptance: gates 0/0, Head single case 900000 PASS, one pick-place PASS; a new 120 s hold is a separate experiment.
+- Independent design review (fresh Opus, read-only) dispatched.
 
 ## CP-3533 — pick-place Teacher run PASS on the merged tree (08742d4a, freeze SES69LkF, r11-headgeom); both user-requested live tasks done
 
