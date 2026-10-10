@@ -69,11 +69,39 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3531
+latest_checkpoint: CP-3532
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3532 — Head-search-only single case PASS on ai-station (seed 900000, nominal single cup); pick-place Teacher run next
+
+- Case: seed 900000, pilot "single cup", anchor default, no bottle occlusion; chosen over 900007 so that a failure would isolate the merge, not the occlusion tuning. One attempt, no retry.
+  - Evidence root sub-tree: head-case-20261010-001/ (RESULT.md, campaign/results.json 0b1abaae…, campaign/hs40-900000/attempt-1/, runs/hcai1010a-900000-1/, teardown-proof.txt, inputs/, scripts/).
+- Recipe:
+  - Fresh install of 8 packages from the merged tree.
+  - Bundle extracted with 1874/1874 sha256 matched. baseline-round1.json fetched from antzb (scp, read-only) and rebound by scripts/make_inputs.py: c2a weights 2afd5506… via refs.weights, with the frozen/dev/safety/freeze documents regenerated for this host.
+  - Matrix: the tree's head-search-scenario-partitions-v1.json.
+  - Interpreter grounded-sam (mujoco 3.12.0, torch 2.13+cu130 CUDA, ultralytics 8.4.115).
+  - Env: env -i, ROS_DOMAIN_ID 173 (verified empty), LOCALHOST discovery, GZ_PARTITION hcai1010a-900000-1, TMPDIR under the evidence root.
+  - Neck: broker-owned controller (bundle ros2-controllers-file-v1.yaml). Camera: unified lossless lock-step path.
+- Result:
+  - TARGET_LOCKED, confidence 0.953, business rc 0, OS rc 0. Search: coarse −0.1756 rad → one fine correction → 0.2429 rad → 3 stable observations; 4 images = 4 inferences.
+  - classify_functional_case PASS (stop_confirmed, owned_children_exited, scene_verified, identity valid, 1/1 attempts; qualified=false by design).
+  - Final yaw error 0.6728° (≤ 5°), actual 0.24283 against MJCF truth 0.23109 rad.
+  - Wrapper-to-exit 9.97 s.
+- Visual check: final.png (payload sha 22eba132…) viewed by the executor AND by root. One blue cup, fully visible, centred near x≈323/640; arm link at left, box at lower right.
+- Teardown: 3 owned children rc 0 and absent; owner absent; domain 173 graph empty; GPU compute empty.
+- Source: a29acbe53 "reservation scope follows the baseline-declared root". prepare_attempt hard-coded another task's /tmp root; RED → GREEN, 71 functional tests.
+- Differences from the antzb record:
+  - The c2a weights with the round-1 config is a first (the antzb round-1 baseline used epoch50 45de681b…).
+  - Stock Jazzy controller_manager/JTC 4.42.1, not the 4.45.2 clock-fix overlay.
+  - Lossless camera path; grounded-sam interpreter; LOCALHOST discovery.
+  - The geometry-new camera_source_sha256 names antzb's so101.xml (not checked at runtime; flagged).
+  - Single 10 s case only: not the 120 s hold, and not a qualification.
+- Deletion candidates: head-case-20261010-001/{scratch,build/log*,bundle,scratch/dryprep}, /tmp/so101-debug-act-data-66c42e4c/hc/.
+- Next: one pick-place Teacher run on freeze SES69LkF with live-r13 (the existing executor).
 
 ## CP-3531 — all UT green on the merged tree; r11-headgeom contact policy activated (diagnostic); freeze SES69LkF; live tasks next
 
