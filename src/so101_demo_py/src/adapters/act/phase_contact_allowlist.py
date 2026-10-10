@@ -51,7 +51,7 @@ def stationary_cup_support_pairs(model: mujoco.MjModel) -> frozenset[tuple[str, 
         if body_name == "table" and name == "table_collision" and model.body_dofnum[body] == 0:
             table.add(name)
     if not cup or not table:
-        raise ValueError("TASK8_CONTACT_SUPPORT_GEOMETRY_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CONTACT_SUPPORT_GEOMETRY_INVALID")
     return frozenset(tuple(sorted((a, b))) for a in cup for b in table)
 
 
@@ -136,7 +136,7 @@ class PhaseContactAllowlist:
             self._thresholds = tuple(sorted(payload['thresholds'].items()))
             self._evaluation = tuple(sorted(payload['evaluation'].items()))
         except (AttributeError, KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ValueError("TASK8_CONTACT_POLICY_INVALID") from error
+            raise ValueError("PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID") from error
 
     @property
     def process_pairs(self) -> frozenset[tuple[str, str]]:
@@ -153,7 +153,7 @@ class PhaseContactAllowlist:
         try:
             return self._pairs[phase]
         except (KeyError, TypeError) as error:
-            raise ValueError("TASK8_CONTACT_PHASE_INVALID") from error
+            raise ValueError("PICK_PLACE_VALIDATION_CONTACT_PHASE_INVALID") from error
 
     @property
     def thresholds(self):
@@ -181,7 +181,7 @@ def load_installed_phase_contact_allowlist(
         )
         return model, pairs
     except (OSError, ValueError, RuntimeError) as error:
-        raise ValueError("TASK8_CONTACT_POLICY_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID") from error
 
 
 load_installed_act_contact_pairs = load_installed_phase_contact_allowlist

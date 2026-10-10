@@ -19,8 +19,8 @@ def _capture_best_world(recorder: SynchronizedFrameRecorder, observer) -> dict:
     except ValueError as latest_error:
         first_error = latest_error
         if str(first_error) not in {
-                "TASK6_SOURCE_STALE", "TASK6_SOURCE_SKEW",
-                "TASK6_CAMERA_INFO_MISSING"}:
+                "SYNCHRONIZED_CAPTURE_SOURCE_STALE", "SYNCHRONIZED_CAPTURE_SOURCE_SKEW",
+                "SYNCHRONIZED_CAPTURE_CAMERA_INFO_MISSING"}:
             raise
     for received in reversed(history[:-1]):
         try:
@@ -46,10 +46,10 @@ def main(argv: list[str] | None = None) -> int:
             or root.is_symlink()
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", options.run_id) is None
             or not 0 < options.duration_s <= 120):
-        raise ValueError("TASK6_CAPTURE_SCOPE_INVALID")
+        raise ValueError("SYNCHRONIZED_CAPTURE_SCOPE_INVALID")
     experiments = root / "experiments"
     if not experiments.is_dir() or experiments.is_symlink():
-        raise ValueError("TASK6_CAPTURE_SCOPE_INVALID")
+        raise ValueError("SYNCHRONIZED_CAPTURE_SCOPE_INVALID")
     import rclpy
     from rclpy.executors import SingleThreadedExecutor
     from rclpy.parameter import Parameter
@@ -133,18 +133,18 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             if thread_errors:
                 recorder.record_rejection(
-                    f"TASK6_SUBSCRIBER_ABORT: {type(thread_errors[0]).__name__}: {thread_errors[0]}"
+                    f"SYNCHRONIZED_CAPTURE_SUBSCRIBER_ABORT: {type(thread_errors[0]).__name__}: {thread_errors[0]}"
                 )
                 atomic_hazard = True
                 break
             next_sample += .1
             if now > next_sample + .1:
-                recorder.record_rejection("TASK6_SAMPLE_TIMER_GAP")
+                recorder.record_rejection("SYNCHRONIZED_CAPTURE_SAMPLE_TIMER_GAP")
                 next_sample = now + .1
             try:
                 _capture_best_world(recorder, observer)
             except EvidenceRejected as error:
-                recorder.record_rejection(f"TASK6_ATOMIC_HAZARD: {error}")
+                recorder.record_rejection(f"SYNCHRONIZED_CAPTURE_ATOMIC_HAZARD: {error}")
                 atomic_hazard = True
                 break
             except (EvidenceStale, ValueError) as error:
@@ -155,7 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if summary["samples"] > 0 and not atomic_hazard else 2
     except BaseException as error:
         if not finished and not finalizing:
-            recorder.record_rejection(f"TASK6_CAPTURE_ABORT: {type(error).__name__}: {error}")
+            recorder.record_rejection(f"SYNCHRONIZED_CAPTURE_ABORT: {type(error).__name__}: {error}")
         raise
     finally:
         try:

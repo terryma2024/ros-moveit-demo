@@ -161,24 +161,24 @@ class PickPlaceRunner:
 
     def _validate_request(self, request: dict) -> None:
         if not isinstance(request, dict) or set(request) != self._REQUEST_KEYS:
-            raise PickPlaceError("TASK8_REQUEST_SCHEMA")
+            raise PickPlaceError("PICK_PLACE_VALIDATION_REQUEST_SCHEMA")
         if any(not isinstance(request[key], str) or not request[key] for key in (
             "scenario_id", "session_id", "attempt_id",
         )):
-            raise PickPlaceError("TASK8_REQUEST_IDENTITY_INVALID")
+            raise PickPlaceError("PICK_PLACE_VALIDATION_REQUEST_IDENTITY_INVALID")
         if type(request["deadline_ns"]) is not int or request["deadline_ns"] <= self.clock_ns():
-            raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
+            raise PickPlaceError("PICK_PLACE_VALIDATION_DEADLINE_EXPIRED")
         mode = request["mode"]
         if mode == "full":
             if request["stop_after"] is not None or request["lifecycle"] != "FULL_RESTART":
                 raise PickPlaceError("FULL_RESTART_REQUIRED")
         elif mode == "phase_prefix":
             if request["stop_after"] not in self.PHASES:
-                raise PickPlaceError("TASK8_PREFIX_INVALID")
+                raise PickPlaceError("PICK_PLACE_VALIDATION_PREFIX_INVALID")
             if request["lifecycle"] != "FULL_RESTART":
                 raise PickPlaceError("FULL_RESTART_REQUIRED")
         else:
-            raise PickPlaceError("TASK8_MODE_INVALID")
+            raise PickPlaceError("PICK_PLACE_VALIDATION_MODE_INVALID")
 
     @staticmethod
     def _scope(evidence: dict, request: dict, reset_epoch: int, release_epoch: int) -> bool:
@@ -303,7 +303,7 @@ class PickPlaceRunner:
         if self._ran:
             # one runner owns one attempt: a second run would otherwise let an early failure attribute
             # its events to the previous attempt's identity
-            raise PickPlaceError("TASK8_RUNNER_REUSED")
+            raise PickPlaceError("PICK_PLACE_VALIDATION_RUNNER_REUSED")
         self._ran = True
         started = False
         latest_step = 0
@@ -340,7 +340,7 @@ class PickPlaceRunner:
             completed: list[str] = []
             for phase in self.PHASES:
                 if request["deadline_ns"] <= self.clock_ns():
-                    raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
+                    raise PickPlaceError("PICK_PLACE_VALIDATION_DEADLINE_EXPIRED")
                 if phase == "RELEASE":
                     latest_step = self._set_down(
                         request, reset_epoch, release_epoch, latest_step,
@@ -378,7 +378,7 @@ class PickPlaceRunner:
                                              "no_fingertip_contact":
                                                  evidence.get("no_fingertip_contact") is True})
                 if request["deadline_ns"] <= self.clock_ns():
-                    raise PickPlaceError("TASK8_DEADLINE_EXPIRED")
+                    raise PickPlaceError("PICK_PLACE_VALIDATION_DEADLINE_EXPIRED")
                 completed.append(phase)
                 self._event("phase_complete", phase, latest_step)
                 if phase != "RADIAL_RETREAT":
@@ -417,6 +417,6 @@ class PickPlaceRunner:
                     "live_evidence_artifact": artifact}
         except BaseException:
             if started:
-                self._stop("TASK8_ABORT", request)
-                self._event("run_aborted", "TASK8_ABORT", latest_step)
+                self._stop("PICK_PLACE_VALIDATION_ABORT", request)
+                self._event("run_aborted", "PICK_PLACE_VALIDATION_ABORT", latest_step)
             raise

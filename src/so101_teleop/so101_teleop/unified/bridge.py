@@ -204,7 +204,7 @@ class ActWorkerPort:
                 or any(not isinstance(value, str)
                        or re.fullmatch(r"[0-9a-f]{64}", value) is None
                        for value in (owner.argv_sha256, owner.environment_sha256))):
-            raise MutationError("ACT_TASK8_STARTUP_OWNER_INVALID")
+            raise MutationError("ACT_PICK_PLACE_VALIDATION_STARTUP_OWNER_INVALID")
         self._startup_stack_owner = owner
 
     def _base(self, request: dict, *, fields: frozenset[str], cancel: bool = False) -> tuple[str, str, int]:
@@ -277,14 +277,14 @@ class ActWorkerPort:
         if request["contact_policy_fingerprint"] != self.context.contact_policy_fingerprint:
             raise MutationError("ACT_POLICY_MISMATCH")
         if self._startup_stack_owner is None:
-            raise MutationError("ACT_TASK8_STARTUP_OWNER_UNBOUND")
+            raise MutationError("ACT_PICK_PLACE_VALIDATION_STARTUP_OWNER_UNBOUND")
         mode = request["mode"]
         if mode == "phase_prefix" and isinstance(request["stop_after"], str):
             operation = "task8_phase"
         elif mode == "full" and request["stop_after"] is None:
             operation = "task8_full"
         else:
-            raise MutationError("ACT_TASK8_MODE_INVALID")
+            raise MutationError("ACT_PICK_PLACE_VALIDATION_MODE_INVALID")
         payload = {
             "scenario_id": request["scenario_id"],
             "support_distance_max_m": request["support_distance_max_m"],

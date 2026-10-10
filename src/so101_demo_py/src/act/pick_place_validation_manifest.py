@@ -38,26 +38,26 @@ def _sha(value: object) -> str:
 
 def _require_hash(value: object) -> str:
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
-        raise ValueError("TASK8_HASH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_HASH_INVALID")
     return value
 
 
 def _require_anchors(value: object) -> dict:
     if not isinstance(value, dict) or set(value) != set(ANCHOR_NAMES):
-        raise ValueError("TASK8_ANCHORS_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_INVALID")
     for anchor in value.values():
         if not isinstance(anchor, dict) or set(anchor) != {"cup_start_m", "neck_start_rad"}:
-            raise ValueError("TASK8_ANCHORS_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_INVALID")
         cup = anchor["cup_start_m"]
         if not isinstance(cup, list) or len(cup) != 3:
-            raise ValueError("TASK8_ANCHORS_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_INVALID")
         if any(type(number) not in (int, float) or not math.isfinite(number) for number in (
             *cup, anchor["neck_start_rad"],
         )):
-            raise ValueError("TASK8_ANCHORS_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_INVALID")
         if not (0.05 <= cup[2] <= 0.35 and all(abs(v) <= 1.0 for v in cup[:2])
                 and abs(anchor["neck_start_rad"]) <= math.pi):
-            raise ValueError("TASK8_ANCHORS_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_INVALID")
     return value
 
 
@@ -92,7 +92,7 @@ def build_pick_place_validation_manifest(
     # Copy through canonical bytes so later caller mutations cannot alter this manifest.
     frozen_anchors = json.loads(_canonical(anchors))
     if type(calibration_report_path) is not str or not calibration_report_path:
-        raise ValueError("TASK8_MANIFEST_CALIBRATION_PATH_INVALID")
+        raise ValueError("PICK_PLACE_CALIBRATION_MANIFEST_CALIBRATION_PATH_INVALID")
     document = {
         "schema_version": SCHEMA_VERSION, "kind": "ACT_PICK_PLACE_VALIDATION", "backend": "mujoco",
         "anchors": frozen_anchors, "anchors_sha256": _sha(frozen_anchors),
@@ -107,25 +107,25 @@ def build_pick_place_validation_manifest(
 
 def require_pick_place_validation_manifest(value: object, *, expected_anchors_sha256: str | None = None) -> dict:
     if not isinstance(value, dict) or set(value) != _KEYS:
-        raise ValueError("TASK8_MANIFEST_SCHEMA")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_SCHEMA")
     if (value["schema_version"] != SCHEMA_VERSION or value["kind"] != "ACT_PICK_PLACE_VALIDATION"
             or value["backend"] != "mujoco"):
-        raise ValueError("TASK8_MANIFEST_ROLE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_ROLE_INVALID")
     _require_anchors(value["anchors"])
     if type(value["calibration_report_path"]) is not str or not value["calibration_report_path"]:
-        raise ValueError("TASK8_MANIFEST_CALIBRATION_PATH_INVALID")
+        raise ValueError("PICK_PLACE_CALIBRATION_MANIFEST_CALIBRATION_PATH_INVALID")
     for key in (*_HASH_KEYS, "anchors_sha256", "calibration_report_sha256",
                 "manifest_document_sha256"):
         _require_hash(value[key])
     if (value["anchors_sha256"] != _sha(value["anchors"])
             or expected_anchors_sha256 is not None
             and value["anchors_sha256"] != _require_hash(expected_anchors_sha256)):
-        raise ValueError("TASK8_ANCHORS_HASH_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_ANCHORS_HASH_MISMATCH")
     if value["prefix_cases"] != _prefix_cases() or value["full_cases"] != _full_cases():
-        raise ValueError("TASK8_CASES_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASES_INVALID")
     if value["manifest_document_sha256"] != _sha({key: item for key, item in value.items()
                                                   if key != "manifest_document_sha256"}):
-        raise ValueError("TASK8_MANIFEST_HASH_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_HASH_MISMATCH")
     return value
 
 
@@ -134,7 +134,7 @@ def write_new_manifest(path: Path, document: dict) -> Path:
     require_pick_place_validation_manifest(document)
     path = Path(path)
     if not path.is_absolute() or not path.parent.is_dir():
-        raise ValueError("TASK8_MANIFEST_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_PATH_INVALID")
     data = _canonical(document) + b"\n"
     fd, staging_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:

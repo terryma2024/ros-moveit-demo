@@ -63,7 +63,7 @@ def test_a_missing_artifact_bundle_refuses_by_name_and_exits_non_zero(tmp_path):
                       "--artifact-bundle", str(tmp_path / "absent-receipt.json"))
 
     assert result.returncode != 0, result.stdout
-    assert "TASK8_PREPARATION_REQUIRED" in result.stderr, result.stderr[-400:]
+    assert "PICK_PLACE_VALIDATION_PREPARATION_REQUIRED" in result.stderr, result.stderr[-400:]
     assert not journal.exists(), "nothing may be acquired before the gate refuses"
 
 
@@ -81,7 +81,7 @@ def test_a_journal_outside_the_evidence_root_refuses_by_name_and_exits_non_zero(
     result = _run_cli("--spec", str(spec), "--journal", str(elsewhere / "campaign.jsonl"))
 
     assert result.returncode != 0, result.stdout
-    assert "TASK8_LOCAL_PATH_INVALID" in result.stderr, result.stderr[-400:]
+    assert "PICK_PLACE_VALIDATION_LOCAL_PATH_INVALID" in result.stderr, result.stderr[-400:]
 
 
 def test_a_spec_with_the_wrong_kind_is_refused_by_the_loader(tmp_path):
@@ -93,5 +93,5 @@ def test_a_spec_with_the_wrong_kind_is_refused_by_the_loader(tmp_path):
     document["kind"] = "not_task8_full"
     path = _write_spec(tmp_path, document)
 
-    with pytest.raises(ValueError, match="TASK8_SPEC_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_SPEC_INVALID"):
         load_spec_file(path)

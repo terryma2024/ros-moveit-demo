@@ -89,7 +89,7 @@ def test_manifest_hash_drift_refuses_even_read_only_preview(tmp_path):
     manifest_path, context = prepared(tmp_path)
     manifest_path.write_bytes(manifest_path.read_bytes() + b" ")
     campaign = PickPlaceValidationCampaign(manifest_path, context, Worker(context), tmp_path / "cases.jsonl")
-    with pytest.raises(PickPlaceValidationError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    with pytest.raises(PickPlaceValidationError, match="PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID"):
         campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)
 
 
@@ -97,5 +97,5 @@ def test_policy_binding_drift_refuses_even_read_only_preview(tmp_path):
     manifest_path, context = prepared(tmp_path)
     wrong = replace(context, contact_policy_fingerprint="e" * 64)
     campaign = PickPlaceValidationCampaign(manifest_path, wrong, Worker(wrong), tmp_path / "cases.jsonl")
-    with pytest.raises(PickPlaceValidationError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    with pytest.raises(PickPlaceValidationError, match="PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID"):
         campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)

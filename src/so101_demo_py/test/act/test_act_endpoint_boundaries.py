@@ -55,7 +55,7 @@ def test_an_expired_deadline_is_refused_before_any_phase(tmp_path):
     from so101_demo.act.pick_place_runner import PickPlaceError
 
     runner = PickPlaceRunner(FakePort(), audit=None)
-    with pytest.raises(PickPlaceError, match="TASK8_DEADLINE_EXPIRED"):
+    with pytest.raises(PickPlaceError, match="PICK_PLACE_VALIDATION_DEADLINE_EXPIRED"):
         runner.run({**boundary_request(), "deadline_ns": 0})
 
 

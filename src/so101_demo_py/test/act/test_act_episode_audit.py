@@ -628,7 +628,7 @@ def test_a_formal_audit_requires_the_registered_lease_contract(tmp_path):
     ("dispatch", {"owner": "worker-1", "permit_id": "permit-1"}),
     ("accept", {"permit_id": "permit-1"}),
     ("revoke", {"permit_id": "permit-1", "reason": "deadline"}),
-    ("stop", {"reason": "TASK8_ABORT", "stopped_confirmed": True}),
+    ("stop", {"reason": "PICK_PLACE_VALIDATION_ABORT", "stopped_confirmed": True}),
     ("contact", {"left_contacts": 2, "right_contacts": 2, "table_contact": True}),
     # a release event describes the epoch its own identity claims
     ("release", {"release_epoch": 1, "supported": True, "no_fingertip_contact": True}),

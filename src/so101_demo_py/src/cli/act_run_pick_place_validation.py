@@ -18,15 +18,15 @@ def load_spec_file(path: Path):
 
     path = Path(path)
     if not path.is_absolute() or ".." in path.parts:
-        raise ValueError("TASK8_SPEC_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                raise ValueError("TASK8_SPEC_INVALID")
+                raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
             raw = stream.read((1 << 20) + 1)
         if len(raw) > (1 << 20):
-            raise ValueError("TASK8_SPEC_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
         data = json.loads(raw)
         if (not isinstance(data, dict)
                 or set(data) != set(OperationSpec.__dataclass_fields__)
@@ -38,10 +38,10 @@ def load_spec_file(path: Path):
                 or data["execution_generation"] < 0
                 or type(data["deadline_ns"]) is not int
                 or not isinstance(data["payload"], dict)):
-            raise ValueError("TASK8_SPEC_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
         return OperationSpec(**{**data, "domain": Domain.VALIDATION})
     except (OSError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_SPEC_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID") from error
 
 
 def _validate_local_paths(spec, journal_path: Path) -> None:
@@ -51,19 +51,19 @@ def _validate_local_paths(spec, journal_path: Path) -> None:
     if (getattr(spec, "domain", None) is not Domain.VALIDATION
             or getattr(spec, "kind", None) != "task8_full"
             or not isinstance(payload, dict)):
-        raise ValueError("TASK8_SPEC_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID")
     try:
         root = Path(payload["evidence_root"])
         manifest = Path(payload["manifest_path"])
     except (KeyError, TypeError) as error:
-        raise ValueError("TASK8_SPEC_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_SPEC_INVALID") from error
     journal = Path(journal_path)
     if (not root.is_absolute() or ".." in root.parts or not root.is_dir()
             or not manifest.is_absolute() or ".." in manifest.parts
             or not journal.is_absolute() or ".." in journal.parts
             or not journal.parent.is_dir()
             or not journal.parent.resolve().is_relative_to(root.resolve())):
-        raise ValueError("TASK8_LOCAL_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_LOCAL_PATH_INVALID")
 
 
 #: The static admission proof: only the installed production composition satisfies it.
@@ -80,7 +80,7 @@ def _readiness_executable(install_prefix: Path) -> Path:
     for candidate in candidates:
         if candidate.is_file():
             return candidate
-    raise ValueError("TASK8_READINESS_EXECUTABLE_MISSING")
+    raise ValueError("PICK_PLACE_VALIDATION_READINESS_EXECUTABLE_MISSING")
 
 
 def _case_owner_factory(lifecycle, spec):
@@ -102,7 +102,7 @@ def _case_owner_factory(lifecycle, spec):
             # resolved per case, so the fail-closed checks happen at owner start
             ros2 = shutil.which("ros2")
             if ros2 is None or not os.access(ros2, os.X_OK):
-                raise ValueError("TASK8_ROS2_EXECUTABLE_UNAVAILABLE")
+                raise ValueError("PICK_PLACE_VALIDATION_ROS2_EXECUTABLE_UNAVAILABLE")
             readiness = _readiness_executable(Path(base_launch.install_prefix))
             environment = dict(base_launch.environment)
             stack = make_pick_place_act_stack(
@@ -162,14 +162,14 @@ def main(argv: list[str] | None = None) -> int:
 
         receipt = Path(args.artifact_bundle)
         if not receipt.is_file():
-            raise ValueError("TASK8_PREPARATION_REQUIRED")
+            raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
         verify_pick_place_validation_startup_receipt({
             "preparation_receipt_path": str(receipt),
             "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
         })
         declared = spec.payload.get("preparation_receipt_path")
         if declared is not None and Path(declared).resolve() != receipt.resolve():
-            raise ValueError("TASK8_BUNDLE_SPEC_MISMATCH")
+            raise ValueError("PICK_PLACE_VALIDATION_BUNDLE_SPEC_MISMATCH")
         if args.journal_run_root is not None:
             # all-or-nothing: either every one of the fourteen journals is free, or nothing starts
             import json
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest = json.loads(Path(bundle.manifest).read_bytes())
             plan = plan_campaign_journals(args.journal_run_root, manifest)
             if len(plan) != 14:
-                raise ValueError("TASK8_CAMPAIGN_JOURNAL_PLAN_INCOMPLETE")
+                raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_JOURNAL_PLAN_INCOMPLETE")
     PickPlaceValidationCampaign.require_full_restart_lifecycle()
 
     from so101_teleop.unified.bridge import ActCampaignChildOwner, ActCampaignLifecycle
@@ -190,10 +190,10 @@ def main(argv: list[str] | None = None) -> int:
 
     services = compose_services()
     if services.act_workload is None or services.bridge is None:
-        raise ValueError(f"TASK8_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}")
+        raise ValueError(f"PICK_PLACE_VALIDATION_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}")
     if Path(services.bridge.launch.environment["SO101_UNIFIED_EVIDENCE_ROOT"]).resolve() != Path(
             spec.payload["evidence_root"]).resolve():
-        raise ValueError("TASK8_SERVICE_ROOT_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_SERVICE_ROOT_MISMATCH")
     owner = ActCampaignChildOwner(services.bridge.launch, services.arbiter, services.safety)
     lifecycle = ActCampaignLifecycle(services.act_workload, owner)
     run_root = None

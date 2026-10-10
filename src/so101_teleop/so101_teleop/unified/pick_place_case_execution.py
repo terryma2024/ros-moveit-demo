@@ -37,7 +37,7 @@ def _regular_bytes(path: Path) -> bytes:
             raise ValueError("too large")
         return raw
     except OSError as error:
-        raise ValueError("TASK8_MANIFEST_BINDING_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID") from error
 
 
 def _preflight(spec, case_id: str, journal_path: Path) -> tuple[dict, dict, Path]:
@@ -46,14 +46,14 @@ def _preflight(spec, case_id: str, journal_path: Path) -> tuple[dict, dict, Path
             or spec.deadline_ns <= time.monotonic_ns()
             or not isinstance(getattr(spec, "payload", None), dict)
             or type(case_id) is not str or _CASE.fullmatch(case_id) is None):
-        raise ValueError("TASK8_CASE_NOT_FROZEN")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_NOT_FROZEN")
     payload = spec.payload
     try:
         root = Path(payload["evidence_root"])
         manifest_path = Path(payload["manifest_path"])
         expected_hash = payload["manifest_sha256"]
     except (KeyError, TypeError) as error:
-        raise ValueError("TASK8_MANIFEST_BINDING_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID") from error
     journal_path = Path(journal_path)
     if (not root.is_absolute() or ".." in root.parts or not root.is_dir()
             or root.is_symlink()
@@ -64,18 +64,18 @@ def _preflight(spec, case_id: str, journal_path: Path) -> tuple[dict, dict, Path
             or journal_path.parent.is_symlink()
             or not journal_path.parent.resolve().is_relative_to(root.resolve())
             or journal_path.exists() or journal_path.is_symlink()):
-        raise ValueError("TASK8_MANIFEST_BINDING_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID")
     raw = _regular_bytes(manifest_path)
     if hashlib.sha256(raw).hexdigest() != expected_hash:
-        raise ValueError("TASK8_MANIFEST_BINDING_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID")
     try:
         manifest = require_pick_place_validation_manifest(json.loads(raw))
     except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_MANIFEST_BINDING_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID") from error
     cases = (*manifest["prefix_cases"], *manifest["full_cases"])
     found = tuple(case for case in cases if case["case_id"] == case_id)
     if len(found) != 1:
-        raise ValueError("TASK8_CASE_NOT_FROZEN")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_NOT_FROZEN")
     return manifest, found[0], manifest_path
 
 
@@ -88,13 +88,13 @@ def _require_result(result: dict, case: dict) -> None:
             or result["completed_phases"] != expected
             or result["stopped_confirmed"] is not True
             or result["formal_episode_eligible"] is not (case["mode"] == "full")):
-        raise ValueError("TASK8_CASE_RESULT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_RESULT_INVALID")
 
 
 def _publish_new(path: Path, row: dict) -> None:
     if (not path.parent.is_dir() or path.parent.is_symlink()
             or path.exists() or path.is_symlink()):
-        raise ValueError("TASK8_CASE_JOURNAL_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_JOURNAL_INVALID")
     data = (json.dumps(row, sort_keys=True, separators=(",", ":"),
                        allow_nan=False) + "\n").encode()
     fd, staging = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -120,18 +120,18 @@ def _require_live_evidence_readback(artifact, case: dict) -> None:
 
     if case["mode"] != "full":
         if artifact is not None:
-            raise ValueError("TASK8_LIVE_EVIDENCE_UNEXPECTED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_UNEXPECTED")
         return
     if type(artifact) is not dict:
-        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_READBACK_MISSING")
     path = artifact.get("path")
     if not isinstance(path, str) or not path:
-        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_READBACK_MISSING")
     target = Path(path)
     if target.is_symlink() or not target.is_file():
-        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISSING")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_READBACK_MISSING")
     if hashlib.sha256(target.read_bytes()).hexdigest() != artifact.get("sha256"):
-        raise ValueError("TASK8_LIVE_EVIDENCE_READBACK_MISMATCH")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_READBACK_MISMATCH")
 
 
 async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> dict:
@@ -150,7 +150,7 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
         campaign = PickPlaceValidationCampaign(manifest_path, context, worker, journal_path)
         planned = campaign.planned_cases(deadline_ns=spec.deadline_ns)
         if case not in planned:
-            raise ValueError("TASK8_CASE_NOT_FROZEN")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_NOT_FROZEN")
         request = {
             "session_id": worker.launch.mujoco_session_id,
             "attempt_id": case_id,
@@ -169,7 +169,7 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
         await owner.finish(attempt_id=case_id)
     if (owner.context is not None or owner._stack_retired is not True
             or owner._child_retired is not True or owner._final_clear is not True):
-        raise ValueError("TASK8_CASE_RETIREMENT_UNCONFIRMED")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_RETIREMENT_UNCONFIRMED")
     stack_root = Path(owner.stack.launch.evidence_root)
     child_root = Path(owner.child_launch.socket_root)
     _retirement_receipt(stack_root, owner.stack_owner_key, stack=True,

@@ -28,7 +28,7 @@ def _require_paths(manifest_path: Path, journal_root: Path) -> dict:
             or journal_root.parent.name != "pick-place-live"
             or journal_root.parent.is_symlink()
             or journal_root.parent.parent.is_symlink()):
-        raise ValueError("TASK8_CAMPAIGN_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_PATH_INVALID")
     return require_pick_place_validation_manifest(json.loads(_regular_bytes(manifest_path)))
 
 
@@ -40,11 +40,11 @@ def _resource_identity(spec, manifest_path: Path, journal_root: Path,
             or Path(spec.payload["evidence_root"]) != journal_root.parent.parent
             or not isinstance(spec.payload.get("children"), list)
             or len(spec.payload["children"]) != 1):
-        raise ValueError("TASK8_CASE_SCOPE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_SCOPE_INVALID")
     try:
         child = ActChildLaunch(**spec.payload["children"][0])
     except (TypeError, ValueError) as error:
-        raise ValueError("TASK8_CASE_SCOPE_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_SCOPE_INVALID") from error
     values = {
         "campaign_id": child.campaign_id,
         "session_id": child.mujoco_session_id,
@@ -57,7 +57,7 @@ def _resource_identity(spec, manifest_path: Path, journal_root: Path,
     if (type(spec.command_id) is not str or not spec.command_id
             or type(spec.runtime_id) is not str or not spec.runtime_id
             or any(value in seen[name] for name, value in values.items())):
-        raise ValueError("TASK8_CASE_RESOURCE_REUSED")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_RESOURCE_REUSED")
     for name, value in values.items():
         seen[name].add(value)
     return child
@@ -77,10 +77,10 @@ def _require_retired_row(row: dict, case: dict, child: ActChildLaunch,
             or row.get("full_restart_retired") is not True
             or row.get("eligible_for_formal_collection") is not False
             or not journal_path.is_file() or journal_path.is_symlink()):
-        raise ValueError("TASK8_CASE_RESULT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_RESULT_INVALID")
     raw = _regular_bytes(journal_path)
     if json.loads(raw) != row:
-        raise ValueError("TASK8_CASE_JOURNAL_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_JOURNAL_INVALID")
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -93,7 +93,7 @@ async def run_full_restart_campaign(
     manifest = _require_paths(manifest_path, journal_root)
     summary_path = journal_root / "campaign-result.json"
     if summary_path.exists() or summary_path.is_symlink():
-        raise ValueError("TASK8_CAMPAIGN_JOURNAL_EXISTS")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_JOURNAL_EXISTS")
     cases = (*manifest["prefix_cases"], *manifest["full_cases"])
     seen = {name: set() for name in (
         "campaign_id", "session_id", "ros_domain_id", "namespace",
@@ -107,10 +107,10 @@ async def run_full_restart_campaign(
         case_id = case["case_id"]
         journal_path = journal_root / f"{case_id}.json"
         if journal_path.exists() or journal_path.is_symlink():
-            raise ValueError("TASK8_CASE_JOURNAL_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_JOURNAL_INVALID")
         spec, owner = make_case(dict(case), journal_path)
         if owner is None or any(owner is earlier for earlier in owners):
-            raise ValueError("TASK8_CASE_OWNER_REUSED")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_OWNER_REUSED")
         child = _resource_identity(spec, manifest_path, journal_root, case_id,
                                    journal_path, seen)
         if service_runtime_id is None:

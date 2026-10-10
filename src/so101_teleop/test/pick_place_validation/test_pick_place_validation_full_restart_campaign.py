@@ -93,7 +93,7 @@ def test_fourteen_ordered_cases_each_have_new_resources_and_durable_result(tmp_p
 
 def test_duplicate_session_or_domain_refuses_before_second_case(tmp_path):
     manifest, root, make_case, execute, calls = _setup(tmp_path, duplicate_at=2)
-    with pytest.raises(ValueError, match="TASK8_CASE_RESOURCE_REUSED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CASE_RESOURCE_REUSED"):
         asyncio.run(run_full_restart_campaign(manifest, root, make_case,
                                               execute_case=execute))
     assert calls == []
@@ -121,7 +121,7 @@ def test_failed_retirement_stops_series_and_keeps_prior_case(tmp_path):
 
 def test_existing_case_journal_refuses_without_starting_that_case(tmp_path):
     manifest, root, make_case, execute, calls = _setup(tmp_path, existing_at="prefix-03")
-    with pytest.raises(ValueError, match="TASK8_CASE_JOURNAL_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CASE_JOURNAL_INVALID"):
         asyncio.run(run_full_restart_campaign(manifest, root, make_case,
                                               execute_case=execute))
     assert calls == []

@@ -94,9 +94,9 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
     assert consumer.consume() == receipt
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_ISSUED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_ISSUED"):
         issuer.issue(probe.readiness_bytes)
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_REUSED"):
         probe()
@@ -129,7 +129,7 @@ def test_failed_observer_and_retired_owner_cannot_issue(tmp_path):
         context, child, STACK_OWNER, CHILD_OWNER,
         live_probe=lambda owner: owner != STACK_OWNER, clock_ns=lambda: NOW_NS,
     )
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         issuer.issue(raw)
     assert not (root / "startup-receipt.json").exists()
 
@@ -142,6 +142,6 @@ def test_issuer_rejects_scope_mismatch_before_writing(tmp_path):
         context, child, STACK_OWNER, CHILD_OWNER,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         issuer.issue(raw)
     assert not (root / "readiness.json").exists()

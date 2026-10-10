@@ -66,7 +66,7 @@ class PickPlaceValidationCampaign:
     def _manifest(self) -> dict:
         path = self.manifest_path
         if not path.is_absolute() or ".." in path.parts:
-            raise PickPlaceValidationError("TASK8_MANIFEST_BINDING_INVALID")
+            raise PickPlaceValidationError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID")
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             with os.fdopen(fd, "rb") as stream:
@@ -80,7 +80,7 @@ class PickPlaceValidationCampaign:
                 raise ValueError("context binding")
             return manifest
         except (AttributeError, OSError, TypeError, UnicodeDecodeError, ValueError) as error:
-            raise PickPlaceValidationError("TASK8_MANIFEST_BINDING_INVALID") from error
+            raise PickPlaceValidationError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID") from error
 
     def planned_cases(self, *, deadline_ns: int) -> tuple[dict, ...]:
         context = self.context
@@ -91,7 +91,7 @@ class PickPlaceValidationCampaign:
                 or self.worker.context != context
                 or not isinstance(self.worker.launch.mujoco_session_id, str)
                 or not self.worker.launch.mujoco_session_id):
-            raise PickPlaceValidationError("TASK8_CAMPAIGN_OWNER_INVALID")
+            raise PickPlaceValidationError("PICK_PLACE_VALIDATION_CAMPAIGN_OWNER_INVALID")
         manifest = self._manifest()
         return tuple(dict(case) for case in (*manifest["prefix_cases"], *manifest["full_cases"]))
 

@@ -411,12 +411,12 @@ class UnifiedWorkloadService:
             try:
                 manifest = require_pick_place_validation_manifest(json.loads(manifest_bytes))
             except (TypeError, ValueError, UnicodeDecodeError) as error:
-                raise ValueError("TASK8_MANIFEST_INVALID") from error
+                raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_INVALID") from error
             if any(manifest[name] != payload[name] for name in (
                 "source_sha256", "runtime_config_sha256", "collection_config_sha256",
                 "contact_policy_fingerprint",
             )):
-                raise ValueError("TASK8_MANIFEST_BINDING_MISMATCH")
+                raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_MISMATCH")
         try:
             calibration_path = Path(payload["calibration_report_path"])
             if (not calibration_path.is_absolute() or ".." in calibration_path.parts

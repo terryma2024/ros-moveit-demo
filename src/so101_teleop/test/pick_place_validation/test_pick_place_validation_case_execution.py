@@ -160,7 +160,7 @@ def test_a_full_case_whose_artifact_does_not_read_back_is_refused(tmp_path):
             "live_evidence_artifact": {"path": str(artifact), "sha256": "b" * 64, "schema_version": 1},
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_READBACK_MISMATCH"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_READBACK_MISMATCH"):
         asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
     assert not journal.exists()
 
@@ -168,7 +168,7 @@ def test_case_rejects_forged_phase_result_after_retiring(tmp_path):
     forged = {"status": "PASSED", "completed_phases": ["SEARCH", "APPROACH"],
               "stopped_confirmed": True, "formal_episode_eligible": False}
     spec, owner, journal, events = _prepared(tmp_path, result=forged)
-    with pytest.raises(ValueError, match="TASK8_CASE_RESULT_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CASE_RESULT_INVALID"):
         asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert not journal.exists()
@@ -203,7 +203,7 @@ def test_missing_child_retirement_receipt_refuses_success_record(tmp_path):
     from so101_teleop.unified.contracts import MutationError
 
     spec, owner, journal, events = _prepared(tmp_path, omit_child_receipt=True)
-    with pytest.raises(MutationError, match="TASK8_RETIREMENT_RECEIPT_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_RETIREMENT_RECEIPT_INVALID"):
         asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == ["start", "execute", "finish"]
     assert not journal.exists()
@@ -211,12 +211,12 @@ def test_missing_child_retirement_receipt_refuses_success_record(tmp_path):
 
 def test_unknown_case_and_replaced_manifest_refuse_before_admission(tmp_path):
     spec, owner, journal, events = _prepared(tmp_path)
-    with pytest.raises(ValueError, match="TASK8_CASE_NOT_FROZEN"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CASE_NOT_FROZEN"):
         asyncio.run(run_pick_place_case(spec, "prefix-99", owner, journal))
     assert events == [] and not journal.exists()
     path = Path(spec.payload["manifest_path"])
     path.write_bytes(path.read_bytes() + b" ")
-    with pytest.raises(ValueError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID"):
         asyncio.run(run_pick_place_case(spec, "prefix-01", owner, journal))
     assert events == [] and not journal.exists()
 
@@ -227,6 +227,6 @@ def test_linked_journal_parent_refuses_before_starting_a_stack(tmp_path):
     real_parent.mkdir()
     alias = tmp_path / "linked-journal"
     alias.symlink_to(real_parent, target_is_directory=True)
-    with pytest.raises(ValueError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID"):
         asyncio.run(run_pick_place_case(spec, "prefix-01", owner, alias / "result.json"))
     assert events == [] and not (real_parent / "result.json").exists()

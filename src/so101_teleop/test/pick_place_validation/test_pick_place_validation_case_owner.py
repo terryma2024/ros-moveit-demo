@@ -192,7 +192,7 @@ def test_finished_case_owner_cannot_start_a_second_case(tmp_path):
         await owner.start(spec)
         await owner.finish(attempt_id="attempt-271")
         completed = tuple(events)
-        with pytest.raises(MutationError, match="TASK8_CASE_OWNER_REUSED"):
+        with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_CASE_OWNER_REUSED"):
             await owner.start(spec)
         assert tuple(events) == completed
 
@@ -211,7 +211,7 @@ def test_alternative_in_root_stack_path_is_rejected_before_stack_start(tmp_path)
         return stack
 
     owner.stack_factory = wrong_factory
-    with pytest.raises(MutationError, match="TASK8_CASE_STACK_SCOPE_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_CASE_STACK_SCOPE_INVALID"):
         asyncio.run(owner.start(spec))
     assert events == ["admit", "child.start", "child.stop", "release"]
 
@@ -223,7 +223,7 @@ def test_symlinked_stack_parent_is_rejected_before_stack_start(tmp_path):
     scope.rename(relocated)
     scope.symlink_to(relocated, target_is_directory=True)
 
-    with pytest.raises(MutationError, match="TASK8_CASE_STACK_SCOPE_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_CASE_STACK_SCOPE_INVALID"):
         asyncio.run(owner.start(spec))
     assert events == ["admit", "child.start", "child.stop", "release"]
 
@@ -283,7 +283,7 @@ def test_failed_stack_start_with_unknown_owner_remains_fenced(tmp_path):
 def test_live_case_cannot_be_ready_without_installed_startup_proof(tmp_path):
     owner, spec, context, events = prepared(tmp_path)
     owner.require_startup_proof = True
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_UNAVAILABLE"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_UNAVAILABLE"):
         asyncio.run(owner.start(spec))
     assert owner.context is context
     assert events == ["admit", "child.start", "stack.start"]

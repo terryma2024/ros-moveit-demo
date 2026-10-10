@@ -100,7 +100,7 @@ def _publish_receipt(document: dict, target: Path) -> Path:
         os.link(str(partial), str(target))
     except FileExistsError as error:
         os.unlink(str(partial))
-        raise ValueError("TASK8_PREPARATION_ALREADY_COMMITTED") from error
+        raise ValueError("PICK_PLACE_CALIBRATION_PREPARATION_ALREADY_COMMITTED") from error
     os.unlink(str(partial))
     return target
 
@@ -122,12 +122,12 @@ def require_runtime_descriptor(runtime: object) -> None:
 
     if (type(runtime) is not dict or set(runtime) != {"schema_version", "head_search"}
             or runtime["schema_version"] != 1 or type(runtime["head_search"]) is not dict):
-        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RUNTIME_CONFIG_INVALID")
     detector = runtime["head_search"].get("detector")
     if type(detector) is not dict:
-        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RUNTIME_CONFIG_INVALID")
     if detector.get("allow_cpu_fallback") is not False or detector.get("requested_device") != "cuda":
-        raise ValueError("TASK8_PREPARATION_CUDA_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_CUDA_REQUIRED")
 
 
 def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> None:
@@ -138,11 +138,11 @@ def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> N
     silent recovery on CPU.
     """
 
-    _regular(runtime_path, "TASK8_PREPARATION_RUNTIME_CONFIG_MISSING")
+    _regular(runtime_path, "PICK_PLACE_VALIDATION_PREPARATION_RUNTIME_CONFIG_MISSING")
     try:
         runtime = json.loads(runtime_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RUNTIME_CONFIG_INVALID") from error
     require_runtime_descriptor(runtime)
     # the full runtime/report pairing is the aggregator's check;
     # demanding a fully bound report here would make every bundle fixture carry a measured calibration, which is a
@@ -153,27 +153,27 @@ def prepare_pick_place_validation_bundle(inputs: PickPlaceValidationArtifactInpu
     """Copy every business artifact into one bundle and commit its receipt."""
 
     if not isinstance(inputs, PickPlaceValidationArtifactInputs):
-        raise ValueError("TASK8_PREPARATION_INPUTS_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_INPUTS_INVALID")
     if (type(inputs.identities) is not dict
             or tuple(sorted(inputs.identities)) != tuple(sorted(_IDENTITIES))
             or any(_SHA.fullmatch(str(value)) is None for value in inputs.identities.values())):
-        raise ValueError("TASK8_PREPARATION_IDENTITY_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_IDENTITY_INVALID")
     bundle_root = Path(bundle_root)
     if bundle_root.exists() and any(bundle_root.iterdir()):
-        raise ValueError("TASK8_PREPARATION_DESTINATION_IN_USE")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_DESTINATION_IN_USE")
     bundle_root.mkdir(parents=True, exist_ok=True)
     # section 4.2: parse the immutable runtime config through the production validator before binding anything
     _require_runtime_descriptor(Path(inputs.runtime_config), Path(inputs.calibration_report))
     artifacts = {}
     for name in _ARTIFACTS:
         source = Path(getattr(inputs, name))
-        _regular(source, "TASK8_PREPARATION_ARTIFACT_MISSING")
+        _regular(source, "PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_MISSING")
         target = bundle_root / f"{name}{source.suffix or '.json'}"
         target.write_bytes(source.read_bytes())
         artifacts[name] = {"relative_path": target.name, "sha256": _digest(target),
                            "source_sha256": _digest(source)}
     manifest_source = Path(inputs.manifest)
-    _regular(manifest_source, "TASK8_PREPARATION_ARTIFACT_MISSING")
+    _regular(manifest_source, "PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_MISSING")
     manifest = json.loads(manifest_source.read_bytes())
     manifest["schema_version"] = SCHEMA_VERSION
     manifest["calibration_report_path"] = artifacts["calibration_report"]["relative_path"]
@@ -200,41 +200,41 @@ def verify_prepared_pick_place_validation_bundle(receipt_path: Path) -> Prepared
 
     receipt_path = Path(receipt_path)
     if not receipt_path.is_file():
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
-    _regular(receipt_path, "TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
+    _regular(receipt_path, "PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     try:
         document = json.loads(receipt_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_PREPARATION_REQUIRED") from error
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED") from error
     if (type(document) is not dict or document.get("kind") != KIND
             or document.get("schema_version") != SCHEMA_VERSION):
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     if document.get("receipt_sha256") != _receipt_sha256(document):
-        raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
     if tuple(sorted(document.get("artifacts", {}))) != tuple(sorted(_ARTIFACTS)):
-        raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
     if tuple(sorted(document.get("identities", {}))) != tuple(sorted(_IDENTITIES)):
-        raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
     bundle_root = receipt_path.parent
     if Path(document["bundle_root"]) != bundle_root.resolve():
-        raise ValueError("TASK8_PREPARATION_BUNDLE_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_BUNDLE_MISMATCH")
     resolved = {}
     for name, entry in document["artifacts"].items():
         if tuple(sorted(entry)) != ("relative_path", "sha256", "source_sha256"):
-            raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
         relative = entry["relative_path"]
         if (type(relative) is not str or Path(relative).name != relative
                 or "/" in relative or relative in ("", ".", "..")):
-            raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
         target = bundle_root / relative
-        _regular(target, "TASK8_PREPARATION_ARTIFACT_MISSING")
+        _regular(target, "PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_MISSING")
         if _digest(target) != entry["sha256"]:
-            raise ValueError("TASK8_PREPARATION_ARTIFACT_DIRTY")
+            raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_DIRTY")
         resolved[name] = target
     manifest_target = bundle_root / document["manifest_path"]
-    _regular(manifest_target, "TASK8_PREPARATION_ARTIFACT_MISSING")
+    _regular(manifest_target, "PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_MISSING")
     if _digest(manifest_target) != document["manifest_sha256"]:
-        raise ValueError("TASK8_PREPARATION_ARTIFACT_DIRTY")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_ARTIFACT_DIRTY")
     return PreparedPickPlaceValidationBundle(
         receipt=receipt_path, manifest=manifest_target,
         identities=dict(document["identities"]), **resolved)
@@ -244,19 +244,19 @@ def validate_pick_place_validation_startup_artifacts(payload) -> PreparedPickPla
     """Pure read-only validation: no lease, no worker, no broker, no ROS child."""
 
     if not isinstance(payload, dict):
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     path = payload.get("preparation_receipt_path")
     digest = payload.get("preparation_receipt_sha256")
     if type(path) is not str or not path:
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     receipt_path = Path(path)
     if not receipt_path.is_absolute() or ".." in receipt_path.parts:
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     if _SHA.fullmatch(str(digest)) is None:
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
-    _regular(receipt_path, "TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
+    _regular(receipt_path, "PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     if _digest(receipt_path) != digest:
-        raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_INVALID")
     return verify_prepared_pick_place_validation_bundle(receipt_path)
 
 
@@ -269,7 +269,7 @@ def pick_place_validation_bundle_payload(receipt_path: Path) -> dict:
 
     receipt_path = Path(receipt_path)
     if not receipt_path.is_absolute() or ".." in receipt_path.parts:
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     verify_prepared_pick_place_validation_bundle(receipt_path)
     return {"preparation_receipt_path": str(receipt_path),
             "preparation_receipt_sha256": _digest(receipt_path)}
@@ -287,17 +287,17 @@ def require_pick_place_validation_payload(payload: dict, *, collection_only_keys
     """
 
     if type(payload) is not dict:
-        raise ValueError("TASK8_PAYLOAD_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PAYLOAD_INVALID")
     if any(key not in payload for key in _PICK_PLACE_VALIDATION_PAYLOAD_KEYS):
-        raise ValueError("TASK8_PAYLOAD_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PAYLOAD_INVALID")
     path = payload["preparation_receipt_path"]
     if not isinstance(path, str) or not path.startswith("/"):
-        raise ValueError("TASK8_PAYLOAD_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PAYLOAD_INVALID")
     digest = payload["preparation_receipt_sha256"]
     if not isinstance(digest, str) or _SHA.fullmatch(digest) is None:
-        raise ValueError("TASK8_PAYLOAD_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_PAYLOAD_INVALID")
     if set(collection_only_keys) & set(payload):
-        raise ValueError("TASK8_PAYLOAD_SHAPE_CONFLICT")
+        raise ValueError("PICK_PLACE_VALIDATION_PAYLOAD_SHAPE_CONFLICT")
     return dict(payload)
 
 
@@ -311,7 +311,7 @@ def verify_pick_place_validation_startup_receipt(payload: dict, *, collection_on
     payload = require_pick_place_validation_payload(payload, collection_only_keys=collection_only_keys)
     receipt = Path(payload["preparation_receipt_path"])
     if not receipt.is_file():
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     if _digest(receipt) != payload["preparation_receipt_sha256"]:
-        raise ValueError("TASK8_PREPARATION_RECEIPT_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_MISMATCH")
     return verify_prepared_pick_place_validation_bundle(receipt)

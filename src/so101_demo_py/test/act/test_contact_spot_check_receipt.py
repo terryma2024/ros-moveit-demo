@@ -108,7 +108,7 @@ def test_the_installed_loader_never_accepts_the_candidate(proposal, tmp_path, mo
     assert "allow_spot_check_candidate" not in inspect.signature(module.load_installed_phase_contact_allowlist).parameters
     monkeypatch.setattr(packages, "get_package_share_directory", lambda name: str(PACKAGE))
     proposal_path, receipt_path = write(tmp_path, proposal, receipt(proposal, tmp_path))
-    with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID"):
         module.load_installed_phase_contact_allowlist(
             proposal_path=proposal_path, receipt_path=receipt_path, expected_fingerprint=proposal["policy_fingerprint"])
     normal = receipt(proposal, tmp_path, kind=None, by="user")

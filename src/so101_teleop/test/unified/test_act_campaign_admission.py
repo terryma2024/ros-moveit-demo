@@ -523,10 +523,10 @@ def test_pick_place_validation_start_rejects_semantically_invalid_manifest_befor
     manifest = json.loads(manifest_path.read_text())
     if mutation == "missing_prefix":
         manifest["prefix_cases"].pop()
-        expected = "TASK8_MANIFEST_INVALID"
+        expected = "PICK_PLACE_VALIDATION_MANIFEST_INVALID"
     else:
         manifest["source_sha256"] = "f" * 64
-        expected = "TASK8_MANIFEST_BINDING_MISMATCH"
+        expected = "PICK_PLACE_VALIDATION_MANIFEST_BINDING_MISMATCH"
     # v2 names the document digest manifest_document_sha256 (manifest_sha256 is the FILE digest,
     # computed below), so a mutated document must recompute the v2 key or it is simply invalid
     manifest["manifest_document_sha256"] = hashlib.sha256(_canonical({

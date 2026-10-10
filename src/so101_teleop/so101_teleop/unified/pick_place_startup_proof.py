@@ -69,7 +69,7 @@ class PickPlaceStartupProofConsumer:
                  child_owner: OwnerKey, live_probe=None, clock_ns=time.monotonic_ns) -> None:
         if (not isinstance(stack_owner, OwnerKey) or not isinstance(child_owner, OwnerKey)
                 or not callable(clock_ns) or live_probe is not None and not callable(live_probe)):
-            raise ValueError("TASK8_STARTUP_CONSUMER_CONFIG_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_STARTUP_CONSUMER_CONFIG_INVALID")
         self.context, self.child = context, child
         self.stack_owner, self.child_owner = stack_owner, child_owner
         self.live_probe = live_probe or (lambda owner: _retirement_owner_state(owner) == "live")
@@ -92,7 +92,7 @@ class PickPlaceStartupProofConsumer:
                 raise ValueError("path")
             return root
         except (AttributeError, OSError, TypeError, ValueError) as error:
-            raise MutationError("TASK8_STARTUP_SCOPE_INVALID") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_SCOPE_INVALID") from error
 
     def _claim(self, root: Path, now_ns: int) -> None:
         marker = root / "startup-consumed.json"
@@ -100,9 +100,9 @@ class PickPlaceStartupProofConsumer:
             fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                          0o600)
         except FileExistsError as error:
-            raise MutationError("TASK8_STARTUP_PROOF_ALREADY_CONSUMED") from error
+            raise MutationError("PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED") from error
         except OSError as error:
-            raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID") from error
         try:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(json.dumps({"schema_version": 1,
@@ -115,17 +115,17 @@ class PickPlaceStartupProofConsumer:
             finally:
                 os.close(dir_fd)
         except OSError as error:
-            raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID") from error
 
     def consume(self) -> dict:
         """Burn the capability before validation; failure cannot be retried."""
         root = self._root()
         receipt_path = root / "startup-receipt.json"
         if not receipt_path.exists() and not receipt_path.is_symlink():
-            raise MutationError("TASK8_STARTUP_PROOF_UNAVAILABLE")
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_UNAVAILABLE")
         now_ns = self.clock_ns()
         if type(now_ns) is not int or now_ns <= 0:
-            raise MutationError("TASK8_STARTUP_PROOF_INVALID")
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID")
         self._claim(root, now_ns)
         try:
             receipt, _ = _read_regular_json(receipt_path)
@@ -171,4 +171,4 @@ class PickPlaceStartupProofConsumer:
             return receipt
         except (AttributeError, KeyError, OSError, TypeError, ValueError,
                 UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID") from error

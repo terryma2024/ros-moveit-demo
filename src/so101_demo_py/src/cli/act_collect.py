@@ -20,7 +20,7 @@ def _service(payload: dict):
 
     services = compose_services()
     if services.act_workload is None or services.bridge is None:
-        raise ValueError(f"TASK8_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}")
+        raise ValueError(f"ACT_COLLECTION_UNIFIED_SERVICE_UNAVAILABLE: {services.act_error}")
     return services.act_workload
 
 

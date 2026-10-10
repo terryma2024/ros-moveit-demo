@@ -130,9 +130,9 @@ def test_spec_loader_refuses_extra_fields_and_symlink(tmp_path):
     path.write_text(json.dumps(data))
     assert load_spec_file(path) == spec
     path.write_text(json.dumps({**data, "extra": True}))
-    with pytest.raises(ValueError, match="TASK8_SPEC_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_SPEC_INVALID"):
         load_spec_file(path)
     link = tmp_path / "operation-link.json"
     link.symlink_to(path)
-    with pytest.raises(ValueError, match="TASK8_SPEC_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_SPEC_INVALID"):
         load_spec_file(link)

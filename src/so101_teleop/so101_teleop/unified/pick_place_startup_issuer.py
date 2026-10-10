@@ -118,7 +118,7 @@ class PickPlaceStartupProofIssuer:
         if (not isinstance(stack_owner, OwnerKey) or not isinstance(child_owner, OwnerKey)
                 or not callable(clock_ns)
                 or live_probe is not None and not callable(live_probe)):
-            raise ValueError("TASK8_STARTUP_ISSUER_CONFIG_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_STARTUP_ISSUER_CONFIG_INVALID")
         self.context, self.child = context, child
         self.stack_owner, self.child_owner = stack_owner, child_owner
         self.live_probe = live_probe or (lambda owner: _retirement_owner_state(owner) == "live")
@@ -134,7 +134,7 @@ class PickPlaceStartupProofIssuer:
         if any((root / name).exists() or (root / name).is_symlink() for name in (
             "readiness.json", "startup-receipt.json", "startup-consumed.json",
         )):
-            raise MutationError("TASK8_STARTUP_PROOF_ALREADY_ISSUED")
+            raise MutationError("PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_ISSUED")
         now_ns = self.clock_ns()
         try:
             if (type(now_ns) is not int or now_ns <= 0
@@ -166,4 +166,4 @@ class PickPlaceStartupProofIssuer:
                         json.dumps(receipt, sort_keys=True, separators=(",", ":")).encode())
             return receipt
         except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
-            raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
+            raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID") from error

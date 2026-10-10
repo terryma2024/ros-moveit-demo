@@ -57,7 +57,7 @@ def Path_provenance(output):
 def test_cli_fails_closed_without_evidence_and_never_writes(tmp_path):
     source_path, report_path = _inputs(tmp_path)
     output, collection = tmp_path / "split.json", tmp_path / "collection.json"
-    with pytest.raises(ValueError, match="TASK10_INPUTS_UNAVAILABLE"):
+    with pytest.raises(ValueError, match="SAMPLE_MANIFEST_INPUTS_UNAVAILABLE"):
         main(["--candidate-source", str(tmp_path / "absent.json"),
               "--reachability-report", str(report_path),
               "--output", str(output), "--collection-output", str(collection), "--seed", "7"])

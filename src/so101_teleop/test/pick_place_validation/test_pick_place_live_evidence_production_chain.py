@@ -113,7 +113,7 @@ def test_a_window_that_never_reached_final_check_invalid_seals_instead(tmp_path)
     assert closed["status"] == "INVALID" and closed["grid_count"] == 1
     # the recorder is deliberately independent of the window; the port couples them, so this asserts the window's
     # own state: an invalidated window accepts no further grid sample
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_SEALED"):
         window.add_grid(_sample(evidence_root, phase="APPROACH", step=1, sim_time=PERIOD_S))
 
 
@@ -121,15 +121,15 @@ def test_the_journal_row_readback_refuses_a_missing_or_mismatched_artifact(tmp_p
     from so101_teleop.unified.pick_place_case_execution import _require_live_evidence_readback
 
     full = {"mode": "full"}
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_READBACK_MISSING"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_READBACK_MISSING"):
         _require_live_evidence_readback(None, full)
     target = tmp_path / "live.json"
     target.write_bytes(b"{}")
     good = {"path": str(target), "sha256": hashlib.sha256(b"{}").hexdigest(), "schema_version": 1}
     assert _require_live_evidence_readback(good, full) is None
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_READBACK_MISMATCH"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_READBACK_MISMATCH"):
         _require_live_evidence_readback({**good, "sha256": "c" * 64}, full)
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_UNEXPECTED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_UNEXPECTED"):
         _require_live_evidence_readback(good, {"mode": "phase_prefix"})
 
 
@@ -231,6 +231,6 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
     assert (child_root / "cleanup-receipt.json").is_file() and (stack_root / "cleanup-receipt.json").is_file()
     # the open window was invalid-sealed with the retirement reason, before the child was retired
     assert getattr(open_window, "_sealed", False) is True
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_SEALED"):
         open_window.add_grid(_sample(evidence_root, phase="APPROACH", step=1, sim_time=PERIOD_S))
     assert getattr(open_window, "_invalid_reason", None) == "OWNER_RETIRE"

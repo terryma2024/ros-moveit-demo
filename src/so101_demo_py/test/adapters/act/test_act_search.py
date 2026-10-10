@@ -278,12 +278,12 @@ def test_search_cancellation_before_neck_submission_proves_stop(monkeypatch):
     def guard():
         checks.append(True)
         if len(checks) == 2:
-            raise RuntimeError("ACT_TASK8_CANCELLED")
+            raise RuntimeError("ACT_PICK_PLACE_VALIDATION_CANCELLED")
 
     adapter, _, calls, _ = adapter_fixture(
         monkeypatch, with_inputs=True, operation_guard=guard)
     adapter.search.target = .1
-    with pytest.raises(RuntimeError, match="ACT_TASK8_CANCELLED"):
+    with pytest.raises(RuntimeError, match="ACT_PICK_PLACE_VALIDATION_CANCELLED"):
         adapter.tick(safe_observe=True)
     assert len(checks) >= 2
     assert calls == ['stop']

@@ -69,7 +69,7 @@ def consume_child_pick_place_startup(request, child_owner: OwnerKey, environment
         )
         owner = OwnerKey(**stack)
     except (AttributeError, KeyError, TypeError, ValueError) as error:
-        raise MutationError("TASK8_STARTUP_SCOPE_INVALID") from error
+        raise MutationError("PICK_PLACE_VALIDATION_STARTUP_SCOPE_INVALID") from error
     options = {}
     if live_probe is not None:
         options["live_probe"] = live_probe

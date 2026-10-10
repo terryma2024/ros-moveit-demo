@@ -63,13 +63,13 @@ class PickPlaceLiveEvidenceRecorder:
                  attempt_id: str) -> None:
         if not all(isinstance(value, str) and value
                    for value in (case_id, session_id, attempt_id)):
-            raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_IDENTITY_INVALID")
         self.case_id = case_id
         self.session_id = session_id
         self.attempt_id = attempt_id
         self.evidence_root = Path(evidence_root)
         if not self.evidence_root.is_dir() or self.evidence_root.is_symlink():
-            raise ValueError("TASK8_LIVE_EVIDENCE_ROOT_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_ROOT_INVALID")
         self._staging = self.evidence_root / "live-evidence-staging"
         self._staging.mkdir(mode=0o700, exist_ok=True)
         self._entries: list[dict] = []
@@ -80,55 +80,55 @@ class PickPlaceLiveEvidenceRecorder:
         """Validate and persist one canonical sample; never accept a lossy frame."""
 
         if self._sealed is not None:
-            raise ValueError("TASK8_LIVE_EVIDENCE_ALREADY_SEALED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_ALREADY_SEALED")
         if type(sample) is not dict or set(sample) != set(_SAMPLE_KEYS):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if (sample["case_id"] != self.case_id or sample["session_id"] != self.session_id
                 or sample["attempt_id"] != self.attempt_id):
-            raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_IDENTITY_MISMATCH")
         for name in ("reset_epoch", "release_epoch", "physics_step"):
             if type(sample[name]) is not int or sample[name] < 0:
-                raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if not _finite(sample["sim_time_s"]) or not isinstance(sample["phase"], str) \
                 or not sample["phase"]:
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if any(type(sample[name]) is not bool for name in _BOOLEANS):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if sample["contact_observation_valid"] is not True or sample["wrist_frame_valid"] is not True:
             # a missing frame or an invalid contact observation is evidence loss, not occlusion
-            raise ValueError("TASK8_LIVE_EVIDENCE_LOSS")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_LOSS")
         if not _finite(sample["cup_support_distance_m"]):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         for name, length in _VECTORS.items():
             values = sample[name]
             if (not isinstance(values, list) or len(values) != length
                     or not all(_finite(value) for value in values)):
-                raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if not isinstance(sample["holding_state"], str) or not sample["holding_state"]:
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         for name in ("source_stamps_s", "source_received_monotonic_s"):
             stamps = sample[name]
             if (type(stamps) is not dict or tuple(sorted(stamps)) != tuple(sorted(_SOURCES))
                     or not all(_finite(value) for value in stamps.values())):
-                raise ValueError("TASK8_LIVE_EVIDENCE_SOURCE_MISSING")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SOURCE_MISSING")
         records = sample["raw_records"]
         if type(records) is not dict or tuple(sorted(records)) != tuple(sorted(_SOURCES)):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SOURCE_MISSING")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SOURCE_MISSING")
         for source, record in records.items():
             if type(record) is not dict or set(record) != {"relative_path", "sha256"}:
-                raise ValueError("TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_RAW_RECORD_INVALID")
             relative = record["relative_path"]
             if (type(relative) is not str or relative.startswith("/")
                     or ".." in Path(relative).parts):
-                raise ValueError("TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_RAW_RECORD_INVALID")
             raw = self.evidence_root / relative
             try:
                 info = raw.stat(follow_symlinks=False)
             except OSError as error:
-                raise ValueError("TASK8_LIVE_EVIDENCE_RAW_RECORD_MISSING") from error
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_RAW_RECORD_MISSING") from error
             if not stat.S_ISREG(info.st_mode) or _SHA.fullmatch(str(record["sha256"])) is None \
                     or _digest(raw) != record["sha256"]:
-                raise ValueError("TASK8_LIVE_EVIDENCE_RAW_RECORD_INVALID")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_RAW_RECORD_INVALID")
         relative = f"sample-{len(self._entries):06d}.json"
         target = self._staging / relative
         payload = _canonical(sample)
@@ -161,15 +161,15 @@ class PickPlaceLiveEvidenceRecorder:
         """
 
         if self._sealed is not None:
-            raise ValueError("TASK8_LIVE_EVIDENCE_ALREADY_SEALED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_ALREADY_SEALED")
         if type(identity) is not dict or set(identity) != {
                 "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch"}:
-            raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_IDENTITY_INVALID")
         if (identity["case_id"] != self.case_id or identity["session_id"] != self.session_id
                 or identity["attempt_id"] != self.attempt_id):
-            raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_IDENTITY_MISMATCH")
         if not self._entries:
-            raise ValueError("TASK8_LIVE_EVIDENCE_EMPTY")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_EMPTY")
         # The release epoch is CREATED at the release, so a case's entries legitimately span it: the phases before
         # RELEASE are captured in epoch 0 and those after it in epoch 1, and both are true. The rule is therefore
         # "non-decreasing, and the last entry is the epoch the case ended in" - a backwards sequence and a last entry
@@ -177,12 +177,12 @@ class PickPlaceLiveEvidenceRecorder:
         previous = None
         for entry in self._entries:
             if entry["reset_epoch"] != identity["reset_epoch"]:
-                raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_EPOCH_MISMATCH")
             if previous is not None and entry["release_epoch"] < previous:
-                raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_EPOCH_MISMATCH")
             previous = entry["release_epoch"]
         if previous != identity["release_epoch"]:
-            raise ValueError("TASK8_LIVE_EVIDENCE_EPOCH_MISMATCH")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_EPOCH_MISMATCH")
         # P1-4 / the packet's proposal 1: the sealed document describes its OWN grid - its edges and its count -
         # rather than leaving a reader to recompute them from the samples.
         grid_times = [entry["sim_time_s"] for entry in self._entries if entry.get("kind") == "grid"]
@@ -209,7 +209,7 @@ class PickPlaceLiveEvidenceRecorder:
             os.link(str(partial), str(target))
         except FileExistsError as error:
             os.unlink(str(partial))
-            raise ValueError("TASK8_LIVE_EVIDENCE_ALREADY_SEALED") from error
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_ALREADY_SEALED") from error
         os.unlink(str(partial))
         _fsync_dir(self._staging)
         _fsync_dir(self.evidence_root)
@@ -225,18 +225,18 @@ def validate_evidence_grid(samples, *, period_s: float, tolerance_s: float) -> i
     """
 
     if not samples:
-        raise ValueError("TASK8_LIVE_EVIDENCE_GRID_EMPTY")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_EMPTY")
     previous = None
     for sample in samples:
         stamp = sample.get("sim_time_s") if isinstance(sample, dict) else None
         if not _finite(stamp):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if previous is not None:
             delta = stamp - previous
             if delta <= 0:
-                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_REGRESSION")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_REGRESSION")
             if abs(delta - period_s) > tolerance_s:
-                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_GAP")
         previous = stamp
     return len(samples)
 
@@ -264,17 +264,17 @@ def build_live_evidence_sample(*, identity: dict, phase: str, physics_step: int,
 
     if type(identity) is not dict or set(identity) != {
             "case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch"}:
-        raise ValueError("TASK8_LIVE_EVIDENCE_IDENTITY_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_IDENTITY_INVALID")
     if type(frame) is not dict or set(frame) != {"wrist_frame_valid", "wrist_target_visible"}:
-        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
     if type(contact) is not dict or set(contact) != {
             "observation_valid", "bilateral_contact", "no_fingertip_contact", "cup_supported",
             "released", "placement_stable"}:
-        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
     if type(measurements) is not dict or set(measurements) != {
             "cup_support_distance_m", "end_effector_position_m", "cup_position_m",
             "cup_orientation_xyzw"}:
-        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
     return {
         "case_id": identity["case_id"], "session_id": identity["session_id"],
         "attempt_id": identity["attempt_id"], "reset_epoch": identity["reset_epoch"],
@@ -314,19 +314,19 @@ def resolve_case_journal_path(run_root: Path, case_id: str) -> Path:
     run_root = Path(run_root)
     if not run_root.is_absolute() or ".." in run_root.parts or not run_root.is_dir() \
             or run_root.is_symlink():
-        raise ValueError("TASK8_JOURNAL_RUN_ROOT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_RUN_ROOT_INVALID")
     if type(case_id) is not str or _CASE_ID.fullmatch(case_id) is None:
-        raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_CASE_ID_INVALID")
     root = run_root / "pick-place-live" / "cases"
     root.mkdir(parents=True, exist_ok=True)
     if root.is_symlink():
-        raise ValueError("TASK8_JOURNAL_ROOT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_ROOT_INVALID")
     journal = root / f"{case_id}.json"
     if journal.exists() or journal.is_symlink():
-        raise ValueError("TASK8_JOURNAL_EXISTS")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_EXISTS")
     summary = run_root / "pick-place-live" / "campaign-result.json"
     if summary.exists() or summary.is_symlink():
-        raise ValueError("TASK8_CAMPAIGN_JOURNAL_EXISTS")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_JOURNAL_EXISTS")
     return journal
 
 
@@ -348,31 +348,31 @@ def require_case_journal_row(row: dict, *, mode: str) -> dict:
     """
 
     if mode not in ("phase_prefix", "full"):
-        raise ValueError("TASK8_JOURNAL_MODE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_MODE_INVALID")
     if type(row) is not dict or set(row) != _JOURNAL_KEYS:
-        raise ValueError("TASK8_JOURNAL_ROW_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_ROW_INVALID")
     if type(row["case_id"]) is not str or _CASE_ID.fullmatch(row["case_id"]) is None:
-        raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_CASE_ID_INVALID")
     if row["mode"] != mode:
-        raise ValueError("TASK8_JOURNAL_MODE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_MODE_INVALID")
     if row["status"] not in ("PASSED", "FAILED"):
-        raise ValueError("TASK8_JOURNAL_STATUS_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_STATUS_INVALID")
     for name in ("live_evidence_sha256", "child_retirement_receipt_sha256",
                  "stack_retirement_receipt_sha256", "source_provenance_sha256",
                  "runtime_config_sha256", "contact_policy_fingerprint",
                  "manifest_document_sha256"):
         if _SHA.fullmatch(str(row[name])) is None:
-            raise ValueError("TASK8_JOURNAL_HASH_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_HASH_INVALID")
     # both owned processes must always name a receipt; only a full row names an artifact
     for name in ("child_retirement_receipt_path", "stack_retirement_receipt_path"):
         value = row[name]
         if not isinstance(value, str) or not value:
-            raise ValueError("TASK8_JOURNAL_PATH_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_PATH_INVALID")
     if mode == "phase_prefix":
         if row["live_evidence_path"] != "" or row["live_evidence_sha256"] != "0" * 64:
-            raise ValueError("TASK8_PREFIX_EVIDENCE_FORBIDDEN")
+            raise ValueError("PICK_PLACE_VALIDATION_PREFIX_EVIDENCE_FORBIDDEN")
     elif not isinstance(row["live_evidence_path"], str) or not row["live_evidence_path"]:
-        raise ValueError("TASK8_JOURNAL_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_PATH_INVALID")
     return dict(row)
 
 
@@ -385,24 +385,24 @@ def require_campaign_cases(manifest: dict, *, prefix_count: int = 9,
     """
 
     if type(manifest) is not dict:
-        raise ValueError("TASK8_CAMPAIGN_MANIFEST_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_MANIFEST_INVALID")
     prefixes = manifest.get("prefix_cases")
     fulls = manifest.get("full_cases")
     if not isinstance(prefixes, list) or not isinstance(fulls, list):
-        raise ValueError("TASK8_CAMPAIGN_MANIFEST_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_MANIFEST_INVALID")
     if len(prefixes) != prefix_count or len(fulls) != full_count:
-        raise ValueError("TASK8_CAMPAIGN_CASE_COUNT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_CASE_COUNT_INVALID")
     ids = []
     for case in (*prefixes, *fulls):
         case_id = case.get("case_id") if isinstance(case, dict) else None
         if type(case_id) is not str or _CASE_ID.fullmatch(case_id) is None:
-            raise ValueError("TASK8_CAMPAIGN_CASE_ID_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_CASE_ID_INVALID")
         ids.append(case_id)
     if len(set(ids)) != len(ids):
-        raise ValueError("TASK8_CAMPAIGN_CASE_DUPLICATE")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_CASE_DUPLICATE")
     if any(not case_id.startswith("prefix-") for case_id in ids[:prefix_count]) or \
             any(not case_id.startswith("full-") for case_id in ids[prefix_count:]):
-        raise ValueError("TASK8_CAMPAIGN_CASE_ORDER_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_CASE_ORDER_INVALID")
     return tuple(ids)
 
 
@@ -416,7 +416,7 @@ def plan_campaign_journals(bundle_root: Path, manifest: dict) -> tuple[tuple[str
     bundle_root = Path(bundle_root)
     if not bundle_root.is_absolute() or ".." in bundle_root.parts \
             or not bundle_root.is_dir() or bundle_root.is_symlink():
-        raise ValueError("TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CAMPAIGN_BUNDLE_ROOT_INVALID")
     return tuple((case_id, resolve_case_journal_path(bundle_root, case_id))
                  for case_id in require_campaign_cases(manifest))
 
@@ -437,12 +437,12 @@ def require_case_row_matches_bundle(row: dict, *, identities: dict,
     """
 
     if type(row) is not dict or type(identities) is not dict:
-        raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH")
     for row_key, identity_key in _ROW_IDENTITY.items():
         if identity_key not in identities or row.get(row_key) != identities[identity_key]:
-            raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+            raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH")
     if row.get("manifest_document_sha256") != manifest_document_sha256:
-        raise ValueError("TASK8_JOURNAL_IDENTITY_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH")
     return dict(row)
 
 
@@ -474,12 +474,12 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
     other = tuple(getattr(evidence, "other_object_contacts", ()))
     distance = getattr(evidence, "minimum_signed_distance_m", None)
     if not _finite(distance):
-        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
     state = getattr(evidence, "object_state", None)
     position = list(getattr(state, "position_world", ()))
     orientation = list(getattr(state, "orientation_xyzw", ()))
     if len(position) != 3 or len(orientation) != 4:
-        raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+        raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
     bilateral = bool(left) and bool(right)
     supported = actual_table_support(evidence, support_distance_max_m=support_distance_max_m)
     if bilateral and not supported:
@@ -519,9 +519,9 @@ class LiveEvidenceWindow:
                  tolerance_s: float = 0.01) -> None:
         if not callable(getattr(recorder, "append", None)) or not callable(
                 getattr(recorder, "seal", None)):
-            raise ValueError("TASK8_LIVE_EVIDENCE_RECORDER_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_RECORDER_INVALID")
         if not _finite(period_s) or period_s <= 0 or not _finite(tolerance_s) or tolerance_s < 0:
-            raise ValueError("TASK8_LIVE_EVIDENCE_GRID_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_INVALID")
         self._recorder = recorder
         self._identity = dict(identity)
         self._identity["reset_epoch"] = UNBOUND_RESET_EPOCH
@@ -573,16 +573,16 @@ class LiveEvidenceWindow:
         """
 
         if self._identity["reset_epoch"] is not UNBOUND_RESET_EPOCH:
-            raise ValueError("TASK8_RESET_EPOCH_ALREADY_BOUND")
+            raise ValueError("PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND")
         if self._opened or self._sealed:
-            raise ValueError("TASK8_RESET_EPOCH_BOUND_TOO_LATE")
+            raise ValueError("PICK_PLACE_VALIDATION_RESET_EPOCH_BOUND_TOO_LATE")
         if type(epoch) is not int or epoch < 0:
-            raise ValueError("TASK8_RESET_EPOCH_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_RESET_EPOCH_INVALID")
         self._identity["reset_epoch"] = epoch
 
     def _require_bound(self) -> None:
         if self._identity["reset_epoch"] is UNBOUND_RESET_EPOCH:
-            raise ValueError("TASK8_RESET_EPOCH_UNBOUND")
+            raise ValueError("PICK_PLACE_VALIDATION_RESET_EPOCH_UNBOUND")
 
     def add_grid(self, sample: dict) -> None:
         self._require_bound()
@@ -594,21 +594,21 @@ class LiveEvidenceWindow:
         """
 
         if self._sealed:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_SEALED")
         phase = sample.get("phase") if isinstance(sample, dict) else None
         if phase in self.REQUIRED_PHASES:
             self._opened = True
         elif not self._opened:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         stamp = sample.get("sim_time_s") if isinstance(sample, dict) else None
         if not _finite(stamp):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if self._last_grid_s is not None:
             delta = stamp - self._last_grid_s
             if delta <= 0:
-                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_REGRESSION")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_REGRESSION")
             if abs(delta - self._period_s) > self._tolerance_s:
-                raise ValueError("TASK8_LIVE_EVIDENCE_GRID_GAP")
+                raise ValueError("PICK_PLACE_LIVE_EVIDENCE_GRID_GAP")
         self._last_grid_s = stamp
         self._grid_count += 1
         self._note_phase(phase)
@@ -619,13 +619,13 @@ class LiveEvidenceWindow:
         """Append an edge sample; it never counts as a grid point, and it says WHICH edge it is."""
 
         if self._sealed:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_SEALED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_SEALED")
         if not self._opened:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         if not isinstance(sample, dict) or not _finite(sample.get("sim_time_s")):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         if reason is not None and reason not in ("command", "release", "contact"):
-            raise ValueError(f"TASK8_LIVE_EVIDENCE_EVENT_REASON_INVALID: {reason}")
+            raise ValueError(f"PICK_PLACE_LIVE_EVIDENCE_EVENT_REASON_INVALID: {reason}")
         self._event_count += 1
         self._event_reasons.append(reason)
         self._note_phase(sample.get("phase"))
@@ -639,7 +639,7 @@ class LiveEvidenceWindow:
         """
 
         if not isinstance(reason, str) or not reason:
-            raise ValueError("TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_INVALID_REASON_REQUIRED")
         self._invalid_reason = reason
         self._sealed = True
         return {"status": "INVALID", "reason": reason,
@@ -657,14 +657,14 @@ class LiveEvidenceWindow:
 
         self._require_bound()
         if not self._opened:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_NOT_OPEN")
         missing = [phase for phase in self.REQUIRED_PHASES if phase not in self._phases_seen]
         if missing:
-            raise ValueError("TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_WINDOW_INCOMPLETE")
         chosen = dict(self._identity) if identity is None else dict(identity)
         for name in ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch"):
             if chosen.get(name) != self._identity.get(name):
-                raise ValueError(f"TASK8_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
+                raise ValueError(f"PICK_PLACE_LIVE_EVIDENCE_IDENTITY_MISMATCH: {name}")
         self._sealed = True
         return self._recorder.seal(chosen, period_s=self._period_s)
 
@@ -682,12 +682,12 @@ class CaseEvidenceDriver:
         staging_root = Path(staging_root)
         if not staging_root.is_absolute() or ".." in staging_root.parts \
                 or not staging_root.is_dir() or staging_root.is_symlink():
-            raise ValueError("TASK8_CASE_STAGING_ROOT_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_STAGING_ROOT_INVALID")
         if not _CASE_ID.fullmatch(str(case_id)):
-            raise ValueError("TASK8_JOURNAL_CASE_ID_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_JOURNAL_CASE_ID_INVALID")
         case_root = staging_root / case_id
         if case_root.exists() and (case_root.is_symlink() or not case_root.is_dir()):
-            raise ValueError("TASK8_CASE_STAGING_ROOT_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_STAGING_ROOT_INVALID")
         case_root.mkdir(exist_ok=True)
         factory = recorder_factory or PickPlaceLiveEvidenceRecorder
         recorder = factory(case_id=case_id, evidence_root=case_root, session_id=session_id,
@@ -740,7 +740,7 @@ class CaseEvidenceDriver:
         # holding the very value the adapter was asking for.
         position = measurements.get("end_effector_position_m") if isinstance(measurements, dict) else None
         if position is None:
-            raise ValueError("TASK8_DRIVER_END_EFFECTOR_REQUIRED")
+            raise ValueError("PICK_PLACE_VALIDATION_DRIVER_END_EFFECTOR_REQUIRED")
         fields = adapter.capture_evidence_fields(captured,
                                                  support_distance_max_m=support_distance_max_m,
                                                  raw_records=raw_records,
@@ -767,11 +767,11 @@ def case_row_to_journal_row(row: dict, *, identities: dict,
     """
 
     if type(row) is not dict or not _CASE_ROW_REQUIRED <= set(row):
-        raise ValueError("TASK8_CASE_ROW_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_ROW_INVALID")
     if type(identities) is not dict or any(
             key not in identities for key in ("source_provenance_sha256", "runtime_config_sha256",
                                               "contact_policy_fingerprint")):
-        raise ValueError("TASK8_CASE_ROW_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_CASE_ROW_INVALID")
     journal = {
         "case_id": row["case_id"], "mode": row["mode"], "status": row["status"],
         "live_evidence_path": row["live_evidence_path"],

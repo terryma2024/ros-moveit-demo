@@ -27,16 +27,16 @@ def test_campaign_summary_requires_passed_complete_and_consecutive():
     from so101_demo.act.pick_place_live_qualification import validate_campaign_summary
 
     assert validate_campaign_summary(_summary())["status"] == "PASSED"
-    for broken, code in ((_summary(status="FAILED"), "TASK8_QUALIFICATION_NOT_PASSED"),
-                         (_summary(prefix_count=8), "TASK8_QUALIFICATION_CASE_COUNT_INVALID"),
+    for broken, code in ((_summary(status="FAILED"), "PICK_PLACE_VALIDATION_QUALIFICATION_NOT_PASSED"),
+                         (_summary(prefix_count=8), "PICK_PLACE_VALIDATION_QUALIFICATION_CASE_COUNT_INVALID"),
                          (_summary(consecutive_full_count=4),
-                          "TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE"),
+                          "PICK_PLACE_VALIDATION_QUALIFICATION_FULLS_NOT_CONSECUTIVE"),
                          (_summary(case_journal_sha256=["a" * 64] * 14),
-                          "TASK8_QUALIFICATION_JOURNAL_DUPLICATE"),
+                          "PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_DUPLICATE"),
                          (_summary(case_journal_sha256=["nope"] + [f"{i:064d}"
                                                                    for i in range(2, 15)]),
-                          "TASK8_QUALIFICATION_JOURNAL_HASH_INVALID"),
-                         (_summary(extra=1), "TASK8_QUALIFICATION_SUMMARY_INVALID")):
+                          "PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_HASH_INVALID"),
+                         (_summary(extra=1), "PICK_PLACE_VALIDATION_QUALIFICATION_SUMMARY_INVALID")):
         with pytest.raises(ValueError, match=code):
             validate_campaign_summary(broken)
 
@@ -47,13 +47,13 @@ def test_release_sample_requires_support_then_contact_loss_and_a_real_file(tmp_p
     sample = dict(_sample(tmp_path), supported_before_open=True, contact_lost_after_open=True,
                   stable_window_s=0.5)
     assert validate_release_sample(sample)["stable_window_s"] == 0.5
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_RELEASE_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_RELEASE_INVALID"):
         validate_release_sample(dict(sample, supported_before_open=False))
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_RELEASE_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_RELEASE_INVALID"):
         validate_release_sample(dict(sample, contact_lost_after_open=False))
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_SAMPLE_HASH_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_HASH_INVALID"):
         validate_release_sample(dict(sample, sample_sha256="0" * 64))
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_SAMPLE_MISSING"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_MISSING"):
         validate_release_sample(dict(sample, sample_path=str(tmp_path / "absent.json")))
 
 
@@ -65,7 +65,7 @@ def test_retreat_sample_requires_distance_stability_and_the_deadline(tmp_path):
     assert validate_retreat_sample(sample)["retreat_distance_m"] == 0.06
     for broken in (dict(sample, target_stable=False), dict(sample, retreat_distance_m=0.0),
                    dict(sample, completed_s=121.0), dict(sample, completed_s=-1.0)):
-        with pytest.raises(ValueError, match="TASK8_QUALIFICATION_RETREAT_INVALID"):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_RETREAT_INVALID"):
             validate_retreat_sample(broken)
 
 
@@ -118,11 +118,11 @@ def test_all_fourteen_journals_must_exist_and_match_the_bundle(tmp_path):
 
 
 @pytest.mark.parametrize("skip,mutate,code", [
-    ("full-05", None, "TASK8_QUALIFICATION_JOURNAL_MISSING"),   # the last of the five fulls
+    ("full-05", None, "PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_MISSING"),   # the last of the five fulls
     (None, ("full-01", {"source_provenance_sha256": "7" * 64}),
-     "TASK8_JOURNAL_IDENTITY_MISMATCH"),
-    (None, ("prefix-01", {"live_evidence_sha256": "b" * 64}), "TASK8_PREFIX_EVIDENCE_FORBIDDEN"),
-    (None, ("full-01", {"stack_retirement_receipt_sha256": "nope"}), "TASK8_JOURNAL_HASH_INVALID"),
+     "PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH"),
+    (None, ("prefix-01", {"live_evidence_sha256": "b" * 64}), "PICK_PLACE_VALIDATION_PREFIX_EVIDENCE_FORBIDDEN"),
+    (None, ("full-01", {"stack_retirement_receipt_sha256": "nope"}), "PICK_PLACE_VALIDATION_JOURNAL_HASH_INVALID"),
 ])
 def test_incomplete_or_foreign_journals_refuse_qualification(tmp_path, skip, mutate, code):
     from so101_demo.act.pick_place_live_qualification import validate_case_journals
@@ -246,15 +246,15 @@ def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path
 
 
 @pytest.mark.parametrize("mutation,code", [
-    ({"status": "CALIBRATION_REQUIRED"}, "TASK8_QUALIFICATION_READY_INVALID"),
+    ({"status": "CALIBRATION_REQUIRED"}, "PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID"),
     ({"checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
                  "synchronization": "FAIL", "execution": "PASS",
                  "release": "UNMEASURED", "retreat": "UNMEASURED"}},
-     "TASK8_QUALIFICATION_CHECKS_INCOMPLETE"),
+     "PICK_PLACE_VALIDATION_QUALIFICATION_CHECKS_INCOMPLETE"),
     ({"checks": {"fov": "PASS", "collision": "PASS", "search": "PASS",
                  "synchronization": "PASS", "execution": "PASS",
                  "release": "PASS", "retreat": "UNMEASURED"}},
-     "TASK8_QUALIFICATION_CHECKS_INCOMPLETE"),
+     "PICK_PLACE_VALIDATION_QUALIFICATION_CHECKS_INCOMPLETE"),
 ])
 def test_a_failing_gate_leaves_no_qualified_behind(tmp_path, mutation, code):
     from so101_demo.act.pick_place_live_qualification import build_pick_place_validation_qualified_report
@@ -278,7 +278,7 @@ def test_an_existing_output_is_never_overwritten(tmp_path):
     ready_path.write_text(json.dumps(_ready(identities)))
     output = tmp_path / "qualified.json"
     output.write_text("{}")
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_OUTPUT_EXISTS"):
         build_pick_place_validation_qualified_report(ready_path, receipt, summary_path, case_root, output)
     assert output.read_text() == "{}"
 
@@ -297,7 +297,7 @@ def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
     assert json.loads(output.read_bytes())["status"] == "QUALIFIED"
     assert str(output) in capsys.readouterr().out
     # a second run refuses to overwrite the published report
-    with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_QUALIFICATION_OUTPUT_EXISTS"):
         cli.main(["--pick-place-calibration-ready", str(ready_path), "--preparation-receipt", str(receipt),
                   "--campaign-result", str(summary_path), "--case-root", str(case_root),
                   "--output", str(output)])

@@ -57,7 +57,7 @@ def _retirement_receipt(root: Path, owner: OwnerKey, *, stack: bool,
             raise ValueError("receipt identity or proof mismatch")
         return value
     except (OSError, TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise MutationError("TASK8_RETIREMENT_RECEIPT_INVALID") from error
+        raise MutationError("PICK_PLACE_VALIDATION_RETIREMENT_RECEIPT_INVALID") from error
 
 
 class PickPlaceCaseOwner:
@@ -72,7 +72,7 @@ class PickPlaceCaseOwner:
                 or not callable(artifact_binding) or not callable(startup_proof_issuer)
                 or type(require_startup_proof) is not bool
                 or not 0 < final_clear_timeout_s <= 30):
-            raise ValueError("TASK8_CASE_OWNER_CONFIG_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_CASE_OWNER_CONFIG_INVALID")
         self.workload_service = workload_service
         self.child_owner = child_owner
         self.stack_factory = stack_factory
@@ -96,9 +96,9 @@ class PickPlaceCaseOwner:
 
     async def start(self, spec):
         if self._ever_started:
-            raise MutationError("TASK8_CASE_OWNER_REUSED")
+            raise MutationError("PICK_PLACE_VALIDATION_CASE_OWNER_REUSED")
         if self.context is not None:
-            raise MutationError("TASK8_CASE_ALREADY_ADMITTED")
+            raise MutationError("PICK_PLACE_CALIBRATION_CASE_ALREADY_ADMITTED")
         self._ever_started = True
         context = self.workload_service.start(spec, allow_existing=False)
         self.context = context
@@ -106,23 +106,23 @@ class PickPlaceCaseOwner:
             if (getattr(spec, "kind", None) != "task8_full"
                     or context.workload_kind != "task8_full" or context.worker_count != 1
                     or spec.payload.get("evidence_root") != context.evidence_root):
-                raise MutationError("TASK8_CASE_CONTEXT_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_CONTEXT_INVALID")
             artifacts = self.artifact_binding(spec.payload, context)
             launches = tuple(ActChildLaunch(**item) for item in spec.payload["children"])
             if len(launches) != 1:
-                raise MutationError("TASK8_CASE_CHILD_MAP_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_CHILD_MAP_INVALID")
             child = launches[0]
             if (child.campaign_id != context.campaign_id
                     or child.execution_generation != context.execution_generation):
-                raise MutationError("TASK8_CASE_CHILD_MAP_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_CHILD_MAP_INVALID")
             self.child_launch = child
             ports = await self.child_owner.start(context, launches, artifacts=artifacts)
             if len(ports) != 1 or ports[0].launch != child:
-                raise MutationError("TASK8_CASE_CHILD_MAP_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_CHILD_MAP_INVALID")
             self.worker = ports[0]
             self.child_owner_key = ports[0].client.owner
             if not isinstance(self.child_owner_key, OwnerKey):
-                raise MutationError("TASK8_CASE_CHILD_OWNER_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_CHILD_OWNER_INVALID")
             stack = self.stack_factory(context, child)
             self.stack = stack
             stack_launch = stack.launch
@@ -132,7 +132,7 @@ class PickPlaceCaseOwner:
             campaign_id = context.campaign_id
             if (not isinstance(campaign_id, str)
                     or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", campaign_id) is None):
-                raise MutationError("TASK8_CASE_STACK_SCOPE_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_STACK_SCOPE_INVALID")
             expected_stack_root = campaign_root / "pick-place-live" / campaign_id / "stack"
             if (stack_launch.session_id != child.mujoco_session_id
                     or stack_launch.ros_domain_id != child.ros_domain_id
@@ -145,16 +145,16 @@ class PickPlaceCaseOwner:
                     or stack_root.resolve() == child_root.resolve()
                     or (stack_root / "cleanup-receipt.json").exists()
                     or (child_root / "cleanup-receipt.json").exists()):
-                raise MutationError("TASK8_CASE_STACK_SCOPE_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_STACK_SCOPE_INVALID")
             owner_key = await stack.start()
             if not isinstance(owner_key, OwnerKey) or stack.owner != owner_key:
-                raise MutationError("TASK8_CASE_STACK_OWNER_INVALID")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_STACK_OWNER_INVALID")
             self.stack_owner_key = owner_key
             if self.require_startup_proof:
                 probe = getattr(stack, "ready_probe", None)
                 if (not isinstance(probe, InstalledActStackReadinessProbe)
                         or probe.readiness_bytes is None):
-                    raise MutationError("TASK8_STARTUP_PROOF_UNAVAILABLE")
+                    raise MutationError("PICK_PLACE_VALIDATION_STARTUP_PROOF_UNAVAILABLE")
                 self.startup_proof_issuer(
                     context, child, owner_key, self.child_owner_key,
                 ).issue(probe.readiness_bytes)
@@ -174,7 +174,7 @@ class PickPlaceCaseOwner:
 
     async def finish(self, *, attempt_id: str) -> None:
         if not self._ready or self.context is None:
-            raise MutationError("TASK8_CASE_NOT_READY")
+            raise MutationError("PICK_PLACE_CALIBRATION_CASE_NOT_READY")
         await self._retire(attempt_id=attempt_id)
 
     async def retire_failed_start(self, *, attempt_id: str) -> None:
@@ -194,16 +194,16 @@ class PickPlaceCaseOwner:
 
     async def _retire(self, *, attempt_id: str) -> None:
         if not isinstance(attempt_id, str) or not attempt_id:
-            raise MutationError("TASK8_CASE_ATTEMPT_INVALID")
+            raise MutationError("PICK_PLACE_VALIDATION_CASE_ATTEMPT_INVALID")
         if not self._stop_confirmed:
             response = await self.worker.cancel({
                 "session_id": self.child_launch.mujoco_session_id,
                 "attempt_id": attempt_id,
-                "reason": "TASK8_CASE_RETIRE",
+                "reason": "PICK_PLACE_VALIDATION_CASE_RETIRE",
                 "deadline_ns": time.monotonic_ns() + 5_000_000_000,
             })
             if not isinstance(response, dict) or response.get("stopped_confirmed") is not True:
-                raise MutationError("TASK8_CASE_STOP_NOT_CONFIRMED")
+                raise MutationError("PICK_PLACE_VALIDATION_CASE_STOP_NOT_CONFIRMED")
             self._stop_confirmed = True
         if not self._child_retired:
             # an open live-evidence window must not outlive the child that owns the port recording into it
@@ -226,9 +226,9 @@ class PickPlaceCaseOwner:
             try:
                 clear = await asyncio.wait_for(proof, timeout=self.final_clear_timeout_s)
             except (asyncio.TimeoutError, OSError, ValueError) as error:
-                raise MutationError("TASK8_FINAL_GRAPH_NOT_CLEARED") from error
+                raise MutationError("PICK_PLACE_VALIDATION_FINAL_GRAPH_NOT_CLEARED") from error
             if clear is not True:
-                raise MutationError("TASK8_FINAL_GRAPH_NOT_CLEARED")
+                raise MutationError("PICK_PLACE_VALIDATION_FINAL_GRAPH_NOT_CLEARED")
             self._final_clear = True
         self.workload_service.finish(self.context, cleanup_confirmed=True)
         self.context = None

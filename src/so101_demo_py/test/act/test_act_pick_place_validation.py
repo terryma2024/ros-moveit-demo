@@ -156,7 +156,7 @@ def test_prefix_rejects_unproved_restart_before_search_and_stops():
     with pytest.raises(PickPlaceError, match="FULL_RESTART_NOT_PROVED"):
         PickPlaceRunner(port).run(request("phase_prefix", "SEARCH"))
     assert not any(call[0] == "phase" for call in port.calls)
-    assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
+    assert port.calls[-1] == ("safe_stop", "PICK_PLACE_VALIDATION_ABORT")
 
 
 def test_release_detaches_before_opening_and_retreat_has_two_ordered_segments():
@@ -212,7 +212,7 @@ def test_begin_failure_still_requests_stop_because_reset_may_have_started():
     port = FailingBegin()
     with pytest.raises(RuntimeError, match="reset response lost"):
         PickPlaceRunner(port).run(request())
-    assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
+    assert port.calls[-1] == ("safe_stop", "PICK_PLACE_VALIDATION_ABORT")
 
 
 def test_release_requires_new_epoch_evidence():
@@ -250,7 +250,7 @@ def test_set_down_must_prove_new_supported_step_before_detach_or_open():
         PickPlaceRunner(port).run(request("full", None))
     assert ("detach_moveit", None) not in port.calls
     assert ("phase", "RELEASE") not in port.calls
-    assert port.calls[-1] == ("safe_stop", "TASK8_ABORT")
+    assert port.calls[-1] == ("safe_stop", "PICK_PLACE_VALIDATION_ABORT")
 
 
 @pytest.mark.parametrize("missing", ["controller_reference_ok", "joint_feedback_ok"])

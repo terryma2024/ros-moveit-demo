@@ -19,13 +19,13 @@ from so101_demo.act.joints import ACT_JOINTS
 
 def _finite(value) -> float:
     if isinstance(value, bool) or not isinstance(value, Real):
-        raise ValueError("TASK6_SOURCE_INVALID")
+        raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_INVALID")
     try:
         result = float(value)
     except (OverflowError, TypeError, ValueError) as error:
-        raise ValueError("TASK6_SOURCE_INVALID") from error
+        raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_INVALID") from error
     if not math.isfinite(result):
-        raise ValueError("TASK6_SOURCE_INVALID")
+        raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_INVALID")
     return result
 
 
@@ -33,7 +33,7 @@ def _stamp(message) -> float:
     try:
         value = message.header.stamp.sec + message.header.stamp.nanosec * 1e-9
     except (AttributeError, TypeError) as error:
-        raise ValueError("TASK6_SOURCE_INVALID") from error
+        raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_INVALID") from error
     return _finite(value)
 
 
@@ -56,15 +56,15 @@ class SynchronizedFrameRecorder:
                 or not isinstance(session_id, str)
                 or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}", session_id) is None
                 or type(reset_epoch) is not int or reset_epoch < 1):
-            raise ValueError("TASK6_CAPTURE_SCOPE_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_SCOPE_INVALID")
         floor, age, skew = (_finite(value) for value in (
             source_floor_s, max_age_s, max_skew_s,
         ))
         if floor < 0 or not 0 < age <= .5 or not 0 < skew <= age:
-            raise ValueError("TASK6_CAPTURE_LIMIT_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_LIMIT_INVALID")
         root.parent.mkdir(parents=True, exist_ok=True)
         if root.parent.is_symlink():
-            raise ValueError("TASK6_CAPTURE_SCOPE_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_SCOPE_INVALID")
         root.mkdir(mode=0o700, exist_ok=False)
         self.root, self.session_id, self.reset_epoch = root, session_id, reset_epoch
         self.floor_s, self.max_age_s, self.max_skew_s = floor, age, skew
@@ -82,7 +82,7 @@ class SynchronizedFrameRecorder:
 
     def accept_image(self, camera: str, message) -> None:
         if camera not in self.CAMERAS:
-            raise ValueError("TASK6_RGB_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_RGB_INVALID")
         try:
             stamp = _stamp(message)
             frame = message.header.frame_id
@@ -91,15 +91,15 @@ class SynchronizedFrameRecorder:
                       len(raw), frame) ==
                      ("rgb8", 640, 480, 1920, 921600, f"{camera}_camera_frame"))
         except (AttributeError, TypeError, ValueError) as error:
-            raise ValueError("TASK6_RGB_INVALID") from error
+            raise ValueError("SYNCHRONIZED_CAPTURE_RGB_INVALID") from error
         if not valid or stamp <= self.floor_s:
-            raise ValueError("TASK6_RGB_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_RGB_INVALID")
         with self._lock:
             self._buffers[camera].append((stamp, raw))
 
     def accept_info(self, camera: str, message) -> None:
         if camera not in self.CAMERAS:
-            raise ValueError("TASK6_CAMERA_INFO_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_CAMERA_INFO_INVALID")
         try:
             stamp = _stamp(message)
             frame = message.header.frame_id
@@ -108,12 +108,12 @@ class SynchronizedFrameRecorder:
             distortion = message.distortion_model
             dimensions = (message.width, message.height)
         except (AttributeError, TypeError, ValueError) as error:
-            raise ValueError("TASK6_CAMERA_INFO_INVALID") from error
+            raise ValueError("SYNCHRONIZED_CAPTURE_CAMERA_INFO_INVALID") from error
         if (stamp <= self.floor_s or frame != f"{camera}_camera_frame"
                 or dimensions != (640, 480)
                 or len(k) != 9 or not d or not isinstance(distortion, str)
                 or not distortion):
-            raise ValueError("TASK6_CAMERA_INFO_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_CAMERA_INFO_INVALID")
         with self._lock:
             self._buffers[f"{camera}_info"].append((stamp, (k, d, distortion)))
 
@@ -129,19 +129,19 @@ class SynchronizedFrameRecorder:
             q = tuple(_finite(positions[name]) for name in ACT_JOINTS)
             v = tuple(_finite(velocities[name]) for name in ACT_JOINTS)
         except (AttributeError, KeyError, TypeError, ValueError) as error:
-            raise ValueError("TASK6_JOINTS_INVALID") from error
+            raise ValueError("SYNCHRONIZED_CAPTURE_JOINTS_INVALID") from error
         if stamp <= self.floor_s:
-            raise ValueError("TASK6_JOINTS_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_JOINTS_INVALID")
         with self._lock:
             self._buffers["joints"].append((stamp, (q, v)))
 
     def record_rejection(self, reason: str, *, at_s: float | None = None) -> None:
         if not isinstance(reason, str) or not reason:
-            raise ValueError("TASK6_REJECTION_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_REJECTION_INVALID")
         row = {"reason": reason, "at_s": None if at_s is None else _finite(at_s)}
         with self._lock:
             if self._closed:
-                raise ValueError("TASK6_CAPTURE_CLOSED")
+                raise ValueError("SYNCHRONIZED_CAPTURE_CLOSED")
             self._rejects.write(json.dumps(row, separators=(",", ":")) + "\n")
             self._rejects.flush()
             os.fsync(self._rejects.fileno())
@@ -152,7 +152,7 @@ class SynchronizedFrameRecorder:
                       if self.floor_s < item[0] <= at_s
                       and 0 <= at_s - item[0] <= self.max_age_s]
         if not candidates:
-            raise ValueError("TASK6_SOURCE_STALE")
+            raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_STALE")
         return max(candidates, key=lambda item: item[0])
 
     def capture(self, world) -> dict:
@@ -167,14 +167,14 @@ class SynchronizedFrameRecorder:
                            and world.paused is False and world.truncated is False
                            and len(position) == 3 and len(orientation) == 4)
         except (AttributeError, TypeError, ValueError) as error:
-            raise ValueError("TASK6_WORLD_SCOPE_INVALID") from error
+            raise ValueError("SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID") from error
         if not scope_valid or at_s <= self.floor_s:
-            raise ValueError("TASK6_WORLD_SCOPE_INVALID")
+            raise ValueError("SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID")
         with self._lock:
             if self._closed:
-                raise ValueError("TASK6_CAPTURE_CLOSED")
+                raise ValueError("SYNCHRONIZED_CAPTURE_CLOSED")
             if step <= self._last_step:
-                raise ValueError("TASK6_WORLD_SCOPE_INVALID")
+                raise ValueError("SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID")
             selected = {key: self._select(key, at_s) for key in (
                 "head", "wrist", "joints",
             )}
@@ -183,15 +183,15 @@ class SynchronizedFrameRecorder:
                 info = [item for item in self._buffers[f"{camera}_info"]
                         if item[0] == stamp]
                 if not info:
-                    raise ValueError("TASK6_CAMERA_INFO_MISSING")
+                    raise ValueError("SYNCHRONIZED_CAPTURE_CAMERA_INFO_MISSING")
                 selected[f"{camera}_info"] = info[-1]
                 if stamp <= self._last_source_stamps.get(camera, self.floor_s):
-                    raise ValueError("TASK6_SOURCE_STALE")
+                    raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_STALE")
             if selected["joints"][0] <= self._last_source_stamps.get("joints", self.floor_s):
-                raise ValueError("TASK6_SOURCE_STALE")
+                raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_STALE")
             stamps = [at_s, *(item[0] for item in selected.values())]
             if max(stamps) - min(stamps) > self.max_skew_s:
-                raise ValueError("TASK6_SOURCE_SKEW")
+                raise ValueError("SYNCHRONIZED_CAPTURE_SOURCE_SKEW")
             index = self._count
             cameras = {}
             for camera in self.CAMERAS:
@@ -233,7 +233,7 @@ class SynchronizedFrameRecorder:
     def finish(self) -> dict:
         with self._lock:
             if self._closed:
-                raise ValueError("TASK6_CAPTURE_CLOSED")
+                raise ValueError("SYNCHRONIZED_CAPTURE_CLOSED")
             self._rows.close()
             self._rejects.close()
             summary = {

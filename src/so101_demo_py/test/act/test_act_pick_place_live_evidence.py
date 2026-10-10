@@ -119,9 +119,9 @@ def test_occlusion_is_only_timed_for_a_valid_frame_with_hidden_target(recorder):
 
 
 @pytest.mark.parametrize("mutation,code", [
-    ("gap", "TASK8_LIVE_EVIDENCE_GRID_GAP"),
-    ("duplicate", "TASK8_LIVE_EVIDENCE_GRID_REGRESSION"),
-    ("regression", "TASK8_LIVE_EVIDENCE_GRID_REGRESSION"),
+    ("gap", "PICK_PLACE_LIVE_EVIDENCE_GRID_GAP"),
+    ("duplicate", "PICK_PLACE_LIVE_EVIDENCE_GRID_REGRESSION"),
+    ("regression", "PICK_PLACE_LIVE_EVIDENCE_GRID_REGRESSION"),
 ])
 def test_ten_hertz_grid_rejects_gaps_duplicates_and_regressions(mutation, code):
     """A missing grid point is not occlusion and may not be smoothed over."""
@@ -145,7 +145,7 @@ def test_grid_accepts_a_complete_causal_sequence_and_reports_its_length():
 
     samples = [{"sim_time_s": index * 0.1} for index in range(5)]
     assert validate_evidence_grid(samples, period_s=0.1, tolerance_s=0.01) == 5
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_EMPTY"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_GRID_EMPTY"):
         validate_evidence_grid([], period_s=0.1, tolerance_s=0.01)
 
 
@@ -179,7 +179,7 @@ def test_sample_builder_refuses_incomplete_readback_inputs(recorder):
     from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample
 
     rec, root = recorder
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_SAMPLE_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID"):
         build_live_evidence_sample(
             identity={"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
                       "reset_epoch": 4, "release_epoch": 0},
@@ -226,7 +226,7 @@ class _RecordingRecorder:
 
     def append(self, sample):
         if set(sample) != set(_CANONICAL_KEYS):
-            raise ValueError("TASK8_LIVE_EVIDENCE_SAMPLE_INVALID")
+            raise ValueError("PICK_PLACE_LIVE_EVIDENCE_SAMPLE_INVALID")
         self.appended.append(sample)
 
     def seal(self, identity):
@@ -261,10 +261,10 @@ def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
     journal = resolve_case_journal_path(run_root, "prefix-01")
     assert journal == run_root / "pick-place-live" / "cases" / "prefix-01.json"
     journal.write_text("{}")
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_EXISTS"):
         resolve_case_journal_path(run_root, "prefix-01")     # never spliced into a continuation
     (run_root / "pick-place-live" / "campaign-result.json").write_text("{}")
-    with pytest.raises(ValueError, match="TASK8_CAMPAIGN_JOURNAL_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CAMPAIGN_JOURNAL_EXISTS"):
         resolve_case_journal_path(run_root, "full-01")
     for bad in ("../escape", "prefix-1", "PREFIX-01", "", 7):
         with pytest.raises(ValueError):
@@ -293,7 +293,7 @@ def test_full_journal_row_requires_evidence_and_both_retirement_receipts():
                     "stack_retirement_receipt_sha256", "manifest_document_sha256"):
         with pytest.raises(ValueError):
             require_case_journal_row(_journal_row(**{missing: "not-a-digest"}), mode="full")
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_MODE_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_MODE_INVALID"):
         require_case_journal_row(_journal_row(), mode="phase_prefix")
     with pytest.raises(ValueError):
         require_case_journal_row(_journal_row(extra=1), mode="full")
@@ -306,7 +306,7 @@ def test_prefix_journal_row_may_never_carry_live_evidence():
                           live_evidence_path="", live_evidence_sha256="0" * 64)
     assert require_case_journal_row(prefix, mode="phase_prefix")["case_id"] == "prefix-01"
     leaky = dict(prefix, live_evidence_sha256="b" * 64)
-    with pytest.raises(ValueError, match="TASK8_PREFIX_EVIDENCE_FORBIDDEN"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREFIX_EVIDENCE_FORBIDDEN"):
         require_case_journal_row(leaky, mode="phase_prefix")
 
 
@@ -343,10 +343,10 @@ def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tm
     assert all(not path.exists() for _, path in plan)
     # a conflicting existing journal stops the run before it starts
     plan[0][1].write_text("{}")
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_EXISTS"):
         plan_campaign_journals(tmp_path, _manifest())
     # an invalid bundle root is refused outright
-    with pytest.raises(ValueError, match="TASK8_CAMPAIGN_BUNDLE_ROOT_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CAMPAIGN_BUNDLE_ROOT_INVALID"):
         plan_campaign_journals(tmp_path / "missing", _manifest())
 
 
@@ -360,14 +360,14 @@ def test_journal_row_must_belong_to_the_bundle_that_produced_it():
         row, identities=identities, manifest_document_sha256="9" * 64)["case_id"] == "full-01"
     for key in ("source_provenance_sha256", "runtime_config_sha256",
                 "contact_policy_fingerprint"):
-        with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH"):
             require_case_row_matches_bundle(_journal_row(**{key: "7" * 64}),
                                             identities=identities,
                                             manifest_document_sha256="9" * 64)
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH"):
         require_case_row_matches_bundle(row, identities=identities,
                                         manifest_document_sha256="8" * 64)
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_IDENTITY_MISMATCH"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_IDENTITY_MISMATCH"):
         require_case_row_matches_bundle(row, identities={"source_provenance_sha256": "e" * 64},
                                         manifest_document_sha256="9" * 64)
 
@@ -459,17 +459,17 @@ def test_window_opens_at_search_and_enforces_the_frozen_grid(recorder):
                 ("case_id", "session_id", "attempt_id", "reset_epoch", "release_epoch")}
     window = LiveEvidenceWindow(rec, identity=identity)
     window.bind_reset_epoch((identity)["reset_epoch"])
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
         window.add_grid(_window_sample(root, 0.0, "IDLE", 0))
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_GAP"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_GRID_GAP"):
         window.add_grid(_window_sample(root, 0.3, "MICRO_LIFT", 1))
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_GRID_REGRESSION"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_GRID_REGRESSION"):
         window.add_grid(_window_sample(root, 0.0, "MICRO_LIFT", 1))
     window.add_grid(_window_sample(root, 0.1, "MICRO_LIFT", 1))
     window.add_event(_window_sample(root, 0.15, "CONTACT_EDGE", 1))
     assert window.grid_count == 2 and window.event_count == 1
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_INCOMPLETE"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_INCOMPLETE"):
         window.seal()                       # the run has not reached FINAL_CHECK yet
 
 
@@ -486,7 +486,7 @@ def test_window_seals_only_after_final_check_and_then_refuses_more_samples(recor
         window.add_grid(_window_sample(root, index * 0.1, phase, index))
     artifact = window.seal()
     assert set(artifact) == {"path", "sha256", "schema_version"}
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_SEALED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_SEALED"):
         window.add_grid(_window_sample(root, 0.7, "FINAL_CHECK", 7))
 
 
@@ -522,7 +522,7 @@ def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_pa
     measurements = {"cup_support_distance_m": 0.02, "end_effector_position_m": [0.0, 0.0, 0.1],
                     "cup_position_m": [0.0, 0.0, 0.1], "cup_orientation_xyzw": [0.0, 0.0, 0.0, 1.0]}
     # a grid sample before CLOSE is refused, exactly as the window requires
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_WINDOW_NOT_OPEN"):
         driver.observe(fields, phase="IDLE", frame=frame, contact=contact,
                        measurements=measurements)
     # CLOSE is the first GRID point (that is what opens the window); an edge event is an addition
@@ -566,10 +566,10 @@ def test_published_case_row_translates_into_the_journal_row_shape():
     # the producer's extra fields do not leak into the closed journal shape
     assert "anchor" not in journal and "campaign_id" not in journal
     # a prefix row must not claim a live-evidence artifact, and the rule is re-applied here
-    with pytest.raises(ValueError, match="TASK8_PREFIX_EVIDENCE_FORBIDDEN"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREFIX_EVIDENCE_FORBIDDEN"):
         case_row_to_journal_row(_published_row(case_id="prefix-01", mode="phase_prefix"),
                                 identities=identities, manifest_document_sha256="9" * 64)
-    with pytest.raises(ValueError, match="TASK8_CASE_ROW_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CASE_ROW_INVALID"):
         case_row_to_journal_row({"case_id": "full-01"}, identities=identities,
                                 manifest_document_sha256="9" * 64)
 
@@ -683,11 +683,11 @@ def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recor
     window.bind_reset_epoch((identity)["reset_epoch"])
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
     # a run that never reached FINAL_CHECK must not seal as evidence
-    result = window.invalidate("TASK8_ABORT")
-    assert result["status"] == "INVALID" and result["reason"] == "TASK8_ABORT"
+    result = window.invalidate("PICK_PLACE_VALIDATION_ABORT")
+    assert result["status"] == "INVALID" and result["reason"] == "PICK_PLACE_VALIDATION_ABORT"
     assert result["grid_count"] == 1 and result["event_count"] == 0
-    assert window.invalidate("TASK8_ABORT") == result          # idempotent
-    with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_INVALID_REASON_REQUIRED"):
+    assert window.invalidate("PICK_PLACE_VALIDATION_ABORT") == result          # idempotent
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_EVIDENCE_INVALID_REASON_REQUIRED"):
         window.invalidate("")
 
 
@@ -703,11 +703,11 @@ def test_a_window_refuses_observation_until_the_reset_epoch_is_bound(recorder):
     identity["reset_epoch"] = None
     window = LiveEvidenceWindow(rec, identity=identity)
     assert window.reset_epoch is UNBOUND_RESET_EPOCH
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_UNBOUND"):
         window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_UNBOUND"):
         window.add_event(_window_sample(root, 0.0, "SEARCH", 0))
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_UNBOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_UNBOUND"):
         window.seal()
 
 
@@ -722,19 +722,19 @@ def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
     window = LiveEvidenceWindow(rec, identity=identity)
     window.bind_reset_epoch(7)
     assert window.reset_epoch == 7 and window.identity["reset_epoch"] == 7
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_ALREADY_BOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND"):
         window.bind_reset_epoch(8)
     for bad in (True, -1, None, "7"):
-        with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_INVALID"):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_INVALID"):
             LiveEvidenceWindow(rec, identity=dict(identity)).bind_reset_epoch(bad)
     # an unbound window cannot open at all, so "bound after opening" is unreachable by construction; the reachable
     # too-late case is a window invalidated by the retirement path before its epoch ever arrived
     window.add_grid(_window_sample(root, 0.0, "SEARCH", 0))
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_ALREADY_BOUND"):
+    with pytest.raises(ValueError, match="PICK_PLACE_CALIBRATION_RESET_EPOCH_ALREADY_BOUND"):
         window.bind_reset_epoch(9)
     other = LiveEvidenceWindow(rec, identity=dict(identity))
     other.invalidate("OWNER_RETIRE")
-    with pytest.raises(ValueError, match="TASK8_RESET_EPOCH_BOUND_TOO_LATE"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_RESET_EPOCH_BOUND_TOO_LATE"):
         other.bind_reset_epoch(9)
 
 

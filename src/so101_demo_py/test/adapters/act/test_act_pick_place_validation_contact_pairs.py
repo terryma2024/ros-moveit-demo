@@ -72,7 +72,7 @@ def test_offline_stationary_support_is_exactly_the_activated_approach_support(tm
     assert not support & pairs.for_phase("TRANSPORT")
     table = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, "table_collision")
     model.geom_contype[table] = 0
-    with pytest.raises(ValueError, match="TASK8_CONTACT_SUPPORT_GEOMETRY_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_SUPPORT_GEOMETRY_INVALID"):
         stationary_cup_support_pairs(model)
 
 
@@ -115,11 +115,11 @@ def test_activated_force_and_holding_limits_are_retained_as_isolated_values(tmp_
 
 def test_unknown_phase_or_wrong_admitted_fingerprint_is_refused(tmp_path):
     pairs = bound(tmp_path)
-    with pytest.raises(ValueError, match="TASK8_CONTACT_PHASE_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_PHASE_INVALID"):
         pairs.for_phase("UNKNOWN")
     other = tmp_path / "other"
     other.mkdir()
-    with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID"):
         bound(other, expected="a" * 64)
 
 
@@ -132,7 +132,7 @@ def test_model_scene_version_and_body_policy_drift_are_refused(tmp_path):
     ):
         root = tmp_path / label
         root.mkdir()
-        with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID"):
             bound(root, change=change)
 
 
@@ -141,7 +141,7 @@ def test_receipt_tamper_is_refused(tmp_path):
     value = json.loads(receipt.read_text())
     value["policy_fingerprint"] = "a" * 64
     receipt.write_text(json.dumps(value))
-    with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID"):
         PhaseContactAllowlist(model=model, scene_path=scene, proposal_path=proposal,
                           receipt_path=receipt, expected_fingerprint=fingerprint)
 
@@ -162,7 +162,7 @@ def test_child_compiles_only_installed_act_scene_before_using_policy(tmp_path):
     _, _, wrong_proposal, wrong_receipt, wrong_fingerprint = artifacts(
         wrong_root, change=lambda payload: payload.update(model_sha256="a" * 64),
     )
-    with pytest.raises(ValueError, match="TASK8_CONTACT_POLICY_INVALID"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_CONTACT_POLICY_INVALID"):
         load_installed_phase_contact_allowlist(
             proposal_path=wrong_proposal, receipt_path=wrong_receipt,
             expected_fingerprint=wrong_fingerprint,

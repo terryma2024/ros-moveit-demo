@@ -85,10 +85,10 @@ def test_causal_sample_preserves_both_rgb_images_and_joint_provenance(tmp_path):
 
 def test_wrong_epoch_and_reused_images_never_create_a_second_sample(tmp_path):
     recorder = prepared(tmp_path)
-    with pytest.raises(ValueError, match="TASK6_WORLD_SCOPE_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID"):
         recorder.capture(world(epoch=3))
     recorder.capture(world())
-    with pytest.raises(ValueError, match="TASK6_SOURCE_STALE"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SOURCE_STALE"):
         recorder.capture(world(1.1, step=550))
     assert recorder.finish()["samples"] == 1
 
@@ -99,18 +99,18 @@ def test_new_images_cannot_reuse_old_joint_feedback(tmp_path):
     for camera, rgb in (("head", (1, 2, 3)), ("wrist", (4, 5, 6))):
         recorder.accept_image(camera, image(1.005, f"{camera}_camera_frame", rgb))
         recorder.accept_info(camera, info(1.005, f"{camera}_camera_frame"))
-    with pytest.raises(ValueError, match="TASK6_SOURCE_STALE"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SOURCE_STALE"):
         recorder.capture(world(1.01, step=501))
     assert recorder.finish()["samples"] == 1
 
 
 def test_missing_camera_info_and_future_image_refuse_without_file_rows(tmp_path):
     recorder = prepared(tmp_path, include_info=False)
-    with pytest.raises(ValueError, match="TASK6_CAMERA_INFO_MISSING"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_CAMERA_INFO_MISSING"):
         recorder.capture(world())
     assert recorder.finish()["samples"] == 0
     future = prepared(tmp_path / "other", image_time=1.01)
-    with pytest.raises(ValueError, match="TASK6_SOURCE_STALE"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SOURCE_STALE"):
         future.capture(world())
     assert future.finish()["samples"] == 0
 
@@ -119,11 +119,11 @@ def test_malformed_rgb_and_source_skew_refuse(tmp_path):
     recorder = prepared(tmp_path)
     bad = image(1.01, "head_camera_frame", (1, 2, 3))
     bad.data = bad.data[:-1]
-    with pytest.raises(ValueError, match="TASK6_RGB_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_RGB_INVALID"):
         recorder.accept_image("head", bad)
     recorder.finish()
     skewed = prepared(tmp_path / "other", joint_time=.955)
-    with pytest.raises(ValueError, match="TASK6_SOURCE_SKEW"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SOURCE_SKEW"):
         skewed.capture(world())
     assert skewed.finish()["samples"] == 0
 
@@ -152,12 +152,12 @@ def test_nonfinite_and_boolean_metadata_values_still_refuse(tmp_path):
     from so101_demo.adapters.act.synchronized_frame_capture import _finite
 
     for value in (True, False, "1", float("nan"), float("inf")):
-        with pytest.raises(ValueError, match="TASK6_SOURCE_INVALID"):
+        with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SOURCE_INVALID"):
             _finite(value)
     recorder = prepared(tmp_path, include_info=False)
     bad = info(.99, "head_camera_frame")
     bad.k[0] = float("nan")
-    with pytest.raises(ValueError, match="TASK6_CAMERA_INFO_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_CAMERA_INFO_INVALID"):
         recorder.accept_info("head", bad)
     assert recorder.finish()["samples"] == 0
 
@@ -191,7 +191,7 @@ def test_cli_never_bypasses_latest_world_scope_with_older_history(tmp_path, inva
     observer = SimpleNamespace(recent_with_receipts=lambda: (
         SimpleNamespace(evidence=earlier), SimpleNamespace(evidence=latest),
     ))
-    with pytest.raises(ValueError, match="TASK6_WORLD_SCOPE_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID"):
         _capture_best_world(recorder, observer)
     assert recorder.finish()["samples"] == 0
 
@@ -200,11 +200,11 @@ def test_paused_or_truncated_physics_never_becomes_a_camera_sample(tmp_path):
     recorder = prepared(tmp_path)
     paused = world()
     paused.paused = True
-    with pytest.raises(ValueError, match="TASK6_WORLD_SCOPE_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID"):
         recorder.capture(paused)
     lost = world()
     lost.truncated = True
-    with pytest.raises(ValueError, match="TASK6_WORLD_SCOPE_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_WORLD_SCOPE_INVALID"):
         recorder.capture(lost)
     assert recorder.finish()["samples"] == 0
 
@@ -212,7 +212,7 @@ def test_paused_or_truncated_physics_never_becomes_a_camera_sample(tmp_path):
 def test_cli_rejects_unscoped_output_before_ros_initialization(tmp_path):
     from so101_demo.cli.act_capture_synchronized_rgb import main
 
-    with pytest.raises(ValueError, match="TASK6_CAPTURE_SCOPE_INVALID"):
+    with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SCOPE_INVALID"):
         main(["--evidence-root", str(tmp_path), "--run-id", "../outside",
               "--session-id", "task6-299", "--reset-epoch", "2",
               "--source-floor-s", ".5", "--max-age-s", ".05",

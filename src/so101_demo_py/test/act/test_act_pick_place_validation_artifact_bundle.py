@@ -115,7 +115,7 @@ def test_bundle_without_receipt_is_never_admitted(valid_inputs, tmp_path, monkey
         prepare_pick_place_validation_bundle(valid_inputs, root)
     assert not (root / "preparation-receipt.json").exists()
     monkeypatch.undo()
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
         verify_prepared_pick_place_validation_bundle(root / "preparation-receipt.json")
 
 
@@ -184,7 +184,7 @@ def test_validate_cli_reports_the_bundle_and_refuses_a_bare_directory(tmp_path):
     inputs = _inputs(tmp_path)
     receipt = prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle-cli")
     assert validate_cli.main(["--preparation-receipt", str(receipt)]) == 0
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
         validate_cli.main(["--preparation-receipt", str(tmp_path / "bundle-cli" / "missing.json")])
 
 
@@ -199,7 +199,7 @@ def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path
     assert payload["preparation_receipt_path"] == str(receipt)
     assert payload["preparation_receipt_sha256"] == hashlib.sha256(receipt.read_bytes()).hexdigest()
     # an uncommitted or tampered bundle can never produce a payload
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
         pick_place_validation_bundle_payload(tmp_path / "bundle-payload" / "missing.json")
     broken = tmp_path / "bundle-broken"
     broken.mkdir()
@@ -216,10 +216,10 @@ def test_pick_place_validation_payload_names_its_receipt_and_never_mixes_shapes(
     assert require_pick_place_validation_payload(payload) == payload
     for broken in ({}, {"preparation_receipt_path": "/x"}, dict(payload, preparation_receipt_sha256="nope"),
                    dict(payload, preparation_receipt_path="relative/path")):
-        with pytest.raises(ValueError, match="TASK8_PAYLOAD_INVALID"):
+        with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PAYLOAD_INVALID"):
             require_pick_place_validation_payload(broken)
     # a collection-only field in a pick-place validation payload is refused, whichever side supplies the key list
-    with pytest.raises(ValueError, match="TASK8_PAYLOAD_SHAPE_CONFLICT"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PAYLOAD_SHAPE_CONFLICT"):
         require_pick_place_validation_payload(dict(payload, collection_profile="formal"),
                               collection_only_keys=("collection_profile", "collection_output_root"))
 
@@ -234,9 +234,9 @@ def test_startup_receipt_must_match_its_payload_digest(tmp_path):
                "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}
     bundle = verify_pick_place_validation_startup_receipt(payload)
     assert Path(bundle.receipt) == receipt
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_RECEIPT_MISMATCH"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_RECEIPT_MISMATCH"):
         verify_pick_place_validation_startup_receipt(dict(payload, preparation_receipt_sha256="0" * 64))
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
         verify_pick_place_validation_startup_receipt(dict(payload,
                                           preparation_receipt_path=str(tmp_path / "absent.json")))
 
@@ -264,7 +264,7 @@ def test_live_cli_refuses_a_bad_bundle_before_composing_services(tmp_path, monke
     monkeypatch.setitem(_sys.modules, "so101_teleop.unified.compose", stub)
 
     missing = tmp_path / "absent.json"
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_REQUIRED"):
         live_cli.main(["--spec", str(tmp_path / "spec.json"),
                        "--journal", str(tmp_path / "journal.json"),
                        "--artifact-bundle", str(missing)])
@@ -303,7 +303,7 @@ def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr(live_cli, "load_spec_file",
                         lambda path: type("S", (), {"payload": {}})())
     monkeypatch.setattr(live_cli, "_validate_local_paths", lambda spec, journal: None)
-    with pytest.raises(ValueError, match="TASK8_JOURNAL_EXISTS"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_JOURNAL_EXISTS"):
         live_cli.main(["--spec", str(tmp_path / "spec.json"),
                        "--journal", str(tmp_path / "journal.json"),
                        "--artifact-bundle", str(receipt),

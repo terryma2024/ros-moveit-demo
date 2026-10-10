@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None, *, load_source=load_candidate_source,
         make_port = ReachabilityReportPort.from_path
     if not args.candidate_source.is_file() or not args.reachability_report.is_file():
         # fail closed: absent production evidence means no manifest, and nothing is written
-        raise ValueError("TASK10_INPUTS_UNAVAILABLE")
+        raise ValueError("SAMPLE_MANIFEST_INPUTS_UNAVAILABLE")
 
     source = load_source(args.candidate_source)
     port = make_port(args.reachability_report)

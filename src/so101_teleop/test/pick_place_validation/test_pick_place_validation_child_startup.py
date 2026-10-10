@@ -76,7 +76,7 @@ def test_child_consumes_exact_issued_proof_once(tmp_path):
     )
     assert consume() == receipt
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consume()
 
 
@@ -84,7 +84,7 @@ def test_child_rejects_wrong_owner_and_scope_before_consumption(tmp_path):
     request, environment, _, root = prepared(tmp_path)
     wrong_owner = {**request.payload["stack_owner"], "pid": 99999, "pgid": 99999}
     request.payload["stack_owner"] = wrong_owner
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consume_child_pick_place_startup(
             request, CHILD_OWNER, environment,
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
@@ -95,7 +95,7 @@ def test_child_rejects_wrong_owner_and_scope_before_consumption(tmp_path):
 def test_child_rejects_cross_worker_scope_without_claim(tmp_path):
     request, environment, _, root = prepared(tmp_path)
     request.worker_id = "w01"
-    with pytest.raises(MutationError, match="TASK8_STARTUP_SCOPE_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_SCOPE_INVALID"):
         consume_child_pick_place_startup(
             request, CHILD_OWNER, environment,
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,

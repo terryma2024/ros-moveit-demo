@@ -16,15 +16,15 @@ from so101_demo.act.pick_place_validation_manifest import build_pick_place_valid
 def _digest_regular_file(path: Path) -> str:
     path = Path(path)
     if not path.is_absolute() or ".." in path.parts:
-        raise ValueError("TASK8_ARTIFACT_PATH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_ARTIFACT_PATH_INVALID")
     try:
         fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         with os.fdopen(fd, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                raise ValueError("TASK8_ARTIFACT_NOT_REGULAR")
+                raise ValueError("PICK_PLACE_VALIDATION_ARTIFACT_NOT_REGULAR")
             return hashlib.file_digest(stream, "sha256").hexdigest()
     except OSError as error:
-        raise ValueError("TASK8_ARTIFACT_UNREADABLE") from error
+        raise ValueError("PICK_PLACE_VALIDATION_ARTIFACT_UNREADABLE") from error
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     if (not isinstance(anchors_config, dict)
             or set(anchors_config) != {"schema_version", "anchors"}
             or anchors_config["schema_version"] != 1):
-        raise ValueError("TASK8_ANCHOR_CONFIG_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_ANCHOR_CONFIG_INVALID")
     document = build_pick_place_validation_manifest(
         anchors_config["anchors"],
         source_sha256=_digest_regular_file(args.source),

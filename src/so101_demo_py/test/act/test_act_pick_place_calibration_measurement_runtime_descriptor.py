@@ -72,7 +72,7 @@ def _invoke(tmp_path, context, driver="descriptor_driver:fill"):
 def test_a_context_descriptor_allowing_cpu_fallback_is_refused_before_measuring(tmp_path):
     """Section 4.2: the descriptor must request CUDA with no CPU fallback; the entry is where that is enforced."""
 
-    with pytest.raises(ValueError, match="TASK8_PREPARATION_CUDA_REQUIRED|RUNTIME_DESCRIPTOR"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_PREPARATION_CUDA_REQUIRED|RUNTIME_DESCRIPTOR"):
         _invoke(tmp_path, _context_document(tmp_path, _descriptor(cpu_fallback=True)))
 
 

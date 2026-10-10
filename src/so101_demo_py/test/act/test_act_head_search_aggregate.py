@@ -167,7 +167,7 @@ def test_a_complete_fixture_set_qualifies_and_publishes_the_plan_documents(tmp_p
     assert report["bundle_sha256"] == digest(fixture.paths["approved_bundle"])
     from so101_demo.act.head_search_qualification import require_gate
 
-    with pytest.raises(ValueError, match="TASK8"):
+    with pytest.raises(ValueError, match="PICK_PLACE_LIVE_GATE_REFUSED"):
         require_gate(report, "pick_place_live")
 
 

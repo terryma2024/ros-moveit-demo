@@ -892,7 +892,7 @@ def test_calibration_rejects_wrong_model_and_non_valid_candidate(
 
     broken_candidate = mac[1].raw_candidates[0]
     object.__setattr__(broken_candidate, "class_confidence", None)
-    with pytest.raises(CalibrationError, match="TASK1_RECORD_CONTRACT_INVALID"):
+    with pytest.raises(CalibrationError, match="CALIBRATION_RECORD_CONTRACT_INVALID"):
         calibrate_joint_platform_val(
             "yolo_seg",
             mac,

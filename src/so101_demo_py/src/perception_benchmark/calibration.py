@@ -682,7 +682,7 @@ def _candidate_model_matches(record: PredictionRecord, model: ModelName) -> bool
 
 def _validate_record(record: object) -> PredictionRecord:
     if not isinstance(record, PredictionRecord):
-        raise CalibrationError("TASK1_RECORD_CONTRACT_INVALID")
+        raise CalibrationError("CALIBRATION_RECORD_CONTRACT_INVALID")
     try:
         candidates = tuple(
             replace(candidate, mask=replace(candidate.mask)) for candidate in record.raw_candidates
@@ -694,19 +694,19 @@ def _validate_record(record: object) -> PredictionRecord:
             raw_candidates=candidates,
         )
     except (TypeError, ValueError) as error:
-        raise CalibrationError("TASK1_RECORD_CONTRACT_INVALID") from error
+        raise CalibrationError("CALIBRATION_RECORD_CONTRACT_INVALID") from error
 
 
 def _validate_truth(truth: object) -> TruthSample:
     if not isinstance(truth, TruthSample):
-        raise CalibrationError("TASK1_TRUTH_CONTRACT_INVALID")
+        raise CalibrationError("CALIBRATION_TRUTH_CONTRACT_INVALID")
     try:
         instances = tuple(
             replace(instance, mask=replace(instance.mask)) for instance in truth.instances
         )
         return replace(truth, instances=instances)
     except (TypeError, ValueError) as error:
-        raise CalibrationError("TASK1_TRUTH_CONTRACT_INVALID") from error
+        raise CalibrationError("CALIBRATION_TRUTH_CONTRACT_INVALID") from error
 
 
 def _identity(item: PredictionRecord | TruthSample) -> tuple[int, str]:

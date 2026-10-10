@@ -176,7 +176,7 @@ def test_a_detach_failure_never_opens_and_stops_instead():
     with pytest.raises(PickPlaceError, match="DETACH_NOT_CONFIRMED"):
         PickPlaceRunner(port).run(request())
     assert port.opened == []
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 def test_an_unsupported_cup_is_held_not_released():
@@ -184,7 +184,7 @@ def test_an_unsupported_cup_is_held_not_released():
     with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
         PickPlaceRunner(port).run(request())
     assert port.opened == []
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 def test_a_stale_set_down_observation_is_refused_before_any_open():
@@ -192,7 +192,7 @@ def test_a_stale_set_down_observation_is_refused_before_any_open():
     with pytest.raises(PickPlaceError, match="SET_DOWN_EVIDENCE_INVALID"):
         PickPlaceRunner(port).run(request())
     assert port.opened == []
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 def test_a_release_observation_from_the_old_epoch_is_refused():
@@ -202,7 +202,7 @@ def test_a_release_observation_from_the_old_epoch_is_refused():
     with pytest.raises(PickPlaceError, match="PHASE_EVIDENCE_INVALID"):
         PickPlaceRunner(port).run(request())
     assert port.opened == ["RELEASE"]
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 class RecordingAudit:
@@ -348,7 +348,7 @@ def test_a_runner_is_one_shot_so_an_early_failure_cannot_inherit_an_identity():
     with pytest.raises(PickPlaceError, match="DETACH_NOT_CONFIRMED"):
         runner.run(request())
     recorded = len(audit.events)
-    with pytest.raises(PickPlaceError, match="TASK8_RUNNER_REUSED"):
+    with pytest.raises(PickPlaceError, match="PICK_PLACE_VALIDATION_RUNNER_REUSED"):
         runner.run(request())
     assert len(audit.events) == recorded
 
@@ -517,7 +517,7 @@ def test_close_requires_bilateral_contact():
     with pytest.raises(PickPlaceError, match="BILATERAL_CONTACT_MISSING"):
         PickPlaceRunner(port).run(request())
     assert port.opened == []
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 @pytest.mark.parametrize("phase", ["MICRO_LIFT", "TRANSPORT", "ALIGN"])
@@ -534,7 +534,7 @@ def test_hold_requires_every_predicate(phase, flip):
     with pytest.raises(PickPlaceError, match="HOLD_NOT_CONFIRMED"):
         PickPlaceRunner(port).run(request())
     assert port.opened == []
-    assert port.stops == ["TASK8_ABORT"]
+    assert port.stops == ["PICK_PLACE_VALIDATION_ABORT"]
 
 
 # The RELEASE / RADIAL_RETREAT / FINAL_CHECK group (predicates 7-10, code RELEASE_NOT_CONFIRMED) is not asserted

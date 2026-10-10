@@ -22,7 +22,7 @@ def main(argv=None) -> int:
     receipt = Path(args.preparation_receipt)
     if not receipt.is_file():
         # fail closed: an absent receipt is never a valid bundle
-        raise ValueError("TASK8_PREPARATION_REQUIRED")
+        raise ValueError("PICK_PLACE_VALIDATION_PREPARATION_REQUIRED")
     payload = {
         "preparation_receipt_path": str(receipt.resolve()),
         "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),

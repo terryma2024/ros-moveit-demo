@@ -109,10 +109,10 @@ class RclpyActionDriver:
         raise MutationError("ROS_DRIVER_NOT_PROVISIONED: cannot observe without a ROS worker")
 
     async def pick_place_phase(self, request) -> dict:
-        raise MutationError("ACT_TASK8_PORT_NOT_PROVISIONED")
+        raise MutationError("ACT_PICK_PLACE_VALIDATION_PORT_NOT_PROVISIONED")
 
     async def pick_place_full(self, request) -> dict:
-        raise MutationError("ACT_TASK8_PORT_NOT_PROVISIONED")
+        raise MutationError("ACT_PICK_PLACE_VALIDATION_PORT_NOT_PROVISIONED")
 
     async def act_collection_start(self, request) -> dict:
         raise MutationError("ACT_COLLECTION_NOT_PROVISIONED")

@@ -44,22 +44,22 @@ def validate_campaign_summary(summary: dict, *, prefix_count: int = 9,
     """
 
     if type(summary) is not dict or set(summary) != _SUMMARY_KEYS:
-        raise ValueError("TASK8_QUALIFICATION_SUMMARY_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_SUMMARY_INVALID")
     if summary["status"] != "PASSED":
-        raise ValueError("TASK8_QUALIFICATION_NOT_PASSED")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_NOT_PASSED")
     if summary["prefix_count"] != prefix_count:
-        raise ValueError("TASK8_QUALIFICATION_CASE_COUNT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_CASE_COUNT_INVALID")
     if summary["consecutive_full_count"] != full_count:
         # fulls must be consecutive: a broken run cannot be spliced into a qualification
-        raise ValueError("TASK8_QUALIFICATION_FULLS_NOT_CONSECUTIVE")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_FULLS_NOT_CONSECUTIVE")
     digests = summary["case_journal_sha256"]
     if not isinstance(digests, list) or len(digests) != prefix_count + full_count:
-        raise ValueError("TASK8_QUALIFICATION_CASE_COUNT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_CASE_COUNT_INVALID")
     if len(set(digests)) != len(digests):
-        raise ValueError("TASK8_QUALIFICATION_JOURNAL_DUPLICATE")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_DUPLICATE")
     for digest in digests:
         if _SHA.fullmatch(str(digest)) is None:
-            raise ValueError("TASK8_QUALIFICATION_JOURNAL_HASH_INVALID")
+            raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_HASH_INVALID")
     return dict(summary)
 
 
@@ -69,17 +69,17 @@ def validate_release_sample(sample: dict) -> dict:
     required = {"supported_before_open", "contact_lost_after_open", "stable_window_s",
                 "sample_path", "sample_sha256"}
     if type(sample) is not dict or set(sample) != required:
-        raise ValueError("TASK8_QUALIFICATION_RELEASE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RELEASE_INVALID")
     if sample["supported_before_open"] is not True or sample["contact_lost_after_open"] is not True:
-        raise ValueError("TASK8_QUALIFICATION_RELEASE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RELEASE_INVALID")
     window = sample["stable_window_s"]
     if not isinstance(window, (int, float)) or isinstance(window, bool) or window <= 0:
-        raise ValueError("TASK8_QUALIFICATION_RELEASE_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RELEASE_INVALID")
     sample_path = require_regular_file(Path(sample["sample_path"]),
-                                       "TASK8_QUALIFICATION_SAMPLE_MISSING")
+                                       "PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_MISSING")
     if _SHA.fullmatch(str(sample["sample_sha256"])) is None \
             or _digest(sample_path) != sample["sample_sha256"]:
-        raise ValueError("TASK8_QUALIFICATION_SAMPLE_HASH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_HASH_INVALID")
     return dict(sample)
 
 
@@ -89,20 +89,20 @@ def validate_retreat_sample(sample: dict, *, deadline_s: float = 120.0) -> dict:
     required = {"retreat_distance_m", "target_stable", "completed_s",
                 "sample_path", "sample_sha256"}
     if type(sample) is not dict or set(sample) != required:
-        raise ValueError("TASK8_QUALIFICATION_RETREAT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RETREAT_INVALID")
     distance, completed = sample["retreat_distance_m"], sample["completed_s"]
     if any(isinstance(value, bool) or not isinstance(value, (int, float))
            for value in (distance, completed)):
-        raise ValueError("TASK8_QUALIFICATION_RETREAT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RETREAT_INVALID")
     if distance <= 0 or completed <= 0 or completed > deadline_s:
-        raise ValueError("TASK8_QUALIFICATION_RETREAT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RETREAT_INVALID")
     if sample["target_stable"] is not True:
-        raise ValueError("TASK8_QUALIFICATION_RETREAT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_RETREAT_INVALID")
     sample_path = require_regular_file(Path(sample["sample_path"]),
-                                       "TASK8_QUALIFICATION_SAMPLE_MISSING")
+                                       "PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_MISSING")
     if _SHA.fullmatch(str(sample["sample_sha256"])) is None \
             or _digest(sample_path) != sample["sample_sha256"]:
-        raise ValueError("TASK8_QUALIFICATION_SAMPLE_HASH_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_SAMPLE_HASH_INVALID")
     return dict(sample)
 
 
@@ -124,18 +124,18 @@ def validate_case_journals(case_root: Path, manifest: dict, *, identities: dict,
     case_root = Path(case_root)
     if not case_root.is_absolute() or ".." in case_root.parts or not case_root.is_dir() \
             or case_root.is_symlink():
-        raise ValueError("TASK8_QUALIFICATION_CASE_ROOT_INVALID")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_CASE_ROOT_INVALID")
     rows = []
     for case_id in require_campaign_cases(manifest):
         mode = "phase_prefix" if case_id.startswith("prefix-") else "full"
         journal = case_root / "pick-place-live" / "cases" / f"{case_id}.json"
-        journal = require_regular_file(journal, "TASK8_QUALIFICATION_JOURNAL_MISSING")
+        journal = require_regular_file(journal, "PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_MISSING")
         try:
             row = json.loads(journal.read_bytes())
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("TASK8_QUALIFICATION_JOURNAL_INVALID") from error
+            raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_INVALID") from error
         if row.get("case_id") != case_id:
-            raise ValueError("TASK8_QUALIFICATION_JOURNAL_IDENTITY_MISMATCH")
+            raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_JOURNAL_IDENTITY_MISMATCH")
         row = require_case_journal_row(row, mode=mode)
         rows.append(require_case_row_matches_bundle(
             row, identities=identities, manifest_document_sha256=manifest_document_sha256))
@@ -162,37 +162,37 @@ def build_pick_place_validation_qualified_report(calibration_ready_report: Path,
 
     output = Path(output)
     if output.exists() or output.is_symlink():
-        raise ValueError("TASK8_QUALIFICATION_OUTPUT_EXISTS")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_OUTPUT_EXISTS")
     ready_path = require_regular_file(Path(calibration_ready_report),
-                                      "TASK8_QUALIFICATION_READY_MISSING")
+                                      "PICK_PLACE_CALIBRATION_QUALIFICATION_READY_MISSING")
     try:
         ready = json.loads(ready_path.read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_QUALIFICATION_READY_INVALID") from error
+        raise ValueError("PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID") from error
     if type(ready) is not dict or set(ready) != _READY_KEYS or ready["status"] != "PICK_PLACE_CALIBRATION_READY":
-        raise ValueError("TASK8_QUALIFICATION_READY_INVALID")
+        raise ValueError("PICK_PLACE_CALIBRATION_QUALIFICATION_READY_INVALID")
     checks = ready["checks"]
     if type(checks) is not dict or any(checks.get(name) != "PASS"
                                        for name in _QUALIFICATION_CHECKS):
-        raise ValueError("TASK8_QUALIFICATION_CHECKS_INCOMPLETE")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_CHECKS_INCOMPLETE")
     if checks.get("release") != "UNMEASURED" or checks.get("retreat") != "UNMEASURED":
-        raise ValueError("TASK8_QUALIFICATION_CHECKS_INCOMPLETE")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_CHECKS_INCOMPLETE")
 
     bundle = verify_prepared_pick_place_validation_bundle(Path(preparation_receipt))
     identities = bundle.identities
     try:
         manifest = json.loads(require_regular_file(
-            Path(bundle.manifest), "TASK8_QUALIFICATION_MANIFEST_MISSING").read_bytes())
+            Path(bundle.manifest), "PICK_PLACE_VALIDATION_QUALIFICATION_MANIFEST_MISSING").read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_QUALIFICATION_MANIFEST_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_MANIFEST_INVALID") from error
     try:
         summary = json.loads(require_regular_file(
-            Path(campaign_result), "TASK8_QUALIFICATION_SUMMARY_MISSING").read_bytes())
+            Path(campaign_result), "PICK_PLACE_VALIDATION_QUALIFICATION_SUMMARY_MISSING").read_bytes())
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("TASK8_QUALIFICATION_SUMMARY_INVALID") from error
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_SUMMARY_INVALID") from error
     validate_campaign_summary(summary)
     if identities.get("source_provenance_sha256") != ready["source_provenance_sha256"]:
-        raise ValueError("TASK8_QUALIFICATION_IDENTITY_MISMATCH")
+        raise ValueError("PICK_PLACE_VALIDATION_QUALIFICATION_IDENTITY_MISMATCH")
     validate_case_journals(case_root, manifest, identities=identities,
                            manifest_document_sha256=manifest["manifest_document_sha256"])
 

@@ -201,7 +201,7 @@ def require_gate(report: Mapping[str, object], gate: str) -> None:
 
     if gate in REFUSED_GATES:
         raise ValueError(
-            f"TASK8: a head-only head search report never grants {gate!r}, whatever its status reads"
+            f"PICK_PLACE_LIVE_GATE_REFUSED: a head-only head search report never grants {gate!r}, whatever its status reads"
         )
     if report.get("status") != HEAD_SEARCH_QUALIFIED:
         raise ValueError(

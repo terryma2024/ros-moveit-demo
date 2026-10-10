@@ -68,24 +68,24 @@ def test_valid_startup_proof_is_consumed_once(tmp_path):
     result = consumer.consume()
     assert result["operation_id"] == "operation-281"
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
 
 
 def test_hash_tamper_consumes_attempt_without_granting_replay(tmp_path):
     consumer, root, _ = prepared(tmp_path)
     (root / "readiness.json").write_text("{}")
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_ALREADY_CONSUMED"):
+    with pytest.raises(MutationError, match="PICK_PLACE_CALIBRATION_STARTUP_PROOF_ALREADY_CONSUMED"):
         consumer.consume()
 
 
 def test_missing_receipt_does_not_create_consumed_marker(tmp_path):
     consumer, root, _ = prepared(tmp_path)
     (root / "startup-receipt.json").unlink()
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_UNAVAILABLE"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_UNAVAILABLE"):
         consumer.consume()
     assert not (root / "startup-consumed.json").exists()
 
@@ -94,7 +94,7 @@ def test_symlinked_readiness_is_rejected_and_consumed(tmp_path):
     consumer, root, _ = prepared(tmp_path)
     (root / "readiness.json").rename(root / "readiness-real.json")
     (root / "readiness.json").symlink_to(root / "readiness-real.json")
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
 
@@ -108,7 +108,7 @@ def test_stale_readiness_is_rejected_even_with_matching_hash(tmp_path):
     receipt["readiness_sha256"] = hashlib.sha256(raw).hexdigest()
     receipt["issued_monotonic_ns"] = NOW_NS - 25_000_000_000
     (root / "startup-receipt.json").write_text(json.dumps(receipt))
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
 
@@ -116,7 +116,7 @@ def test_stale_readiness_is_rejected_even_with_matching_hash(tmp_path):
 def test_retired_stack_owner_is_rejected(tmp_path):
     consumer, root, _ = prepared(tmp_path)
     consumer.live_probe = lambda owner: owner != consumer.stack_owner
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
 
@@ -125,7 +125,7 @@ def test_owner_field_type_drift_is_rejected(tmp_path):
     consumer, root, receipt = prepared(tmp_path)
     receipt["stack_owner"]["started_ticks"] = 101.0
     (root / "startup-receipt.json").write_text(json.dumps(receipt))
-    with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         consumer.consume()
     assert (root / "startup-consumed.json").is_file()
 
@@ -133,6 +133,6 @@ def test_owner_field_type_drift_is_rejected(tmp_path):
 def test_foreign_stack_path_rejected_before_consumption(tmp_path):
     consumer, root, _ = prepared(tmp_path)
     consumer.context.campaign_id = "../foreign"
-    with pytest.raises(MutationError, match="TASK8_STARTUP_SCOPE_INVALID"):
+    with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_SCOPE_INVALID"):
         consumer.consume()
     assert not (root / "startup-consumed.json").exists()

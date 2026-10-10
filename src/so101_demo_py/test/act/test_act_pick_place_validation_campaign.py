@@ -80,17 +80,17 @@ def test_four_negatives_break_the_chain_at_four_different_links(tmp_path):
     document = json.loads(tampered.read_bytes())
     document["campaign_note"] = "tampered"
     tampered.write_text(json.dumps(document))
-    with pytest.raises(PickPlaceValidationError, match="TASK8_MANIFEST_BINDING_INVALID"):
+    with pytest.raises(PickPlaceValidationError, match="PICK_PLACE_VALIDATION_MANIFEST_BINDING_INVALID"):
         campaign.planned_cases(deadline_ns=1)
 
     # 2. more than one worker claims the campaign (the manager is single-owner by rule)
     (tmp_path / "second").mkdir()
-    with pytest.raises(PickPlaceValidationError, match="TASK8_CAMPAIGN_OWNER_INVALID"):
+    with pytest.raises(PickPlaceValidationError, match="PICK_PLACE_VALIDATION_CAMPAIGN_OWNER_INVALID"):
         _campaign(tmp_path / "second", worker_count=2).planned_cases(deadline_ns=1)
 
     # 3. the deadline is already behind the clock
     (tmp_path / "third").mkdir()
-    with pytest.raises(PickPlaceValidationError, match="TASK8_CAMPAIGN_OWNER_INVALID"):
+    with pytest.raises(PickPlaceValidationError, match="PICK_PLACE_VALIDATION_CAMPAIGN_OWNER_INVALID"):
         _campaign(tmp_path / "third", clock_ns=10).planned_cases(deadline_ns=5)
 
     # 4. the lifecycle proof itself: the production composition must be importable by name
@@ -106,5 +106,5 @@ def test_four_negatives_break_the_chain_at_four_different_links(tmp_path):
 def test_the_manifest_validator_refuses_a_document_that_was_edited_after_writing(tmp_path):
     document = _manifest_document()
     document["full_cases"] = list(document["full_cases"])[:-1]
-    with pytest.raises(ValueError, match="TASK8_(CASES_INVALID|MANIFEST_HASH_MISMATCH)"):
+    with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_(CASES_INVALID|MANIFEST_HASH_MISMATCH)"):
         require_pick_place_validation_manifest(document)
