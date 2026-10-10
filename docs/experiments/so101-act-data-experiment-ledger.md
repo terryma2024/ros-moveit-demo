@@ -69,11 +69,28 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3536
+latest_checkpoint: CP-3537
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3537 — thin-subclass step 1 (shadow comparison) done; root rulings; go for steps 2–6
+
+- Commits d7913d6ad..e3a35347f (8): the head_neck_limits constants module (with a pin test against the broker C++ constants, to be deleted with the broker in step 4); the pure head_stop_window evaluator; the subscriber on its own node/executor (reliable, depth 64, rearm floor); CANCEL_STOP gains raw_stop_confirmed_sim_ns and raw_stop_last_sample_source_ns; the shadow log and offline comparison behind SO101_HEAD_SHADOW_STOP_WINDOW_DIR. 12 RED/GREEN pairs (red-green/).
+- Shadow verdicts (case-shadow-002, fresh install from cdcf5ff86, seed 900000, domain 173):
+  - pass hjrs2a: startup PASS/PASS, end PASS/PASS. Startup quiet run unbroken at native READY 4.330 s; end window 144 ms after the raw-stop stamp (deadline 0.5 s).
+  - negA hjrna2 (0.006 N·m alternating torque): startup FAIL/FAIL (native PREARM_READY_DEADLINE), end PASS/PASS.
+  - negB hjrnb2 (1.0 N·m held after terminal): startup PASS/PASS, end FAIL/FAIL.
+  - Informational hjrn2a (0.0005 N·m pulses): end native PASS / shadow FAIL (NO_WINDOW). The jitter sits between the window bound 0.002 rad/s and the native raw-stop 0.0414.
+  - Teardown proofs for every run.
+- Root rulings (CP-3394, recommended):
+  1. Accept the executor's startup predicate: a quiet run unbroken at the native decision instant L (the READY stamp, or the last evaluation when never READY), with a window complete by L + 102 ms. A stale early window must not pass; the design §3 wording is corrected accordingly.
+  2. End disagreement: accept an asymmetry. Shadow FAIL / native PASS is allowed only when it is strictly stricter, i.e. the shadow fails NO_WINDOW because |v| lies between the 0.002 witness bound and the 0.0414 native raw-stop bound. Every other disagreement still blocks. Rationale: the new end proof adopts the witness constant 0.002, which is stricter than the old end proof (close ACK + raw stop at 0.0414), and that is the safe direction. Risk: false end failures in nominal live runs. The live acceptance in step 7 will show it; if nominal runs fail the end window, root revisits the bound (no silent loosening).
+  3. head_stop_window_deadline_s stays the provisional constant 0.5 s until startup protocol v2, where it becomes a policy field (HeadSimulationPolicy schema v3; v2 policies remain readable).
+  - Accepted as reported: the CANCEL_STOP stamp fields (119 audit/campaign tests still pass), the env-gated shadow, fail-safe loss above depth 64.
+- Diagnostic dev-loop numbers: 11306 pass, 7 fail (test_p3_* need the installed location; 19/19 against the install). This is not the step-5 gate.
+- Go: steps 2–6 per design §7. Stop again before the step-7 live runs.
 
 ## CP-3536 — thin-subclass design: re-review FAIL (rev 2), rev 3 → PASS-WITH-CHANGES, 5 changes applied; implementation dispatched
 
