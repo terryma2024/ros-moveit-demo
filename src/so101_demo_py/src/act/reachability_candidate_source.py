@@ -1,4 +1,4 @@
-"""Task 10 inputs: a closed candidate-source document and its sampling config.
+"""Inputs of candidate sampling: a closed candidate-source document and its sampling config.
 
 The document is supplied, never inferred: it names `minimum_gap_m` and the exact candidates of the
 five formal splits plus the qualification sets (8 functional, 40 sustained-load). Nothing here invents

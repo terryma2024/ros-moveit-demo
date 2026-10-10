@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.candidate_source import (
+from so101_demo.act.reachability_candidate_source import (
     candidate_identity, load_candidate_source, sampling_config,
 )
 from so101_demo.act.sampling import REACHABILITY_GATES, SPLITS

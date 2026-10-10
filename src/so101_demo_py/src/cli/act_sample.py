@@ -17,7 +17,7 @@ import json
 import math
 from pathlib import Path
 
-from so101_demo.act.candidate_source import load_candidate_source, sampling_config
+from so101_demo.act.reachability_candidate_source import load_candidate_source, sampling_config
 from so101_demo.act.sampling import (
     COLLECTION_SPLITS, SPLITS, assert_separated, make_manifest, project_collection_manifest,
 )

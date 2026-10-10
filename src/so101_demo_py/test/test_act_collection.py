@@ -112,7 +112,7 @@ class _Service:
 
 def _cli_inputs(tmp_path, *, qualification_only=False):
     from so101_demo.act.sampling import SPLITS
-    from so101_demo.act.candidate_source import candidate_identity
+    from so101_demo.act.reachability_candidate_source import candidate_identity
     from so101_demo.act.sampling import REACHABILITY_GATES
 
     splits = ("functional", "load") if qualification_only else ("train", "validation", "offline_test")

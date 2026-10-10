@@ -163,7 +163,7 @@ def test_the_guard_refuses_a_process_that_holds_memo_state(tmp_path, monkeypatch
 def test_the_guard_refuses_a_process_that_built_a_trusting_gate(monkeypatch):
     from so101_demo.act.result_store import ActCollectionResultVerifier
 
-    ActCollectionResultVerifier({}, trust_fresh_qc_memo=True)
+    ActCollectionResultVerifier({}, trust_independent_qc_memo=True)
     with pytest.raises(qc_memo.ReadbackMemoForbidden, match="READBACK_MEMO_TRUSTING_GATE_BUILT"):
         with qc_memo.readback_guard():
             pass
@@ -175,9 +175,9 @@ def test_inside_the_guard_a_trusting_store_or_verifier_cannot_be_built(tmp_path)
     with qc_memo.readback_guard():
         ActCollectionResultVerifier({})                                   # a plain verifier is fine
         with pytest.raises(qc_memo.ReadbackMemoForbidden, match="READBACK_MEMO_TRUST_FORBIDDEN"):
-            ActCollectionResultVerifier({}, trust_fresh_qc_memo=True)
+            ActCollectionResultVerifier({}, trust_independent_qc_memo=True)
         flipped = ActCollectionResultVerifier({})
-        flipped.TRUST_FRESH_QC_MEMO = True                                # flipped after construction: refused at the first use
+        flipped.TRUST_INDEPENDENT_QC_MEMO = True                                # flipped after construction: refused at the first use
         with pytest.raises(qc_memo.ReadbackMemoForbidden):
             flipped.verify(None, "x", None)
 
@@ -390,7 +390,7 @@ def test_a_process_with_a_filled_memo_cache_or_a_trusting_gate_is_refused_by_eve
     assert calls == [] and "READBACK_MEMO_STATE_PRESENT" in capsys.readouterr().err
     qc_memo._CACHE.clear()
     from so101_demo.act.result_store import ActCollectionResultVerifier
-    ActCollectionResultVerifier({}, trust_fresh_qc_memo=True)
+    ActCollectionResultVerifier({}, trust_independent_qc_memo=True)
     assert standalone("qc", run, tmp_path / "again.json") == 4
 
 

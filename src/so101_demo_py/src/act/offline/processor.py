@@ -1,4 +1,4 @@
-"""Offline episode processor: a raw bag in, a sealed episode and a verdict out (P2, CP-3428).
+"""Offline episode processor: a raw bag in, a sealed episode and a verdict out.
 
 The processor opens the episode (frozen inputs, scope, lease), builds the `OfflineEngine` and the `OfflineRosSources`, and
 feeds them from the record-only process's bag on a virtual clock (`replay.py`). Every gate, join, label, continuity and seal rule is the live one; the one substitution is the receipt instant of a
@@ -33,7 +33,7 @@ LEASE_FIELDS = ("batch_id", "coordinator_epoch", "worker_id", "worker_generation
 #: The clock map (bag system stamps to the monotonic clock) is built from two anchors read back to back (+-1 us measured) and
 #: cross-checked against the scene-read pairs. The tightest receipt-ordering rule it feeds is a few milliseconds ("received before
 #: request", the 100 ms join); observed residuals are 0.9 us and 2.8 us on the two real bags. 2 ms leaves a factor of 700 above the
-#: observation and stays below the tightest rule (CP-3457; it was 10 ms).
+#: observation and stays below the tightest rule.
 CLOCK_RESIDUAL_LIMIT_NS = 2_000_000
 
 
@@ -180,9 +180,9 @@ def _write_json(path: Path, document: dict) -> None:
     os.replace(staging, path)
 
 
-def run_fresh_qc(episode_root, *, scope, inputs_manifest, teacher_manifest, output, ignore_scene_colors=False) -> dict:
+def run_independent_qc(episode_root, *, scope, inputs_manifest, teacher_manifest, output, ignore_scene_colors=False) -> dict:
     """The sealed episode's QC in a fresh interpreter: {"status": PASS|FAIL|ERROR, "reason", "rc", ...}."""
-    argv = [sys.executable, "-m", "so101_demo.act.offline.fresh_qc", "--episode", str(episode_root), "--scope", str(scope),
+    argv = [sys.executable, "-m", "so101_demo.act.offline.independent_qc", "--episode", str(episode_root), "--scope", str(scope),
             "--inputs-manifest", str(inputs_manifest), "--output", str(output)]
     if teacher_manifest is not None:
         argv += ["--teacher-manifest", str(teacher_manifest)]
@@ -366,7 +366,7 @@ def process_bag(bag, out, *, inputs_manifest, lease, scope=None, teacher_manifes
     report["bag"]["not_played"] = {topic: count - drained[topic] for topic, count in scan["counts"].items() if count != drained[topic]}
     qc_began = _REAL["perf_counter"]()
     if verdict == "VALID":
-        runner = qc_runner or (lambda root, **kw: run_fresh_qc(root, ignore_scene_colors=ignore_scene_colors, **kw))
+        runner = qc_runner or (lambda root, **kw: run_independent_qc(root, ignore_scene_colors=ignore_scene_colors, **kw))
         teacher = (out / "dynamic" / "dynamic-execute-manifest.json") if teacher_manifest is None else Path(teacher_manifest)
         qc = runner(episode_root, scope=scope, inputs_manifest=inputs_manifest, teacher_manifest=teacher,
                     output=(out / "offline-qc-report.json") if qc_output is None else Path(qc_output))

@@ -240,16 +240,16 @@ class ActCollectionResultStore:
     """One writer at the workspace reserved by a Coordinator lease."""
 
     #: CP-3456: trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation
-    TRUST_FRESH_QC_MEMO = False
+    TRUST_INDEPENDENT_QC_MEMO = False
 
     def __init__(self, workspace: Path, lease: LeaseIdentity, *, clock,
                  audit_manifest=None, scope=None,
                  expected_session_id: str | None = None,
                  expected_reset_epoch: int | None = None,
-                 reserved_workspace=None, inputs_manifest=None, trust_fresh_qc_memo=None) -> None:
-        if trust_fresh_qc_memo is not None:
-            self.TRUST_FRESH_QC_MEMO = bool(trust_fresh_qc_memo)
-        if self.TRUST_FRESH_QC_MEMO:
+                 reserved_workspace=None, inputs_manifest=None, trust_independent_qc_memo=None) -> None:
+        if trust_independent_qc_memo is not None:
+            self.TRUST_INDEPENDENT_QC_MEMO = bool(trust_independent_qc_memo)
+        if self.TRUST_INDEPENDENT_QC_MEMO:
             from . import qc_memo
             qc_memo.note_trusting_gate()
         self.workspace = _safe(workspace)
@@ -371,7 +371,7 @@ class ActCollectionResultStore:
 
         if status in ("INVALID", "DISABLED"):
             return dict(status=status, reason=reason, qc="NOT_RUN", episode_sha256=episode_sha256, binding=None)
-        memoised = (self.TRUST_FRESH_QC_MEMO and qc_report_path is not None and qc_required
+        memoised = (self.TRUST_INDEPENDENT_QC_MEMO and qc_report_path is not None and qc_required
                     and _safe(Path(qc_report_path)) == self.working / 'qc-report.json'
                     and _qc_memo_covers(qc_report_path, episode_root=self.episode_root, scope=self.scope,
                                         inputs_manifest=self.inputs_manifest))
@@ -406,7 +406,7 @@ class ActCollectionResultStore:
                 write_qc_report(report, target)
             verified, digest, mode = _verify_result_qc(target, episode_root=self.episode_root,
                 audit_manifest=self.audit_manifest, scope=self.scope, inputs_manifest=self.inputs_manifest,
-                execution_lease=self.lease, trust_memo=self.TRUST_FRESH_QC_MEMO)
+                execution_lease=self.lease, trust_memo=self.TRUST_INDEPENDENT_QC_MEMO)
         except (OSError, ValueError, TypeError, KeyError) as error:
             if supplied:
                 raise
@@ -593,13 +593,13 @@ class ActCollectionResultVerifier:
 
     #: CP-3456: trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation. The Coordinator
     #: asks for it; the read-only readback never does.
-    TRUST_FRESH_QC_MEMO = False
+    TRUST_INDEPENDENT_QC_MEMO = False
 
     def __init__(self, worker_roots: Mapping[str, Path], *, audit_manifest=None, scope=None, inputs_manifest=None,
-                 trust_fresh_qc_memo=None) -> None:
-        if trust_fresh_qc_memo is not None:
-            self.TRUST_FRESH_QC_MEMO = bool(trust_fresh_qc_memo)
-        if self.TRUST_FRESH_QC_MEMO:
+                 trust_independent_qc_memo=None) -> None:
+        if trust_independent_qc_memo is not None:
+            self.TRUST_INDEPENDENT_QC_MEMO = bool(trust_independent_qc_memo)
+        if self.TRUST_INDEPENDENT_QC_MEMO:
             from . import qc_memo
             qc_memo.note_trusting_gate()
         self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
@@ -712,7 +712,7 @@ class ActCollectionResultVerifier:
         from . import qc_memo
         from .qc_session import active, qc_session
 
-        if self.TRUST_FRESH_QC_MEMO and qc_memo.strict_active():
+        if self.TRUST_INDEPENDENT_QC_MEMO and qc_memo.strict_active():
             raise qc_memo.ReadbackMemoForbidden("READBACK_MEMO_TRUST_FORBIDDEN")
         with contextlib.nullcontext() if active() is not None else qc_session():
             return self._verify(lease, location, run_mode)
@@ -762,7 +762,7 @@ class ActCollectionResultVerifier:
             raise ValueError('RESULT_QC_CURRENT_REPORT_REQUIRED')
         report, digest, mode = _verify_result_qc(sealed / 'qc-report.json', episode_root=episode_path.parent,
             audit_manifest=audit_manifest, scope=self.scope, inputs_manifest=self.inputs_manifest,
-            execution_lease=execution_lease, trust_memo=self.TRUST_FRESH_QC_MEMO)
+            execution_lease=execution_lease, trust_memo=self.TRUST_INDEPENDENT_QC_MEMO)
         binding = dict(qc_report_sha256=digest, inputs_sha256=report['inputs_sha256'],
             scope_sha256=report['scope_sha256'], audit_manifest_sha256=report['audit_manifest_sha256'],
             collection_mode=mode, episode_seal_sha256=report['episode_seal_sha256'])
@@ -807,7 +807,7 @@ class ActCollectionResultVerifier:
             # Data the store graded as sound is re-verified from the sealed files, never read as a claim. Where this gate trusts the
             # fresh-process QC's memo and the memo covers these exact files, that verification (seal, physical audit, native QC) is the
             # one the memo records.
-            memoised = (self.TRUST_FRESH_QC_MEMO and qc != "NOT_RUN" and document["qc_report_path"] == "qc-report.json"
+            memoised = (self.TRUST_INDEPENDENT_QC_MEMO and qc != "NOT_RUN" and document["qc_report_path"] == "qc-report.json"
                         and _qc_memo_covers(sealed / "qc-report.json", episode_root=episode_path.parent, scope=self.scope,
                                             inputs_manifest=self.inputs_manifest))
             episode = (_seal_facts(episode_path) if memoised else

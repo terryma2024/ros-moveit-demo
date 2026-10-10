@@ -1,4 +1,4 @@
-"""A content-bound memo of the independent fresh-process QC (CP-3456).
+"""A content-bound memo of the independent fresh-process QC.
 
 `episode_qc.recompute_native_qc` is a pure function of files: the sealed episode, the run scope, the frozen inputs and the Teacher
 manifest. For a 100 s episode it takes about five minutes (the seal, the physical audit and the native QC). The offline processor runs

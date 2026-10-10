@@ -1509,7 +1509,7 @@ class _ArtifactResults:
             self._act_stores[key] = ActCollectionResultStore(workspace.path.parent, lease,
                 clock=self._clock, audit_manifest=workspace.path / "episode/audit/audit-manifest.json",
                 scope=self._collection_scope, expected_session_id=session,
-                inputs_manifest=self._collection_inputs_manifest, trust_fresh_qc_memo=True,
+                inputs_manifest=self._collection_inputs_manifest, trust_independent_qc_memo=True,
                 expected_reset_epoch=reset_receipt.reset_epoch_value, reserved_workspace=workspace)
         return True
 
@@ -2863,7 +2863,7 @@ class ProductionBatchComposition:
                 worker_roots,
                 scope=self._episode_scope_path,
                 inputs_manifest=self._episode_inputs_manifest,
-                trust_fresh_qc_memo=True,
+                trust_independent_qc_memo=True,
             )
         self._startup_stage = "coordinator_journal"
         if self.journal is None:

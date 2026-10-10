@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.act.candidate_source import candidate_identity, load_candidate_source
+from so101_demo.act.reachability_candidate_source import candidate_identity, load_candidate_source
 from so101_demo.act.sampling import REACHABILITY_GATES
 from so101_demo.adapters.act.candidate_reachability import (
     PHASE_STATES,

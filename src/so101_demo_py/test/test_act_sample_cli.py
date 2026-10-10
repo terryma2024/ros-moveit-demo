@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from so101_demo.act.candidate_source import candidate_identity
+from so101_demo.act.reachability_candidate_source import candidate_identity
 from so101_demo.act.sampling import COLLECTION_SPLITS, REACHABILITY_GATES, SPLITS
 from so101_demo.cli.act_sample import NOT_FROZEN, main
 

@@ -112,40 +112,40 @@ def test_the_fingerprint_is_cached_per_process_only_while_every_file_is_unchange
 # ---- where the memo is written and where it is trusted -------------------------------------------------------------------------
 
 def test_the_fresh_process_qc_writes_the_memo_beside_a_passing_report_and_not_beside_a_failing_one(tmp_path, monkeypatch):
-    from so101_demo.act.offline import fresh_qc
+    from so101_demo.act.offline import independent_qc
 
     root, scope, inputs, teacher, report, report_path = episode(tmp_path)
     monkeypatch.setattr(episode_qc, "recompute_native_qc", lambda *args, **kwargs: copy.deepcopy(report))
     monkeypatch.setattr(episode_qc, "write_qc_report", lambda document, output: Path(output).write_bytes(episode_qc._report_canonical(document)) or "sha")
     arguments = ["--episode", str(root), "--scope", str(scope), "--inputs-manifest", str(inputs), "--teacher-manifest", str(teacher),
                  "--output", str(report_path)]
-    assert fresh_qc.main(arguments) == 0
+    assert independent_qc.main(arguments) == 0
     assert qc_memo.memo_matches(report_path, report, **paths(root, scope, inputs, teacher)) is True
     failing = copy.deepcopy(report)
     failing["status"] = "FAIL"
     report_path.with_name(qc_memo.MEMO_NAME).unlink()
     monkeypatch.setattr(episode_qc, "recompute_native_qc", lambda *args, **kwargs: copy.deepcopy(failing))
-    assert fresh_qc.main(arguments) == 1
+    assert independent_qc.main(arguments) == 1
     assert not report_path.with_name(qc_memo.MEMO_NAME).exists()
 
 
 def _trusting(monkeypatch):
     from so101_demo.act import result_store
 
-    monkeypatch.setattr(result_store.ActCollectionResultVerifier, "TRUST_FRESH_QC_MEMO", True)
-    monkeypatch.setattr(result_store.ActCollectionResultStore, "TRUST_FRESH_QC_MEMO", True)
+    monkeypatch.setattr(result_store.ActCollectionResultVerifier, "TRUST_INDEPENDENT_QC_MEMO", True)
+    monkeypatch.setattr(result_store.ActCollectionResultStore, "TRUST_INDEPENDENT_QC_MEMO", True)
 
 
 def test_the_result_gates_trust_the_memo_only_when_asked_and_the_readback_never_does(monkeypatch):
     from so101_demo.act import result_store
 
-    assert result_store.ActCollectionResultVerifier.TRUST_FRESH_QC_MEMO is False
-    assert result_store.ActCollectionResultStore.TRUST_FRESH_QC_MEMO is False
+    assert result_store.ActCollectionResultVerifier.TRUST_INDEPENDENT_QC_MEMO is False
+    assert result_store.ActCollectionResultStore.TRUST_INDEPENDENT_QC_MEMO is False
     # the readback builds its verifier without the option: it recomputes in full
     import inspect
 
     source = inspect.getsource(result_store.verify_coordinator_commit)
-    assert "trust_fresh_qc_memo" not in source and "TRUST_FRESH_QC_MEMO" not in source
+    assert "trust_independent_qc_memo" not in source and "TRUST_INDEPENDENT_QC_MEMO" not in source
 
 
 def test_the_production_composition_asks_for_the_memo_in_both_gates():
@@ -154,7 +154,7 @@ def test_the_production_composition_asks_for_the_memo_in_both_gates():
     from so101_demo.cli import mujoco_parallel_batch
 
     source = inspect.getsource(mujoco_parallel_batch)
-    assert source.count("trust_fresh_qc_memo=True") == 2
+    assert source.count("trust_independent_qc_memo=True") == 2
 
 
 def test_a_valid_memo_skips_the_recomputation_in_the_result_qc_readback_and_a_missing_one_does_not(tmp_path, monkeypatch):
@@ -204,7 +204,7 @@ def test_the_coordinators_gate_skips_the_covered_verifications_only_when_it_trus
     for trusts, covers, expected_seal_reads in ((False, True, 1), (True, False, 1), (True, True, 0)):
         calls, tripwire = _tripwires(monkeypatch, memo_covers=covers)
         verifier = _verifier(tmp_path, location, inputs)
-        verifier.TRUST_FRESH_QC_MEMO = trusts
+        verifier.TRUST_INDEPENDENT_QC_MEMO = trusts
         recomputed = []
         monkeypatch.setattr(episode_qc, "recompute_native_qc", lambda *a, **k: recomputed.append(1) or copy.deepcopy(document))
         assert verifier.verify(lease(), str(location), RunMode.EXECUTE)["status"] == "PASSED"
@@ -219,7 +219,7 @@ def test_the_stores_gate_skips_the_covered_verifications_only_when_it_trusts_a_c
         scratch = tmp_path / f"{trusts}-{covers}"
         scratch.mkdir()
         store, seal, document, inputs = setup_result(scratch, monkeypatch)
-        store.TRUST_FRESH_QC_MEMO = trusts
+        store.TRUST_INDEPENDENT_QC_MEMO = trusts
         report_path = store.working / "qc-report.json"
         episode_qc.write_qc_report(document, report_path)
         calls, tripwire = _tripwires(monkeypatch, memo_covers=covers)

@@ -1,4 +1,4 @@
-"""Fresh-process QC of an offline episode: `python -m so101_demo.act.offline.fresh_qc ...`.
+"""Independent-process QC of an offline episode: `python -m so101_demo.act.offline.independent_qc ...`.
 
 It imports nothing from the processor and holds no state of the replay. It runs the same read-only recomputation the QC command
 runs (`episode_qc.recompute_native_qc`) against the original scope and frozen inputs, and writes the common QC report.
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="fresh_qc")
+    parser = argparse.ArgumentParser(prog="independent_qc")
     parser.add_argument("--episode", type=Path, required=True)
     parser.add_argument("--scope", type=Path, required=True)
     parser.add_argument("--inputs-manifest", type=Path, required=True)
@@ -43,7 +43,7 @@ def main(argv=None) -> int:
                                      teacher_manifest=arguments.teacher_manifest, topic_loss=arguments.topic_loss)
         digest = write_qc_report(report, arguments.output)
         if report["status"] == "PASS" and not arguments.diagnostic_ignore_scene_colors:
-            # CP-3456: the run's result gates may rely on this exact recomputation instead of repeating it
+            # The run's result gates may rely on this exact recomputation instead of repeating it
             from .. import qc_memo
 
             qc_memo.write_memo(arguments.output, report, episode_root=arguments.episode, scope=arguments.scope,

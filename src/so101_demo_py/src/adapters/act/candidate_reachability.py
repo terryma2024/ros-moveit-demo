@@ -91,7 +91,7 @@ def probe_candidate(
 ) -> dict:
     """Probe one candidate: two independent plan() calls per phase, each returning its own receipt."""
 
-    from so101_demo.act.candidate_source import candidate_identity
+    from so101_demo.act.reachability_candidate_source import candidate_identity
 
     identity = candidate_identity(candidate)
     start_sha256 = _evidence_digest(start_state)
@@ -201,7 +201,7 @@ def build_candidate_source_document(*, candidates: Mapping[str, Sequence[dict]],
                                     minimum_gap_m: float) -> dict:
     """The closed candidate-source document; the candidates themselves are supplied, never generated."""
 
-    from so101_demo.act.candidate_source import (QUALIFICATION_COUNTS, QUALIFICATION_KEYS, _require_candidate)
+    from so101_demo.act.reachability_candidate_source import (QUALIFICATION_COUNTS, QUALIFICATION_KEYS, _require_candidate)
     from so101_demo.act.sampling import SPLITS
 
     if set(candidates) != set(SPLITS):

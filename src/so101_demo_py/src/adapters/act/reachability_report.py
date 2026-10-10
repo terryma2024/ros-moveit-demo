@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from so101_demo.act.candidate_source import candidate_identity
+from so101_demo.act.reachability_candidate_source import candidate_identity
 from so101_demo.act.sampling import REACHABILITY_GATES
 
 _REPORT_KEYS = frozenset({"schema_version", "kind", "gates"})
