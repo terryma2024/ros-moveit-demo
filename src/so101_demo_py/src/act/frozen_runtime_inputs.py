@@ -30,7 +30,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
     for name in TEACHER_POLICY_BINDINGS:
         if name not in frozen:
             raise ValueError("INPUTS_TEACHER_POLICY_REQUIRED: " + name)
-    validate_execution_snapshot_binding(binding, require_model=True)
+    validate_execution_snapshot_binding(binding)
     root = manifest_path.parent / binding["path"]
     snapshot = verify_execution_snapshot(root, expected_sha256=binding["sha256"])
     for name in TEACHER_POLICY_BINDINGS:

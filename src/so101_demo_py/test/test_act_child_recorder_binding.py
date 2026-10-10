@@ -188,3 +188,16 @@ def test_run_rejects_a_posthoc_final_target_before_creating_run_root(tmp_path, m
                  "--mode", manifest["mode"], "--lifecycle", "FULL_RESTART",
                  "--final-cup-pose", ",".join(map(str, target))]) == 2
     assert not root.exists()
+
+
+def test_only_the_model_bound_execution_snapshot_binding_is_accepted(tmp_path):
+    from so101_demo.act.first_episode_inputs import validate_execution_snapshot_binding
+
+    _, manifest, snapshot = frozen_child_inputs(tmp_path)
+    binding = manifest["execution_snapshot"]
+    assert validate_execution_snapshot_binding(binding)["model_sha256"] == snapshot["model_sha256"]
+    retired = {key: binding[key] for key in ("kind", "path", "sha256")} | {"schema_version": 1}
+    with pytest.raises(ValueError, match="INPUTS_EXECUTION_SNAPSHOT_INVALID"):
+        validate_execution_snapshot_binding(retired)
+    with pytest.raises(ValueError, match="INPUTS_EXECUTION_SNAPSHOT_INVALID"):
+        validate_execution_snapshot_binding({**binding, "schema_version": 3})

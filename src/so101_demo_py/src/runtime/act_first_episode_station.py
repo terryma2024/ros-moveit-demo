@@ -41,7 +41,7 @@ class FirstEpisodeStation:
             raise ValueError("EPISODE_DIAGNOSTIC_REQUIRED")
         if "execution_snapshot" not in frozen:
             raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
-        validate_execution_snapshot_binding(frozen["execution_snapshot"], require_model=True)
+        validate_execution_snapshot_binding(frozen["execution_snapshot"])
         return cls(inputs_manifest, scope_path, frozen["inputs_sha256"],
                    hashlib.sha256(scope_bytes).hexdigest())
 
@@ -72,7 +72,7 @@ class FirstEpisodeStation:
             raise ValueError("EPISODE_AI_STATION_LINUX_REQUIRED")
         frozen = self._frozen()
         binding = frozen["execution_snapshot"]
-        validate_execution_snapshot_binding(binding, require_model=True)
+        validate_execution_snapshot_binding(binding)
         snapshot_root = self.inputs_manifest.parent / binding["path"]
         snapshot = verify_execution_snapshot(snapshot_root, expected_sha256=binding["sha256"])
         command = ros2_command(

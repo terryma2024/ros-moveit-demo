@@ -118,20 +118,15 @@ def execution_snapshot_binding(snapshot, root):
             "physics_chunks": {"max_samples": chunk_size, "max_contacts": contacts, "config_sha256": config_sha}}
 
 
-def validate_execution_snapshot_binding(binding, *, require_model=False):
-    keys = {"kind", "schema_version", "path", "sha256"}
-    if isinstance(binding, dict) and type(binding.get("schema_version")) is int and binding["schema_version"] == 2:
-        keys.update({"model_identity", "physics_chunks"})
+def validate_execution_snapshot_binding(binding):
+    """The verified model identity of an execution snapshot binding (schema 2: it names the compiled model and the producer chunks)."""
+    keys = {"kind", "schema_version", "path", "sha256", "model_identity", "physics_chunks"}
     if (not isinstance(binding, dict) or set(binding) != keys
             or binding["kind"] != "ACT_EXECUTION_SNAPSHOT_BINDING"
-            or type(binding["schema_version"]) is not int or binding["schema_version"] not in (1, 2)
+            or type(binding["schema_version"]) is not int or binding["schema_version"] != 2
             or binding["path"] != "execution" or not isinstance(binding["sha256"], str)
             or not _HEX64.fullmatch(binding["sha256"])):
         raise ValueError("INPUTS_EXECUTION_SNAPSHOT_INVALID")
-    if binding["schema_version"] == 1:
-        if require_model:
-            raise ValueError("INPUTS_EXECUTION_MODEL_BINDING_REQUIRED")
-        return None
     model = binding["model_identity"]
     if (not isinstance(model, dict) or set(model) != {"model_sha256", "nq", "nv", "mujoco_version"}
             or not isinstance(model["model_sha256"], str) or not _HEX64.fullmatch(model["model_sha256"])
@@ -153,7 +148,7 @@ def audit_execution_model_identity(inputs):
     binding = inputs.get("execution_snapshot")
     if binding is None:
         return None
-    model = validate_execution_snapshot_binding(binding, require_model=True)
+    model = validate_execution_snapshot_binding(binding)
     roles = inputs.get("roles")
     extra = {key: inputs[key] for key in _MANIFEST_OPTIONAL if key in inputs}
     if (not isinstance(roles, dict) or set(roles) != set(INPUT_ROLES)
@@ -439,9 +434,9 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
         binding = document["execution_snapshot"]
         model_identity = validate_execution_snapshot_binding(binding)
         snapshot = verify_execution_snapshot(root / binding["path"], expected_sha256=binding["sha256"])
-        if model_identity is not None and any(snapshot[key] != value for key, value in model_identity.items()):
+        if any(snapshot[key] != value for key, value in model_identity.items()):
             raise ValueError("INPUTS_EXECUTION_SNAPSHOT_IDENTITY_MISMATCH")
-        if model_identity is not None and binding != execution_snapshot_binding(snapshot, root / binding["path"]):
+        if binding != execution_snapshot_binding(snapshot, root / binding["path"]):
             raise ValueError("INPUTS_EXECUTION_PRODUCER_CONFIG_INVALID")
         identity = document["roles"]["scene_model"]["identity"]
         if (not isinstance(identity, dict) or snapshot["model_sha256"] != identity.get("model_sha256")

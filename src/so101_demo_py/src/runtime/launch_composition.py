@@ -2345,7 +2345,7 @@ def _configured_task_station_actions(context):
             binding = frozen.get("execution_snapshot")
             if binding is None:
                 raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
-            validate_execution_snapshot_binding(binding, require_model=True)
+            validate_execution_snapshot_binding(binding)
             from ..act.execution_snapshot import verify_execution_snapshot, verify_installed_station_assets
             import hashlib
             snapshot_root = Path(first_inputs).parent / binding["path"]

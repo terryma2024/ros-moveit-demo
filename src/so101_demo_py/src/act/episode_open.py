@@ -42,7 +42,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     binding = frozen.get("execution_snapshot")
     if binding is None or "runtime_policy" not in frozen or "episode_recorder_v1" not in frozen:
         raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
-    validate_execution_snapshot_binding(binding, require_model=True)
+    validate_execution_snapshot_binding(binding)
     snapshot = verify_execution_snapshot(manifest_path.parent / binding["path"],
                                          expected_sha256=binding["sha256"])
     document = read_collection_scope(Path(scope_path))
