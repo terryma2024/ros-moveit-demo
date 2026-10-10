@@ -289,7 +289,7 @@ def test_a_nominal_measurement_gives_the_tilt_compensated_target_and_a_valid_rec
     record = value._document["place_height"]
     assert record["mode"] == "tilt_compensated" and record["fallback_reason"] is None
     assert target.position_m == (0.1, -0.2, record["target_tcp_z_m"])
-    ph.validate_document_v3(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
 
 
 @pytest.mark.parametrize("measurement,reason", [
@@ -304,9 +304,9 @@ def test_every_fallback_reason_uses_the_v1_target_and_never_refuses(tmp_path, ge
     value = place_adapter(tmp_path, geometry, measurement)
     target = place(value)
     record = value._document["place_height"]
-    assert record["mode"] == "fallback_v1" and record["fallback_reason"] == reason
+    assert record["mode"] == "fallback_reference" and record["fallback_reason"] == reason
     assert target.position_m[2] == pytest.approx(HOVER_Z - 0.01325, abs=1e-12) == record["constant_offset_target_tcp_z_m"]
-    ph.validate_document_v3(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
 
 
 def test_the_target_deviation_and_scene_hash_reasons(tmp_path, geometry):
@@ -320,7 +320,7 @@ def test_the_target_deviation_and_scene_hash_reasons(tmp_path, geometry):
     place(value)
     record = value._document["place_height"]
     assert record["fallback_reason"] == "SCENE_HASH_MISMATCH"
-    ph.validate_document_v3(record, ph.PlaceHeightPolicy.from_document(V3))
+    ph.validate_document(record, ph.PlaceHeightPolicy.from_document(V3))
 
 
 @pytest.mark.parametrize("failure,code", [
@@ -362,7 +362,7 @@ def test_finish_builds_the_summary_off_thread_and_stores_it_in_the_manifest(tmp_
     summary.offer_collision(501, 1.102, "table_collision", "upper_arm_collision", -1e-4, 0.4)
     summary.phase_finish("LIFT", 2.0, "SUCCEEDED")
     value._perception_error = {"xy_mm": 1.5, "z_mm": 0.2, "tilt_deg": 0.1}
-    value._document["place_height"] = {"mode": "fallback_v1", "fallback_reason": "K_OUT_OF_BAND"}
+    value._document["place_height"] = {"mode": "fallback_reference", "fallback_reason": "K_OUT_OF_BAND"}
     value.finish(result())
     document = value._document["teacher_process_summary"]
     assert document["schema"] == "teacher_process_summary_v1" and document["complete"] is True

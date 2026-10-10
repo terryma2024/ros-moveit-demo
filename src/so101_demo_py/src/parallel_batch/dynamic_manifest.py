@@ -13,7 +13,7 @@ from .contracts import AttemptStatus
 
 SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
 SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
-#: Teacher policy v3 (minimal runtime gates, design 2026-10-10): no recovery states, a `teacher_place_height_v3` record and a
+#: Teacher policy v3 (minimal runtime gates, design 2026-10-10): no recovery states, a `teacher_place_height` record and a
 #: `teacher_process_summary_v1`. Chosen by the frozen Teacher execution policy version.
 SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 EXECUTION_STATUSES = frozenset({
@@ -252,10 +252,10 @@ def _target_valid(value: object) -> bool:
 def _place_height_contract(
     document: Mapping[str, object], expected_status: str, frozen_execution_policy: Mapping[str, object] | None,
 ) -> None:
-    """v3: a finished run carries a `teacher_place_height_v3` record (tilt_compensated or fallback_v1); an ERROR run may stop before the
+    """v3: a finished run carries a `teacher_place_height` record (tilt_compensated or fallback_reference); an ERROR run may stop before the
     measurement, so its record is optional but still bound when present. With the frozen policy the record is checked against it."""
 
-    from ..core.place_height import PlaceHeightPolicy, validate_document_v3
+    from ..core.place_height import PlaceHeightPolicy, validate_document
 
     if "place_height" not in document:
         if expected_status == "DONE":
@@ -263,7 +263,7 @@ def _place_height_contract(
         return
     try:
         policy = None if frozen_execution_policy is None else PlaceHeightPolicy.from_document(frozen_execution_policy)
-        validate_document_v3(document["place_height"], policy)
+        validate_document(document["place_height"], policy)
     except (ValueError, KeyError, TypeError):
         _fail("PLACE_HEIGHT")
 

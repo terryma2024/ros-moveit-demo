@@ -1,5 +1,6 @@
-"""CP-3480 / CP-3394: the tilt-compensated place height. Pure part: the geometry, the policy v2 loader, the bounds and the audit
-document. The numbers in the comments are the 20 retained PASS bags of the force-stop investigation."""
+"""The tilt-compensated place height (CP-3480 / CP-3394, CP-3504). Pure part: the geometry, the policy fields, the bounds, and the
+place target as a strategy with a closed fallback to the reference target - never a refusal - with its own record validator. The
+numbers in the comments are the 20 retained PASS bags of the force-stop investigation."""
 
 import hashlib
 import math
@@ -13,8 +14,8 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
-V2 = PACKAGE / "config/act/teacher_execution_policy.yaml"
-OLD_TARGET_Z = 0.2176344 - 0.01325                    # the v1 constant-offset target of the retained bags
+TEACHER_POLICY = PACKAGE / "config/act/teacher_execution_policy.yaml"
+OLD_TARGET_Z = 0.2176344 - 0.01325                    # the constant-offset reference target of the retained bags
 THETA = math.radians(4.04)
 
 
@@ -25,12 +26,12 @@ def geometry():
 
 @pytest.fixture()
 def policy_document():
-    return yaml.safe_load(V2.read_bytes())
+    return yaml.safe_load(TEACHER_POLICY.read_bytes())
 
 
 @pytest.fixture()
 def policy():
-    return ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(V2))
+    return ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(TEACHER_POLICY))
 
 
 # ---- the geometry: exact formula, read from the frozen scene ---------------------------------------------------------------------
@@ -59,7 +60,7 @@ def test_the_policy_pins_the_scene_the_geometry_was_fitted_for(geometry, policy)
     assert policy.scene_sha256 == geometry.scene_sha256, "scene.xml changed: refit the place height and re-issue the policy"
 
 
-# ---- policy v2 ---------------------------------------------------------------------------------------------------------------------
+# ---- the policy ---------------------------------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("change", [
     {"place_height_mode": "constant"}, {"place_height_mode": None}, {"schema_version": 2}, {"schema_version": "3"},
@@ -125,7 +126,7 @@ def test_the_target_ends_the_actual_arm_the_guard_past_first_contact(geometry, p
     k = policy.grasp_offset_m
     target = ph.target_tcp_z(THETA, k, geometry, policy)
     assert target == pytest.approx(0.167706 + k + policy.tracking_offset_m - policy.guard_m, abs=2e-6)
-    # against the 20 retained bags: the v1 target sits 0.785 mm (commanded) below the TCP height of first contact, and the arm
+    # against the 20 retained bags: the reference target sits 0.785 mm (commanded) below the TCP height of first contact, and the arm
     # ends 0.943 mm below it; the new target is the guard below
     first_contact_tcp = 0.205170
     assert first_contact_tcp - (target - policy.tracking_offset_m) == pytest.approx(policy.guard_m, abs=2e-5)       # k and z_touch vs the 20 bags' measured contact: within 10 um
@@ -140,42 +141,84 @@ def test_the_deviation_bound_covers_the_calibrated_range_and_no_more(geometry, p
     assert max(abs(v) for v in spread) < policy.max_deviation_m <= 0.002 and max(abs(v) for v in spread) > 0.0013
 
 
-def test_a_nominal_measurement_plans_and_the_document_validates(geometry, policy):
-    document = ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z, geometry, policy)
-    assert document["mode"] == "tilt_compensated" and document["scene_sha256"] == geometry.scene_sha256
-    ph.validate_document(document)
-    ph.validate_document(document, policy)
-    for change in ({"target_tcp_z_m": document["target_tcp_z_m"] + 1e-6}, {"guard_m": 0.0}, {"mode": "constant"},
-                   {"tilt_rad": float("nan")}, {"geometry": {"table_top_z_m": 0.12}}):
+# ---- the place target is a strategy with a closed fallback, never a refusal ------------------------------------------------------
+
+def test_a_nominal_measurement_is_tilt_compensated_and_validates(geometry, policy):
+    record = ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z, geometry, policy)
+    assert record["schema"] == "teacher_place_height" and record["mode"] == "tilt_compensated" and record["fallback_reason"] is None
+    assert record["target_tcp_z_m"] == pytest.approx(ph.target_tcp_z(THETA, policy.grasp_offset_m, geometry, policy), abs=1e-12)
+    ph.validate_document(record, policy)
+    ph.validate_document(record)
+    assert set(record) == ph.RECORD_KEYS
+
+
+@pytest.mark.parametrize("theta_deg,k_offset,reason", [
+    (2.0, 0.0, "TILT_OUT_OF_RANGE"), (7.0, 0.0, "TILT_OUT_OF_RANGE"), (float("nan"), 0.0, "TILT_OUT_OF_RANGE"),
+    (4.04, 0.002, "K_OUT_OF_BAND"), (4.04, -0.002, "K_OUT_OF_BAND")])
+def test_a_measurement_outside_the_calibration_falls_back_with_its_reason_and_validates(geometry, policy, theta_deg, k_offset, reason):
+    theta = math.radians(theta_deg)
+    record = ph.plan_place_height(theta, policy.grasp_offset_m + k_offset, OLD_TARGET_Z, geometry, policy)
+    assert record["mode"] == "fallback_reference" and record["fallback_reason"] == reason
+    assert record["target_tcp_z_m"] == OLD_TARGET_Z == record["constant_offset_target_tcp_z_m"]
+    ph.validate_document(record, policy)
+
+
+def test_the_deviation_bound_and_the_workspace_fall_back(geometry, policy):
+    # the deviation bound is 2 mm: a reference target 3 mm off the computed one
+    record = ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z - 0.003, geometry, policy)
+    assert record["fallback_reason"] == "TARGET_DEVIATION" and record["target_tcp_z_m"] == OLD_TARGET_Z - 0.003
+    assert record["computed_target_tcp_z_m"] == pytest.approx(ph.target_tcp_z(THETA, policy.grasp_offset_m, geometry, policy))
+    ph.validate_document(record, policy)
+    outside = ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z, geometry, policy, workspace_z_range=(0.5, 1.0))
+    assert outside["fallback_reason"] == "TARGET_DEVIATION"
+    ph.validate_document(outside, policy, workspace_z_range=(0.5, 1.0))
+
+
+def test_a_foreign_scene_falls_back_before_any_other_check(geometry, policy):
+    import dataclasses
+
+    foreign = dataclasses.replace(geometry, scene_sha256="0" * 64)
+    record = ph.plan_place_height(math.radians(2.0), policy.grasp_offset_m + 0.01, OLD_TARGET_Z, foreign, policy)
+    assert record["fallback_reason"] == "SCENE_HASH_MISMATCH" and record["scene_sha256"] == "0" * 64
+    ph.validate_document(record, policy)
+
+
+@pytest.mark.parametrize("reason", ["TILT_UNSTABLE", "JOINT_STATE_STALE", "MEASUREMENT_FAILED", "SCENE_HASH_MISMATCH"])
+def test_the_measurement_less_reasons_have_a_valid_record(geometry, policy, reason):
+    record = ph.fallback_record(reason, OLD_TARGET_Z, policy, detail="no window in 1 s", geometry=None if reason != "SCENE_HASH_MISMATCH" else geometry)
+    if reason == "SCENE_HASH_MISMATCH":
+        record["scene_sha256"] = "1" * 64
+    ph.validate_document(record, policy)
+    ph.validate_document(record)
+    assert record["tilt_rad"] is None and record["grasp_offset_m"] is None or reason == "SCENE_HASH_MISMATCH"
+
+
+def test_the_closed_enum_is_exactly_the_specified_reasons():
+    assert ph.FALLBACK_REASONS == ("TILT_UNSTABLE", "TILT_OUT_OF_RANGE", "K_OUT_OF_BAND", "TARGET_DEVIATION", "JOINT_STATE_STALE",
+                                   "SCENE_HASH_MISMATCH", "MEASUREMENT_FAILED")
+    with pytest.raises(ValueError):
+        ph.fallback_record("SOMETHING_ELSE", OLD_TARGET_Z, ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(TEACHER_POLICY)))
+
+
+def test_the_validator_rejects_a_tampered_or_inconsistent_record(geometry, policy):
+    good = ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z, geometry, policy)
+    fallback = ph.plan_place_height(math.radians(2.0), policy.grasp_offset_m, OLD_TARGET_Z, geometry, policy)
+    cases = [
+        ({**good, "target_tcp_z_m": good["target_tcp_z_m"] + 1e-3}, "formula"),
+        ({**good, "fallback_reason": "TILT_UNSTABLE"}, "reason on a compensated record"),
+        ({**good, "guard_m": 0.0005}, "guard"),
+        ({**good, "schema": "teacher_place_height_unknown"}, "schema"),
+        ({**good, "extra": 1}, "keys"),
+        ({**fallback, "target_tcp_z_m": OLD_TARGET_Z + 1e-3}, "fallback target is not the reference target"),
+        ({**fallback, "fallback_reason": "BECAUSE"}, "reason"),
+        ({**fallback, "fallback_reason": "K_OUT_OF_BAND"}, "k reason with k in band"),
+        ({**good, "mode": "fallback_reference", "fallback_reason": "TILT_OUT_OF_RANGE"}, "tilt reason with the tilt in range"),
+        ({**fallback, "fallback_reason": "SCENE_HASH_MISMATCH"}, "scene hash reason without a mismatch"),
+        ({**fallback, "fallback_reason": "TARGET_DEVIATION", "computed_target_tcp_z_m": OLD_TARGET_Z}, "deviation reason within the bound"),
+        ({**fallback, "mode": "constant"}, "mode"),
+        ("not a dict", "type"),
+    ]
+    for record, label in cases:
         with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-            ph.validate_document({**document, **change}, policy)
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        ph.validate_document({**document, "tilt_rad": policy.tilt_max_rad + 0.01,
-                              "target_tcp_z_m": ph.target_tcp_z(policy.tilt_max_rad + 0.01, document["grasp_offset_m"], geometry, policy)},
-                             policy)
-
-
-@pytest.mark.parametrize("theta_deg,k_offset,code", [
-    (2.9, 0.0, ph.TILT_OUT_OF_RANGE), (5.6, 0.0, ph.TILT_OUT_OF_RANGE), (float("nan"), 0.0, ph.TILT_OUT_OF_RANGE),
-    (4.04, 0.0004, ph.HEIGHT_OUT_OF_BOUNDS), (4.04, -0.0004, ph.HEIGHT_OUT_OF_BOUNDS)])
-def test_a_measurement_outside_the_calibration_is_refused_with_its_code(geometry, policy, theta_deg, k_offset, code):
-    with pytest.raises(ph.PlaceHeightRefused) as refusal:
-        ph.plan_place_height(math.radians(theta_deg), policy.grasp_offset_m + k_offset, OLD_TARGET_Z, geometry, policy)
-    assert refusal.value.code == code and str(refusal.value).startswith(code + ": ")
-
-
-def test_a_target_far_from_the_constant_offset_target_or_a_foreign_scene_is_refused(geometry, policy):
-    with pytest.raises(ph.PlaceHeightRefused) as far:
-        ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z - 0.01, geometry, policy)
-    assert far.value.code == ph.HEIGHT_OUT_OF_BOUNDS
-    foreign = ph.CupGeometry(**{**{f: getattr(geometry, f) for f in geometry.__slots__}, "scene_sha256": "0" * 64})
-    with pytest.raises(ph.PlaceHeightRefused) as scene:
-        ph.plan_place_height(THETA, policy.grasp_offset_m, OLD_TARGET_Z, foreign, policy)
-    assert scene.value.code == ph.HEIGHT_OUT_OF_BOUNDS
-
-
-def test_a_refusal_document_is_valid_only_with_one_of_the_three_codes():
-    for code in ph.REFUSAL_CODES:
-        ph.validate_document({"mode": "tilt_compensated", "refused": code})
-    with pytest.raises(ValueError, match="PLACE_HEIGHT"):
-        ph.validate_document({"mode": "tilt_compensated", "refused": "SOMETHING_ELSE"})
+            ph.validate_document(record, policy)
+    assert label

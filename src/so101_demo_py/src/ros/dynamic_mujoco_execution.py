@@ -2513,7 +2513,7 @@ class RosDynamicMujocoExecution:
         try:
             geometry = self._place_geometry()
             theta, k = self._measure_place_height()
-            document = ph.plan_place_height_v3(theta, k, old_target, geometry, height_policy)
+            document = ph.plan_place_height(theta, k, old_target, geometry, height_policy)
         except Exception as error:
             code, _ = self._failure_code(error)
             if isinstance(error, TeacherStop) or code in TERMINAL_STOP_CODES_TEACHER:

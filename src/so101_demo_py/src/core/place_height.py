@@ -22,12 +22,12 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-#: refusal codes (a Teacher stop before any DESCEND_TO_PLACE motion; the cup stays held)
+#: codes of a failed measurement (``PlaceHeightRefused``); the Teacher turns them into a closed fallback reason, it never stops for them
 TILT_UNSTABLE = "TEACHER_PLACE_TILT_UNSTABLE"
 TILT_OUT_OF_RANGE = "TEACHER_PLACE_TILT_OUT_OF_RANGE"
 HEIGHT_OUT_OF_BOUNDS = "TEACHER_PLACE_HEIGHT_OUT_OF_BOUNDS"
-#: a measurement or geometry step that failed for a reason other than a refusal (scene parse error, no cup body, stale or missing
-#: joint state, dynamic evidence timeout): terminal as well, with the cup held, never a RECOVER_* lift at the place pose
+#: a measurement or geometry step that failed for a reason other than an unstable tilt (scene parse error, no cup body, stale or
+#: missing joint state, dynamic evidence timeout)
 MEASUREMENT_FAILED = "TEACHER_PLACE_MEASUREMENT_FAILED"
 REFUSAL_CODES = (TILT_UNSTABLE, TILT_OUT_OF_RANGE, HEIGHT_OUT_OF_BOUNDS, MEASUREMENT_FAILED)
 MODE = "tilt_compensated"
@@ -160,60 +160,11 @@ def target_tcp_z(theta_rad: float, k_m: float, geometry: CupGeometry, policy: Pl
     return touch_center_z(theta_rad, geometry) + k_m + policy.tracking_offset_m - policy.guard_m
 
 
-def check_measurement(theta_rad: float, k_m: float, policy: PlaceHeightPolicy, geometry: CupGeometry) -> None:
-    """Refuse (before any motion) a tilt, a grasp offset or a scene outside what was calibrated."""
-    if not (math.isfinite(theta_rad) and math.isfinite(k_m)):
-        raise PlaceHeightRefused(TILT_OUT_OF_RANGE, "the measured tilt or grasp offset is not finite")
-    if geometry.scene_sha256 != policy.scene_sha256:
-        raise PlaceHeightRefused(HEIGHT_OUT_OF_BOUNDS, "the scene model is not the one the place geometry was fitted for")
-    if not policy.tilt_min_rad <= theta_rad <= policy.tilt_max_rad:
-        raise PlaceHeightRefused(
-            TILT_OUT_OF_RANGE,
-            f"tilt {math.degrees(theta_rad):.3f} deg outside [{math.degrees(policy.tilt_min_rad):.3f}, "
-            f"{math.degrees(policy.tilt_max_rad):.3f}] deg")
-    if abs(k_m - policy.grasp_offset_m) > policy.grasp_offset_half_band_m:
-        raise PlaceHeightRefused(
-            HEIGHT_OUT_OF_BOUNDS,
-            f"grasp offset {k_m:.6f} m outside {policy.grasp_offset_m:.6f} +- {policy.grasp_offset_half_band_m:.6f} m")
+def _check_compensated(document, policy: PlaceHeightPolicy | None) -> None:
+    """QC side (ValueError): a tilt-compensated record is the formula applied to its own recorded measurement, within every bound.
 
-
-def plan_place_height(theta_rad: float, k_m: float, old_target_z_m: float, geometry: CupGeometry,
-                      policy: PlaceHeightPolicy, workspace_z_range=(0.0, 1.0)) -> dict:
-    """The audit document of one computed target, after every bound; raises PlaceHeightRefused otherwise.
-
-    ``old_target_z_m`` is the target the constant offset of policy v1 would have given for the same pose: the new target may not
-    differ from it by more than ``max_deviation_m`` (the geometric need: the z_touch spread over the tilt range plus the k band)."""
-    check_measurement(theta_rad, k_m, policy, geometry)
-    target = target_tcp_z(theta_rad, k_m, geometry, policy)
-    if abs(target - old_target_z_m) > policy.max_deviation_m or not workspace_z_range[0] <= target <= workspace_z_range[1]:
-        raise PlaceHeightRefused(
-            HEIGHT_OUT_OF_BOUNDS,
-            f"target z {target:.6f} m is {abs(target - old_target_z_m) * 1000:.3f} mm from the constant-offset target "
-            f"(limit {policy.max_deviation_m * 1000:.1f} mm) or outside the workspace")
-    return place_height_document(theta_rad, k_m, target, old_target_z_m, geometry, policy)
-
-
-def place_height_document(theta_rad, k_m, target_z_m, old_target_z_m, geometry, policy) -> dict:
-    return {
-        "mode": MODE, "tilt_rad": theta_rad, "grasp_offset_m": k_m,
-        "touch_center_z_m": touch_center_z(theta_rad, geometry), "guard_m": policy.guard_m,
-        "tracking_offset_m": policy.tracking_offset_m, "target_tcp_z_m": target_z_m,
-        "constant_offset_target_tcp_z_m": old_target_z_m, "scene_sha256": geometry.scene_sha256,
-        "geometry": {"table_top_z_m": geometry.table_top_z_m, "half_height_m": geometry.half_height_m,
-                     "rim_radius_m": geometry.rim_radius_m}}
-
-
-def validate_document(document, policy: PlaceHeightPolicy | None = None) -> None:
-    """QC side (ValueError): a recorded document is the formula applied to its own recorded measurement, within every bound.
-
-    A refusal document (``refused``) is valid when its code is one of the three refusal codes. With the frozen ``policy`` the guard,
-    the tracking offset, the scene hash, the tilt range, the k band and the deviation bound are checked against it as well."""
-    if type(document) is not dict or document.get("mode") != MODE:
-        raise ValueError("PLACE_HEIGHT: mode")
-    if "refused" in document:
-        if document["refused"] not in REFUSAL_CODES:
-            raise ValueError("PLACE_HEIGHT: refusal")
-        return
+    With the frozen ``policy`` the guard, the tracking offset, the scene hash, the tilt range, the k band and the deviation bound
+    are checked against it as well."""
     try:
         geometry = document["geometry"]
         theta, k, target, guard, tracking, old = (float(document[key]) for key in (
@@ -233,28 +184,28 @@ def validate_document(document, policy: PlaceHeightPolicy | None = None) -> None
         raise ValueError("PLACE_HEIGHT: policy")
 
 
-# ---- policy v3 (CP-3504): the tilt-compensated target is a strategy with a closed fallback, never a refusal ------------------------
-#: the closed set of reasons for which v3 uses the v1 fixed target instead of the tilt-compensated one
-RECORD_SCHEMA_V3 = "teacher_place_height_v3"
-MODE_FALLBACK = "fallback_v1"
+# ---- CP-3504: the tilt-compensated target is a strategy with a closed fallback, never a refusal ------------------------------
+#: the closed set of reasons for which the Teacher uses the reference target (hover z + the reference offset) instead of the tilt-compensated one
+RECORD_SCHEMA = "teacher_place_height"
+MODE_FALLBACK = "fallback_reference"
 FB_TILT_UNSTABLE = "TILT_UNSTABLE"                  # no stable window in 1 s
 FB_TILT_OUT_OF_RANGE = "TILT_OUT_OF_RANGE"          # outside the calibrated range (or not finite)
 FB_K_OUT_OF_BAND = "K_OUT_OF_BAND"                  # k outside its band
-FB_TARGET_DEVIATION = "TARGET_DEVIATION"            # more than max_deviation_m from the v1 target (or outside the workspace)
+FB_TARGET_DEVIATION = "TARGET_DEVIATION"            # more than max_deviation_m from the reference target (or outside the workspace)
 FB_JOINT_STATE_STALE = "JOINT_STATE_STALE"          # the joint state k needs is older than state_max_age_s
 FB_SCENE_HASH_MISMATCH = "SCENE_HASH_MISMATCH"      # the scene is not the one the geometry was fitted for
 FB_MEASUREMENT_FAILED = "MEASUREMENT_FAILED"        # geometry or timeout
 FALLBACK_REASONS = (FB_TILT_UNSTABLE, FB_TILT_OUT_OF_RANGE, FB_K_OUT_OF_BAND, FB_TARGET_DEVIATION, FB_JOINT_STATE_STALE,
                     FB_SCENE_HASH_MISMATCH, FB_MEASUREMENT_FAILED)
-RECORD_KEYS_V3 = frozenset({
+RECORD_KEYS = frozenset({
     "schema", "mode", "fallback_reason", "detail", "tilt_rad", "grasp_offset_m", "touch_center_z_m", "guard_m", "tracking_offset_m",
     "target_tcp_z_m", "constant_offset_target_tcp_z_m", "computed_target_tcp_z_m", "scene_sha256", "geometry"})
 
 
-def _record_v3(mode, reason, detail, *, policy, old_target_z_m, target_z_m, geometry=None, theta=None, k=None, computed=None,
+def _record(mode, reason, detail, *, policy, old_target_z_m, target_z_m, geometry=None, theta=None, k=None, computed=None,
                scene_sha256=None) -> dict:
     return {
-        "schema": RECORD_SCHEMA_V3, "mode": mode, "fallback_reason": reason, "detail": str(detail)[:300],
+        "schema": RECORD_SCHEMA, "mode": mode, "fallback_reason": reason, "detail": str(detail)[:300],
         "tilt_rad": theta, "grasp_offset_m": k,
         "touch_center_z_m": None if geometry is None or theta is None or not math.isfinite(theta) else touch_center_z(theta, geometry),
         "guard_m": policy.guard_m, "tracking_offset_m": policy.tracking_offset_m, "target_tcp_z_m": target_z_m,
@@ -267,16 +218,16 @@ def _record_v3(mode, reason, detail, *, policy, old_target_z_m, target_z_m, geom
 
 def fallback_record(reason: str, old_target_z_m: float, policy: PlaceHeightPolicy, *, detail: str = "", geometry=None,
                     theta=None, k=None, computed=None) -> dict:
-    """The v3 record of a fallback: the target used is the v1 fixed target (`old_target_z_m`), the measurements so far are kept."""
+    """The record of a fallback: the target used is the reference target (`old_target_z_m`), the measurements so far are kept."""
     if reason not in FALLBACK_REASONS:
         raise ValueError("PLACE_HEIGHT: fallback reason")
-    return _record_v3(MODE_FALLBACK, reason, detail, policy=policy, old_target_z_m=old_target_z_m, target_z_m=old_target_z_m,
+    return _record(MODE_FALLBACK, reason, detail, policy=policy, old_target_z_m=old_target_z_m, target_z_m=old_target_z_m,
                       geometry=geometry, theta=theta, k=k, computed=computed)
 
 
-def plan_place_height_v3(theta_rad: float, k_m: float, old_target_z_m: float, geometry: CupGeometry, policy: PlaceHeightPolicy,
+def plan_place_height(theta_rad: float, k_m: float, old_target_z_m: float, geometry: CupGeometry, policy: PlaceHeightPolicy,
                          workspace_z_range=(0.0, 1.0)) -> dict:
-    """The v3 record of one measurement: tilt-compensated inside every calibrated bound, else the fallback with the first failing
+    """The record of one measurement: tilt-compensated inside every calibrated bound, else the fallback with the first failing
     reason (scene, tilt, k, deviation). Never raises for a bound."""
     if geometry.scene_sha256 != policy.scene_sha256:
         return fallback_record(FB_SCENE_HASH_MISMATCH, old_target_z_m, policy, geometry=geometry, theta=theta_rad, k=k_m,
@@ -292,19 +243,19 @@ def plan_place_height_v3(theta_rad: float, k_m: float, old_target_z_m: float, ge
     target = target_tcp_z(theta_rad, k_m, geometry, policy)
     if abs(target - old_target_z_m) > policy.max_deviation_m or not workspace_z_range[0] <= target <= workspace_z_range[1]:
         return fallback_record(FB_TARGET_DEVIATION, old_target_z_m, policy, geometry=geometry, theta=theta_rad, k=k_m, computed=target,
-                               detail=f"target z {target:.6f} m is {abs(target - old_target_z_m) * 1000:.3f} mm from the v1 target "
+                               detail=f"target z {target:.6f} m is {abs(target - old_target_z_m) * 1000:.3f} mm from the reference target "
                                       f"(limit {policy.max_deviation_m * 1000:.1f} mm) or outside the workspace")
-    return _record_v3(MODE, None, "", policy=policy, old_target_z_m=old_target_z_m, target_z_m=target, geometry=geometry,
+    return _record(MODE, None, "", policy=policy, old_target_z_m=old_target_z_m, target_z_m=target, geometry=geometry,
                       theta=theta_rad, k=k_m, computed=target)
 
 
-def validate_document_v3(document, policy: PlaceHeightPolicy | None = None, *, workspace_z_range=(0.0, 1.0)) -> None:
-    """QC side (ValueError) for a `teacher_place_height_v3` record.
+def validate_document(document, policy: PlaceHeightPolicy | None = None, *, workspace_z_range=(0.0, 1.0)) -> None:
+    """QC side (ValueError) for a `teacher_place_height` record.
 
-    ``tilt_compensated``: the v2 recomputation of the formula from the recorded measurement, within every bound of the frozen policy.
-    ``fallback_v1``: a reason of the closed enum, a target equal to the v1 target, and (with the policy) a reason that the recorded
-    measurement actually shows for tilt, k, deviation and scene hash. The other reasons carry no measurement to check."""
-    if type(document) is not dict or document.get("schema") != RECORD_SCHEMA_V3 or set(document) != RECORD_KEYS_V3:
+    ``tilt_compensated``: the recomputation of the formula from the recorded measurement, within every bound of the frozen policy.
+    ``fallback_reference``: a reason of the closed enum, a target equal to the reference target, and (with the policy) a reason that
+    the recorded measurement actually shows for tilt, k, deviation and scene hash. The other reasons carry no measurement to check."""
+    if type(document) is not dict or document.get("schema") != RECORD_SCHEMA or set(document) != RECORD_KEYS:
         raise ValueError("PLACE_HEIGHT: schema")
     mode, reason = document["mode"], document["fallback_reason"]
     if mode == MODE:
@@ -312,7 +263,7 @@ def validate_document_v3(document, policy: PlaceHeightPolicy | None = None, *, w
             raise ValueError("PLACE_HEIGHT: fallback reason on a compensated record")
         if any(document[key] is None for key in ("tilt_rad", "grasp_offset_m", "geometry", "scene_sha256")):
             raise ValueError("PLACE_HEIGHT: fields")
-        validate_document({**document, "mode": MODE}, policy)
+        _check_compensated(document, policy)
         return
     if mode != MODE_FALLBACK or reason not in FALLBACK_REASONS:
         raise ValueError("PLACE_HEIGHT: mode")
@@ -321,7 +272,7 @@ def validate_document_v3(document, policy: PlaceHeightPolicy | None = None, *, w
     except (TypeError, ValueError) as error:
         raise ValueError("PLACE_HEIGHT: fields") from error
     if not (math.isfinite(target) and math.isfinite(old)) or abs(target - old) > 1e-9:
-        raise ValueError("PLACE_HEIGHT: the fallback target is not the v1 target")
+        raise ValueError("PLACE_HEIGHT: the fallback target is not the reference target")
     if policy is None:
         return
     if document["guard_m"] != policy.guard_m or document["tracking_offset_m"] != policy.tracking_offset_m:

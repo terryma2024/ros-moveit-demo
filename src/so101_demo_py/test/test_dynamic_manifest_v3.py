@@ -28,7 +28,7 @@ def place_record(*, fallback=None):
     old = 0.2176344 - 0.01325
     if fallback is not None:
         return ph.fallback_record(fallback, old, POLICY, geometry=geometry, theta=0.0705, k=POLICY.grasp_offset_m, detail="x")
-    return ph.plan_place_height_v3(0.0705, POLICY.grasp_offset_m, old, geometry, POLICY)
+    return ph.plan_place_height(0.0705, POLICY.grasp_offset_m, old, geometry, POLICY)
 
 
 def summary_document(*, flags=False, incomplete=False):
@@ -123,7 +123,7 @@ def test_a_fallback_place_record_is_accepted_when_its_reason_is_supported_by_the
     (lambda d: d["teacher_process_summary"].update(complete=False), "PROCESS_SUMMARY"),
     (lambda d: d["teacher_process_summary"]["policy"].update(verdict_source="broker"), "PROCESS_SUMMARY"),
     (lambda d: d["teacher_process_summary"]["policy"].update(cup_pose_source="sim_truth"), "PROCESS_SUMMARY"),
-    (lambda d: d["teacher_process_summary"].update(place_height_mode="fallback_v1"), "PROCESS_SUMMARY"),
+    (lambda d: d["teacher_process_summary"].update(place_height_mode="fallback_reference"), "PROCESS_SUMMARY"),
     (lambda d: d.update(failure_class="sim_integrity"), "FAILURE_CLASS"),
     (lambda d: d.pop("failure_class"), "FAILURE_CLASS"),
 ])

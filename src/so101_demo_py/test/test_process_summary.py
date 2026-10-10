@@ -153,13 +153,13 @@ def test_the_document_is_json_and_carries_schema_units_and_policy_provenance():
     value = summary()
     value.offer_step(1, 10.5, 1.0, 5e-5)
     policy = {"schema_version": 3, "policy_sha256": "a" * 64, "cup_pose_source": "broker_rgbd", "verdict_source": "sim_truth"}
-    document = value.build(policy=policy, place_height={"mode": "fallback_v1", "fallback_reason": "TILT_UNSTABLE"},
+    document = value.build(policy=policy, place_height={"mode": "fallback_reference", "fallback_reason": "TILT_UNSTABLE"},
                            perception_error={"xy_mm": 1.0, "z_mm": 0.5, "tilt_deg": 0.2})
     assert json.loads(json.dumps(document, allow_nan=False)) == document
     assert document["schema"] == "teacher_process_summary_v1" and document["units"]["compression"] == "um"
     assert document["policy"] == {"execution_policy_schema": 3, "execution_policy_sha256": "a" * 64, "cup_pose_source": "broker_rgbd",
                                   "verdict_source": "sim_truth"}
-    assert document["place_height_mode"] == "fallback_v1" and document["place_fallback_reason"] == "TILT_UNSTABLE"
+    assert document["place_height_mode"] == "fallback_reference" and document["place_fallback_reason"] == "TILT_UNSTABLE"
     assert document["perception_error"] == {"xy_mm": 1.0, "z_mm": 0.5, "tilt_deg": 0.2}
     assert document["thresholds"] == {"source": "r10b", "summed_force_n": 1.8916304473471774,
                                       "compression_um": pytest.approx(119.28116711427007), "comparison": "strict >"}
