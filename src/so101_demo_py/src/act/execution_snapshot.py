@@ -11,7 +11,7 @@ from .qc_session import session_memo
 
 KIND = "ACT_FIRST_EPISODE_EXECUTION_INPUTS"
 SCENE = "assets/mujoco/act/scene.xml"
-MOTION = "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+MOTION = "config/policies/dynamic_cup_pick/mujoco.yaml"
 _FIELDS = frozenset({"kind", "schema_version", "files", "source_files", "source_sha256",
                      "scene_path", "motion_policy_path", "model_sha256", "mujoco_version",
                      "nq", "nv", "targets", "snapshot_sha256"})

@@ -77,7 +77,6 @@ COMMON_ARGUMENTS = {
     "execute",
     "headless",
     "policy_id",
-    "policy_version",
     "session_id",
     "evidence_file",
     "readiness_timeout_s",
@@ -1446,7 +1445,6 @@ def _configured_actions(context, *, backend: str, pick_place: bool):
         prefix = None
     policy = load_policy_variant(
         LaunchConfiguration("policy_id").perform(context),
-        LaunchConfiguration("policy_version").perform(context),
         backend,
         share,
     )
@@ -1761,7 +1759,6 @@ def build_launch_description(*, backend: str, pick_place: bool) -> LaunchDescrip
         DeclareLaunchArgument("execute", default_value="false", choices=("true", "false")),
         DeclareLaunchArgument("headless", default_value="true", choices=("true", "false")),
         DeclareLaunchArgument("policy_id", default_value="light_cup_wall_pick"),
-        DeclareLaunchArgument("policy_version", default_value="v1"),
         DeclareLaunchArgument("session_id", default_value=unique),
         DeclareLaunchArgument("evidence_file", default_value=f"/tmp/so101-{unique}.json"),
         DeclareLaunchArgument("readiness_timeout_s", default_value="90.0"),

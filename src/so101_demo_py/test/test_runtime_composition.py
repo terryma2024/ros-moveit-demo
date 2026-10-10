@@ -20,7 +20,6 @@ def test_composition_loads_exact_policy_variant_and_bundle(package_share: Path) 
     request = CompositionRequest(
         backend="mujoco",
         policy_id="light_cup_wall_pick",
-        policy_version="v1",
         share_dir=package_share,
         source_commit="0" * 40,
         installed_prefix=package_share.parent,
@@ -36,7 +35,6 @@ def test_composition_rejects_unknown_backend(package_share: Path) -> None:
     request = CompositionRequest(
         "unknown",
         "light_cup_wall_pick",
-        "v1",
         package_share,
         "0" * 40,
         package_share.parent,

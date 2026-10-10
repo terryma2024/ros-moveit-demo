@@ -18,7 +18,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
-MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+MOTION = PACKAGE / "config/policies/light_cup_wall_pick/mujoco.yaml"
 PLUGIN = PACKAGE / "config/mujoco/act/mujoco_plugins.yaml"
 
 

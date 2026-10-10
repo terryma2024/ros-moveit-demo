@@ -1,6 +1,5 @@
 schema_version: 1
 policy_id: light_cup_wall_pick
-version: v1
 variants:
   mujoco:
     backend: mujoco

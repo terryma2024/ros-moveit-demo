@@ -117,7 +117,7 @@ _CURRENT_PROVENANCE_FILES = {
     "catalog_sha256": "catalog_sha256.json",
 }
 _DYNAMIC_MUJOCO_POLICY = Path(
-    "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+    "config/policies/dynamic_cup_pick/mujoco.yaml"
 )
 
 

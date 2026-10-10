@@ -28,7 +28,7 @@ POINT_RADIUS_PX = 10.0
 SCENE_PATH = Path("src/so101_demo_py/assets/mujoco/scene.xml")
 ANCHOR_PATH = Path("src/so101_demo_py/config/mujoco/rgbd_task_points.yaml")
 TARGET_POLICY_PATH = Path(
-    "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+    "src/so101_demo_py/config/policies/light_cup_wall_pick/mujoco.yaml"
 )
 
 QUOTAS = (

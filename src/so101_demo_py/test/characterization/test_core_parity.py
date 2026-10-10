@@ -7,7 +7,7 @@ from paths import REPOSITORY
 
 REPOSITORY_ROOT = REPOSITORY
 POLICY_PATH = (
-    REPOSITORY_ROOT / "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+    REPOSITORY_ROOT / "src/so101_demo_py/config/policies/light_cup_wall_pick/mujoco.yaml"
 )
 
 

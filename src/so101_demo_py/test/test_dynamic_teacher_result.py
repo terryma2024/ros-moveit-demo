@@ -24,7 +24,7 @@ ARM_AND_GRIPPER = (*RosDynamicMujocoExecution._ARM_JOINTS, "6")
 
 def _template():
     return load_dynamic_pick_template(
-        PACKAGE / "config/policies/dynamic_cup_pick/v1/mujoco.yaml",
+        PACKAGE / "config/policies/dynamic_cup_pick/mujoco.yaml",
         expected_backend="mujoco", expected_execution_allowed=True)
 
 

@@ -132,7 +132,7 @@ def production_arguments(
         "--evidence-root",
         str(evidence_root_for(session_id, checkpoint)),
         "--motion-policy",
-        str(package_share / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"),
+        str(package_share / "config/policies/light_cup_wall_pick/mujoco.yaml"),
         "--contact-policy",
         str(package_share / "config/mujoco/contact_calibration.yaml"),
     ]

@@ -18,7 +18,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 URDF = PACKAGE / "assets/mujoco/so101.urdf"
-POLICY = PACKAGE / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+POLICY = PACKAGE / "config/policies/dynamic_cup_pick/mujoco.yaml"
 JOINTS = ("1", "2", "3", "4", "5")
 
 

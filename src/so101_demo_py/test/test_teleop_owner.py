@@ -60,7 +60,7 @@ def test_workflow_arguments_bind_unified_policy_and_epoch() -> None:
     assert values[:3] == ["--backend", "mujoco", "--mode"]
     assert values[values.index("--expected-reset-epoch") + 1] == "7"
     assert values[values.index("--motion-policy") + 1].endswith(
-        "/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+        "/so101_demo_py/config/policies/light_cup_wall_pick/mujoco.yaml"
     )
 
 

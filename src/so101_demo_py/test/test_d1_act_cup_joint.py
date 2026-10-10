@@ -11,7 +11,7 @@ import yaml
 from act_identity import ACT_MODEL_SHA256, ACT_SCENE, ACT_SCENE_SHA256, PACKAGE
 
 pytestmark = pytest.mark.fast
-MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+MOTION = PACKAGE / "config/policies/light_cup_wall_pick/mujoco.yaml"
 # sha256 of the files: the main/robot-default ones as they were BEFORE D1 (must not change); act/so101.xml carries the R11 official ranges.
 UNCHANGED = {
     "assets/mujoco/act/so101.xml": "264dd124c27d06a14a96baf2cc8bf7789c407a81a9ca648159957bf7713eebfe",

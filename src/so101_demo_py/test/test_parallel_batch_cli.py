@@ -451,7 +451,7 @@ def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
     module_path.parent.mkdir(parents=True)
     module_path.write_text("# installed module\n", encoding="utf-8")
     share = tmp_path / "install/so101_demo_py/share/so101_demo_py"
-    policy = share / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
+    policy = share / "config/policies/dynamic_cup_pick/mujoco.yaml"
     policy.parent.mkdir(parents=True)
     policy.write_text("schema_version: 1\n", encoding="utf-8")
 

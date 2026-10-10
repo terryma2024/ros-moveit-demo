@@ -162,7 +162,7 @@ def test_reachability_constructor_respects_explicit_backend(monkeypatch, backend
 
     monkeypatch.setenv("SO101_IK_BACKEND", "quik" if backend == "native" else "native")
     template = load_dynamic_pick_template(
-        PACKAGE / "config/policies/dynamic_cup_pick/v1/mujoco.yaml", expected_backend="mujoco"
+        PACKAGE / "config/policies/dynamic_cup_pick/mujoco.yaml", expected_backend="mujoco"
     )
     planner = RosMoveGroupReachabilityPlanner(
         object(), template, action_client=object(), ik_backend=backend

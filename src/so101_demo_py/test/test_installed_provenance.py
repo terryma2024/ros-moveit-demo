@@ -86,11 +86,11 @@ def test_final_install_contains_runtime_contract() -> None:
     assert {path.name for path in (share / "launch").glob("*.launch.py")} == EXPECTED_LAUNCHERS
     assert (share / "assets/mujoco/scene.xml").is_file()
     assert (share / "assets/gazebo/world.sdf").is_file()
-    assert (share / "config/policies/light_cup_wall_pick/v1/mujoco.yaml").is_file()
-    assert (share / "config/policies/light_cup_wall_pick/v1/gazebo.yaml").is_file()
-    assert (share / "config/policies/light_cup_wall_pick/v1/real_stub.yaml").is_file()
-    assert (share / "config/policies/dynamic_cup_pick/v1/gazebo.yaml").is_file()
-    assert (share / "config/policies/dynamic_cup_pick/v1/manifest.yaml").is_file()
+    assert (share / "config/policies/light_cup_wall_pick/mujoco.yaml").is_file()
+    assert (share / "config/policies/light_cup_wall_pick/gazebo.yaml").is_file()
+    assert (share / "config/policies/light_cup_wall_pick/real_stub.yaml").is_file()
+    assert (share / "config/policies/dynamic_cup_pick/gazebo.yaml").is_file()
+    assert (share / "config/policies/dynamic_cup_pick/manifest.yaml").is_file()
 
 
 def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> None:

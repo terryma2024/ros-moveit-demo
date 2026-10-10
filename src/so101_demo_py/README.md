@@ -223,7 +223,6 @@ is available at `http://127.0.0.1:8080/tasks` when Teleop is enabled.
 | `execute` | `false` | Second, independent live-execution authorization |
 | `headless` | `true` on generic launches | Viewer visibility; it is independent of sensor rendering |
 | `policy_id` | `light_cup_wall_pick` | Registered fixed-motion policy |
-| `policy_version` | `v1` | Frozen policy version |
 | `session_id` | Generated unique value | Correlation identity for simulator, reset, workflow, and evidence |
 | `evidence_file` | Unique file under `/tmp` | Top-level result anchor; detailed artifacts use a sibling `.d` directory |
 | `readiness_timeout_s` | `90.0` | Stack readiness deadline |
@@ -330,7 +329,7 @@ failure. A typical check is:
 SHARE="$(ros2 pkg prefix so101_demo_py)/share/so101_demo_py"
 ros2 run so101_demo_py task_reachability \
   --points "$SHARE/config/mujoco/rgbd_task_points.yaml" \
-  --policy "$SHARE/config/policies/dynamic_cup_pick/v1/mujoco.yaml" \
+  --policy "$SHARE/config/policies/dynamic_cup_pick/mujoco.yaml" \
   --session-id task-station-001 \
   --evidence-file "$SO101_EVIDENCE_ROOT/reachability.json"
 ```

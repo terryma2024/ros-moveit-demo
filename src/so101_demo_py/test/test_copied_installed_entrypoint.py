@@ -267,7 +267,7 @@ def test_copied_launch_resources_are_functionally_discovered(tmp_path) -> None:
         "share=Path(get_package_share_directory('so101_demo_py'));"
         "print(json.dumps({'exe':str(exe),'executable':exe.stat().st_mode & 0o111 != 0,"
         "'share':str(share),'launch':sorted(p.name for p in (share/'launch').glob('*.launch.py')),"
-        "'policy':(share/'config/policies/light_cup_wall_pick/v1/mujoco.yaml').is_file(),"
+        "'policy':(share/'config/policies/light_cup_wall_pick/mujoco.yaml').is_file(),"
         "'scene':(share/'assets/mujoco/scene.xml').is_file(),"
         "'module':__import__('so101_demo').__file__}))"
     )

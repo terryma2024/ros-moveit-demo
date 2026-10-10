@@ -46,11 +46,11 @@ for launcher in \
 done
 test -f "${share}/assets/mujoco/scene.xml"
 test -f "${share}/assets/gazebo/world.sdf"
-test -f "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
-test -f "${share}/config/policies/light_cup_wall_pick/v1/gazebo.yaml"
-test -f "${share}/config/policies/light_cup_wall_pick/v1/real_stub.yaml"
+test -f "${share}/config/policies/light_cup_wall_pick/mujoco.yaml"
+test -f "${share}/config/policies/light_cup_wall_pick/gazebo.yaml"
+test -f "${share}/config/policies/light_cup_wall_pick/real_stub.yaml"
 
-policy_sha256="$(python3 - "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml" <<'PY'
+policy_sha256="$(python3 - "${share}/config/policies/light_cup_wall_pick/mujoco.yaml" <<'PY'
 from pathlib import Path
 import hashlib
 import sys
@@ -60,8 +60,8 @@ PY
 )"
 test "${policy_sha256}" = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 cmp -s \
-  "${share}/config/policies/light_cup_wall_pick/v1/mujoco.yaml" \
-  "${share}/config/policies/light_cup_wall_pick/v1/gazebo.yaml"
+  "${share}/config/policies/light_cup_wall_pick/mujoco.yaml" \
+  "${share}/config/policies/light_cup_wall_pick/gazebo.yaml"
 
 python3 -m pytest -q src/so101_demo_py/test
 python3 -m pytest --collect-only -q src/so101_demo_py/test | rg '[1-9][0-9]* tests collected'

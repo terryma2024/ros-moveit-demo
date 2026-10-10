@@ -15,7 +15,7 @@ from paths import PACKAGE_ROOT
 pytestmark = pytest.mark.fast
 PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
-MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
+MOTION = PACKAGE / "config/policies/light_cup_wall_pick/mujoco.yaml"
 GOLDEN = {
     "no_contact:0": "bf4826ead84092ef0badacbb7776a2b8fd48f03edafc24881a872cb6b4b4307e",
     "no_contact:7": "cb2f4d7b5cf6408fcf04f5da347c5d50e3c85d145257c420e92266384a347e3d",

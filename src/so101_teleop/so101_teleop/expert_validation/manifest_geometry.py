@@ -16,8 +16,8 @@ from .service import ServiceConflict
 
 _INSTALLED_INPUTS = {
     "execution_policy": "config/mujoco/headless_execution.yaml",
-    "dynamic_policy": "config/policies/dynamic_cup_pick/v1/mujoco.yaml",
-    "placement_policy": "config/policies/light_cup_wall_pick/v1/mujoco.yaml",
+    "dynamic_policy": "config/policies/dynamic_cup_pick/mujoco.yaml",
+    "placement_policy": "config/policies/light_cup_wall_pick/mujoco.yaml",
     "task_scene": "config/mujoco/task_scene.yaml",
     "scene": "assets/mujoco/scene.xml",
     "target_mesh": "assets/mujoco/assets/target_landing_tolerance_ring.obj",

@@ -10,8 +10,8 @@
   "policy": {
     "id": "light_cup_wall_pick",
     "version": "v1",
-    "mujoco_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml",
-    "gazebo_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/gazebo.yaml",
+    "mujoco_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/mujoco.yaml",
+    "gazebo_path": "src/so101_demo_py/config/policies/light_cup_wall_pick/gazebo.yaml",
     "sha256": "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356",
     "simulator_variants_byte_identical": true
   },

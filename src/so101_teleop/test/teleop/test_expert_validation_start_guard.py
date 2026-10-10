@@ -87,8 +87,8 @@ class _EmptyNvml:
 
 INSTALLED_ASSETS = (
     "config/mujoco/headless_execution.yaml",
-    "config/policies/dynamic_cup_pick/v1/mujoco.yaml",
-    "config/policies/light_cup_wall_pick/v1/mujoco.yaml",
+    "config/policies/dynamic_cup_pick/mujoco.yaml",
+    "config/policies/light_cup_wall_pick/mujoco.yaml",
     "config/mujoco/task_scene.yaml",
     "assets/mujoco/scene.xml",
     "assets/mujoco/assets/target_landing_tolerance_ring.obj",

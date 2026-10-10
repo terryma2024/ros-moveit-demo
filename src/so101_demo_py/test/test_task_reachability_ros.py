@@ -25,7 +25,7 @@ def test_prepare_horizon_reuses_real_requests_only_within_one_call(monkeypatch) 
 
     package = PACKAGE_ROOT
     template = load_dynamic_pick_template(
-        package / "config/policies/dynamic_cup_pick/v1/mujoco.yaml", expected_backend="mujoco"
+        package / "config/policies/dynamic_cup_pick/mujoco.yaml", expected_backend="mujoco"
     )
     ik = UnderactuatedPoseIk.from_urdf(
         package / "assets/mujoco/so101.urdf", template.arm_joint_names, "world", "so101_tcp"
