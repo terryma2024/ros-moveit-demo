@@ -15,12 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor  # noqa: E402
 

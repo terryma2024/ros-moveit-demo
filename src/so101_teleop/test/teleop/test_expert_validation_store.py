@@ -23,6 +23,7 @@ from so101_teleop.expert_validation.store import (
     StoreConflict,
     SupervisorStore,
 )
+from teleop_paths import TEST_ROOT
 
 
 SHA_A = "a" * 64
@@ -769,7 +770,7 @@ def test_an_owner_whose_group_still_holds_a_live_process_is_not_retired(tmp_path
     leader = subprocess.Popen(
         [
             sys.executable,
-            str(Path(__file__).parents[1] / "fixtures/process_tree_helper.py"),
+            str(TEST_ROOT / "fixtures/process_tree_helper.py"),
             "--mode", "coordinator", "--root", str(tmp_path / "owner-tree"),
             "--batch-id", "b1", "--leader-exits",
         ],

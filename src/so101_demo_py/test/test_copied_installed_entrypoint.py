@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
 #: The copied install under test. Task 9 of the lightweight start guard plan replaced the
 #: hardcoded historical prefix with an explicit one: the new immutable copy of the current
@@ -61,7 +62,7 @@ requires_copied_prefix = pytest.mark.skipif(
     reason="requires SO101_E2E_INSTALL_PREFIX (lg-copy-final)",
 )
 ENTRYPOINT = DEMO_PREFIX / "lib/so101_demo_py/text_pick_agent"
-WORKTREE = Path(__file__).resolve().parents[3]
+WORKTREE = REPOSITORY
 RUNTIME_MODULES = (
     "runtime/provenance.py",
     "runtime/debug_provenance.py",

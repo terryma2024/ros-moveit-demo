@@ -403,10 +403,7 @@ def test_the_missing_raw_branch_is_accepted_by_a_real_audit_writer(tmp_path):
 def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identity(tmp_path):
     """T3-F3(c): the runner carries the writer's lease and emits the release event the seal tie names."""
 
-    import sys
-    from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_episode_audit import _lease, identity
     from so101_demo.act.episode_audit import EpisodeAuditWriter
 
@@ -447,10 +444,7 @@ class AlignedPort(FakePort):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        import sys
-        from pathlib import Path
 
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
         from test_act_episode_audit import identity
 
         self.names = {"session_id": identity()["session_id"], "attempt_id": identity()["attempt_id"]}

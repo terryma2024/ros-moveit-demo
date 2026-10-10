@@ -19,6 +19,7 @@ from so101_demo.adapters.perception.mujoco_dataset import (
     load_dataset_config,
     split_seed_plan,
 )
+from paths import PACKAGE_ROOT
 
 
 def _raw_render(*, cup_count: int, cup_rgba: tuple[float, ...]) -> RawRender:
@@ -323,7 +324,7 @@ def test_generate_dataset_refuses_existing_output_root(tmp_path: Path) -> None:
 
 
 def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -> None:
-    fixture = Path(__file__).parents[1] / "assets/mujoco/v5_multi_object_scene.xml"
+    fixture = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
     root = ET.parse(fixture).getroot()
     names = {element.attrib["name"] for element in root.iter() if "name" in element.attrib}
 
@@ -350,7 +351,7 @@ def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -
 
 
 def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> None:
-    config_path = Path(__file__).parents[1] / "config/perception_benchmark/fresh_dataset.yaml"
+    config_path = PACKAGE_ROOT / "config/perception_benchmark/fresh_dataset.yaml"
 
     config = load_dataset_config(config_path, generator_commit="fresh-source")
 
@@ -375,9 +376,9 @@ from so101_demo.adapters.perception.mujoco_dataset import (  # noqa: E402
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256  # noqa: E402
 
-HEAD_CONFIG_PATH = Path(__file__).parents[1] / "config/perception/head_camera_yolo_seg.yaml"
+HEAD_CONFIG_PATH = PACKAGE_ROOT / "config/perception/head_camera_yolo_seg.yaml"
 HEAD_SMOKE_CONFIG_PATH = (
-    Path(__file__).parents[1] / "config/perception/head_camera_yolo_seg_smoke.yaml"
+    PACKAGE_ROOT / "config/perception/head_camera_yolo_seg_smoke.yaml"
 )
 
 

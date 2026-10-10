@@ -1,7 +1,6 @@
 import json
-from pathlib import Path
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _receipt(*, backend: str = "gazebo", success: bool = True):

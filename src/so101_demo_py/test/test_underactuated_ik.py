@@ -1,12 +1,12 @@
-from pathlib import Path
 
 import pytest
 
 from so101_demo.control.moveit.underactuated_ik import UnderactuatedPoseIk
 from so101_demo.ports.evidence import PoseEvidence
+from paths import PACKAGE_ROOT
 
 
-URDF = Path(__file__).parents[1] / "assets" / "mujoco" / "so101.urdf"
+URDF = PACKAGE_ROOT / "assets" / "mujoco" / "so101.urdf"
 JOINTS = ("1", "2", "3", "4", "5")
 GRASP_JOINTS = (-0.000206491845, 0.472194274096, 0.214652624195, 0.854922375695, 0.000576703465)
 GRASP_POSE = PoseEvidence(

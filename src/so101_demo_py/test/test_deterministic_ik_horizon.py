@@ -1,4 +1,3 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -15,8 +14,9 @@ from so101_demo.core.dynamic_pick import CupPoseSample, resolve_motion_targets
 from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
 from so101_demo.core.task_geometry import Pose7
 from so101_demo.ports.evidence import PoseEvidence
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 URDF = PACKAGE / "assets/mujoco/so101.urdf"
 POLICY = PACKAGE / "config/policies/dynamic_cup_pick/v1/mujoco.yaml"
 JOINTS = ("1", "2", "3", "4", "5")

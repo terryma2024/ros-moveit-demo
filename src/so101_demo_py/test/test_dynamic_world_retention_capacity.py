@@ -7,10 +7,10 @@ import json
 import threading
 import time
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
 # ---- H2: retention capacity ----
@@ -97,7 +97,7 @@ def test_dynamic_scene_binding_with_episode_recorder_retains_2048_frames():
     episode = SimpleNamespace(synchronizer=RgbObservationSynchronizer(max_age_s=.1, max_skew_s=.1),
         capture=SimpleNamespace(audit=SimpleNamespace(append_raw_physics=lambda record: None,
         inputs={"execution_snapshot": {"physics_chunks": {"max_samples": 50, "max_contacts": 128}}})))
-    path = Path(__file__).parents[1] / "assets/mujoco/act/scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
     binding = bind_data_sources(Node(), session_id="live-source", reset_epoch=2, model_path=path,
         episode_recorder=episode)
     try:

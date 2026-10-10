@@ -20,12 +20,10 @@ What this file requires:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 def _formally_sealed(tmp_path, monkeypatch):

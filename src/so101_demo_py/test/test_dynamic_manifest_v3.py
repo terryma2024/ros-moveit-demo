@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
@@ -16,8 +15,9 @@ from so101_demo.core.process_summary import ProcessSummary
 from so101_demo.core.workflow import SO101_WORKFLOW_V3
 from test_dynamic_manifest_semantics import (
     DONE_TRACE, MOTION_STATES, TRUSTED_FINAL, event, manifest, sample, teacher_fields, teacher_result)
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCHEMA_V3 = "so101-dynamic-mujoco-execute-v3"
 FROZEN = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy_v3.yaml")
 POLICY = ph.PlaceHeightPolicy.from_document(FROZEN)

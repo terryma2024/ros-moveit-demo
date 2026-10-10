@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def fixture_runtime(
@@ -397,7 +398,7 @@ def test_grounded_oom_has_infrastructure_type():
 def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService, GROUNDED_ID
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
-    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    config = load_parallel_runtime_config(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     service = PerceptionService(f.runtime, config, generation=3)
     # run_next is the synchronous service seam; do not start competing executor threads.
@@ -466,7 +467,7 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
             self.health_changed(False)
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml'
     )
     runtime = Runtime()
     service = PerceptionService(runtime, config, generation=1)
@@ -550,7 +551,7 @@ def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeyp
             self.health_changed(False)
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml'
     )
     runtime = Runtime()
     service = PerceptionService(
@@ -620,7 +621,7 @@ def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
             self.health_changed(False)
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml'
     )
     service = PerceptionService(Runtime(), config, generation=1)
     service.start()
@@ -679,7 +680,7 @@ def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
             self.health_changed(False)
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml'
     )
     service = PerceptionService(Runtime(), config, generation=1)
     service.start()
@@ -710,7 +711,7 @@ def test_service_preserves_initiating_runtime_failure_before_health_fanout(
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     f = fixture_runtime(
         tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
     service = PerceptionService(f.runtime, config, generation=1)
@@ -731,7 +732,7 @@ def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
 
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.0]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
@@ -799,7 +800,7 @@ def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path,
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
     from so101_demo.core.detection import DetectionBatch
-    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    config = load_parallel_runtime_config(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
@@ -1001,7 +1002,7 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
     from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config
     f = fixture_runtime(tmp_path, monkeypatch)
-    config = load_parallel_runtime_config(Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+    config = load_parallel_runtime_config(PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     now = [1.]
     service = PerceptionService(f.runtime, config, generation=1, clock=lambda: now[0])
     # This test drives dispatch synchronously; do not race the service executor.
@@ -1028,7 +1029,7 @@ def test_health_losing_response_reports_one_exact_event(
 
     f = fixture_runtime(tmp_path, monkeypatch)
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / 'config/mujoco/parallel_batch_v1.yaml'
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml'
     )
     events = []
     service = PerceptionService(

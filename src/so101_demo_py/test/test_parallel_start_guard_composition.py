@@ -10,7 +10,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
 
@@ -23,8 +22,9 @@ from so101_demo.parallel_batch.contracts import (
     load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.start_guard import FAIL, GuardScope, StartGuardPolicy
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 
 
@@ -416,7 +416,7 @@ def test_the_two_approved_w1_policies_demand_the_mps_probe(tmp_path, scope):
         load_parallel_runtime_config_v6,
     )
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     for name in ("parallel_batch_v5_macos_mps_w1_retry.yaml",
                  "parallel_batch_v6_macos_mps_w1_first_pass.yaml"):
         config = (load_parallel_runtime_config_v5 if "v5" in name

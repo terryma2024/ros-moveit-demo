@@ -4,15 +4,15 @@ import hashlib
 import importlib.util
 import io
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tarfile
 
 import pytest
+from paths import REPOSITORY
 
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = REPOSITORY
 ENTRY = REPO / "scripts/setup-so101-quik.sh"
 HELPER = REPO / "scripts/so101_quik_setup.py"
 

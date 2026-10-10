@@ -2,6 +2,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import yaml
+from paths import PACKAGE_ROOT
 
 REMOVED_PACKAGE_NAMES = tuple(
     f"so101_{backend}_demo_py" for backend in ("mujoco", "gazebo")
@@ -11,7 +12,7 @@ TEXT_SUFFIXES = {".xml", ".sdf", ".xacro", ".urdf", ".yaml", ".json", ".md"}
 
 def _share(request) -> Path:
     installed = request.config.getoption("--installed-share")
-    return installed or Path(__file__).parents[1]
+    return installed or PACKAGE_ROOT
 
 
 def test_assets_have_backend_entrypoints_and_resolve_locally(request) -> None:

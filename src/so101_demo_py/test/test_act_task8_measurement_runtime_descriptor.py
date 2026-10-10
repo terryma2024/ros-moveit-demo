@@ -9,14 +9,12 @@ So the descriptor travels as a parsed document in the context, and the entry is 
 import hashlib
 import json
 import sys
-from pathlib import Path
 
 import pytest
 
 from test_act_task8_calibration_aggregator import SEAL_VALID_HELPER
 from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_act_task8_calibration_aggregator import TEMPLATE_V2, _cli_identities   # noqa: E402
 
 

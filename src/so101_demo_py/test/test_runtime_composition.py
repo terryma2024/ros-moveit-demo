@@ -8,6 +8,7 @@ from so101_demo.runtime.composition import (
     RuntimeCompositionError,
     compose_backend,
 )
+from paths import PACKAGE_ROOT
 
 
 class Port:
@@ -45,7 +46,7 @@ def test_composition_rejects_unknown_backend(package_share: Path) -> None:
 
 
 def test_core_and_application_do_not_import_backend_implementations() -> None:
-    root = Path(__file__).parents[1] / "src"
+    root = PACKAGE_ROOT / "src"
     forbidden = {"so101_demo.backends", "mujoco", "gazebo", "ros_gz"}
     violations = []
     for area in (root / "core", root / "application"):
@@ -65,4 +66,4 @@ def test_core_and_application_do_not_import_backend_implementations() -> None:
 
 @pytest.fixture
 def package_share() -> Path:
-    return Path(__file__).parents[1]
+    return PACKAGE_ROOT

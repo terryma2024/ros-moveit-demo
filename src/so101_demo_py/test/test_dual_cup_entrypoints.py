@@ -1,9 +1,8 @@
 import json
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_setup_exposes_only_named_fixed_and_dynamic_pick_place_entries() -> None:

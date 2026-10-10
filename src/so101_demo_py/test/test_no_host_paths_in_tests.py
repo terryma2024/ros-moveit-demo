@@ -6,9 +6,8 @@ stand-in, or mark the test as an integration test outside the ordinary gate.
 
 The allowlist holds only path *strings* that are inputs to validation logic and are never opened; every entry says why.
 """
-from pathlib import Path
+from paths import REPOSITORY
 
-REPOSITORY = Path(__file__).resolve().parents[3]
 TEST_TREES = (
     "src/so101_demo_py/test",
     "src/so101_teleop/test",

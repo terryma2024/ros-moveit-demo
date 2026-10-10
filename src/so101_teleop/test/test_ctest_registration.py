@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from typing import NamedTuple
+from teleop_paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 CMAKE_LISTS = PACKAGE_ROOT / "CMakeLists.txt"
 
 _REGISTRATION = re.compile(

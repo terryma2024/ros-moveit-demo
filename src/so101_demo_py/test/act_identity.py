@@ -1,8 +1,8 @@
 """The ACT scene's own identity, derived from the file and the compiled model (never pasted into tests)."""
 import hashlib
-from pathlib import Path
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 ACT_SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 
 

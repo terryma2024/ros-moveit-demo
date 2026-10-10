@@ -3,10 +3,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from paths import PACKAGE_ROOT
 
 
 def _share() -> Path:
-    return Path(__file__).parents[1]
+    return PACKAGE_ROOT
 
 
 def test_backends_share_visual_source_and_keep_collision_separate() -> None:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import math
 import os
-from pathlib import Path
 from types import SimpleNamespace
 
 import mujoco
@@ -22,12 +21,13 @@ from so101_demo.adapters.act.physics import model_sha256
 from so101_demo.adapters.act.pick_place_neck_sweep import MujocoNeckSweepChecker
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
+from paths import PACKAGE_ROOT, TEST_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 MODEL = PACKAGE / "assets/mujoco/act/head_search_scene.xml"
 # Vendored from the Head line's evidence (geometry-new, sha256-pinned below); no other host's evidence path is read.
-GEOMETRY = Path(__file__).resolve().parent / "data/head_camera_geometry_new.json"
+GEOMETRY = TEST_ROOT / "data/head_camera_geometry_new.json"
 GEOMETRY_SHA256 = "f0f04d0e4519a13f9657de6f1bd2bab5b4443c0f935360968c1cee2eb6fad72a"
 MODEL_XML_SHA256 = "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14"
 MODEL_SEMANTIC_SHA256 = "9fb38d68ef1e17111fd4a670bd397fb7f15d77538b5fdd1bdb652319c1fd05bf"

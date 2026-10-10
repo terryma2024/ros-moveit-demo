@@ -2,9 +2,9 @@
 comment in `src/so101_demo_py/src` or `test/` may use it again. The pattern is built from parts so that this file needs no
 allow-list entry for itself."""
 import re
-from pathlib import Path
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 LABEL = "K" + "2"
 PATTERN = re.compile(rf"(?<![A-Za-z0-9]){LABEL}(?![0-9])|(?<![A-Za-z0-9]){LABEL.lower()}(?![0-9])", re.IGNORECASE)
 

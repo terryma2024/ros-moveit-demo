@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 # A module-level `importorskip` would end the whole directory collection in the ordinary interpreter, so the gate is a marker.
 pytestmark = pytest.mark.skipif(
@@ -16,7 +17,7 @@ if importlib.util.find_spec("torch") is not None:
 
 from act_training_fixture import synthetic_dataset  # noqa: E402
 
-CONFIG = Path(__file__).resolve().parents[1] / "config/act/training.yaml"
+CONFIG = PACKAGE_ROOT / "config/act/training.yaml"
 SPLITS = {"act-1": "train", "act-2": "train", "act-3": "validation"}
 
 

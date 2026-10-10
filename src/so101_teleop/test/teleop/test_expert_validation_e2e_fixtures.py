@@ -7,9 +7,10 @@ import sys
 
 import pytest
 import yaml
+from teleop_paths import REPOSITORY, TEST_ROOT
 
-_E2E_DIR = Path(__file__).resolve().parents[1] / "e2e"
-_DEMO_SRC = Path(__file__).resolve().parents[4] / "so101_demo_py" / "src"
+_E2E_DIR = TEST_ROOT / "e2e"
+_DEMO_SRC = REPOSITORY / "so101_demo_py" / "src"
 for _path in (str(_E2E_DIR), str(_DEMO_SRC)):
     if _path not in sys.path:
         sys.path.insert(0, _path)
@@ -19,7 +20,7 @@ from scripted_service import (  # noqa: E402
     load_scenario,
 )
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "expert_validation_e2e"
+FIXTURES = TEST_ROOT / "fixtures" / "expert_validation_e2e"
 EXPECTED_BASELINE_SHA256 = (
     "c8199fb430624f4c23cdcff6e646bdc51367b0f51e597e83286719f1240a964e"
 )

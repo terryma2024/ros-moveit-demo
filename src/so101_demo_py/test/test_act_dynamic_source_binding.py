@@ -10,6 +10,7 @@ import pytest
 
 from so101_demo.ros.dynamic_runtime import run_dynamic_execute
 from test_dynamic_scene_sync import _runtime, _options, _observation, RecordingTaskScenePort
+from paths import PACKAGE_ROOT
 
 
 @pytest.mark.parametrize("fail_runner", [False, True])
@@ -42,7 +43,6 @@ def test_execution_gets_bound_source_before_actions_and_owned_subscription_close
 
 
 def test_a_data_callback_that_raises_latches_a_bounded_hazard_and_never_unwinds_the_control_spin():
-    from pathlib import Path
     from so101_demo.ros.data_source_binding import _DATA_HAZARD_LIMIT, bind_data_sources
     callbacks = {}
     class Node:
@@ -51,7 +51,7 @@ def test_a_data_callback_that_raises_latches_a_bounded_hazard_and_never_unwinds_
             return topic
         def destroy_subscription(self, value):
             pass
-    path = Path(__file__).parents[1] / "assets/mujoco/act/scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
     binding = bind_data_sources(Node(), session_id="source-session", reset_epoch=2, model_path=path)
     try:
         for _ in range(_DATA_HAZARD_LIMIT + 4):
@@ -96,7 +96,6 @@ def _assert_no_control_requests(requests):
 
 
 def test_a_failure_to_build_the_recording_sources_leaves_the_teachers_scene_observer_and_only_a_data_hazard(tmp_path):
-    from pathlib import Path
     from so101_demo.act.synchronizer import RgbObservationSynchronizer
     from so101_demo.ros.data_source_binding import bind_data_sources
     created, destroyed = [], []
@@ -111,7 +110,7 @@ def test_a_failure_to_build_the_recording_sources_leaves_the_teachers_scene_obse
     episode = SimpleNamespace(synchronizer=RgbObservationSynchronizer(max_age_s=.1, max_skew_s=.1),
         capture=SimpleNamespace(audit=SimpleNamespace(append_raw_physics=lambda record: None,
             inputs={"execution_snapshot": {"physics_chunks": {"max_samples": 50, "max_contacts": 128}}})))
-    path = Path(__file__).parents[1] / "assets/mujoco/act/scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
     binding = bind_data_sources(Node(), session_id="live-source", reset_epoch=2, model_path=path,
                                          episode_recorder=episode)
     assert binding.physics_adapter is None and binding.observation_adapter is None
@@ -126,7 +125,6 @@ def test_a_failure_to_build_the_recording_sources_leaves_the_teachers_scene_obse
 def test_real_factory_owns_one_raw_chunk_subscription_and_drains_before_close(tmp_path):
     import time
     import mujoco
-    from pathlib import Path
     from so101_demo.ros.data_source_binding import bind_data_sources
     from test_act_raw_physics_chunks import _chunk
     from so101_demo.act.synchronizer import RgbObservationSynchronizer
@@ -144,7 +142,7 @@ def test_real_factory_owns_one_raw_chunk_subscription_and_drains_before_close(tm
         capture=SimpleNamespace(audit=SimpleNamespace(
         append_raw_physics=lambda record: retained.append(record),
         inputs={"execution_snapshot": {"physics_chunks": {"max_samples": 50, "max_contacts": 128}}})))
-    path = Path(__file__).parents[1] / "assets/mujoco/act/scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
     model = mujoco.MjModel.from_xml_path(str(path))
     data = mujoco.MjData(model)
     binding = bind_data_sources(Node(), session_id="live-source", reset_epoch=2,
@@ -210,7 +208,6 @@ def test_observation_ownership_attempts_all_known_handles_on_failure(failure):
 def test_runtime_binding_decodes_actual_rgb_and_measured_joint_messages(tmp_path):
     import threading
     import time
-    from pathlib import Path
     from sensor_msgs.msg import Image, JointState
     from so101_demo.act.joints import ACT_JOINTS
     from so101_demo.act.synchronizer import RgbObservationSynchronizer
@@ -233,7 +230,7 @@ def test_runtime_binding_decodes_actual_rgb_and_measured_joint_messages(tmp_path
     episode = SimpleNamespace(capture=capture,
         synchronizer=RgbObservationSynchronizer(max_age_s=.1, max_skew_s=.1))
     binding = bind_data_sources(Node(), session_id="session", reset_epoch=2,
-        model_path=Path(__file__).parents[1] / "assets/mujoco/act/scene.xml", episode_recorder=episode)
+        model_path=PACKAGE_ROOT / "assets/mujoco/act/scene.xml", episode_recorder=episode)
     try:
         capture.active = True
         capture.started = True
@@ -261,7 +258,6 @@ def test_runtime_binding_decodes_actual_rgb_and_measured_joint_messages(tmp_path
 
 
 def test_binding_scene_observer_age_is_separate_from_the_act_data_age():
-    from pathlib import Path
     from so101_demo.ros.data_source_binding import bind_data_sources
 
     class Node:
@@ -271,7 +267,7 @@ def test_binding_scene_observer_age_is_separate_from_the_act_data_age():
         def destroy_subscription(self, value):
             pass
 
-    path = Path(__file__).parents[1] / "assets/mujoco/act/scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
     default = bind_data_sources(Node(), session_id="s", reset_epoch=2, model_path=path)
     teacher = bind_data_sources(Node(), session_id="s", reset_epoch=2, model_path=path,
                                          scene_max_age_s=0.5)

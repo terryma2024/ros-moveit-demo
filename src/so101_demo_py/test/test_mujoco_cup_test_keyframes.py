@@ -1,8 +1,8 @@
-from pathlib import Path
 from xml.etree import ElementTree
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/scene.xml"
 MULTI_OBJECT_SCENE = PACKAGE / "assets/mujoco/v5_multi_object_scene.xml"
 

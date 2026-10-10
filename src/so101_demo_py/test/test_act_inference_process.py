@@ -1,14 +1,14 @@
 """Task 13: one request in flight, and a late answer is refused rather than applied."""
 
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.act.runtime_config import load_runtime_config
 from so101_demo.adapters.act.inference_process import ActInferenceProcess
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 RUNTIME = PACKAGE / "config/act/runtime.yaml"
 
 

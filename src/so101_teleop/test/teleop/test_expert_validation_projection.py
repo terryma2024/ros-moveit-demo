@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -10,9 +9,9 @@ from so101_teleop.expert_validation.projection import (
     marker_style,
     project_xy,
 )
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_PATH = (
     PACKAGE_ROOT / "config/expert_validation/top_view_projection_v1.json"
 )

@@ -1,7 +1,6 @@
 """Only same-step lossless bilateral evidence establishes a held cup."""
 
 import copy
-from pathlib import Path
 
 import mujoco
 import pytest
@@ -10,9 +9,10 @@ from so101_demo.adapters.act.physics import model_sha256
 from so101_demo.adapters.act.held_cup_state import held_cup_attachment
 from so101_demo.adapters.act.scene_state import SceneStateObserver
 from so101_demo.act.contact_live import LivePhysicsStream
+from paths import PACKAGE_ROOT
 
 
-SCENE = Path(__file__).resolve().parents[1] / "assets/mujoco/act/scene.xml"
+SCENE = PACKAGE_ROOT / "assets/mujoco/act/scene.xml"
 
 
 def evidence():

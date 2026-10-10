@@ -6,9 +6,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = REPOSITORY
 CONTRACT_TOOL = REPOSITORY_ROOT / "scripts" / "so101_macos_runtime_contract.py"
 
 

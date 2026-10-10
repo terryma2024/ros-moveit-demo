@@ -800,9 +800,7 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     """
 
     import json
-    import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
     from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
     from so101_demo.act import episode_qc

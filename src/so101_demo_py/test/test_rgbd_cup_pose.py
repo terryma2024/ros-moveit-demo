@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def _transform(*, translation, rotation_xyzw):
@@ -1799,7 +1800,7 @@ def test_cli_invalid_profiling_configuration_still_exits_before_perception(
 
 
 def test_package_registers_rgbd_cup_pose_executable() -> None:
-    package_root = Path(__file__).resolve().parents[1]
+    package_root = PACKAGE_ROOT
     setup_source = (package_root / "setup.py").read_text(encoding="utf-8")
 
     assert "rgbd_cup_pose = so101_demo.cli.rgbd_cup_pose:main" in setup_source

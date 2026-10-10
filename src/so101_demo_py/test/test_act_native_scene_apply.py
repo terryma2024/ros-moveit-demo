@@ -1,7 +1,6 @@
 """Exercise generated requests through the installed native MoveIt library, without ROS services."""
 
 import json
-from pathlib import Path
 import shutil
 import subprocess
 
@@ -9,6 +8,7 @@ import pytest
 
 from test_act_scene_association import frozen_scene
 from test_act_scene_attachment_association import attachment
+from paths import TEST_ROOT
 
 
 @pytest.fixture(scope="module")
@@ -16,7 +16,7 @@ def native_scene_probe(tmp_path_factory):
     root = tmp_path_factory.mktemp("native-scene-probe")
     cmake = shutil.which("cmake")
     assert cmake is not None
-    source = Path(__file__).parent / "native_scene_probe"
+    source = TEST_ROOT / "native_scene_probe"
     for name, command in (("configure", [cmake, "-S", str(source), "-B", str(root / "build")]),
                           ("build", [cmake, "--build", str(root / "build"), "--parallel", "2"])):
         result = subprocess.run(command, capture_output=True, text=True, check=False)

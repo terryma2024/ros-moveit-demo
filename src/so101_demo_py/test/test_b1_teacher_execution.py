@@ -8,7 +8,6 @@ import os
 import signal
 import threading
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -24,8 +23,9 @@ from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 from test_b1_teacher_stop_core import (
     COMPRESSION_LIMIT_M, FORCE_LIMIT_N, evidence,
 )
+from paths import PACKAGE_ROOT
 
-EXECUTION_POLICY = Path(__file__).resolve().parents[1] / "config/act/teacher_execution_policy_v1.yaml"
+EXECUTION_POLICY = PACKAGE_ROOT / "config/act/teacher_execution_policy_v1.yaml"
 ARM = ("1", "2", "3", "4", "5")
 
 

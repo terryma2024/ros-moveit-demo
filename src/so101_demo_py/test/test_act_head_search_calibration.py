@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from so101_demo.act.head_search_calibration import (
@@ -12,8 +11,9 @@ from so101_demo.act.head_search_calibration import (
     load_scenario_partitions,
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 CONTRACT = PACKAGE / "config/act/head-search-calibration-contract-v1.json"
 PARTITIONS = PACKAGE / "config/act/head-search-scenario-partitions-v1.json"
 

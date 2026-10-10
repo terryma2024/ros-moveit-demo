@@ -1,9 +1,9 @@
 """Contract tests for the Coordinator-free stateless perception Broker."""
 
 from contextlib import contextmanager
-from pathlib import Path
 import threading
 import time
+from paths import PACKAGE_ROOT
 
 
 YOLO = "plastic-cup-yolo11n-seg-v1"
@@ -15,7 +15,7 @@ def _config():
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
 
     return load_parallel_runtime_config(
-        Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml"
+        PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
     )
 
 

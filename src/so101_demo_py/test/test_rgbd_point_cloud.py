@@ -1,10 +1,10 @@
-from pathlib import Path
 from types import SimpleNamespace
 import sys
 
 import numpy as np
 
 from so101_demo.cli import rgbd_point_cloud
+from paths import PACKAGE_ROOT
 
 
 def _message(
@@ -238,7 +238,7 @@ def test_largest_cluster_indices_rejects_noise_and_smaller_clusters() -> None:
 
 
 def test_package_registers_rgbd_point_cloud_executable() -> None:
-    package_root = Path(__file__).resolve().parents[1]
+    package_root = PACKAGE_ROOT
     setup_source = (package_root / "setup.py").read_text(encoding="utf-8")
 
     assert "rgbd_point_cloud = so101_demo.cli.rgbd_point_cloud:main" in setup_source

@@ -1,4 +1,4 @@
-from pathlib import Path
+from paths import PACKAGE_ROOT
 
 
 def test_reset_ports_expose_backend_neutral_operations() -> None:
@@ -35,7 +35,7 @@ def test_reset_ports_expose_backend_neutral_operations() -> None:
 
 
 def test_reset_application_and_ports_do_not_expose_simulator_teleport() -> None:
-    package = Path(__file__).parents[2] / "src"
+    package = PACKAGE_ROOT / "src"
     sources = (
         (package / "ports/reset.py").read_text(encoding="utf-8")
         + (package / "application/transactional_reset.py").read_text(encoding="utf-8")

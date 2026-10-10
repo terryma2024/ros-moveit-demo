@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.act.parallel_collection import partition_waves
+from paths import PACKAGE_ROOT
 
 
 def test_manifest_order_is_partitioned_without_duplication():
@@ -208,7 +209,7 @@ def test_campaign_config_consumes_the_real_v3_collection_config(tmp_path):
 
     from so101_demo.act.parallel_collection import campaign_config_from
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
     config = campaign_config_from(document, qualification=False)
     assert config == {"max_wave_size": document["qualification"]["max_wave_size"],
@@ -236,7 +237,7 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
         FixedActCollectionCampaign, campaign_config_from, partition_waves,
     )
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_text())
     config = campaign_config_from(document, qualification=False)
     scene_ids = tuple(f"act-{index:03d}" for index in range(45))
@@ -328,11 +329,8 @@ def test_workload_needs_a_campaign_that_can_run():
 def test_the_worker_accepts_either_act_workload_only_in_execute_mode(tmp_path):
     """The worker's workload port is exact-typed: the two ACT workloads, and only in EXECUTE mode."""
 
-    import sys
     from types import SimpleNamespace
-    from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_parallel_batch_worker import Fake
     from so101_demo.parallel_batch.worker import ParallelWorker, RunMode, WorkerError
 

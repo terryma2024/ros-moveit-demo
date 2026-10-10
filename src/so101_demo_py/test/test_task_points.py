@@ -11,9 +11,9 @@ from so101_demo.runtime.task_point_config import (
     dump_task_point_list,
     load_task_point_list,
 )
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 PRESET_PATH = PACKAGE_ROOT / "config/mujoco/rgbd_task_points.yaml"
 WORKSPACE_BOUNDS_M = (-0.30, -0.50, 0.10, 0.35, 0.20, 0.50)
 

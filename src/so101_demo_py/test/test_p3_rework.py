@@ -25,8 +25,9 @@ from so101_demo.parallel_batch.contracts import RunMode, teacher_execution_bound
 from test_p3_offline_switch import (IDENTITY, LEASE, Clock, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
                                     collection_for, pilot_factory, worker_runtime)
 from test_p3_qc_memo import episode, paths
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 ACT_FILE = PACKAGE / "config/mujoco/parallel_batch_v3_act_offline.yaml"
 ORIGINAL_FILE = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 

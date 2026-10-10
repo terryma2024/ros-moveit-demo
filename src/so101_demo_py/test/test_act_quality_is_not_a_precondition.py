@@ -2,8 +2,9 @@
 
 import ast
 from pathlib import Path
+from paths import PACKAGE_ROOT
 
-SOURCE = Path(__file__).resolve().parents[1] / "src"
+SOURCE = PACKAGE_ROOT / "src"
 QUALITY = "task8_measurement_contract"
 
 

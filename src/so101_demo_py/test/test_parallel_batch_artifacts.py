@@ -19,6 +19,7 @@ from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.core.domain import State
 from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.workflow import SO101_WORKFLOW
+from paths import PACKAGE_ROOT
 
 
 EXPECTED_FINAL_CUP_POSE_WORLD = (
@@ -933,7 +934,7 @@ def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, m
     try:
         request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
         config = load_parallel_runtime_config(
-            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0.0, result_port=adapter)
         coordinator.register_worker('w1', generation=1)
@@ -1048,7 +1049,7 @@ def test_adapter_requires_parent_durability_after_rename_failure(
     try:
         request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
         config = load_parallel_runtime_config(
-            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0.0, result_port=adapter)
         coordinator.register_worker('w1', generation=1)

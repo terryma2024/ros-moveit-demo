@@ -1,17 +1,17 @@
 """The generator must not accept intersecting task-object visual solids."""
 
 import shutil
-from pathlib import Path
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 @pytest.fixture
 def scene():
     import mujoco
 
-    path = Path(__file__).parents[1] / "assets/mujoco/v5_multi_object_scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
     model = mujoco.MjModel.from_xml_path(str(path))
     data = mujoco.MjData(model)
     return mujoco, model, data
@@ -27,7 +27,7 @@ def position(scene, joint, xyz):
 def mutated_task_scene(tmp_path, old, new):
     import mujoco
 
-    source = Path(__file__).parents[1] / "assets/mujoco"
+    source = PACKAGE_ROOT / "assets/mujoco"
     copied = tmp_path / "mujoco"
     shutil.copytree(source, copied)
     scene_path = copied / "v5_multi_object_scene.xml"

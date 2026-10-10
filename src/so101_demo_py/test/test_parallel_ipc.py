@@ -13,6 +13,7 @@ import time
 from types import SimpleNamespace
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def request(**changes):
@@ -452,7 +453,7 @@ def test_broker_summary_survives_runtime_start_failure(tmp_path):
     ipc_root = tmp_path / "ipc"
     ipc_root.mkdir(mode=0o700)
     config = load_parallel_runtime_config(
-        Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml"
+        PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
     )
     transport = BrokerTransport(
         ipc_root=ipc_root,
@@ -1140,7 +1141,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     ipc_root.mkdir()
     config = ipc_root / "runtime-config.yaml"
     config.write_bytes(
-        (Path(__file__).parents[1] / "config/mujoco/parallel_batch_v1.yaml").read_bytes()
+        (PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml").read_bytes()
     )
     document = {
         "schema_version": 1,

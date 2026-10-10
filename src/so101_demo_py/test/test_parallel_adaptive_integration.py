@@ -10,8 +10,9 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
+from paths import PACKAGE_ROOT, REPOSITORY
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
@@ -150,7 +151,7 @@ def test_run_cli_reports_adaptive_runner_error_and_closes(
 
 
 def test_adaptive_wrapper_has_strict_cleanup_trap_contract():
-    script = Path(__file__).resolve().parents[3] / "scripts/run_so101_adaptive_batch.zsh"
+    script = REPOSITORY / "scripts/run_so101_adaptive_batch.zsh"
     document = script.read_text(encoding="utf-8")
 
     assert document.startswith("#!/usr/bin/env zsh\nset -euo pipefail\n")
@@ -159,7 +160,7 @@ def test_adaptive_wrapper_has_strict_cleanup_trap_contract():
 
 
 def test_adaptive_wrapper_preserves_runner_status_after_successful_cleanup(tmp_path):
-    script = Path(__file__).resolve().parents[3] / "scripts/run_so101_adaptive_batch.zsh"
+    script = REPOSITORY / "scripts/run_so101_adaptive_batch.zsh"
     commands = tmp_path / "commands"
     commands.mkdir()
     runner = commands / "so101_parallel_batch"
@@ -203,7 +204,7 @@ def test_adaptive_wrapper_emits_exact_runner_handshake(tmp_path):
     import signal
     import time
 
-    script = Path(__file__).resolve().parents[3] / "scripts/run_so101_adaptive_batch.zsh"
+    script = REPOSITORY / "scripts/run_so101_adaptive_batch.zsh"
     commands = tmp_path / "commands"
     commands.mkdir()
     runner = commands / "so101_parallel_batch"
@@ -262,7 +263,7 @@ def test_scaling_driver_accepts_w16_and_rejects_w17_in_dry_run(tmp_path):
     """The maintained launcher must expose the same optional ceiling as the CLI."""
 
     script = (
-        Path(__file__).resolve().parents[3]
+        REPOSITORY
         / "scripts/run_so101_adaptive_worker_scaling.zsh"
     )
     accepted = subprocess.run(
@@ -419,7 +420,7 @@ def test_external_cleanup_accepts_w16_and_rejects_w17_pool_identity(tmp_path):
 def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
     import setuptools
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     captured = {}
     monkeypatch.setattr(setuptools, "setup", lambda **values: captured.update(values))
 
@@ -440,7 +441,7 @@ def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
 def test_setup_adaptive_wrapper_source_is_relative_and_resolves(monkeypatch):
     import setuptools
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     captured = {}
     monkeypatch.setattr(setuptools, "setup", lambda **values: captured.update(values))
 
@@ -456,7 +457,7 @@ def test_setup_adaptive_wrapper_source_is_relative_and_resolves(monkeypatch):
     source = Path(wrapper_sources[0])
     assert not source.is_absolute()
     assert (package / source).resolve() == (
-        package.parents[1] / "scripts/run_so101_adaptive_batch.zsh"
+        REPOSITORY / "scripts/run_so101_adaptive_batch.zsh"
     )
     assert (package / source).is_file()
 

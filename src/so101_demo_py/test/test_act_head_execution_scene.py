@@ -2,19 +2,19 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import mujoco
 import pytest
 
 from test_act_head_execution_composition import build_inputs
 from so101_demo.adapters.act.physics import model_sha256
+from paths import PACKAGE_ROOT
 
 
 def scene_inputs(tmp_path):
     from so101_demo.adapters.act.head_execution_scene import scene_byte_closure, scene_coordinates
     inputs, policy = build_inputs(tmp_path)
-    root = Path(__file__).resolve().parents[1] / 'assets/mujoco/act'
+    root = PACKAGE_ROOT / 'assets/mujoco/act'
     for name, path in [('scene', root/'head_search_scene.xml'), ('urdf', root/'so101.urdf')]:
         inputs.refs[name] = dict(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
     model = mujoco.MjModel.from_xml_path(inputs.refs['scene']['path'])

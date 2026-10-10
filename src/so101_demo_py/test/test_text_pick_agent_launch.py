@@ -26,9 +26,9 @@ from so101_demo.profiling.system_trace import (
 from so101_demo.runtime.provenance import InstalledExecutionIdentity
 
 from launch import LaunchContext
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = PACKAGE_ROOT / "launch/so101_mujoco_text_pick_agent.launch.py"
 INSTRUCTION = "Pick the plastic cup. Apply no constraints."
 

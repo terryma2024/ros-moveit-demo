@@ -33,6 +33,7 @@ from so101_demo.training.grounding_dino_dataset import (
     GroundingDinoDatasetError,
     convert_dataset,
 )
+from paths import PACKAGE_ROOT
 
 CONTRACT = "so101-nonpenetrating-train-val-v1"
 POLICY = "task-visual-nonpenetration-v1"
@@ -401,7 +402,7 @@ def test_train_val_seed_plan_and_six_scenario_schedule_are_exact(tmp_path: Path)
 
 def test_official_train_val_config_loads_the_frozen_contract() -> None:
     path = (
-        Path(__file__).parents[1]
+        PACKAGE_ROOT
         / "config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml"
     )
 
@@ -806,7 +807,7 @@ def test_legacy_sample_limit_control_is_unchanged() -> None:
 
 
 def test_contract_tests_load_no_rendering_modules() -> None:
-    source_root = (Path(__file__).resolve().parents[1] / "src").resolve()
+    source_root = (PACKAGE_ROOT / "src").resolve()
     program = """
 import importlib.util
 import sys
@@ -868,7 +869,7 @@ def _official_config_document(tmp_path: Path) -> tuple[Path, dict[str, object]]:
     fixture = tmp_path / "model.xml"
     fixture.write_text("<mujoco/>", encoding="utf-8")
     source = (
-        Path(__file__).parents[1]
+        PACKAGE_ROOT
         / "config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml"
     )
     document = yaml.safe_load(source.read_text(encoding="utf-8"))

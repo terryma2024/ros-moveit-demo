@@ -28,8 +28,9 @@ from so101_demo.parallel_batch.w2_composition import (
     load_execution_config,
     load_execution_config_for_schema,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 V1_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"

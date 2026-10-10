@@ -14,6 +14,7 @@ from so101_demo.parallel_batch.contracts import (
     RunMode,
     ValidationStatus,
 )
+from paths import PACKAGE_ROOT
 
 
 def valid_receipt(worker_id="w1", *, generation=1, observed=10.0):
@@ -303,7 +304,7 @@ def production_pool(tmp_path, summary, **composition_state):
     )
     options = dc_replace(
         load_adaptive_worker_options(
-            Path(__file__).resolve().parents[1]
+            PACKAGE_ROOT
             / "config/mujoco/parallel_adaptive_workers_v1.yaml"
         ),
         worker_count=1,
@@ -548,7 +549,7 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
 
     config_path = (
-        Path(__file__).resolve().parents[1]
+        PACKAGE_ROOT
         / "config/mujoco/parallel_batch_v1.yaml"
     )
     config = load_parallel_runtime_config(config_path)

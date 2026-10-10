@@ -5,7 +5,6 @@ import dataclasses
 import math
 import re
 import xml.etree.ElementTree as ET
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -19,8 +18,9 @@ from so101_demo.ports.evidence import PoseEvidence
 
 from test_b1_teacher_execution import make_adapter
 from test_b1_teacher_stop_core import evidence
+from paths import PACKAGE_ROOT, TEST_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V2 = PACKAGE / "config/act/teacher_execution_policy_v2.yaml"
 HOVER_TARGET_Z = 0.2176344                      # the policy place TCP z (hover); the v1 target is this - 0.01325
 CUP_Z, K = 0.1677, 0.037454                     # cup origin height at the hover of the retained bags, TCP above it (measured)
@@ -259,7 +259,7 @@ def test_the_refusal_says_how_many_samples_over_what_span_with_what_tilt_range(t
     assert value._document["place_height"]["detail"].startswith(ph.TILT_UNSTABLE)
 
 
-LIVE_INTERVAL = Path(__file__).parent / "place_height_live/run_3a7cb058_measurement_interval.json"
+LIVE_INTERVAL = TEST_ROOT / "place_height_live/run_3a7cb058_measurement_interval.json"
 
 
 def test_a_live_measurement_interval_that_every_first_round_run_refused_is_now_accepted(tmp_path):

@@ -1,12 +1,12 @@
 """Physical offline collector checks against the pinned ACT MuJoCo scene."""
 
 import hashlib
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 

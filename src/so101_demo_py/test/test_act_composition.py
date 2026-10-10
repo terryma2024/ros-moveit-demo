@@ -2,14 +2,14 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.runtime.act_composition import build_act_session_composition
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 class _Port:

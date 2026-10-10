@@ -1,10 +1,9 @@
 import runpy
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import setuptools
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_ament_and_python_package_identities_are_distinct() -> None:

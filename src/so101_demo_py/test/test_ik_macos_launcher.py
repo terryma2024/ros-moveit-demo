@@ -4,14 +4,14 @@ import os
 import shutil
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="fixed macOS launcher contract")
 def test_clean_mac_launcher_preserves_selected_ik_backend(tmp_path):
-    root = Path(__file__).parents[3]
+    root = REPOSITORY
     scripts = tmp_path / "checkout/scripts"
     scripts.mkdir(parents=True)
     launcher = scripts / "so101-macos.zsh"

@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 
 

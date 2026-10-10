@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from paths import SOURCE_ROOT
 
 
 def _summary(**overrides):
@@ -140,10 +141,8 @@ def _full_fixture(tmp_path):
     """A verified bundle carrying a REAL v2 manifest, plus a complete campaign."""
 
     import dataclasses
-    import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_task8_artifact_bundle import _inputs        # stub-based inputs
 
     from so101_demo.act.pick_place_validation_manifest import (
@@ -307,10 +306,7 @@ def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
 def test_qualified_report_validates_only_with_its_campaign_block(tmp_path):
     """The calibration validator requires the provenance block on a QUALIFIED report."""
 
-    import sys
-    from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_calibration import report as qualified_report   # a fully valid QUALIFIED report
 
     from so101_demo.act.calibration import require_qualified
@@ -331,10 +327,8 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     """Producer path: real Task8Runner -> port -> CaseEvidenceDriver -> sealed artifact (no fakes)."""
 
     import hashlib as _hashlib
-    import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_task8 import FakePort, request as runner_request
     from test_act_task8_live_evidence import _Contact, _Evidence   # the physics-evidence doubles
 
@@ -442,10 +436,7 @@ def _evidence_port(driver, *, session_id="session-1", attempt_id="attempt-1"):
     """
 
     import hashlib as _hashlib
-    import sys
-    from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_task8 import FakePort                       # noqa: E402
     from test_act_task8_live_evidence import _Contact, _Evidence   # noqa: E402
 
@@ -527,10 +518,8 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
     """The factory is the harness the closing integration test will use."""
 
     import hashlib as _hashlib
-    import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_task8 import request as runner_request
 
     from so101_demo.act.task8 import Task8Runner
@@ -555,10 +544,8 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
 
     import hashlib as _hashlib
     import json as _json
-    import sys
     from pathlib import Path as _Path
 
-    sys.path.insert(0, str(_Path(__file__).resolve().parent))
     from test_act_task8 import request as runner_request
 
     from so101_demo.act.task8 import Task8Runner
@@ -610,10 +597,9 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
     import time
     from pathlib import Path as _Path
 
-    here = _Path(__file__).resolve()
-    sys.path.insert(0, str(here.parent))
-    # <worktree>/src/so101_demo_py/test/<this file>: parents[2] is <worktree>/src
-    sys.path.insert(0, str(here.parents[2] / "so101_teleop" / "test" / "teleop"))
+    teleop_tests = SOURCE_ROOT / "so101_teleop" / "test"
+    sys.path.insert(0, str(teleop_tests / "support"))
+    sys.path.insert(0, str(teleop_tests / "teleop"))
     from test_task8_case_execution import CHILD_OWNER, STACK_OWNER
 
     from so101_teleop.unified.pick_place_case_execution import run_pick_place_case

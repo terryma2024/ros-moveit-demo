@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import copy
 import importlib.util
-from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import pytest
+from paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 SCRIPT_PATH = REPOSITORY_ROOT / "scripts/generate_so101_parallel_worker_scaling_chart.py"
 DATA_PATH = REPOSITORY_ROOT / "docs/guides/data/so101-parallel-worker-scaling.json"
 SVG_PATH = REPOSITORY_ROOT / "docs/guides/assets/so101-parallel-worker-scaling.svg"

@@ -1,10 +1,9 @@
 """Consistency checks for the long-running parallel qualification ledger."""
 
-from pathlib import Path
 import re
+from paths import REPOSITORY
 
 
-REPOSITORY = Path(__file__).resolve().parents[3]
 LEDGER = (
     REPOSITORY
     / "docs/experiments/so101-parallel-multipoint-validation-experiment-ledger.md"

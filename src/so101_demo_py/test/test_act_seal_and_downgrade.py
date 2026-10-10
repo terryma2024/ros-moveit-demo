@@ -11,10 +11,7 @@ import re
 from dataclasses import asdict, replace
 
 import json
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_assembly import EpisodeSink, LiveSampler, PhysicalAuditAdapter, PointEpisode, ProductionProducer, assemble_episode_capture, episode_audit_pair, physical_audit_from_captured, physical_audit_from_observation
@@ -31,6 +28,7 @@ from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.contracts import (BatchKindV2, BatchRequestV2, RunMode,
                                                  load_parallel_runtime_config_v2)
+from paths import PACKAGE_ROOT
 
 
 SCOPE = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "preselected_target_diagnostic",
@@ -357,7 +355,7 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
         config = load_parallel_runtime_config_v2(
-            Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v2.yaml")
+            PACKAGE_ROOT / "config/mujoco/parallel_batch_v2.yaml")
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0., result_port=verifier)
         coordinator.register_worker("w00", generation=1)

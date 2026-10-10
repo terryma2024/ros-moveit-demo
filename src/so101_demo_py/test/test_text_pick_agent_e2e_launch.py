@@ -11,9 +11,9 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.utilities import perform_substitutions
 from so101_demo.runtime import launch_composition
 from so101_demo.runtime.provenance import InstalledExecutionIdentity
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = PACKAGE_ROOT / "launch/so101_mujoco_text_pick_agent_e2e.launch.py"
 
 

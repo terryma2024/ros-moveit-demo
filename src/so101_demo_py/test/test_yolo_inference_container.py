@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 RUNNER = REPOSITORY_ROOT / "scripts/yolo-seg-inference-container.sh"
 DOCKERFILE = (
     REPOSITORY_ROOT / "src/so101_demo_py/docker/yolo-inference/Dockerfile"

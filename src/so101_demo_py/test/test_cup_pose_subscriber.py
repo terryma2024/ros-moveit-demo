@@ -1,9 +1,8 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _pose_message(

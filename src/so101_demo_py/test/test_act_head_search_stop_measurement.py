@@ -23,6 +23,7 @@ from so101_demo.act.head_search_timing_params import (
     compute_submit_lead_s,
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256
+from paths import PACKAGE_ROOT
 
 #: the stopped-velocity window as the Head neck limits module declares it (the one Python home)
 STOP_HEADER = """\"\"\"Head neck limits.\"\"\"
@@ -325,7 +326,7 @@ def test_a_negative_declared_quantisation_is_still_a_caller_error(tmp_path: Path
 def test_the_platform_declaration_in_the_config_tree_states_the_zero_and_its_basis() -> None:
     """The retained declaration the run passes to `measure-feedback` exists and declares the zero."""
 
-    path = Path(__file__).parents[1] / "config/act/feedback-quantisation-declaration-v1.json"
+    path = PACKAGE_ROOT / "config/act/feedback-quantisation-declaration-v1.json"
     declaration = stop.declared_quantisation(path)
 
     assert declaration["quantisation_rad"] == 0.0

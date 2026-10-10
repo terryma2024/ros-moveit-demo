@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from paths import PACKAGE_ROOT
 
 RETIRED_MODULES = (
     "so101_demo.parallel_batch.resource_budget",
@@ -18,7 +19,7 @@ RETIRED_MODULES = (
     "so101_demo.parallel_batch.owned_resources",
 )
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SOURCE = PACKAGE / "src"
 
 

@@ -17,6 +17,7 @@ from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, Ru
 from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, load_parallel_runtime_config_v2
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
+from paths import PACKAGE_ROOT
 
 
 PROVENANCE = {"source_sha256": "a" * 64, "scene_sha256": "b" * 64,
@@ -204,7 +205,7 @@ def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
         config = load_parallel_runtime_config_v2(
-            Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v2.yaml")
+            PACKAGE_ROOT / "config/mujoco/parallel_batch_v2.yaml")
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0., result_port=verifier)
         coordinator.register_worker("w00", generation=1)

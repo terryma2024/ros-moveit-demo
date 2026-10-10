@@ -1,14 +1,14 @@
 """Exact numeric regression for the CPU IK kernel, using the real URDF chain."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from so101_demo.control.moveit.underactuated_ik import UnderactuatedPoseIk
+from paths import PACKAGE_ROOT
 
 
-URDF = Path(__file__).parents[1] / "assets/mujoco/so101.urdf"
+URDF = PACKAGE_ROOT / "assets/mujoco/so101.urdf"
 JOINTS = ("1", "2", "3", "4", "5")
 
 

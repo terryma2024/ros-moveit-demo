@@ -10,12 +10,10 @@ object rather than of what was published. The second check is the packet's propo
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 
 from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder  # noqa: E402
 

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def _pose_message(*, frame_id: str = "camera_color_optical_frame"):
@@ -69,9 +70,8 @@ def test_rejects_missing_source_or_target_frame(
 
 
 def test_package_registers_tf_demo_and_geometry_transform_dependency() -> None:
-    from pathlib import Path
 
-    package_root = Path(__file__).resolve().parents[1]
+    package_root = PACKAGE_ROOT
     setup_source = (package_root / "setup.py").read_text(encoding="utf-8")
     package_xml = (package_root / "package.xml").read_text(encoding="utf-8")
 

@@ -1,12 +1,11 @@
 import subprocess
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import yaml
 from so101_demo.ports.reset import ResetStepReceipt
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _pose():

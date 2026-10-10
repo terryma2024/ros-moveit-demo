@@ -36,8 +36,9 @@ from so101_teleop.unified.goals import GoalRegistry
 from so101_teleop.unified.intent_store import IntentStore
 from so101_teleop.unified.ipc import IpcRequest
 from so101_teleop.unified.safety import SafetyAuthority, SafetyLane, SafetyLimits
+from teleop_paths import TEST_ROOT
 
-HELPER_PATH = Path(__file__).parents[1] / "e2e/noros_child_helper.py"
+HELPER_PATH = TEST_ROOT / "e2e/noros_child_helper.py"
 SERVICE_EPOCH = "e1"
 RUNTIME_ID = "R1"
 SERVICE_TOKEN = "bridge-test-token"

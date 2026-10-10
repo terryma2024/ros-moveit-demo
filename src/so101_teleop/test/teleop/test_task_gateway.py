@@ -16,9 +16,10 @@ from so101_teleop.task_gateway import (
     TaskOwnerRequest,
     TaskReachabilityOwnerRequest,
 )
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[2]
+PACKAGE = PACKAGE_ROOT
 
 
 class FakeProcess:

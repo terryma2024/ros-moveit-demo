@@ -8,6 +8,7 @@ import pytest
 
 from so101_demo.core.domain import State
 from so101_demo.core.workflow import SO101_WORKFLOW
+from paths import PACKAGE_ROOT
 
 
 DONE_TRACE = [
@@ -179,9 +180,8 @@ def test_valid_complete_done_manifest_is_accepted():
 def _place_height_document():
     from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
     from so101_demo.core import place_height as ph
-    from pathlib import Path
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     policy = ph.PlaceHeightPolicy.from_document(load_teacher_execution_policy(package / "config/act/teacher_execution_policy_v2.yaml"))
     geometry = ph.cup_geometry_from_scene(package / "assets/mujoco/act/scene.xml")
     return ph.plan_place_height(0.0705, policy.grasp_offset_m, 0.2176344 - 0.01325, geometry, policy)
@@ -205,11 +205,10 @@ def test_a_manifest_with_an_inconsistent_place_height_document_is_rejected(chang
 # ---- CP-3483: the place_height record is bound to the frozen execution policy of the run --------------------------------------------
 
 def _frozen_policy(version):
-    from pathlib import Path
     from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 
     return load_teacher_execution_policy(
-        Path(__file__).resolve().parents[1] / f"config/act/teacher_execution_policy_v{version}.yaml")
+        PACKAGE_ROOT / f"config/act/teacher_execution_policy_v{version}.yaml")
 
 
 def _validate_frozen(document, policy, status="DONE"):

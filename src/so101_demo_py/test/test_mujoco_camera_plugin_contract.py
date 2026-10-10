@@ -1,10 +1,10 @@
-from pathlib import Path
 from xml.etree import ElementTree
 
 import yaml
+from paths import PACKAGE_ROOT, REPOSITORY, SOURCE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
-FORK = PACKAGE.parents[1] / "third_party" / "mujoco_ros2_control"
+PACKAGE = PACKAGE_ROOT
+FORK = REPOSITORY / "third_party" / "mujoco_ros2_control"
 PROBE = PACKAGE / "test/macos_camera_topic_probe.py"
 CAMERA_PLUGIN_XML = FORK / "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml"
 CAMERA_PLUGIN_SOURCE = FORK / "mujoco_ros2_control_plugins/src/camera_plugin.cpp"
@@ -87,7 +87,7 @@ def test_runtime_probe_enforces_the_cross_platform_rgbd_contract() -> None:
 
 
 def test_support_package_declares_opengl_egl_build_contract() -> None:
-    package = ElementTree.parse(PACKAGE.parent / "so101_mujoco_support/package.xml")
+    package = ElementTree.parse(SOURCE_ROOT / "so101_mujoco_support/package.xml")
     build_dependencies = {element.text for element in package.getroot().findall("build_depend")}
 
     assert "opengl" in build_dependencies

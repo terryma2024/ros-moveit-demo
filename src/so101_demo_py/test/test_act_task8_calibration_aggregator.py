@@ -21,10 +21,11 @@ from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibrat
 from so101_demo.act.task8_measurement_contract import (
     bind_measurement_contract, close_measurement_batch,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 TEMPLATE = PACKAGE / "config/act/task8-calibration-measurement-contract-v1.json"
-TEMPLATE_V2 = Path(__file__).resolve().parents[1] / "config/act" / "task8-calibration-measurement-contract-v2.json"
+TEMPLATE_V2 = PACKAGE_ROOT / "config/act" / "task8-calibration-measurement-contract-v2.json"
 ANCHORS = ("default", "left", "forward")
 
 
@@ -542,9 +543,7 @@ def _valid_evidence(contract):
     """Raw evidence that satisfies every comparator, taken from the formulas suite's own cases where it has them."""
 
     import math
-    import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_task8_measurement_formulas import FIELD_CASES
 
     evidence = {field: valid["measurements"][field] for field, (valid, *_rest) in FIELD_CASES.items()}
@@ -665,14 +664,12 @@ def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
 def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path):
     """Boundary IV item 5: the report the aggregator publishes must satisfy the head-search binding, not just the gate."""
 
-    import sys
 
     from so101_demo.act.calibration import require_gate
     from so101_demo.act.head_search_binding import validate_head_search_binding
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_head_search_binding import _inputs
 
     runtime = _inputs(tmp_path)[0]        # the binding fixture's first element is the runtime descriptor
@@ -690,13 +687,11 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
 def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_path):
     """Boundary IV item 5, negative direction: a report measured under one configuration cannot bind another."""
 
-    import sys
 
     from so101_demo.act.head_search_binding import validate_head_search_binding
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_head_search_binding import _inputs
 
     runtime = _inputs(tmp_path)[0]
@@ -833,13 +828,11 @@ def test_a_batch_whose_payload_claims_a_different_descriptor_is_refused(tmp_path
 def test_a_batch_that_does_not_index_the_descriptor_cannot_bind(tmp_path):
     """Item 3: no sealed descriptor means nothing to bind to, so the report cannot satisfy the runtime binding."""
 
-    import sys
 
     from so101_demo.act.head_search_binding import validate_head_search_binding
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_head_search_binding import _inputs
 
     runtime = _inputs(tmp_path)[0]

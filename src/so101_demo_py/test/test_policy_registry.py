@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 import yaml
 from so101_demo.core.policy_registry import PolicyValidationError, load_policy_variant
+from paths import PACKAGE_ROOT, REPOSITORY
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-PACKAGE_ROOT = REPOSITORY_ROOT / "src" / "so101_demo_py"
+REPOSITORY_ROOT = REPOSITORY
 POLICY_ROOT = PACKAGE_ROOT / "config" / "policies" / "light_cup_wall_pick" / "v1"
 FROZEN_POLICY_SHA256 = "aa83a43c25e2fa4bf70cbaaf6bcb76742e44d7f67a83625ab428f78dc5848356"
 

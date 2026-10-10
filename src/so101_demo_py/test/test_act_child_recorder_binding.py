@@ -12,6 +12,7 @@ from so101_demo.act.collection_scope import build_collection_scope, write_collec
 from so101_demo.act.first_episode_inputs import freeze_inputs
 from so101_demo.act.episode_open import open_recorder_episode
 from test_act_first_episode_scope import _registry, _write_registry
+from paths import PACKAGE_ROOT, REPOSITORY
 
 
 def _options(tmp_path, *, inputs=None, working=None):
@@ -40,7 +41,7 @@ def frozen_child_inputs(tmp_path, execution_policy="teacher_execution_policy_v1.
     """Synthetic approval/roles plus real frozen source/model for a Recorder boundary fixture."""
     from so101_demo.act.execution_snapshot import freeze_execution_snapshot
     from so101_demo.act.contact_policy import policy_fingerprint
-    config = Path(__file__).parents[1] / "config/act"
+    config = PACKAGE_ROOT / "config/act"
     manifest_path = freeze_inputs(_write_registry(tmp_path, _registry(tmp_path)), tmp_path / "inputs",
                                  mode="preselected_target_diagnostic",
                                  teacher_endpoint=config / "teacher_endpoint_v2.yaml",
@@ -48,7 +49,7 @@ def frozen_child_inputs(tmp_path, execution_policy="teacher_execution_policy_v1.
         episode_recorder_policy=config / "episode_recorder_v1.yaml",
                                  runtime_policy=config / "endpoint_pose_development_runtime_v1.yaml")
     root = manifest_path.parent
-    snapshot = freeze_execution_snapshot(Path(__file__).resolve().parents[3], root / "execution")
+    snapshot = freeze_execution_snapshot(REPOSITORY, root / "execution")
     document = json.loads(manifest_path.read_bytes())
     scene = (root / "execution" / snapshot["scene_path"]).read_bytes()
     role = document["roles"]["scene_model"]

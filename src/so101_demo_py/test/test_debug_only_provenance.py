@@ -21,9 +21,9 @@ from ament_index_python.packages import get_package_prefix
 from so101_demo.runtime.debug_provenance import (
     MANIFEST_RELATIVE_PATH, build_debug_manifest, collect_debug_artifacts,
     read_debug_manifest, write_debug_manifest)
+from paths import PACKAGE_ROOT, REPOSITORY
 
-WORKTREE = Path(__file__).resolve().parents[3]
-PACKAGE_ROOT = WORKTREE / "src/so101_demo_py"
+WORKTREE = REPOSITORY
 
 
 def _site_packages(prefix: Path) -> Path:

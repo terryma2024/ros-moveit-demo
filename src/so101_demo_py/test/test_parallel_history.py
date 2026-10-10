@@ -9,14 +9,14 @@ import hashlib
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.parallel_batch import history
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V1_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
 V2_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
 V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"

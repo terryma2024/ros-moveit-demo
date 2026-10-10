@@ -6,7 +6,6 @@ The controller holds no limits of its own: the broker-era pin tests went with th
 import importlib
 from pathlib import Path
 
-REPOSITORY = Path(__file__).resolve().parents[3]
 
 
 def limits():

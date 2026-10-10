@@ -9,9 +9,9 @@ install-prefix and stack conditions.
 
 from __future__ import annotations
 
-from pathlib import Path
+from teleop_paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[2]
+PACKAGE = PACKAGE_ROOT
 FIXTURE = PACKAGE / "web/e2e/expert-validation/fixtures/live-sim.ts"
 DURABLE_ROOT = PACKAGE / "web/e2e/expert-validation/fixtures/durable-root.ts"
 GLOBAL_SETUP = PACKAGE / "web/e2e/expert-validation/fixtures/live-sim-global-setup.ts"

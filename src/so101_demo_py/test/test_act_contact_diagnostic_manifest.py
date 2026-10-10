@@ -1,7 +1,6 @@
 """Physical diagnostic motions are frozen before any live command authority."""
 
 from act_identity import ACT_MODEL_SHA256
-from pathlib import Path
 import hashlib
 import json
 
@@ -14,9 +13,10 @@ from so101_demo.act.contact_diagnostic import (
 )
 from so101_demo.act.joints import ACT_JOINTS
 from so101_demo.adapters.act.physics import MujocoPathChecker
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 PLUGIN = PACKAGE / "config/mujoco/act/mujoco_plugins.yaml"

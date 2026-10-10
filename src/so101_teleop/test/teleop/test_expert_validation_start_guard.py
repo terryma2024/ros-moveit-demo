@@ -26,8 +26,9 @@ from so101_teleop.expert_validation.production import (
     ProductionRuntimeLayout,
     create_production_service,
 )
+from teleop_paths import REPOSITORY
 
-WORKTREE = Path(__file__).resolve().parents[4]
+WORKTREE = REPOSITORY
 V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
 MACOS_CONFIG_DIR = WORKTREE / "src/so101_demo_py/config/mujoco"
 

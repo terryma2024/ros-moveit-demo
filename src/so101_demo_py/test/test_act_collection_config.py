@@ -2,14 +2,14 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.act.collection_config import load_collection_config
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 CONFIG = PACKAGE / "config/act/parallel_collection_v3.yaml"
 PUBLIC = PACKAGE / "config/mujoco/parallel_batch_v3_act_offline.yaml"
 

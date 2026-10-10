@@ -2,8 +2,9 @@ import json
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def test_shared_schema_loads_mujoco_and_gazebo_backend_presets() -> None:

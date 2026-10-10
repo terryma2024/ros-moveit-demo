@@ -3,12 +3,12 @@
 import importlib.util
 import json
 import os
-from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
 
-SCRIPT = Path(__file__).resolve().parents[3] / "scripts/inject_so101_parallel_fault.py"
+SCRIPT = REPOSITORY / "scripts/inject_so101_parallel_fault.py"
 
 
 def task_roots(tmp_path):

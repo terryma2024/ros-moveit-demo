@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
 
 import yaml
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG_PATH = PACKAGE_ROOT / "config/perception/grounded_sam.yaml"
 
 

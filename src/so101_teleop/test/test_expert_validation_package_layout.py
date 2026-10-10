@@ -1,10 +1,10 @@
-from pathlib import Path
 import re
 import subprocess
 import sys
+from teleop_paths import REPOSITORY
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = REPOSITORY
 TELEOP = ROOT / "src" / "so101_teleop"
 DEMO = ROOT / "src" / "so101_demo_py"
 

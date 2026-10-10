@@ -8,7 +8,6 @@ before any motion, the Recorder before it listens, `act_first_episode run` befor
 import hashlib
 import inspect
 import json
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,8 +16,9 @@ import yaml
 from so101_demo.act.first_episode_inputs import (
     POLICY_BINDINGS, freeze_inputs, policy_binding, verify_frozen_inputs, verify_policy_bindings)
 from test_act_first_episode_scope import _registry, _write_registry
+from paths import PACKAGE_ROOT
 
-CONFIG = Path(__file__).parents[1] / "config/act"
+CONFIG = PACKAGE_ROOT / "config/act"
 POLICY_FILES = {"teacher_endpoint": CONFIG / "teacher_endpoint_v2.yaml",
                 "teacher_execution_policy": CONFIG / "teacher_execution_policy_v1.yaml",
                 "episode_recorder_policy": CONFIG / "episode_recorder_v1.yaml"}

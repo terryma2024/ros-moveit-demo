@@ -18,6 +18,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin",
@@ -28,7 +29,7 @@ pytestmark = pytest.mark.skipif(
 def _scratch_module():
     spec = importlib.util.spec_from_file_location(
         "so101_demo.runtime.macos_test_scratch",
-        Path(__file__).resolve().parents[1] / "src/runtime/macos_test_scratch.py",
+        PACKAGE_ROOT / "src/runtime/macos_test_scratch.py",
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

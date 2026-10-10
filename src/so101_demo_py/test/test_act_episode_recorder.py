@@ -26,8 +26,9 @@ from so101_demo.act.offline.engine import RC_INVALID, RC_VALID, OfflineEngine
 from so101_demo.act.offline.policy import RecorderConfigRefused, check_outputs_absent, load_recorder_policy
 from test_act_recorder import PROVENANCE
 from test_act_seal_and_downgrade import IDENTITY, SCOPE, recorder_physical_audit
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 POLICY_FILE = PACKAGE / "config/act/episode_recorder_v1.yaml"
 STREAM_IDENTITY = StreamIdentity(IDENTITY["session_id"], IDENTITY["reset_epoch"], IDENTITY["attempt_id"])
 FRAME = np.zeros((480, 640, 3), dtype=np.uint8)

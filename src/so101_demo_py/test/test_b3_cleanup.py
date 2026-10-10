@@ -4,14 +4,13 @@ Names are built from fragments so the repository-wide absence gate (`rg -w` over
 """
 import importlib.util
 import inspect
-from pathlib import Path
 
 import pytest
 import yaml
+from paths import PACKAGE_ROOT, REPOSITORY
 
-CONFIG = Path(__file__).resolve().parents[1] / "config/mujoco"
-SRC = Path(__file__).resolve().parents[1] / "src"
-REPOSITORY = Path(__file__).resolve().parents[3]
+CONFIG = PACKAGE_ROOT / "config/mujoco"
+SRC = PACKAGE_ROOT / "src"
 STOCK = "joint_trajectory_controller/JointTrajectoryController"
 
 

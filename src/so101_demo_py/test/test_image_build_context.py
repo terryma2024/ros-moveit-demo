@@ -15,9 +15,10 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path, PurePosixPath
+from paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 PACKAGE_SOURCE = "src/so101_demo_py"
 DOCKERFILES = sorted((REPOSITORY_ROOT / "src/so101_demo_py/docker").glob("*/Dockerfile"))
 

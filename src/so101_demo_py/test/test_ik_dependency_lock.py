@@ -1,13 +1,12 @@
 """Dependency resolvers must select the exact NumPy version tested for each host."""
 
 import runpy
-from pathlib import Path
 
 import pytest
 import setuptools
 from packaging.requirements import Requirement
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 LOCK_PATH = PACKAGE_ROOT / "config/ik/requirements.lock"
 
 

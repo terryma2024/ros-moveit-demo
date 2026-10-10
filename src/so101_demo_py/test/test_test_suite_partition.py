@@ -1,8 +1,8 @@
 from configparser import ConfigParser
 from pathlib import Path
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 DEFAULT_TEST_ROOT = PACKAGE_ROOT / "test"
 BENCHMARK_TEST_ROOT = PACKAGE_ROOT / "benchmark_test"
 BENCHMARK_PATTERN = "test_perception_benchmark_*.py"

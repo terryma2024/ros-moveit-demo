@@ -11,6 +11,7 @@ from ament_index_python.packages import get_package_prefix
 
 from so101_demo.application.text_agent import AgentResult, AgentStatus
 from so101_demo.ports.task_planner import PlannerMetadata
+from paths import REPOSITORY
 
 
 FULL_SHA = re.compile(r"[0-9a-f]{64}")
@@ -225,7 +226,7 @@ def test_runtime_execution_chain_never_runs_git(tmp_path: Path, monkeypatch) -> 
     copied = tmp_path / "copied"
     (copied / "share/so101_demo_py").mkdir(parents=True)
     (copied / "share/so101_demo_py/note.txt").write_text("bytes\n")
-    document = build_debug_manifest(copied, source_root=Path(__file__).resolve().parents[3])
+    document = build_debug_manifest(copied, source_root=REPOSITORY)
     assert document["kind"] == "DEBUG_INSTALL_PROVENANCE"
     assert [call for call in calls if call and call[0].endswith("git")]
 

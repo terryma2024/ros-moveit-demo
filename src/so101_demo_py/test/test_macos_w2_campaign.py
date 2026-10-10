@@ -27,8 +27,9 @@ from so101_demo.parallel_batch.macos_w2_campaign import (
 from so101_demo.parallel_batch.pool_recovery import INFRASTRUCTURE_FAILURE, RecoveryFacts
 from so101_demo.parallel_batch.w2_composition import (
     W2CampaignPlan, compose_w2_campaign, load_execution_config)
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 
 BROKER_PID = 7001

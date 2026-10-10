@@ -17,8 +17,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
-WORKTREE = Path(__file__).resolve().parents[3]
+WORKTREE = REPOSITORY
 V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
 V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
 

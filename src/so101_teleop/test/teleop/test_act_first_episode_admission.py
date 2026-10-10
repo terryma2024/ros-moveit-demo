@@ -19,10 +19,11 @@ import pytest
 
 from so101_teleop.unified.contracts import Domain, OperationSpec
 from so101_teleop.unified.intent_store import IntentStore
+from teleop_paths import SOURCE_ROOT
 
-# <wt>/src/so101_teleop/test/teleop/<this file> -> parents[3] is <wt>/src
-_SRC = Path(__file__).resolve().parents[3]
-for _candidate in (_SRC / "so101_demo_py" / "test", Path(__file__).resolve().parent):
+# the demo package's shared fixtures live in its test directory, its helpers and path constants in test/support
+_DEMO_TEST = SOURCE_ROOT / "so101_demo_py" / "test"
+for _candidate in (_DEMO_TEST / "support", _DEMO_TEST, Path(__file__).resolve().parent):
     if str(_candidate) not in sys.path:
         sys.path.insert(0, str(_candidate))
 

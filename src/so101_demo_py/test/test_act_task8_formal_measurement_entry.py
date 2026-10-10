@@ -23,7 +23,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 BOTTOM_IO_ENV = "SO101_TASK8_BOTTOM_IO_SEAM"
 PROVIDER_SEAM_ENV = "SO101_TASK8_PROVIDER_SEAM"

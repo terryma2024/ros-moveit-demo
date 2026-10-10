@@ -12,13 +12,10 @@ a RED until the adapter translates, and it keeps the real interface rather than 
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 
 from so101_demo.act.task8_production_composition import (  # noqa: E402
     MeasurementDetectorAdapter, ProductionCompositionError,

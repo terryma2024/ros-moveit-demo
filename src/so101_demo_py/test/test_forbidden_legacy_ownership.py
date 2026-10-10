@@ -6,9 +6,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY, SOURCE_ROOT
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
-SOURCE_ROOT = REPOSITORY_ROOT / "src"
+REPOSITORY_ROOT = REPOSITORY
 REMOVED_PACKAGE_NAMES = tuple(f"so101_{backend}_demo_py" for backend in ("mujoco", "gazebo"))
 PROCESS_DOCUMENT_ROOTS = (
     Path("docs/experiments"),

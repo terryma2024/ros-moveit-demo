@@ -39,9 +39,10 @@ from so101_demo.parallel_batch.resources import (
     configured_runtime_ipc_root,
     runtime_ipc_base,
 )
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
 V2_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'

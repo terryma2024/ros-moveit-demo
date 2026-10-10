@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 
 import sys
 
@@ -11,11 +10,12 @@ from so101_teleop.expert_validation.preflight import (
     PreflightEngine,
     PreflightRejected,
 )
+from teleop_paths import REPOSITORY, SOURCE_ROOT
 
 
 SHA = "a" * 64
 
-REPO = Path(__file__).parents[4]
+REPO = REPOSITORY
 CONFIG_DIR = REPO / "src" / "so101_demo_py" / "config" / "mujoco"
 
 #: The three installed macOS combinations (design section 6). The document, not the caller,
@@ -321,7 +321,7 @@ def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
         import yaml
 
         document = yaml.safe_load(
-            (Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco"
+            (SOURCE_ROOT / "so101_demo_py/config/mujoco"
              / "parallel_batch_v4_macos_mps_w2.yaml").read_text(encoding="utf-8"))
         policy = StartGuardPolicy(
             mps_minimum_headroom_bytes=document["start_guard"]["mps_minimum_headroom_bytes"])

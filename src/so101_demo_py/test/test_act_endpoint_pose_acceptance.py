@@ -7,7 +7,6 @@ The policy is the frozen rule every collection mode shares, and the calculator i
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import pytest
 import yaml
@@ -18,8 +17,9 @@ from so101_demo.act.endpoint_pose_acceptance import (
     load_development_runtime,
     load_endpoint_policy,
 )
+from paths import PACKAGE_ROOT
 
-POLICY = Path(__file__).resolve().parent.parent / "config/act/endpoint_pose_acceptance_v1.yaml"
+POLICY = PACKAGE_ROOT / "config/act/endpoint_pose_acceptance_v1.yaml"
 START = [0.02, -0.28, 0.165, 0, 0, 0, 1]
 END = [-0.07, -0.23, 0.165, 0, 0, 0, 1]
 
@@ -96,7 +96,7 @@ def test_bad_policies_are_refused_by_name(tmp_path, document):
         load_endpoint_policy(path)
 
 
-RUNTIME = Path(__file__).resolve().parent.parent / "config/act/endpoint_pose_development_runtime_v1.yaml"
+RUNTIME = PACKAGE_ROOT / "config/act/endpoint_pose_development_runtime_v1.yaml"
 
 
 def test_the_authorized_runtime_defaults_load_exactly():

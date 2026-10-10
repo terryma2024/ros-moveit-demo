@@ -14,8 +14,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = REPOSITORY
 LAUNCHER = REPOSITORY_ROOT / "scripts" / "so101_macos_unified_service.py"
 
 

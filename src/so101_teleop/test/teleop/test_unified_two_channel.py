@@ -9,14 +9,14 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import sys
-from pathlib import Path
 
 import pytest
 
 from so101_teleop.unified.contracts import MutationError
 from so101_teleop.unified.ipc import IpcRequest
+from teleop_paths import TEST_ROOT
 
-HARNESS_PATH = Path(__file__).parents[1] / "e2e/unified_child_harness.py"
+HARNESS_PATH = TEST_ROOT / "e2e/unified_child_harness.py"
 
 
 def load_harness():

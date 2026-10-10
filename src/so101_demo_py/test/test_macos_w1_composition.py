@@ -37,8 +37,9 @@ from so101_demo.parallel_batch.w1_composition import (
     compose_w1_retry,
     exact_w1_slots,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 V5_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
 V6_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"

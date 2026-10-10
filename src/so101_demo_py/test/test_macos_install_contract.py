@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 import yaml
+from paths import REPOSITORY
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin", reason="macOS install and dylib contracts are macOS-only")
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+REPOSITORY_ROOT = REPOSITORY
 INSTALLER = REPOSITORY_ROOT / "scripts" / "install-mujoco-ros2-control.zsh"
 FUSION_CHECK = (
     REPOSITORY_ROOT / "src" / "so101_demo_py" / "scripts" / "check_fusion_contract.sh"

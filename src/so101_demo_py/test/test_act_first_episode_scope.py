@@ -26,6 +26,7 @@ from so101_demo.act.first_episode_inputs import (
     require_nonhead_gate,
     verify_frozen_inputs,
 )
+from paths import REPOSITORY
 
 INPUTS_SHA = "a" * 64
 SOURCE_COMMIT = "a" * 40
@@ -554,7 +555,7 @@ def test_inputs_manifest_is_closed_and_read_back_strictly(tmp_path):
 # the real worktree: the frozen initial state, and the blockers that exist today
 # ---------------------------------------------------------------------------
 
-WORKTREE = Path(__file__).resolve().parents[3]
+WORKTREE = REPOSITORY
 BLOCKER_CODES = {"NONHEAD_INPUT_BINDING_REQUIRED", "INPUT_CANDIDATE_AMBIGUOUS", "INPUT_NOT_APPROVED",
                  "INPUT_IDENTITY_MISMATCH", "INPUT_ACTIVATION_STALE"}
 

@@ -16,12 +16,9 @@ controller to be admitted.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext  # noqa: E402
 

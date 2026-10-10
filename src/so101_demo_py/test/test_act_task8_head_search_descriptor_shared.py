@@ -12,12 +12,9 @@ are deliberately NOT part of the shared shape rule, so the binding's own pairing
 from __future__ import annotations
 
 import copy
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_act_head_search_binding import _inputs  # noqa: E402
 

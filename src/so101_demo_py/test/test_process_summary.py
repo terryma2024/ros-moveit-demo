@@ -3,15 +3,15 @@
 import json
 import math
 import threading
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from so101_demo.core import process_summary as ps
 from so101_demo.ros.teacher_safety import CupSafetyLimits
+from paths import TEST_ROOT
 
-FIXTURES = Path(__file__).parent / "process_summary"
+FIXTURES = TEST_ROOT / "process_summary"
 LIMITS = CupSafetyLimits(1.8916304473471774, 0.00011928116711427007)
 
 

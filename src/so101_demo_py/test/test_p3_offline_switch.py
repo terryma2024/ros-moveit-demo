@@ -21,6 +21,7 @@ from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
 from so101_demo.runtime.parallel_worker_runtime import RuntimeDecision, build_worker_runtime
 from so101_demo.runtime.task_stack import StackProcessSpec
 from test_parallel_worker_runtime import _ProcessGroup, _lease, _resources, _write_capture
+from paths import PACKAGE_ROOT
 
 POLICY = {"ready_timeout_s": 10.0, "policy_sha256": "p" * 64}
 IDENTITY = {"session_id": "session-worker-1", "reset_epoch": 7, "attempt_id": "attempt-1"}
@@ -71,7 +72,7 @@ def test_the_worker_specification_round_trips_and_a_forged_one_is_refused(tmp_pa
 def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_processing():
     from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
 
-    package = Path(__file__).parents[1]
+    package = PACKAGE_ROOT
     act = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_v3_act_offline.yaml")
     original = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_v3.yaml")
     assert act.executing_hard_timeout_s == act.lease_duration_s == 1500.0
@@ -85,7 +86,7 @@ def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_pro
 def test_below_the_original_floor_a_version_three_config_is_refused_and_other_versions_stay_pinned(tmp_path):
     from so101_demo.parallel_batch import contracts
 
-    package = Path(__file__).parents[1]
+    package = PACKAGE_ROOT
     text = (package / "config/mujoco/parallel_batch_v3_act_offline.yaml").read_text()
     for field, bad in (("executing_hard_timeout_s", "239.0"), ("lease_duration_s", "299.0")):
         broken = tmp_path / f"{field}.yaml"
@@ -103,7 +104,7 @@ def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspec
 
     from so101_demo.act import first_episode_inputs
 
-    package = Path(__file__).parents[1]
+    package = PACKAGE_ROOT
     document = yaml.safe_load((package / "config/act/parallel_collection_v3.yaml").read_bytes())
     runtime = package / document["parallel_runtime"]["path"]
     assert runtime.name == "parallel_batch_v3_act_offline.yaml"

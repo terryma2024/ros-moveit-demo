@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 
 from so101_demo.act.task8_phase_camera_sampler import (  # noqa: E402
     MIN_SAMPLES_PER_ANCHOR, PhaseCameraSamplingError, build_phase_camera_matrix,

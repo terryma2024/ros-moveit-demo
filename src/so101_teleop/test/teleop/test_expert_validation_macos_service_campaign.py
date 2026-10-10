@@ -23,11 +23,12 @@ from so101_teleop.expert_validation.supervisor import (
     RETRY_COORDINATOR_FLAGS,
     fixed_coordinator_argv,
 )
+from teleop_paths import SOURCE_ROOT, TEST_ROOT
 
-DEMO_ROOT = Path(__file__).resolve().parents[3] / "so101_demo_py"
+DEMO_ROOT = SOURCE_ROOT / "so101_demo_py"
 V4_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 V3_CONFIG = DEMO_ROOT / "config/mujoco/parallel_batch_v3.yaml"
-HELPER = Path(__file__).resolve().parents[1] / "fixtures/stubborn_helper.py"
+HELPER = TEST_ROOT / "fixtures/stubborn_helper.py"
 
 
 def _stubborn_campaign(tmp_path: Path) -> Path:

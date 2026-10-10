@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from so101_teleop.web_bundle import WebBundleError, ensure_web_bundle, select_bun
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _source(root: Path) -> Path:

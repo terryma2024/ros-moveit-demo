@@ -5,13 +5,13 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
 from so101_demo.act.pick_place_validation_manifest import (
     build_pick_place_validation_manifest, require_pick_place_validation_manifest, write_new_manifest,
 )
+from paths import PACKAGE_ROOT
 
 
 ANCHORS = {
@@ -109,7 +109,7 @@ def test_prepare_cli_freezes_file_hashes_and_refuses_overwrite(tmp_path):
 def test_checked_in_anchor_file_has_measured_exp115_values():
     import yaml
 
-    path = Path(__file__).resolve().parents[1] / "config/act/task8-live-anchors.yaml"
+    path = PACKAGE_ROOT / "config/act/task8-live-anchors.yaml"
     document = yaml.safe_load(path.read_text())
     assert set(document) == {"schema_version", "measurement_experiment", "anchors"}
     assert document["measurement_experiment"] == "EXP-115"

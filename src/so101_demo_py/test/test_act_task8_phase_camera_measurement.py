@@ -16,12 +16,10 @@ What this file requires:
 from __future__ import annotations
 
 import copy
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.task8_production_composition import PhaseCameraMatrixEvaluator  # noqa: E402
 

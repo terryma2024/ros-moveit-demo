@@ -4,9 +4,10 @@ from pathlib import Path
 
 import pytest
 import yaml
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 POINTS_PATH = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
 
@@ -1217,11 +1218,10 @@ def test_frozen_model_digests_match_the_published_hub_artifacts():
 def test_the_benchmark_and_training_configs_carry_the_same_frozen_digests():
     """Every config that names a model digest names the same one as the code."""
 
-    from pathlib import Path as _Path
 
     import so101_demo.parallel_batch.contracts as contracts
 
-    package = _Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     benchmark = (package / "config/perception_benchmark/benchmark.yaml").read_text()
     assert contracts._FROZEN_YOLO_WEIGHTS_SHA256 in benchmark
     assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in benchmark
@@ -1235,10 +1235,9 @@ def test_the_benchmark_and_training_configs_carry_the_same_frozen_digests():
 def test_the_retired_grounded_sam_manifest_digest_is_not_used_anywhere():
     """The superseded digest must not linger in any shipped config or constant."""
 
-    from pathlib import Path as _Path
 
     retired = "0486be2fca63736d847ffd5566bd0b59db87da829e25623412bbbdf187df1775"
-    package = _Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     for pattern in ("config/**/*.yaml", "config/**/*.json"):
         for path in package.glob(pattern):
             assert retired not in path.read_text(), path

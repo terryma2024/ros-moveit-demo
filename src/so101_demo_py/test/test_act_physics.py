@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 import mujoco
 from so101_demo.adapters.act.physics import MujocoPathChecker,model_sha256
+from paths import PACKAGE_ROOT
 
 
 @pytest.fixture
@@ -165,8 +166,7 @@ def test_position_stage_collision_decisions_match_full_forward_dynamics(scene,ho
 
 
 def test_position_stage_contacts_match_full_engine_on_actual_robot_camera_scene():
-    from pathlib import Path
-    path=Path(__file__).resolve().parents[1]/'assets/mujoco/act/scene.xml'
+    path=PACKAGE_ROOT/'assets/mujoco/act/scene.xml'
     model=mujoco.MjModel.from_xml_path(str(path));model.geom_margin[:]=np.maximum(model.geom_margin,.002)
     full,position=mujoco.MjData(model),mujoco.MjData(model)
     rng=np.random.default_rng(317)

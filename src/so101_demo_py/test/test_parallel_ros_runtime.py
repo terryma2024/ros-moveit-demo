@@ -3,15 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
 import stat
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 EXPECTED_FINAL_CUP_POSE_WORLD = (
     -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,
 )

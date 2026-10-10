@@ -1,7 +1,6 @@
 """Behavioral gates for scheduling, backpressure and stale candidate fencing."""
 
 from dataclasses import replace
-from pathlib import Path
 import threading
 from types import SimpleNamespace
 
@@ -10,6 +9,7 @@ import pytest
 from so101_demo.parallel_batch.contracts import (
     ExecutionKind, InferenceRequest, load_parallel_runtime_config, ModelOutcome,
 )
+from paths import PACKAGE_ROOT
 
 
 YOLO = 'plastic-cup-yolo11n-seg-v1'
@@ -37,7 +37,7 @@ def harness(*, ready=True, detectors=None, queue_capacity_per_model=None):
     from so101_demo.parallel_batch.broker import PerceptionBroker
     control = SimpleNamespace(now=100.0)
     config = load_parallel_runtime_config(
-        Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v1.yaml')
+        PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
     capacity_kwargs = (
         {} if queue_capacity_per_model is None
         else {'queue_capacity_per_model': queue_capacity_per_model}
@@ -621,7 +621,7 @@ def test_broker_accepts_the_v2_runtime_config():
     from so101_demo.parallel_batch.contracts import (
         ParallelRuntimeConfigV2, load_parallel_runtime_config_v2)
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     config = load_parallel_runtime_config_v2(package / 'config/mujoco/parallel_batch_v2.yaml')
     assert isinstance(config, ParallelRuntimeConfigV2)
     broker = PerceptionBroker(config, grounded_model_id=GROUNDED, clock=lambda: 100.0)

@@ -1,8 +1,8 @@
 import pytest
-from pathlib import Path
 from types import SimpleNamespace
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def _geometry():

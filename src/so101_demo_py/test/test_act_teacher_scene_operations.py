@@ -7,7 +7,6 @@ bytes whether collection is off, on or failing, and no data-side path builds or 
 import ast
 import base64
 import time
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -17,8 +16,9 @@ from so101_demo.core.domain import State
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 from test_act_recorder_scene import Context, over_dds
 from test_act_scene_association import frozen_scene  # noqa: F401  (pytest fixture)
+from paths import PACKAGE_ROOT
 
-SRC = Path(__file__).resolve().parents[1] / "src"
+SRC = PACKAGE_ROOT / "src"
 
 
 class Client:

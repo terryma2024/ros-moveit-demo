@@ -1,11 +1,11 @@
 """Frozen core behavior checks retained after the strangler cutover."""
 
 from dataclasses import fields
-from pathlib import Path
 
 from so101_demo.core import domain, policy, recovery, runner, workflow
+from paths import REPOSITORY
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = REPOSITORY
 POLICY_PATH = (
     REPOSITORY_ROOT / "src/so101_demo_py/config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 )

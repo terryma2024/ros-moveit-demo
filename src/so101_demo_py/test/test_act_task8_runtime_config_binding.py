@@ -6,12 +6,10 @@ refused rather than auto-recovered on CPU. The bundle is where that file is boun
 """
 
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_act_task8_artifact_bundle import _inputs, _write          # noqa: E402
 
 

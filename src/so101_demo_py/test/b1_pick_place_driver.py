@@ -14,8 +14,9 @@ from __future__ import annotations
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 ARM = ("1", "2", "3", "4", "5")
 REST_Z = 0.165
 

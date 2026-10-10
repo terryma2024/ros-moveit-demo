@@ -10,8 +10,9 @@ from so101_teleop.backends.protocol import (
     WorkflowRequest,
 )
 from so101_teleop.backends.registry import load_backend_profile
+from teleop_paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[2]
+PACKAGE = PACKAGE_ROOT
 
 
 def executable_prefix(tmp_path, package, executable):

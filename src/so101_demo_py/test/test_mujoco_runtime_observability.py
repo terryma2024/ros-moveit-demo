@@ -1,18 +1,18 @@
 """Runtime observability must expose real renderer attempt boundaries safely."""
 
 from dataclasses import FrozenInstanceError
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 @pytest.fixture
 def scene():
     import mujoco
 
-    path = Path(__file__).parents[1] / "assets/mujoco/v5_multi_object_scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
     model = mujoco.MjModel.from_xml_path(str(path))
     return mujoco, path, model, mujoco.MjData(model)
 

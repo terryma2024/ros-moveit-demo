@@ -2,7 +2,6 @@
 
 The backlog bound belonged to the retired chunk spool: it stays in the closed document (frozen manifests carry it) and nothing reads it."""
 import math
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -10,8 +9,9 @@ import yaml
 
 from so101_demo.act.offline.policy import RecorderConfigRefused, load_recorder_policy
 from test_act_episode_recorder_sources import RecordingNode, _binding, _engine, _episode, _options
+from paths import PACKAGE_ROOT
 
-POLICY_FILE = Path(__file__).resolve().parents[1] / "config/act/episode_recorder_v1.yaml"
+POLICY_FILE = PACKAGE_ROOT / "config/act/episode_recorder_v1.yaml"
 
 
 def document():

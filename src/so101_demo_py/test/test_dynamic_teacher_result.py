@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,8 +13,9 @@ from so101_demo.core.domain import ActionStatus, Failure, FailureCategory, State
 from so101_demo.core.dynamic_pick import compose_pose, inverse_pose
 from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 START = (0.02, -0.28, 0.165, 0.0, 0.0, 0.0, 1.0)
 SCHEMA_V2 = "so101-dynamic-mujoco-execute-v2"
 ARM_AND_GRIPPER = (*RosDynamicMujocoExecution._ARM_JOINTS, "6")

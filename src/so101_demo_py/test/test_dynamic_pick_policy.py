@@ -1,8 +1,8 @@
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def test_loads_the_gazebo_plan_only_variant() -> None:

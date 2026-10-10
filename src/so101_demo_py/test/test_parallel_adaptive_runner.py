@@ -1,6 +1,5 @@
 """Cross-generation adaptive runner state-machine contracts."""
 
-from pathlib import Path
 
 import pytest
 
@@ -14,9 +13,10 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     load_adaptive_worker_options,
 )
 from so101_demo.parallel_batch.contracts import PointStatus, RunMode
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 
 

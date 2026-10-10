@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from teleop_paths import PACKAGE_ROOT
 
-CMAKE = Path(__file__).parents[1] / "CMakeLists.txt"
-WEB_ROOT = Path(__file__).parents[1] / "web"
+CMAKE = PACKAGE_ROOT / "CMakeLists.txt"
+WEB_ROOT = PACKAGE_ROOT / "web"
 
 
 def test_web_build_tracks_css_components_and_local_font_assets():

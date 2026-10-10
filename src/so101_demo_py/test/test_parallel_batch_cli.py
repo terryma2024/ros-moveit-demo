@@ -18,9 +18,10 @@ from so101_demo.parallel_batch.contracts import (
     ValidationStatus,
     WorkerState,
 )
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
 CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"

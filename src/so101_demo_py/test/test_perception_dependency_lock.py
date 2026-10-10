@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 import yaml
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 LOCK_PATH = PACKAGE_ROOT / "config/perception/requirements.lock"
 TRAINING_PATH = PACKAGE_ROOT / "config/perception/training.yaml"
 

@@ -1,4 +1,3 @@
-from pathlib import Path
 from xml.etree import ElementTree
 
 import numpy as np
@@ -9,9 +8,10 @@ from so101_demo.runtime.camera_tf import (
     CAMERA_TO_OPTICAL,
     camera_static_transform_nodes,
 )
+from paths import PACKAGE_ROOT
 
 
-SCENE = Path(__file__).parents[1] / "assets/mujoco/scene.xml"
+SCENE = PACKAGE_ROOT / "assets/mujoco/scene.xml"
 
 
 def _rpy_matrix(rpy: tuple[float, float, float]) -> np.ndarray:

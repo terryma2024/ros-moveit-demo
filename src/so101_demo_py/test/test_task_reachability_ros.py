@@ -13,17 +13,17 @@ from so101_demo.ros.task_reachability import (
     RosMoveGroupReachabilityPlanner,
     make_move_group_goal,
 )
+from paths import PACKAGE_ROOT
 
 
 def test_prepare_horizon_reuses_real_requests_only_within_one_call(monkeypatch) -> None:
     from collections import Counter
-    from pathlib import Path
 
     from so101_demo.control.moveit.underactuated_ik import UnderactuatedPoseIk
     from so101_demo.core.dynamic_pick import CupPoseSample, resolve_motion_targets
     from so101_demo.core.dynamic_pick_policy import load_dynamic_pick_template
 
-    package = Path(__file__).parents[1]
+    package = PACKAGE_ROOT
     template = load_dynamic_pick_template(
         package / "config/policies/dynamic_cup_pick/v1/mujoco.yaml", expected_backend="mujoco"
     )

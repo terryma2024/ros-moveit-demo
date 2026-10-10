@@ -1,7 +1,6 @@
 """The actual dynamic child may open only on fresh, stopped, supported authorization."""
 
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -10,8 +9,9 @@ from so101_demo.core.domain import State, ActionStatus
 from so101_demo.core.simulation.types import ContactEvidence, ObjectState, SimulationEvidence, ReceivedSimulationEvidence
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
+from paths import PACKAGE_ROOT
 
-EXECUTION_POLICY = Path(__file__).resolve().parents[1] / "config/act/teacher_execution_policy_v1.yaml"
+EXECUTION_POLICY = PACKAGE_ROOT / "config/act/teacher_execution_policy_v1.yaml"
 
 
 def world(*, step=501, sequence=6, supported=True, bilateral=True):

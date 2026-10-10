@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 import signal
 import sys
 import time
@@ -13,9 +12,10 @@ from so101_teleop.expert_validation.models import (
 from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
 from so101_teleop.owned_group import terminate_group
 from so101_teleop.expert_validation.store import SupervisorStore
+from teleop_paths import TEST_ROOT
 
 
-HELPER = Path(__file__).parents[1] / "fixtures/process_tree_helper.py"
+HELPER = TEST_ROOT / "fixtures/process_tree_helper.py"
 
 
 def _wait(path, timeout=3.0):

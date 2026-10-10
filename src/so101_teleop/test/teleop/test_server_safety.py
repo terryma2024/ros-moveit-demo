@@ -23,13 +23,14 @@ from so101_teleop.server import (
 from so101_teleop.control import PlanRejected, PlanStore
 from so101_teleop.main import installed_web_assets
 import so101_teleop.server as server_module
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[2]
+PACKAGE = PACKAGE_ROOT
 
 
 def test_legacy_gazebo_pose_callback_is_removed():
-    source = (Path(__file__).resolve().parents[2] / 'so101_teleop' / 'server.py').read_text()
+    source = (PACKAGE_ROOT / 'so101_teleop' / 'server.py').read_text()
     assert '_legacy_bridge_pose_unused' not in source
 
 

@@ -18,8 +18,9 @@ import time
 import so101_teleop.owned_group as owned_group_module
 from so101_teleop.owned_group import terminate_group
 from so101_teleop.process_identity import ProcessIdentityError
+from teleop_paths import TEST_ROOT
 
-HELPER = Path(__file__).parents[1] / "fixtures/stubborn_helper.py"
+HELPER = TEST_ROOT / "fixtures/stubborn_helper.py"
 
 
 def _spawn_stubborn_group(tmp_path) -> subprocess.Popen:

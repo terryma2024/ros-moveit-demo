@@ -4,7 +4,6 @@ Removed gates no longer raise, kept gates still raise, the release sequence of 5
 mapping, the process summary, the final normal_stop. v1/v2 behaviour is covered by the untouched tests of the same module."""
 import math
 from dataclasses import replace
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,8 +19,9 @@ from so101_demo.ros.teacher_stop import TeacherStop
 
 from test_b1_teacher_execution import ARM, make_adapter, release_adapter
 from test_b1_teacher_stop_core import COMPRESSION_LIMIT_M, FORCE_LIMIT_N, evidence
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V3 = load_teacher_execution_policy(PACKAGE / "config/act/teacher_execution_policy_v3.yaml")
 HOVER_Z = 0.2176344
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 from types import SimpleNamespace
 import pytest
+from paths import REPOSITORY
 
 
 def test_runtime_concurrency_accepts_w16_and_rejects_w17():
@@ -236,7 +237,7 @@ def test_unknown_or_unsafe_container_inputs_fail_closed(tmp_path, bad):
 
 
 def test_wrapper_executes_argument_validation_before_docker():
-    script = Path(__file__).parents[3] / 'scripts/parallel-perception-container.sh'
+    script = REPOSITORY / 'scripts/parallel-perception-container.sh'
     result = subprocess.run([str(script), 'run'], capture_output=True, text=True)
     assert result.returncode == 2
     assert '--output' in result.stderr
@@ -244,7 +245,7 @@ def test_wrapper_executes_argument_validation_before_docker():
 
 def test_container_refuses_image_drift_before_running(tmp_path, monkeypatch):
     from so101_demo.cli import parallel_perception_broker as cli
-    root = Path(__file__).parents[3].resolve()
+    root = REPOSITORY.resolve()
     calls = []
     monkeypatch.setattr(cli, 'image_record', lambda image: {
         'image_id': 'sha256:' + 'c' * 64, 'dockerfile_sha256': 'a' * 64,

@@ -20,8 +20,9 @@ from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
 from so101_demo.profiling.session import build_profiler
 from so101_demo.runtime.workflow_events import EventDecoder, EventEmitter
 from test_dynamic_pick import _sample, _template
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def _geometry() -> TaskGeometry:

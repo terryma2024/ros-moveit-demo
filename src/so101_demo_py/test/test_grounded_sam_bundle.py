@@ -13,8 +13,8 @@ from so101_demo.adapters.perception.model_bundle import (
 )
 from so101_demo.adapters.perception.model_runtime import ModelSetupError
 from so101_demo.cli.prepare_grounded_sam_bundle import main
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 CONFIG_PATH = (PACKAGE_ROOT / "config/perception/grounded_sam.yaml").resolve()
 LOCK_PATH = CONFIG_PATH.with_name("requirements.lock")
 LOCKED_DEPENDENCIES = {

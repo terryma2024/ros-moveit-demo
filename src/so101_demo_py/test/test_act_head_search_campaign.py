@@ -3,12 +3,12 @@
 import copy
 import importlib
 import json
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
-PARTITIONS = Path(__file__).parents[1] / "config/act/head-search-scenario-partitions-v1.json"
+PARTITIONS = PACKAGE_ROOT / "config/act/head-search-scenario-partitions-v1.json"
 
 
 def campaign():

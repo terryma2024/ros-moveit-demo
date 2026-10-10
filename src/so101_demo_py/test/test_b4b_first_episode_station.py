@@ -6,13 +6,10 @@ The L1 run b4a1 launched the ORIGINAL pick-place profile (no neck controller) be
 import importlib.util
 import os
 import subprocess
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
@@ -24,8 +21,9 @@ from so101_demo.runtime import launch_composition as launch
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from test_act_child_recorder_binding import frozen_child_inputs
 from test_parallel_worker_runtime import _ProcessGroup, _resources
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 FORBIDDEN = ("act_command_" + "broker", "controller_" + "reservation")
 
 

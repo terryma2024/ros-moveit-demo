@@ -14,8 +14,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from teleop_paths import REPOSITORY
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = REPOSITORY
 RUNNER = REPOSITORY_ROOT / "scripts" / "so101-macos-service-campaign-live-window.zsh"
 REGISTERED_TASK_ROOT = (
     "/tmp/so101-debug-macos-service-campaign-closure-2208b154-6e9f-4ae1-a448-1fa0101df9b1"

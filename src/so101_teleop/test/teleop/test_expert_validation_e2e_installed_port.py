@@ -12,9 +12,10 @@ import tempfile
 import time
 
 import pytest
+from teleop_paths import PACKAGE_ROOT, TEST_ROOT
 
-_E2E_DIR = Path(__file__).resolve().parents[1] / "e2e"
-_TELEOP_ROOT = Path(__file__).resolve().parents[2]
+_E2E_DIR = TEST_ROOT / "e2e"
+_TELEOP_ROOT = PACKAGE_ROOT
 _DEMO_SRC = _TELEOP_ROOT.parent / "so101_demo_py" / "src"
 for _path in (str(_E2E_DIR), str(_E2E_DIR / "process_helpers"), str(_DEMO_SRC)):
     if _path not in sys.path:

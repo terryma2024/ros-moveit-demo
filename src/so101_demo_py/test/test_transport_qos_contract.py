@@ -1,10 +1,10 @@
-from pathlib import Path
 from xml.etree import ElementTree
 
 import yaml
 from so101_demo.backends.mujoco.transport_observer import RELIABLE_QOS_DEPTH
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def test_reliable_consumer_retains_at_least_the_producer_history() -> None:

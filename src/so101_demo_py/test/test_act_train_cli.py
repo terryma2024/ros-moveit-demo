@@ -3,15 +3,15 @@
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.act.training_requirements import require_resolved_requirements
 from so101_demo.cli.act_train import main
+from paths import PACKAGE_ROOT
 
-SOURCE_LOCK = Path(__file__).resolve().parents[1] / "config/act/requirements.lock"
+SOURCE_LOCK = PACKAGE_ROOT / "config/act/requirements.lock"
 
 
 def _workspace(tmp_path,monkeypatch, *, episodes=2):
@@ -29,7 +29,7 @@ def _workspace(tmp_path,monkeypatch, *, episodes=2):
     binding.write_text("{}")
     config = tmp_path / "training.yaml"
     config.write_text(yaml.safe_dump(yaml.safe_load(
-        (Path(__file__).resolve().parents[1] / "config/act/training.yaml").read_text())))
+        (PACKAGE_ROOT / "config/act/training.yaml").read_text())))
     return manifest_path, index_path, binding, config
 
 
@@ -124,7 +124,7 @@ def test_the_production_trainer_refuses_to_run_without_the_requirements_digest(t
 
     pytest.importorskip("torch")
     from so101_demo.act.training_config import load_training_config
-    shipped = load_training_config(Path(__file__).resolve().parents[1] / "config/act/training.yaml")
+    shipped = load_training_config(PACKAGE_ROOT / "config/act/training.yaml")
     with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_SHA256_INVALID"):
         _trainer(shipped, tmp_path, tmp_path / "out")
 

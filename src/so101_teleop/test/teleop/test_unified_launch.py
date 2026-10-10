@@ -5,8 +5,9 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
+from teleop_paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[2]
+PACKAGE = PACKAGE_ROOT
 
 UNIFIED_SCRIPT = PACKAGE / "scripts/so101_unified_web_server.py"
 LEGACY_SCRIPTS = (

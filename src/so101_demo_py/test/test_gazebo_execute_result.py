@@ -1,6 +1,5 @@
 import argparse
 import json
-from pathlib import Path
 
 from so101_demo.application.backend_execute import ExecuteBoundary, classify_execute_boundary
 from so101_demo.backends.gazebo.execute import _complete_runtime_options
@@ -13,8 +12,8 @@ from so101_demo.core.domain import (
     QualificationStatus,
 )
 from so101_demo.runtime.result_manifest import write_run_result
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_teleop_request_derives_result_from_checkpoint(tmp_path) -> None:

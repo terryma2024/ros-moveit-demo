@@ -8,15 +8,14 @@ asserts the model's own values, and asserts that they are NOT the seam's.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # noqa: E402
 
 from so101_demo.act.task8_bottom_io import BottomIOError, occluder_geometry_from_model  # noqa: E402
 from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS  # noqa: E402
+from paths import PACKAGE_ROOT
 
 #: the seam's invented values, quoted from `test_act_task8_formal_measurement_entry.py`
 SEAM_POSITION = [0.02, 0.0, 0.10]
@@ -193,7 +192,7 @@ from so101_demo.act.head_camera_geometry import (  # noqa: E402
     validate_head_camera_geometry,
 )
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 GEOMETRY_CONTRACT_PATH = PACKAGE / "config/act/head-camera-geometry-contract-v1.json"
 FAKE_SCENE_PATH = PACKAGE / "assets/mujoco/act/scene.xml"
 

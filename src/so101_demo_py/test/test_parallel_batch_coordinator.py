@@ -15,6 +15,7 @@ from so101_demo.parallel_batch.contracts import (
     load_parallel_runtime_config, load_parallel_runtime_config_v2,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
+from paths import PACKAGE_ROOT
 
 
 class Clock:
@@ -77,7 +78,7 @@ def make(tmp_path):
                                      BatchKindV2.FIRST_PASS)
         clock, results = (Clock() if clock_port is None else clock_port), Results()
         config = load_parallel_runtime_config_v2(
-            Path(__file__).resolve().parents[1] / 'config/mujoco/parallel_batch_v2.yaml')
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v2.yaml')
         selector_args = (
             {} if point_selector is None else {'point_selector': point_selector}
         )

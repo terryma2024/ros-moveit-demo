@@ -19,6 +19,7 @@ from so101_demo.act.offline import processor, replay
 from offline_synthetic_bag import (ATTEMPT, EPOCH, SESSION, BagSyntheticSources, arm_reference, build_bag, mono_of,
                                    system_of)
 from test_act_episode_recorder import POLICY_FILE, make_episode
+from paths import PACKAGE_ROOT, TEST_ROOT
 
 LEASE = dict(batch_id="batch-1", coordinator_epoch=1, worker_id="w00", worker_generation=1, point_id="point-1",
              attempt_id=ATTEMPT, lease_generation=1, lease_issued_monotonic_s=1.0, lease_deadline_monotonic_s=9_999_999.0)
@@ -36,7 +37,7 @@ print(json.dumps({"status": references["status"], "reason": references.get("reas
 def synthetic_qc(episode_root, **_):
     """A fresh interpreter re-reads the sealed files: seal, audit manifest, the Teacher-reference cross-check."""
     # the child imports a test-directory module: hand it this directory explicitly (the gate runs from another cwd and path)
-    here = str(Path(__file__).resolve().parent)
+    here = str(TEST_ROOT)
     env = dict(os.environ, PYTHONPATH=os.pathsep.join(filter(None, [here, os.environ.get("PYTHONPATH", "")])))
     completed = subprocess.run([sys.executable, "-c", QC_CODE, str(Path(episode_root).parent)], capture_output=True, text=True,
                                env=env, timeout=300)
@@ -304,7 +305,7 @@ def test_the_lease_can_be_read_from_an_episode_document(tmp_path):
 
 
 def test_setup_py_declares_the_act_offline_episode_console_entry_and_it_resolves_to_a_callable():
-    text = (Path(__file__).resolve().parents[1] / "setup.py").read_text()
+    text = (PACKAGE_ROOT / "setup.py").read_text()
     assert '"act_offline_episode = so101_demo.cli.act_offline_episode:main"' in text
     from so101_demo.cli import act_offline_episode
     assert callable(act_offline_episode.main)

@@ -8,9 +8,9 @@ import ast
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT, REPOSITORY
 
-PACKAGE = Path(__file__).resolve().parents[1]
-REPOSITORY = PACKAGE.parents[1]
+PACKAGE = PACKAGE_ROOT
 SUPPORT = REPOSITORY / "src/so101_mujoco_support"
 TELEOP = REPOSITORY / "src/so101_teleop/so101_teleop"
 

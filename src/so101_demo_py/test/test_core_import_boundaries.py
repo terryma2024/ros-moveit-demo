@@ -2,8 +2,9 @@ import ast
 import subprocess
 import sys
 from pathlib import Path
+from paths import PACKAGE_ROOT
 
-CORE_ROOT = Path(__file__).resolve().parents[1] / "src" / "core"
+CORE_ROOT = PACKAGE_ROOT / "src" / "core"
 FORBIDDEN_IMPORT_ROOTS = {"gazebo", "launch", "moveit", "mujoco", "rclpy", "ros_gz"}
 
 

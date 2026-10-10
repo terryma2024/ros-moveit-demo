@@ -1,5 +1,4 @@
 import asyncio
-from pathlib import Path
 
 import pytest
 
@@ -7,9 +6,10 @@ from so101_teleop.backends.registry import load_backend_profile
 from so101_teleop.backends.protocol import BackendOperation
 from so101_teleop.models import ServerMode, TelemetrySnapshot
 from so101_teleop.server import TeleopService
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).resolve().parents[2]
+PACKAGE = PACKAGE_ROOT
 
 
 class Worker:

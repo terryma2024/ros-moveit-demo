@@ -7,12 +7,12 @@ import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import PACKAGE_ROOT, TEST_ROOT
 
-TEST_DIR = Path(__file__).resolve().parent
+TEST_DIR = TEST_ROOT
 BROKER_PARAMETERS = {"control_context", "broker_connection", "initial_empty_retirement", "operation_guard"}
 
 
@@ -107,7 +107,7 @@ def test_worker_kwargs_carry_no_lifecycle_acknowledgements():
 
 
 def test_no_teacher_lifecycle_in_the_reset_path_sources():
-    root = Path(__file__).resolve().parents[1] / "src"
+    root = PACKAGE_ROOT / "src"
     for relative in ("backends/mujoco/reset.py", "backends/mujoco/client.py", "backends/mujoco/teleop_runtime.py",
                      "cli/teleop_reset.py", "runtime/parallel_ros_runtime.py", "cli/mujoco_parallel_batch.py"):
         text = (root / relative).read_text()

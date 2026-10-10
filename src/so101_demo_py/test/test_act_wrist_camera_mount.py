@@ -1,13 +1,13 @@
 """The calibrated ACT wrist image and ROS optical frame must share one mount pose."""
 
-from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import mujoco
 import numpy as np
+from paths import PACKAGE_ROOT
 
 
-ASSETS = Path(__file__).parents[1] / "assets/mujoco/act"
+ASSETS = PACKAGE_ROOT / "assets/mujoco/act"
 EXPECTED_MJCF_QUAT = np.array(
     (0.9839547340865649, -0.14820831798181258,
      0.09624659121013797, -0.024575789510572335)

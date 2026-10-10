@@ -1,13 +1,13 @@
 """Name-based reset must preserve six-joint ordering and serialize overrides."""
 
 import math
-from pathlib import Path
 import xml.etree.ElementTree as ET
 
 import pytest
 
 from so101_demo.act.joints import ARM_JOINTS, ACT_JOINTS, ordered_positions
 from so101_demo.backends.mujoco.client import JointResetOverride, joint_override_message
+from paths import PACKAGE_ROOT
 
 
 def test_named_mapping_preserves_arm_order():
@@ -40,7 +40,7 @@ def test_invalid_joint_override(name, position, velocity):
 
 def test_act_model_joint_sets_and_named_keyframes():
     import mujoco
-    assets = Path(__file__).parents[1] / "assets/mujoco/act"
+    assets = PACKAGE_ROOT / "assets/mujoco/act"
     model = mujoco.MjModel.from_xml_path(str(assets / "scene.xml"))
     urdf = ET.parse(assets / "so101.urdf").getroot()
     assert {element.attrib["name"] for element in urdf.findall("ros2_control/joint")} == set(ACT_JOINTS)

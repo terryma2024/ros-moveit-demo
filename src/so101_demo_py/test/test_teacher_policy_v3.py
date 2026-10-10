@@ -3,7 +3,6 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 import yaml
@@ -12,8 +11,9 @@ from so101_demo.act.frozen_runtime_inputs import frozen_execution_policy_name, l
 from so101_demo.act.first_episode_inputs import (
     EXECUTION_POLICY_BINDINGS, POLICY_BINDINGS, policy_binding, read_inputs_manifest, verify_frozen_inputs)
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
+from paths import PACKAGE_ROOT
 
-CONFIG = Path(__file__).resolve().parents[1] / "config/act"
+CONFIG = PACKAGE_ROOT / "config/act"
 V1, V2, V3 = (CONFIG / f"teacher_execution_policy_v{n}.yaml" for n in (1, 2, 3))
 V3_NAME = "teacher_execution_policy_v3.yaml"
 #: v1 and v2 are frozen artifacts of earlier rounds: a change of one byte is a new policy, never an edit

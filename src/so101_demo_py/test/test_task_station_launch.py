@@ -19,9 +19,10 @@ from launch import LaunchContext
 from launch.utilities import perform_substitutions
 import so101_demo.runtime.launch_composition as launch_composition
 from so101_demo.runtime.launch_composition import build_task_station_launch_description
+from paths import PACKAGE_ROOT
 
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def test_task_station_launch_is_visible_persistent_and_has_camera_tf(tmp_path: Path) -> None:

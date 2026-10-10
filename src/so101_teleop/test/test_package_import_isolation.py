@@ -3,10 +3,9 @@
 import os
 import subprocess
 import sys
-from pathlib import Path
+from teleop_paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_gui_import_does_not_load_server_models():

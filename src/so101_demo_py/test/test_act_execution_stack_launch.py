@@ -2,7 +2,6 @@
 
 import importlib.util
 import os
-from pathlib import Path
 
 import pytest
 from launch import LaunchContext
@@ -12,6 +11,7 @@ from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 
 from so101_demo.runtime import launch_composition as launch
+from paths import PACKAGE_ROOT
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +52,7 @@ def test_invalid_act_stack_request_refuses_before_graph_construction(tmp_path, m
 
 
 def test_public_act_execution_stack_launch_is_thin():
-    path = Path(__file__).parents[1] / "launch/so101_mujoco_act_execution_stack.launch.py"
+    path = PACKAGE_ROOT / "launch/so101_mujoco_act_execution_stack.launch.py"
     spec = importlib.util.spec_from_file_location("act_execution_stack_launch", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

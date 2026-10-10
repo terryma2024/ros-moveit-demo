@@ -13,8 +13,9 @@ from so101_demo.act.head_search_qualification import (
     require_gate,
     serve_teleop,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def _qualified_report(root: Path, **overrides) -> dict:

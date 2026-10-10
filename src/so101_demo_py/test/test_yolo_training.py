@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from so101_demo.adapters.perception.yolo_training import prepare_training_run
+from paths import PACKAGE_ROOT
 
 
 def _write_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -121,11 +122,11 @@ from so101_demo.act.head_search_training import (  # noqa: E402
     load_training_contract,
 )
 
-HEAD_CONTRACT = Path(__file__).parents[1] / "config/perception/head_search_yolo_training.yaml"
+HEAD_CONTRACT = PACKAGE_ROOT / "config/perception/head_search_yolo_training.yaml"
 HEAD_SMOKE_CONTRACT = (
-    Path(__file__).parents[1] / "config/perception/head_search_yolo_training_smoke.yaml"
+    PACKAGE_ROOT / "config/perception/head_search_yolo_training_smoke.yaml"
 )
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 BASE_SHA = "d" * 64
 
 

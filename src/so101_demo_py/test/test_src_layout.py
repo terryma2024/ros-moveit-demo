@@ -1,10 +1,9 @@
 import runpy
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import setuptools
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_python_namespace_uses_direct_mapped_src_layout() -> None:

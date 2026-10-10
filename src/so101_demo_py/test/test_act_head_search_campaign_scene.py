@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import mujoco
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def _module():
@@ -23,7 +24,7 @@ def _baseline(tmp_path):
     from test_act_head_execution_scene import scene_inputs, register_safety
     inputs, _, safety=scene_inputs(tmp_path)
     register_safety(inputs,safety)
-    root=Path(__file__).resolve().parents[1]
+    root=PACKAGE_ROOT
     plugin=root/'config/mujoco/act/mujoco_plugins.yaml'
     inputs.refs['mujoco_plugin']=_ref(plugin)
     geometry={'schema_version':1,'camera_name':'head_camera','image_width':640,'image_height':480,
@@ -49,7 +50,7 @@ def _baseline(tmp_path):
 
 def _case(index):
     from so101_demo.act.head_search_campaign import load_cases
-    path=Path(__file__).resolve().parents[1]/'config/act/head-search-scenario-partitions-v1.json'
+    path=PACKAGE_ROOT/'config/act/head-search-scenario-partitions-v1.json'
     return load_cases(json.loads(path.read_text()))[index]
 
 

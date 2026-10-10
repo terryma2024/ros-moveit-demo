@@ -1,13 +1,13 @@
 """Task 12: the training configuration is frozen, and drift is refused rather than absorbed."""
 
-from pathlib import Path
 
 import pytest
 import yaml
 
 from so101_demo.act.training_config import load_training_config
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 CONFIG = PACKAGE / "config/act/training.yaml"
 
 

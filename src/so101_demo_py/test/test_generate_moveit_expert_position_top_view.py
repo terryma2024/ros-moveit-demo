@@ -9,9 +9,10 @@ from pathlib import Path
 import yaml
 
 from so101_demo.core.task_points import parse_task_point_list
+from paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 SCRIPT_PATH = REPOSITORY_ROOT / "scripts/generate_so101_moveit_expert_position_top_view.py"
 EXPECTED_GENERATED_XY_M = [
     (-0.096188, -0.202721),

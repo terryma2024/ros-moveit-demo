@@ -1,13 +1,13 @@
 """Task 14 CLI: the composition is built first, and only then is a spec submitted."""
 
 import json
-from pathlib import Path
 
 import pytest
 
 from so101_demo.cli.act_session import main
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 class _Service:

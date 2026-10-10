@@ -44,8 +44,9 @@ from so101_teleop.process_identity import (
     identity_state,
     read_identity,
 )
+from teleop_paths import TEST_ROOT
 
-HELPER = Path(__file__).parents[1] / "fixtures/process_tree_helper.py"
+HELPER = TEST_ROOT / "fixtures/process_tree_helper.py"
 ARGV_TAIL = (
     "--mode",
     "coordinator",

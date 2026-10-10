@@ -2,12 +2,12 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT, REPOSITORY
 
-PACKAGE = Path(__file__).resolve().parents[1]
-SOURCE = PACKAGE.parents[1]
+PACKAGE = PACKAGE_ROOT
+SOURCE = REPOSITORY
 
 
 def _snapshot(tmp_path):

@@ -34,8 +34,9 @@ from so101_teleop.expert_validation.execution_context import (
 )
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
 from so101_teleop.expert_validation.store import SupervisorStore
+from teleop_paths import REPOSITORY
 
-REPO = Path(__file__).resolve().parents[4]
+REPO = REPOSITORY
 V4_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
 V5_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
 V6_DOCUMENT = REPO / "src/so101_demo_py/config/mujoco/parallel_batch_v6_macos_mps_w1_first_pass.yaml"

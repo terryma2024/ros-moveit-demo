@@ -2,7 +2,6 @@
 the watches record instead of stopping (design 2026-10-10 sections 2, 3 and 7). The v1/v2 entry is covered by the untouched tests."""
 import math
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -14,8 +13,9 @@ from so101_demo.ports.cup_scene_observation import CupSceneObservation
 from so101_demo.ports.evidence import PoseEvidence
 from test_dynamic_pick import _sample, _template
 from test_dynamic_scene_sync import RecordingTaskScenePort, _observation, _options, _runtime
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def observation(x=0.02, moveit_x=None, quaternion=(0.0, 0.0, 0.0, 1.0)):

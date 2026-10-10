@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import subprocess
 import sys
+from paths import PACKAGE_ROOT
 
 
-PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 TARGET = PACKAGE_ROOT / "test/test_sam_decoder_runtime.py"
 EXPLICIT_ML_CASES = {
     "test/test_sam_decoder_runtime.py::"

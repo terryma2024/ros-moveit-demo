@@ -5,7 +5,6 @@ import json
 import math
 import threading
 import time
-from pathlib import Path
 import uuid
 from dataclasses import replace
 
@@ -22,6 +21,7 @@ from so101_demo.adapters.act.head_trajectory_guard import HeadTrajectoryGuard
 from so101_demo.adapters.act.pick_place_neck_sweep import MujocoNeckSweepChecker
 from so101_demo.adapters.act.physics import model_sha256
 from so101_demo.adapters.act.scene_state import SceneStateObserver
+from paths import PACKAGE_ROOT, TEST_ROOT
 
 
 @pytest.fixture
@@ -61,8 +61,8 @@ def composed(monkeypatch, request):
     scope = dict(epoch='attempt-' + uuid.uuid4().hex, generation=11, session_id='head-search-restarts',
         policy_sha256='a' * 64, controller_identity=identity)
     state = HeadLocalState(scope=scope, search_deadline_ns=time.monotonic_ns() + 30_000_000_000)
-    model_path = Path(__file__).resolve().parents[1] / 'assets/mujoco/act/head_search_scene.xml'
-    geometry_path = Path(__file__).resolve().parent / 'data/head_camera_geometry_probe11.json'
+    model_path = PACKAGE_ROOT / 'assets/mujoco/act/head_search_scene.xml'
+    geometry_path = TEST_ROOT / 'data/head_camera_geometry_probe11.json'
     import mujoco
     model = mujoco.MjModel.from_xml_path(str(model_path))
     semantic_sha = model_sha256(model)
@@ -433,7 +433,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     assert not servers['admitted']
 
     import mujoco
-    model_path = Path(__file__).resolve().parents[1] / 'assets/mujoco/act/head_search_scene.xml'
+    model_path = PACKAGE_ROOT / 'assets/mujoco/act/head_search_scene.xml'
     semantic = model_sha256(mujoco.MjModel.from_xml_path(str(model_path)))
     other_checker = MujocoNeckSweepChecker(model_path, expected_model_sha256=semantic,
         protected_roots=('base',), allowed_pairs=(), path_step_s=.002,
@@ -442,7 +442,7 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     other_guard = HeadTrajectoryGuard(checker=other_checker,
         feedback_port=config['port'], scene_observer=config['guard'].scene_observer,
         node=config['port'].node, model_xml_path=model_path,
-        geometry_path=Path(__file__).resolve().parent / 'data/head_camera_geometry_probe11.json',
+        geometry_path=TEST_ROOT / 'data/head_camera_geometry_probe11.json',
         geometry_sha256=config['guard'].geometry_sha256,
         simulation_session_id=config['guard'].simulation_session_id,
         reset_epoch=config['guard'].reset_epoch,

@@ -12,8 +12,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from paths import REPOSITORY
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools"))
+sys.path.insert(0, str(REPOSITORY / "tools"))
 
 from so101_build_receipt import RECEIPT_SUFFIX, write_build_receipt  # noqa: E402
 

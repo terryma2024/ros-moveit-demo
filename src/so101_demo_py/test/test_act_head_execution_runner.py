@@ -8,6 +8,7 @@ from test_act_head_execution_composition import build_inputs
 from test_act_head_execution_composition import observer_setup
 import types
 from head_owner_support import deadline, make as make_neck_owner
+from paths import PACKAGE_ROOT
 
 
 DECLARATIONS = {
@@ -290,9 +291,8 @@ def _with_development_blocks(document):
     """
 
     import json as _json
-    from pathlib import Path as _Path
 
-    reference = _Path(__file__).resolve().parents[1] / 'config/mujoco/act/head_search_v2.json'
+    reference = PACKAGE_ROOT / 'config/mujoco/act/head_search_v2.json'
     names = list(_json.loads(reference.read_text())['values'])
     result = {key: value for key, value in document.items() if key not in names}
     values = {key: document[key] for key in names if key in document}

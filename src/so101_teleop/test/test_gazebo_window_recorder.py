@@ -10,14 +10,15 @@ from pathlib import Path
 import sys
 
 import pytest
+from teleop_paths import PACKAGE_ROOT
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
+    PACKAGE_ROOT
     / 'scripts'
     / 'gazebo_window_recorder.py'
 )
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(PACKAGE_ROOT))
 sys.path.insert(0, str(SCRIPT_PATH.parent))
 SPEC = importlib.util.spec_from_file_location('gazebo_window_recorder', SCRIPT_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)

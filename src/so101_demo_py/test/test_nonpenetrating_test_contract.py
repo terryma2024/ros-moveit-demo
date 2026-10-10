@@ -12,6 +12,7 @@ from so101_demo.adapters.perception.mujoco_dataset import (
     split_seed_plan,
 )
 from so101_demo.training.grounding_dino_dataset import GroundingDinoDatasetError
+from paths import PACKAGE_ROOT
 
 CONTRACT = "so101-nonpenetrating-test-v1"
 SCENARIOS = tuple(scenario.value for scenario in DatasetScenario)
@@ -50,7 +51,7 @@ def _official_manifest() -> dict[str, object]:
 
 def test_official_test_config_loads_the_preregistered_population() -> None:
     path = (
-        Path(__file__).parents[1]
+        PACKAGE_ROOT
         / "config/perception/plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml"
     )
 

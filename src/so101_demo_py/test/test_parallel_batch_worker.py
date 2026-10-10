@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, replace
 import json
-from pathlib import Path
 import threading
 import time
 from types import SimpleNamespace
@@ -22,10 +21,11 @@ from so101_demo.parallel_batch.contracts import (
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.worker import ParallelWorker
+from paths import PACKAGE_ROOT
 
 
 CONFIG = load_parallel_runtime_config(
-    Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v1.yaml"
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
 )
 
 

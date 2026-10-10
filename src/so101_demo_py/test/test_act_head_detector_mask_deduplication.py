@@ -1,6 +1,5 @@
 """Head duplicate instances must not create false multi-cup ambiguity."""
 
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -9,6 +8,7 @@ from so101_demo.adapters.act.detector import HeadRgbDetector
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 from so101_demo.act.search import HeadSearchController
 from test_act_search import config, evidence
+from paths import TEST_ROOT
 
 
 HIGH_BOX = (152.88339233398438, 201.56985473632812,
@@ -55,7 +55,7 @@ def mask(*pixels):
 
 @pytest.mark.parametrize('reverse', [False, True])
 def test_actual_900027_duplicate_masks_keep_high_confidence_instance(reverse):
-    with np.load(Path(__file__).parent / 'data/head_900027_duplicate_masks.npz') as saved:
+    with np.load(TEST_ROOT / 'data/head_900027_duplicate_masks.npz') as saved:
         candidates = [candidate('high', saved['high'], confidence=.9388879537582397,
                                 box=HIGH_BOX),
                       candidate('low', saved['low'], confidence=.2810225784778595,
@@ -146,7 +146,7 @@ def test_deduplicated_track_still_requires_three_fresh_frames_and_attempt_reset(
 
 
 def captured_900017(stamp=6268000000):
-    with np.load(Path(__file__).parent / 'data/head_900017_nested_fragment.npz') as saved:
+    with np.load(TEST_ROOT / 'data/head_900017_nested_fragment.npz') as saved:
         return [candidate(f'captured-{index}', pixels, confidence=float(box[4]),
                           box=tuple(float(value) for value in box[:4]))
                 for index, (pixels, box) in enumerate(zip(

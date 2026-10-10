@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from so101_demo.runtime.provenance import installed_bundle
+from paths import TEST_ROOT
 
 EXPECTED_EXECUTABLES = {
     "act_offline_episode",
@@ -126,7 +127,7 @@ def test_mujoco_support_plugin_comes_from_the_candidate_project_overlay() -> Non
 
 
 def test_pytest_collection_is_nonzero() -> None:
-    test_root = Path(__file__).resolve().parent
+    test_root = TEST_ROOT
     environment = dict(os.environ)
     environment.pop("PYTEST_ADDOPTS", None)
     completed = subprocess.run(

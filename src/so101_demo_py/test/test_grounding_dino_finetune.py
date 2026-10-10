@@ -23,6 +23,7 @@ from so101_demo.training.grounding_dino_runtime import (
     _validate_fresh_reload_statistics,
     enable_grounding_dino_gradient_checkpointing,
 )
+from paths import PACKAGE_ROOT
 
 
 def _sha256(path: Path) -> str:
@@ -31,7 +32,7 @@ def _sha256(path: Path) -> str:
 
 def test_json_contract_roundtrip_preserves_optimizer_numeric_types(tmp_path: Path) -> None:
     original, _ = load_contract(
-        Path(__file__).parents[1] / "config/perception/grounding_dino_training.yaml"
+        PACKAGE_ROOT / "config/perception/grounding_dino_training.yaml"
     )
     path = tmp_path / "contract.json"
     path.write_text(json.dumps(original), encoding="utf-8")

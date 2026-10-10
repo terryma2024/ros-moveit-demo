@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import pytest
@@ -89,7 +88,6 @@ def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
 def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consumes(tmp_path):
     """CP-2103's first half: the bundle route the verifier's journal delegation depends on."""
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_task8_artifact_bundle import _inputs
 
     from so101_demo.act.task8_artifact_bundle import (
@@ -108,7 +106,6 @@ def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consu
 def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
     """CP-2104's second half, one step at a time: a prefix and a full row for real identities."""
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_task8_artifact_bundle import _inputs
 
     from so101_demo.act.task8_artifact_bundle import (
@@ -152,7 +149,6 @@ def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
 def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verifies(tmp_path):
     """CP-2107: the verifier's positive path, end to end."""
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
     from test_act_task8_artifact_bundle import _inputs
 
     from so101_demo.act.task8_artifact_bundle import (

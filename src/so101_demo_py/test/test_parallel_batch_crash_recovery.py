@@ -2,7 +2,6 @@
 
 import os
 from dataclasses import asdict
-from pathlib import Path
 
 import pytest
 
@@ -18,10 +17,11 @@ from so101_demo.parallel_batch.contracts import (
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
+from paths import PACKAGE_ROOT
 
 
 CONFIG = load_parallel_runtime_config(
-    Path(__file__).resolve().parents[1] / "config/mujoco/parallel_batch_v1.yaml"
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
 )
 EXPECTED_FINAL_CUP_POSE_WORLD = (
     -0.08, -0.25, 0.1648, 0.0, 0.0, 0.0, 1.0,

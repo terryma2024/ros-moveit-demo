@@ -4,7 +4,7 @@ import pytest
 
 from b2_collection_fixtures import materials_v2
 from test_act_scene_association import frozen_scene
-from pathlib import Path
+from paths import PACKAGE_ROOT
 
 
 def materials(frozen_scene):
@@ -27,7 +27,7 @@ def test_native_endpoint_reader_uses_first_sources_and_authenticated_frozen_targ
     verify = getattr(episode_qc, 'native_endpoint_records', None)
     assert callable(verify), 'actual endpoint readback still uses physics stream extrema'
     events, identity, window, _, sources, _ = materials(frozen_scene)
-    policy = load_endpoint_policy(Path(__file__).resolve().parents[1]/'config/act/endpoint_pose_acceptance_v1.yaml')
+    policy = load_endpoint_policy(PACKAGE_ROOT/'config/act/endpoint_pose_acceptance_v1.yaml')
     inputs = copy.deepcopy(frozen_scene[1])
     inputs['endpoint_policy'] = dict(rule_version=policy['rule_version'], thresholds=policy['thresholds'], sha256=digest(policy))
     inputs['inputs_sha256'] = digest({**inputs['roles'], **{key: value for key, value in inputs.items() if key not in ('roles', 'inputs_sha256')}})

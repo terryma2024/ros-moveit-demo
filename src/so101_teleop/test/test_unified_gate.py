@@ -18,8 +18,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from teleop_paths import PACKAGE_ROOT
 
-GATE_PATH = Path(__file__).parents[1] / "test/e2e/record_gate.py"
+GATE_PATH = PACKAGE_ROOT / "test/e2e/record_gate.py"
 
 POLICY_FIELDS = {
     "execution_host": "unit-host",

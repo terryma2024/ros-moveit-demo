@@ -1,12 +1,9 @@
 """E2: the initial endpoint sample must come from after the reset and before the gripper dispatch (CP-2620)."""
 
 import json
-import sys
 
 import pytest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.act.episode_audit import EpisodeAuditWriter

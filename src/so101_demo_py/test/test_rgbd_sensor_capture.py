@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
 def _frame(stamp_ns: int = 20_000_000):
@@ -173,5 +174,5 @@ def test_sensor_capture_cli_requires_exclusive_absolute_directory() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--output-directory", "relative"])
 
-    setup_source = (Path(__file__).parents[1] / "setup.py").read_text()
+    setup_source = (PACKAGE_ROOT / "setup.py").read_text()
     assert "rgbd_sensor_capture = so101_demo.cli.rgbd_sensor_capture:main" in setup_source

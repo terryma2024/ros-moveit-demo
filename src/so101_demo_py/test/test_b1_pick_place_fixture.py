@@ -15,10 +15,11 @@ import pytest
 
 import b1_pick_place_driver as driver
 from so101_demo.core.domain import State
+from paths import PACKAGE_ROOT, SOURCE_ROOT, TEST_ROOT
 
-TEST_DIR = Path(__file__).resolve().parent
-SRC = Path(__file__).resolve().parents[1] / "src"
-TELEOP_SRC = Path(__file__).resolve().parents[2] / "so101_teleop" / "so101_teleop"
+TEST_DIR = TEST_ROOT
+SRC = PACKAGE_ROOT / "src"
+TELEOP_SRC = SOURCE_ROOT / "so101_teleop" / "so101_teleop"
 FORWARD_MOTION_STATES = (State.MOVE_ABOVE_OBJECT, State.DESCEND, State.MICRO_LIFT, State.LIFT,
                          State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE, State.RETREAT)
 

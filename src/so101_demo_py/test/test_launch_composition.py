@@ -1,5 +1,4 @@
 import importlib.util
-from pathlib import Path
 from types import SimpleNamespace
 
 from launch.actions import (
@@ -17,8 +16,8 @@ from so101_demo.runtime import launch_composition
 from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
 
 from launch import LaunchContext
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_ROOT = PACKAGE_ROOT / "launch"
 LAUNCHERS = (
     "so101_mujoco.launch.py",

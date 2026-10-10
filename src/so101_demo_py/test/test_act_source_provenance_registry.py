@@ -6,12 +6,11 @@ The vendored MuJoCo plugin is the case that makes this visible: it is built by i
 overlay, not by `so101_mujoco_support`, so it must not be described as if this worktree produced it.
 """
 
-from pathlib import Path
 
 from so101_demo.act.source_provenance import runtime_role_specs
+from paths import PACKAGE_ROOT, REPOSITORY
 
-WORKTREE = Path(__file__).resolve().parents[1]
-REPOSITORY = WORKTREE.parents[1]
+WORKTREE = PACKAGE_ROOT
 
 
 def _by_name(name):

@@ -6,10 +6,10 @@ import subprocess
 import sys
 
 import yaml
+from paths import PACKAGE_ROOT, REPOSITORY
 
 
-PACKAGE_ROOT = Path(__file__).parents[1]
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 RUNNER = REPOSITORY_ROOT / "scripts/yolo-seg-training-container.sh"
 DOCKERFILE = (
     REPOSITORY_ROOT / "src/so101_demo_py/docker/yolo-training/Dockerfile"

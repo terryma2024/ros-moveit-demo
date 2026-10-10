@@ -1,10 +1,10 @@
 """Task 8P3: the compatibility import paths carry no second implementation."""
 
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 ALIASES = ("act_prepare_task8_live.py", "act_task8_live.py", "act_prepare_task8_live_artifacts.py")
 
 

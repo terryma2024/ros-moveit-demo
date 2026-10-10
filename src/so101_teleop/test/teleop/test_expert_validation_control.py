@@ -22,6 +22,7 @@ from so101_teleop.expert_validation.control import (
 )
 from so101_teleop.expert_validation.coordinator import CoordinatorBinding
 from so101_teleop.expert_validation.process_owner import OwnedAdaptiveWrapper
+from teleop_paths import SOURCE_ROOT
 
 
 def _binding(tmp_path, epoch=4):
@@ -230,7 +231,7 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
     journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
     try:
         request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
-        demo_root = Path(__file__).resolve().parents[3] / "so101_demo_py"
+        demo_root = SOURCE_ROOT / "so101_demo_py"
         config = load_parallel_runtime_config(demo_root / "config/mujoco/parallel_batch_v1.yaml")
         coordinator = BatchCoordinator(journal, request, config=config, result_port=UnusedResultPort())
         coordinator.register_worker("w1", generation=1)

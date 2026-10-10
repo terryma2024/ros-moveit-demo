@@ -1,6 +1,5 @@
 """Task 12: a training run may not start against an unpinned dependency set."""
 
-from pathlib import Path
 
 import pytest
 import yaml
@@ -8,8 +7,9 @@ import yaml
 from so101_demo.act.training_requirements import (
     load_training_requirements, require_resolved_requirements,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 LOCK = PACKAGE / "config/act/requirements.lock"
 
 

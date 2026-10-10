@@ -1,16 +1,16 @@
 import importlib.util
 import sys
-from pathlib import Path
 
 import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
+from teleop_paths import PACKAGE_ROOT, REPOSITORY
 
 
-PACKAGE = Path(__file__).resolve().parents[1]
-REPOSITORY_ROOT = PACKAGE.parents[1]
+PACKAGE = PACKAGE_ROOT
+REPOSITORY_ROOT = REPOSITORY
 LAUNCH = PACKAGE / "launch" / "so101_teleop.launch.py"
 
 

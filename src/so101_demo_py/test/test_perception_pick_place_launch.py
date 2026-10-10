@@ -23,8 +23,8 @@ from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
 
 from launch import LaunchContext
+from paths import PACKAGE_ROOT
 
-PACKAGE_ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = PACKAGE_ROOT / "launch/so101_mujoco_perception_pick_place.launch.py"
 
 

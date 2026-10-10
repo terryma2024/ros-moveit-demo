@@ -8,13 +8,10 @@ name. The four negatives below break the chain at four different links, and each
 from __future__ import annotations
 
 import json
-import sys
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from so101_demo.act.pick_place_validation_campaign import (  # noqa: E402
     PickPlaceValidationCampaign, PickPlaceValidationError,

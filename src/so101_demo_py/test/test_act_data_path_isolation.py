@@ -8,12 +8,12 @@ physical sources; it is never given, and never imports, anything that can comman
 
 import ast
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-SRC = Path(__file__).parents[1] / "src"
+SRC = PACKAGE_ROOT / "src"
 
 #: every module that belongs to the data path of a recording
 DATA_PATH = (

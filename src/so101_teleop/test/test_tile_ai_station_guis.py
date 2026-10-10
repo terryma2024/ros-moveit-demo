@@ -1,16 +1,16 @@
 import importlib.util
-from pathlib import Path
 import sys
 
 import pytest
+from teleop_paths import PACKAGE_ROOT
 
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1]
+    PACKAGE_ROOT
     / 'scripts'
     / 'tile_ai_station_guis.py'
 )
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(PACKAGE_ROOT))
 SPEC = importlib.util.spec_from_file_location('tile_ai_station_guis', SCRIPT_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

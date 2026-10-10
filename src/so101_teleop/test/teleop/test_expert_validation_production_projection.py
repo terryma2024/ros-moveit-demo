@@ -2,7 +2,6 @@ import hashlib
 import json
 from dataclasses import asdict
 from dataclasses import replace
-from pathlib import Path
 import sys
 import time
 from contextlib import contextmanager
@@ -24,6 +23,7 @@ from test_expert_validation_supervisor import _bound_without_execution
 from test_expert_validation_frozen_manifest import SameThreadApi
 
 from validation_seal_fixture import make_sealed_attempt
+from teleop_paths import SOURCE_ROOT
 
 
 class CursorStore:
@@ -106,7 +106,7 @@ def _coordinator_for_control_projection(service, request):
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
 
     journal = CoordinatorJournal.create(request.batch_root / "coordinator", request.batch_id)
-    config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
     batch = BatchRequest(request.batch_id, RunMode.EXECUTE, request.selected_point_ids, 1, 4, request.batch_root)
     coordinator = BatchCoordinator(journal, batch, config=load_parallel_runtime_config(config), result_port=None)
     coordinator.register_worker("worker-01", generation=1)
@@ -180,7 +180,7 @@ def test_cancel_channel_failure_projects_durable_recovery_without_rewriting_poin
 @pytest.mark.parametrize("finish_before_projection", [False, True])
 def test_cancel_command_replays_durably_and_conflicting_target_never_contacts_owner(tmp_path, finish_before_projection):
     with _control_service(tmp_path) as (service, owner, request, body):
-        config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+        config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
         program = '''
 import os, pathlib, time
 from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config

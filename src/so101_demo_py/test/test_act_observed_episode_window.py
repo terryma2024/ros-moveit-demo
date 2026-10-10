@@ -3,12 +3,9 @@
 import json
 import hashlib
 import shutil
-from pathlib import Path
-import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from so101_demo.act.episode_assembly import PointEpisode, assemble_episode_capture, ProductionProducer
 from so101_demo.act.episode_audit import verify_audit_manifest
 from test_act_continuous_capture import AcquisitionGuard, AcquisitionMinter, feed, reference

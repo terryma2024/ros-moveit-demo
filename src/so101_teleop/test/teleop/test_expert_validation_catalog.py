@@ -16,9 +16,10 @@ from so101_teleop.expert_validation.catalog import (
     select_catalog_points,
     selection_sha256,
 )
+from teleop_paths import REPOSITORY
 
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+REPOSITORY_ROOT = REPOSITORY
 CATALOG_PATH = (
     REPOSITORY_ROOT
     / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"

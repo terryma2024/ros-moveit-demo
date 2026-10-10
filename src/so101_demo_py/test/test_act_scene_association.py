@@ -2,11 +2,11 @@
 
 import copy
 from dataclasses import asdict
-from pathlib import Path
 import time
 from types import SimpleNamespace
 
 import pytest
+from paths import REPOSITORY
 
 
 @pytest.fixture(scope="module")
@@ -16,7 +16,7 @@ def frozen_scene(tmp_path_factory):
     from so101_demo.act.first_episode_inputs import execution_snapshot_binding, INPUT_ROLES
     from so101_demo.act.scene_association import digest
     root = tmp_path_factory.mktemp("alignment-frozen") / "execution"
-    source = Path(__file__).resolve().parents[3]
+    source = REPOSITORY
     snapshot = freeze_execution_snapshot(source, root)
     roles = {name: {"identity": {}} for name in INPUT_ROLES}
     roles["scene_model"]["identity"] = {key: snapshot[key] for key in ("model_sha256", "mujoco_version")}

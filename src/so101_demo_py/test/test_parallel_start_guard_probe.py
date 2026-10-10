@@ -17,6 +17,7 @@ import pytest
 
 from so101_demo.parallel_batch import start_guard_probe as probe_module
 from so101_demo.parallel_batch.start_guard import GuardScope, StartGuardPolicy
+from paths import PACKAGE_ROOT
 
 GPU0 = "GPU-00000000-0000-0000-0000-000000000000"
 
@@ -413,7 +414,7 @@ def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path
         load_parallel_runtime_config_v6,
     )
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     policies = [
         load_parallel_runtime_config_v4(
             package / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml").start_guard,
@@ -453,7 +454,7 @@ def test_a_v5_policy_takes_the_darwin_helper_half_and_demands_the_mps_admission(
 
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v5
 
-    package = Path(__file__).resolve().parents[1]
+    package = PACKAGE_ROOT
     policy = load_parallel_runtime_config_v5(
         package / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml").start_guard
     coordinator = probe_module.ProbeCoordinator(tmp_path)

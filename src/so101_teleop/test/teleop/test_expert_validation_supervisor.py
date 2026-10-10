@@ -3,7 +3,6 @@ from dataclasses import replace
 import hashlib
 import json
 import os
-from pathlib import Path
 import sys
 import time
 
@@ -23,6 +22,7 @@ from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
 from test_expert_validation_preflight import Resources, _request
 from test_expert_validation_adaptive_owner import request as _adaptive_owner_request
+from teleop_paths import SOURCE_ROOT
 
 
 class Owner:
@@ -139,7 +139,7 @@ def test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals(t
     # Evaluate the new binding before spawning; RED never starts an accidental CLI.
     binding = request.control_binding
     assert binding is not None
-    config = Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
     program = '''
 import json, os, pathlib, time
 from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config

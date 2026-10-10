@@ -18,6 +18,7 @@ from so101_demo.adapters.perception.mujoco_dataset import (
     scenario_plan,
     select_bounded_render,
 )
+from paths import PACKAGE_ROOT
 
 SCENARIO_ORDER = (
     DatasetScenario.NO_CUP,
@@ -98,7 +99,7 @@ def test_scenario_quota_mismatch_is_rejected_before_generation(tmp_path: Path) -
 
 def test_augmented_config_is_the_preregistered_contract() -> None:
     config_path = (
-        Path(__file__).parents[1] / "config/perception/plastic_cup_grounding_dino_augmented_r3.yaml"
+        PACKAGE_ROOT / "config/perception/plastic_cup_grounding_dino_augmented_r3.yaml"
     )
 
     config = load_dataset_config(config_path, generator_commit="b" * 40)

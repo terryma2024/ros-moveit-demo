@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from paths import PACKAGE_ROOT, REPOSITORY
 
-PACKAGE_ROOT = Path(__file__).parents[1]
-REPOSITORY_ROOT = Path(__file__).parents[3]
+REPOSITORY_ROOT = REPOSITORY
 RUNNER = REPOSITORY_ROOT / "scripts/grounding-dino-training-container.sh"
 DOCKERFILE = REPOSITORY_ROOT / "src/so101_demo_py/docker/grounding-dino-training/Dockerfile"
 TRAINING_CONFIG = PACKAGE_ROOT / "config/perception/grounding_dino_training.yaml"

@@ -1,12 +1,12 @@
 """Design 2026-10-10 D8: one decode table maps the recorder's PNG keys to the runtime keys, and its digest is frozen in the config."""
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 import yaml
+from paths import PACKAGE_ROOT
 
-CONFIG = Path(__file__).resolve().parents[1] / "config/act/training.yaml"
+CONFIG = PACKAGE_ROOT / "config/act/training.yaml"
 
 
 def test_the_decode_table_maps_the_recorder_png_keys_to_the_runtime_keys():

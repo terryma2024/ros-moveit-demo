@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 FORBIDDEN_TOKENS = ("PASS", "FAIL", "qualified", "visible", "target_in_view", "contact_ok", "_ok")
 ANCHOR_ORDER = ["default", "left", "forward"]
@@ -152,7 +153,7 @@ def test_only_a_closed_or_invalid_batch_is_ever_returned(tmp_path):
 
 
 def test_the_cli_defaults_to_the_production_driver():
-    source = (Path(__file__).resolve().parents[1] / "src/cli/act_measure_task8_calibration.py").read_text()
+    source = (PACKAGE_ROOT / "src/cli/act_measure_task8_calibration.py").read_text()
     assert "Task8MujocoMeasurementDriver" in source
     assert "--driver" in source, "injection must be an explicit, test-only option"
 

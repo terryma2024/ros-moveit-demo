@@ -42,6 +42,7 @@ from test_parallel_selection import (  # noqa: F401 - shared catalog fixtures
 
 from so101_demo.parallel_batch.w1_composition import exact_w1_slots
 from so101_demo.parallel_batch.w2_composition import exact_w2_slots
+from paths import PACKAGE_ROOT
 
 #: The Task 11 selection ids, plus the anchors the first-pass binding contract requires.
 TASK11_IDS = ("cup_test_left_5cm", "sample_07_mid_center", "sample_12_far_left",
@@ -85,7 +86,7 @@ def _selected(point_ids=TASK11_IDS) -> tuple[str, ...]:
 def _catalog_copy(tmp_path: Path) -> Path:
     """The installed 20-point catalog, so the selection ids are the real ones."""
 
-    source = (Path(__file__).resolve().parents[1]
+    source = (PACKAGE_ROOT
               / "config/mujoco/moveit_expert_validation_points_v1.yaml")
     target = tmp_path / source.name
     target.write_bytes(source.read_bytes())
@@ -609,7 +610,7 @@ def test_the_worker_reads_its_lease_before_it_uses_it() -> None:
     fills, and the whole post-station body must sit under one `try/finally`.
     """
 
-    source = (Path(__file__).resolve().parents[1] / "src/cli/macos_w2_worker.py").read_text()
+    source = (PACKAGE_ROOT / "src/cli/macos_w2_worker.py").read_text()
     assignment = source.index("lease_document = json.loads(")
     first_use = source.index("lease_identity = {name: lease_document.get(name)")
     assert assignment < first_use
@@ -704,7 +705,7 @@ def test_a_retry_selection_document_projects_the_original_chain(tmp_path: Path) 
 # The v5 CLI's own retry-binding contract (what the service forwards on the command line)
 # --------------------------------------------------------------------------------------
 
-V5_CONFIG = (Path(__file__).resolve().parents[1]
+V5_CONFIG = (PACKAGE_ROOT
              / "config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml")
 
 

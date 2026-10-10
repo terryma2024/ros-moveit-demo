@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 from so101_demo.act.head_search_binding import validate_head_search_binding
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 V2 = PACKAGE / "config/mujoco/act/head_search_v2.json"
 
 FIELDS = (

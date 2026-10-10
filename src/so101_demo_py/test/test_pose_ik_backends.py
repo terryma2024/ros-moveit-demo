@@ -10,8 +10,9 @@ import pytest
 
 from so101_demo.control.moveit.underactuated_ik import UnderactuatedIkError, UnderactuatedPoseIk
 from so101_demo.ports.evidence import PoseEvidence
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 URDF = PACKAGE / "assets/mujoco/so101.urdf"
 JOINTS = ("1", "2", "3", "4", "5")
 

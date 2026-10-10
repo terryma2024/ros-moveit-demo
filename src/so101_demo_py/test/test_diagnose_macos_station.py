@@ -18,6 +18,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from paths import REPOSITORY
 
 
 def _diagnostic_module():
@@ -800,7 +801,7 @@ def test_farm_environment_is_the_same_builder_as_the_runtime_contract_tool() -> 
     """The diagnostic must not grow a second, drifting runtime environment."""
 
     module = _diagnostic_module()
-    repository_root = Path(__file__).resolve().parents[3]
+    repository_root = REPOSITORY
     tool = repository_root / "scripts" / "so101_macos_runtime_contract.py"
     spec = importlib.util.spec_from_file_location("so101_macos_runtime_contract", tool)
     assert spec is not None and spec.loader is not None

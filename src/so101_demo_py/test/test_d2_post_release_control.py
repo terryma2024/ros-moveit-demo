@@ -8,12 +8,12 @@ receipt clock, scenario, diagnostic result) produced by the collector BEFORE D2 
 """
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 pytestmark = pytest.mark.fast
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 GOLDEN = {

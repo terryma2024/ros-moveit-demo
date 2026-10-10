@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import math
-from pathlib import Path
 
 import pytest
 import yaml
@@ -15,8 +14,9 @@ from so101_demo.act.teacher_endpoint import (
     load_teacher_execution_policy,
     validate_task_targets,
 )
+from paths import PACKAGE_ROOT
 
-CONFIG = Path(__file__).resolve().parent.parent / "config/act"
+CONFIG = PACKAGE_ROOT / "config/act"
 ENDPOINT_YAML = CONFIG / "teacher_endpoint_v2.yaml"
 EXECUTION_YAML = CONFIG / "teacher_execution_policy_v1.yaml"
 

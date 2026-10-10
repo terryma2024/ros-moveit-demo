@@ -1,11 +1,11 @@
 """Task 8P3: the receipt schema must describe the validator, not an older idea of it."""
 
 import json
-from pathlib import Path
 
 from so101_demo.act import task8_artifact_bundle as module
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 SCHEMA = json.loads((PACKAGE / "config/act/task8-preparation-receipt-schema.json").read_text())
 
 

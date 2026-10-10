@@ -14,8 +14,9 @@ import json
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 ARTIFACTS = ("source_provenance", "runtime_config", "collection_config", "calibration_report",
              "head_search_qualification", "measurement_contract", "anchors", "proposal",
              "activation_receipt")

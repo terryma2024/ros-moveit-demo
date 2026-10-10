@@ -50,6 +50,7 @@ from so101_teleop.process_identity import (
     identity_state,
     read_identity,
 )
+from teleop_paths import SOURCE_ROOT
 
 #: The campaign this fixture builds. It is deliberately not a recorded id: nothing in the fixture
 #: depends on a historical run, and a test that names a recorded campaign would fail here.
@@ -73,10 +74,10 @@ SOURCE_SHA256 = "a" * 64
 #: into ``tmp_path``. The restored first pass has no named profile and binds v3; a macOS retry
 #: resolves its own MPS v5 document beside that configured file.
 V3_PARALLEL_DOCUMENT = (
-    Path(__file__).resolve().parents[3] / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
+    SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
 )
 MPS_RETRY_DOCUMENT = (
-    Path(__file__).resolve().parents[3]
+    SOURCE_ROOT
     / "so101_demo_py/config/mujoco/parallel_batch_v5_macos_mps_w1_retry.yaml"
 )
 

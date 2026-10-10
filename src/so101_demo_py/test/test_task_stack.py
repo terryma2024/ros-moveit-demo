@@ -3,6 +3,7 @@ import signal
 from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
 
 class _Child:
@@ -311,7 +312,7 @@ def test_exactly_one_station_intent_is_written_per_station_spawn(tmp_path: Path)
     # The Worker that owns the station cooperates instead of recording: it contributes the
     # parent-token context and nothing else, so this source check is the other half of the proof.
     worker = (
-        Path(__file__).resolve().parents[1] / "src" / "cli" / "macos_w2_worker.py"
+        PACKAGE_ROOT / "src" / "cli" / "macos_w2_worker.py"
     ).read_text(encoding="utf-8")
     assert "OwnerSpawnRecorder" not in worker
     assert "SO101_OWNER_PARENT_TOKEN" in worker

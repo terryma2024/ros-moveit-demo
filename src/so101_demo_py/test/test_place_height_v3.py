@@ -2,14 +2,14 @@
 `teacher_place_height_v3` has its own validator. The v2 validator is untouched (its tests pass as they were)."""
 
 import math
-from pathlib import Path
 
 import pytest
 
 from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 from so101_demo.core import place_height as ph
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 V3 = PACKAGE / "config/act/teacher_execution_policy_v3.yaml"
 SCENE = PACKAGE / "assets/mujoco/act/scene.xml"
 HOVER_Z = 0.2176344

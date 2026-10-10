@@ -3,7 +3,6 @@
 import asyncio
 import hashlib
 import json
-from pathlib import Path
 import shutil
 from types import SimpleNamespace
 
@@ -16,6 +15,7 @@ from so101_teleop.expert_validation.artifacts import ValidationArtifactRegistry
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
 from so101_teleop.expert_validation.service import ServiceConflict
 from so101_teleop.expert_validation.store import SupervisorStore
+from teleop_paths import SOURCE_ROOT
 
 
 INPUTS = {
@@ -30,7 +30,7 @@ INPUTS = {
     "target_mesh": "assets/mujoco/assets/target_landing_tolerance_ring.obj",
     "anchors": "config/mujoco/rgbd_task_points.yaml",
 }
-DEMO_SOURCE = Path(__file__).resolve().parents[3] / "so101_demo_py"
+DEMO_SOURCE = SOURCE_ROOT / "so101_demo_py"
 
 
 class SameThreadApi:

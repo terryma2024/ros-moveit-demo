@@ -1,14 +1,14 @@
 """The optical center clears the upright shoulder-to-elbow arm envelope."""
 
-from pathlib import Path
 from xml.etree import ElementTree
 
 import mujoco
 import numpy as np
 import pytest
+from paths import PACKAGE_ROOT
 
 
-ASSETS = Path(__file__).resolve().parents[1] / "assets/mujoco/act"
+ASSETS = PACKAGE_ROOT / "assets/mujoco/act"
 
 
 def test_optical_center_is_eleven_centimeters_above_upright_upper_arm():

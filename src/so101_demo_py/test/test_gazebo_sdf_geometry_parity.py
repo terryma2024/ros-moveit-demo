@@ -1,10 +1,10 @@
 import math
 import xml.etree.ElementTree as ET
-from pathlib import Path
 
 import pytest
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).parents[1]
+PACKAGE = PACKAGE_ROOT
 
 
 def _numbers(text: str | None) -> tuple[float, ...]:

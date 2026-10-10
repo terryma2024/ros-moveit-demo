@@ -9,8 +9,9 @@ import pytest
 from so101_demo.act.task8_measurement_contract import (
     bind_measurement_contract, close_measurement_batch, load_measurement_contract,
 )
+from paths import PACKAGE_ROOT
 
-PACKAGE = Path(__file__).resolve().parents[1]
+PACKAGE = PACKAGE_ROOT
 TEMPLATE = PACKAGE / "config/act/task8-calibration-measurement-contract-v1.json"
 ANCHORS = ["default", "left", "forward"]
 
@@ -494,7 +495,7 @@ def test_a_changed_controlled_input_is_refused_against_the_bound_contract(tmp_pa
     from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, bind_measurement_contract,
                                                           load_measurement_contract)
 
-    template_path = (Path(__file__).resolve().parents[1]
+    template_path = (PACKAGE_ROOT
                      / "config/act/task8-calibration-measurement-contract-v2.json")
     identities = {name: "a" * 64 for name in IDENTITIES_V2}
     identities["source_commit"] = "0" * 40
