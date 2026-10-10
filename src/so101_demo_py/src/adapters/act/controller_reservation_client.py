@@ -96,7 +96,6 @@ class ControllerReservationClient:
         self._deadline_port = deadline_port
         self._lock = threading.RLock()
         self._attempted = {}
-        self._authority = None
         self._confirmed_identities = {}
         self._identity_invalidations = {}
 
@@ -393,28 +392,6 @@ class ControllerReservationClient:
             "command_authority": False,
         }
 
-    RESERVATION_BINDING_FIELDS = ("permit_id", "goal_uuid", "role", "target_digest",
-                                  "session_id", "broker_incarnation", "generation",
-                                  "controller_incarnation", "controller_boot_incarnation",
-                                  "claim_monotonic_ns", "deadline_ns")
-
-    def install_authority(self, authority):
-        """Install the sealed broker-owned composition exactly once.
-
-        The dependency is type-checked against the real class (not duck-typed) and
-        cannot be rebound or replaced afterwards.
-        """
-
-        from so101_demo.adapters.act.broker_authority_composition import BrokerAuthorityComposition
-
-        with self._lock:
-            if self._authority is not None:
-                raise ValueError("CONTROLLER_RESERVATION_AUTHORITY_ALREADY_INSTALLED")
-            if type(authority) is not BrokerAuthorityComposition:
-                raise TypeError("CONTROLLER_RESERVATION_AUTHORITY_INVALID")
-            self._authority = authority
-        return True
-
     def reserve(self, ticket, kind, goal, goal_uuid):
         if (not isinstance(ticket, tuple) or not ticket
                 or not isinstance(goal, FollowJointTrajectory.Goal)):
@@ -427,40 +404,6 @@ class ControllerReservationClient:
         with self._lock:
             self._attempted.setdefault(generation, set()).add(kind)
         return self._request(kind, 1, generation, native_uuid, payload)
-
-    def reserve_bound(self, ticket, kind, goal, goal_uuid, *, handle):
-        """Reserve with the frozen SOGB v2 frame built from the installed authority."""
-
-        if (not isinstance(ticket, tuple) or not ticket
-                or not isinstance(goal, FollowJointTrajectory.Goal)):
-            raise TypeError("CONTROLLER_RESERVATION_GOAL_INVALID")
-        if str(uuid.UUID(goal_uuid)) != goal_uuid:
-            raise ValueError("CONTROLLER_RESERVATION_UUID_INVALID")
-        authority = self._authority
-        if authority is None:
-            raise ValueError("CONTROLLER_RESERVATION_AUTHORITY_MISSING")
-        binding = authority.reservation_binding(handle)
-        if binding["role"] != kind or binding["goal_uuid"] != goal_uuid:
-            raise ValueError("CONTROLLER_RESERVATION_BINDING_GOAL_MISMATCH")
-        generation, controller_incarnation, boot = self.identity_snapshot(kind)
-        if (generation != binding["generation"]
-                or controller_incarnation != binding["controller_incarnation"]
-                or boot != binding["controller_boot_incarnation"]):
-            raise ValueError("CONTROLLER_RESERVATION_IDENTITY_MISMATCH")
-        role_number = {"arm": 1, "gripper": 2, "neck": 3}[kind]
-        frame = _encode_bound_frame(
-            generation=binding["generation"], goal_uuid=bytes.fromhex(goal_uuid.replace("-", "")),
-            role=role_number, permit_uuid=bytes.fromhex(binding["permit_id"].replace("-", "")),
-            target_digest=bytes.fromhex(binding["target_digest"]),
-            claim_monotonic_ns=binding["claim_monotonic_ns"],
-            deadline_ns=binding["deadline_ns"], session_id=binding["session_id"],
-            broker_incarnation=binding["broker_incarnation"],
-            controller_incarnation=controller_incarnation,
-            controller_boot_incarnation=boot, goal_cdr=serialize_message(goal),
-            capability=self._capabilities[kind])
-        with self._lock:
-            self._attempted.setdefault(generation, set()).add(kind)
-        return self._send_prebuilt(kind, frame, expected_generation=generation)
 
     def arm_generation(self, ticket):
         if set(self._paths) not in ({"arm", "gripper"}, {"arm", "gripper", "neck"}):
