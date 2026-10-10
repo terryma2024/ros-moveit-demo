@@ -2,12 +2,11 @@
  "bound_files": {
   "activation_receipt": "approved contact policy activation receipt",
   "anchor_config": "config/act/task8-live-anchors.yaml",
-  "camera_plugin_config": "config/mujoco/act/task6_visible_approach_v1.json",
   "contact_policy": "approved contact policy document carrying policy_fingerprint",
   "controller_config": "config/mujoco/act/ros2_controllers.yaml",
   "cuda_device_policy": "CUDA-only device policy",
   "detector_weights": "detector weight file and model id",
-  "head_search_config": "config/mujoco/act/head_search_v1.json",
+  "head_search_config": "config/mujoco/act/head_search_v2.json",
   "installed_act_profile": "installed share assets/mujoco/act and config/mujoco/act",
   "joint_limits": "assets/mujoco/act/so101.urdf joint limits",
   "mujoco_xml": "assets/mujoco/act/so101.xml",

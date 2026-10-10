@@ -12,8 +12,7 @@ from so101_demo.act.task8_measurement_contract import (
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-TEMPLATE = PACKAGE / "config/act/task8-calibration-measurement-contract-v1.json"
-ANCHORS = ["default", "left", "forward"]
+TEMPLATE = PACKAGE / "config/act/pick-place-calibration-measurement-contract.json"
 
 
 def _sha(path: Path) -> str:
@@ -22,9 +21,12 @@ def _sha(path: Path) -> str:
 
 @pytest.fixture
 def identities():
-    return {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
-            "anchors_sha256": _sha(PACKAGE / "config/act/task8-live-anchors.yaml"),
-            "contact_policy_fingerprint": "c" * 64, "act_profile_sha256": "d" * 64}
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
+
+    value = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
+    value.update(source_commit="0" * 40, anchors_sha256=_sha(PACKAGE / "config/act/task8-live-anchors.yaml"),
+                 runtime_config_sha256="b" * 64)
+    return value
 
 
 def test_bind_records_every_source_hash_and_refuses_the_unbound_template(tmp_path, identities):
@@ -34,7 +36,7 @@ def test_bind_records_every_source_hash_and_refuses_the_unbound_template(tmp_pat
     document = load_measurement_contract(output, expected_hashes=identities)
     assert document["identities"] == identities
     assert document["source_hashes"]["template"] == _sha(TEMPLATE)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_UNBOUND"):
         load_measurement_contract(TEMPLATE, expected_hashes=identities)   # template is unbound
 
 
@@ -48,24 +50,12 @@ def test_bind_refuses_to_overwrite_and_rejects_wrong_identity(tmp_path, identiti
         load_measurement_contract(output, expected_hashes=mismatched)
 
 
-def test_bound_contract_carries_the_frozen_thresholds(tmp_path, identities):
-    bound = bind_measurement_contract(TEMPLATE, identities, tmp_path / "contract.json")
-    document = load_measurement_contract(bound, expected_hashes=identities)
-    assert document["thresholds"]["search"]["min_consecutive_lock_frames"] == 3
-    assert document["thresholds"]["fov"]["sample_period_s"] == 0.002
-    assert document["thresholds"]["collision"]["full_request_budget_ms"] == 25
-    assert document["thresholds"]["collision"]["full_request_count"] == 4
-    # the contract carries exactly the three frozen anchors, in the template order
-    assert document["anchors"] == ANCHORS
-    assert sorted(document["anchors"]) == sorted(ANCHORS)
-
-
 def test_batch_close_is_one_way_and_identity_bound(tmp_path):
     root = tmp_path / "batch"
     # the batch carries the contract's ten-member identity: the schema that admitted the measurement seals it
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
 
-    identity = {name: "a" * 64 for name in IDENTITIES_V2}
+    identity = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identity["source_commit"] = "0" * 40
     sealed = close_measurement_batch(root, identity, cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"})
     assert Path(sealed).is_file()
@@ -103,11 +93,11 @@ EXPECTED_OCCLUDERS = [
 ]
 
 
-def test_contract_v2_freezes_the_21_head_search_fields_with_calibration_units():
+def test_contract_freezes_the_21_head_search_fields_with_calibration_units():
     from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
-    document = load_contract_v2()
+    document = load_contract()
     assert set(document["measurements"]) == HEAD_SEARCH_FIELDS
     assert len(HEAD_SEARCH_FIELDS) == 21
     for name, entry in document["measurements"].items():
@@ -116,11 +106,11 @@ def test_contract_v2_freezes_the_21_head_search_fields_with_calibration_units():
                               "threshold_source", "failure_code"}, name
 
 
-def test_contract_v2_freezes_the_seven_support_fields():
+def test_contract_freezes_the_seven_support_fields():
     from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
-    document = load_contract_v2()
+    document = load_contract()
     assert set(document["support"]) == SUPPORT_FIELDS
     assert len(SUPPORT_FIELDS) == 7
     for name, entry in document["support"].items():
@@ -194,20 +184,20 @@ def test_closing_a_batch_refuses_an_identity_that_is_not_the_contract_identity(t
     """Boundary I: the sealed batch must carry the contract's ten-member identity, not whatever the caller held.
 
     The CLI today seals with a two-key mapping it builds for its ledger line, so this asserts the schema boundary the
-    contract already defines: an identity that is not ``IDENTITIES_V2`` cannot close a batch.
+    contract already defines: an identity that is not ``MEASUREMENT_IDENTITIES`` cannot close a batch.
     """
 
-    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, close_measurement_batch,
-                                                          require_v2_identity)
+    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
+                                                          require_identity)
 
     batch = tmp_path / "batch"
     batch.mkdir()
     two_key = {"source_provenance_sha256": "a" * 64, "contract_sha256": "b" * 64}
-    assert tuple(sorted(IDENTITIES_V2)) != tuple(sorted(two_key)), "the fixture must not be a valid identity"
+    assert tuple(sorted(MEASUREMENT_IDENTITIES)) != tuple(sorted(two_key)), "the fixture must not be a valid identity"
     with pytest.raises(ValueError, match="MEASUREMENT_BATCH_IDENTITY_INVALID"):
         close_measurement_batch(batch, two_key)
     with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_IDENTITY_INVALID"):
-        require_v2_identity(two_key)
+        require_identity(two_key)
 
 
 def test_the_measurement_cli_requires_a_context_document_separate_from_the_identity(tmp_path):
@@ -222,12 +212,12 @@ def test_the_measurement_cli_requires_a_context_document_separate_from_the_ident
 
     # a bound v2 contract plus an identities file carrying exactly the contract's ten identity members, so the run
     # reaches the context boundary instead of stopping at an unbound template or a missing file
-    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, KIND, SCHEMA_VERSION_V2,
+    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
                                                           _contract_sha256)
 
-    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identities["source_commit"] = "0" * 40
-    document = {"schema_version": SCHEMA_VERSION_V2, "kind": KIND, "identities": identities,
+    document = {"schema_version": SCHEMA_VERSION, "kind": KIND, "identities": identities,
                 "source_hashes": {"anchors": "b" * 64}, "bound_files": {"anchors": "config/act/anchors.yaml"},
                 "measurements": {}, "support": {}}
     document["contract_sha256"] = _contract_sha256(document)
@@ -246,12 +236,12 @@ def test_the_measurement_cli_requires_a_context_document_separate_from_the_ident
 def _bound_contract(tmp_path):
     """A bound v2 contract plus the identities file that matches it - the pair the CLI's admission requires."""
 
-    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, KIND, SCHEMA_VERSION_V2,
+    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
                                                           _contract_sha256)
 
-    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identities["source_commit"] = "0" * 40
-    document = {"schema_version": SCHEMA_VERSION_V2, "kind": KIND, "identities": identities,
+    document = {"schema_version": SCHEMA_VERSION, "kind": KIND, "identities": identities,
                 "source_hashes": {"anchors": "b" * 64}, "bound_files": {"anchors": "config/act/anchors.yaml"},
                 "measurements": {}, "support": {}}
     document["contract_sha256"] = _contract_sha256(document)
@@ -298,11 +288,11 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     like a sha256.
     """
 
-    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, close_measurement_batch,
-                                                          require_v2_identity)
+    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
+                                                          require_identity)
     from so101_demo.act.task8_measurement_schema import validate_closed_batch
 
-    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+    identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identities["source_commit"] = "0" * 40
     root = tmp_path / "batch"
     root.mkdir()
@@ -310,7 +300,7 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     for anchor in ("default", "left", "forward"):                       # the seal declares three, so evidence three
         (root / "sync").mkdir(exist_ok=True)
         (root / "sync" / f"{anchor}.json").write_text('{"samples": []}')
-    sealed = Path(close_measurement_batch(root, require_v2_identity(identities), cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"}))
+    sealed = Path(close_measurement_batch(root, require_identity(identities), cleanup={"cleanup_complete": True, "generation": "g1", "reason": "fixture"}))
     assert validate_closed_batch(root) is not None, "an untouched sealed batch validates"
 
     document = json.loads(sealed.read_text())
@@ -492,12 +482,12 @@ def test_a_changed_controlled_input_is_refused_against_the_bound_contract(tmp_pa
 
     import json as _json
 
-    from so101_demo.act.task8_measurement_contract import (IDENTITIES_V2, bind_measurement_contract,
+    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, bind_measurement_contract,
                                                           load_measurement_contract)
 
     template_path = (PACKAGE_ROOT
-                     / "config/act/task8-calibration-measurement-contract-v2.json")
-    identities = {name: "a" * 64 for name in IDENTITIES_V2}
+                     / "config/act/pick-place-calibration-measurement-contract.json")
+    identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identities["source_commit"] = "0" * 40
     bound_path = tmp_path / "bound.json"
     bind_measurement_contract(template_path, identities, bound_path)   # the binder returns the document
@@ -506,3 +496,31 @@ def test_a_changed_controlled_input_is_refused_against_the_bound_contract(tmp_pa
     with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_IDENTITY_MISMATCH"):
         load_measurement_contract(bound_path, expected_hashes=changed)
     assert load_measurement_contract(bound_path, expected_hashes=identities) is not None, "the unchanged set loads"
+
+
+def test_the_contract_names_only_files_that_exist_in_the_package():
+    """Every bound file that is a repository path must exist: a retired file may not stay named by the contract."""
+
+    document = json.loads(TEMPLATE.read_text())
+    import re
+
+    paths = [value for value in document["bound_files"].values()
+             if re.fullmatch(r"(config|assets)/[\w./-]+", value)]
+    assert paths, "the contract binds repository files"
+    missing = [value for value in paths if not (PACKAGE / value).exists()]
+    assert missing == [], missing
+
+
+def test_a_template_or_contract_of_another_schema_is_refused(tmp_path, identities):
+    document = json.loads(TEMPLATE.read_text())
+    retired = tmp_path / "retired-template.json"
+    retired.write_text(json.dumps({**document, "schema_version": 1}))
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_TEMPLATE_INVALID"):
+        bind_measurement_contract(retired, identities, tmp_path / "contract.json")
+    bound = bind_measurement_contract(TEMPLATE, identities, tmp_path / "bound.json")
+    foreign = json.loads(bound.read_text())
+    foreign["schema_version"] = 1
+    path = tmp_path / "foreign-contract.json"
+    path.write_text(json.dumps(foreign))
+    with pytest.raises(ValueError, match="MEASUREMENT_CONTRACT_INVALID"):
+        load_measurement_contract(path, expected_hashes=identities)

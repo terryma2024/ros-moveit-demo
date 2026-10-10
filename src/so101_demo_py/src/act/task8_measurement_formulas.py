@@ -30,8 +30,8 @@ class FieldResultSet(dict):
 
 def _load_contract(path: Path | None = None) -> dict:
     if path is None:
-        from .task8_measurement_schema import load_contract_v2
-        return load_contract_v2()
+        from .task8_measurement_schema import load_contract
+        return load_contract()
     return json.loads(Path(path).read_bytes())
 
 

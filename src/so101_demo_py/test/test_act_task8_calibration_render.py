@@ -23,9 +23,9 @@ def _render():
 
 
 def _contract():
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
-    return load_contract_v2()
+    return load_contract()
 
 
 def _sealed_batch(root, *, anchors=("default", "left", "forward"), measurements=None, status="CLOSED",

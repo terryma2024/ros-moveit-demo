@@ -48,14 +48,14 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     from so101_demo.act.task8_measurement_contract import (
-        close_measurement_batch, load_measurement_contract, require_v2_identity,
+        close_measurement_batch, load_measurement_contract, require_identity,
     )
     from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
 
     identities = json.loads(args.identities.read_text())
     contract = load_measurement_contract(args.contract, expected_hashes=identities)
     # the batch is sealed with the contract's ten-member identity; the ledger line keeps its own two-field shape
-    identity = require_v2_identity(identities)
+    identity = require_identity(identities)
     ledger_identity = {"source_provenance_sha256": identity["source_provenance_sha256"],
                        "contract_sha256": contract["contract_sha256"]}
     _append_ledger(args.ledger, "PLANNED", ledger_identity, "admission verified")

@@ -35,7 +35,7 @@ value                                the consumer it is read from
 ===================================  ==========================================================
 
 The four camera measurements are observed **live from the running stack**, exactly as the Task 8
-measurement contract defines them (``config/act/task8-calibration-measurement-contract-v2.json``):
+measurement contract defines them (``config/act/pick-place-calibration-measurement-contract.json``):
 ``head_intrinsics_px`` from the ``/head_camera/camera_info`` the running camera plugin publishes,
 ``head_translation_m`` and ``head_rpy_rad`` from the ``base -> head_camera_frame`` transform the running
 description publishes, and ``yaw_zero_bearing_rad`` from the bearing of that rotation's optical forward

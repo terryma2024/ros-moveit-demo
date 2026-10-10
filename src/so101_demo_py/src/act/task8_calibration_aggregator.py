@@ -60,97 +60,6 @@ def _read(root: Path, relative: str):
     return json.loads(path.read_bytes())
 
 
-def _fov(root: Path, period_s: float) -> str:
-    verdict = "PASS"
-    for anchor in _ANCHORS:
-        document = _read(root, f"fov/{anchor}.json")
-        if document is None or not document.get("samples"):
-            return "UNMEASURED"
-        previous = None
-        for sample in document["samples"]:
-            stamp = sample.get("t_s")
-            if not isinstance(stamp, (int, float)):
-                return "UNMEASURED"
-            if previous is not None and abs((stamp - previous) - period_s) > period_s / 2:
-                verdict = "FAIL"
-            previous = stamp
-            if sample.get("target_in_view") is not True:
-                verdict = "FAIL"
-    return verdict
-
-
-def _search(root: Path, minimum: int) -> str:
-    verdict = "PASS"
-    for anchor in _ANCHORS:
-        document = _read(root, f"search/{anchor}.json")
-        if document is None or not document.get("lock_frames"):
-            return "UNMEASURED"
-        best = 0
-        run = 0
-        target = None
-        for frame in document["lock_frames"]:
-            if frame.get("qualified") is True:
-                if frame.get("target_id") == target:
-                    run += 1
-                else:
-                    target, run = frame.get("target_id"), 1
-                best = max(best, run)
-            else:
-                target, run = None, 0
-        if best < minimum:
-            verdict = "FAIL"
-    return verdict
-
-
-def _synchronization(root: Path, thresholds: dict) -> str:
-    verdict = "PASS"
-    for anchor in _ANCHORS:
-        document = _read(root, f"sync/{anchor}.json")
-        if document is None or not document.get("samples"):
-            return "UNMEASURED"
-        previous = None
-        for sample in document["samples"]:
-            age, skew, stamp = sample.get("age_s"), sample.get("skew_s"), sample.get("t_s")
-            if not all(isinstance(value, (int, float)) for value in (age, skew)):
-                return "UNMEASURED"
-            if age > thresholds["max_age_s"] or skew > thresholds["max_skew_s"]:
-                verdict = "FAIL"
-            if stamp is not None:
-                if previous is not None and stamp < previous:
-                    verdict = "FAIL"
-                previous = stamp
-    return verdict
-
-
-def _collision(root: Path, thresholds: dict) -> str:
-    document = _read(root, "collision.json")
-    if document is None or not document.get("calls"):
-        return "UNMEASURED"
-    calls = document["calls"]
-    if len(calls) != thresholds["full_request_count"]:
-        return "FAIL"
-    for call in calls:
-        duration = call.get("duration_ms")
-        if not isinstance(duration, (int, float)):
-            return "UNMEASURED"
-        if duration > thresholds["full_request_budget_ms"] or call.get("contact_ok") is not True:
-            return "FAIL"
-    return "PASS"
-
-
-def _execution(root: Path) -> str:
-    document = _read(root, "execution.json")
-    receipt = _read(root, "cleanup-receipt.json")
-    if document is None:
-        return "UNMEASURED"
-    if receipt is None or receipt.get("group_clear") is not True:
-        return "FAIL"
-    for name in ("reference_matches_permit", "velocity_ok", "acceleration_ok", "stop_ok"):
-        if document.get(name) is not True:
-            return "FAIL"
-    return "PASS"
-
-
 def _bare(entry):
     """A sample records bare values; the published report records unit-bearing entries."""
 
@@ -210,37 +119,22 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     )
 
     admitted = admitted_identity(contract)
-    # Two schemas, one rule each, stated here rather than implied: a V2 contract carries the ten-field identity, so the
-    # batch must carry the identity this contract admitted; a V1 contract's identity has five members and no contract
-    # member at all, so the only name it has for itself is the document's self-digest.
-    contract_identity = admitted.get(IDENTITY_CONTRACT_MEMBER, bound_document_digest(contract))
+    # the contract carries the ten-field identity, so the batch must carry the identity this contract admitted
+    contract_identity = admitted[IDENTITY_CONTRACT_MEMBER]
     for batch, identity in batches:
         if identity.get(IDENTITY_CONTRACT_MEMBER) != contract_identity:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     # and every member must agree across roots, not only the provenance: two batches measured under different anchor
     # sets or camera matrices are not the same generation, however equal their provenance happens to be
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
 
-    for name in IDENTITIES_V2:
+    for name in MEASUREMENT_IDENTITIES:
         values = {identity.get(name) for _, identity in batches}
         if len(values) != 1 or None in values:
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
-    if "thresholds" in contract:
-        thresholds = contract["thresholds"]
-        checks = {
-            "fov": _fov(roots[0], thresholds["fov"]["sample_period_s"]),
-            "collision": _collision(roots[0], thresholds["collision"]),
-            "search": _search(roots[0], thresholds["search"]["min_consecutive_lock_frames"]),
-            "synchronization": _synchronization(roots[0], thresholds["synchronization"]),
-            "execution": _execution(roots[0]),
-            "release": "UNMEASURED",
-            "retreat": "UNMEASURED",
-        }
-    else:
-        # v2 carries per-field comparators instead of aggregate thresholds, so the five ready checks are folded from
-        # the per-field verdicts over the repository's own CHECK_MEASUREMENTS groups - and release/retreat stay
-        # UNMEASURED, because those five live-only fields belong to the later 33-field QUALIFIED report and a
-        # TASK8_READY report must not claim them
+    # the contract carries per-field comparators, so the five ready checks are folded from the per-field verdicts over the
+    # repository's own CHECK_MEASUREMENTS groups - and release/retreat stay UNMEASURED, because those five live-only fields
+    # belong to the later 33-field QUALIFIED report and a TASK8_READY report must not claim them
         checks = dict(derived_checks(roots, contract))
         checks["release"] = "UNMEASURED"
         checks["retreat"] = "UNMEASURED"
@@ -379,7 +273,7 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
         require_raw_inputs(raw)
         verdicts = {}
         for section in ("measurements", "support"):
-            for field in contract.get(section, {}):     # a v1 bound contract carries no support section
+            for field in contract.get(section, {}):
                 if field not in raw["measurements"]:
                     # a field with no raw record is explicitly UNMEASURED - never a silent pass
                     verdicts[field] = "UNMEASURED"
@@ -527,7 +421,7 @@ def _field_verdicts(batch: dict, records: dict, contract: dict) -> dict:
     for relative, record in records.items():
         raw = {"measurements": record.get("measurements") or {}, "configured": record.get("configured") or {}}
         for section in ("measurements", "support"):
-            for field in contract.get(section, {}):     # a v1 bound contract carries no support section
+            for field in contract.get(section, {}):
                 if field not in raw["measurements"]:
                     continue
                 try:

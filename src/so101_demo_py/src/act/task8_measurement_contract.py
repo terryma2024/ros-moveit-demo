@@ -14,39 +14,33 @@ import re
 import stat
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+# the approved measurement protocol: the contract carries the ten-member identity, the bound-file list and the
+# per-measurement metadata, and every field is recomputed from raw evidence
+SCHEMA_VERSION = 2
 KIND = "task8_calibration_measurement_contract"
 TEMPLATE_KIND = "task8_calibration_measurement_contract_template"
 BATCH_KIND = "task8_calibration_batch"
+#: the sealed measurement batch document is its own kind with its own version
+BATCH_SCHEMA_VERSION = 1
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
-_IDENTITIES = ("source_provenance_sha256", "runtime_config_sha256", "anchors_sha256",
-               "contact_policy_fingerprint", "act_profile_sha256")
-_TEMPLATE_KEYS = ("schema_version", "kind", "anchors", "measurements", "camera_measurements",
-                  "thresholds", "verdicts")
-_BOUND_KEYS = ("schema_version", "kind", "identities", "source_hashes", "anchors",
-               "measurements", "camera_measurements", "thresholds", "verdicts",
-               "contract_sha256")
-# protocol v2 (approved measurement-protocol amendment): the contract carries the ten-member identity, the
-# bound-file list and the per-measurement metadata, and every field is recomputed from raw evidence
-SCHEMA_VERSION_V2 = 2
-IDENTITIES_V2 = ("source_commit", "config_sha256", "source_provenance_sha256", "runtime_config_sha256",
+MEASUREMENT_IDENTITIES = ("source_commit", "config_sha256", "source_provenance_sha256", "runtime_config_sha256",
                  "anchors_sha256", "contact_policy_fingerprint", "act_profile_sha256",
                  "measurement_contract_sha256", "phase_camera_matrix_sha256", "driver_source_sha256")
-_V2_TEMPLATE_KEYS = ("schema_version", "kind", "status", "source_design", "source_plan", "bound_files",
-                     "measurements", "support", "notes")
-_V2_BOUND_KEYS = ("schema_version", "kind", "identities", "source_hashes", "bound_files", "measurements",
+_TEMPLATE_KEYS = ("schema_version", "kind", "status", "source_design", "source_plan", "bound_files",
+                  "measurements", "support", "notes")
+_BOUND_KEYS = ("schema_version", "kind", "identities", "source_hashes", "bound_files", "measurements",
                   "support", "contract_sha256")
 _SOURCE_COMMIT = re.compile(r"[0-9a-f]{40}\Z")
 
 
-def require_v2_identity(identities: object) -> dict:
+def require_identity(identities: object) -> dict:
     """The ten-member identity: `source_commit` is a git SHA, every other member a 64-hex digest."""
 
-    if type(identities) is not dict or tuple(sorted(identities)) != tuple(sorted(IDENTITIES_V2)):
+    if type(identities) is not dict or tuple(sorted(identities)) != tuple(sorted(MEASUREMENT_IDENTITIES)):
         raise ValueError("MEASUREMENT_CONTRACT_IDENTITY_INVALID")
     if _SOURCE_COMMIT.fullmatch(str(identities["source_commit"])) is None:
         raise ValueError("MEASUREMENT_CONTRACT_IDENTITY_INVALID")
-    for name in IDENTITIES_V2:
+    for name in MEASUREMENT_IDENTITIES:
         if name == "source_commit":
             continue
         if _SHA.fullmatch(str(identities[name])) is None:
@@ -113,32 +107,16 @@ def bind_measurement_contract(template_path: Path, identities: dict, output: Pat
         raise ValueError("MEASUREMENT_CONTRACT_TEMPLATE_INVALID") from error
     if type(template) is not dict:
         raise ValueError("MEASUREMENT_CONTRACT_TEMPLATE_INVALID")
-    if template.get("schema_version") == SCHEMA_VERSION_V2:
-        if (tuple(sorted(template)) != tuple(sorted(_V2_TEMPLATE_KEYS))
-                or template.get("kind") != TEMPLATE_KIND):
-            raise ValueError("MEASUREMENT_CONTRACT_TEMPLATE_INVALID")
-        document = {
-            "schema_version": SCHEMA_VERSION_V2, "kind": KIND,
-            "identities": require_v2_identity(identities),
-            "source_hashes": {"template": _digest(template_path)},
-            "bound_files": dict(template["bound_files"]),
-            "measurements": dict(template["measurements"]), "support": dict(template["support"]),
-        }
-    else:
-        if (type(identities) is not dict or tuple(sorted(identities)) != tuple(sorted(_IDENTITIES))
-                or any(_SHA.fullmatch(str(value)) is None for value in identities.values())):
-            raise ValueError("MEASUREMENT_CONTRACT_IDENTITY_INVALID")
-        if (tuple(sorted(template)) != tuple(sorted(_TEMPLATE_KEYS))
-                or template["schema_version"] != SCHEMA_VERSION
-                or template["kind"] != TEMPLATE_KIND):
-            raise ValueError("MEASUREMENT_CONTRACT_TEMPLATE_INVALID")
-        document = {
-            "schema_version": SCHEMA_VERSION, "kind": KIND, "identities": dict(identities),
-            "source_hashes": {"template": _digest(template_path)},
-            "anchors": list(template["anchors"]), "measurements": dict(template["measurements"]),
-            "camera_measurements": dict(template["camera_measurements"]),
-            "thresholds": dict(template["thresholds"]), "verdicts": list(template["verdicts"]),
-        }
+    if (template.get("schema_version") != SCHEMA_VERSION or tuple(sorted(template)) != tuple(sorted(_TEMPLATE_KEYS))
+            or template.get("kind") != TEMPLATE_KIND):
+        raise ValueError("MEASUREMENT_CONTRACT_TEMPLATE_INVALID")
+    document = {
+        "schema_version": SCHEMA_VERSION, "kind": KIND,
+        "identities": require_identity(identities),
+        "source_hashes": {"template": _digest(template_path)},
+        "bound_files": dict(template["bound_files"]),
+        "measurements": dict(template["measurements"]), "support": dict(template["support"]),
+    }
     document["contract_sha256"] = _contract_sha256(document)
     payload = _canonical(document)
     partial = Path(str(output) + ".partial")
@@ -167,15 +145,8 @@ def load_measurement_contract(path: Path, *, expected_hashes: dict) -> dict:
         raise ValueError("MEASUREMENT_CONTRACT_INVALID") from error
     if type(document) is not dict:
         raise ValueError("MEASUREMENT_CONTRACT_INVALID")
-    keys = tuple(sorted(document))
-    version = document.get("schema_version")
-    if keys == tuple(sorted(_V2_BOUND_KEYS)) and version == SCHEMA_VERSION_V2:
-        if document.get("kind") != KIND:
-            raise ValueError("MEASUREMENT_CONTRACT_INVALID")
-    elif keys == tuple(sorted(_BOUND_KEYS)) and version == SCHEMA_VERSION:
-        if document.get("kind") != KIND:
-            raise ValueError("MEASUREMENT_CONTRACT_INVALID")
-    else:
+    if (tuple(sorted(document)) != tuple(sorted(_BOUND_KEYS)) or document.get("schema_version") != SCHEMA_VERSION
+            or document.get("kind") != KIND):
         if document.get("kind") == TEMPLATE_KIND:
             raise ValueError("MEASUREMENT_CONTRACT_UNBOUND")
         raise ValueError("MEASUREMENT_CONTRACT_INVALID")
@@ -199,7 +170,7 @@ def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED
     # the batch's identity is the contract's ten-member identity, not whatever mapping the caller happens to hold:
     # the same schema that admitted the measurement is the one that seals it
     try:
-        require_v2_identity(identity)
+        require_identity(identity)
     except ValueError as error:
         raise ValueError("MEASUREMENT_BATCH_IDENTITY_INVALID") from error
     if status not in ("CLOSED", "INVALID"):
@@ -215,7 +186,7 @@ def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED
     for path in sorted(root.rglob("*")):
         if path.is_file() and path.name != "batch.json":
             files[path.relative_to(root).as_posix()] = _digest(path)
-    document = {"schema_version": SCHEMA_VERSION, "kind": BATCH_KIND, "status": status,
+    document = {"schema_version": BATCH_SCHEMA_VERSION, "kind": BATCH_KIND, "status": status,
                 "identity": dict(identity), "files": files,
                 "anchors": ["default", "left", "forward"]}
     # the same optional fields the production seal carries: a CLOSED batch must be able to name its cleanup proof,

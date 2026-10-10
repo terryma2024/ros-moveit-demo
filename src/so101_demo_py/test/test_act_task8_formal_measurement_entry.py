@@ -147,8 +147,8 @@ def _formal_run(tmp_path, monkeypatch):
 
     from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
-    from test_act_task8_measurement_runtime_descriptor import TEMPLATE_V2
-    from so101_demo.act.task8_measurement_contract import require_v2_identity
+    from test_act_task8_measurement_runtime_descriptor import TEMPLATE
+    from so101_demo.act.task8_measurement_contract import require_identity
     from test_act_task8_calibration_aggregator import _cli_identities
     from so101_demo.cli import act_measure_task8_calibration as measure
 
@@ -164,7 +164,7 @@ def _formal_run(tmp_path, monkeypatch):
     identities_document = _cli_identities()
     identities = tmp_path / "identities.json"
     identities.write_text(json.dumps(identities_document))
-    bound = bind_measurement_contract(TEMPLATE_V2, identities_document, tmp_path / "bound-v2.json")
+    bound = bind_measurement_contract(TEMPLATE, identities_document, tmp_path / "bound-v2.json")
     # the repo's own MATCHED pair (runtime descriptor + admitted calibration), reused rather than re-invented: a
     # mismatched pair is refused as HEAD_SEARCH_SAMPLE_MISMATCH, which is the binding doing its job
     from test_act_head_search_binding import _inputs
@@ -177,7 +177,7 @@ def _formal_run(tmp_path, monkeypatch):
     document["search_start_rad"] = 0.0
     context_path = tmp_path / "context.json"
     context_path.write_text(json.dumps(document))
-    require_v2_identity(identities_document)
+    require_identity(identities_document)
 
     argv = ["--contract", str(bound), "--identities", str(identities),
             "--batch-root", str(tmp_path / "batch"), "--ledger", str(tmp_path / "ledger.md"),

@@ -72,9 +72,9 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
 
     # the owner's disposition (CP-1789): a field whose THRESHOLD is not approved reports UNMEASURED rather than a
     # comparison against a limit that does not exist
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
-    contract_v2 = load_contract_v2()
+    contract_v2 = load_contract()
     # "pending" means the THRESHOLD comes from a config document that has not been approved yet - the same
     # discriminator the aggregator uses, because `threshold_source` is free text: the contract says `"config"`,
     # `"bound calibration-search config"`, and for the camera `"模型 FOV + tolerance"`, which is a source that exists.

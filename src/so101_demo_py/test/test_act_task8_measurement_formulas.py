@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.task8_measurement_schema import load_contract_v2
+from so101_demo.act.task8_measurement_schema import load_contract
 
-CONTRACT = load_contract_v2()
+CONTRACT = load_contract()
 HEAD_FIELDS = sorted(CONTRACT["measurements"])
 SUPPORT_FIELDS = sorted(CONTRACT["support"])
 HEAD_SAMPLE_KEYS = {

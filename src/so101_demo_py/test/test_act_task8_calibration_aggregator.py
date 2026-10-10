@@ -24,8 +24,7 @@ from so101_demo.act.task8_measurement_contract import (
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-TEMPLATE = PACKAGE / "config/act/task8-calibration-measurement-contract-v1.json"
-TEMPLATE_V2 = PACKAGE_ROOT / "config/act" / "task8-calibration-measurement-contract-v2.json"
+TEMPLATE = PACKAGE_ROOT / "config/act" / "pick-place-calibration-measurement-contract.json"
 ANCHORS = ("default", "left", "forward")
 
 
@@ -37,10 +36,7 @@ def _write(path: Path, payload) -> Path:
 
 @pytest.fixture
 def contract(tmp_path):
-    identities = {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
-                  "anchors_sha256": "c" * 64, "contact_policy_fingerprint": "d" * 64,
-                  "act_profile_sha256": "e" * 64}
-    return json.loads(bind_measurement_contract(TEMPLATE, identities,
+    return json.loads(bind_measurement_contract(TEMPLATE, _cli_identities(),
                                                 tmp_path / "contract.json").read_text())
 
 
@@ -50,7 +46,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, _canonical
+from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES, _canonical
 from so101_demo.act.task8_measurement_schema import write_closed_json
 
 
@@ -87,172 +83,30 @@ def seal_valid(root, contract):
 
 
 
-def batch_factory(tmp_path, contract, name="batch", *, declared_status="CLOSED", status_field=None,
-                  source_provenance_sha256="a" * 64, lock_frames=None, fov_ok=True,
-                  sync=True, collision_ok=True, execution_ok=True, descriptor=True):
-    root = tmp_path / name
-    lock_frames = lock_frames or {"default": 4, "left": 4, "forward": 4}
-    (root / "declared.json").parent.mkdir(parents=True, exist_ok=True)
-    _write(root / "declared.json", {"declared_status": declared_status})
-    for anchor in ANCHORS:
-        samples = [{"t_s": index * 0.002,
-                    "target_in_view": fov_ok or index < 3} for index in range(6)]
-        _write(root / f"fov/{anchor}.json", {"samples": samples})
-        frames = [{"t_s": index * 0.05, "target_id": "cup", "qualified": index < lock_frames[anchor]}
-                  for index in range(max(lock_frames.values()) + 1)]
-        _write(root / f"search/{anchor}.json", {"lock_frames": frames})
-        if sync:
-            _write(root / f"sync/{anchor}.json",
-                   {"samples": [{"age_s": 0.05, "skew_s": 0.01} for _ in range(4)]})
-    calls = [{"request_index": index, "duration_ms": 20.0 if collision_ok or index != 3 else 40.0,
-              "contact_ok": True} for index in range(4)]
-    _write(root / "collision.json", {"calls": calls})
-    _write(root / "execution.json", {"reference_matches_permit": execution_ok,
-                                     "velocity_ok": execution_ok, "acceleration_ok": execution_ok,
-                                     "submit_lead_s": 0.05, "stop_ok": execution_ok})
-    _write(root / "cleanup-receipt.json", {"group_clear": True})
-    _write(root / "measurements.json", {
-        "measurements": {name: {"value": 1.0, "unit": "rad"} for name in (
-            "horizontal_fov_rad", "coarse_step_rad", "search_timeout_s",
-            "max_fine_corrections", "max_fine_total_rad", "min_confidence", "tracking_iou",
-            "min_bbox_aspect", "center_deadband_px", "vertical_bounds_px", "min_area_px2",
-            "max_age_s", "max_skew_s", "lock_valid_neck_rad", "submit_lead_s",
-            "stop_velocity_rad_s", "stop_latency_s")
-            + tuple(sorted(contract.get("support", {})))},     # a real batch carries the support fields too
-        "camera_measurements": {name: {"value": 1.0, "unit": "px"} for name in (
-            "head_intrinsics_px", "head_translation_m", "head_rpy_rad",
-            "yaw_zero_bearing_rad")},
-        "observed_lock_frames": {anchor: lock_frames[anchor] for anchor in ANCHORS}})
-    # Astra item 4: every sealed batch indexes its runtime descriptor, so the fixture writes one before sealing -
-    # descriptor=False builds the bare root that the aggregator must refuse
-    if descriptor:
-        _write(root / "runtime-descriptor.json", _descriptor())
-    # the batch is sealed by the production entry point, which records every raw file hash
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
-
-    # P1-2: for a V2 contract the batch carries the identity the contract ADMITTED - no rewriting, because that is
-    # what the formal entry seals and what the aggregator compares against. This suite's `contract` fixture is a V1
-    # document (five-member identity), whose only self-name is its own digest, so that member is what it declares.
-    identity = {name: "b" * 64 for name in IDENTITIES_V2}
-    identity["source_commit"] = "a" * 40
-    identity["source_provenance_sha256"] = source_provenance_sha256
-    admitted = contract["identities"]
-    identity["measurement_contract_sha256"] = admitted.get("measurement_contract_sha256",
-                                                           contract["contract_sha256"])
-    close_measurement_batch(root, identity,
-                            status=(status_field or
-                                    ("INVALID" if declared_status == "INVALID"
-                                     else "CLOSED")),
-                            # a CLOSED batch must carry its cleanup proof; the validator requires presence, not shape
-                            cleanup={"group_clear": True})
-    return root
-
-
 def _report(outputs):
     return json.loads(Path(outputs["calibration_report"]).read_text())
-
-
-def test_aggregator_never_trusts_raw_pass_labels(tmp_path, contract):
-    batch = batch_factory(tmp_path, contract,
-                          lock_frames={"default": 2, "left": 4, "forward": 4},
-                          declared_status="PASS")
-    report = _report(aggregate_task8_calibration((batch,), contract, tmp_path / "out"))
-    assert report["status"] == "CALIBRATION_REQUIRED"
-    assert report["checks"]["search"] == "FAIL"
-
-
-def test_aggregator_rejects_mixed_source_provenance(tmp_path, contract):
-    a = batch_factory(tmp_path, contract, "a", source_provenance_sha256="a" * 64)
-    b = batch_factory(tmp_path, contract, "b", source_provenance_sha256="b" * 64)
-    with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH"):
-        aggregate_task8_calibration((a, b), contract, tmp_path / "out")
-
-
-def test_full_pass_with_release_unmeasured_becomes_task8_ready(tmp_path, contract):
-    batch = batch_factory(tmp_path, contract)
-    outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
-    assert set(outputs) == {"head_search_qualification", "calibration_report",
-                            "aggregation_receipt"}
-    report = _report(outputs)
-    assert report["status"] == "TASK8_READY"
-    assert set(report["checks"]) >= {"fov", "collision", "search", "synchronization", "execution"}
-    assert all(value == "PASS" for key, value in report["checks"].items()
-               if key in {"fov", "collision", "search", "synchronization", "execution"})
-    assert report["checks"].get("release") == "UNMEASURED"
-    assert report["checks"].get("retreat") == "UNMEASURED"
-    assert report["source_provenance_sha256"] == "a" * 64
-    sample = json.loads(Path(outputs["head_search_qualification"]).read_text())
-    assert sample["source_provenance_sha256"] == "a" * 64
-
-
-@pytest.mark.parametrize("mutation,check", [
-    ("fov", "fov"), ("sync", "synchronization"), ("collision", "collision"),
-    ("execution", "execution"),
-])
-def test_out_of_contract_evidence_fails_the_matching_check(tmp_path, contract, mutation, check):
-    kwargs = {"fov_ok": mutation != "fov", "sync": mutation != "sync",
-              "collision_ok": mutation != "collision", "execution_ok": mutation != "execution"}
-    batch = batch_factory(tmp_path, contract, **kwargs)
-    report = _report(aggregate_task8_calibration((batch,), contract, tmp_path / "out"))
-    assert report["checks"][check] in ("FAIL", "UNMEASURED")
-    assert report["status"] == "CALIBRATION_REQUIRED"
-
-
-def test_invalid_batch_is_refused_and_missing_input_is_unmeasured(tmp_path, contract):
-    poisoned = batch_factory(tmp_path, contract, "poisoned", status_field="INVALID")
-    with pytest.raises(ValueError, match="CALIBRATION_BATCH_INVALID"):
-        aggregate_task8_calibration((poisoned,), contract, tmp_path / "out")
-    partial = batch_factory(tmp_path, contract, "partial", sync=False)
-    report = _report(aggregate_task8_calibration((partial,), contract, tmp_path / "out2"))
-    assert report["checks"]["synchronization"] == "UNMEASURED"
-    assert report["status"] == "CALIBRATION_REQUIRED"
-
-
-def test_aggregation_is_deterministic_and_tamper_evident(tmp_path, contract):
-    batch = batch_factory(tmp_path, contract)
-    root = tmp_path / "out"
-    first = aggregate_task8_calibration((batch,), contract, root)
-    first_bytes = {key: Path(path).read_bytes() for key, path in first.items()}
-    # the same sealed batch aggregated again derives byte-identical outputs: the report's
-    # sample path is absolute, so determinism is asserted against the same output root
-    second = aggregate_task8_calibration((batch,), contract, root)
-    for key in first:
-        assert Path(second[key]).read_bytes() == first_bytes[key]
-    frame = batch / "fov/default.json"
-    payload = json.loads(frame.read_text())
-    payload["samples"][0]["target_in_view"] = False
-    frame.write_text(json.dumps(payload))
-    with pytest.raises(ValueError):
-        aggregate_task8_calibration((batch,), contract, tmp_path / "three")
-    assert not list((tmp_path / "three").glob("*TASK8_READY*"))
 
 
 def _cli_identities():
     """The ten-member identity the measurement CLI requires, distinct per member so a mix-up is visible."""
 
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
 
-    identities = {name: format(index + 1, "02x") * 32 for index, name in enumerate(IDENTITIES_V2)}
+    identities = {name: format(index + 1, "02x") * 32 for index, name in enumerate(MEASUREMENT_IDENTITIES)}
     identities["source_commit"] = "0" * 40
     return identities
 
 
-def _identities():
-    return {"source_provenance_sha256": "a" * 64, "runtime_config_sha256": "b" * 64,
-            "anchors_sha256": "c" * 64, "contact_policy_fingerprint": "d" * 64,
-            "act_profile_sha256": "e" * 64}
-
-
-def test_offline_report_cli_publishes_the_v2_documents_and_refuses_any_override(tmp_path, contract):
+def test_offline_report_cli_publishes_the_documents_and_refuses_any_override(tmp_path, contract):
     """The old aggregator wrote one `calibration-report.json` with a caller-visible status; the v2 entry renders
     and publishes four documents instead and exposes no status or threshold override at all."""
 
     from so101_demo.cli import act_build_task8_calibration_report as builder
 
-    batch = batch_factory(tmp_path, contract)
+    batch = _closed_batch(tmp_path / "batch", contract)
     identities = tmp_path / "identities.json"
-    identities.write_text(json.dumps(_identities()))
-    bound = bind_measurement_contract(TEMPLATE, _identities(), tmp_path / "bound.json")
+    identities.write_text(json.dumps(_cli_identities()))
+    bound = bind_measurement_contract(TEMPLATE, _cli_identities(), tmp_path / "bound.json")
     out = tmp_path / "out"
     arguments = ["--contract", str(bound), "--identities", str(identities),
                  "--batch-root", str(batch), "--output-root", str(out)]
@@ -281,7 +135,7 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
     # one schema, not two: the CLI's ten-member identity comes from a v2 template bind, so the bound contract and the
     # identities file the CLI checks against it are the same schema by construction
     identities.write_text(json.dumps(_cli_identities()))
-    bound = bind_measurement_contract(TEMPLATE_V2, _cli_identities(), tmp_path / "bound.json")
+    bound = bind_measurement_contract(TEMPLATE, _cli_identities(), tmp_path / "bound.json")
     ledger = tmp_path / "ledger.md"
     driver_module = tmp_path / "driver.py"
     driver_module.write_text(
@@ -323,24 +177,24 @@ def test_measure_cli_seals_only_on_success_and_keeps_the_ledger_honest(tmp_path,
 def _sealed_batch(root, payload, identities=None, extra_files=None,
                  descriptor=None, descriptor_indexed=True):
     from so101_demo.act.task8_measurement_schema import write_closed_json
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
     import hashlib
     identity = dict(identities) if identities else {
-        name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+        name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in MEASUREMENT_IDENTITIES}
 
     raw = write_closed_json(Path(root) / "raw" / "records.json", payload)
     files = {"raw/records.json": hashlib.sha256(raw.read_bytes()).hexdigest()}
     files.update(extra_files or {})
     # Astra item 4: this builder seals a batch the aggregator will read, so it indexes a descriptor like production -
-    # descriptor_indexed=False is how a test deliberately builds the bare root the rule must refuse
+    # descriptor_indexed=False is how a test deliberately builds the bare root (no descriptor at all) the rule must refuse
     if descriptor is None:
         descriptor = _descriptor()
     if "head_search" not in descriptor:      # callers may hand in the inner block; the sealed document is the document
         descriptor = {"schema_version": 1, "head_search": descriptor}
     descriptor_path = Path(root) / "runtime-descriptor.json"
-    if not descriptor_path.exists():      # this builder may be called twice on one root; a sealed file is never rewritten
-        write_closed_json(descriptor_path, descriptor)
     if descriptor_indexed:
+        if not descriptor_path.exists():      # this builder may be called twice on one root; a sealed file is never rewritten
+            write_closed_json(descriptor_path, descriptor)
         files["runtime-descriptor.json"] = hashlib.sha256(descriptor_path.read_bytes()).hexdigest()
     # the batch declares three anchors, so it must evidence them: the aggregator's per-anchor sync file is the
     # convention it consumes, and indexing what it wrote keeps the fixture schema-true by construction
@@ -362,13 +216,13 @@ def _sealed_batch(root, payload, identities=None, extra_files=None,
 
 def test_derived_verdicts_come_from_raw_evidence_across_every_root(tmp_path):
     from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
     first = _sealed_batch(tmp_path / "batch-a", {"measurements": {"min_confidence": [0.6]},
                                                  "configured": {"min_confidence": 0.5}})
     second = _sealed_batch(tmp_path / "batch-b", {"measurements": {"min_confidence": [0.4]},
                                                   "configured": {"min_confidence": 0.5}})
-    verdicts = derive_field_verdicts([first, second], load_contract_v2())
+    verdicts = derive_field_verdicts([first, second], load_contract())
     assert set(verdicts) == {str(first), str(second)}          # every root is aggregated, not just the first
     assert verdicts[str(first)]["min_confidence"] == "PASS"
     assert verdicts[str(second)]["min_confidence"] == "FAIL"
@@ -378,25 +232,25 @@ def test_derived_verdicts_come_from_raw_evidence_across_every_root(tmp_path):
 
 def test_a_batch_offering_labels_instead_of_raw_evidence_is_refused(tmp_path):
     from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
     labelled = _sealed_batch(tmp_path / "batch-labels", {"measurements": {"qualified": True},
                                                          "configured": {"min_confidence": 0.5}})
     with pytest.raises(ValueError, match="RAW_EVIDENCE_REQUIRED: qualified is a label"):
-        derive_field_verdicts([labelled], load_contract_v2())
+        derive_field_verdicts([labelled], load_contract())
 
 
 def test_derived_checks_fold_members_across_roots_and_propagate_unmeasured(tmp_path):
     from so101_demo.act.task8_calibration_aggregator import derived_checks
     from so101_demo.act.calibration import CHECK_MEASUREMENTS
-    from so101_demo.act.task8_measurement_schema import load_contract_v2
+    from so101_demo.act.task8_measurement_schema import load_contract
 
     synchronisation = sorted(CHECK_MEASUREMENTS["synchronization"])
     payload = {"measurements": {synchronisation[0]: [{"received_monotonic_s": 0.0,
                                                       "decision_monotonic_s": 0.1}]},
                "configured": {synchronisation[0]: 0.5}}
     only_one = _sealed_batch(tmp_path / "batch-c", payload)
-    contract = load_contract_v2()
+    contract = load_contract()
     checks = derived_checks([only_one], contract)
     # max_skew_s has no raw record, so the synchronization check is UNMEASURED rather than passing on one member
     assert checks["synchronization"] == "UNMEASURED"
@@ -439,7 +293,7 @@ def test_two_batches_that_disagree_on_a_second_identity_member_are_refused(tmp_p
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
-    bound_path = bind_measurement_contract(TEMPLATE_V2, _cli_identities(), tmp_path / "bound.json")
+    bound_path = bind_measurement_contract(TEMPLATE, _cli_identities(), tmp_path / "bound.json")
     bound = json.loads(Path(bound_path).read_text())      # the binder returns the path it wrote, not the document
     identities = _cli_identities()
     identities["measurement_contract_sha256"] = bound["contract_sha256"]
@@ -455,7 +309,7 @@ def test_the_published_measurements_are_values_with_their_sample_never_verdicts(
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
 
-    batch = batch_factory(tmp_path, contract)
+    batch = _closed_batch(tmp_path / "batch", contract)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     document = json.loads(Path(outputs["calibration_report"]).read_text())
     measurements = document["measurements"]
@@ -477,7 +331,7 @@ def test_rendering_the_same_immutable_batch_twice_is_byte_identical_and_publishe
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
 
-    batch = batch_factory(tmp_path, contract)
+    batch = _closed_batch(tmp_path / "batch", contract)
     out = tmp_path / "out"
     first = aggregate_task8_calibration((batch,), contract, out)
     snapshot = {name: Path(path).read_bytes() for name, path in first.items()}
@@ -502,8 +356,8 @@ def test_every_cited_sample_reads_back_from_disk_with_its_recorded_hash(tmp_path
 
     # a v2 bound contract, because only it carries the support section the seven remaining fields come from
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     document = json.loads(Path(outputs["calibration_report"]).read_text())
     measurements = document["measurements"]
@@ -515,7 +369,7 @@ def test_every_cited_sample_reads_back_from_disk_with_its_recorded_hash(tmp_path
         assert _hashlib.sha256(sample.read_bytes()).hexdigest() == entry["sample_sha256"], f"{name} digest"
 
 
-def test_a_v2_batch_yields_a_report_that_passes_the_task8_live_gate(tmp_path):
+def test_a_batch_yields_a_report_that_passes_the_pick_place_live_gate(tmp_path):
     """Boundary IV's publishing half: the 28-field TASK8_READY must satisfy require_gate(report, "task8_live").
 
     The gate wants the five PICK_PLACE_READY_CHECKS to PASS, release and retreat to be UNMEASURED, and every field of
@@ -527,8 +381,8 @@ def test_a_v2_batch_yields_a_report_that_passes_the_task8_live_gate(tmp_path):
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     report = json.loads(Path(outputs["calibration_report"]).read_text())
 
@@ -592,8 +446,11 @@ def _valid_evidence(contract):
     return evidence, configured
 
 
-def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
-    if descriptor is None:                      # production always seals a descriptor, so the fixture does too
+def _closed_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
+    bare = descriptor is False                  # a bare root: its descriptor is written but never indexed
+    if bare:
+        descriptor = None
+    elif descriptor is None:                    # production always seals a descriptor, so the fixture does too
         # the shared rule is closed over every block of the document, so the fixture reuses THIS module's own
         # complete builder instead of a partial inline literal that only the weak rule ever accepted
         descriptor = _descriptor()
@@ -601,12 +458,12 @@ def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
     # the False case is still available for tests that deliberately build a bare root
     """A batch that is schema-true for v2: valid raw evidence in the indexed records and the 28 published entries."""
 
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
     from so101_demo.act.task8_measurement_schema import write_closed_json
 
     root = Path(root)
     evidence, configured = _valid_evidence(contract)
-    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in MEASUREMENT_IDENTITIES}
     # P1-2: a V2 batch carries the identity the contract ADMITTED - not the bound document's self-digest, which no
     # identity member could ever equal. This is what the formal entry seals, so a fixture states the same rule.
     identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
@@ -657,7 +514,8 @@ def _v2_batch(root, contract, descriptor=None, descriptor_as_index_file=True):
     published = root / "measurements.json"
     extra = {"measurements.json": __import__("hashlib").sha256(published.read_bytes()).hexdigest()}
     extra.update(index_descriptor or {})
-    _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities, extra_files=extra)
+    _sealed_batch(root, {"measurements": evidence, "configured": configured}, identities, extra_files=extra,
+                  descriptor_indexed=not bare)
     return root
 
 
@@ -674,9 +532,9 @@ def test_the_published_report_binds_to_a_runtime_head_search_descriptor(tmp_path
 
     runtime = _inputs(tmp_path)[0]        # the binding fixture's first element is the runtime descriptor
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
     # the batch records the descriptor it was measured under, so the report can bind to this very runtime
-    batch = _v2_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
+    batch = _closed_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     report = json.loads(Path(outputs["calibration_report"]).read_text())
     require_gate(report, "task8_live")
@@ -696,8 +554,8 @@ def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_pa
 
     runtime = _inputs(tmp_path)[0]
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract, descriptor=runtime["head_search"])
     report = json.loads(Path(aggregate_task8_calibration(
         (batch,), contract, tmp_path / "out")["calibration_report"]).read_text())
     assert validate_head_search_binding(runtime, report) is not None, "the matching pairing binds"
@@ -713,15 +571,15 @@ def test_a_runtime_that_does_not_match_the_measured_descriptor_is_refused(tmp_pa
         validate_head_search_binding(other, report)
 
 
-def test_a_v2_render_is_byte_identical_when_repeated_and_publishes_once(tmp_path):
+def test_a_render_is_byte_identical_when_repeated_and_publishes_once(tmp_path):
     """Boundary IV item 4 on the v2 path: the 28-field report and its two samples render deterministically."""
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)
     out = tmp_path / "out"
     first = aggregate_task8_calibration((batch,), contract, out)
     snapshot = {name: Path(path).read_bytes() for name, path in first.items()}
@@ -740,8 +598,8 @@ def test_the_receipt_vouches_for_every_document_the_aggregation_publishes(tmp_pa
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     receipt = json.loads(Path(outputs["aggregation_receipt"]).read_text())
 
@@ -761,8 +619,8 @@ def test_the_aggregation_publishes_exactly_the_canonical_document_names(tmp_path
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)
     out = tmp_path / "out"
     aggregate_task8_calibration((batch,), contract, out)
     written = sorted(path.name for path in Path(out).rglob("*") if path.is_file())
@@ -778,7 +636,7 @@ def test_the_aggregator_reads_the_descriptor_back_from_the_closed_index(tmp_path
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
     descriptor = {"schema_version": 1, "head_search": {
         "schema_version": 1,
         "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "a" * 64,
@@ -788,7 +646,7 @@ def test_the_aggregator_reads_the_descriptor_back_from_the_closed_index(tmp_path
         "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame",
                    "width_px": 640, "height_px": 480},
         "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}}
-    batch = _v2_batch(tmp_path / "batch", contract, descriptor=descriptor, descriptor_as_index_file=True)
+    batch = _closed_batch(tmp_path / "batch", contract, descriptor=descriptor, descriptor_as_index_file=True)
     outputs = aggregate_task8_calibration((batch,), contract, tmp_path / "out")
     sample = json.loads(Path(outputs["head_search_qualification"]).read_text())
     assert sample.get("head_search") == descriptor["head_search"], \
@@ -814,9 +672,9 @@ def test_a_batch_whose_payload_claims_a_different_descriptor_is_refused(tmp_path
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
     sealed = _descriptor("plastic-cup")
-    batch = _v2_batch(tmp_path / "batch", contract, descriptor=sealed, descriptor_as_index_file=True)
+    batch = _closed_batch(tmp_path / "batch", contract, descriptor=sealed, descriptor_as_index_file=True)
     # the payload now claims a different model than the sealed descriptor records
     payload = json.loads((batch / "measurements.json").read_text())
     payload["head_search"] = _descriptor("another-cup")["head_search"]
@@ -837,8 +695,8 @@ def test_a_batch_that_does_not_index_the_descriptor_cannot_bind(tmp_path):
 
     runtime = _inputs(tmp_path)[0]
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
-    batch = _v2_batch(tmp_path / "batch", contract)          # no descriptor anywhere in the batch
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+    batch = _closed_batch(tmp_path / "batch", contract)          # no descriptor anywhere in the batch
     report = json.loads(Path(aggregate_task8_calibration(
         (batch,), contract, tmp_path / "out")["calibration_report"]).read_text())
     with pytest.raises(ValueError, match="HEAD_SEARCH_SAMPLE_MISMATCH"):
@@ -850,8 +708,8 @@ def test_a_root_without_a_sealed_descriptor_fails_closed(tmp_path, contract):
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
 
-    good = batch_factory(tmp_path, contract, name="good")
-    bare = batch_factory(tmp_path, contract, name="bare", descriptor=False)
+    good = _closed_batch(tmp_path / "good", contract)
+    bare = _closed_batch(tmp_path / "bare", contract, descriptor=False)
     with pytest.raises(ValueError, match="CALIBRATION_DESCRIPTOR_MISSING"):
         aggregate_task8_calibration((good, bare), contract, tmp_path / "out")
 
@@ -861,8 +719,8 @@ def test_identical_sealed_descriptors_across_roots_pass_and_reach_the_sample(tmp
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
 
-    first = batch_factory(tmp_path, contract, name="first")
-    second = batch_factory(tmp_path, contract, name="second")
+    first = _closed_batch(tmp_path / "first", contract)
+    second = _closed_batch(tmp_path / "second", contract)
     aggregate_task8_calibration((first, second), contract, tmp_path / "out")
     sample = json.loads((tmp_path / "out" / "head-search-qualification.json").read_text())
     assert sample["head_search"]["detector"]["allow_cpu_fallback"] is False, \
@@ -921,19 +779,19 @@ def test_a_payload_carrying_the_inner_head_search_block_matches_the_sealed_descr
     """
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, bind_measurement_contract
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES, bind_measurement_contract
     from so101_demo.act.task8_measurement_schema import write_closed_json
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
     inner = _complete_inner_block()
     evidence, configured = _valid_evidence(contract)
-    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in MEASUREMENT_IDENTITIES}
     # P1-2: the identity member names the contract this run was ADMITTED under, which the bound document carries in
     # its `identities` field - the self-digest is a different quantity and no member could equal it
     identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
     # a seeded root provides a schema-true measurements.json to lift; the payload root itself is written ONCE
-    seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
+    seed = _closed_batch(tmp_path / "seed", contract, descriptor=inner)
     batch = _build_payload_root(tmp_path / "batch", seed, inner)
     _sealed_batch(batch, {"measurements": evidence, "configured": configured}, identities,
                   extra_files=_index_of(batch), descriptor=inner)
@@ -947,19 +805,19 @@ def test_a_payload_carrying_a_different_inner_block_is_refused(tmp_path):
     """The negative direction of P1-4: a payload claiming another configuration must still be refused."""
 
     from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
-    from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, bind_measurement_contract
+    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES, bind_measurement_contract
     from so101_demo.act.task8_measurement_schema import write_closed_json
 
     contract = json.loads(Path(bind_measurement_contract(
-        TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
+        TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")).read_text())
     inner = _complete_inner_block()
     other = _complete_inner_block(device="cpu")
     evidence, configured = _valid_evidence(contract)
-    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in IDENTITIES_V2}
+    identities = {name: ("b" * 40 if name == "source_commit" else "a" * 64) for name in MEASUREMENT_IDENTITIES}
     # P1-2: the identity member names the contract this run was ADMITTED under, which the bound document carries in
     # its `identities` field - the self-digest is a different quantity and no member could equal it
     identities["measurement_contract_sha256"] = contract["identities"]["measurement_contract_sha256"]
-    seed = _v2_batch(tmp_path / "seed", contract, descriptor=inner)
+    seed = _closed_batch(tmp_path / "seed", contract, descriptor=inner)
     batch = _build_payload_root(tmp_path / "batch", seed, other)   # the payload claims a DIFFERENT block
     _sealed_batch(batch, {"measurements": evidence, "configured": configured}, identities,
                   extra_files=_index_of(batch), descriptor=inner)

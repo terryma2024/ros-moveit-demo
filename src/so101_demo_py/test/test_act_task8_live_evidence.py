@@ -576,9 +576,9 @@ def test_published_case_row_translates_into_the_journal_row_shape():
 
 # --- protocol v2 additions (Task 7): nine phases, row provenance, release correlation ----------------------
 
-V2_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
+LIVE_PHASES = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE", "RADIAL_RETREAT",
              "FINAL_CHECK")
-V2_ROW_KEYS = {"head_rgb_ref", "wrist_rgb_ref", "head_camera_info_ref", "wrist_camera_info_ref",
+ROW_KEYS = {"head_rgb_ref", "wrist_rgb_ref", "head_camera_info_ref", "wrist_camera_info_ref",
                "head_segmentation_ref", "wrist_segmentation_ref", "head_depth_ref", "wrist_depth_ref",
                "joint_receipt", "tf_receipt", "reference_receipt", "physics_receipt",
                "session_id", "reset_epoch", "attempt_id", "phase", "source_stamp", "receive_monotonic_s",
@@ -588,10 +588,10 @@ V2_ROW_KEYS = {"head_rgb_ref", "wrist_rgb_ref", "head_camera_info_ref", "wrist_c
 def test_the_window_requires_exactly_the_designs_nine_phases():
     from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
 
-    assert LiveEvidenceWindow.REQUIRED_PHASES == V2_PHASES
+    assert LiveEvidenceWindow.REQUIRED_PHASES == LIVE_PHASES
 
 
-def _v2_sample(**overrides):
+def _live_sample(**overrides):
     """Call the real builder with the real keyword-only interface."""
 
     from so101_demo.act.task8_live_evidence import build_live_evidence_sample
@@ -618,7 +618,7 @@ def _v2_sample(**overrides):
 
 
 def test_every_ten_hz_row_cites_its_raw_records_and_identity():
-    row = _v2_sample()
+    row = _live_sample()
     text = json.dumps(row, sort_keys=True)
     for name in ("raw/head.png", "raw/wrist.png", "raw/head.json", "raw/wrist.json",
                  "raw/head-seg.png", "raw/wrist-seg.png", "raw/head.npy", "raw/wrist.npy"):
@@ -629,7 +629,7 @@ def test_every_ten_hz_row_cites_its_raw_records_and_identity():
 
 def test_the_task_camera_is_not_an_observation_source():
     with pytest.raises(ValueError, match="TASK_CAMERA_NOT_AN_OBSERVATION"):
-        _v2_sample(raw_records={"task_camera": "raw/task.png"})
+        _live_sample(raw_records={"task_camera": "raw/task.png"})
 
 
 def _release_fixture(rows_suffix=0):

@@ -15,7 +15,7 @@ import pytest
 from test_act_task8_calibration_aggregator import SEAL_VALID_HELPER
 from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
 
-from test_act_task8_calibration_aggregator import TEMPLATE_V2, _cli_identities   # noqa: E402
+from test_act_task8_calibration_aggregator import TEMPLATE, _cli_identities   # noqa: E402
 
 
 def _descriptor(cpu_fallback: bool = False, device: str = "cuda"):
@@ -44,7 +44,7 @@ def _invoke(tmp_path, context, driver="descriptor_driver:fill"):
     from so101_demo.act.task8_measurement_contract import bind_measurement_contract
     from so101_demo.cli import act_measure_task8_calibration as measure
 
-    bound = bind_measurement_contract(TEMPLATE_V2, _cli_identities(), tmp_path / "bound-v2.json")
+    bound = bind_measurement_contract(TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")
 
     identities = tmp_path / "identities.json"
     identities.write_text(json.dumps(_cli_identities()))
@@ -329,7 +329,7 @@ def _invalid_sealing_driver(tmp_path):
     module.write_text(
         "import hashlib, json\n"
         "from pathlib import Path\n"
-        "from so101_demo.act.task8_measurement_contract import IDENTITIES_V2, _canonical\n"
+        "from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES, _canonical\n"
         "from so101_demo.act.task8_measurement_schema import write_closed_json\n"
         "def fill(contract, root):\n"
         "    root = Path(root); root.mkdir(parents=True, exist_ok=True)\n"

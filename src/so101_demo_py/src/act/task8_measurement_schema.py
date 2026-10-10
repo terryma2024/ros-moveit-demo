@@ -123,15 +123,15 @@ def _load(path: Path, code: str) -> dict:
     return document
 
 
-def load_contract_v2(path: Path | None = None) -> dict:
-    document = _load(path or _CONFIG / "task8-calibration-measurement-contract-v2.json",
-                     "MEASUREMENT_CONTRACT_V2_INVALID")
+def load_contract(path: Path | None = None) -> dict:
+    document = _load(path or _CONFIG / "pick-place-calibration-measurement-contract.json",
+                     "MEASUREMENT_CONTRACT_INVALID")
     for section in ("measurements", "support"):
         if type(document.get(section)) is not dict or not document[section]:
-            raise ValueError("MEASUREMENT_CONTRACT_V2_INVALID")
+            raise ValueError("MEASUREMENT_CONTRACT_INVALID")
         for name, entry in document[section].items():
             if type(entry) is not dict or type(entry.get("unit")) is not str:
-                raise ValueError("MEASUREMENT_CONTRACT_V2_INVALID")
+                raise ValueError("MEASUREMENT_CONTRACT_INVALID")
     return document
 
 
