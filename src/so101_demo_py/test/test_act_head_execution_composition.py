@@ -1,7 +1,7 @@
 """Directed tests for the one resource composition of a stage-one run.
 
 The composition must open exactly one writer for a fresh run root from verified
-inputs, bind one ROS/native/detector/inference/runtime/search set in one fixed
+inputs, bind one ROS/owner/detector/inference/runtime/search set in one fixed
 order with no rebinding, prove every bound resource shares the sealed policy and
 run identity, and seal the run exactly once.
 """
@@ -19,7 +19,8 @@ from so101_demo.act.head_local_state import HeadLocalState
 from so101_demo.adapters.act.head_owned_search import OwnedHeadSearch
 from test_act_head_feedback_freshness import policy as feedback_policy_dict
 from test_act_head_local_observer import observer_setup, simulation_policy
-from test_act_head_local_runtime import Authority, Recorder, Revoker
+from test_act_head_local_runtime import Recorder
+from head_owner_support import deadline, make as make_neck_owner
 from test_act_search import config as search_config
 
 
@@ -97,13 +98,11 @@ def local_stack(monkeypatch, policy, *, epoch=None, session=None, generation=7,
     observer = HeadLocalObserver(row.node, row.port, state, policy=policy,
                                  camera_frame='head_camera_optical_frame',
                                  bind_port_sink=False)
-    revoker = Revoker()
-    runtime = HeadLocalRuntime(node=row.node, port=row.port, local_state=state, revoker=revoker,
+    neck_owner, *_ = make_neck_owner(policy=policy, generation=generation, session_id=session,
+                                     identity=identity, auto_window=True)
+    neck_owner.activate(deadline=deadline())
+    runtime = HeadLocalRuntime(node=row.node, port=row.port, local_state=state, owner=neck_owner,
                                observer=observer, policy=policy, sink=Recorder())
-    authority = Authority(arm_guard=runtime.prearm_guard, fault_callback=runtime.fault,
-                          generation=generation, session_id=session,
-                          controller_identity=identity)
-    runtime.bind_authority(authority)
 
     class Owner:
         _simulation_policy = policy
@@ -133,7 +132,7 @@ def local_stack(monkeypatch, policy, *, epoch=None, session=None, generation=7,
                              emit=lambda event, **fields: None,
                              local_state=state, policy=policy)
     return SimpleNamespace(node=row.node, port=row.port, state=state, observer=observer,
-                           runtime=runtime, authority=authority, revoker=revoker, owner=owner,
+                           runtime=runtime, neck_owner=neck_owner, owner=owner,
                            search=search, policy=policy)
 
 
@@ -143,7 +142,7 @@ def bound_composition(monkeypatch, tmp_path, *, policy=None):
     stack = local_stack(monkeypatch, policy, epoch=inputs.run['epoch'],
                         session=inputs.run['session_id'], generation=inputs.run['generation'])
     composition.bind_ros(node=stack.node, port=stack.port)
-    composition.bind_native(authority=stack.authority, revoker=stack.revoker)
+    composition.bind_owner(owner=stack.neck_owner)
     composition.bind_detector(object(), runtime_device='cuda:0')
     composition.bind_inference(stack.owner)
     composition.bind_runtime(observer=stack.observer, runtime=stack.runtime)
@@ -182,7 +181,7 @@ def test_open_refuses_a_foreign_object_and_a_promoted_scope(monkeypatch, tmp_pat
 def test_binding_order_and_single_binding_are_enforced(monkeypatch, tmp_path):
     composition, inputs, stack = bound_composition(monkeypatch, tmp_path)
     assert composition.complete is True
-    assert composition.bound_stages == ('ros', 'native', 'detector', 'inference', 'runtime',
+    assert composition.bound_stages == ('ros', 'owner', 'detector', 'inference', 'runtime',
                                         'search')
     with pytest.raises(module().HeadExecutionCompositionRefused) as refusal:
         composition.bind_ros(node=stack.node, port=stack.port)
@@ -219,7 +218,7 @@ def test_detector_binding_refuses_any_device_but_cuda_zero(monkeypatch, tmp_path
     stack = local_stack(monkeypatch, policy, epoch=inputs.run['epoch'],
                         session=inputs.run['session_id'], generation=inputs.run['generation'])
     composition.bind_ros(node=stack.node, port=stack.port)
-    composition.bind_native(authority=stack.authority, revoker=stack.revoker)
+    composition.bind_owner(owner=stack.neck_owner)
     with pytest.raises(module().HeadExecutionCompositionRefused) as refusal:
         composition.bind_detector(object(), runtime_device=device)
     assert refusal.value.code == 'EXECUTION_DEVICE_REFUSED'
@@ -231,7 +230,7 @@ def test_inference_binding_requires_the_frozen_policy(monkeypatch, tmp_path):
     stack = local_stack(monkeypatch, policy, epoch=inputs.run['epoch'],
                         session=inputs.run['session_id'], generation=inputs.run['generation'])
     composition.bind_ros(node=stack.node, port=stack.port)
-    composition.bind_native(authority=stack.authority, revoker=stack.revoker)
+    composition.bind_owner(owner=stack.neck_owner)
     composition.bind_detector(object(), runtime_device='cuda:0')
     with pytest.raises(module().HeadExecutionCompositionRefused):
         composition.bind_inference(SimpleNamespace(configuration=lambda **k: {},
@@ -246,7 +245,7 @@ def test_runtime_binding_requires_the_sealed_identity_and_policy(monkeypatch, tm
     foreign = local_stack(monkeypatch, policy, epoch='foreign-epoch',
                           session=inputs.run['session_id'], generation=inputs.run['generation'])
     composition.bind_ros(node=foreign.node, port=foreign.port)
-    composition.bind_native(authority=foreign.authority, revoker=foreign.revoker)
+    composition.bind_owner(owner=foreign.neck_owner)
     composition.bind_detector(object(), runtime_device='cuda:0')
     composition.bind_inference(foreign.owner)
     with pytest.raises(module().HeadExecutionCompositionRefused):
@@ -293,7 +292,7 @@ def test_incomplete_composition_seals_as_a_failure(monkeypatch, tmp_path):
     assert refusal.value.code == 'EXECUTION_COMPOSITION_REFUSED'
     completion = json.loads((inputs.run_root / 'completion.json').read_text())
     assert completion['complete_composition'] is False
-    assert completion['missing_stages'] == ['native', 'detector', 'inference', 'runtime', 'search']
+    assert completion['missing_stages'] == ['owner', 'detector', 'inference', 'runtime', 'search']
     stack.runtime.close(timeout_s=1.)
 
 
@@ -358,3 +357,26 @@ def test_the_stack_children_are_recorded_once_started(tmp_path):
         children = composition.ros_children()
         assert children and children[0]['argv'] == ['ros2_control_node'], (
             'the composition must carry the launched children so the manifest can record argv/PIDs')
+
+
+def test_owner_binding_requires_the_run_generation_session_and_the_owner_api(monkeypatch, tmp_path):
+    inputs, policy = build_inputs(tmp_path)
+    composition = module().HeadExecutionComposition.open(inputs)
+    stack = local_stack(monkeypatch, policy, epoch=inputs.run['epoch'],
+                        session=inputs.run['session_id'], generation=inputs.run['generation'])
+    composition.bind_ros(node=stack.node, port=stack.port)
+    wrong_generation, *_ = make_neck_owner(generation=inputs.run['generation'] + 1,
+                                           session_id=inputs.run['session_id'])
+    with pytest.raises(module().HeadExecutionCompositionRefused):
+        composition.bind_owner(owner=wrong_generation)
+    wrong_session, *_ = make_neck_owner(generation=inputs.run['generation'], session_id='other-session')
+    with pytest.raises(module().HeadExecutionCompositionRefused):
+        composition.bind_owner(owner=wrong_session)
+    with pytest.raises(module().HeadExecutionCompositionRefused):
+        composition.bind_owner(owner=SimpleNamespace(generation=inputs.run['generation'],
+                                                     session_id=inputs.run['session_id']))
+    assert composition.bound_stages == ('ros',)
+    assert composition.bind_owner(owner=stack.neck_owner)['owner'] is stack.neck_owner
+    with pytest.raises(module().HeadExecutionCompositionRefused) as refusal:
+        composition.bind_owner(owner=stack.neck_owner)
+    assert refusal.value.code == 'EXECUTION_RESOURCE_REBOUND'

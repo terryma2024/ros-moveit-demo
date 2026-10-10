@@ -79,11 +79,49 @@ def test_reset_uses_fresh_next_epoch_step_zero_and_exact_declared_pose(tmp_path)
         assert scene.observer.snapshot()['reset_epoch'] == 3
         resets = [r for r in events if r[0] == 'reset']
         assert resets == [('reset',inputs.document['development_pose'])]
-        assert ('switch',(),('arm_controller','gripper_controller','neck_controller')) in events
-        assert ('switch',('arm_controller','gripper_controller','neck_controller'),()) in events
+        assert ('switch',(),('arm_controller','gripper_controller')) in events
+        assert ('switch',('arm_controller','gripper_controller'),()) in events
+        assert not any('neck_controller' in row[1] or 'neck_controller' in row[2]
+                       for row in events if row[0] == 'switch'), 'the neck is activated by its owner only'
         with pytest.raises(PermissionError, match='REUSED'): scene.reset(timeout_s=.1)
     finally: assert scene.close()['closed'] is True
     assert len(node.retired) == 1
+
+
+def test_the_neck_owner_activates_the_neck_after_the_other_controllers_and_before_the_final_pause(tmp_path):
+    scene, _, _, _, events = setup_scene(tmp_path)
+    scene.neck_activation = lambda *, deadline: events.append(('neck_activate',))
+    try:
+        scene.reset(timeout_s=.1)
+        names = [row[0] if row[0] != 'switch' else ('switch', bool(row[1])) for row in events
+                 if row[0] in ('switch', 'neck_activate', 'pause')]
+        activate = names.index(('switch', True))
+        assert names[activate + 1] == 'neck_activate'
+        assert names.index('neck_activate') < len(names) - 1 - names[::-1].index('pause')
+    finally: scene.close()
+
+
+def test_reset_refuses_a_neck_that_is_still_active(tmp_path):
+    scene, _, _, _, events = setup_scene(tmp_path)
+    scene.services.neck_state = lambda *, deadline: 'active'
+    try:
+        with pytest.raises(PermissionError, match='HEAD_RESET_NECK_ACTIVE'):
+            scene.reset(timeout_s=.1)
+        assert not any(row[0] in ('switch', 'reset') for row in events)
+    finally: scene.close()
+
+
+def test_a_failing_neck_activation_fails_the_reset_without_a_receipt(tmp_path):
+    scene, _, _, _, events = setup_scene(tmp_path)
+    def refuse(*, deadline):
+        raise PermissionError('HEAD_NECK_ACTIVATION_REFUSED')
+    scene.neck_activation = refuse
+    try:
+        with pytest.raises(PermissionError, match='HEAD_NECK_ACTIVATION_REFUSED'):
+            scene.reset(timeout_s=.1)
+        assert scene.receipt is None
+        assert [r for r in events if r[0] == 'pause'][-1] == ('pause', True)
+    finally: scene.close()
 
 
 def test_reset_waits_for_startup_controllers_before_first_pause(tmp_path):

@@ -11,7 +11,9 @@ from .head_execution_scene import HeadSceneSafety
 from .scene_state import SceneStateObserver, RosSceneStateAdapter
 
 
-_CONTROLLERS = ('arm_controller', 'gripper_controller', 'neck_controller')
+#: the controllers one reset cycles; the neck is configured but inactive and is activated by its owner
+_CONTROLLERS = ('arm_controller', 'gripper_controller')
+NECK_CONTROLLER = 'neck_controller'
 
 
 def rebase_startup_originals(capture, port, reset_proof):
@@ -99,6 +101,12 @@ class HeadSceneServices:
         states = {row.name: row.state for row in response.controller}
         return all(states.get(name) == 'active' for name in names)
 
+    def neck_state(self, *, deadline):
+        """The neck controller's lifecycle state, or None when the manager does not list it."""
+        response = self._call('controllers', self.types['controllers'].Request(), deadline=deadline)
+        states = {row.name: row.state for row in response.controller}
+        return states.get(NECK_CONTROLLER)
+
     def reset_pose(self, pose, *, deadline, fixture=None):
         from so101_demo.backends.mujoco.client import (
             JointResetOverride, FreeJointResetOverride, joint_override_message, _free_joint_message)
@@ -144,6 +152,8 @@ class OwnedHeadScene:
             from so101_demo.act.head_search_campaign_scene import load_case_fixture
             self.fixture = load_case_fixture(inputs,safety)
         self.startup_ready = startup_ready
+        #: called as ``neck_activation(deadline=...)`` at the activation step: the neck owner activates the neck
+        self.neck_activation = None
         if on_verified_reset is not None and not callable(on_verified_reset):
             raise ValueError('HEAD_RESET_INITIAL_FRAME_HOOK_INVALID')
         self.on_verified_reset = on_verified_reset
@@ -254,6 +264,10 @@ class OwnedHeadScene:
                 require(startup.get('ready'), 'STARTUP')
                 if self.emit is not None:
                     self.emit('STACK_STARTUP_VERIFIED', startup)
+            # The neck is configured and inactive until its owner activates it after this reset.
+            neck_state = getattr(self.services, 'neck_state', None)
+            if callable(neck_state) and neck_state(deadline=deadline) == 'active':
+                raise PermissionError('HEAD_RESET_NECK_ACTIVE')
             # Spawners are owned asynchronous children. Do not pause their
             # controller-manager cycle or strictly deactivate missing roles.
             while not self.services.active(_CONTROLLERS,deadline=deadline):
@@ -278,6 +292,8 @@ class OwnedHeadScene:
                 require(type(initial) is dict and initial.get('ready') is True,'INITIAL_FRAME')
             require(self.services.pause(False,deadline=deadline),'RESUME_FOR_ACTIVATE')
             require(self.services.switch(activate=_CONTROLLERS,deactivate=(),deadline=deadline),'ACTIVATE')
+            if self.neck_activation is not None:
+                self.neck_activation(deadline=deadline)
             while not self.services.active(_CONTROLLERS,deadline=deadline):
                 if time.monotonic() >= deadline: raise TimeoutError('HEAD_RESET_CONTROLLERS_TIMEOUT')
                 time.sleep(.005)

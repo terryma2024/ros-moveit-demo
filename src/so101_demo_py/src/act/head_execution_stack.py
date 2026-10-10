@@ -12,6 +12,9 @@ from .head_search_transport_measurement import MujocoRosTransport
 
 STACK_LOG = 'transport-stack.log'
 CONTROLLERS = ('joint_state_broadcaster', 'arm_controller', 'gripper_controller', 'neck_controller')
+#: the controllers the spawners activate; the neck is only configured, the neck owner activates it
+ACTIVE_AT_SPAWN = CONTROLLERS[:3]
+NECK = 'neck_controller'
 
 
 class RestartStack(MujocoRosTransport):
@@ -22,11 +25,9 @@ class RestartStack(MujocoRosTransport):
     on the simulator's own clock). This subclass uses that composition with the settings a restart needs:
 
     * the remaining three controller spawners of the ACT profile (the base starts
-      ``joint_state_broadcaster`` only), so the stack under test is the production composition; and
-    * the reservation scope in the environment of **every** child. The admission-wrapped controllers read
-      ``SO101_ACT_CONTROLLER_RESERVATION_DIR`` and ``SO101_SIMULATION_SESSION_ID`` from the environment of
-      the process that hosts them - ``ros2_control_node`` - so a scope that reached only the spawner
-      clients would leave every neck goal rejected for ever.
+      ``joint_state_broadcaster`` only), so the stack under test is the production composition. The neck
+      spawner passes ``--inactive``: the Head neck controller needs the owner's heartbeat helper pid before
+      it may activate, so it is configured here and activated by the neck owner; and
     * the Head TF publisher follows the original 100 Hz JointState cadence, so
       exact Header transforms do not wait for the publisher's 20 Hz default.
     """
@@ -65,9 +66,9 @@ class RestartStack(MujocoRosTransport):
                 raise ValueError('HEAD_STACK_BATCH_COMMAND_INVALID')
             # Upstream spawners serialize on one ROS_HOME lock, before creating
             # their ROS nodes. One supported multi-controller invocation avoids
-            # repeating service discovery while preserving every controller.
-            argv[2:2] = CONTROLLERS[1:]
-            name = 'spawner ' + ' '.join(CONTROLLERS)
+            # repeating service discovery while preserving every active controller.
+            argv[2:2] = ACTIVE_AT_SPAWN[1:]
+            name = 'spawner ' + ' '.join(ACTIVE_AT_SPAWN)
         if name == 'robot_state_publisher':
             argv.extend(('-p', 'publish_frequency:=100.0'))
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -90,7 +91,7 @@ class RestartStack(MujocoRosTransport):
 
     def wait_startup(self, *, deadline):
         """Reap every owned spawner before reset, using its original deadline."""
-        groups = (' '.join(CONTROLLERS),) if self.batch_spawners else CONTROLLERS
+        groups = ((' '.join(ACTIVE_AT_SPAWN), NECK) if self.batch_spawners else CONTROLLERS)
         if (type(deadline) not in (int, float) or not math.isfinite(deadline)
                 or set(self._spawners) != set(groups)):
             raise PermissionError('HEAD_STACK_SPAWNERS_INVALID')
@@ -114,22 +115,13 @@ class RestartStack(MujocoRosTransport):
         if self.log_path is None:
             self.log_path = self.workspace / STACK_LOG
         super().start()
-        if self.batch_spawners:
-            return
-        for controller in CONTROLLERS:
-            if controller == "joint_state_broadcaster":
-                continue
-            self.processes.append(self._spawn(
-                [
-                    _package_executable("controller_manager", "spawner"),
-                    controller,
-                    "--controller-manager-timeout",
-                    str(self.startup_timeout_s),
-                    "--param-file",
-                    str(self.controller_config_path),
-                ],
-                f"spawner {controller}",
-            ))
+        for controller in (CONTROLLERS[1:] if not self.batch_spawners else (NECK,)):
+            command = [_package_executable("controller_manager", "spawner"), controller,
+                       "--controller-manager-timeout", str(self.startup_timeout_s),
+                       "--param-file", str(self.controller_config_path)]
+            if controller == NECK:
+                command.append("--inactive")
+            self.processes.append(self._spawn(command, f"spawner {controller}"))
 
     def stop(self):
         """Retire this Head run within its declared budget, retaining every outcome."""

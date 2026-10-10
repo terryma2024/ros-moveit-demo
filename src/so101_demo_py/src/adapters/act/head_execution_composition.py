@@ -1,7 +1,7 @@
 """The one resource composition of a file-protocol stage-one development run.
 
-A run has an optional evidence writer, one ROS node/controller port, one native
-authority/revocation pair, one detector, one inference owner, one local
+A run has an optional evidence writer, one ROS node/controller port, one Head neck
+owner (the dead-man, stop window and graph check of the neck controller), one detector, one inference owner, one local
 runtime/observer pair and one owned search. This module is the entry's binding
 point: when logging is enabled it opens one writer under the fresh run root,
 binds each resource exactly once in one fixed order, proves the bound resources
@@ -32,7 +32,7 @@ COMPOSITION_CLOSED = 'EXECUTION_COMPOSITION_CLOSED'
 DEVICE_REFUSED = 'EXECUTION_DEVICE_REFUSED'
 
 #: the one order the entry binds in; a later stage may not appear before its predecessor
-BIND_ORDER = ('ros', 'native', 'detector', 'inference', 'runtime', 'search')
+BIND_ORDER = ('ros', 'owner', 'detector', 'inference', 'runtime', 'search')
 
 
 class HeadExecutionCompositionRefused(ValueError):
@@ -181,48 +181,18 @@ class HeadExecutionComposition:
             _refuse(COMPOSITION_REFUSED, 'the controller port is not bound to the frozen policy')
         return self._bind('ros', {'node': node, 'port': port})
 
-        # the runner reads the controller identity after this binding and before bind_native, so it
-        # is recorded here from whatever object carries it (CP-HFP-417/421)
-        for _source in (stack, port):
-            if _source is not None:
-                try:
-                    self._record_controller_identity(_source)
-                except Exception:
-                    continue
-                else:
-                    break
+    def bind_owner(self, *, owner):
+        """Bind the Head neck owner: it must carry the run's generation and session."""
 
-    def _record_controller_identity(self, authority):
-        """Record the generation/incarnation/boot triple the runner reads (CP-HFP-416/418/420)."""
-
-        source = authority
-        identity = getattr(source, 'identity', None)
-        incarnation = getattr(source, 'incarnation', None)
-        boot = getattr(source, 'boot', None)
-        if type(identity) in (tuple, list) and len(identity) == 3:
-            incarnation = identity[1] if incarnation is None else incarnation
-            boot = identity[2] if boot is None else boot
-        generation = getattr(source, 'generation', None)
-        triple = {'generation': generation, 'incarnation': incarnation, 'boot': boot}
-        if (type(generation) is not int or type(incarnation) is not str or not incarnation
-                or type(boot) is not str or not boot):
-            _refuse(COMPOSITION_REFUSED,
-                    'the authority must carry the generation/incarnation/boot triple')
-        self._handle['controller_identity'] = triple
-
-    def bind_native(self, *, authority, revoker):
-        """Bind the authenticated main authority and the primary-fault revoker."""
-
-        self._require_stage('native')
+        self._require_stage('owner')
         run = self.inputs.run
-        if (getattr(authority, 'generation', None) != run['generation']
-                or getattr(authority, 'session_id', None) != run['session_id']
-                or getattr(revoker, 'generation', None) != run['generation']
-                or getattr(authority, 'native_owner', None) != getattr(revoker, 'native_owner', None)):
+        if (getattr(owner, 'generation', None) != run['generation']
+                or getattr(owner, 'session_id', None) != run['session_id']
+                or any(not callable(getattr(owner, name, None))
+                       for name in ('identity', 'readback', 'close_planned', 'close_fault'))):
             _refuse(COMPOSITION_REFUSED,
-                    'authority and revoker must share the run generation, session and native owner')
-        return self._bind('native', {'authority': authority, 'revoker': revoker})
-
+                    'the neck owner must share the run generation and session and expose the owner API')
+        return self._bind('owner', {'owner': owner})
 
     def bind_detector(self, detector, *, runtime_device):
         """Bind the one built model with the device actually observed at construction."""

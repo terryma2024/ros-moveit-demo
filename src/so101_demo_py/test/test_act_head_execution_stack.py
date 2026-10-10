@@ -127,20 +127,22 @@ def test_batched_spawner_submits_all_roles_and_reaps_one_actual_child(tmp_path, 
     script.chmod(0o700)
     child = stack._spawn([str(script), 'joint_state_broadcaster', '--param-file',
         str(tmp_path/'controllers.yaml')], 'spawner joint_state_broadcaster')
-    stack.processes.append(child)
+    neck = stack._spawn([str(script), 'neck_controller', '--inactive'], 'spawner neck_controller')
+    stack.processes.extend((child, neck))
     try:
         if exit_code:
             with pytest.raises(PermissionError, match='HEAD_STACK_SPAWNER_FAILED'):
                 stack.wait_startup(deadline=time.monotonic()+1.)
         else:
             result = stack.wait_startup(deadline=time.monotonic()+1.)
-            assert result['ready'] and len(result['children']) == 1
-            assert result['children'][0]['pid'] == child.pid
+            assert result['ready'] and len(result['children']) == 2
+            assert [row['pid'] for row in result['children']] == [child.pid, neck.pid]
             assert result['children'][0]['rc'] == 0 and child.poll() == 0
             import json
-            assert json.loads(stack.log_path.read_text()) == [
-                'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
-                'neck_controller', '--param-file', str(tmp_path/'controllers.yaml')]
+            lines = [json.loads(line) for line in stack.log_path.read_text().splitlines()]
+            assert ['joint_state_broadcaster', 'arm_controller', 'gripper_controller',
+                    '--param-file', str(tmp_path/'controllers.yaml')] in lines
+            assert ['neck_controller', '--inactive'] in lines
     finally:
         stack.stop()
 
@@ -157,7 +159,8 @@ def test_batched_spawner_cannot_extend_original_startup_deadline(tmp_path):
     script.chmod(0o700)
     child = stack._spawn([str(script), 'joint_state_broadcaster'],
                          'spawner joint_state_broadcaster')
-    stack.processes.append(child)
+    neck = stack._spawn([str(script), 'neck_controller'], 'spawner neck_controller')
+    stack.processes.extend((child, neck))
     try:
         started = time.monotonic()
         with pytest.raises(TimeoutError, match='HEAD_STACK_SPAWNER_TIMEOUT'):
@@ -167,7 +170,7 @@ def test_batched_spawner_cannot_extend_original_startup_deadline(tmp_path):
         stack.stop()
 
 
-@pytest.mark.parametrize('batched, expected_children', [(False, 6), (True, 3)])
+@pytest.mark.parametrize('batched, expected_children', [(False, 6), (True, 4)])
 def test_start_keeps_four_controllers_and_truthful_child_count(
         tmp_path, monkeypatch, batched, expected_children):
     from so101_demo.act.head_execution_stack import RestartStack
@@ -189,14 +192,20 @@ def test_start_keeps_four_controllers_and_truthful_child_count(
         for child in stack.processes:
             assert child.wait(timeout=1.) == 0
         if batched:
-            assert stack.processes[2].args[1:5] == [
-                'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
-                'neck_controller']
-            assert len(startup['children']) == 1
+            assert stack.processes[2].args[1:4] == [
+                'joint_state_broadcaster', 'arm_controller', 'gripper_controller']
+            assert '--inactive' not in stack.processes[2].args
+            assert stack.processes[3].args[1] == 'neck_controller'
+            assert len(startup['children']) == 2
         else:
             assert [child.args[1] for child in stack.processes[2:]] == [
                 'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
                 'neck_controller']
+        # only the neck waits for the owner: it is configured and left inactive by its spawner
+        neck_spawners = [child for child in stack.processes[2:] if child.args[1] == 'neck_controller']
+        assert len(neck_spawners) == 1 and '--inactive' in neck_spawners[0].args
+        assert not any('--inactive' in child.args for child in stack.processes[2:]
+                       if child.args[1] != 'neck_controller')
         retirement = stack.stop()
         assert retirement['closed'] and len(retirement['children']) == expected_children
         assert len({child['pid'] for child in retirement['children']}) == expected_children
