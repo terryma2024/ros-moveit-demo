@@ -65,15 +65,7 @@ def test_an_extra_key_is_refused_rather_than_ignored(tmp_path):
         load_training_config(path)
 
 
-# ---- schema v2 (design 2026-10-10 section 3.0 item 3): steps, learning rate, batch size and the std floor ---------------------------
-
-
-def _v1_document():
-    document = yaml.safe_load(CONFIG.read_text())
-    document["schema_version"] = 1
-    del document["training"]
-    del document["normalization"]["std_floor"]
-    return document
+# ---- schema 2 (design 2026-10-10 section 3.0 item 3): steps, learning rate, batch size and the std floor ---------------------------
 
 
 def _write(tmp_path, document):
@@ -82,7 +74,7 @@ def _write(tmp_path, document):
     return path
 
 
-def test_the_shipped_configuration_is_schema_v2_with_the_training_hyper_parameters():
+def test_the_shipped_configuration_carries_the_training_hyper_parameters():
     document = load_training_config(CONFIG)
     assert document["schema_version"] == 2
     training = document["training"]
@@ -90,18 +82,6 @@ def test_the_shipped_configuration_is_schema_v2_with_the_training_hyper_paramete
     assert type(training["batch_size"]) is int and training["batch_size"] > 0
     assert type(training["learning_rate"]) is float and training["learning_rate"] > 0
     assert type(document["normalization"]["std_floor"]) is float and document["normalization"]["std_floor"] > 0
-
-
-def test_a_schema_v1_configuration_is_still_readable_and_carries_no_hyper_parameters(tmp_path):
-    document = load_training_config(_write(tmp_path, _v1_document()))
-    assert document["schema_version"] == 1 and "training" not in document
-    # v1 must not smuggle the v2 fields in
-    for mutate in (lambda d: d.update(training={"steps": 1, "learning_rate": 1e-5, "batch_size": 1}),
-                   lambda d: d["normalization"].update(std_floor=0.01)):
-        broken = _v1_document()
-        mutate(broken)
-        with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
-            load_training_config(_write(tmp_path, broken))
 
 
 @pytest.mark.parametrize("overrides,code", [
@@ -115,12 +95,12 @@ def test_a_schema_v1_configuration_is_still_readable_and_carries_no_hyper_parame
     ({"normalization.std_floor": 0.0}, "TRAINING_STD_FLOOR_INVALID"),
     ({"normalization.std_floor": float("nan")}, "TRAINING_STD_FLOOR_INVALID"),
     ({"normalization.std_floor": None}, "TRAINING_STD_FLOOR_INVALID")])
-def test_a_v2_configuration_with_a_bad_hyper_parameter_is_refused(tmp_path, overrides, code):
+def test_a_configuration_with_a_bad_hyper_parameter_is_refused(tmp_path, overrides, code):
     with pytest.raises(ValueError, match=code):
         _load(tmp_path, **{key.replace("training.", "training.", 1): value for key, value in overrides.items()})
 
 
-def test_a_v2_configuration_must_carry_the_training_block(tmp_path):
+def test_a_configuration_must_carry_the_training_block(tmp_path):
     document = yaml.safe_load(CONFIG.read_text())
     del document["training"]
     with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
@@ -155,8 +135,17 @@ def test_a_malformed_backbone_field_is_refused(tmp_path, value):
         _load(tmp_path, **{"training.pretrained_backbone": value})
 
 
-def test_the_backbone_field_is_part_of_the_v2_training_block_only(tmp_path):
+def test_the_backbone_field_is_part_of_the_training_block_only(tmp_path):
     document = yaml.safe_load(CONFIG.read_text())
     del document["training"]["pretrained_backbone"]
+    with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
+        load_training_config(_write(tmp_path, document))
+
+
+def test_a_configuration_of_another_schema_is_refused(tmp_path):
+    document = yaml.safe_load(CONFIG.read_text())
+    document["schema_version"] = 1
+    del document["training"]
+    del document["normalization"]["std_floor"]
     with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
         load_training_config(_write(tmp_path, document))

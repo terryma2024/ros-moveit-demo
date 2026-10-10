@@ -37,16 +37,16 @@ def test_the_trainer_refuses_a_config_whose_preprocessing_hash_drifted(tmp_path)
     assert not (tmp_path / "out").exists()
 
 
-def test_the_trainer_refuses_a_schema_v1_config_and_a_missing_requirements_digest(tmp_path):
+def test_the_trainer_refuses_a_foreign_schema_config_and_a_missing_requirements_digest(tmp_path):
     from so101_demo.act.training_config import load_training_config
     from so101_demo.adapters.act.lerobot import preprocessing_sha256, train_act_bundle
     config = load_training_config(CONFIG)
     config["frozen"]["preprocessing_sha256"] = preprocessing_sha256()
     with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_SHA256_INVALID"):
         train_act_bundle(config, tmp_path / "view", tmp_path / "out", requirements_sha256="short")
-    v1 = {**config, "schema_version": 1}
-    with pytest.raises(ValueError, match="TRAINING_CONFIG_V2_REQUIRED"):
-        train_act_bundle(v1, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64)
+    foreign = {**config, "schema_version": 1}
+    with pytest.raises(ValueError, match="TRAINING_CONFIG_INVALID"):
+        train_act_bundle(foreign, tmp_path / "view", tmp_path / "out", requirements_sha256="a" * 64)
 
 
 def _ready_config(**backbone):

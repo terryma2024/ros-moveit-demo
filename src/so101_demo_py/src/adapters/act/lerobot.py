@@ -434,7 +434,7 @@ _WEIGHT_DECAY = 1e-4
 
 def _require_trainable_config(config: dict, requirements_sha256: str) -> None:
     if not isinstance(config, dict) or config.get("schema_version") != 2:
-        raise ValueError("TRAINING_CONFIG_V2_REQUIRED")
+        raise ValueError("TRAINING_CONFIG_INVALID")
     if config.get("frozen", {}).get("preprocessing_sha256") != preprocessing_sha256():
         # the config froze a different decode/normalisation than this adapter implements
         raise ValueError("TRAINING_PREPROCESSING_DRIFT")

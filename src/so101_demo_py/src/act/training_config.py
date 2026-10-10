@@ -14,9 +14,8 @@ import math
 
 import yaml
 
-_CONFIG_KEYS = frozenset({"schema_version", "kind", "action", "observation", "normalization", "frozen"})
-# schema v2 adds the optimisation hyper-parameters and the normalisation std floor; v1 stays readable but cannot be trained from
-_CONFIG_KEYS_V2 = _CONFIG_KEYS | {"training"}
+# schema 2: the frozen contract plus the optimisation hyper-parameters and the normalisation std floor
+_CONFIG_KEYS = frozenset({"schema_version", "kind", "action", "observation", "normalization", "frozen", "training"})
 _TRAINING_KEYS = frozenset({"steps", "learning_rate", "batch_size", "pretrained_backbone"})
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _OBSERVATION_KEYS = frozenset({"cameras", "state_dim", "action_dim"})
@@ -43,11 +42,10 @@ def load_training_config(path) -> dict:
         document = yaml.safe_load(target.read_bytes())
     except yaml.YAMLError as error:
         raise ValueError("TRAINING_CONFIG_INVALID") from error
-    if not isinstance(document, dict) or document.get("schema_version") not in (1, 2) \
-            or type(document.get("schema_version")) is not int:
+    if not isinstance(document, dict) or type(document.get("schema_version")) is not int \
+            or document["schema_version"] != 2:
         raise ValueError("TRAINING_CONFIG_INVALID")
-    version = document["schema_version"]
-    if set(document) != (_CONFIG_KEYS_V2 if version == 2 else _CONFIG_KEYS) or document["kind"] != "act_training":
+    if set(document) != _CONFIG_KEYS or document["kind"] != "act_training":
         raise ValueError("TRAINING_CONFIG_INVALID")
 
     action = document["action"]
@@ -77,28 +75,27 @@ def load_training_config(path) -> dict:
     normalization = document["normalization"]
     if not isinstance(normalization, dict) or normalization.get("split") != "train":
         raise ValueError("TRAINING_NORMALIZATION_NOT_TRAIN_ONLY")
-    if set(normalization) != ({"split", "std_floor"} if version == 2 else {"split"}):
+    if set(normalization) != {"split", "std_floor"}:
         raise ValueError("TRAINING_CONFIG_INVALID")
-    if version == 2:
-        if not _positive_float(normalization["std_floor"]):
-            # a dimension with no spread (the neck under a fixed head) must still normalise to a finite value
-            raise ValueError("TRAINING_STD_FLOOR_INVALID")
-        training = document["training"]
-        if not isinstance(training, dict) or set(training) != _TRAINING_KEYS:
-            raise ValueError("TRAINING_CONFIG_INVALID")
-        if type(training["steps"]) is not int or training["steps"] < 1:
-            raise ValueError("TRAINING_STEPS_INVALID")
-        if type(training["batch_size"]) is not int or training["batch_size"] < 1:
-            raise ValueError("TRAINING_BATCH_SIZE_INVALID")
-        if not _positive_float(training["learning_rate"]):
-            raise ValueError("TRAINING_LEARNING_RATE_INVALID")
-        backbone = training["pretrained_backbone"]
-        if backbone is not None and (
-                not isinstance(backbone, dict) or set(backbone) != {"name", "sha256"}
-                or not isinstance(backbone["name"], str) or not backbone["name"]
-                or not isinstance(backbone["sha256"], str) or len(backbone["sha256"]) != 64):
-            # the weights are pinned by name and hash (null = a randomly initialised backbone); the file path is a run argument
-            raise ValueError("TRAINING_BACKBONE_INVALID")
+    if not _positive_float(normalization["std_floor"]):
+        # a dimension with no spread (the neck under a fixed head) must still normalise to a finite value
+        raise ValueError("TRAINING_STD_FLOOR_INVALID")
+    training = document["training"]
+    if not isinstance(training, dict) or set(training) != _TRAINING_KEYS:
+        raise ValueError("TRAINING_CONFIG_INVALID")
+    if type(training["steps"]) is not int or training["steps"] < 1:
+        raise ValueError("TRAINING_STEPS_INVALID")
+    if type(training["batch_size"]) is not int or training["batch_size"] < 1:
+        raise ValueError("TRAINING_BATCH_SIZE_INVALID")
+    if not _positive_float(training["learning_rate"]):
+        raise ValueError("TRAINING_LEARNING_RATE_INVALID")
+    backbone = training["pretrained_backbone"]
+    if backbone is not None and (
+            not isinstance(backbone, dict) or set(backbone) != {"name", "sha256"}
+            or not isinstance(backbone["name"], str) or not backbone["name"]
+            or not isinstance(backbone["sha256"], str) or len(backbone["sha256"]) != 64):
+        # the weights are pinned by name and hash (null = a randomly initialised backbone); the file path is a run argument
+        raise ValueError("TRAINING_BACKBONE_INVALID")
 
     frozen = document["frozen"]
     if not isinstance(frozen, dict) or set(frozen) != _FROZEN_KEYS:
