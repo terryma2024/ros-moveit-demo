@@ -69,11 +69,34 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3534
+latest_checkpoint: CP-3535
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3535 — stock-JTC design review FAIL (13 findings); user chose a thin JTC subclass; design revision 2; pushed to origin
+
+- Push (user "push origin"):
+  - The submodule branch so101-merge-head-20261010 (pin b843139) was pushed first to gitee zjumty/mujoco_ros2_control as a new branch.
+  - Then codex/so101-act-data-0917a was pushed c5efe10f5..d38c4f399, fast-forward, with no force.
+  - github was not pushed. AGENTS.md stays uncommitted. The submodule branch is not merged into the submodule's main.
+- Review (fresh Opus, read-only; deviation from the AGENTS.md Astra reviewer rule recorded): FAIL.
+  - Blockers:
+    - stock JTC keeps the ~/joint_trajectory topic subscriber and the scaling subscription (factor > 1 exceeds the guard's limits); the broker drops both, at cpp:755-781.
+    - The neck is `continuous` (so101.urdf:656); stock 4.42.1 enables angle wraparound and has no parameter to disable it; the broker forces it off (cpp:815-836).
+    - The rev-1 stop window lacked the witness conditions: holding / no active goal, reference unchanged, 200 ms freshness, goal arrival voids the window.
+  - Majors: NaN cancel → hold at NaN (the broker goes to ERROR); the owner dead-man is lost; per-tick checks are only approximable before dispatch; the 51-sample window is fragile (500 Hz trylock publisher); a racy graph check; head_search_qualification_readback missing from the port list; startup protocol and HFA-009 need versioning.
+  - Minors: the 120 s criterion is ill-defined; arm/gripper interpolate_from_desired_state changes; no negative tests.
+- User decision (AskUserQuestion): "Thin JTC subclass".
+- Design revision 2 (same file), every finding addressed:
+  - Arm and gripper stock JTC; the neck HeadNeckTrajectoryController (inputs closed, scaling ≠ 1 → fault, wraparound off plus the immutable config, NaN → ERROR, a socket dead-man latch, no reservation).
+  - Extend the existing HeadTrajectoryGuard, with a fidelity table (exact / approximated / detected after the fact) and an after-acceptance monitor.
+  - A polled graph check by node and GID.
+  - The 51-sample window with the witness conditions, its own executor, a named refusal code, and a shadow comparison first.
+  - startup_protocol v2 and HFA-009 v1/v2, with old evidence still auditable.
+  - The port list includes qualification_readback; an import-graph RED test.
+  - A defined 120 s criterion; sim negative tests; the remaining regression stated.
 
 ## CP-3534 — stock-JTC refactor: research done, user decisions, design written, independent review dispatched
 
