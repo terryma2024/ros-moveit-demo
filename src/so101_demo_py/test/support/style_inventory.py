@@ -16,7 +16,8 @@ locals are never read as hits:
 ``wire``
     String values in package source and configuration that carry a process name on the wire:
     ``TASK<n>_`` error codes, ``SO101_TASK<n>`` environment variables, ``task<n>-`` / ``task<n>_`` identifiers,
-    and ``...-v<n>`` kind literals. Docstrings are not wire values and are not scanned.
+    ``MPS_W<n>_`` profile values, ``hs<n>-`` case ids, a whole-string worker label (``"w1"``, ``"W8"``), and
+    kind-like literals with an embedded ``[-_]v<n>`` segment. Docstrings are not wire values and are not scanned.
 
 ``python src/so101_demo_py/test/support/style_inventory.py`` prints the per-guard counts.
 """
@@ -61,8 +62,15 @@ _WIRE_PATTERNS = (
     re.compile(r"TASK\d+_"),
     re.compile(r"SO101_TASK\d+"),
     re.compile(r"task\d+[-_]"),
+    re.compile(r"MPS_W\d_"),
+    re.compile(r"(?<![A-Za-z0-9])hs\d+-"),
 )
-_WIRE_KIND = re.compile(r"[\w.\-]+-v\d+")
+# A kind-like literal is one token with no space or slash. It carries a version when a ``v<digits>`` segment sits
+# between separators anywhere in it (``so101-run-result-v1``, ``recorder_queue_v1``, ``paired_camera_truth_v2_original``).
+_KIND_LIKE = re.compile(r"[A-Za-z][\w.\-]*")
+_EMBEDDED_VERSION = re.compile(r"(?:^|[-_])[vV]\d+(?=[-_.]|$)")
+# A worker or work-step label used as a whole string (``"w1"``, ``"W8"``) is a process name, not a counter.
+_WORKER_LABEL = re.compile(r"[Ww]\d")
 
 
 def segments(name: str) -> list[str]:
@@ -278,7 +286,9 @@ def _docstring_nodes(tree: ast.Module) -> set[int]:
 
 
 def is_wire_string(value: str) -> bool:
-    return any(pattern.search(value) for pattern in _WIRE_PATTERNS) or bool(_WIRE_KIND.fullmatch(value))
+    if any(pattern.search(value) for pattern in _WIRE_PATTERNS) or _WORKER_LABEL.fullmatch(value):
+        return True
+    return bool(_KIND_LIKE.fullmatch(value) and _EMBEDDED_VERSION.search(value))
 
 
 def _wire_name(value: str) -> str:
