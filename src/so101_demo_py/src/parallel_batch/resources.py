@@ -33,9 +33,6 @@ from .contracts import (
     ParallelRuntimeConfigV3,
     ParallelRuntimeConfigV4,
     IpcTransport,
-    ParallelRuntimeConfig,
-    ParallelRuntimeConfigV2,
-    load_parallel_runtime_config,
 )
 
 
@@ -178,7 +175,6 @@ class AllocationPolicy:
 
     max_worker_count: int
     ros_domain_ids: tuple[int, ...]
-    enforce_resource_thresholds: bool = True
     persistent_cleanup_claims: bool = False
 
     def __post_init__(self) -> None:
@@ -200,8 +196,6 @@ class AllocationPolicy:
             )
         ):
             raise ResourceAllocationError('ALLOCATION_POLICY_ROS_DOMAIN_IDS')
-        if type(self.enforce_resource_thresholds) is not bool:
-            raise ResourceAllocationError('ALLOCATION_POLICY_RESOURCE_THRESHOLDS')
         if type(self.persistent_cleanup_claims) is not bool:
             raise ResourceAllocationError('ALLOCATION_POLICY_PERSISTENT_CLAIMS')
         object.__setattr__(self, 'ros_domain_ids', domains)
@@ -635,7 +629,7 @@ class CurrentRuntimeProvenanceProbe:
             else {name: Path(path) for name, path in current_paths.items()}
         )
 
-    def snapshot(self, config: ParallelRuntimeConfig) -> Mapping[str, str]:
+    def snapshot(self, config: ParallelRuntimeConfigV3) -> Mapping[str, str]:
         """Hash every current runtime input or fail closed when the port is unwired."""
         if self.current_paths is None:
             raise ResourceAllocationError('CURRENT_RUNTIME_PROVENANCE_UNAVAILABLE')
@@ -668,7 +662,7 @@ class TwoWorkerHeadroomVerifier:
         )
 
     def verify(
-        self, manifest_path: Path, *, config: ParallelRuntimeConfig
+        self, manifest_path: Path, *, config: ParallelRuntimeConfigV3
     ) -> Mapping[str, object]:
         """Return a compact verified record or fail closed on any uncertainty."""
         path = Path(manifest_path)
@@ -757,7 +751,7 @@ class TwoWorkerHeadroomVerifier:
         self,
         document: dict[str, object],
         *,
-        config: ParallelRuntimeConfig,
+        config: ParallelRuntimeConfigV3,
         artifacts_fd: int,
         snapshots: list,
     ) -> dict[str, object]:
@@ -1024,7 +1018,7 @@ class WorkerResourceAllocator:
 
     def __init__(
         self,
-        config: ParallelRuntimeConfig,
+        config: ParallelRuntimeConfigV3,
         evidence_root: Path,
         *,
         probe=None,
@@ -1035,8 +1029,7 @@ class WorkerResourceAllocator:
         ipc_root: Path | None = None,
         start_guard=None,
     ) -> None:
-        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
-                                    ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
+        if not isinstance(config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)):
             raise ResourceAllocationError('CONFIG')
         raw_root = str(evidence_root)
         root = Path(evidence_root)
@@ -1121,50 +1114,11 @@ class WorkerResourceAllocator:
             raise ResourceAllocationError('WORKER_COUNT')
         if len(self.allocation_policy.ros_domain_ids) < requested:
             raise ResourceAllocationError('ROS_DOMAIN_IDS')
-        version_three = isinstance(
-            self.config, (ParallelRuntimeConfigV3, ParallelRuntimeConfigV4)
-        )
-        if version_three:
-            # Version three has no formula budget: the one bounded startup check decides.
-            admission, guard_document = self._start_guard_check(requested)
-            if not admission.admitted:
-                raise ResourceAllocationError(admission.reason, admission=admission)
-            live_headroom = guard_document
-            required = ResourceThresholds(0, 0.0, 0.0)
-            failures = ()
-            headroom_ratio = 0.0
-        else:
-            observed = self._probe_snapshot()
-            if self.allocation_policy.enforce_resource_thresholds:
-                required = ResourceThresholds(
-                    logical_cpu_count=self.config.min_logical_cpu_per_worker * requested,
-                    available_ram_gib=float(
-                        self.config.available_ram_base_gib
-                        + self.config.available_ram_per_worker_gib * requested
-                    ),
-                    gpu_free_gib=float(self.config.min_available_gpu_gib),
-                )
-                failures = _resource_failures(observed, required)
-                headroom_ratio = self.config.required_live_headroom_ratio
-            else:
-                required = ResourceThresholds(0, 0.0, 0.0)
-                failures = ()
-                headroom_ratio = 0.0
-        if not version_three:
-            admission = ResourceAdmission(
-                admitted=not failures,
-                observed=observed,
-                required=required,
-                required_live_headroom_ratio=headroom_ratio,
-                failures=failures,
-            )
-            if failures:
-                raise ResourceAllocationError(', '.join(failures), admission=admission)
-            live_headroom = (
-                self._live_headroom(requested)
-                if self.allocation_policy.enforce_resource_thresholds
-                else None
-            )
+        # There is no formula budget: the one bounded startup check decides.
+        admission, guard_document = self._start_guard_check(requested)
+        if not admission.admitted:
+            raise ResourceAllocationError(admission.reason, admission=admission)
+        live_headroom = guard_document
 
         paths = tuple(self._paths(slot + 1) for slot in range(requested))
         parent_fd = None
@@ -1190,7 +1144,7 @@ class WorkerResourceAllocator:
                 os.close(parent_fd)
         self._workers = {worker.worker_id: worker for worker in workers}
         self._manifest = ResourceManifest(
-            schema_version=3 if version_three else 1,
+            schema_version=3,
             mode='dry_run',
             backend=self.config.backend,
             evidence_root=self.evidence_root,
@@ -1209,18 +1163,7 @@ class WorkerResourceAllocator:
         """Reclaim an exact crashed batch root without recreating its allocation."""
         if self._closed or self._manifest is not None:
             raise ResourceAllocationError('ALLOCATOR_NOT_ACTIVE')
-        expected_schema = (
-            4 if isinstance(self.config, ParallelRuntimeConfigV4)
-            else 3 if isinstance(self.config, ParallelRuntimeConfigV3)
-            else 2 if isinstance(self.config, ParallelRuntimeConfigV2) else 1
-        )
-        if (
-            isinstance(self.config, (ParallelRuntimeConfigV2, ParallelRuntimeConfigV3))
-            and isinstance(manifest, ResourceManifest)
-            and manifest.schema_version == 1
-        ):
-            # A retained version-one manifest never starts a version-two restore.
-            raise ResourceAllocationError('LEGACY_CONTRACT_EXECUTION_FORBIDDEN')
+        expected_schema = 4 if isinstance(self.config, ParallelRuntimeConfigV4) else 3
         if (
             not isinstance(manifest, ResourceManifest)
             or manifest.schema_version != expected_schema
@@ -1294,33 +1237,12 @@ class WorkerResourceAllocator:
                 })
             if dict(environment) != expected_environment:
                 raise ResourceAllocationError('RECOVERY_RESOURCE_ENVIRONMENT')
-        if isinstance(self.config, ParallelRuntimeConfigV3):
-            # Restore re-runs one fresh bounded check; the recorded guard document is kept
-            # as evidence, and ownership/domain checks below are unchanged.
-            admission, guard_document = self._start_guard_check(manifest.worker_count)
-            if not admission.admitted:
-                raise ResourceAllocationError(admission.reason, admission=admission)
-            manifest = replace(manifest, admission=admission, start_guard=guard_document)
-        else:
-            observed = self._probe_snapshot()
-            required = ResourceThresholds(
-                logical_cpu_count=self.config.min_logical_cpu_per_worker * manifest.worker_count,
-                available_ram_gib=float(
-                    self.config.available_ram_base_gib
-                    + self.config.available_ram_per_worker_gib * manifest.worker_count
-                ),
-                gpu_free_gib=float(self.config.min_available_gpu_gib),
-            )
-            failures = _resource_failures(observed, required)
-            admission = ResourceAdmission(
-                admitted=not failures,
-                observed=observed,
-                required=required,
-                required_live_headroom_ratio=self.config.required_live_headroom_ratio,
-                failures=failures,
-            )
-            if failures:
-                raise ResourceAllocationError(', '.join(failures), admission=admission)
+        # Restore re-runs one fresh bounded check; the recorded guard document is kept
+        # as evidence, and ownership/domain checks below are unchanged.
+        admission, guard_document = self._start_guard_check(manifest.worker_count)
+        if not admission.admitted:
+            raise ResourceAllocationError(admission.reason, admission=admission)
+        manifest = replace(manifest, admission=admission, start_guard=guard_document)
         parent_fd = _open_trusted_parent(self.evidence_root)
         root_fd = None
         try:
@@ -2104,7 +2026,7 @@ def _thaw_json(value):
     return value
 
 
-def _runtime_config_sha256(config: ParallelRuntimeConfig) -> str:
+def _runtime_config_sha256(config: ParallelRuntimeConfigV3) -> str:
     return hashlib.sha256(_json_bytes(asdict(config))).hexdigest()
 
 

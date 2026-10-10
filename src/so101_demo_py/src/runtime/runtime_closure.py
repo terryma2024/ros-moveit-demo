@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..parallel_batch.resource_identity import canonical_sha256
+from ..parallel_batch.canonical_json import canonical_sha256
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids an import cycle with task_stack
     from .task_stack import OwnedProcessIdentity

@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    BatchKindV2, BatchRequest, BatchRequestV2, RunMode, ValidationStatus, WorkerState,
-    load_parallel_runtime_config, load_parallel_runtime_config_v2,
+    BatchKindV2, BatchRequestV2, RunMode, ValidationStatus, WorkerState,
+    load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
@@ -77,8 +77,8 @@ def make(tmp_path):
             request = BatchRequestV2('batch-a', mode, points, workers, root,
                                      BatchKindV2.FIRST_PASS)
         clock, results = (Clock() if clock_port is None else clock_port), Results()
-        config = load_parallel_runtime_config_v2(
-            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v2.yaml')
+        config = load_parallel_runtime_config_v3(
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
         selector_args = (
             {} if point_selector is None else {'point_selector': point_selector}
         )

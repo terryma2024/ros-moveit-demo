@@ -9,13 +9,11 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 POINTS_PATH = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
-CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 
 
-def test_capacity_and_frozen_points():
-    """A changed catalog or insufficient startup capacity must be rejected."""
-
-    from so101_demo.parallel_batch.contracts import ContractError, validate_capacity
+def test_frozen_points_catalog():
+    """A changed catalog must be rejected."""
 
     assert hashlib.sha256(POINTS_PATH.read_bytes()).hexdigest() == (
         "c74915477bfea979285c605a199cf524462a57d9f44b0b5f38a6ae935f298dc5"
@@ -30,70 +28,47 @@ def test_capacity_and_frozen_points():
         "sample_15_far_center",
         "sample_16_far_right",
     ]
-    with pytest.raises(ContractError, match="INSUFFICIENT_CAPACITY"):
-        validate_capacity(worker_count=2, max_points_per_worker=9, point_count=20)
-
-
-@pytest.mark.parametrize("value", [True, 0, -1])
-def test_capacity_rejects_boolean_zero_and_negative_values(value):
-    """Treating bool or nonpositive capacity as an integer admits invalid batches."""
-
-    from so101_demo.parallel_batch.contracts import ContractError, validate_capacity
-
-    with pytest.raises(ContractError, match="POSITIVE_INTEGER"):
-        validate_capacity(worker_count=value, max_points_per_worker=10, point_count=20)
-
-
-def test_capacity_accepts_exact_and_excess_capacity():
-    """Exact and surplus worker capacity must retain the CLI's selected capacity."""
-
-    from so101_demo.parallel_batch.contracts import validate_capacity
-
-    assert validate_capacity(worker_count=2, max_points_per_worker=10, point_count=20) == 20
-    assert validate_capacity(worker_count=3, max_points_per_worker=10, point_count=20) == 30
 
 
 def test_runtime_config_loads_the_frozen_values():
     """Changing closed runtime defaults must require a new configuration artifact."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 
-    config = load_parallel_runtime_config(CONFIG_PATH)
+    config = load_parallel_runtime_config_v3(CONFIG_PATH)
     assert config.backend == "mujoco"
     assert config.ros_domain_ids == (181, 182, 183, 184, 185, 186, 187, 188)
     assert config.max_worker_count == 8
-    assert config.max_points_per_worker_upper_bound == 20
     assert config.heartbeat_interval_s == 1.0
     assert config.lease_duration_s == 300.0
     assert config.batch_hard_timeout_s == 5400.0
     assert config.broker_queue_capacity_per_model == 3
     assert config.requested_device == "cuda"
     assert config.allow_cpu_fallback is False
-    assert config.required_live_headroom_ratio == 0.20
 
 
 @pytest.mark.parametrize(
-    ("mutated_key", "mutated_value", "error"),
+    ("section", "mutated_key", "mutated_value", "error"),
     [
-        ("unexpected", 1, "UNKNOWN_CONFIG_FIELD"),
-        ("heartbeat_interval_s", float("inf"), "FINITE"),
-        ("max_worker_count", True, "POSITIVE_INTEGER"),
+        (None, "unexpected", 1, "UNKNOWN_CONFIG_FIELD"),
+        ("execution", "heartbeat_interval_s", float("inf"), "FINITE"),
+        ("execution", "max_worker_count", True, "POSITIVE_INTEGER"),
     ],
 )
 def test_runtime_config_rejects_unknown_boolean_and_nonfinite_values(
-    tmp_path, mutated_key, mutated_value, error
+    tmp_path, section, mutated_key, mutated_value, error
 ):
     """Loose YAML parsing could silently admit an unsafe scheduler configuration."""
 
-    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config_v3
 
     document = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    document[mutated_key] = mutated_value
+    (document if section is None else document[section])[mutated_key] = mutated_value
     path = tmp_path / "parallel_batch.yaml"
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
     with pytest.raises(ContractError, match=error):
-        load_parallel_runtime_config(path)
+        load_parallel_runtime_config_v3(path)
 
 
 def test_closed_statuses_keep_candidates_distinct_from_accepted_poses():
@@ -138,7 +113,8 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
     """A mixed attempt/validation identity could authorize the wrong sealed workspace."""
 
     from so101_demo.parallel_batch.contracts import (
-        BatchRequest,
+        BatchKindV2,
+        BatchRequestV2,
         ContractError,
         ExecutionKind,
         InferenceRequest,
@@ -146,13 +122,13 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
     )
 
     with pytest.raises(ContractError, match="ABSOLUTE_EVIDENCE_ROOT"):
-        BatchRequest(
+        BatchRequestV2(
             batch_id="batch-1",
             run_mode=RunMode.DRY_RUN,
             selected_point_ids=("task_start",),
             worker_count=1,
-            max_points_per_worker=1,
             evidence_root=Path("relative/evidence"),
+            batch_kind=BatchKindV2.FIRST_PASS,
         )
     request_fields = dict(
         request_id="request-1",
@@ -307,29 +283,28 @@ def test_relative_input_path_rejects_dot_component():
         ("max_frame_age_s", 4.0),
         ("max_rgbd_skew_s", 0.01),
         ("max_tf_skew_s", 0.01),
-        ("min_available_gpu_gib", 7),
     ],
 )
 def test_runtime_config_rejects_reviewed_value_drift(tmp_path, key, value):
-    """Changing any admission-critical v1 value requires a new reviewed config."""
+    """Changing any admission-critical value requires a new reviewed config."""
 
-    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config_v3
 
     document = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    document[key] = value
+    document["execution"][key] = value
     path = tmp_path / "drifted.yaml"
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
     with pytest.raises(ContractError, match="FROZEN_RUNTIME_VALUE"):
-        load_parallel_runtime_config(path)
+        load_parallel_runtime_config_v3(path)
 
 
 def test_runtime_config_exposes_reviewed_model_hashes_without_yaml_schema_drift():
     """Model provenance must be frozen even though the reviewed YAML has no hash keys."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 
-    config = load_parallel_runtime_config(CONFIG_PATH)
+    config = load_parallel_runtime_config_v3(CONFIG_PATH)
     assert config.yolo_weights_sha256 == (
         "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
     )
@@ -343,10 +318,11 @@ def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
     """Float schema versions and string selections must not be normalized into valid inputs."""
 
     from so101_demo.parallel_batch.contracts import (
-        BatchRequest,
+        BatchKindV2,
+        BatchRequestV2,
         ContractError,
         RunMode,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
 
     document = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
@@ -354,50 +330,42 @@ def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
     path = tmp_path / "float-schema.yaml"
     path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
     with pytest.raises(ContractError, match="SCHEMA_VERSION"):
-        load_parallel_runtime_config(path)
+        load_parallel_runtime_config_v3(path)
     with pytest.raises(ContractError, match="POINT_ID_SEQUENCE"):
-        BatchRequest(
+        BatchRequestV2(
             batch_id="batch-1",
             run_mode=RunMode.DRY_RUN,
             selected_point_ids="abc",
             worker_count=1,
-            max_points_per_worker=1,
             evidence_root=Path("/tmp/parallel-evidence"),
+            batch_kind=BatchKindV2.FIRST_PASS,
         )
 
 
 def test_batch_request_rejects_duplicate_empty_and_overbound_selection_controls():
     """Duplicate IDs and counts beyond frozen admission limits must fail before leasing."""
 
-    from so101_demo.parallel_batch.contracts import BatchRequest, ContractError, RunMode
+    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, ContractError, RunMode
 
     shared = dict(
         batch_id="batch-1",
         run_mode=RunMode.DRY_RUN,
         evidence_root=Path("/tmp/parallel-evidence"),
+        batch_kind=BatchKindV2.FIRST_PASS,
     )
     with pytest.raises(ContractError, match="UNIQUE_POINT_IDS"):
-        BatchRequest(
+        BatchRequestV2(
             **shared,
             selected_point_ids=("task_start", "task_start"),
             worker_count=1,
-            max_points_per_worker=2,
         )
     with pytest.raises(ContractError, match="EMPTY_ID"):
-        BatchRequest(**shared, selected_point_ids=("",), worker_count=1, max_points_per_worker=1)
+        BatchRequestV2(**shared, selected_point_ids=("",), worker_count=1)
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
-        BatchRequest(
+        BatchRequestV2(
             **shared,
             selected_point_ids=("task_start",),
             worker_count=9,
-            max_points_per_worker=1,
-        )
-    with pytest.raises(ContractError, match="MAX_POINTS_PER_WORKER"):
-        BatchRequest(
-            **shared,
-            selected_point_ids=("task_start",),
-            worker_count=1,
-            max_points_per_worker=21,
         )
 
 
@@ -530,119 +498,16 @@ def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mod
 
 @pytest.mark.parametrize("workers", [1, 2, 8])
 def test_fixed_batch_contract_supports_exact_count_through_eight(tmp_path, workers):
-    from so101_demo.parallel_batch.contracts import BatchRequest, RunMode
-    request = BatchRequest("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
-                           workers, 20 if workers == 1 else 10 if workers == 2 else 3, tmp_path)
+    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode
+    request = BatchRequestV2("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
+                             workers, tmp_path, BatchKindV2.FIRST_PASS)
     assert request.worker_count == workers
 
 
 def test_fixed_batch_nine_is_outside_supported_range(tmp_path):
-    from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, ContractError
+    from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode, ContractError
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
-        BatchRequest("nine", RunMode.EXECUTE, ("p1",), 9, 1, tmp_path)
-
-
-V2_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
-
-
-def test_v1_can_be_read_but_not_executed(tmp_path):
-    from so101_demo.parallel_batch.contracts import ContractError, require_v2_execution
-    with pytest.raises(ContractError) as error:
-        require_v2_execution(1, 1)
-    assert error.value.code == 'LEGACY_CONTRACT_EXECUTION_FORBIDDEN'
-    with pytest.raises(ContractError):
-        require_v2_execution(3, 2)
-    assert require_v2_execution(2, 2) is None
-
-
-def test_v1_yaml_bytes_and_hash_are_frozen():
-    """v1 stays byte-identical; the new contract must never migrate it in place."""
-
-    assert hashlib.sha256(CONFIG_PATH.read_bytes()).hexdigest() == (
-        "aadcac01da5342bd81cc560d12dd77e526a8b29751832f3bdd1f7e6f528a93a3"
-    )
-
-
-def test_historical_contract_view_is_readonly_and_byte_stable():
-    from so101_demo.parallel_batch.contracts import read_historical_contract
-    first = read_historical_contract(CONFIG_PATH)
-    second = read_historical_contract(CONFIG_PATH)
-    assert first.version == 1
-    assert first.raw_sha256 == hashlib.sha256(CONFIG_PATH.read_bytes()).hexdigest()
-    assert first.raw_sha256 == second.raw_sha256
-    assert dict(first.payload) == dict(second.payload) == yaml.safe_load(CONFIG_PATH.read_text())
-    assert first.readonly is True
-    with pytest.raises(TypeError):
-        first.payload["schema_version"] = 2
-    with pytest.raises((TypeError, AttributeError)):
-        first.raw_sha256 = "b" * 64
-
-
-def test_historical_contract_rejects_unknown_versions(tmp_path):
-    from so101_demo.parallel_batch.contracts import ContractError, read_historical_contract
-    document = tmp_path / "future.yaml"
-    document.write_text("schema_version: 3\n")
-    with pytest.raises(ContractError) as error:
-        read_historical_contract(document)
-    assert error.value.code == "UNKNOWN_SCHEMA_VERSION"
-
-
-def test_v2_config_is_closed_and_carries_no_quota_fields():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
-    config = load_parallel_runtime_config_v2(V2_CONFIG_PATH)
-    assert config.schema_version == 2
-    for removed in ("max_points_per_worker", "max_points_per_worker_upper_bound",
-                    "min_logical_cpu_per_worker", "available_ram_base_gib",
-                    "available_ram_per_worker_gib", "min_available_gpu_gib",
-                    "required_live_headroom_ratio"):
-        assert not hasattr(config, removed), removed
-    assert config.heartbeat_timeout_s == 5.0
-    assert config.batch_hard_timeout_s == 5400.0
-    assert config.ros_domain_ids == (181, 182, 183, 184, 185, 186, 187, 188)
-    assert config.max_worker_count == 8
-    assert config.deployment.approved_profile_path is None
-    assert config.deployment.approved_profile_sha256 is None
-    assert config.deployment.promotion_record_path is None
-
-
-def test_v2_config_rejects_unknown_duplicate_and_nonfinite_fields(tmp_path):
-    from so101_demo.parallel_batch.contracts import (
-        ContractError, load_parallel_runtime_config_v2)
-    document = yaml.safe_load(V2_CONFIG_PATH.read_text())
-    unknown = tmp_path / "unknown.yaml"
-    document["execution"]["max_points_per_worker"] = 20
-    unknown.write_text(yaml.safe_dump(document, sort_keys=False))
-    with pytest.raises(ContractError) as error:
-        load_parallel_runtime_config_v2(unknown)
-    assert error.value.code.startswith("UNKNOWN_EXECUTION_FIELD")
-    duplicate = tmp_path / "duplicate.yaml"
-    duplicate.write_text(V2_CONFIG_PATH.read_text() + "\nschema_version: 2\n")
-    with pytest.raises(ContractError) as error:
-        load_parallel_runtime_config_v2(duplicate)
-    assert error.value.code == "DUPLICATE_KEY"
-    nonfinite = tmp_path / "nonfinite.yaml"
-    document = yaml.safe_load(V2_CONFIG_PATH.read_text())
-    document["execution"]["heartbeat_timeout_s"] = float("nan")
-    nonfinite.write_text(yaml.safe_dump(document, sort_keys=False))
-    with pytest.raises(ContractError) as error:
-        load_parallel_runtime_config_v2(nonfinite)
-    assert error.value.code.startswith("NONFINITE")
-
-
-def test_v2_fixed_execution_config_is_mode_and_count_only():
-    from so101_demo.parallel_batch.contracts import ContractError, FixedExecutionConfigV2
-    assert FixedExecutionConfigV2(2, "SEQUENTIAL", 1).worker_count == 1
-    assert FixedExecutionConfigV2(2, "PARALLEL", 8).execution_mode == "PARALLEL"
-    with pytest.raises(ContractError):
-        FixedExecutionConfigV2(1, "PARALLEL", 2)
-    with pytest.raises(ContractError):
-        FixedExecutionConfigV2(2, "ADAPTIVE", 2)
-    with pytest.raises(ContractError):
-        FixedExecutionConfigV2(2, "SEQUENTIAL", 2)
-    with pytest.raises(ContractError):
-        FixedExecutionConfigV2(2, "PARALLEL", 1)
-    with pytest.raises(ContractError):
-        FixedExecutionConfigV2(2, "PARALLEL", 9)
+        BatchRequestV2("nine", RunMode.EXECUTE, ("p1",), 9, tmp_path, BatchKindV2.FIRST_PASS)
 
 
 def test_v2_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path):
@@ -667,15 +532,14 @@ def test_v2_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path)
 
 
 def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
-    """The broker transport loads a config shared by both generations, and the v1 parser
-    refuses a v2 document (`UNKNOWN_CONFIG_FIELD: ['deployment', 'execution']`), which is
-    exactly how the broker died at startup in run56. The loader must choose by schema."""
+    """The broker transport loads whichever profile document it is given; the loader must
+    choose the parser by the declared schema."""
 
     from so101_demo.parallel_batch.contracts import (
         ContractError, load_runtime_config_any_schema)
 
-    loaded = load_runtime_config_any_schema(V2_CONFIG_PATH)
-    assert getattr(loaded, "schema_version", None) == 2
+    loaded = load_runtime_config_any_schema(CONFIG_PATH)
+    assert getattr(loaded, "schema_version", None) == 3
     unknown = tmp_path / "v9.yaml"
     unknown.write_text("schema_version: 9\n")
     with pytest.raises(ContractError, match="SCHEMA_VERSION"):
@@ -848,8 +712,11 @@ def test_runtime_config_loader_selects_v3_parser(tmp_path):
     loaded = contracts.load_runtime_config_any_schema(V3_CONFIG_PATH)
     assert isinstance(loaded, contracts.ParallelRuntimeConfigV3)
     assert loaded.schema_version == 3
-    assert isinstance(contracts.load_runtime_config_any_schema(V2_CONFIG_PATH),
-                      contracts.ParallelRuntimeConfigV2)
+    for retired in (1, 2):
+        path = tmp_path / f"retired-{retired}.yaml"
+        path.write_text(f"schema_version: {retired}\n")
+        with pytest.raises(contracts.ContractError, match="SCHEMA_VERSION"):
+            contracts.load_runtime_config_any_schema(path)
 
 
 def test_budget_environment_does_not_change_v3_loading(monkeypatch):

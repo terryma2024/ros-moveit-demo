@@ -32,8 +32,6 @@ ALLOWED = {
     "src/so101_demo_py/test/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
     "src/so101_demo_py/test/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
     "src/so101_demo_py/test/test_parallel_batch_cli.py": "string argument compared with the CLI's own output",
-    # installed-prefix identity: the audit hashes an in-memory inventory and records the prefix as a label
-    "src/so101_demo_py/test/test_parallel_resource_identity.py": "prefix label for an in-memory inventory",
     "src/so101_demo_py/test/test_pick_place_executor_adapter.py": "installed_prefix label passed to a fake adapter",
     # command-line arguments for argument-parsing / option-binding tests
     "src/so101_demo_py/test/test_qualification_runner.py": "CLI argument string; the runner is parsed, not executed",

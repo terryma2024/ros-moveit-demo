@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Sequence
 
 from ..runtime.task_artifacts import atomic_json
-from .resource_identity import canonical_sha256
+from .canonical_json import canonical_sha256
 from .selection import FirstPassSelectionBinding, RetrySelectionBinding
 
 STATE_SCHEMA_VERSION = 1

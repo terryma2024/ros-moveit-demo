@@ -28,7 +28,7 @@ from so101_demo.parallel_batch.start_guard_probe import (
     CLEAR,
     ProbeCoordinator,
 )
-from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 from so101_demo.parallel_batch.resources import (
     AllocationPolicy,
     main,
@@ -43,9 +43,8 @@ from paths import PACKAGE_ROOT
 
 
 PACKAGE = PACKAGE_ROOT
-CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v1.yaml'
+CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
 CLI_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v3.yaml'
-V2_CONFIG_PATH = PACKAGE / 'config/mujoco/parallel_batch_v2.yaml'
 
 
 def test_two_worker_headroom_verifier_uses_business_named_acceptance_provider():
@@ -90,13 +89,6 @@ def config():
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 
     return load_parallel_runtime_config_v3(CLI_CONFIG_PATH)
-
-
-@pytest.fixture
-def legacy_config():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v2
-
-    return load_parallel_runtime_config_v2(V2_CONFIG_PATH)
 
 
 @pytest.fixture(autouse=True)
@@ -317,7 +309,6 @@ def test_observational_policy_allocates_eight_without_headroom_rejection(
     policy = AllocationPolicy(
         max_worker_count=8,
         ros_domain_ids=tuple(range(215, 223)),
-        enforce_resource_thresholds=False,
         persistent_cleanup_claims=True,
     )
     target = resource_root(tmp_path, 'adaptive-eight')
@@ -342,7 +333,7 @@ def test_observational_policy_allocates_eight_without_headroom_rejection(
 def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
     tmp_path, config
 ):
-    policy = AllocationPolicy(1, (215,), False, True)
+    policy = AllocationPolicy(1, (215,), True)
     claims = resource_root(tmp_path, 'persistent-claims')
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'first-active'), probe=FakeProbe(),
@@ -364,7 +355,7 @@ def test_persistent_active_domain_record_rejects_reuse_after_lock_release(
 def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
     tmp_path, config
 ):
-    policy = AllocationPolicy(1, (215,), False, True)
+    policy = AllocationPolicy(1, (215,), True)
     claims = Path(os.environ['TMPDIR']).parent / 'verified-release-claims'
     first = WorkerResourceAllocator(
         config, resource_root(tmp_path, 'release-first'), probe=FakeProbe(),
@@ -390,7 +381,7 @@ def test_verified_cleanup_releases_persistent_domain_for_a_new_batch(
 
 
 def test_prelaunch_allocation_failure_releases_persistent_claim(tmp_path, config):
-    policy = AllocationPolicy(1, (215,), False, True)
+    policy = AllocationPolicy(1, (215,), True)
     target = resource_root(tmp_path, 'prelaunch-failure')
     claims = Path(os.environ['TMPDIR']).parent / 'rollback-claims'
     socket_path = target / 'ipc/1/s'
@@ -1565,25 +1556,6 @@ def test_admission_records_the_start_guard_decision(tmp_path, config):
     assert manifest.start_guard['status'] == admission.status
     assert manifest.start_guard['checks']['ram']['reason'] == admission.checks['ram']['reason']
     assert manifest.schema_version == 3
-
-
-@pytest.mark.parametrize(
-    'snapshot',
-    [
-        ResourceSnapshot(True, 64.0, 12.0),
-        ResourceSnapshot(32, math.nan, 12.0),
-        ResourceSnapshot(32, 64.0, math.inf),
-        ResourceSnapshot(32, -1.0, 12.0),
-    ],
-)
-def test_malformed_resource_probe_values_fail_closed(tmp_path, legacy_config, snapshot):
-    # The formula-budget path is the one that reads the injected probe. A v3 or v4
-    # config decides through the start guard instead, which probes the host itself,
-    # so an injected snapshot never reaches allocation there.
-    probe = FakeProbe()
-    probe.resources = snapshot
-    with pytest.raises(ResourceAllocationError, match='INVALID_RESOURCE_SNAPSHOT'):
-        allocator(tmp_path, legacy_config, probe, start_guard=None).allocate()
 
 
 def test_existing_ros_domain_fails_before_any_directory_is_created(tmp_path, config):

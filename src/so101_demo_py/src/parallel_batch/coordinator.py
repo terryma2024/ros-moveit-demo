@@ -22,8 +22,7 @@ from typing import Callable, Protocol
 
 from .contracts import (
     ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV2,
-    AttemptStatus, BatchSummary, LeaseIdentity, ParallelRuntimeConfig,
+    AttemptStatus, BatchSummary, LeaseIdentity,
     PointStatus, RunMode, ValidationStatus, WorkerState,
 )
 
@@ -140,8 +139,7 @@ class BatchCoordinator:
         if point_selector is not None and not callable(point_selector):
             raise ValueError('POINT_SELECTOR_CALLABLE')
         self._point_selector = point_selector
-        if not isinstance(config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
-                                   ParallelRuntimeConfigV3)):
+        if not isinstance(config, ParallelRuntimeConfigV3):
             raise ValueError('FROZEN_CONFIG_REQUIRED')
         self.config = config
         self._state = {'workers': {}, 'points': {}}

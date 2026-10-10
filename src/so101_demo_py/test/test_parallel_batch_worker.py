@@ -10,13 +10,13 @@ import pytest
 
 from so101_demo.parallel_batch.contracts import (
     AttemptStatus,
-    BatchRequest,
+    BatchKindV2, BatchRequestV2,
     ExecutionKind,
     LeaseIdentity,
     RunMode,
     ValidationStatus,
     WorkerState,
-    load_parallel_runtime_config,
+    load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -24,8 +24,8 @@ from so101_demo.parallel_batch.worker import ParallelWorker
 from paths import PACKAGE_ROOT
 
 
-CONFIG = load_parallel_runtime_config(
-    PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
+CONFIG = load_parallel_runtime_config_v3(
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
 )
 
 
@@ -1659,9 +1659,7 @@ def test_port_exceptions_fail_closed_and_never_escape_as_authorization(failure):
 
 def test_worker_composes_with_real_durable_coordinator_port(tmp_path):
     clock = Clock()
-    request = BatchRequest(
-        "batch-a", RunMode.EXECUTE, ("p1",), 1, 2, tmp_path,
-    )
+    request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("p1",), 1, tmp_path, BatchKindV2.FIRST_PASS)
     journal = CoordinatorJournal.create(tmp_path, "batch-a")
 
     class DurableResults:

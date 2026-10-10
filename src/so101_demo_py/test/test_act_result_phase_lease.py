@@ -11,7 +11,7 @@ from so101_demo.act.result_store import ActCollectionResultVerifier
 from so101_demo.act.collection_scope import write_collection_scope
 from so101_demo.cli.mujoco_parallel_batch import _ArtifactResults
 from so101_demo.parallel_batch.contracts import (BatchKindV2, BatchRequestV2, RunMode,
-    AttemptStatus, load_parallel_runtime_config_v2)
+    AttemptStatus, load_parallel_runtime_config_v3)
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
@@ -38,8 +38,8 @@ def test_verifier_uses_exact_durable_execution_lease_and_exact_finalizing_lease(
             verifier.bind_execution_journal(journal)
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("point-1",), 1,
                                 tmp_path / "journal", BatchKindV2.FIRST_PASS)
-        config = load_parallel_runtime_config_v2(PACKAGE_ROOT /
-                                                 "config/mujoco/parallel_batch_v2.yaml")
+        config = load_parallel_runtime_config_v3(PACKAGE_ROOT /
+                                                 "config/mujoco/parallel_batch_v3.yaml")
         coordinator = BatchCoordinator(journal, request, config=config, result_port=verifier, clock=clock)
         coordinator.register_worker("w00", generation=1)
         grant = coordinator.grant_lease("w00", generation=1)

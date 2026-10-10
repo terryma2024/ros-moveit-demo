@@ -16,7 +16,7 @@ from so101_demo.act.result_store import (
     ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults, ResultInfraError,
 )
 from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
-from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, load_parallel_runtime_config_v2
+from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, load_parallel_runtime_config_v3
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
@@ -218,8 +218,8 @@ def test_coordinator_journals_business_failed_only_after_verifier(tmp_path):
         verifier = ActCollectionResultVerifier({"w00": root}, scope=scope_of(tmp_path))
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
-        config = load_parallel_runtime_config_v2(
-            PACKAGE_ROOT / "config/mujoco/parallel_batch_v2.yaml")
+        config = load_parallel_runtime_config_v3(
+            PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml")
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0., result_port=verifier)
         coordinator.register_worker("w00", generation=1)

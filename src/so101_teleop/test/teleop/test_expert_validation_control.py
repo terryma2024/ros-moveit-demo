@@ -210,7 +210,7 @@ def test_real_control_transport_preserves_a_long_private_batch_socket(tmp_path):
 def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
     """No injected transport or stand-in terminal-result authority on this path."""
     from so101_demo.parallel_batch.contracts import (
-        BatchRequest, RunMode, load_parallel_runtime_config,
+        BatchKindV2, BatchRequestV2, RunMode, load_parallel_runtime_config_v3,
     )
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -230,9 +230,9 @@ def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
     root = (tmp_path if sys.platform != "darwin" else _short_private_root("u")).resolve()
     journal = CoordinatorJournal.create(root / "coordinator", "batch-a")
     try:
-        request = BatchRequest("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
+        request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("p1", "p2"), 2, root, BatchKindV2.FIRST_PASS)
         demo_root = SOURCE_ROOT / "so101_demo_py"
-        config = load_parallel_runtime_config(demo_root / "config/mujoco/parallel_batch_v1.yaml")
+        config = load_parallel_runtime_config_v3(demo_root / "config/mujoco/parallel_batch_v3.yaml")
         coordinator = BatchCoordinator(journal, request, config=config, result_port=UnusedResultPort())
         coordinator.register_worker("w1", generation=1)
         coordinator.register_worker("w2", generation=1)

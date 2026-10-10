@@ -19,11 +19,9 @@ from typing import Mapping
 from .contracts import (
     teacher_execution_bound_s,
     ParallelRuntimeConfigV3,
-    ParallelRuntimeConfigV2,
     AttemptStatus,
     ExecutionKind,
     LeaseIdentity,
-    ParallelRuntimeConfig,
     RunMode,
     TeacherChannelTerminal,
     TeacherPreMotionRefused,
@@ -306,8 +304,7 @@ class ParallelWorker:
             raise WorkerError("FAULT_HOOK_CALLABLE")
         if type(self._adaptive_workers) is not bool:
             raise WorkerError("ADAPTIVE_WORKERS_BOOLEAN")
-        if not isinstance(self._config, (ParallelRuntimeConfig, ParallelRuntimeConfigV2,
-                                        ParallelRuntimeConfigV3)):
+        if not isinstance(self._config, ParallelRuntimeConfigV3):
             raise WorkerError("FROZEN_CONFIG_REQUIRED")
         if not isinstance(self._worker_id, str) or not self._worker_id:
             raise WorkerError("WORKER_ID_REQUIRED")

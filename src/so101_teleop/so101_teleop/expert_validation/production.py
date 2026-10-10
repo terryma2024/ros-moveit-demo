@@ -232,7 +232,7 @@ class ProductionRuntimeLayout:
         parallel = _required_file(
             environment,
             "SO101_VALIDATION_PARALLEL_CONFIG",
-            demo_share / "config/mujoco/parallel_batch_v1.yaml",
+            demo_share / "config/mujoco/parallel_batch_v3.yaml",
         )
         adaptive = _required_file(
             environment,

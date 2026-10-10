@@ -71,7 +71,7 @@ def test_upstream_adaptive_runtime_and_catalog_are_installable():
         "src/parallel_batch/adaptive_pool.py",
         "src/cli/parallel_batch_cleanup.py",
         "config/mujoco/parallel_adaptive_workers_v1.yaml",
-        "config/mujoco/parallel_batch_v1.yaml",
+        "config/mujoco/parallel_batch_v3.yaml",
         "config/mujoco/moveit_expert_validation_points_v1.yaml",
     ):
         assert (DEMO / relative).is_file(), relative

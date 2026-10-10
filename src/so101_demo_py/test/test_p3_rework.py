@@ -74,7 +74,6 @@ def test_versions_four_to_six_keep_every_pin_exactly():
     for pins in (contracts.FROZEN_RUNTIME_VALUES_V4, contracts.FROZEN_RUNTIME_VALUES_V5, contracts.FROZEN_RUNTIME_VALUES_V6):
         assert pins["executing_hard_timeout_s"] == 240.0 and pins["lease_duration_s"] == 300.0
     assert contracts._FROZEN_RUNTIME_VALUES_V3["executing_hard_timeout_s"] == 240.0
-    assert contracts._FROZEN_RUNTIME_VALUES["executing_hard_timeout_s"] == 240.0 and contracts._FROZEN_RUNTIME_VALUES["lease_duration_s"] == 300.0
     # the v3 closed field list is exactly the dataclass (the v4 work froze that surface) and the v4 list is untouched by this change
     assert set(contracts.EXECUTION_V3_FIELDS) == {item.name for item in contracts.fields(contracts.ParallelRuntimeConfigV3)} - {
         "schema_version", "start_guard"}

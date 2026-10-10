@@ -58,13 +58,11 @@ from so101_demo.parallel_batch.contracts import (
     teacher_execution_bound_s,
     AttemptIdentity,
     AttemptStatus,
-    BatchRequest,
     BatchSummary,
     ContractError,
     LeaseIdentity,
-    ParallelRuntimeConfig,
-    ParallelRuntimeConfigV2,
     RunMode,
+    RuntimeConfig,
     ValidationStatus,
     ValidationIdentity,
     WorkerState,
@@ -72,7 +70,6 @@ from so101_demo.parallel_batch.contracts import (
     InferenceRequest,
     ModelOutcome,
     NormalizedInferenceResponseIdentity,
-    load_parallel_runtime_config,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
@@ -151,7 +148,7 @@ def _take_fixed_web_control(spec: PreparedBatch) -> _FixedWebControl | None:
     values = {key: os.environ.pop(key) for key in keys if key in os.environ}
     if len(values) != len(keys):
         raise CliError("FIXED_CONTROL_ENV_INCOMPLETE")
-    if not isinstance(spec.request, (BatchRequest, BatchRequestV2)):
+    if not isinstance(spec.request, BatchRequestV2):
         raise CliError("FIXED_CONTROL_REQUEST_REQUIRED")
     token, campaign, epoch, socket_path = (values[key] for key in keys)
     if re.fullmatch(r"[0-9a-f]{64}", token) is None:
@@ -177,9 +174,9 @@ class _Parser(argparse.ArgumentParser):
 @dataclass(frozen=True, slots=True)
 class PreparedBatch:
     start_guard: object | None
-    request: BatchRequest | BatchRequestV2 | BatchRequestV3 | PoolRequest | None
+    request: BatchRequestV2 | PoolRequest | None
     adaptive_request: AdaptiveBatchRequest | None
-    config: ParallelRuntimeConfig
+    config: RuntimeConfig
     config_path: Path
     adaptive_config_path: Path | None
     points_path: Path
@@ -878,7 +875,7 @@ def _validate_external_overlay_binding(
 
     demo_prefix = prefixes["so101_demo_py"]
     expected_console = demo_prefix / "lib/so101_demo_py/so101_parallel_batch"
-    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
+    expected_config = demo_prefix / "share/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
     expected_points = (
         demo_prefix
         / "share/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
@@ -2819,7 +2816,6 @@ class ProductionBatchComposition:
                 else AllocationPolicy(
                     max_worker_count=adaptive_context.options.worker_count,
                     ros_domain_ids=adaptive_context.options.ros_domain_ids,
-                    enforce_resource_thresholds=False,
                     persistent_cleanup_claims=True,
                 )
             ),

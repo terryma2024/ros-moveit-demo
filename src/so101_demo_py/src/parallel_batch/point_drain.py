@@ -50,7 +50,7 @@ from typing import Callable, Mapping, Sequence
 
 from ..runtime.task_artifacts import atomic_json, fsync_directory
 from .queue import CommittedResult, DurablePointQueue, PointLease, WorkerIdentity
-from .resource_identity import canonical_sha256
+from .canonical_json import canonical_sha256
 from .selection import (
     BUSINESS_FAILED,
     FirstPassSelectionBinding,

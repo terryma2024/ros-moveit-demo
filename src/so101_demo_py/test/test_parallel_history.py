@@ -1,7 +1,7 @@
 """History reading is pure: it decodes retained documents and grants nothing.
 
 Task 3 of the lightweight start guard plan. The active budget/measurement implementation is
-being deleted; historical v1/v2 records must stay readable without dragging any of it back
+being deleted; retained profile documents must stay readable without dragging any of it back
 into the process, and without touching the sealed bytes on disk.
 """
 
@@ -17,9 +17,7 @@ from so101_demo.parallel_batch import history
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-V1_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
-V2_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
-V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
+LINUX_CUDA_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 
 RETIRED_MODULES = (
     "so101_demo.parallel_batch.resource_budget",
@@ -31,8 +29,8 @@ RETIRED_MODULES = (
 )
 
 
-@pytest.mark.parametrize("path", [V1_CONFIG, V2_CONFIG, V3_CONFIG])
-def test_history_reads_every_generation_without_authorizing(path):
+@pytest.mark.parametrize("path", [LINUX_CUDA_CONFIG])
+def test_history_reads_a_profile_without_authorizing(path):
     view = history.load_history(path)
     raw = path.read_bytes()
     assert view["raw_sha256"] == hashlib.sha256(raw).hexdigest()
@@ -40,11 +38,11 @@ def test_history_reads_every_generation_without_authorizing(path):
     assert view["readonly"] is True
     assert view["authorizes_execution"] is False
     assert view["schema_version"] in history.history_versions()
-    assert view["kind"] in ("LEGACY_V1", "CERTIFIED_V2", "ACTIVE_V3")
+    assert view["kind"] == "LINUX_CUDA"
 
 
 def test_history_rejects_unknown_versions_and_malformed_documents(tmp_path):
-    unknown = tmp_path / "v9.yaml"
+    unknown = tmp_path / "unknown.yaml"
     unknown.write_text("schema_version: 9\n")
     with pytest.raises(history.HistoryError, match="HISTORY_SCHEMA_VERSION"):
         history.load_history(unknown)
@@ -65,8 +63,8 @@ def test_history_rejects_unknown_versions_and_malformed_documents(tmp_path):
 
 
 def test_history_keeps_the_sealed_bytes_unchanged(tmp_path):
-    copy = tmp_path / "retained-v2.yaml"
-    original = V2_CONFIG.read_bytes()
+    copy = tmp_path / "retained.yaml"
+    original = LINUX_CUDA_CONFIG.read_bytes()
     copy.write_bytes(original)
     before = sorted(p.name for p in tmp_path.iterdir())
     digest_before = hashlib.sha256(copy.read_bytes()).hexdigest()
@@ -80,8 +78,8 @@ def test_history_keeps_the_sealed_bytes_unchanged(tmp_path):
 
 
 def test_history_projection_is_read_only():
-    view = history.load_history(V2_CONFIG)
-    assert view["payload"]["schema_version"] == 2
+    view = history.load_history(LINUX_CUDA_CONFIG)
+    assert view["payload"]["schema_version"] == 3
     with pytest.raises(TypeError):
         view["payload"]["schema_version"] = 3
     with pytest.raises(TypeError):
@@ -95,7 +93,7 @@ def test_history_import_pulls_in_no_retired_module():
         "import json, sys\n"
         "from pathlib import Path\n"
         "from so101_demo.parallel_batch import history\n"
-        f"view = history.load_history(Path({str(V2_CONFIG)!r}))\n"
+        f"view = history.load_history(Path({str(LINUX_CUDA_CONFIG)!r}))\n"
         "loaded = sorted(name for name in sys.modules if 'parallel_batch' in name)\n"
         "print(json.dumps({'schema_version': view['schema_version'], 'modules': loaded}))\n"
     )
@@ -105,7 +103,7 @@ def test_history_import_pulls_in_no_retired_module():
     import json
 
     payload = json.loads(result.stdout.strip().splitlines()[-1])
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     for module in RETIRED_MODULES:
         assert module not in payload["modules"], payload["modules"]
 
@@ -126,7 +124,7 @@ def test_history_jsonl_reader_is_lossless(tmp_path):
 def test_history_and_contracts_agree_on_the_active_version():
     from so101_demo.parallel_batch import contracts
 
-    view = history.load_history(V3_CONFIG)
-    config = contracts.load_parallel_runtime_config_v3(V3_CONFIG)
+    view = history.load_history(LINUX_CUDA_CONFIG)
+    config = contracts.load_parallel_runtime_config_v3(LINUX_CUDA_CONFIG)
     assert view["schema_version"] == config.schema_version == 3
-    assert view["kind"] == "ACTIVE_V3"
+    assert view["kind"] == "LINUX_CUDA"

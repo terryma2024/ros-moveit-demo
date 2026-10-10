@@ -21,7 +21,7 @@ from paths import REPOSITORY
 
 WORKTREE = REPOSITORY
 V3_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
-V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
+V2_CONFIG = WORKTREE / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
 
 
 def _installed_prefix() -> Path:

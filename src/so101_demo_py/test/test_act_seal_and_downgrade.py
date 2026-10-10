@@ -27,7 +27,7 @@ from test_act_recorder import PROVENANCE
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.contracts import (BatchKindV2, BatchRequestV2, RunMode,
-                                                 load_parallel_runtime_config_v2)
+                                                 load_parallel_runtime_config_v3)
 from paths import PACKAGE_ROOT
 
 
@@ -354,8 +354,8 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
         verifier = ActCollectionResultVerifier({"w00": root})
         request = BatchRequestV2("batch-a", RunMode.EXECUTE, ("scene-1",), 1,
                                  tmp_path / "journal", BatchKindV2.FIRST_PASS)
-        config = load_parallel_runtime_config_v2(
-            PACKAGE_ROOT / "config/mujoco/parallel_batch_v2.yaml")
+        config = load_parallel_runtime_config_v3(
+            PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml")
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0., result_port=verifier)
         coordinator.register_worker("w00", generation=1)

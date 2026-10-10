@@ -546,13 +546,13 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     tmp_path, monkeypatch, worker_count, yolo_executor_count
 ):
     from so101_demo.cli import mujoco_parallel_batch as cli
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 
     config_path = (
         PACKAGE_ROOT
-        / "config/mujoco/parallel_batch_v1.yaml"
+        / "config/mujoco/parallel_batch_v3.yaml"
     )
-    config = load_parallel_runtime_config(config_path)
+    config = load_parallel_runtime_config_v3(config_path)
     owner = object.__new__(cli.ProductionBatchComposition)
     ipc_root = tmp_path / "ipc"
     ipc_root.mkdir()

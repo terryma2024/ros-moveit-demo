@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from ..parallel_batch.resource_identity import canonical_sha256
+from ..parallel_batch.canonical_json import canonical_sha256
 from .runtime_closure import (
     RuntimeClosureIdentity,
     build_runtime_closure_identity,

@@ -14,7 +14,7 @@ from paths import PACKAGE_ROOT, REPOSITORY
 
 PACKAGE = PACKAGE_ROOT
 POINTS = PACKAGE / "config/mujoco/moveit_expert_validation_points_v1.yaml"
-CONFIG = PACKAGE / "config/mujoco/parallel_batch_v2.yaml"
+CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 ADAPTIVE_CONFIG = PACKAGE / "config/mujoco/parallel_adaptive_workers_v1.yaml"
 
 import pytest
@@ -544,7 +544,7 @@ def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
     assert Path(adaptive_path).name == "parallel_adaptive_workers_v1.yaml"
     assert worker_options.worker_count >= 1
     source = Path(cli.__file__).read_text(encoding="utf-8")
-    assert "parallel_batch_v2.yaml" in source
+    assert "parallel_batch_v3.yaml" in source
     assert "_adaptive_options" in source
 
 

@@ -33,7 +33,6 @@ from paths import PACKAGE_ROOT
 PACKAGE = PACKAGE_ROOT
 V3_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
 V4_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v4_macos_mps_w2.yaml"
-V1_CONFIG = PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
 
 
 # --------------------------------------------------------------------------------------
@@ -58,7 +57,9 @@ def test_v4_loads_and_v1_v2_are_still_refused_for_execution(tmp_path):
     loaded = load_execution_config(V4_CONFIG)
     assert isinstance(loaded, ParallelRuntimeConfigV4)
     assert loaded.schema_version == 4
-    for legacy in (V1_CONFIG, PACKAGE / "config/mujoco/parallel_batch_v2.yaml"):
+    for retired in (1, 2):
+        legacy = tmp_path / f"retired-{retired}.yaml"
+        legacy.write_text(yaml.safe_dump({"schema_version": retired}))
         with pytest.raises(ContractError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
             load_execution_config(legacy)
 

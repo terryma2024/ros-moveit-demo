@@ -7,20 +7,20 @@ import pytest
 
 from so101_demo.parallel_batch.contracts import (
     AttemptIdentity,
-    BatchRequest,
+    BatchKindV2, BatchRequestV2,
     ExecutionKind,
     InferenceRequest,
     ModelOutcome,
     RunMode,
-    load_parallel_runtime_config,
+    load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT
 
 
-CONFIG = load_parallel_runtime_config(
-    PACKAGE_ROOT / "config/mujoco/parallel_batch_v1.yaml"
+CONFIG = load_parallel_runtime_config_v3(
+    PACKAGE_ROOT / "config/mujoco/parallel_batch_v3.yaml"
 )
 YOLO = CONFIG.yolo_model_id
 GROUNDED = "grounded-sam"
@@ -66,9 +66,7 @@ def make_coordinator(tmp_path, clock, points=("p1", "p2")):
     journal = CoordinatorJournal.create(tmp_path, "batch-broker")
     coordinator = BatchCoordinator(
         journal,
-        BatchRequest(
-            "batch-broker", RunMode.EXECUTE, points, 1, 2, tmp_path
-        ),
+        BatchRequestV2("batch-broker", RunMode.EXECUTE, points, 1, tmp_path, BatchKindV2.FIRST_PASS),
         config=CONFIG,
         clock=clock,
         result_port=NoResults(),

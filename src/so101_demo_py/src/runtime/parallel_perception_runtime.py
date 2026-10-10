@@ -29,14 +29,15 @@ from so101_demo.core.detection import DetectionBatch, DetectionCandidate, Detect
 from so101_demo.parallel_batch.broker import BrokerSubmission, ModelResult, PerceptionBroker
 from so101_demo.parallel_batch.contracts import (
     InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
-    ParallelRuntimeConfig,
 )
+from so101_demo.parallel_batch.frozen_models import (
+    FROZEN_GROUNDED_SAM_MANIFEST_SHA256, FROZEN_YOLO_WEIGHTS_SHA256)
 
 YOLO_ID = 'plastic-cup-yolo11n-seg-v1'
 GROUNDED_ID = 'grounded-sam'
 IMAGE_TAG = 'so101-parallel-perception:ros-jazzy-torch2.13.0-cu130-v1'
-YOLO_SHA = ParallelRuntimeConfig.FROZEN_YOLO_WEIGHTS_SHA256
-GROUNDED_SHA = ParallelRuntimeConfig.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
+YOLO_SHA = FROZEN_YOLO_WEIGHTS_SHA256
+GROUNDED_SHA = FROZEN_GROUNDED_SAM_MANIFEST_SHA256
 PINS = ('torch==2.13.0+cu130', 'torchvision==0.28.0+cu130', 'ultralytics==8.4.115',
         'transformers==4.56.2', 'scipy==1.17.1', 'huggingface-hub==0.34.4',
         'safetensors==0.6.2', 'tokenizers==0.22.0', 'numpy==1.26.4',

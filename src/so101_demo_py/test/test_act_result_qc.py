@@ -30,7 +30,7 @@ def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_o
     from so101_demo.act.episode_audit import EpisodeAuditWriter
     from so101_demo.act.recorder import EpisodeRecorder
     from so101_demo.act.result_store import ActCollectionResultStore,ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import BatchKindV2,BatchRequestV2,RunMode,load_parallel_runtime_config_v2
+    from so101_demo.parallel_batch.contracts import BatchKindV2,BatchRequestV2,RunMode,load_parallel_runtime_config_v3
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
     from test_act_seal_and_downgrade import SCOPE,IDENTITY,PROVENANCE
@@ -40,7 +40,7 @@ def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_o
     inputs=tmp_path/'inputs-manifest.json';inputs.write_text(json.dumps(dict(inputs_sha256='a'*64,mode=SCOPE['mode'])))
     verifier=ActCollectionResultVerifier({'w00':worker},scope=scope,inputs_manifest=inputs)
     verifier.bind_execution_journal(journal)
-    config=load_parallel_runtime_config_v2(PACKAGE_ROOT/'config/mujoco/parallel_batch_v2.yaml')
+    config=load_parallel_runtime_config_v3(PACKAGE_ROOT/'config/mujoco/parallel_batch_v3.yaml')
     coordinator=BatchCoordinator(journal,BatchRequestV2('batch-1',RunMode.EXECUTE,('point-1',),1,run,
         BatchKindV2.FIRST_PASS),config=config,clock=lambda:10.,result_port=verifier)
     coordinator.register_worker('w00',generation=1)

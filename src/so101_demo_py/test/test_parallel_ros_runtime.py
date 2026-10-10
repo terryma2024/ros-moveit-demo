@@ -660,11 +660,11 @@ def test_recovery_requires_observed_child_and_ros_graph_absence():
 
 def test_f21_config_reuses_dynamic_age_and_orders_workspace_min_then_max():
     from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config
+    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_v3
 
     template = load_dynamic_policy_variant(PACKAGE, backend="mujoco").template
-    config = load_parallel_runtime_config(
-        PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+    config = load_parallel_runtime_config_v3(
+        PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
     )
     assert config.max_frame_age_s == template.maximum_source_age_s == 5.0
     assert config.max_rgbd_skew_s == 0.0
@@ -684,7 +684,7 @@ def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
         ModelOutcome,
         RunMode,
         ValidationIdentity,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
     from so101_demo.parallel_batch.perception import LocalizedPose, PerceptionError
@@ -723,8 +723,8 @@ def test_task5_policy_persists_admission_and_rejects_mixed_source_clock(
     resources = SimpleNamespace(
         worker_id="worker-01", generation=1, session_id="session-1"
     )
-    config = load_parallel_runtime_config(
-        PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+    config = load_parallel_runtime_config_v3(
+        PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
     )
     ports = ParallelRosRuntimePorts(
         resources,
@@ -825,7 +825,7 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
         ModelOutcome,
         RunMode,
         ValidationIdentity,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
     from so101_demo.runtime.parallel_ros_runtime import (
         ParallelRosRuntimePorts,
@@ -858,8 +858,8 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
         header=SimpleNamespace(stamp=SimpleNamespace(sec=12, nanosec=0)),
         data=b"depth",
     )
-    config = load_parallel_runtime_config(
-        PACKAGE / "config/mujoco/parallel_batch_v1.yaml"
+    config = load_parallel_runtime_config_v3(
+        PACKAGE / "config/mujoco/parallel_batch_v3.yaml"
     )
     ports = ParallelRosRuntimePorts(
         SimpleNamespace(
@@ -1273,7 +1273,7 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind, ModelOutcome, RunMode, ValidationIdentity,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts, ResetBoundaryReceipt
@@ -1305,7 +1305,7 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     ports = ParallelRosRuntimePorts(
         SimpleNamespace(worker_id="worker-01", generation=1, session_id="session-1"),
         catalog={"task_start": {"cup_position_world_m": [0.02, -0.28, 0.165]}},
-        config=load_parallel_runtime_config(PACKAGE / "config/mujoco/parallel_batch_v1.yaml"),
+        config=load_parallel_runtime_config_v3(PACKAGE / "config/mujoco/parallel_batch_v3.yaml"),
         broker_generation=1,
         dependencies={
                 "workspace_provider": lambda _lease: workspace,

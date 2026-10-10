@@ -139,17 +139,17 @@ def test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals(t
     # Evaluate the new binding before spawning; RED never starts an accidental CLI.
     binding = request.control_binding
     assert binding is not None
-    config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v1.yaml"
+    config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
     program = '''
 import json, os, pathlib, time
-from so101_demo.parallel_batch.contracts import BatchRequest, RunMode, load_parallel_runtime_config
+from so101_demo.parallel_batch.contracts import BatchKindV2, BatchRequestV2, RunMode, load_parallel_runtime_config_v3
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 root = pathlib.Path(os.environ["TOY_BATCH_ROOT"])
 journal = CoordinatorJournal.create(root / "coordinator", "b001")
-request = BatchRequest("b001", RunMode.EXECUTE, ("p1", "p2"), 2, 2, root)
-coordinator = BatchCoordinator(journal, request, config=load_parallel_runtime_config(os.environ["TOY_CONFIG"]), result_port=None)
+request = BatchRequestV2("b001", RunMode.EXECUTE, ("p1", "p2"), 2, root, BatchKindV2.FIRST_PASS)
+coordinator = BatchCoordinator(journal, request, config=load_parallel_runtime_config_v3(os.environ["TOY_CONFIG"]), result_port=None)
 coordinator.register_worker("w1", generation=1)
 coordinator.register_worker("w2", generation=1)
 path = pathlib.Path(os.environ["SO101_FIXED_CONTROL_SOCKET"])

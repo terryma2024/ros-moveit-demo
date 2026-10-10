@@ -11,8 +11,8 @@ import pytest
 
 from so101_demo.parallel_batch import artifacts as api
 from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity, BatchRequest, LeaseIdentity, PointStatus, RunMode, ValidationIdentity,
-    load_parallel_runtime_config,
+    AttemptIdentity, BatchKindV2, BatchRequestV2, LeaseIdentity, PointStatus, RunMode, ValidationIdentity,
+    load_parallel_runtime_config_v3,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
@@ -932,9 +932,9 @@ def test_real_result_adapter_commits_only_matching_coordinator_event(tmp_path, m
     )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
-        request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
-        config = load_parallel_runtime_config(
-            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
+        request = BatchRequestV2('batch-a', mode, ('point-1',), 1, tmp_path, BatchKindV2.FIRST_PASS)
+        config = load_parallel_runtime_config_v3(
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0.0, result_port=adapter)
         coordinator.register_worker('w1', generation=1)
@@ -1047,9 +1047,9 @@ def test_adapter_requires_parent_durability_after_rename_failure(
     )
     journal = CoordinatorJournal.create(tmp_path / 'journal', 'batch-a')
     try:
-        request = BatchRequest('batch-a', mode, ('point-1',), 1, 1, tmp_path)
-        config = load_parallel_runtime_config(
-            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v1.yaml')
+        request = BatchRequestV2('batch-a', mode, ('point-1',), 1, tmp_path, BatchKindV2.FIRST_PASS)
+        config = load_parallel_runtime_config_v3(
+            PACKAGE_ROOT / 'config/mujoco/parallel_batch_v3.yaml')
         coordinator = BatchCoordinator(journal, request, config=config,
                                        clock=lambda: 0.0, result_port=adapter)
         coordinator.register_worker('w1', generation=1)

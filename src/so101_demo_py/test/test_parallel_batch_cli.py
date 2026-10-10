@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch.contracts import (
-    load_parallel_runtime_config_v2,
+    load_parallel_runtime_config_v3,
     BatchSummary,
     PointStatus,
     RunMode,
@@ -2039,7 +2039,7 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
     from so101_demo.cli.mujoco_parallel_batch import CliError, _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
         load_parallel_runtime_config_v3,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
@@ -2758,7 +2758,7 @@ def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_pat
     repository = tmp_path / "checkout"
     module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
     console = repository / "install/so101_demo_py/lib/so101_demo_py/so101_parallel_batch"
-    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v2.yaml"
+    config = repository / "src/so101_demo_py/config/mujoco/parallel_batch_v3.yaml"
     points = repository / "src/so101_demo_py/config/mujoco/moveit_expert_validation_points_v1.yaml"
     for path in (module, console, config, points):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -2808,7 +2808,7 @@ def _external_overlay_fixture(tmp_path):
     support_prefix.mkdir(parents=True)
     share = package_prefix / "share/so101_demo_py/config/mujoco"
     share.mkdir(parents=True)
-    config = share / "parallel_batch_v2.yaml"
+    config = share / "parallel_batch_v3.yaml"
     points = share / "moveit_expert_validation_points_v1.yaml"
     config.write_text("schema_version: 2\n", encoding="utf-8")
     points.write_text("schema_version: 1\n", encoding="utf-8")
@@ -3484,7 +3484,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
     from so101_demo.cli.mujoco_parallel_batch import _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
-        load_parallel_runtime_config,
+        load_parallel_runtime_config_v3,
         load_parallel_runtime_config_v3,
     )
     from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt

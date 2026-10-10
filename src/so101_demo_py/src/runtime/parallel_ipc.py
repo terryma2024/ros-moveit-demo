@@ -1042,7 +1042,8 @@ def _snapshot(document):
 
 def _broker_response(response):
     from so101_demo.parallel_batch.broker import BrokerResponse
-    from so101_demo.parallel_batch.contracts import ParallelRuntimeConfig
+    from so101_demo.parallel_batch.frozen_models import (
+        FROZEN_GROUNDED_SAM_MANIFEST_SHA256, FROZEN_YOLO_WEIGHTS_SHA256)
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 
     if type(response) is not BrokerResponse:
@@ -1055,9 +1056,8 @@ def _broker_response(response):
             if isinstance(response.candidate, dict)
             and isinstance(response.candidate.get("weights_sha256"), str)
             else {
-                YOLO_ID: ParallelRuntimeConfig.FROZEN_YOLO_WEIGHTS_SHA256,
-                GROUNDED_ID:
-                    ParallelRuntimeConfig.FROZEN_GROUNDED_SAM_MANIFEST_SHA256,
+                YOLO_ID: FROZEN_YOLO_WEIGHTS_SHA256,
+                GROUNDED_ID: FROZEN_GROUNDED_SAM_MANIFEST_SHA256,
             }[response.request.model_id]
         ),
         "broker_generation": response.broker_generation,
