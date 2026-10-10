@@ -69,11 +69,42 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3545
+latest_checkpoint: CP-3546
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3546 — refactor phase B done (HEAD 53278f0be, 32 family commits), gates 0/0; live checks dispatched
+
+- Families committed (one commit each):
+  - workflow profiles (TEACHER_WORKFLOW);
+  - teacher endpoint (unversioned);
+  - Teacher policy (one; plus general_runtime_policy.yaml);
+  - place height; dynamic manifest (so101-dynamic-execute / so101-teacher-execute; v1 gone); teacher events;
+  - ACT result and QC (schema 3); episode seal; snapshot binding; training config; journal; camera truth; HFA-009 (dead-man only);
+  - HeadSimulationPolicy (3 only; active candidate b15a4f13… is schema 3); measurement contract (v2; the retired task6 reference dropped); contact policy;
+  - parallel_batch history → request (BatchRequest/BatchKind) → profiles; parallel_ipc_darwin; adaptive_worker_pool.yaml;
+  - single-version file renames; policy directories flattened; test names; guides.
+- Allowlists: versioned 509 → 29 (all permanent: vendor STL parts and the perception dataset/candidate configs); process 305 → 280; wire 358 → 332.
+- Gates (phaseB/gates/final):
+  - fresh build rc 0;
+  - demo 11217 pass, 0 fail (collection 11382);
+  - colcon 1918 tests, 0/0;
+  - scripts: 10 pass;
+  - benchmark_test 555 pass, 62 skip (run because fresh_dataset.yaml changed).
+- U3: the adaptive route builds its own AllocationPolicy (16 workers, domains 215–230), independent of the linux_cuda frozen fixed-batch values, so no override change was needed; enforce_resource_thresholds was deleted (only v1/v2 used it). Teleop production.py, run_so101_adaptive_worker_scaling.zsh and so101-teleop-service.py point at parallel_batch_linux_cuda.yaml.
+- Where the code proved the design wrong (accepted by root):
+  - model bundle 1/2/3 and dataset 1/2 are lineage stages, since later builders consume earlier bundles; readers are kept, with only the test names renamed;
+  - the four `_v3()` forks separate general from Teacher runs and are kept as `_teacher_run()`;
+  - runner checkpoint was already latest-only;
+  - the teleop expert-validation `*_v1` tests test current behaviour and were renamed, not deleted.
+- Open items, to clear in phase C:
+  - about 400 lines of unreachable code in parallel_batch/resources.py (TwoWorkerHeadroomVerifier and the formula-budget helpers);
+  - embedded `_v1` audit source kinds (e.g. recorder_queue_v1) deferred to phase D.
+- Process deviation: the new refusal tests have no recorded RED run against their parent commits. The phase is deletion-dominant, so this is accepted; later phases must record RED.
+- External tooling: new prepare-qualified-inputs r7, cycle-r10 and Head make_inputs-phaseB.py, with sha256 recorded; the other active wrappers were reviewed and are unaffected.
+- Live checks after phase B dispatched: Head 900000; one pick-place Teacher run through cycle-r10; a Linux fixed-N batch through the teleop unified service; an adaptive run; an offline dataset smoke.
 
 ## CP-3545 — refactor phase A done (HEAD 12657279a), gates 0/0; phase B dispatched
 
