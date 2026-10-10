@@ -69,11 +69,58 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3527
+latest_checkpoint: CP-3528
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3528 — Head line merged (97b4c499e + fixups to 8ab61b431); camera path unified; Head geometry adopted; UT not yet green (161 classified); next phase dispatched
+
+- Merge and fixups: 97b4c499e merge; 4aa87d4e4, 6ce0e43fa, 7817614ee, 8ab61b431 fixups. Submodule so101-merge-head-20261010: be41802 merge of 16ca7bc and 0d9df5e → a68bcf4.
+- Resolution counts:
+  - (a) 527 Head-side paths kept at the local state (378 restored, 149 stay deleted);
+  - (b) 39 auto-merged plus 22 hand-resolved. All 39 auto-merged files were re-derived against the pre-unique base and are identical (no old code reintroduced).
+  - (c) about 357 Head-only files added;
+  - (d) Head-side act-data ledger saved as docs/experiments/so101-act-data-experiment-ledger.head-line-20261010.md (6.0 MB).
+  - Log: /tmp/so101-debug-act-data-66c42e4c/merge-resolution.md.
+- Kept Head-imported broker-chain modules: ros_neck, broker_execution, controller_reservation_provision/client.
+  - Removed: the resurrected retired pick-place child-port and search-boundary modules plus 7 tests; test_controller_reservation_socket.cpp (53 gtest cases) and its Python client, because they drive the deleted CommandBroker.
+  - Dangling: controller_reservation_client.install_authority lazily imports the deleted broker_authority_composition; no test reaches it. To be checked against the Head live path.
+- Camera (root decision, recommended):
+  - The capture is unified on the lossless lock-step path and the camera_lossless_capture switch is removed.
+  - ControlTickGate arms when the controller manager loop attaches (use_sim_time=true, set by the shared launch for both ACT and Head). It is unarmed only before the attach or after a 250 ms unacknowledged timeout.
+  - RED SlowRendererWithTheTickGateArmed… (30 ms renders, 600 steps): Head's non-blocking mode delivered 1 of 12 frames; unified: 600 ticks exactly once at 2 ms, 12 frames on the 100 ms grid. It replaces Head's PhysicsCaptureDoesNotWaitForInFlightRendering.
+  - Kept from Head: physics-step observer, ns stamps, reset re-arm, paused snapshots, camera truth.
+  - Note: with sim time on, Head's loop trace and clock-advance probe are bypassed by the lock-step branch.
+- Geometry (USER decision "需要保留"):
+  - so101.xml/urdf take Head's neck mount z 0.24 → 0.38925 m and the two camera housing/lens geoms, on top of the local R11 joint ranges.
+  - Compiled model b3b2e83c… → 17c415d9…. Head camera world z 0.42992 → 0.57917 m; optical axis unchanged at neck 0.0/0.1.
+  - Re-pinned: 8 source _MODEL_SHA constants, the test_d1 hash, the Head contract hash, and 16 d2 golden digests (contact numerics shift about 1e-6).
+  - Still bound to the old hash, needing re-seal: contact-calibration-schema.json, held_cup_micro_lift_candidates_v1, held_cup_transfer_v2/v3, task6_alt_full_contact_v1, task6_contact_transition_v1, task6_visible_approach_v1, visible_approach_candidate_v1, the contact policy activation (0ba8e07f… and r10b/131c2bdc…), and mujoco_plugins.yaml bytes (Head use_egl).
+- Build: fresh base scratch/merge-head-0010.b0L3h0bo, RelWithDebInfo, 10 packages, rc 0.
+- Gates:
+  - so101_demo_py test-venv: 11071 pass / 90 fail / 113 err / 177 skip, rc 1.
+  - so101_demo_py grounded-sam: 11125 / 48 / 113 / 165, rc 1.
+  - colcon: plugins 8/8, mujoco_ros2_control 14/14, so101_teleop 113/113, so101_quik 2/2, so101_mujoco_support 16/17; mujoco_ros2_control_tests 1/7 (launch tests fail identically on a clean local 16ca7bc build, so pre-existing).
+  - The broker-owned trajectory controller test fails on a clean Head-line build here (JTC parameter mismatch), so pre-existing.
+- 161 pytest failures and errors, classified:
+  - 115 env: the two head-camera-geometry.json files live in the antzb evidence root and the tests hard-code that path;
+  - 43 old-model-hash sealed artifacts, which fail closed;
+  - 44 test-venv lacks torch/ultralytics (pass under grounded-sam);
+  - 1 numpy 2.5 3e-8 against 0;
+  - 1 flake (rec12b, known load-sensitive since CP-3478).
+- Executor deviation: wiped the uncommitted user AGENTS.md edit twice (bulk `git checkout -- $(git diff --name-only)`). Root restored it from the main checkout; the 2-line diff is verified.
+- Root imported both geometry files from antzb into imports/antzb-head-20261010/head-camera-geometry/:
+  - probe11 0db2eb4c…;
+  - geometry-new f0f04d0e… (matches the sha the tests require).
+- Next (CP-3394 recommended):
+  - (1) vendor the two geometry JSONs as repo test data and make the tests resolve them repo-relatively (no external evidence path);
+  - (2) make the so101_demo_py ordinary gate interpreter the user-chosen grounded-sam venv (pytest/xdist installed there), or justify otherwise;
+  - (3) fix the numpy-2.5 exact-zero assertion only if the computation is legitimately floating-point;
+  - (4) re-seal every old-hash artifact on the Head-geometry model with its own generator/validator, diff old against new content, and build a new contact proposal plus activation (standing CP-3394 authorization, as at CP-3401, for diagnostic use);
+  - (5) static import-graph check that the Head live path does not reach deleted modules;
+  - (6) then the Head-search-only single-cup case and one pick-place Teacher run.
 
 ## CP-3527 — user: pull the Head search line (merged into origin/codex/so101-act-data-0917a), merge it with the non-Head line, all UT green, one Head-search-only task PASS, one pick-place Teacher task PASS
 
