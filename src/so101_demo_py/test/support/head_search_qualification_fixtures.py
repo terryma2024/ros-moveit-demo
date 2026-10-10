@@ -383,7 +383,7 @@ def build_fixture(root: Path, *, run_root: Path | None = None, seed_base: int = 
     weights.write_bytes(b"fixture-weights\n")
     weights_sha256 = digest(weights)
     production_config = (
-        final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+        final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
     )
     _write(
         production_config,

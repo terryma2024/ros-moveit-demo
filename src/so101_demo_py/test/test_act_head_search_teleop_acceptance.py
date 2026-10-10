@@ -52,7 +52,7 @@ def bundle_document(values_sha256: str) -> dict:
         "path": "/declared/bundle.json",
         "sha256": "b" * 64,
         "values_sha256": values_sha256,
-        "promoted_config": "/declared/head_search_v2.json",
+        "promoted_config": "/declared/head_search_runtime.json",
         "promoted_config_sha256": "c" * 64,
         "promoted_values_sha256": PROMOTED_VALUES_SHA256,
         "values_match": values_sha256 == PROMOTED_VALUES_SHA256,

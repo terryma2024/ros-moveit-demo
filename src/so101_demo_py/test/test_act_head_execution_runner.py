@@ -292,7 +292,7 @@ def _with_development_blocks(document):
 
     import json as _json
 
-    reference = PACKAGE_ROOT / 'config/mujoco/act/head_search_v2.json'
+    reference = PACKAGE_ROOT / 'config/mujoco/act/head_search_runtime.json'
     names = list(_json.loads(reference.read_text())['values'])
     result = {key: value for key, value in document.items() if key not in names}
     values = {key: document[key] for key in names if key in document}

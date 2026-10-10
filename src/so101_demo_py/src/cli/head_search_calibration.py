@@ -3810,7 +3810,7 @@ def _serve_teleop(parsed) -> int:
         return 2
     production_config = parsed.production_config or (
         final_run
-        / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+        / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
     )
     run_root = Path(parsed.run_root)
     ready_file = Path(parsed.ready_file) if parsed.ready_file else run_root / "head-camera-connection.json"

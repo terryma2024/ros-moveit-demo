@@ -974,7 +974,7 @@ def _timing_inputs(tmp_path: Path) -> dict:
         ),
         encoding="utf-8",
     )
-    production = tmp_path / "head_search_v2.json"
+    production = tmp_path / "head_search_runtime.json"
     production.write_text(
         json.dumps(
             {
@@ -1141,7 +1141,7 @@ def _deadband_inputs(tmp_path: Path) -> dict:
     )
     weights = tmp_path / "C.pt"
     weights.write_bytes(b"selected-model")
-    production = tmp_path / "head_search_v2.json"
+    production = tmp_path / "head_search_runtime.json"
     production.write_text(
         json.dumps(
             {
@@ -2706,7 +2706,7 @@ def test_measure_skew_prints_the_librarys_refusal_and_returns_two(
 def _rule_inputs(tmp_path: Path) -> dict:
     """The sealed production config the rule's grid comes from, and two brand-new directories."""
 
-    config = tmp_path / "head_search_v2.json"
+    config = tmp_path / "head_search_runtime.json"
     config.write_text(
         json.dumps(
             {
@@ -3471,7 +3471,7 @@ def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
     final_run = tmp_path / "frozen"
     (final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act").mkdir(parents=True)
     (
-        final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+        final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
     ).write_text(json.dumps({"values": {}}), encoding="utf-8")
     acceptance_root = tmp_path / "teleop-acceptance"
     rc = main(

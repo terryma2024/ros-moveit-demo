@@ -47,7 +47,7 @@ RUNTIME = {
     "final_run": "/evidence/head-toolchain-frozen",
     "source_commit": "d8d1b5f8be37678f5bdbdaa92c322b4548f25504",
     "setup_bash_present": True,
-    "production_config": "/evidence/head-toolchain-frozen/head_search_v2.json",
+    "production_config": "/evidence/head-toolchain-frozen/head_search_runtime.json",
     "production_config_sha256": "3fb9f27646b6e314fc30fe2892f6b1c3d44b068f4c6614df8f7de3c5add2ffd9",
     "values_count": 17,
     "values_sha256": "3c787fd7ec402355d8a6e363a6bcbf814273ce30d98d47a3af2bc4400f568df2",

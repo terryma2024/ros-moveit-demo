@@ -110,7 +110,7 @@ def _runtime(tmp_path: Path, values=None) -> dict:
     weights.parent.mkdir(parents=True, exist_ok=True)
     weights.write_bytes(b"weights\n")
     config = (
-        root / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+        root / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
     )
     config.write_text(
         json.dumps(
@@ -643,7 +643,7 @@ def _cli_arguments(tmp_path: Path, run_root: Path, evidence: Path, *extra: str) 
         "--production-config",
         str(
             fixture_source
-            / "final-run/install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+            / "final-run/install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
         ),
         "--approved-bundle",
         str(fixture_source / "approved-bundle.json"),

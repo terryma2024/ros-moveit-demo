@@ -453,7 +453,7 @@ def default_production_config(final_run: Path) -> Path:
 
     return (
         Path(final_run)
-        / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_v2.json"
+        / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act/head_search_runtime.json"
     )
 
 

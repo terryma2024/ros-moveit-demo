@@ -797,7 +797,7 @@ def _document(tmp_path, *, episodes=None):
         dataset_config_sha256="9" * 64,
         geometry_seal_path=tmp_path / "head-camera-geometry.json",
         geometry_seal_sha256="c" * 64,
-        production_search_config_path=tmp_path / "head_search_v2.json",
+        production_search_config_path=tmp_path / "head_search_runtime.json",
         production_search_config_sha256="d" * 64,
         frozen_candidate_path=tmp_path / "frozen-c.json",
         frozen_candidate_sha256="e" * 64,
@@ -982,7 +982,7 @@ def _sealed_inputs(tmp_path):
     seal_path = tmp_path / "head-camera-geometry.json"
     seal_path.write_text(json.dumps(seal), encoding="utf-8")
     production["weight_sha256"] = module._digest(weights_path)
-    production_path = tmp_path / "head_search_v2.json"
+    production_path = tmp_path / "head_search_runtime.json"
     production_path.write_text(json.dumps(production), encoding="utf-8")
     frozen_path = tmp_path / "frozen-c.json"
     frozen_path.write_text(json.dumps(frozen), encoding="utf-8")

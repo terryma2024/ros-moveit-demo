@@ -104,7 +104,7 @@ def runtime_identity(**overrides) -> dict:
         "final_run": "/evidence/head-toolchain-20261001T130437Z",
         "source_commit": "956b5b74bfc2581a6222970c924ac0fd4e5e93e0",
         "setup_bash_present": True,
-        "production_config": "/evidence/frozen/head_search_v2.json",
+        "production_config": "/evidence/frozen/head_search_runtime.json",
         "production_config_sha256": "dfa0af9b" + "0" * 56,
         "values_count": 17,
         "values_sha256": "3c787fd7" + "0" * 56,

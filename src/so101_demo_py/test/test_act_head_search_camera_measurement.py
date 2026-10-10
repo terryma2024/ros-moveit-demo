@@ -348,7 +348,7 @@ def test_a_declared_safety_margin_is_read_with_its_declaring_path_and_digest(tmp
 
 
 def test_a_declared_safety_margin_is_found_under_the_values_block(tmp_path):
-    artefact = tmp_path / "head_search_v2.json"
+    artefact = tmp_path / "head_search_runtime.json"
     artefact.write_text(json.dumps({"values": {"safety_margin_px": 8}}), encoding="utf-8")
 
     declaration = read_declared_safety_margin(artefact)
@@ -872,7 +872,7 @@ def _sealed_inputs(tmp_path):
     scene.write_text("<mujoco/>\n", encoding="utf-8")
     seal_path = tmp_path / "seal.json"
     seal_path.write_text(json.dumps(seal), encoding="utf-8")
-    production_path = tmp_path / "head_search_v2.json"
+    production_path = tmp_path / "head_search_runtime.json"
     production_path.write_text(json.dumps(production), encoding="utf-8")
     frozen_path = tmp_path / "frozen-c.json"
     frozen_path.write_text(json.dumps(frozen), encoding="utf-8")
@@ -924,7 +924,7 @@ def _document(tmp_path, *, safety_margin=None, geometry=None):
         scene_sha256="a" * 64,
         geometry_seal_path=seal_path,
         geometry_seal_sha256=module._digest(seal_path),
-        production_search_config_path=tmp_path / "head_search_v2.json",
+        production_search_config_path=tmp_path / "head_search_runtime.json",
         production_search_config_sha256="b" * 64,
         runtime_identity_document={"python_version": "3.12.3"},
     )

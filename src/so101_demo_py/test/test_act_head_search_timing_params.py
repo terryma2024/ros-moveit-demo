@@ -835,13 +835,13 @@ def test_a_reported_startup_readback_is_checked_and_recorded():
     computed = build()["parameters"]["max_age_s"]["value"]
     document = build(
         startup_readbacks={
-            "max_age_s": {"observed_value": computed, "read_from": "head_search_v2.json"}
+            "max_age_s": {"observed_value": computed, "read_from": "head_search_runtime.json"}
         }
     )
 
     readback = document["parameters"]["max_age_s"]["startup_readback"]
     assert readback["verified"] is True
-    assert readback["read_from"] == "head_search_v2.json"
+    assert readback["read_from"] == "head_search_runtime.json"
 
 
 def test_a_startup_readback_that_disagrees_refuses_with_phase_8s_code():

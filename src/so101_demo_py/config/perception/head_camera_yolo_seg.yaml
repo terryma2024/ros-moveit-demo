@@ -15,7 +15,7 @@ image_height: 480
 #                 = ceil(0.25 * min(640, 480)) = ceil(120.0) = 120 px
 # 0.25 is a policy value: one quarter of the shorter edge is reserved at the top and at the bottom, which
 # leaves half the 480 px image height for the projection to land in. It is deliberately NOT derived from
-# the promoted `values.vertical_bounds_px` of `head_search_v2.json` - a margin defined by the bounds it
+# the promoted `values.vertical_bounds_px` of `head_search_runtime.json` - a margin defined by the bounds it
 # constrains would be circular - and 0.25 is exactly representable in binary, so the ceiling is not
 # perturbed by floating-point rounding. The calibration records this path, its sha256 and the derived
 # integer, and refuses a fraction outside (0, 0.5] or one whose dimensions contradict the sealed camera.

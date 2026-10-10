@@ -159,7 +159,7 @@ def _production(tmp_path, **overrides):
         },
     }
     document.update(overrides)
-    return tmp_path / "head_search_v2.json", document
+    return tmp_path / "head_search_runtime.json", document
 
 
 def _controllers(tmp_path):

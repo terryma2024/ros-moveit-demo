@@ -262,7 +262,7 @@ def _frozen_root(tmp_path: Path, *, commit: str = "9" * 40) -> tuple[Path, Path]
     weights = root / "weights/best.pt"
     weights.parent.mkdir(parents=True, exist_ok=True)
     weights.write_bytes(b"frozen weights\n")
-    config = config_dir / "head_search_v2.json"
+    config = config_dir / "head_search_runtime.json"
     config.write_text(
         json.dumps(
             {

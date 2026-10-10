@@ -698,7 +698,7 @@ def _document(tmp_path, *, candidates=(18.0, 2.0)):
         scene_sha256="b" * 64,
         geometry_seal_path=seal,
         geometry_seal_sha256="c" * 64,
-        production_search_config_path=tmp_path / "head_search_v2.json",
+        production_search_config_path=tmp_path / "head_search_runtime.json",
         production_search_config_sha256="d" * 64,
         frozen_candidate_path=tmp_path / "frozen-c.json",
         frozen_candidate_sha256="e" * 64,
@@ -876,7 +876,7 @@ def _sealed_inputs(tmp_path):
     scene.write_text("<mujoco/>\n", encoding="utf-8")
     seal_path = tmp_path / "seal.json"
     seal_path.write_text(json.dumps(seal), encoding="utf-8")
-    production_path = tmp_path / "head_search_v2.json"
+    production_path = tmp_path / "head_search_runtime.json"
     production_path.write_text(json.dumps(production), encoding="utf-8")
     frozen_path = tmp_path / "frozen-c.json"
     frozen_path.write_text(json.dumps(frozen), encoding="utf-8")

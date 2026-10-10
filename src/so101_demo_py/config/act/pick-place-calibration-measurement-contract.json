@@ -6,7 +6,7 @@
   "controller_config": "config/mujoco/act/ros2_controllers.yaml",
   "cuda_device_policy": "CUDA-only device policy",
   "detector_weights": "detector weight file and model id",
-  "head_search_config": "config/mujoco/act/head_search_v2.json",
+  "head_search_config": "config/mujoco/act/head_search_runtime.json",
   "installed_act_profile": "installed share assets/mujoco/act and config/mujoco/act",
   "joint_limits": "assets/mujoco/act/so101.urdf joint limits",
   "mujoco_xml": "assets/mujoco/act/so101.xml",

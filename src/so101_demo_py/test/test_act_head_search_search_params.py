@@ -891,14 +891,14 @@ def test_a_reported_startup_readback_is_checked_and_recorded():
         startup_readbacks={
             "search_timeout_s": {
                 "observed_value": EXPECTED_TIMEOUT_S,
-                "read_from": "head_search_v2.json",
+                "read_from": "head_search_runtime.json",
             }
         }
     )
 
     readback = document["parameters"]["search_timeout_s"]["startup_readback"]
     assert readback["verified"] is True
-    assert readback["read_from"] == "head_search_v2.json"
+    assert readback["read_from"] == "head_search_runtime.json"
 
 
 def test_a_startup_readback_that_disagrees_refuses_with_phase_8s_code():
@@ -1067,14 +1067,14 @@ def test_a_reported_startup_readback_of_the_coarse_step_is_checked_and_recorded(
         startup_readbacks={
             "coarse_step_rad": {
                 "observed_value": COARSE_STEP_CANDIDATES[0],
-                "read_from": "head_search_v2.json",
+                "read_from": "head_search_runtime.json",
             }
         },
     )
 
     readback = document["parameters"]["coarse_step_rad"]["startup_readback"]
     assert readback["verified"] is True
-    assert readback["read_from"] == "head_search_v2.json"
+    assert readback["read_from"] == "head_search_runtime.json"
 
     code = refusal_of(
         lambda: build(
