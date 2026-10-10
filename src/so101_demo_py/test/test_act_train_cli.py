@@ -1,6 +1,7 @@
 """Task 12 CLI: refuse before writing anything, then train one owned job."""
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -84,6 +85,8 @@ def test_the_cli_exports_trains_and_records_the_run(tmp_path, capsys, monkeypatc
 def test_the_production_trainer_fails_closed_and_never_overwrites_an_output(tmp_path,monkeypatch):
     from so101_demo.cli.act_train import _trainer
 
+    if importlib.util.find_spec("torch") is not None:
+        pytest.skip("this asserts the torch-free refusal; the training interpreter has torch")
     with pytest.raises(ValueError, match="TRAINING_(INTERPRETER_REQUIRED|ADAPTER_UNAVAILABLE)"):
         _trainer({}, tmp_path, tmp_path / "out")
     manifest, index, binding, config = _workspace(tmp_path,monkeypatch)
@@ -94,3 +97,104 @@ def test_the_production_trainer_fails_closed_and_never_overwrites_an_output(tmp_
              trainer=lambda *_a: {"kind": "act_bundle"},
              owner_factory=lambda **_: {"device": "cuda", "run_root": str(tmp_path)},
              requirements_path=_resolved_lock(tmp_path))
+
+
+# ---- design 2026-10-10 section 3.0 items 2-3: the requirements digest and the CUDA owner lease factory -----------------------------
+
+
+def test_the_production_trainer_receives_the_requirements_lock_digest(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    lock = _resolved_lock(tmp_path)
+    seen = {}
+
+    def recorder(config_, dataset, output, *, requirements_sha256=None):
+        seen.update(requirements_sha256=requirements_sha256, dataset=dataset, output=output)
+        return {"schema_version": 1, "kind": "act_bundle"}
+    monkeypatch.setattr(cli, "_trainer", recorder)
+    owner = {"device": "cuda", "run_root": str(tmp_path)}
+    assert cli.main(_argv(manifest, index, binding, config, tmp_path / "bundle"), owner_factory=lambda **_: owner,
+                    requirements_path=lock) == 0
+    assert seen["requirements_sha256"] == hashlib.sha256(lock.read_bytes()).hexdigest()
+    assert seen["output"] == tmp_path / "bundle"
+
+
+def test_the_production_trainer_refuses_to_run_without_the_requirements_digest(tmp_path):
+    from so101_demo.cli.act_train import _trainer
+
+    pytest.importorskip("torch")
+    from so101_demo.act.training_config import load_training_config
+    shipped = load_training_config(Path(__file__).resolve().parents[1] / "config/act/training.yaml")
+    with pytest.raises(ValueError, match="TRAINING_REQUIREMENTS_SHA256_INVALID"):
+        _trainer(shipped, tmp_path, tmp_path / "out")
+
+
+class _Binding:
+    DOCUMENT = {"device": "cuda", "binding_id": "train-binding-1", "leases": []}
+
+
+def _binding_file(tmp_path, document=None):
+    path = tmp_path / "train-gpu-binding.json"
+    path.write_text(json.dumps(document or _Binding.DOCUMENT))
+    return path
+
+
+def test_the_cuda_owner_factory_claims_the_run_root_through_the_training_owner(tmp_path):
+    from so101_demo.cli.act_train import local_owner_factory
+
+    class Idle:
+        def state(self):
+            return "IDLE"
+    run_root = tmp_path / "bundle.run"
+    factory = local_owner_factory(_binding_file(tmp_path), run_root, arbiter=Idle(), identity=lambda: {"pid": 4242, "started_ticks": 99})
+    owner = factory(dataset_sha256="a" * 64, config_sha256="b" * 64)
+    assert owner["device"] == "cuda" and owner["run_root"] == str(run_root) and owner["gpu_binding_id"] == "train-binding-1"
+    receipt = json.loads((run_root / "training-owner.json").read_text())
+    assert receipt["dataset_sha256"] == "a" * 64 and receipt["config_sha256"] == "b" * 64 and receipt["owner_pid"] == 4242
+
+
+def test_the_cuda_owner_factory_refuses_a_busy_gpu_a_bad_binding_and_an_unreadable_arbiter(tmp_path):
+    from so101_demo.cli.act_train import local_owner_factory
+
+    class Busy:
+        def state(self):
+            return "BUSY"
+    ident = lambda: {"pid": 1, "started_ticks": 1}  # noqa: E731
+    with pytest.raises(ValueError, match="TRAINING_ARBITER_BUSY"):
+        local_owner_factory(_binding_file(tmp_path), tmp_path / "a.run", arbiter=Busy(), identity=ident)(
+            dataset_sha256="a" * 64, config_sha256="b" * 64)
+    with pytest.raises(ValueError, match="TRAINING_GPU_BUSY"):
+        local_owner_factory(_binding_file(tmp_path, {**_Binding.DOCUMENT, "leases": [{"kind": "collection"}]}), tmp_path / "b.run",
+                            arbiter=type("I", (), {"state": lambda self: "IDLE"})(), identity=ident)(
+            dataset_sha256="a" * 64, config_sha256="b" * 64)
+    with pytest.raises(ValueError, match="TRAINING_GPU_LEASE_INVALID"):
+        local_owner_factory(tmp_path / "absent.json", tmp_path / "c.run", arbiter=Busy(), identity=ident)(
+            dataset_sha256="a" * 64, config_sha256="b" * 64)
+    assert not (tmp_path / "bundle.run" / "training-owner.json").exists()
+
+
+def test_the_process_table_arbiter_is_idle_only_when_no_process_holds_a_compute_context():
+    from so101_demo.cli.act_train import ProcessTableArbiter
+
+    assert ProcessTableArbiter(runner=lambda: "").state() == "IDLE"
+    assert ProcessTableArbiter(runner=lambda: "\n").state() == "IDLE"
+    assert ProcessTableArbiter(runner=lambda: "4242\n").state() == "BUSY"
+
+    def broken():
+        raise OSError("nvidia-smi missing")
+    with pytest.raises(ValueError, match="TRAINING_ARBITER_UNAVAILABLE"):
+        ProcessTableArbiter(runner=broken).state()
+
+
+def test_main_builds_its_owner_from_the_gpu_binding_when_no_factory_is_injected(tmp_path, monkeypatch):
+    import so101_demo.cli.act_train as cli
+    manifest, index, binding, config = _workspace(tmp_path, monkeypatch)
+    seen = {}
+
+    def factory_builder(gpu_binding, run_root):
+        seen.update(binding=gpu_binding, run_root=run_root)
+        return lambda **_: {"device": "cuda", "run_root": str(tmp_path)}
+    monkeypatch.setattr(cli, "local_owner_factory", factory_builder)
+    assert cli.main(_argv(manifest, index, binding, config, tmp_path / "bundle"), trainer=lambda *_a: {"kind": "act_bundle"},
+                    requirements_path=_resolved_lock(tmp_path)) == 0
+    assert seen == {"binding": binding, "run_root": tmp_path / "bundle.run"}

@@ -5,10 +5,14 @@ exposes exactly what the runner requires: `infer(observation)` returning an acti
 and `reset()`. The observation it accepts is the runner's four-key mapping, converted to the LeRobot batch
 layout (`observation.state`, `observation.images.head`, `observation.images.wrist`) on the policy's device.
 
-The trainer runs LeRobot's own training entry point over an exported dataset and leaves a bundle carrying the
-frozen action semantics and a train-only normalization. Both the policy factory and the training entry point
-are injectable so the wiring is testable without a GPU, and neither is guessed at: the real LeRobot names used
-here were read from the resolved interpreter (lerobot 0.6.1, `ACTPolicy`, `predict_action_chunk`, `reset`).
+The trainer (`train_act_bundle`) runs over a training view of an exported dataset: it decodes the frames through the single D8
+table, computes train-only normalisation statistics (with a std floor), trains a LeRobot 0.6.1 `ACTPolicy` with AdamW and leaves a
+bundle carrying the frozen action semantics and those statistics. LeRobot 0.6.1 keeps normalisation in separate processors, not in
+the policy, so this adapter owns it: the statistics live in the bundle, the trainer normalises state and action with them, and
+`LerobotPolicy.infer` normalises the state and de-normalises the action chunk with the same numbers. The policy is built with
+`NormalizationMode.IDENTITY` and no pretrained backbone weights (no network at run time). Both the policy factory and the training
+entry point are injectable so the wiring is testable without a GPU; the real LeRobot names used here were read from the resolved
+interpreter (lerobot 0.6.1: `ACTPolicy`, `ACTConfig`, `predict_action_chunk`, `reset`).
 """
 
 from __future__ import annotations
@@ -22,7 +26,23 @@ _IMAGE_KEYS = (("head", "observation.images.head"), ("wrist", "observation.image
 _STATE_KEY = "observation.state"
 _ACTION_KEYS = frozenset({"chunk_size", "execution_prefix", "temporal_ensembling", "tail_padding_mask"})
 _POLICY_FILE = "policy.safetensors"
+BUNDLE_FILE = "bundle.json"
+_LOG_FILE = "training-log.json"
 _MODEL_SOURCE = "lerobot-act"
+
+#: D8: the one table that maps the recorder's PNG keys (sealed episodes and validators fix these names) to the runtime observation
+#: keys. It is used by the dataset loader only; the runtime keys stay `head` / `wrist`.
+OBSERVATION_DECODE_TABLE = (("head_png", "head"), ("wrist_png", "wrist"))
+
+#: Everything that turns a stored observation into a network input and is therefore frozen: the decode table, the image decode, the
+#: image scaling and normalisation constants, and the state and action widths. `preprocessing_sha256()` is bound in the training config.
+PREPROCESSING = {
+    "observation_decode": dict(OBSERVATION_DECODE_TABLE),
+    "image": {"decode": "PNG -> uint8 HxWx3 RGB", "to_tensor": "float32 CHW, x / 255",
+              "mean": [0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]},
+    "state_dim": 8,
+    "action_dim": 6,
+}
 
 
 def sha256_file(path: Path) -> str:
@@ -36,6 +56,10 @@ def sha256_file(path: Path) -> str:
 def canonical_sha256(value: object) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
                                      ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+
+
+def preprocessing_sha256() -> str:
+    return canonical_sha256(PREPROCESSING)
 
 
 def require_action_semantics(action: object) -> dict:
@@ -64,7 +88,38 @@ def resolve_policy_file(root: Path, bundle: dict) -> Path:
     return candidate
 
 
-def _as_batch(observation: dict, device: str) -> dict:
+def _require_normalization(bundle: dict) -> dict:
+    """The bundle's statistics, closed and finite: a bundle without them would leave normalisation to be guessed at run time."""
+
+    import math
+
+    normalization = bundle.get("normalization")
+    keys = ("state_mean", "state_std", "action_mean", "action_std")
+    if not isinstance(normalization, dict) or any(key not in normalization for key in keys):
+        raise ValueError("BUNDLE_NORMALIZATION_STATS_MISSING")
+    for key in keys:
+        values = normalization[key]
+        if (not isinstance(values, list) or not values
+                or any(isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) for item in values)):
+            raise ValueError("BUNDLE_NORMALIZATION_INVALID")
+    if (len(normalization["state_mean"]) != len(normalization["state_std"])
+            or len(normalization["action_mean"]) != len(normalization["action_std"])
+            or min(normalization["state_std"]) <= 0 or min(normalization["action_std"]) <= 0):
+        raise ValueError("BUNDLE_NORMALIZATION_INVALID")
+    return normalization
+
+
+def _normalise_images(images):
+    """uint8 NCHW tensor -> float32 NCHW, x / 255 then the frozen per-channel mean and std (training and inference share this)."""
+
+    import torch
+
+    mean = torch.tensor(PREPROCESSING["image"]["mean"], dtype=torch.float32, device=images.device).view(1, 3, 1, 1)
+    std = torch.tensor(PREPROCESSING["image"]["std"], dtype=torch.float32, device=images.device).view(1, 3, 1, 1)
+    return (images.to(torch.float32) / 255.0 - mean) / std
+
+
+def _as_batch(observation: dict, device: str, normalization: dict | None = None) -> dict:
     import numpy as np                     # present in the training interpreter, imported at call time
     import torch
 
@@ -73,53 +128,130 @@ def _as_batch(observation: dict, device: str) -> dict:
     state = observation["state"]
     if not isinstance(state, (list, tuple)) or not state:
         raise ValueError("OBSERVATION_INVALID")
-    batch = {_STATE_KEY: torch.tensor([list(map(float, state))], dtype=torch.float32, device=device)}
+    values = np.asarray(list(map(float, state)), dtype=np.float64)
+    if not np.isfinite(values).all():
+        raise ValueError("OBSERVATION_INVALID")
+    if normalization is not None:
+        mean = np.asarray(normalization["state_mean"], dtype=np.float64)
+        if values.shape != mean.shape:
+            raise ValueError("OBSERVATION_INVALID")
+        values = (values - mean) / np.asarray(normalization["state_std"], dtype=np.float64)
+    batch = {_STATE_KEY: torch.tensor(values[None, :], dtype=torch.float32, device=device)}
     for key, batch_key in _IMAGE_KEYS:
-        image = observation[key]
-        array = np.asarray(image)
+        array = np.asarray(observation[key])
         if array.ndim != 3 or array.shape[-1] != 3:
             raise ValueError("OBSERVATION_IMAGE_INVALID")
-        tensor = torch.tensor(array, dtype=torch.float32, device=device) / 255.0
-        batch[batch_key] = tensor.permute(2, 0, 1).unsqueeze(0).contiguous()
+        if array.dtype != np.uint8:
+            if not np.issubdtype(array.dtype, np.integer) or array.min() < 0 or array.max() > 255:
+                raise ValueError("OBSERVATION_IMAGE_INVALID")
+            array = array.astype(np.uint8)
+        tensor = torch.from_numpy(np.ascontiguousarray(array)).to(device).permute(2, 0, 1).unsqueeze(0)
+        batch[batch_key] = _normalise_images(tensor).contiguous()
     return batch
 
 
 class LerobotPolicy:
-    """The `infer`/`reset` interface the runner requires, over a LeRobot ACT policy."""
+    """The `infer`/`reset` interface the runner requires, over a LeRobot ACT policy.
 
-    def __init__(self, policy: object, device: str = "cuda") -> None:
+    ``normalization`` is the bundle's statistics: the state is normalised before the network and the action chunk is
+    de-normalised after it (LeRobot 0.6.1's policy does neither; its processors do, and the bundle does not use them)."""
+
+    def __init__(self, policy: object, device: str = "cuda", normalization: dict | None = None) -> None:
         self._policy = policy
         self._device = device
+        self._normalization = normalization
 
     def infer(self, observation: dict) -> tuple:
-        batch = _as_batch(observation, self._device)
+        import numpy as np
+
+        batch = _as_batch(observation, self._device, self._normalization)
         chunk = self._policy.predict_action_chunk(batch)
-        rows = chunk.tolist() if hasattr(chunk, "tolist") else chunk
-        actions = []
-        for row in rows:
-            values = row[0] if row and isinstance(row[0], (list, tuple)) else row
-            actions.append(tuple(float(value) for value in values))
-        return tuple(actions)
+        if hasattr(chunk, "detach"):
+            chunk = chunk.detach().cpu().numpy()
+        actions = np.asarray(chunk, dtype=np.float64)
+        if actions.ndim == 3 and actions.shape[0] == 1:
+            actions = actions[0]
+        if actions.ndim != 2 or actions.shape[0] < 1:
+            raise ValueError("POLICY_ACTION_INVALID")
+        if self._normalization is not None:
+            mean = np.asarray(self._normalization["action_mean"], dtype=np.float64)
+            if actions.shape[1] != mean.shape[0]:
+                raise ValueError("POLICY_ACTION_INVALID")
+            actions = actions * np.asarray(self._normalization["action_std"], dtype=np.float64) + mean
+        if not np.isfinite(actions).all():
+            raise ValueError("POLICY_ACTION_INVALID")
+        return tuple(tuple(float(value) for value in row) for row in actions)
 
     def reset(self) -> None:
         self._policy.reset()
 
 
-def _default_factory(path: Path) -> object:
-    from lerobot.policies.act.modeling_act import ACTPolicy
+def _act_config(chunk_size: int, execution_prefix: int, image_shape, device: str, learning_rate: float | None = None):
+    """The LeRobot 0.6.1 `ACTConfig` for this task: cameras head and wrist, state 8, action 6, no temporal ensembling.
 
-    return ACTPolicy.from_pretrained(str(path))
+    Normalisation is IDENTITY in the policy (the adapter normalises, see the module docstring) and the backbone has no pretrained
+    weights, so building a policy never touches the network."""
+
+    from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature
+    from lerobot.policies.act.configuration_act import ACTConfig
+
+    from so101_demo.act.training_config import ACTION_DIM, CAMERAS, STATE_DIM
+
+    if (not isinstance(image_shape, (list, tuple)) or len(image_shape) != 3 or image_shape[0] != 3
+            or any(type(item) is not int or item < 1 for item in image_shape)):
+        raise ValueError("BUNDLE_NORMALIZATION_INVALID")
+    inputs = {_STATE_KEY: PolicyFeature(FeatureType.STATE, (STATE_DIM,))}
+    for camera in CAMERAS:
+        inputs[f"observation.images.{camera}"] = PolicyFeature(FeatureType.VISUAL, tuple(image_shape))
+    extra = {} if learning_rate is None else {"optimizer_lr": learning_rate, "optimizer_lr_backbone": learning_rate}
+    return ACTConfig(
+        input_features=inputs, output_features={"action": PolicyFeature(FeatureType.ACTION, (ACTION_DIM,))},
+        chunk_size=chunk_size, n_action_steps=execution_prefix, temporal_ensemble_coeff=None,
+        pretrained_backbone_weights=None, device=device,
+        normalization_mapping={"VISUAL": NormalizationMode.IDENTITY, "STATE": NormalizationMode.IDENTITY,
+                               "ACTION": NormalizationMode.IDENTITY},
+        **extra)
+
+
+def _load_act_policy(path: Path, bundle: dict, device: str) -> object:
+    from lerobot.policies.act.modeling_act import ACTPolicy
+    from safetensors.torch import load_model
+
+    action = require_action_semantics(bundle.get("action"))
+    config = _act_config(action["chunk_size"], action["execution_prefix"],
+                         _require_normalization(bundle).get("image_shape"), device)
+    policy = ACTPolicy(config)
+    load_model(policy, str(path))                  # strict: every tensor of the saved policy must be present and fit
+    return policy.to(device).eval()
 
 
 def policy_loader(root: Path, *, factory=None, device: str = "cuda"):
-    """Build the `loader` that `load_policy` injects: it resolves and verifies inside `root`."""
+    """Build the `loader` that `load_policy` injects: it resolves and verifies inside `root`.
 
-    build = factory or _default_factory
+    ``factory(path)`` builds the underlying policy from the verified weights file; the default rebuilds LeRobot's `ACTPolicy` from the
+    bundle's own action semantics and image shape and loads the weights into it."""
 
     def loader(bundle: dict) -> LerobotPolicy:
-        return LerobotPolicy(build(resolve_policy_file(root, bundle)), device)
+        path = resolve_policy_file(root, bundle)
+        normalization = _require_normalization(bundle)
+        policy = factory(path) if factory is not None else _load_act_policy(path, bundle, device)
+        return LerobotPolicy(policy, device, normalization)
 
     return loader
+
+
+def build_policy_from_bundle(root: Path, device: str = "cuda", *, bundle: dict | None = None, factory=None) -> LerobotPolicy:
+    """The trained policy of the bundle at ``root`` (the directory holding `bundle.json` and `policy.safetensors`).
+
+    The bundle document is re-read through `load_bundle` (closed schema, policy digest) unless the caller already holds the loaded
+    document, and the weights file is hash-verified again by `policy_loader` before it is deserialised."""
+
+    from so101_demo.act.bundle import load_bundle
+
+    root = Path(root)
+    if bundle is None:
+        bundle = load_bundle(root / BUNDLE_FILE)
+    return policy_loader(root, factory=factory, device=device)(bundle)
 
 
 def _dataset_digest(dataset: Path) -> str:
@@ -145,7 +277,7 @@ def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement
     action = dict(action)
     target = Path(target)
     target.mkdir(parents=True, exist_ok=True)
-    train(config or {"action": action, "dataset": str(dataset)}, Path(dataset), target)
+    extra = train(config or {"action": action, "dataset": str(dataset)}, Path(dataset), target)
     policy = target / _POLICY_FILE
     if not policy.is_file():
         raise ValueError("LEROBOT_POLICY_NOT_WRITTEN")
@@ -159,7 +291,260 @@ def train_with_lerobot(action: dict, dataset: Path, target: Path, *, requirement
         "config_sha256": canonical_sha256(config or {"action": action}),
         "policy_path": _POLICY_FILE,
         "policy_sha256": sha256_file(policy),
-        "normalization": {"split": "train", "config_sha256": canonical_sha256(config or {"action": action})},
+        # whatever the train callable measured on the train split (statistics, floored dimensions, image shape) is the bundle's
+        "normalization": {**(extra if isinstance(extra, dict) else {}), "split": "train",
+                          "config_sha256": canonical_sha256(config or {"action": action})},
         "action": action,
     }
     return document
+
+
+
+# ---- the dataset side: decode (D8), the training view, train-only statistics -------------------------------------------------------
+
+
+def decode_png(path) -> "numpy.ndarray":
+    """One stored frame -> uint8 HxWx3 RGB. Anything but an 8-bit RGB PNG is refused, never converted."""
+
+    import numpy as np
+    from PIL import Image
+
+    try:
+        with open(path, "rb") as stream:
+            header = stream.read(26)
+        if len(header) < 26 or header[:8] != b"\x89PNG\r\n\x1a\n" or header[24] != 8 or header[25] != 2:
+            raise ValueError("OBSERVATION_IMAGE_INVALID")           # not PNG, not 8 bit, or not colour type 2 (RGB)
+        with Image.open(path) as image:
+            if image.format != "PNG" or image.mode != "RGB":
+                raise ValueError("OBSERVATION_IMAGE_INVALID")
+            array = np.array(image, dtype=np.uint8)
+    except (OSError, Image.DecompressionBombError) as error:
+        raise ValueError("OBSERVATION_IMAGE_INVALID") from error
+    if array.ndim != 3 or array.shape[2] != 3:
+        raise ValueError("OBSERVATION_IMAGE_INVALID")
+    return array
+
+
+def decode_observation(observation: dict, dataset_root) -> dict:
+    """A stored observation -> the runtime observation: the D8 table maps `head_png`/`wrist_png` to decoded `head`/`wrist`."""
+
+    root = Path(dataset_root)
+    decoded = {"sim_time_s": observation["sim_time_s"], "state": list(observation["state"])}
+    for png_key, key in OBSERVATION_DECODE_TABLE:
+        relative = observation.get(png_key)
+        if (not isinstance(relative, str) or not relative or Path(relative).is_absolute()
+                or ".." in Path(relative).parts):
+            raise ValueError("OBSERVATION_IMAGE_INVALID")           # a frame path never leaves the dataset
+        decoded[key] = decode_png(root / relative)
+    return decoded
+
+
+def load_training_view(view) -> tuple:
+    """(samples, dataset root) of a training view, with the dataset re-verified.
+
+    The view holds no episodes and no frames: it names the exported dataset (`dataset_root`) and carries a byte copy of that dataset's
+    export manifest. The manifest copy must still equal the dataset's, every episode and frame digest is re-verified, and the view's
+    samples must equal what the whitelist reads from the dataset now."""
+
+    from so101_demo.act.training import TRAINING_SAMPLES_FILE, load_training_samples, require_exported_dataset
+
+    view = Path(view)
+    try:
+        document = json.loads((view / TRAINING_SAMPLES_FILE).read_bytes())
+        view_manifest = (view / "export-manifest.json").read_bytes()
+    except (OSError, ValueError) as error:
+        raise ValueError("TRAINING_VIEW_INVALID") from error
+    if (not isinstance(document, dict) or document.get("kind") != "act_training_samples"
+            or not isinstance(document.get("dataset_root"), str) or not isinstance(document.get("samples"), list)):
+        raise ValueError("TRAINING_VIEW_INVALID")
+    root = Path(document["dataset_root"])
+    try:
+        dataset_manifest = (root / "export-manifest.json").read_bytes()
+    except OSError as error:
+        raise ValueError("TRAINING_VIEW_DATASET_MISMATCH") from error
+    if dataset_manifest != view_manifest:
+        raise ValueError("TRAINING_VIEW_DATASET_MISMATCH")
+    manifest = require_exported_dataset(root)                    # episode and frame digests
+    samples = load_training_samples(root, manifest=manifest)
+    if document["samples"] != samples:
+        raise ValueError("TRAINING_VIEW_SAMPLES_MISMATCH")
+    return samples, root.resolve()
+
+
+def compute_statistics(samples: list, *, std_floor: float) -> dict:
+    """Mean and std of state and action over the TRAIN split only; a std below ``std_floor`` is raised to it and the dimension recorded."""
+
+    import numpy as np
+
+    train = [sample for sample in samples if sample.get("split") == "train"]
+    if not train:
+        raise ValueError("TRAINING_NO_TRAIN_SPLIT")
+    states = np.asarray([row["observation"]["state"] for sample in train for row in sample["rows"]], dtype=np.float64)
+    actions = np.asarray([row["action"] for sample in train for row in sample["rows"]], dtype=np.float64)
+    if states.ndim != 2 or actions.ndim != 2 or len(states) == 0:
+        raise ValueError("TRAINING_NO_TRAIN_SPLIT")
+    stats = {"split": "train", "std_floor": float(std_floor), "sample_count": int(len(states)), "episode_count": len(train),
+             "floored_dims": {}}
+    for name, values in (("state", states), ("action", actions)):
+        std = values.std(axis=0)
+        floored = std < std_floor
+        stats[f"{name}_mean"] = [float(item) for item in values.mean(axis=0)]
+        stats[f"{name}_std"] = [float(item) for item in np.where(floored, std_floor, std)]
+        stats["floored_dims"][name] = [int(index) for index in np.flatnonzero(floored)]
+    return stats
+
+
+def _chunk_samples(samples: list) -> list:
+    """Every (episode index, row index) of the given episodes: a chunk never starts in, or reaches into, another episode."""
+
+    return [(episode, row) for episode, sample in enumerate(samples) for row in range(len(sample["rows"]))]
+
+
+def _action_window(actions, start: int, chunk_size: int) -> tuple:
+    """(chunk x action_dim, pad mask) for the window at ``start``: the tail is padded with this episode's last action and masked."""
+
+    import numpy as np
+
+    window = actions[start:start + chunk_size]
+    count = len(window)
+    pad = np.zeros(chunk_size, dtype=bool)
+    if count < chunk_size:
+        pad[count:] = True
+        window = np.concatenate([window, np.repeat(window[-1:], chunk_size - count, axis=0)], axis=0)
+    return window.astype(np.float32), pad
+
+
+# ---- the trainer ---------------------------------------------------------------------------------------------------------------------
+
+_GRAD_CLIP_NORM = 10.0
+_LOADER_TIMEOUT_S = 600     # a worker that died raises after this long instead of hanging the run
+_WEIGHT_DECAY = 1e-4
+
+
+def _require_trainable_config(config: dict, requirements_sha256: str) -> None:
+    if not isinstance(config, dict) or config.get("schema_version") != 2:
+        raise ValueError("TRAINING_CONFIG_V2_REQUIRED")
+    if config.get("frozen", {}).get("preprocessing_sha256") != preprocessing_sha256():
+        # the config froze a different decode/normalisation than this adapter implements
+        raise ValueError("TRAINING_PREPROCESSING_DRIFT")
+    if not isinstance(requirements_sha256, str) or len(requirements_sha256) != 64:
+        raise ValueError("TRAINING_REQUIREMENTS_SHA256_INVALID")
+
+
+def _run_training(config: dict, view: Path, target: Path, device: str, num_workers: int | None) -> dict:
+    """The LeRobot training loop; returns the normalisation block the bundle records."""
+
+    import time
+
+    import numpy as np
+    import torch
+    from lerobot.policies.act.modeling_act import ACTPolicy
+    from safetensors.torch import save_model
+
+    started = time.monotonic()
+    samples, root = load_training_view(view)
+    stats = compute_statistics(samples, std_floor=config["normalization"]["std_floor"])
+    train = [sample for sample in samples if sample["split"] == "train"]
+    action_cfg, hyper = config["action"], config["training"]
+    chunk_size = action_cfg["chunk_size"]
+    state_mean, state_std = np.asarray(stats["state_mean"]), np.asarray(stats["state_std"])
+    action_mean, action_std = np.asarray(stats["action_mean"]), np.asarray(stats["action_std"])
+    episodes = []
+    for sample in train:
+        rows = sample["rows"]
+        states = ((np.asarray([row["observation"]["state"] for row in rows]) - state_mean) / state_std).astype(np.float32)
+        actions = ((np.asarray([row["action"] for row in rows]) - action_mean) / action_std).astype(np.float32)
+        episodes.append({"states": states, "actions": actions,
+                         "head": [row["observation"]["head_png"] for row in rows],
+                         "wrist": [row["observation"]["wrist_png"] for row in rows]})
+    first = decode_png(root / episodes[0]["head"][0])
+    image_shape = (3, int(first.shape[0]), int(first.shape[1]))
+
+    index = _chunk_samples(train)
+
+    class _Chunks(torch.utils.data.Dataset):
+        def __len__(self):
+            return len(index)
+
+        def __getitem__(self, position):
+            episode_index, row = index[position]
+            episode = episodes[episode_index]
+            images = []
+            for camera in ("head", "wrist"):
+                array = decode_png(root / episode[camera][row])
+                if array.shape != (image_shape[1], image_shape[2], 3):
+                    raise ValueError("TRAINING_IMAGE_SHAPE_MISMATCH")
+                images.append(np.ascontiguousarray(array.transpose(2, 0, 1)))
+            chunk, pad = _action_window(episode["actions"], row, chunk_size)
+            # numpy, not tensors: worker tensors travel through shared memory and a socket under TMPDIR, whose 107-byte path limit the
+            # deep scratch directories of the evidence roots exceed (the DataLoader then hangs); pickled arrays need neither
+            return {_STATE_KEY: episode["states"][row], "observation.images.head": images[0],
+                    "observation.images.wrist": images[1], "action": chunk, "action_is_pad": pad}
+
+    def stack(items):
+        return {key: np.stack([item[key] for item in items]) for key in items[0]}
+
+    seed = config["frozen"]["seed"]
+    torch.manual_seed(seed)
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    workers = (4 if str(device).startswith("cuda") else 0) if num_workers is None else num_workers
+    loader = torch.utils.data.DataLoader(_Chunks(), batch_size=hyper["batch_size"], shuffle=True, generator=generator,
+                                         num_workers=workers, collate_fn=stack,
+                                         persistent_workers=workers > 0, drop_last=False,
+                                         timeout=_LOADER_TIMEOUT_S if workers > 0 else 0)
+    policy = ACTPolicy(_act_config(chunk_size, action_cfg["execution_prefix"], image_shape, device,
+                                   learning_rate=hyper["learning_rate"])).to(device)
+    policy.train()
+    optimizer = torch.optim.AdamW(policy.get_optim_params(), lr=hyper["learning_rate"], weight_decay=_WEIGHT_DECAY)
+
+    log, step = [], 0
+    while step < hyper["steps"]:
+        for batch in loader:
+            batch = {key: torch.from_numpy(value).to(device) for key, value in batch.items()}
+            for camera in ("head", "wrist"):
+                batch[f"observation.images.{camera}"] = _normalise_images(batch[f"observation.images.{camera}"])
+            loss, parts = policy(batch)
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(policy.parameters(), _GRAD_CLIP_NORM)
+            optimizer.step()
+            step += 1
+            value = float(loss.item())
+            if not np.isfinite(value):
+                raise ValueError("TRAINING_LOSS_NOT_FINITE")
+            log.append({"step": step, "loss": value, "l1_loss": float(parts["l1_loss"]), "kld_loss": float(parts.get("kld_loss", 0.0))})
+            if step >= hyper["steps"]:
+                break
+    policy.eval()
+    save_model(policy, str(Path(target) / _POLICY_FILE))
+    (Path(target) / _LOG_FILE).write_text(json.dumps(
+        {"schema_version": 1, "kind": "act_training_log", "device": str(device), "seed": seed, "steps_requested": hyper["steps"],
+         "batch_size": hyper["batch_size"], "learning_rate": hyper["learning_rate"], "train_samples": len(index),
+         "elapsed_s": time.monotonic() - started, "steps": log}, sort_keys=True, allow_nan=False) + chr(10))
+    return {**stats, "image_shape": list(image_shape)}
+
+
+def train_act_bundle(config: dict, dataset: Path, output: Path, *, requirements_sha256: str, device: str = "cuda",
+                     num_workers: int | None = None) -> dict:
+    """Train an ACT policy over a training view and leave a bundle in ``output`` (design 2026-10-10 section 3.3).
+
+    ``dataset`` is the training view `train_act` hands to a trainer. ``output`` receives `policy.safetensors`, `bundle.json` and
+    `training-log.json`; the returned document is the bundle."""
+
+    _require_trainable_config(config, requirements_sha256)
+
+    def train(cfg, view, target):
+        return _run_training(cfg, view, target, device, num_workers)
+
+    document = train_with_lerobot(config["action"], dataset, output, requirement_sha256=requirements_sha256, train=train, config=config)
+    bundle_path = Path(output) / BUNDLE_FILE
+    temporary = bundle_path.with_name(bundle_path.name + ".partial")
+    import os
+    with open(temporary, "w") as handle:
+        handle.write(json.dumps(document, sort_keys=True, indent=2, allow_nan=False) + chr(10))
+        handle.flush()
+        os.fsync(handle.fileno())
+    temporary.replace(bundle_path)
+    from so101_demo.act.bundle import load_bundle
+    return load_bundle(bundle_path)                                  # the closed document, the policy path and its digest

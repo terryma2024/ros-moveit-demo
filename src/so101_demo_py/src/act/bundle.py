@@ -8,7 +8,10 @@ hash, so a seal that nobody committed — or two receipts that disagree — neve
 
 from __future__ import annotations
 
+import hashlib
 import json
+import re
+import shutil
 from pathlib import Path
 
 _EPISODE_KEYS = ("scene_id", "journal_sha256", "verifier_sha256")
@@ -16,7 +19,12 @@ _COLLECTION_EVIDENCE_KEYS=frozenset({'coordinator_root','result_location','scope
 
 
 def _verify_collection_for_export(episode):
-    """Trace retained originals on every call; caller flags and cached proofs grant no eligibility.
+    """The collection mode of a committed episode that may be exported (see `_verified_collection`)."""
+    return _verified_collection(episode)[0]
+
+
+def _verified_collection(episode):
+    """(mode, commit proof) of a committed episode that may be exported. Trace retained originals on every call; caller flags and cached proofs grant no eligibility.
 
     A readback entry point may hold a session that shares one QC *recomputation* between its calls (a computation, not a proof): the
     commit proof, the mode, the result status, the QC verdict and `export_eligible` are read and decided here afresh each time."""
@@ -59,7 +67,7 @@ def _verify_collection_for_export(episode):
     if exclusion is not None:
         # design 2026-10-10 section 7: an offline data-selection rule. The episode stays sealed and committed with its data verdict.
         raise ValueError(f'EXPORT_EPISODE_ORACLE_EXCLUDED: {exclusion[0]} {exclusion[1]}')
-    return scope['mode']
+    return scope['mode'],proof
 
 
 def _teacher_oracle_exclusion(evidence):
@@ -81,6 +89,100 @@ def _teacher_oracle_exclusion(evidence):
     if hashlib.sha256(raw).hexdigest()!=bound:
         raise ValueError('EXPORT_EPISODE_TEACHER_MANIFEST_UNBOUND')
     return exclusion_of_manifest(raw)
+
+
+_SCENE_ID=re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]*')
+_FRAME_NAME=re.compile(r'frames/[0-9]{6}-(?:head|wrist)\.png')
+_SHA256_HEX=re.compile(r'[0-9a-f]{64}')
+
+
+def sealed_episode(evidence,proof):
+    """(recorder directory, seal) of a committed episode, the seal being the very file the coordinator commit proof bound.
+
+    The commit proof carries the sha256 of the sealed episode that the independent data QC verified end to end. Nothing in the
+    recorder directory is trusted before that digest agrees: the rows and every frame are then bound by the seal `files` map."""
+    from .result_store import _read_regular,_safe
+    try:
+        root=_safe(Path(evidence['result_location']))/'episode'
+        raw=_read_regular(root/'seal.json')
+        seal=json.loads(raw)
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        raise ValueError('EXPORT_EPISODE_SEAL_UNBOUND') from error
+    if hashlib.sha256(raw).hexdigest()!=proof.get('episode_seal_sha256'):
+        raise ValueError('EXPORT_EPISODE_SEAL_UNBOUND')
+    files=seal.get('files') if isinstance(seal,dict) else None
+    if (seal.get('kind')!='ACT_EPISODE_SEAL' or seal.get('status')!='PASSED' or type(seal.get('record_count')) is not int
+            or not isinstance(files,dict) or 'records.jsonl' not in files):
+        raise ValueError('EXPORT_EPISODE_SEAL_UNBOUND')
+    return root,seal
+
+
+def _seal_digest(entry):
+    digest=entry.get('sha256') if isinstance(entry,dict) else None
+    if not isinstance(digest,str) or not _SHA256_HEX.fullmatch(digest):
+        raise ValueError('EXPORT_EPISODE_SEAL_UNBOUND')
+    return digest
+
+
+def sealed_episode_content(episode):
+    """The training content of a committed episode, read from its sealed recorder rows (design 2026-10-10 section 3.2).
+
+    The commit is re-verified, the seal is the one the commit bound, and `records.jsonl` must hash to the seal `files` entry. The
+    whitelist (`training_content`) then drops the per-record audit and every non-whitelisted key."""
+    from .qc_session import assert_export_path_allowed
+    from .result_store import _read_regular
+    assert_export_path_allowed()
+    _,proof=_verified_collection(episode)
+    root,seal=sealed_episode(episode['collection_evidence'],proof)
+    try:
+        raw=_read_regular(root/'records.jsonl')
+    except (OSError,ValueError) as error:
+        raise ValueError('TRAINING_EPISODE_CONTENT_MISSING') from error
+    if hashlib.sha256(raw).hexdigest()!=_seal_digest(seal['files']['records.jsonl']):
+        raise ValueError('TRAINING_EPISODE_CONTENT_DIGEST_MISMATCH')
+    try:
+        rows=[json.loads(line) for line in raw.splitlines() if line.strip()]
+    except ValueError as error:
+        raise ValueError('TRAINING_EPISODE_CONTENT_INVALID') from error
+    if len(rows)!=seal['record_count']:
+        raise ValueError('TRAINING_EPISODE_CONTENT_INVALID')
+    return training_content({'frames':len(rows),'rows':rows})
+
+
+def _content_observations(content):
+    """The observations of a whitelisted content, in order."""
+    if 'rows' in content:
+        return [row['observation'] for row in content['rows']]
+    return [content['observation']]
+
+
+def _content_actions(content):
+    if 'rows' in content:
+        return [row['action'] for row in content['rows']]
+    return [content['action']]
+
+
+def _check_dimensions(content):
+    """State width 8 and action width 6 (act/training_config.py), refused at export rather than at the first training batch."""
+    from .training_config import ACTION_DIM,STATE_DIM
+    observations=_content_observations(content)
+    if not observations:
+        raise ValueError('EXPORT_EPISODE_CONTENT_INVALID')
+    if (any(len(observation.get('state',())) != STATE_DIM for observation in observations)
+            or any(len(action) != ACTION_DIM for action in _content_actions(content))):
+        raise ValueError('EXPORT_EPISODE_DIMENSION_INVALID')
+
+
+def _frame_plan(scene_id,content,files):
+    """[(source name, dataset-relative path, sha256)] for every frame the content references; refuses what the seal does not bind."""
+    plan=[]
+    for observation in _content_observations(content):
+        for key in ('head_png','wrist_png'):
+            name=observation.get(key)
+            if not isinstance(name,str) or not _FRAME_NAME.fullmatch(name) or name not in files:
+                raise ValueError('EXPORT_EPISODE_FRAME_MISSING')
+            plan.append((name,f'episodes/{scene_id}/{name}',_seal_digest(files[name])))
+    return plan
 
 
 #: What a training sample may contain (user, 2026-10-10: collision and force data do not enter training): the observation (joint state,
@@ -328,9 +430,6 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     are hashed into the manifest so a later edit is detectable.
     """
 
-    import hashlib
-    import os
-
     from .qc_session import assert_export_path_allowed
 
     assert_export_path_allowed()
@@ -342,7 +441,8 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
     if not episodes:
         raise ValueError("EXPORT_EMPTY")
     target = Path(output)
-    if target.exists() or target.is_symlink():
+    partial = target.with_name(target.name + ".partial")
+    if target.exists() or target.is_symlink() or partial.exists() or partial.is_symlink():
         raise ValueError("EXPORT_OUTPUT_EXISTS")
 
     records, seen = [], set()
@@ -350,6 +450,9 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
         if not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str):
             raise ValueError("EXPORT_EPISODES_INVALID")
         scene_id = episode["scene_id"]
+        if not _SCENE_ID.fullmatch(scene_id):
+            # the scene id becomes a directory name inside the export
+            raise ValueError("EXPORT_EPISODES_INVALID")
         if scene_id in seen:
             raise ValueError("EXPORT_DUPLICATE_SCENE")
         seen.add(scene_id)
@@ -359,24 +462,80 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
         if any(stale in scene_id or stale in str(episode.get("dataset_id", ""))
                for stale in _STALE_DATASET_IDS):
             raise ValueError("EXPORT_STALE_DATASET_ID")
+        proof = None
         if episode.get('kind')=='ACT_COMMITTED_EPISODE':
-            _verify_collection_for_export(episode)
+            _, proof = _verified_collection(episode)
         if episode.get("status", "PASSED") != "PASSED":
             raise ValueError("EXPORT_EPISODE_NOT_PASSED")
         content = episode.get("content")
         if not isinstance(content, dict) or not content:
             raise ValueError("EXPORT_EPISODE_CONTENT_MISSING")
         content = training_content(content)
-        if episode.get('kind')!='ACT_COMMITTED_EPISODE':
-            _verify_collection_for_export(episode)
+        if proof is None:
+            _, proof = _verified_collection(episode)
+        _check_dimensions(content)
+        # the frames are bound by the seal the commit proof named, never by anything the caller passed in
+        root, seal = sealed_episode(episode['collection_evidence'], proof)
+        plan = _frame_plan(scene_id, content, seal['files'])
+        for name, _, digest in plan:
+            if _file_sha256(root / name, 'EXPORT_EPISODE_FRAME_MISSING') != digest:
+                raise ValueError("EXPORT_EPISODE_FRAME_DIGEST_MISMATCH")
+        relative = {name: destination for name, destination, _ in plan}
+        content = _with_frame_paths(content, relative)
         payload = json.dumps(content, sort_keys=True, indent=2).encode() + _NEWLINE
         records.append({"scene_id": scene_id, "split": split,
                         "content_sha256": hashlib.sha256(payload).hexdigest(),
-                        "payload": payload})
+                        "payload": payload, "root": root,
+                        "frames": {destination: (name, digest) for name, destination, digest in plan}})
+
+    try:
+        _write_export(partial, records, source_manifest_sha256, campaign_index_sha256)
+        partial.rename(target)
+    except BaseException:
+        shutil.rmtree(partial, ignore_errors=True)       # our own half-written export, never a finished one
+        raise
+    manifest_path = target / "export-manifest.json"
+    document = json.loads(manifest_path.read_bytes())
+    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
+
+
+def _file_sha256(path, missing):
+    """Streaming sha256 of a regular, non-symlink file; ``missing`` is the refusal for anything else."""
+    import os
+    import stat
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError(missing)
+            digest = hashlib.sha256()
+            for block in iter(lambda: stream.read(1 << 20), b""):
+                digest.update(block)
+            return digest.hexdigest()
+    except OSError as error:
+        raise ValueError(missing) from error
+
+
+def _with_frame_paths(content, relative):
+    """The content with every frame name replaced by its dataset-relative path."""
+    def observation(item):
+        return {key: (relative[value] if key in ('head_png', 'wrist_png') else value) for key, value in item.items()}
+    rewritten = dict(content)
+    if 'rows' in content:
+        rewritten['rows'] = [{'observation': observation(row['observation']), 'action': row['action']} for row in content['rows']]
+    else:
+        rewritten['observation'] = observation(content['observation'])
+    return rewritten
+
+
+def _write_export(target, records, source_manifest_sha256, campaign_index_sha256):
+    import os
 
     target.mkdir(parents=True)
     episodes_dir = target / "episodes"
     episodes_dir.mkdir()
+    manifest_episodes = []
     for record in records:
         path = episodes_dir / (record["scene_id"] + ".json")
         temporary = path.with_name(path.name + ".partial")
@@ -385,12 +544,26 @@ def export_dataset(committed, output, *, source_manifest_sha256: str,
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(path)
+        (episodes_dir / record["scene_id"] / "frames").mkdir(parents=True)
+        for destination, (name, digest) in record["frames"].items():
+            # read once: the bytes that are hashed are the bytes that are written
+            fd = os.open(record["root"] / name, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as stream:
+                data = stream.read()
+            if hashlib.sha256(data).hexdigest() != digest:
+                raise ValueError("EXPORT_EPISODE_FRAME_DIGEST_MISMATCH")
+            with open(target / destination, "xb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+        manifest_episodes.append({"scene_id": record["scene_id"], "split": record["split"],
+                                  "content_sha256": record["content_sha256"],
+                                  "frames": {destination: digest for destination, (_, digest) in sorted(record["frames"].items())}})
     document = {"schema_version": 1, "kind": "act_dataset_export", "scene_count": len(records),
                 "source_manifest_sha256": source_manifest_sha256,
-                "campaign_index_sha256": campaign_index_sha256,
-                "episodes": [{"scene_id": record["scene_id"], "split": record["split"],
-                              "content_sha256": record["content_sha256"]} for record in records]}
+                "campaign_index_sha256": campaign_index_sha256, "episodes": manifest_episodes}
     manifest_path = target / "export-manifest.json"
-    manifest_path.write_text(json.dumps(document, sort_keys=True, indent=2) + chr(10))
-    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    return {**document, "manifest_path": str(manifest_path), "export_sha256": digest}
+    with open(manifest_path, "w") as handle:
+        handle.write(json.dumps(document, sort_keys=True, indent=2) + chr(10))
+        handle.flush()
+        os.fsync(handle.fileno())

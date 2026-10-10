@@ -3,6 +3,9 @@ from dataclasses import asdict
 import copy
 import hashlib
 import json
+import re
+import struct
+import zlib
 
 from so101_demo.act.collection_scope import write_collection_scope
 from so101_demo.act.episode_qc import write_qc_report,read_qc_report
@@ -15,7 +18,48 @@ ROW_CONTENT=dict(frames=1,rows=[dict(observation=dict(sim_time_s=0.,state=[0.]*8
     action=[0.]*6)])
 
 
-def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),proof_overrides=None,teacher_manifests=None,content=None):
+_FRAME_NAME=re.compile(r'frames/\d{6}-(head|wrist)\.png')
+
+
+def tiny_png(width=2,height=2,seed=0):
+    """A real RGB PNG (8-bit, colour type 2) built with zlib only, so the ordinary interpreter needs no imaging library."""
+    rows=b''.join(b'\x00'+bytes((seed+3*x+7*y+channel*41)%256 for x in range(width) for channel in range(3)) for y in range(height))
+    def chunk(kind,data):
+        return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',width,height,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(rows))+chunk(b'IEND',b'')
+
+
+def _observations(content):
+    if isinstance(content.get('rows'),list):
+        return [row['observation'] for row in content['rows'] if isinstance(row,dict) and isinstance(row.get('observation'),dict)]
+    return [content['observation']] if isinstance(content.get('observation'),dict) else []
+
+
+def write_sealed_episode(location,content,*,frame=None):
+    """A minimal recorder directory (`episode/seal.json`, `records.jsonl`, `frames/*.png`) holding exactly the rows of ``content``.
+
+    Names that are not recorder frame names (the refusal tests use `h`) are not written. ``frame(name)`` returns the PNG bytes."""
+    root=location/'episode';(root/'frames').mkdir(parents=True)
+    files={}
+    rows=content.get('rows') if isinstance(content.get('rows'),list) else []
+    for observation in _observations(content):
+        for key in ('head_png','wrist_png'):
+            name=observation.get(key)
+            if isinstance(name,str) and _FRAME_NAME.fullmatch(name) and name not in files:
+                data=frame(name) if frame is not None else tiny_png(seed=len(files))
+                (root/name).write_bytes(data)
+                files[name]=dict(sha256=hashlib.sha256(data).hexdigest(),size=len(data))
+    records=b''.join(json.dumps(dict(row,audit={'contacts':[],'release_epoch':0}),sort_keys=True).encode()+b'\n' for row in rows if isinstance(row,dict))
+    (root/'records.jsonl').write_bytes(records)
+    files['records.jsonl']=dict(sha256=hashlib.sha256(records).hexdigest(),size=len(records))
+    seal=dict(kind='ACT_EPISODE_SEAL',schema_version=2,status='PASSED',record_count=len(rows),files=dict(sorted(files.items())))
+    seal_bytes=json.dumps(seal,sort_keys=True,separators=(',',':')).encode()+b'\n'
+    (root/'seal.json').write_bytes(seal_bytes)
+    return hashlib.sha256(seal_bytes).hexdigest()
+
+
+def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),proof_overrides=None,teacher_manifests=None,content=None,
+        contents=None,splits=None,frame=None):
     from so101_demo.act import result_store
     records=[];proofs={}
     for index,scene_id in enumerate(scene_ids):
@@ -25,7 +69,10 @@ def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),pro
         write_collection_scope(scope_doc,scope)
         inputs.write_text(json.dumps(dict(mode='formal',inputs_sha256='a'*64)))
         location=root/'sealed';location.mkdir()
-        qc=report();qc['identity'].update(mode='formal',scene_id=scene_id)
+        episode_content=copy.deepcopy((contents or {}).get(scene_id)) if contents and scene_id in contents else (
+            copy.deepcopy(ROW_CONTENT) if content is None else copy.deepcopy(content))
+        seal_sha256=write_sealed_episode(location,episode_content,frame=frame)
+        qc=report();qc['identity'].update(mode='formal',scene_id=scene_id);qc['episode_seal_sha256']=seal_sha256
         # the Teacher manifest of the sealed result, bound by the QC reference check (default: a policy v2 manifest, which has no summary)
         teacher_manifest=(teacher_manifests or {}).get(scene_id,{'schema':'so101-dynamic-mujoco-execute-v2'})
         (location/'dynamic').mkdir()
@@ -49,9 +96,8 @@ def complete_export_entries(tmp_path,monkeypatch,scene_ids=('act-1','act-2'),pro
             commit_sequence=7,commit_frame_sha256='d'*64,journal_terminal_sha256='e'*64,aggregate_sha256='f'*64)
         proof.update((proof_overrides or {}).get(scene_id,{}))
         coordinator=root/'coordinator';coordinator.mkdir()
-        episode_content=copy.deepcopy(ROW_CONTENT) if content is None else copy.deepcopy(content)
         content_path=root/'content.json';content_path.write_text(json.dumps(episode_content))
-        record=dict(kind='ACT_COMMITTED_EPISODE',schema_version=2,scene_id=scene_id,status='PASSED',split='train',
+        record=dict(kind='ACT_COMMITTED_EPISODE',schema_version=2,scene_id=scene_id,status='PASSED',split=(splits or {}).get(scene_id,'train'),
             journal_sha256='d'*64,verifier_sha256='c'*64,content=episode_content,
             content_path=str(content_path),content_sha256=hashlib.sha256(content_path.read_bytes()).hexdigest(),
             collection_evidence=dict(coordinator_root=str(coordinator),result_location=str(location),

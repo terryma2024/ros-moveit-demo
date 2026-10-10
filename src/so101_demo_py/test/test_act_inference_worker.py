@@ -1,6 +1,7 @@
 """Task 13 CLI: one reply per request, from a bundle that verifies, into a file that does not exist."""
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 
@@ -87,5 +88,30 @@ def test_the_worker_refuses_before_serving_anything(tmp_path):
 def test_the_production_loader_fails_closed(tmp_path):
     from so101_demo.cli.act_inference_worker import _policy_loader
 
+    if importlib.util.find_spec("torch") is not None:
+        pytest.skip("this asserts the torch-free refusal; the training interpreter has torch")
     with pytest.raises(ValueError, match="INFERENCE_(INTERPRETER_REQUIRED|ADAPTER_UNAVAILABLE)"):
+        _policy_loader({})
+
+
+def test_the_production_loader_is_given_the_bundle_directory(tmp_path, monkeypatch):
+    import so101_demo.cli.act_inference_worker as cli
+
+    bundle = _bundle(tmp_path)
+    seen = {}
+
+    def loader(document, root=None):
+        seen.update(bundle=document["kind"], root=root)
+        return _Model()
+    monkeypatch.setattr(cli, "_policy_loader", loader)
+    assert main(["--bundle", str(bundle), "--requests", str(_requests(tmp_path)), "--replies", str(tmp_path / "replies.jsonl"),
+                 "--session-id", "s", "--attempt-id", "a"]) == 0
+    assert seen == {"bundle": "act_bundle", "root": tmp_path}
+
+
+def test_the_production_loader_needs_the_bundle_directory():
+    pytest.importorskip("torch")
+    from so101_demo.cli.act_inference_worker import _policy_loader
+
+    with pytest.raises(ValueError, match="INFERENCE_BUNDLE_ROOT_REQUIRED"):
         _policy_loader({})

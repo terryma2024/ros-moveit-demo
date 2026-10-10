@@ -14,7 +14,7 @@ from pathlib import Path
 from so101_demo.act.offline_evaluation import evaluate_offline
 
 
-def _policy_loader(bundle: dict):
+def _policy_loader(bundle: dict, root: Path | None = None):
     """Load the trained model in the training interpreter, where the pinned dependencies live."""
 
     try:
@@ -25,7 +25,9 @@ def _policy_loader(bundle: dict):
         from so101_demo.adapters.act.lerobot import build_policy_from_bundle
     except ImportError as error:
         raise ValueError("OFFLINE_EVALUATION_LOADER_UNAVAILABLE") from error
-    return build_policy_from_bundle(bundle)
+    if root is None:
+        raise ValueError("OFFLINE_EVALUATION_BUNDLE_ROOT_REQUIRED")
+    return build_policy_from_bundle(root, bundle=bundle)
 
 
 def main(argv: list[str] | None = None, *, policy_loader=None) -> int:
@@ -37,7 +39,7 @@ def main(argv: list[str] | None = None, *, policy_loader=None) -> int:
     args = parser.parse_args(argv)
 
     document = evaluate_offline(args.manifest, args.bundle, args.freeze, args.output,
-                                policy_loader=policy_loader or _policy_loader)
+                                policy_loader=policy_loader or (lambda document: _policy_loader(document, args.bundle.parent)))
     print(json.dumps({"episode_count": document["episode_count"],
                       "valid_targets": document["valid_targets"],
                       "mean_mae_rad": document["mean_mae_rad"],

@@ -28,7 +28,8 @@ def _bundle(root: Path) -> dict:
             "dataset_sha256": "a" * 64, "config_sha256": "b" * 64,
             "policy_path": "policy.safetensors",
             "policy_sha256": hashlib.sha256(_policy_bytes()).hexdigest(),
-            "normalization": {"split": "train", "state_mean": [0.0] * 6, "state_std": [1.0] * 6},
+            "normalization": {"split": "train", "state_mean": [0.0] * 6, "state_std": [1.0] * 6,
+                              "action_mean": [0.0] * 6, "action_std": [1.0] * 6},
             "action": {"chunk_size": 16, "execution_prefix": 8, "temporal_ensembling": False,
                        "tail_padding_mask": True}}
 
@@ -121,3 +122,46 @@ def test_trainer_refuses_a_missing_training_entry_point(tmp_path):
         train_with_lerobot({"chunk_size": 16, "execution_prefix": 8, "temporal_ensembling": False,
                             "tail_padding_mask": True}, tmp_path / "dataset", tmp_path,
                            requirement_sha256="d" * 64, train=None)
+
+
+def test_the_loader_refuses_a_bundle_without_statistics_rather_than_guessing_the_normalisation(tmp_path):
+    from so101_demo.adapters.act.lerobot import policy_loader
+
+    bundle = _bundle(tmp_path)
+    for normalization in ({"split": "train"}, {"split": "train", "state_mean": [0.0], "state_std": [1.0], "action_mean": [0.0]}):
+        with pytest.raises(ValueError, match="BUNDLE_NORMALIZATION_STATS_MISSING"):
+            policy_loader(tmp_path, factory=lambda path: _FakePolicy())({**bundle, "normalization": normalization})
+    bad = {"split": "train", "state_mean": [0.0], "state_std": [0.0], "action_mean": [0.0], "action_std": [1.0]}
+    with pytest.raises(ValueError, match="BUNDLE_NORMALIZATION_INVALID"):
+        policy_loader(tmp_path, factory=lambda path: _FakePolicy())({**bundle, "normalization": bad})
+
+
+def test_infer_normalises_the_state_and_denormalises_the_actions_with_the_bundle_statistics(tmp_path):
+    torch = pytest.importorskip("torch", reason="the training interpreter owns the tensor path")
+    from so101_demo.adapters.act.lerobot import policy_loader
+
+    class Zeros(_FakePolicy):
+        def predict_action_chunk(self, batch):
+            self.batches.append(batch)
+            return torch.zeros(1, 4, 6)                       # the network's normalised output: the mean after de-normalisation
+
+        def reset(self):
+            pass
+
+    bundle = _bundle(tmp_path)
+    bundle["normalization"] = {"split": "train", "state_mean": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0], "state_std": [2.0] * 6,
+                               "action_mean": [10.0, 20.0, 30.0, 40.0, 50.0, 60.0], "action_std": [0.5] * 6}
+    policy = Zeros()
+    model = policy_loader(tmp_path, factory=lambda path: policy, device="cpu")(bundle)
+    observation = {**_observation(), "state": [3.0, 2.0, 1.0, 4.0, 5.0, 8.0]}
+    chunk = model.infer(observation)
+    assert chunk == tuple(tuple([10.0, 20.0, 30.0, 40.0, 50.0, 60.0]) for _ in range(4))
+    assert policy.batches[-1]["observation.state"].tolist() == [[1.0, 0.0, -1.0, 0.0, 0.0, 1.0]]
+    # a unit network output moves each action by exactly one std
+    class Ones(Zeros):
+        def predict_action_chunk(self, batch):
+            return torch.ones(1, 2, 6)
+    model = policy_loader(tmp_path, factory=lambda path: Ones(), device="cpu")(bundle)
+    assert model.infer(observation)[0] == (10.5, 20.5, 30.5, 40.5, 50.5, 60.5)
+    with pytest.raises(ValueError, match="OBSERVATION_INVALID"):
+        model.infer({**observation, "state": [0.0] * 8})                     # the width must match the statistics

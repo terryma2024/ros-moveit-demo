@@ -65,7 +65,11 @@ def test_the_manifest_digest_covers_the_sanitised_bytes_and_a_plain_content_is_u
     for item in document["episodes"]:
         path = tmp_path / "dataset" / "episodes" / f"{item['scene_id']}.json"
         assert hashlib.sha256(path.read_bytes()).hexdigest() == item["content_sha256"]
-        assert json.loads(path.read_text()) == ROW_CONTENT
+        expected = copy.deepcopy(ROW_CONTENT)                       # only the frame names change: they become dataset-relative
+        for row_ in expected["rows"]:
+            for key in ("head_png", "wrist_png"):
+                row_["observation"][key] = f"episodes/{item['scene_id']}/{row_['observation'][key]}"
+        assert json.loads(path.read_text()) == expected
 
 
 @pytest.mark.parametrize("bad", [

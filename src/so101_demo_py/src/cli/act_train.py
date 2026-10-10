@@ -9,8 +9,10 @@ trainer run. The production trainer fails closed until the training interpreter 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from so101_demo.act.bundle import export_dataset, resolve_committed_episodes
@@ -22,8 +24,10 @@ _PACKAGE = Path(__file__).resolve().parents[1]
 REQUIREMENTS_LOCK = _PACKAGE / "config" / "act" / "requirements.lock"
 
 
-def _trainer(_config, _dataset, _output):
-    """Train in the training interpreter, where the pinned dependencies live."""
+def _trainer(_config, _dataset, _output, *, requirements_sha256=None):
+    """Train in the training interpreter, where the pinned dependencies live.
+
+    ``requirements_sha256`` is the digest of the resolved lock this run validated; it is the provenance of the weights."""
 
     try:
         import torch  # noqa: F401
@@ -33,7 +37,61 @@ def _trainer(_config, _dataset, _output):
         from so101_demo.adapters.act.lerobot import train_act_bundle
     except ImportError as error:
         raise ValueError("TRAINING_ADAPTER_UNAVAILABLE") from error
-    return train_act_bundle(_config, _dataset, _output)
+    return train_act_bundle(_config, _dataset, _output, requirements_sha256=requirements_sha256)
+
+
+class ProcessTableArbiter:
+    """IDLE only when no process holds a CUDA compute context (`nvidia-smi --query-compute-apps`); anything else is BUSY.
+
+    This is the arbiter the CLI uses for a local training run: it answers from the GPU's own process table and fails closed when that
+    table cannot be read. ``runner()`` returns the query's stdout."""
+
+    def __init__(self, runner=None) -> None:
+        self.runner = runner or self._nvidia_smi
+
+    @staticmethod
+    def _nvidia_smi() -> str:
+        return subprocess.run(["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader"], check=True,
+                              capture_output=True, text=True, timeout=15).stdout
+
+    def state(self) -> str:
+        try:
+            listing = self.runner()
+        except (OSError, ValueError, TypeError, subprocess.SubprocessError) as error:
+            raise ValueError("TRAINING_ARBITER_UNAVAILABLE") from error
+        return "BUSY" if str(listing).strip() else "IDLE"
+
+
+def _process_identity() -> dict:
+    """This process as `TrainingRunOwner` pins it: pid and the start time in clock ticks (field 22 of /proc/self/stat)."""
+
+    import os
+
+    stat = Path("/proc/self/stat").read_text()
+    fields = stat[stat.rindex(")") + 2:].split()          # fields after the command name, which may contain spaces
+    return {"pid": os.getpid(), "started_ticks": int(fields[19])}
+
+
+def local_owner_factory(gpu_binding: Path, run_root: Path, *, arbiter=None, identity=None):
+    """The CUDA owner-lease factory `act_train` uses: ``factory(dataset_sha256=, config_sha256=) -> owner``.
+
+    The owner is `TrainingRunOwner.acquire` over ``run_root`` with the GPU binding document (`--gpu-binding`: device, binding_id,
+    leases) as the lease, so a binding that lists collection, broker or training leases, a busy GPU, or a run root already owned
+    by another identity refuses before any training starts."""
+
+    from so101_demo.act.training_owner import TrainingRunOwner
+
+    def factory(*, dataset_sha256: str, config_sha256: str) -> dict:
+        try:
+            lease = json.loads(Path(gpu_binding).read_bytes())
+        except (OSError, ValueError) as error:
+            raise ValueError("TRAINING_GPU_LEASE_INVALID") from error
+        root = Path(run_root)
+        root.mkdir(parents=True, exist_ok=True)
+        owner = TrainingRunOwner(arbiter=arbiter or ProcessTableArbiter(), identity=identity or _process_identity)
+        return owner.acquire(run_root=root.resolve(), dataset_sha256=dataset_sha256, config_sha256=config_sha256, gpu_lease=lease)
+
+    return factory
 
 
 def _owner(argv, dataset_sha256, config_sha256, gpu_binding, owner_factory):
@@ -72,9 +130,14 @@ def main(argv: list[str] | None = None, *, trainer=None, owner_factory=None,
                    campaign_index_sha256=hashlib.sha256(args.campaign_index.read_bytes()).hexdigest())
     dataset_sha256 = hashlib.sha256((dataset / "export-manifest.json").read_bytes()).hexdigest()
     config_sha256 = hashlib.sha256(json.dumps(config, sort_keys=True).encode()).hexdigest()
+    if owner_factory is None:
+        owner_factory = local_owner_factory(args.gpu_binding, args.output.with_name(args.output.name + ".run"))
     owner = _owner(args, dataset_sha256, config_sha256, args.gpu_binding, owner_factory)
+    if trainer is None:
+        lock_sha256 = hashlib.sha256(Path(requirements_path or REQUIREMENTS_LOCK).read_bytes()).hexdigest()
+        trainer = functools.partial(_trainer, requirements_sha256=lock_sha256)
     outcome = train_act(config=config, requirements=requirements, dataset=dataset, owner=owner,
-                        output=args.output, trainer=trainer or _trainer)
+                        output=args.output, trainer=trainer)
     print(json.dumps({"status": outcome["status"], "episode_count": outcome["episode_count"],
                       "dataset": str(dataset), "bundle": str(args.output)}, sort_keys=True))
     return 0

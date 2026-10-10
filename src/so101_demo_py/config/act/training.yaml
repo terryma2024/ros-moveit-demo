@@ -1,4 +1,4 @@
-schema_version: 1
+schema_version: 2
 kind: act_training
 action:
   chunk_size: 10
@@ -11,7 +11,13 @@ observation:
   action_dim: 6
 normalization:
   split: train
+  # floor for the per-dimension std: the neck sin/cos state dimensions have zero spread under a fixed head
+  std_floor: 0.01
+training:
+  steps: 20000
+  learning_rate: 1.0e-5
+  batch_size: 8
 frozen:
   seed: 20260924
-  # quoted: an unquoted all-digit hash is a YAML integer, not a string
-  preprocessing_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  # sha256 of adapters/act/lerobot.py PREPROCESSING (the D8 decode table and image scaling). Quoted: an all-digit hash is a YAML integer
+  preprocessing_sha256: "47fea5806bd7cd5f6a2753eddb27d13f63424f4df6eed67f4b580b7ca8016083"

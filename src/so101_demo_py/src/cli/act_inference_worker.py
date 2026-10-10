@@ -16,7 +16,7 @@ from so101_demo.act.bundle import load_bundle, load_policy
 from so101_demo.act.policy import ActPolicyRunner
 
 
-def _policy_loader(bundle: dict):
+def _policy_loader(bundle: dict, root: Path | None = None):
     try:
         import torch  # noqa: F401
     except ImportError as error:
@@ -25,7 +25,9 @@ def _policy_loader(bundle: dict):
         from so101_demo.adapters.act.lerobot import build_policy_from_bundle
     except ImportError as error:
         raise ValueError("INFERENCE_ADAPTER_UNAVAILABLE") from error
-    return build_policy_from_bundle(bundle)
+    if root is None:
+        raise ValueError("INFERENCE_BUNDLE_ROOT_REQUIRED")
+    return build_policy_from_bundle(root, bundle=bundle)
 
 
 def main(argv: list[str] | None = None, *, loader=None) -> int:
@@ -42,7 +44,8 @@ def main(argv: list[str] | None = None, *, loader=None) -> int:
     if args.replies.exists() or args.replies.is_symlink():
         raise ValueError("INFERENCE_REPLIES_EXIST")
     bundle = load_bundle(args.bundle)
-    runner = ActPolicyRunner(bundle, load_policy(args.bundle, loader=loader or _policy_loader))
+    loader = loader or (lambda document: _policy_loader(document, args.bundle.parent))      # the weights live beside bundle.json
+    runner = ActPolicyRunner(bundle, load_policy(args.bundle, loader=loader))
     runner.reset(args.session_id, args.attempt_id)
 
     replies = []

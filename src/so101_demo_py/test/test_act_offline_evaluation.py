@@ -1,5 +1,6 @@
 """Task 12A: padded frames must not enter a joint metric, and bad rows must not vanish."""
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -190,7 +191,24 @@ def test_cli_evaluates_through_an_injected_loader_and_leaves_no_output_on_refusa
 def test_the_production_loader_fails_closed_rather_than_reaching_for_a_model(tmp_path):
     from so101_demo.cli.act_offline_evaluate import _policy_loader
 
+    if importlib.util.find_spec("torch") is not None:
+        pytest.skip("this asserts the torch-free refusal; the training interpreter has torch")
     # no torch in the test interpreter, so the production path must refuse precisely rather than guess
     with pytest.raises(ValueError,
                        match="OFFLINE_EVALUATION_(TRAINING_INTERPRETER_REQUIRED|LOADER_UNAVAILABLE)"):
         _policy_loader({})
+
+
+def test_the_production_loader_is_given_the_bundle_directory(tmp_path, monkeypatch):
+    import so101_demo.cli.act_offline_evaluate as cli
+
+    manifest, bundle, freeze = _frozen(tmp_path)
+    seen = {}
+
+    def loader(document, root=None):
+        seen.update(root=root)
+        return _FixedPolicy()
+    monkeypatch.setattr(cli, "_policy_loader", loader)
+    assert cli.main(["--manifest", str(manifest), "--bundle", str(bundle), "--freeze", str(freeze),
+                     "--output", str(tmp_path / "report.json")]) == 0
+    assert seen == {"root": Path(bundle).parent}

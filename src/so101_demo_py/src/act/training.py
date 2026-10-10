@@ -14,8 +14,16 @@ import os
 from pathlib import Path
 
 
+def _file_digest(path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def require_exported_dataset(output) -> dict:
-    """Re-read an export and confirm every episode still hashes to what the manifest claims."""
+    """Re-read an export and confirm every episode and every frame still hashes to what the manifest claims."""
 
     root = Path(output)
     manifest_path = root / "export-manifest.json"
@@ -30,13 +38,24 @@ def require_exported_dataset(output) -> dict:
         raise ValueError("TRAINING_DATASET_MANIFEST_INVALID")
     for episode in manifest["episodes"]:
         if (not isinstance(episode, dict) or not isinstance(episode.get("scene_id"), str)
-                or not isinstance(episode.get("content_sha256"), str)):
+                or not isinstance(episode.get("content_sha256"), str)
+                or not isinstance(episode.get("frames"), dict) or not episode["frames"]):
             raise ValueError("TRAINING_DATASET_MANIFEST_INVALID")
         path = root / "episodes" / (episode["scene_id"] + ".json")
         if not path.is_file():
             raise ValueError("TRAINING_EPISODE_MISSING")
         if hashlib.sha256(path.read_bytes()).hexdigest() != episode["content_sha256"]:
             raise ValueError("TRAINING_EPISODE_DIGEST_MISMATCH")
+        prefix = f"episodes/{episode['scene_id']}/frames/"
+        for relative, digest in episode["frames"].items():
+            if (not isinstance(relative, str) or not relative.startswith(prefix) or ".." in Path(relative).parts
+                    or not isinstance(digest, str) or len(digest) != 64):
+                raise ValueError("TRAINING_DATASET_MANIFEST_INVALID")
+            frame = root / relative
+            if not frame.is_file() or frame.is_symlink():
+                raise ValueError("TRAINING_EPISODE_FRAME_MISSING")
+            if _file_digest(frame) != digest:
+                raise ValueError("TRAINING_EPISODE_FRAME_DIGEST_MISMATCH")
     return manifest
 
 
@@ -51,7 +70,10 @@ def materialize_training_view(dataset, view, samples) -> Path:
     view = Path(view)
     view.mkdir(parents=True)
     (view / "export-manifest.json").write_bytes((Path(dataset) / "export-manifest.json").read_bytes())
-    payload = (json.dumps({"kind": "act_training_samples", "schema_version": 1, "samples": samples}, sort_keys=True,
+    # the view holds no episodes and no frames: the trainer resolves frame paths against the dataset root named here and
+    # re-verifies their digests (the view's copy of the export manifest is byte-identical to the dataset's)
+    payload = (json.dumps({"kind": "act_training_samples", "schema_version": 1, "dataset_root": str(Path(dataset).resolve()),
+                           "samples": samples}, sort_keys=True,
                           indent=2, allow_nan=False) + chr(10)).encode()
     temporary = view / (TRAINING_SAMPLES_FILE + ".partial")
     with open(temporary, "wb") as handle:
@@ -62,7 +84,7 @@ def materialize_training_view(dataset, view, samples) -> Path:
     return view
 
 
-def load_training_samples(output) -> list:
+def load_training_samples(output, *, manifest=None) -> list:
     """The training samples of a verified export, read through the whitelist (observation and action only).
 
     The export is re-verified (every episode hashes to its manifest entry), and each episode is read again through
@@ -71,7 +93,8 @@ def load_training_samples(output) -> list:
 
     from .bundle import training_content
 
-    manifest = require_exported_dataset(output)
+    if manifest is None:
+        manifest = require_exported_dataset(output)
     root = Path(output)
     samples = []
     for episode in manifest["episodes"]:
@@ -106,7 +129,7 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
     view = target.with_name(target.name + TRAINING_VIEW_SUFFIX)
     if view.exists() or view.is_symlink():
         raise ValueError("TRAINING_OUTPUT_EXISTS")
-    samples = load_training_samples(dataset)
+    samples = load_training_samples(dataset, manifest=manifest)
 
     state_path = target.with_name(target.name + ".state.json")
     disposition = {"schema_version": 1, "kind": "act_training_state", "status": "FAILED",
@@ -136,22 +159,35 @@ def train_act(*, config: dict, requirements: dict, dataset, owner: dict, output,
 
 
 def attach_episode_content(committed, *, root) -> tuple:
-    """Read each committed episode's content from inside the campaign root, verifying what it claims.
+    """Read each committed episode's content, verifying what it claims. The content hash is always verified.
 
-    Content is never taken on trust or by path inference: the file must sit under the root the campaign
-    index names, and when the entry records a content hash the bytes must match it.
+    The source is the sealed recorder rows of the committed episode (`bundle.sealed_episode_content`: the seal is the one the
+    coordinator commit bound and `records.jsonl` hashes to the seal `files` map). An entry that names a ``content_path`` is read from
+    inside the campaign root and must carry a ``content_sha256`` that its bytes match; an entry that carries inline ``content`` must
+    carry a ``content_sha256`` equal to the canonical JSON digest of that content. Nothing is taken on trust or by path inference.
     """
+
+    from .bundle import sealed_episode_content
 
     base = Path(root).resolve()
     resolved = []
     for episode in committed:
         if not isinstance(episode, dict):
             raise ValueError("TRAINING_EPISODES_INVALID")
+        recorded = episode.get("content_sha256")
         if isinstance(episode.get("content"), dict) and episode["content"]:
+            if not isinstance(recorded, str):
+                raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISSING")
+            canonical = json.dumps(episode["content"], sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+            if hashlib.sha256(canonical).hexdigest() != recorded:
+                raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISMATCH")
             resolved.append(episode)
             continue
         name = episode.get("content_path")
         if not isinstance(name, str) or not name:
+            if isinstance(episode.get("collection_evidence"), dict):
+                resolved.append({**episode, "content": sealed_episode_content(episode)})
+                continue
             raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
         path = Path(name)
         if not path.is_absolute():
@@ -159,14 +195,16 @@ def attach_episode_content(committed, *, root) -> tuple:
         resolved_path = path.resolve()
         if not resolved_path.is_file() or not resolved_path.is_relative_to(base):
             raise ValueError("TRAINING_EPISODE_CONTENT_MISSING")
+        raw = resolved_path.read_bytes()
+        if not isinstance(recorded, str):
+            raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISSING")
+        if hashlib.sha256(raw).hexdigest() != recorded:
+            raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISMATCH")
         try:
-            content = json.loads(resolved_path.read_bytes())
+            content = json.loads(raw)
         except ValueError as error:
             raise ValueError("TRAINING_EPISODE_CONTENT_INVALID") from error
         if not isinstance(content, dict) or not content:
             raise ValueError("TRAINING_EPISODE_CONTENT_INVALID")
-        recorded = episode.get("content_sha256")
-        if isinstance(recorded, str) and hashlib.sha256(resolved_path.read_bytes()).hexdigest() != recorded:
-            raise ValueError("TRAINING_EPISODE_CONTENT_DIGEST_MISMATCH")
         resolved.append({**episode, "content": content})
     return tuple(resolved)
