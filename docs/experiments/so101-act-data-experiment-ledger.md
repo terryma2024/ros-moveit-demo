@@ -69,11 +69,43 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3548
+latest_checkpoint: CP-3549
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3549 — refactor phase C done (HEAD 82796df78, 15 commits), gates 0/0; general-path fix batch dispatched before phase D
+
+- Commits:
+  - resources.py dead code deleted (28 definitions, 942 lines; unreachability proof in phaseC/proofs);
+  - adaptive scaling script defaults set to the frozen values (RED recorded);
+  - task8_* / w8 → pick_place_* / calibration_production_composition / parallel_qualification_verifier; n1/w1/w2 → single/two-worker (ExecutionProfile member names changed, wire values kept for D);
+  - first_episode → diagnostic_episode (CLI act_diagnostic_episode); fresh_qc → independent_qc; candidate_source → reachability_candidate_source;
+  - test infrastructure: TEST_IMPORT_PATH plus a conftest that puts the test dirs on sys.path (tests import each other by bare name); gate-runner duration map fixed for nested paths (RED recorded); teleop per-worker IPC conftest lifted to test/conftest.py;
+  - 584 demo tests moved into the src-mirroring tree and 100 teleop tests into expert_validation/unified/pick_place_validation/api, with the 113 CTest registrations rewritten;
+  - test_p3_rework split into 5 files; 108 process-named test files renamed by behaviour; identifiers and docstrings rewritten in the touched modules; guides updated.
+- Allowlists:
+  - process 280 → 7 (the digest-bound config/act/task8-* files and task6_route_plugins.yaml, reclassified as wire renames for phase D);
+  - wire 324 (7 resources.py rows pruned);
+  - versioned 29 permanent.
+- Gates (phaseC/gates/final):
+  - fresh build rc 0;
+  - demo 11217 pass, 0 fail (collection 11382);
+  - colcon 1918 tests, 0/0;
+  - scripts 12 pass;
+  - benchmark 555 pass. This used the direct-pytest benchmark gate, not the literal colcon command from §9 N7; phase F must use the literal command.
+- External tooling: -phaseC versions of inspect r3, prepare r7, live r17, cycle-r10 and live-r14 (act_diagnostic_episode), with sha256 recorded.
+- Open items:
+  - wire strings left for D: EXP-115, CP-3389, w1/w2 worker ids, "W8" kinds;
+  - review labels inside docstring bodies;
+  - pre-existing lint: `Mapping` undefined at parallel_worker_runtime.py:701.
+- Decision (CP-3394): before phase D, one fix batch per CP-3548:
+  - general plugin file scene publisher, plus fail-fast DYNAMIC_SCENE_SOURCE_ABSENT;
+  - service projection for a dead coordinator;
+  - diagnosis of the reset-epoch fallback mismatch;
+  - the Mapping lint.
+  - RED first for each; then rerun the fixed-N service batch and the adaptive run.
 
 ## CP-3548 — root cause of the general-path release failure found (read-only diagnosis): the general simulator never publishes scene-state frames
 
