@@ -279,7 +279,7 @@ def test_recover_defaults_to_keyword_only_preview_without_writes(fenced):
 
 
 # --------------------------------------------------------------------------------------
-# Task 6: the formal recovery entry reclaims the durable owner tree, leaf first
+# the formal recovery entry reclaims the durable owner tree, leaf first
 # --------------------------------------------------------------------------------------
 
 
@@ -477,7 +477,7 @@ def test_operator_recovery_cli_accepts_an_owner_tree_root(tmp_path, capsys):
 
 
 # --------------------------------------------------------------------------------------
-# Portable runtime inventory (remediation Task 5)
+# Portable runtime inventory
 #
 # Darwin has no /proc. The inspector therefore reads the host through a port: procfs on Linux,
 # psutil on Darwin. An unreadable process, a broken psutil or a reused pid must never be read as

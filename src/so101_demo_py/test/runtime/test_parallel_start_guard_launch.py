@@ -1,6 +1,6 @@
 """The real installed parallel entry, its guard, and the product negative gates.
 
-Task 8 of the lightweight start guard plan. This file deliberately does **not** substitute the
+Part of the lightweight start guard plan. This file deliberately does **not** substitute the
 TextAgent copied-entry case for the parallel guard: it discovers the installed console script
 through the functional lookup, runs the real allocator entry as a subprocess against the active
 v3 config, and reads back the composition it wrote. The TextAgent launch resource is verified

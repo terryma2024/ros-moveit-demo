@@ -768,7 +768,7 @@ class ParallelWorker:
             self._assert_running()
             lease = self._current()
             self._open_teacher_window(lease)
-            # CP-3457: the runtime closes the Teacher-child window itself the moment the Teacher exits, before any data work
+            # The runtime closes the Teacher-child window itself the moment the Teacher exits, before any data work
             # (the offline processing) runs inside this boundary; the `finally` below stays the backstop.
             bind = getattr(self._runtime, "bind_teacher_exit", None)
             if bind is not None:

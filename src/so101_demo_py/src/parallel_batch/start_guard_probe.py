@@ -1,6 +1,6 @@
 """Bounded, single-flight startup probe: the owner coordinates, a helper does the reads.
 
-Task 4 of the lightweight start guard plan. The design requires that every potentially
+The lightweight start guard design requires that every potentially
 blocking read (``/proc``, cgroup, NVML) happens in a short-lived helper process, that the
 whole request is bounded by the policy deadline, that concurrent requests share one
 task-level lock across processes, and that a helper which cannot be reaped becomes a durable

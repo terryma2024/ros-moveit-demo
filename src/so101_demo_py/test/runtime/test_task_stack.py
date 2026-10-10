@@ -105,7 +105,7 @@ def test_stack_escalates_only_owned_process_group_after_timeout(tmp_path: Path) 
 
 
 # --------------------------------------------------------------------------------------
-# Owner records (Task 6): the boundary that calls Popen writes the STATION record
+# Owner records: the boundary that calls Popen writes the STATION record
 # --------------------------------------------------------------------------------------
 
 

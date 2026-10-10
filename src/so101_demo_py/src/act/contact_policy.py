@@ -40,9 +40,9 @@ _RECEIPT_KEYS = frozenset(
 )
 _HEX64 = re.compile(r"[0-9a-f]{64}\Z")
 
-#: The user's recorded rule deviation (CP-3389): fit offline, validate with Teacher spot-checks instead of the live cohort.
+#: The user's recorded rule deviation: fit offline, validate with Teacher spot-checks instead of the live cohort.
 VALIDATION_OFFLINE_SPOT_CHECK = "offline_fit_teacher_spot_check"
-VALIDATION_DECISION = "CP-3389"
+VALIDATION_DECISION = "owner_deviation_offline_cohort"
 VALIDATION_MODES = (VALIDATION_OFFLINE_SPOT_CHECK,)
 #: A receipt kind that may only be used by a preselected_target_diagnostic freeze (never by default, never installed).
 SPOT_CHECK_CANDIDATE = "spot_check_candidate"

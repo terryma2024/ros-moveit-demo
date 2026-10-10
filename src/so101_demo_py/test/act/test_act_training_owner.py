@@ -1,4 +1,4 @@
-"""Task 12 ownership: nothing trains on a GPU that is busy, and no lease is inherited."""
+"""Nothing trains on a GPU that is busy, and no lease is inherited."""
 
 import json
 

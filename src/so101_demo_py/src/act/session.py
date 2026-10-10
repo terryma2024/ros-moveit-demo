@@ -1,4 +1,4 @@
-"""Task 14: what may be retried, and under whose command.
+"""What may be retried, and under whose command.
 
 A retry re-drives the arm toward a cup. That is only defensible when the cup's state is actually known and
 empty: a held cup would be crushed or dropped, and an unknown state might be either. The attempt budget is

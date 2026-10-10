@@ -1,4 +1,4 @@
-"""Task 11A recovery: terminal scenes are skipped, and nothing held is reset blind."""
+"""Terminal scenes are skipped, and nothing held is reset blind."""
 
 import json
 from pathlib import Path

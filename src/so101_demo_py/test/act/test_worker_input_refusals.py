@@ -1,4 +1,4 @@
-"""Design 2026-10-10 section 1 (CP-3522): a worker input refusal before any motion becomes a committed D8f result.
+"""Design 2026-10-10 section 1: a worker input refusal before any motion becomes a committed D8f result.
 
 The closed allowlist (request_model boundary only): a PerceptionError starting `STALE_RGBD:` or `STALE_RGBD_OR_TF:`, a RuntimeError
 `BROKER_CANDIDATE_AMBIGUOUS...`, and the perception-terminal decision that request_model returns. It is committed in the manifest-free

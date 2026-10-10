@@ -1,6 +1,6 @@
 """The v4 RED tests for an immutable inference input snapshot.
 
-Task 6 of the macOS MPS / private IPC plan. The v4 design (section 7.3) keeps raw RGB-D arrays
+Part of the macOS MPS / private IPC plan. The v4 design (section 7.3) keeps raw RGB-D arrays
 out of the control frame: a Worker writes a snapshot into a task-owned input root, atomically
 renames it, and registers a descriptor; the Broker opens that descriptor under the pinned root,
 verifies size/SHA-256/shape/dtype, reads, and closes. The snapshot lives at least until the

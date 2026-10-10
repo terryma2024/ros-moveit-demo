@@ -1,4 +1,4 @@
-"""Task 12: the pinned training dependencies.
+"""The pinned training dependencies.
 
 A training run may only start against a **resolved** lock: every package pinned by version and source SHA,
 with the resolver provenance recorded. Until the selected LeRobot / PyTorch release has actually been

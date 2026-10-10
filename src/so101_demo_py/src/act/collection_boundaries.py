@@ -9,7 +9,7 @@ from .native_endpoints import validate_source_clock
 
 
 def validate_verified_reset(document, *, identity=None):
-    """The V3 verified reset (CP-3425): the FIRST evidence of this session and epoch the Recorder itself retained.
+    """The V3 verified reset: the FIRST evidence of this session and epoch the Recorder itself retained.
 
     Its clock is the evidence producer's own: the sample's simulation time and the producer's monotonic interval of that
     physics step, never a receipt time. The Recorder runs before the Teacher, so this boundary precedes the capture start and

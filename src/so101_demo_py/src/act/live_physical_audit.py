@@ -27,10 +27,10 @@ class LivePhysicalAuditProvider:
         #: optional `at_s -> bool`: the physics chunk for this instant has not arrived yet (it is in flight, not missing)
         self.physics_awaiting = physics_awaiting
         #: optional `at_s -> read record | None`: the first planning-scene read AFTER `at_s`, offered only when the read the
-        #: planning source returned is older than the age rule allows and the source has established the bracket (CP-3440 B)
+        #: planning source returned is older than the age rule allows and the source has established the bracket
         self.planning_next_source = planning_next_source
         #: optional `read -> (admitted association documents whose apply overlaps the read, an overlapping apply is not admitted yet)`
-        #: (CP-3489): a read concurrent with an apply may show the scene before or after it
+        #: a read concurrent with an apply may show the scene before or after it
         self.concurrent_apply_source = concurrent_apply_source
         self._release_epoch = identity["release_epoch"]
         self._release_time_s = None
@@ -74,7 +74,7 @@ class LivePhysicalAuditProvider:
             raise ValueError("LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID")
         observed = canonical(normalized_scene_geometry(response.scene))
         if observed != canonical(document["receipt"]["geometry"]):
-            # CP-3489: a read concurrent with the NEXT apply may already show its scene; exactly that geometry is accepted
+            # A read concurrent with the NEXT apply may already show its scene; exactly that geometry is accepted
             hook = self.concurrent_apply_source
             if hook is None:
                 raise ValueError("LIVE_PHYSICAL_SCENE_GEOMETRY_INVALID")
@@ -86,7 +86,7 @@ class LivePhysicalAuditProvider:
         return document["association_id"]
 
     def _verify_apply_anchor(self, planning, at_s):
-        """CP-3449: `planning` must be the successful apply that anchors the governing association. The scene it produced is proven by
+        """`planning` must be the successful apply that anchors the governing association. The scene it produced is proven by
         the read that follows it (checked by the caller against the same association), so nothing is compared here."""
         from .scene_association import _call, association_anchor, canonical
         bound = self.scene_association_source(at_s)
@@ -122,7 +122,7 @@ class LivePhysicalAuditProvider:
             raise ValueError("LIVE_PHYSICAL_SCOPE_INVALID")
         required = (PlanningSceneComponents.WORLD_OBJECT_NAMES | PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
                     | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS | PlanningSceneComponents.OBJECT_COLORS)
-        # CP-3449: the scene source of a row between the Teacher's apply and the first read after it is that APPLY
+        # The scene source of a row between the Teacher's apply and the first read after it is that APPLY
         apply_form = planning.get("service") == "/apply_planning_scene"
         if apply_form:
             association_id = self._verify_apply_anchor(planning, at_s)
@@ -187,7 +187,7 @@ class LivePhysicalAuditProvider:
         return self._parts(at_s) is not None
 
     def unready_cause(self, at_s):
-        """Which row source is not causal at `at_s` (observation for the start-gate telemetry, CP-3414)."""
+        """Which row source is not causal at `at_s`."""
         try:
             for name, source in (("physics", self.physics_source), ("planning_scene", self.planning_source),
                                  ("controller_state", self.controller_source), ("lifecycle", self.lifecycle_source)):
@@ -221,10 +221,10 @@ class LivePhysicalAuditProvider:
                 "planning_scene": planning["response_ros_clock"]["sim_time_ns"] / 1e9},
             "mujoco_truth": {"source_kind": "native_physics_step", **physics}, "contacts": contacts,
             # The originals are ROS messages converted to dicts; non-finite floats in them (NaN effort of a joint state) are tagged,
-            # never dropped, because the retained rows are strict canonical JSON (CP-3412). Finite values pass through unchanged.
+            # never dropped, because the retained rows are strict canonical JSON. Finite values pass through unchanged.
             "planning_scene": {"query_id": planning["call_id"], "record": json_safe(planning),
                 "association_id": association_id,
-                # present only when the read is older than the age rule and was admitted by bracketing (CP-3440 B)
+                # present only when the read is older than the age rule and was admitted by bracketing
                 **({} if next_read is None else {"bracket": {"next_query_id": next_read["call_id"],
                                                              "next_record": json_safe(next_read)}})},
             "controller_state": json_safe(controller),

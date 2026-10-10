@@ -141,7 +141,7 @@ class OfflineRosSources:
         self._chunk_wait_s = float(self._policy.get("physics_receiver_lag_max_s", 0.1))
         if "physics_receiver_lag_max_s" in self._policy:
             self.ALIGNMENT_RETRY_S = max(self.ALIGNMENT_RETRY_S, self._chunk_wait_s)
-        #: the Teacher publishes a `normal_stop` for every confirmed stop; the bag shows which one is the last (CP-3440)
+        #: the Teacher publishes a `normal_stop` for every confirmed stop; the bag shows which one is the last
         self._final_normal_stop_seq = final_normal_stop_seq
         self._final_boundary_done = False
         self._scene_reads_pending: list = []
@@ -219,7 +219,7 @@ class OfflineRosSources:
     def _default_world_factory(self, node, session_id):
         from ...backends.mujoco.observer import MujocoWorldObserver
 
-        # A gap is reported here and judged where the data is: the retained records must be gap-free (CP-3418)
+        # A gap is reported here and judged where the data is: the retained records must be gap-free
         return MujocoWorldObserver(node, session_id, max_age_s=0.5, subscription_depth=256, history_capacity=2048,
                                    on_sequence_gap=self._world_gap_is_judged_on_the_records)
 
@@ -303,7 +303,7 @@ class OfflineRosSources:
             concurrent_apply_source=self._concurrent_apply_for)
 
     def _physics_awaiting(self, at_s):
-        """The newest physics sample received is older than this grid instant: its chunk is in flight (CP-3410)."""
+        """The newest physics sample received is older than this grid instant: its chunk is in flight."""
         newest = self.binding.physics_adapter.latest_sample_time_s()
         return newest is not None and newest < at_s
 
@@ -326,7 +326,7 @@ class OfflineRosSources:
 
     def _concurrent_apply_for(self, read):
         """(admitted association documents whose apply overlapped `read`, True when an overlapping apply has no admitted
-        association yet): a read concurrent with an apply may show the scene before or after it (CP-3489)."""
+        association yet): a read concurrent with an apply may show the scene before or after it."""
         from ...act.scene_association import association_anchor, read_overlaps_apply
 
         # the Teacher's own applies, in the tracker (the planning calls hold the Recorder's reads only)
@@ -407,7 +407,7 @@ class OfflineRosSources:
         return found
 
     def _bracket_at(self, at_s, bound, found):
-        """(read before, read after) when the scene is PROVEN unchanged across the hole, else None (CP-3440 B).
+        """(read before, read after) when the scene is PROVEN unchanged across the hole, else None.
 
         Proof: both reads carry the same normalized scene geometry (the content the association compares), and no Teacher
         `/apply_planning_scene` call overlaps the interval between them (its request begins before the later read's response
@@ -434,12 +434,12 @@ class OfflineRosSources:
         return before, after
 
     def _apply_bracket_at(self, at_s, bound, found):
-        """(the Teacher's apply, the first read after it) for a row between the two, else None (CP-3449).
+        """(the Teacher's apply, the first read after it) for a row between the two, else None.
 
         The row has no read at or before it that follows the governing association (a read must begin after the apply's response),
         so the scene source is the apply that made the scene what the association describes. Proof: the apply succeeded; the first
         read after the row, causal after the same apply, carries the association's geometry; no other apply (successful or not) lies
-        between the apply's response and that read. With any read at or before the row the read rules decide (CP-3440 B).
+        between the apply's response and that read. With any read at or before the row the read rules decide.
         """
         from moveit_msgs.srv import GetPlanningScene
 
@@ -532,7 +532,7 @@ class OfflineRosSources:
 
     def _offer_initial_alignment(self) -> None:
         """The initial alignment is the Recorder's OWN: its latest full read of the scene, before the Teacher's SETUP, against a
-        physics source. It asserts the empty scene and depends on no Teacher event (CP-3425). A source that has not arrived
+        physics source. It asserts the empty scene and depends on no Teacher event. A source that has not arrived
         yet is retried with the next, newer read; any other refusal (a scene that is not empty) is the data's verdict."""
         if self._initial_built or getattr(self, "_initial_offered", False):
             return
@@ -640,7 +640,7 @@ class OfflineRosSources:
         self._drain_stages(engine)
 
     def _drain_stages(self, engine) -> None:
-        """Run every drain stage on every pass: a failure in one never stops the others (CP-3420).
+        """Run every drain stage on every pass: a failure in one never stops the others.
 
         L2 cefacd37: one world/scene join failure was raised from the pump before the associations were serviced, so the world
         cursor stood still (22 s later its record was evicted: "retention prefix lost") and the Teacher's attach and detach
@@ -691,7 +691,7 @@ class OfflineRosSources:
             entry["facts"] = facts
 
     def _epoch_boundary(self, history):
-        """The verified reset (CP-3425): the Recorder's own FIRST retained evidence of this session and epoch that still has its
+        """The verified reset: the Recorder's own FIRST retained evidence of this session and epoch that still has its
         physics step, with the evidence producer's clock (the sample's sim time, the producer's monotonic interval of the step),
         not a receipt time. None while no retained world record has its raw step."""
         identity = self.episode.identity
@@ -732,7 +732,7 @@ class OfflineRosSources:
         # The seed pair is the newest pre-capture pair. The world evidence the capture is retained from is the newest world
         # record AT OR BEFORE the pair's stamp (its predecessor), taken from the retained history, never the newest world record
         # of the moment: a camera frame is older than the newest world record by its own latency, so "stamp >= newest world"
-        # held only in a few-millisecond window (L2 rRQGirke: seed_expired on 12605 passes). CP-3416.
+        # held only in a few-millisecond window (a live run expired the seed on 12605 passes).
         with adapter._lock:
             if adapter.hazard is not None or adapter._closed:
                 raise PermissionError("RECORDER_CAPTURE_START_SOURCE_LOST")

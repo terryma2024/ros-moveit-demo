@@ -1,8 +1,7 @@
 """Original ROS values that JSON cannot carry (NaN, +/-inf) are kept as explicit tags, never dropped or rewritten.
 
 The retained audit rows are canonical JSON with `allow_nan=False`. A `/joint_states` message from the joint_state_broadcaster has NaN
-in the arrays of an interface it does not provide (effort, here), and the Recorder keeps the original message with every row (CP-3412:
-one such row failed the writer and ended the recording). `json_safe` replaces each non-finite float by `{"__non_finite_float__":
+in the arrays of an interface it does not provide (effort, here), and the Recorder keeps the original message with every row (one such row failed the writer and ended the recording). `json_safe` replaces each non-finite float by `{"__non_finite_float__":
 "nan" | "inf" | "-inf"}`; `restore_non_finite` is its exact inverse, so the original is recoverable and nothing is invented.
 """
 

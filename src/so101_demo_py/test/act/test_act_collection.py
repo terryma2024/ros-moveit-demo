@@ -1,4 +1,4 @@
-"""Task 11: only a committed, clean, complete success may enter training."""
+"""Only a committed, clean, complete success may enter training."""
 
 import json
 

@@ -1,6 +1,6 @@
 """The v4 permission-only RPC: what it checks, and what it deliberately does not.
 
-Task 5 of the macOS MPS / private IPC plan. Two facts have to hold at once:
+Part of the macOS MPS / private IPC plan. Two facts have to hold at once:
 
 * the server is still bounded and closed (frame cap, schema, operation allowlist, deadline,
   bounded queue), because those protect the process that owns the socket;

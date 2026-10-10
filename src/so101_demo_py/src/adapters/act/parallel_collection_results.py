@@ -1,4 +1,4 @@
-"""Task 11A results: append-once scene records, verified by digest.
+"""Results: append-once scene records, verified by digest.
 
 A scene result is published exactly once. Re-publishing the identical document is idempotent — a wave
 that is re-entered after a crash must be able to finish without rewriting history — while a *different*

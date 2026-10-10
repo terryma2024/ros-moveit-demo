@@ -90,7 +90,7 @@ def test_cli_stop_closes_the_bag_and_writes_stats(tmp_path, isolated_ros_domain)
             process.wait()
 
 
-# ---- CP-3489: the sidecar never waits for fsync, and publishes only once the bag has matched -------------------------------------
+# ---- the sidecar never waits for fsync, and publishes only once the bag has matched -------------------------------------
 
 def _scene_service(name):
     node = rclpy.create_node(name)
@@ -170,7 +170,7 @@ def test_a_slow_fsync_never_stalls_the_read_loop(tmp_path, isolated_ros_domain, 
 
 
 def test_the_camera_topics_have_deep_reliable_queues_in_the_bag_overrides(tmp_path, isolated_ros_domain):
-    """CP-3494: camera_info depth 100, images depth 50, written into the bag's QoS overrides like the other deep topics."""
+    """Camera_info depth 100, images depth 50, written into the bag's QoS overrides like the other deep topics."""
     import yaml
     from so101_demo.act.offline.raw_recorder import DEEP_RELIABLE
 

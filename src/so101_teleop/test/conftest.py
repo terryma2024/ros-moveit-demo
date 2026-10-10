@@ -38,7 +38,7 @@ def pytest_configure(config) -> None:
         return
     # The root must differ between PROCESSES as well as between xdist workers: `colcon test` launches this package's
     # registered pytest processes with one inherited base, so `<base>/<worker>` is the same path in all of them and the
-    # second process to reach `gw0` aborts pytest with FileExistsError (CP-1606). The pid is what makes it unique.
+    # second process to reach `gw0` aborts pytest with FileExistsError. The pid is what makes it unique.
     worker_root = Path(base) / f"{worker}-{os.getpid()}"
     worker_root.mkdir(mode=0o700)
     if worker_root.stat().st_mode & 0o077:

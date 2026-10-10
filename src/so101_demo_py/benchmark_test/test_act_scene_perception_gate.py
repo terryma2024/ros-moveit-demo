@@ -1,4 +1,4 @@
-"""The ACT-scene perception gate (CP-3467): the production detector and the production localizer on rendered frames of the scene.
+"""The ACT-scene perception gate: the production detector and the production localizer on rendered frames of the scene.
 
 The saved Broker inputs of the pilot all show the same few cup positions, and the benchmark suite scores masks, not poses. This gate
 renders the ACT scene (RGB, depth, the cup's ground truth, the production camera chain) over the three calibration anchors, 300

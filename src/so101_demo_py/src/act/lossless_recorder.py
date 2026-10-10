@@ -129,7 +129,7 @@ class LosslessRecorderQueue:
                 self.recorder.append(*job)
             except Exception as error:  # A refused durable write can never be a business outcome.
                 with self._condition:
-                    self._writer_error = chain_text(error)    # the whole chain: the wrapper's cause is the point (CP-3412)
+                    self._writer_error = chain_text(error)    # the whole chain: the wrapper's cause is the point
                     self._fail("RECORDER_QUEUE_WRITE_FAILED")
                 return
             with self._condition:

@@ -1,4 +1,4 @@
-"""Task 12: the frozen training configuration.
+"""The frozen training configuration.
 
 The values that decide what a model was trained on — the action chunk, how much of it is executed, whether
 temporal ensembling is used, the checkpoint seed and the preprocessing hash — are frozen here and refused

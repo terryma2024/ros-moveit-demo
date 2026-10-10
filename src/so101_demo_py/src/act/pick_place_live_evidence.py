@@ -137,7 +137,7 @@ class PickPlaceLiveEvidenceRecorder:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        # P1-4 (rereview 5): the entry says WHICH kind of sample it is, and an event carries the reason it was taken
+        # the entry says WHICH kind of sample it is, and an event carries the reason it was taken
         # with. Before this, `add_event` validated the reason and kept it in `self._event_reasons` - the live window's
         # own state - so a reader of the SEALED evidence could not tell what a given event sample was.
         entry = {
@@ -183,7 +183,7 @@ class PickPlaceLiveEvidenceRecorder:
             previous = entry["release_epoch"]
         if previous != identity["release_epoch"]:
             raise ValueError("PICK_PLACE_LIVE_EVIDENCE_EPOCH_MISMATCH")
-        # P1-4 / the packet's proposal 1: the sealed document describes its OWN grid - its edges and its count -
+        # the sealed document describes its OWN grid - its edges and its count -
         # rather than leaving a reader to recompute them from the samples.
         grid_times = [entry["sim_time_s"] for entry in self._entries if entry.get("kind") == "grid"]
         index = {
@@ -498,7 +498,7 @@ def derive_frame_aggregates(evidence, *, support_distance_max_m: float) -> dict:
 
 #: The epoch a case ENDS in once it has passed its release. The release CREATES the epoch, so a case that has run to
 #: FINAL_CHECK seals with this one, and the port's `_release_epoch_for("FINAL_CHECK")` computes the same value - named
-#: here once so the window's identity and the port's seal cannot drift apart (rereview4 P1-4).
+#: here once so the window's identity and the port's seal cannot drift apart.
 FINAL_RELEASE_EPOCH = 1
 
 
@@ -534,7 +534,7 @@ class LiveEvidenceWindow:
         self._phases_seen = []
         self._grid_count = 0
         self._event_count = 0
-        #: P1-4: which edge each event is - "command", "release" or "contact". A count alone cannot say whether the
+        #: which edge each event is - "command", "release" or "contact". A count alone cannot say whether the
         #: evidence carries the moment the gripper was told to open, so the reason travels with the event.
         self._event_reasons = []
 
@@ -648,7 +648,7 @@ class LiveEvidenceWindow:
     def seal(self, identity: dict = None) -> dict:
         """Seal through the recorder, with the identity the CASE ends in.
 
-        P1-4: the window used to seal with the identity it was CONSTRUCTED with - the epoch the case started in - while
+        the window used to seal with the identity it was CONSTRUCTED with - the epoch the case started in - while
         the port seals with the epoch the case ends in. Nothing compared them, so the two could disagree silently. A
         caller that knows the terminal identity passes it; the window REFUSES a disagreement rather than sealing over
         it, and keeps its own identity for the callers that have nothing better (a prefix case never passes its

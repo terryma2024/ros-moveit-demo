@@ -5,7 +5,7 @@ The data side never writes the MoveIt scene. The Teacher publishes each of its r
 recorded physics sources, into the same `ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION` documents the QC readback verifies:
 
 * `initial`  the Recorder's OWN read-only query of the scene before the Teacher's SETUP, against a physics source, no apply:
-             it asserts that nothing is attached, as the worker's initial gate does (CP-3425); it does not depend on any Teacher event;
+             it asserts that nothing is attached, as the worker's initial gate does; it does not depend on any Teacher event;
 * `world_sync` the Teacher's SETUP apply of the full task geometry and its read-back; the cup's pose is the perceived one,
              so its delta against the physics-derived pose is recorded, not required, everything else is strict;
 * `attach`   the Teacher's plain attach apply and its read-back; membership, link, touch links and frame are strict and

@@ -1,4 +1,4 @@
-"""Task 12 CLI: export a verified dataset and run one owned training job.
+"""CLI: export a verified dataset and run one owned training job.
 
 The order is deliberate. The dependency lock must be resolved and the config valid before anything is
 written; the dataset is exported from the campaign index (never by scanning episode directories) into a

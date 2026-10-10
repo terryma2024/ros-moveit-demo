@@ -1,6 +1,6 @@
 """The lightweight start guard as the Web/API sees it.
 
-Task 7 of the lightweight start guard plan. The preview (`Check resources` -> preflight) runs
+Part of the lightweight start guard plan. The preview (`Check resources` -> preflight) runs
 one bounded check on the server, the campaign start runs its own fresh check, a client cannot
 supply or override a status, and history projections never probe.
 """

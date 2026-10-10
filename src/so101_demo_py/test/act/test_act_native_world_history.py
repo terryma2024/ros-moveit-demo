@@ -146,7 +146,7 @@ def test_actual_child_drains_original_candidates_without_skipping_missing_scene(
     assert value._drain_world_sources() == 0 and retained == []
     assert value._world_record_cursor == source.evidence.publisher_sequence - 1
     if late:
-        # CP-3403: the 100 ms is judged on the receipts (a frame received 101 ms after its world record), not on the
+        # The 100 ms is judged on the receipts (a frame received 101 ms after its world record), not on the
         # pass cadence; a frame that is merely observed late by a slow pass is covered by test_recorder_hot_path_defects.
         scene = (scene[0], scene[1] + .101)
     scenes.append(scene)

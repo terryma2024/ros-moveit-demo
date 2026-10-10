@@ -104,7 +104,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
             query = planning["record"]
             apply = association_anchor(association)
             geometry = canonical(association["receipt"]["geometry"])
-            # CP-3449: the row's scene source may be the Teacher's successful apply that anchors the association, bounded by the
+            # The row's scene source may be the Teacher's successful apply that anchors the association, bounded by the
             # first read after it (the bracket, required then)
             apply_form = isinstance(query, dict) and query.get("service") == "/apply_planning_scene"
             if apply_form:
@@ -125,7 +125,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
                         and apply["response_ros_clock"]["end_monotonic_ns"] <= read["request_ros_clock"]["begin_monotonic_ns"]
                         and apply["response_ros_clock"]["sim_time_ns"] <= read["request_ros_clock"]["sim_time_ns"]
                         and (canonical(normalized_scene_geometry(read_response.scene)) == geometry
-                             # CP-3489: a read concurrent with another association's apply may show that association's scene
+                             # A read concurrent with another association's apply may show that association's scene
                              or concurrent_apply_geometry_matches(
                                  read, canonical(normalized_scene_geometry(read_response.scene)),
                                  association["association_id"], scenes.values())))
@@ -137,7 +137,7 @@ def verify_physical_rows(rows, *, raw_chunks, associations, inputs, identity):
                 if not 0 <= grid - stamp_ns <= 100000000:
                     raise ValueError("scene contents or apply-before-query causality mismatch")
             else:
-                # CP-3440 B: a read older than the age rule is admitted by the next read: same association and geometry, the
+                # a read older than the age rule is admitted by the next read: same association and geometry, the
                 # instant lies between the two, and no scene change (an association's apply) falls between them
                 if set(bracket) != {"next_query_id", "next_record"}:
                     raise ValueError("scene bracket malformed")

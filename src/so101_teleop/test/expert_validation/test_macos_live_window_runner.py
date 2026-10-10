@@ -1,4 +1,4 @@
-"""Contract tests for the closed macOS live service-window runner (remediation Task 7B).
+"""Contract tests for the closed macOS live service-window runner.
 
 One window owns one service and one console case. These tests read the runner's own text and drive
 its refusal paths; they never start the service, a browser or a simulator.

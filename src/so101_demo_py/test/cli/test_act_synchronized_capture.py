@@ -39,7 +39,7 @@ def joints(value):
                            position=[0.] * 7, velocity=[0.] * 7)
 
 
-def world(value=1., *, epoch=2, session="task6-299", step=500):
+def world(value=1., *, epoch=2, session="capture-299", step=500):
     return SimpleNamespace(simulation_time_s=value, simulation_session_id=session,
                            reset_epoch=epoch, simulation_step=step, paused=False,
                            truncated=False,
@@ -49,7 +49,7 @@ def world(value=1., *, epoch=2, session="task6-299", step=500):
 
 def prepared(tmp_path, *, include_info=True, image_time=.99, joint_time=.985):
     recorder = SynchronizedFrameRecorder(
-        tmp_path / "capture", session_id="task6-299", reset_epoch=2,
+        tmp_path / "capture", session_id="capture-299", reset_epoch=2,
         source_floor_s=.5, max_age_s=.05, max_skew_s=.03,
     )
     recorder.accept_image("head", image(image_time, "head_camera_frame", (10, 20, 30)))
@@ -67,7 +67,7 @@ def test_causal_sample_preserves_both_rgb_images_and_joint_provenance(tmp_path):
     summary = recorder.finish()
     assert summary["status"] == "RECORDED_UNQUALIFIED"
     assert summary["samples"] == 1
-    assert row["simulation_session_id"] == "task6-299"
+    assert row["simulation_session_id"] == "capture-299"
     assert row["reset_epoch"] == 2 and row["simulation_step"] == 500
     assert row["joint_positions_rad"] == [0.] * 7
     assert row["joint_stamp_s"] == pytest.approx(.985)
@@ -214,7 +214,7 @@ def test_cli_rejects_unscoped_output_before_ros_initialization(tmp_path):
 
     with pytest.raises(ValueError, match="SYNCHRONIZED_CAPTURE_SCOPE_INVALID"):
         main(["--evidence-root", str(tmp_path), "--run-id", "../outside",
-              "--session-id", "task6-299", "--reset-epoch", "2",
+              "--session-id", "capture-299", "--reset-epoch", "2",
               "--source-floor-s", ".5", "--max-age-s", ".05",
               "--max-skew-s", ".03", "--duration-s", "1"])
     assert not (tmp_path / "experiments").exists()
@@ -296,7 +296,7 @@ def test_cli_drains_atomic_callbacks_during_a_slow_png_write(tmp_path, monkeypat
     monkeypatch.setattr(cli, "SynchronizedFrameRecorder", Recorder)
     result = cli.main([
         "--evidence-root", str(tmp_path), "--run-id", "capture",
-        "--session-id", "task6-302", "--reset-epoch", "1",
+        "--session-id", "capture-302", "--reset-epoch", "1",
         "--source-floor-s", "0", "--max-age-s", ".12",
         "--max-skew-s", ".05", "--duration-s", ".21",
     ])

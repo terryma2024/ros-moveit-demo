@@ -1,4 +1,4 @@
-"""Task 12: the training configuration is frozen, and drift is refused rather than absorbed."""
+"""The training configuration is frozen, and drift is refused rather than absorbed."""
 
 
 import pytest

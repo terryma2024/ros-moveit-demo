@@ -43,7 +43,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
         child = {
             "campaign_id": f"campaign-{identity}", "worker_id": "w00",
             "execution_generation": 1, "ros_domain_id": identity,
-            "namespace": f"/task8-{identity}", "controller_name": f"arm-{identity}",
+            "namespace": f"/pick-place-{identity}", "controller_name": f"arm-{identity}",
             "mujoco_session_id": f"session-{identity}",
             "socket_root": f"/tmp/act389-{identity}",
         }

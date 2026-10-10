@@ -326,7 +326,7 @@ def test_the_tracker_owes_one_association_per_geometry_changing_apply_and_the_se
     teacher = Teacher(ctx)
     tracker = SceneOperationTracker()
     jobs = jobs_of(tracker, teacher.setup())
-    # the Teacher's SETUP writes the task scene: a world_sync alignment is owed (the initial one is the Recorder's own, CP-3425)
+    # the Teacher's SETUP writes the task scene: a world_sync alignment is owed
     assert [job.operation for job in jobs] == ["world_sync"] and jobs[0].apply is not None
     jobs = jobs_of(tracker, teacher.attach()) + jobs_of(tracker, teacher.detach()) + jobs_of(
         tracker, teacher.detach(state="SYNC_WORLD_OBJECT"))
@@ -530,7 +530,7 @@ def test_a_source_whose_native_sample_or_scene_frame_disagrees_is_refused_not_sk
 
 
 def own_initial_job(ctx, scene=None):
-    """The Recorder's OWN read of the scene before the Teacher's SETUP: a full read, no apply, no Teacher event (CP-3425)."""
+    """The Recorder's OWN read of the scene before the Teacher's SETUP: a full read, no apply, no Teacher event."""
     from moveit_msgs.srv import GetPlanningScene
 
     payload = Teacher(ctx).call(full_read_request(), GetPlanningScene.Response(
@@ -688,7 +688,7 @@ def test_the_recorders_sources_turn_the_teachers_setup_and_attach_events_into_ad
     ctx.stamp()
     sources, engine, latched, appended, scene_calls, node = sources_fixture(ctx, monkeypatch)
     assert sources._execution_root() == ctx.root
-    # the initial alignment is the Recorder's own read before the Teacher's SETUP: no Teacher event is involved (CP-3425)
+    # the initial alignment is the Recorder's own read before the Teacher's SETUP: no Teacher event is involved
     ctx.stamp()
     read_scene(sources, ctx, scene_calls)
     settle(sources, engine)
@@ -733,7 +733,7 @@ def test_rows_wait_while_an_association_is_owed_and_are_ready_once_it_is_admitte
     assert provider.ready(at_s) is False, "built but not yet admitted"
     settle(sources, engine)
     read_scene(sources, ctx, scene_calls)
-    # CP-3403: the pumps that settled the association already read the scene (reads start at the built initial association)
+    # The pumps that settled the association already read the scene (reads start at the built initial association)
     assert len(scene_calls) >= 1 and provider.ready(at_s) is True
     ctx.stamp()
     teacher = Teacher(ctx)

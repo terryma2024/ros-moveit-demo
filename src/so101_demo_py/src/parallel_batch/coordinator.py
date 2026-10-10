@@ -4,7 +4,7 @@ The journal alone is authoritative. Every transition holds one state lock and
 appends a projection delta before applying it or acknowledging authorization.
 The injected result port verifies sealed artifacts and discovers a completed
 artifact in the workspace reserved by LEASE_GRANTED. It must not call back into
-the coordinator or authorize worker actions; Task 4 supplies the disk adapter.
+the coordinator or authorize worker actions; the disk adapter supplies persistence.
 """
 
 import hashlib
@@ -792,7 +792,7 @@ class BatchCoordinator:
             if lease.coordinator_epoch != self.journal.coordinator_epoch:
                 raise ValueError('STALE_COORDINATOR_EPOCH')
             return deepcopy(duplicate.payload['response'])
-        # (T3-F14 correction, CP-2239) The ACT QC gate applies to an ACT execution commit and nothing else: it is
+        # The ACT QC gate applies to an ACT execution commit and nothing else: it is
         # selected by the result contract the port implements — the generic production adapter must keep its own
         # paths — and it runs after the acknowledged-request branch so a replay stays journal-backed rather than
         # depending on the filesystem. ACT validation commits are not episodes and are not gated here.

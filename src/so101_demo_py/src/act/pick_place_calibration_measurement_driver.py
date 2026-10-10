@@ -49,9 +49,9 @@ class PickPlaceCalibrationMujocoMeasurementDriver:
         self.phase_camera = phase_camera
         from so101_demo.act.pick_place_calibration_measurement_schema import MeasurementIdentity
 
-        # Astra item 3: the identity is the schema's ten-member document, passed in rather than invented
+        # the identity is the schema's ten-member document, passed in rather than invented
         self.identity = MeasurementIdentity.require(identity)
-        # P1-2 (rereview 5): the aggregator computes each field from `raw["measurements"][field]` and reads its limit
+        # the aggregator computes each field from `raw["measurements"][field]` and reads its limit
         # from `raw["configured"][field]`, keyed by the CONTRACT's field names - so the contract must reach the one
         # place that writes raw records, and it is passed in rather than guessed.
         self.contract = contract if isinstance(contract, dict) else {}
@@ -67,7 +67,7 @@ class PickPlaceCalibrationMujocoMeasurementDriver:
         if isinstance(descriptor, dict):
             payload = json.dumps(descriptor, sort_keys=True).encode("utf-8")
             (root / "runtime-descriptor.json").write_bytes(payload)
-            # Astra item 3: the descriptor is part of the sealed closure, so it is indexed like every other artefact
+            # the descriptor is part of the sealed closure, so it is indexed like every other artefact
             self._files.append({"payload_path": "runtime-descriptor.json",
                                 "payload_sha256": _sha256(payload), "encoding": "utf-8"})
         anchors, failure = [], None
@@ -137,7 +137,7 @@ class PickPlaceCalibrationMujocoMeasurementDriver:
         for index, phase in enumerate(_PHASES):
             stamp = self.clock.monotonic()
             observation = self.phase_camera(phase, index)
-            # P1-3: a replay row is either a MEASUREMENT or a named refusal. Sealing an ABSENT observation would
+            # a replay row is either a MEASUREMENT or a named refusal. Sealing an ABSENT observation would
             # publish a phase path that was never sampled, which is the failure the marker was introduced to expose.
             if not isinstance(observation, dict) or observation.get("geometry_state") != "MEASURED":
                 state = observation.get("geometry_state") if isinstance(observation, dict) else type(observation).__name__
@@ -214,9 +214,8 @@ class PickPlaceCalibrationMujocoMeasurementDriver:
     def _aggregator_evidence(self, record: dict) -> dict:
         """Present this record's own evidence under the names the aggregator's formulas read.
 
-        P1-2 (rereview 5): the formulas read `raw["measurements"][field]` (a list of bbox dicts for the bbox fields)
-        and `raw["configured"][field]` (the configured limit). The record already carries the bbox evidence - my P1-1
-        translation of the real `DetectionBatch` keeps each candidate's `bbox_xyxy` - so this is a RENAMING at write
+        the formulas read `raw["measurements"][field]` (a list of bbox dicts for the bbox fields)
+        and `raw["configured"][field]` (the configured limit). The record already carries the bbox evidence - the translation of the real `DetectionBatch` keeps each candidate's `bbox_xyxy` - so this is a RENAMING at write
         time, never an addition after sealing, never a re-seal, and it does not touch the identity.
         """
 
@@ -303,10 +302,10 @@ class PickPlaceCalibrationMujocoMeasurementDriver:
         from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
         from so101_demo.act.pick_place_calibration_measurement_schema import BATCH_KIND, write_closed_json
 
-        # Astra item 3: this is the ONE seal owner, and its document is the schema's, not a private shape
-        # Astra item 3: the provenance rows are the driver's own record and cannot live in the sealed document
+        # this is the ONE seal owner, and its document is the schema's, not a private shape
+        # the provenance rows are the driver's own record and cannot live in the sealed document
         # (_BATCH_KEYS has no room for them), so they get an indexed home of their own inside the closure
-        # Astra item 3: the schema reads each sealed anchor as a NAME (f"anchors/{anchor}/"), so the names are what
+        # the schema reads each sealed anchor as a NAME (f"anchors/{anchor}/"), so the names are what
         # the document carries; the driver's richer per-anchor records live in index.json beside the provenance rows
         anchor_names = [row["anchor"] if isinstance(row, dict) else str(row) for row in anchors]
         provenance = _canonical({"files": self._files, "anchors": anchors})

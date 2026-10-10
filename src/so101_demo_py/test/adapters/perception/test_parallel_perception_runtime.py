@@ -1214,7 +1214,7 @@ def test_the_broker_argv_documents_the_device_the_platform_should_choose():
 
 
 def test_each_model_is_asked_for_the_class_its_own_prompt_profile_declares(tmp_path, monkeypatch):
-    """CP-3467: Grounded DINO + SAM declares `cup`; asking it for the task class `plastic_cup` is UNSUPPORTED_DETECTION_QUERY,
+    """Grounded DINO + SAM declares `cup`; asking it for the task class `plastic_cup` is UNSUPPORTED_DETECTION_QUERY,
     which the Broker treats as an infrastructure failure. YOLO, trained on `plastic_cup`, keeps the snapshot's class."""
     from dataclasses import replace
 

@@ -20,7 +20,7 @@ from pathlib import Path
 
 KIND = "ACT_TOPIC_LOSS_GATE"
 SCHEMA_VERSION = 1
-#: v2 (CP-3394): with a per-topic breakdown, losses logged before the window starts are provably outside it; v1 documents are refused
+#: v2: with a per-topic breakdown, losses logged before the window starts are provably outside it; v1 documents are refused
 RULE_VERSION = "topic_loss"
 DOCUMENT_NAME = "topic-loss.json"
 CHECK_NAME = "topic_loss_gate"

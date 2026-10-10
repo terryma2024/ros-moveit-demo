@@ -1,4 +1,4 @@
-"""Task 12 ownership: one run root, one live owner, one GPU.
+"""Training ownership: one run root, one live owner, one GPU.
 
 Training and collection must never share a GPU, and two run roots must never believe they own the same
 one. The owner receipt written here is the evidence of that claim, and it is re-read on every later

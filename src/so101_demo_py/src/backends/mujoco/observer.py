@@ -149,7 +149,7 @@ class MujocoWorldObserver:
         self._received_at_s: float | None = None
         self._history: deque[ReceivedSimulationEvidence] = deque(maxlen=history_capacity)
         self._strict_hazard: str | None = None
-        self._gap_log: deque = deque(maxlen=16)   # what each gap looked like (observation only, CP-3418)
+        self._gap_log: deque = deque(maxlen=16)   # what each gap looked like
         self._rejection_log: deque = deque(maxlen=16)
         self._callback_count = 0
         self._rejected_count = 0

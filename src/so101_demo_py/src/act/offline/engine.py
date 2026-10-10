@@ -15,7 +15,7 @@ Teacher's normal-stop clock, and the engine keeps feeding the sources until they
 (bounded), so the window covers the end reference. `verify_teacher_references` is run before the seal and again on the sealed files.
 
 This module is the engine of the live Recorder with its process discipline removed (ready file, stall telemetry, signal handling,
-deferred events, sandbox faults): the live Recorder is gone from the run path (CP-3456, cleanup step 2).
+deferred events, sandbox faults): the live Recorder is gone from the run path.
 """
 
 from __future__ import annotations
@@ -149,7 +149,7 @@ class OfflineEngine:
             self._invalid_total += 1
             if len(self.invalid) < _MAX_REASONS and not (self.invalid and self.invalid[-1]["reason"] == text):
                 entry = {"reason": text, "monotonic_ns": time.monotonic_ns()}
-                # the exception chains of writer and seal failures are longer than an ordinary fact (CP-3412)
+                # the exception chains of writer and seal failures are longer than an ordinary fact
                 entry.update({key: str(value)[:(2000 if key in _CHAIN_FACTS else _REASON_CHARS)]
                               for key, value in facts.items()})
                 self.invalid.append(entry)

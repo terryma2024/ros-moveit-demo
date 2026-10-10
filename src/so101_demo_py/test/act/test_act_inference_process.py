@@ -1,4 +1,4 @@
-"""Task 13: one request in flight, and a late answer is refused rather than applied."""
+"""One request in flight, and a late answer is refused rather than applied."""
 
 
 import pytest

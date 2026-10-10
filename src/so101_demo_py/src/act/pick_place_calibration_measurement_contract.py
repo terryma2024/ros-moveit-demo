@@ -75,7 +75,7 @@ BOUND_DOCUMENT_DIGEST_KEY = "contract_sha256"
 #: The ten-field identity's own name for the contract this run was ADMITTED under. The bound document carries it
 #: verbatim in its `identities` field - which `load_measurement_contract` already requires to equal the caller's
 #: mapping - so "the batch was measured under this contract" means "the batch's identity equals the contract's
-#: admitted identities", and that is the single rule every layer states (rereview4 P1-2).
+#: admitted identities", and that is the single rule every layer states.
 IDENTITY_CONTRACT_MEMBER = "measurement_contract_sha256"
 
 

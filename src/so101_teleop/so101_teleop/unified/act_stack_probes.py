@@ -1,4 +1,4 @@
-"""Exact bounded probes for one admitted Task 8 ACT stack lifecycle."""
+"""Exact bounded probes for one admitted pick-place validation ACT stack lifecycle."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class RosGraphClearProbe:
 def make_pick_place_act_stack(context, child: ActChildLaunch, *,
                          ros2_executable: Path, readiness_executable: Path,
                          base_environment: Mapping[str, str]) -> ActStackProcessOwner:
-    """Create the only stack scope allowed for one admitted full Task 8 case."""
+    """Create the only stack scope allowed for one admitted full pick-place validation case."""
     try:
         campaign = context.campaign_id
         campaign_root = Path(context.evidence_root)

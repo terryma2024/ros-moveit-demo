@@ -1,7 +1,7 @@
 """Emit ACT calibration status; unmeasured checks never pass.
 
 A supplied measured report is validated for structure and emitted with its own recorded identity.
-Per the owner amendment recorded as CP-1928 that identity is provenance: it is no longer required to
+Per the owner's amendment that identity is provenance: it is no longer required to
 match the installed profile, and the emitted document says which revision it was measured on.
 """
 
@@ -25,7 +25,7 @@ def main(arguments=None):
                   checks={key:"UNMEASURED" for key in sorted(REQUIRED_CHECKS)})
     if options.measured_report:
         measured = json.loads(options.measured_report.read_text())
-        # per the owner amendment recorded in CP-1928 the measured report's own identity is
+        # per the owner's amendment the measured report's own identity is
         # recorded, not compared with the installed profile
         if measured.get("status") == "QUALIFIED":
             require_gate(measured, "formal_collection")

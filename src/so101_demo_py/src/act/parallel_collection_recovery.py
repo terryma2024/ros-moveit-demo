@@ -1,4 +1,4 @@
-"""Task 11A recovery: a wave is re-entered from what actually happened.
+"""Recovery: a wave is re-entered from what actually happened.
 
 Two rules shape this module. A scene that already has a sealed result is never collected again, so a
 re-entered wave only does the work that is genuinely outstanding. And a scene whose holding state is

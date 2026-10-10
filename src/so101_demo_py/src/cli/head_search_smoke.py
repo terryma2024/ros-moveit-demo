@@ -5,8 +5,8 @@ Two modes, one entry name, because the plan names this script for both of them:
 * **Planning coverage** (this command with no ``--run-root``): read the geometry seal, build the bounded
   stop plan for one anchor, prove coverage from the field-of-view intervals, record the plan and its
   statuses, and fail closed when the safe interval cannot cover the required domain. This is the entry
-  Task 11 runs and it is unchanged.
-* **The production smoke** (``--run-root`` present): Task 14 Step 3's smoke. Every other flag is the
+  the coverage gate runs and it is unchanged.
+* **The production smoke** (``--run-root`` present): the production smoke. Every other flag is the
   ``measure-production-smoke`` surface of ``so101_head_search_calibration`` and is forwarded to it
   verbatim, so there is one implementation of the flight, the sealed journal and the aggregator. In this
   mode the coverage proof is still written into the run root - it is the plan the flight walks - but the
@@ -52,7 +52,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--contract", type=_path)
     parser.add_argument("--perception-config", type=_path)
     parser.add_argument("--output", type=_path)
-    # The plan's Task 11/13 invocations pass --scenario and --evidence-root. Task 11's
+    # The plan's coverage and qualification invocations pass --scenario and --evidence-root. The coverage
     # acceptance depends on this command running, so both are accepted here and the
     # evidence root doubles as the output root; every pre-existing flag keeps working.
     parser.add_argument("--scenario", default="default")
@@ -143,7 +143,7 @@ def main(arguments: list[str] | None = None) -> int:
         plan_path.write_text(
             json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        # The plan's Task 11 gate checks for coverage-proof.json in the evidence root;
+        # The plan's coverage gate checks for coverage-proof.json in the evidence root;
         # the emitted document is that proof, so it is written under both names.
         coverage_path = parsed.output / "coverage-proof.json"
         coverage_path.write_text(

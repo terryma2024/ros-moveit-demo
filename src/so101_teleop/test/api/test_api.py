@@ -77,7 +77,7 @@ class TaskApiService:
 
 def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_service=None,
                     instances=None, arbiter=None, safety=None):
-    """Build the unified app around a stub port; the migration target for these tests (CP-75)."""
+    """Build the unified app around a stub port; the migration target for these tests."""
     from so101_teleop.unified.app import create_unified_app
     from so101_teleop.unified.ports import UnifiedServices
 

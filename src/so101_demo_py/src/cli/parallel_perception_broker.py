@@ -41,7 +41,7 @@ def broker_argv():
 
 
 #: Where the image keeps the `so101_demo` it was built with (2026-09-24). Its parser predates later contract changes, so a run mounts
-#: the qualified package over it instead of trusting the baked one (CP-3459).
+#: the qualified package over it instead of trusting the baked one.
 IMAGE_PACKAGE_PATH = '/opt/venv/lib/python3.12/site-packages/so101_demo'
 
 
@@ -61,8 +61,8 @@ def _file_sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-#: Where the detector the broker runs sits inside the package that is mounted over the image's own (CP-3467: it is the freeze's
-#: own `yolo_seg.py`; the baked 09-24 file that CP-3460 pinned is gone, and rule R6 in the Worker's localizer takes the second
+#: Where the detector the broker runs sits inside the package that is mounted over the image's own (it is the freeze's
+#: own `yolo_seg.py`; the baked 09-24 file that was pinned earlier is gone, and rule R6 in the Worker's localizer takes the second
 #: candidate the corrected detector returns).
 DETECTOR_RELATIVE_PATH = Path('adapters') / 'perception' / 'yolo_seg.py'
 
@@ -539,7 +539,7 @@ def main(argv=None, *, transport=None):
         write_receipt(Path('/runtime/smoke.json'), {'provenance': provenance, 'results': results})
         return int(any(item['outcome'] not in {'QUALIFIED', 'NORMAL_REJECTION'}
                        for item in results.values()))
-    # The only real framing/auth protocol is implemented by Task 11.
+    # The only real framing/auth protocol is implemented by the parallel transport.
     try:
         return transport.serve(runtime, endpoint=Path(args.endpoint))
     except Exception:

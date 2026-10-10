@@ -128,7 +128,7 @@ def write_receipt(path, document):
 def query_class_for(detector, default):
     """The class a detector is asked for: the one its own prompt profile declares (`target_class_id`, as Grounded DINO + SAM does:
     `cup`), else the snapshot's task class (`plastic_cup`, which the YOLO model was trained on). Asking Grounded for `plastic_cup`
-    raised UNSUPPORTED_DETECTION_QUERY, an infrastructure error, the first time the policy fell back to it (CP-3467)."""
+    raised UNSUPPORTED_DETECTION_QUERY, an infrastructure error, the first time the policy fell back to it."""
     return getattr(detector, 'target_class_id', None) or default
 
 
@@ -368,7 +368,7 @@ class ParallelPerceptionRuntime:
 class PerceptionService:
     """Bind immutable snapshots to the one canonical bounded Broker.
 
-    Task 11 transport calls submit/run_next/poll_response; an independent timer
+    The parallel transport calls submit/run_next/poll_response; an independent timer
     must poll deadlines while run_next blocks on CUDA. The supervisor provides
     generation; an in-process restart never reloads or reuses unhealthy models.
     """

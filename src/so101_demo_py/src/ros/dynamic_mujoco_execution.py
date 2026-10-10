@@ -86,7 +86,7 @@ _DEFAULT_STATE_UNAVAILABLE_STOP_S = 1.0
 _SUMMARY_JOIN_S = 5.0
 #: Teacher run: the failure codes that are not from the Teacher's own motion (they are the attempt's `failure_class = sim_integrity` or operator stops)
 _TEACHER_FAILED_CODES = frozenset({"TEACHER_ARM_NOT_STOPPED", "TEACHER_DWELL_TIMEOUT", "TEACHER_INJECTED_EXECUTION_FAILURE"})
-#: CP-3513: the failure code of the diagnostic-only injected execution failure (an execution failure, status FAILED)
+#: The failure code of the diagnostic-only injected execution failure (an execution failure, status FAILED)
 INJECTED_EXECUTION_FAILURE = "TEACHER_INJECTED_EXECUTION_FAILURE"
 
 
@@ -783,7 +783,7 @@ class RosDynamicMujocoExecution:
     # Set by the entry that starts an external Recorder (`--collection on`). Off by default: a Teacher with no Recorder
     # issues no extra stop request.
     final_stop_proof_enabled = False
-    #: CP-3513, diagnostic only: the State at whose execute boundary one execution failure is injected (None: off)
+    #: Diagnostic only: the State at whose execute boundary one execution failure is injected (None: off)
     inject_failure_at = None
 
     def _publish_final_normal_stop(self) -> None:
@@ -1633,12 +1633,12 @@ class RosDynamicMujocoExecution:
             trajectory, getattr(self, "_execute_timeout_s", 45.0), monitor=monitor)
         if (executed.status is ActionStatus.SUCCEEDED and self._teacher_run() and getattr(self, "inject_failure_at", None) is state
                 and not getattr(self, "_injected_failure_fired", False)):
-            # CP-3513, diagnostic only: the execute really succeeded (the arm moved, the cup is held); report it as the failed result a
+            # Diagnostic only: the execute really succeeded (the arm moved, the cup is held); report it as the failed result a
             # failed execute returns, once, so everything after this line is the real Teacher failure path
             self._injected_failure_fired = True
             executed = ActionResult(ActionStatus.FAILED, Failure(
                 FailureCategory.EXECUTION, INJECTED_EXECUTION_FAILURE,
-                f"diagnostic injection at {state.value} (CP-3513): the execution result was replaced by a failure"))
+                f"diagnostic injection at {state.value}: the execution result was replaced by a failure"))
         if executed.status is ActionStatus.SUCCEEDED:
             self._last_arm_result = "SUCCEEDED"
             return executed
@@ -1933,8 +1933,7 @@ class RosDynamicMujocoExecution:
                 facts["newest_evidence_sequence"] = current[-1].evidence.publisher_sequence
                 facts["newest_evidence_age_s"] = now - current[-1].received_monotonic_s
             if pending_source is not None and not 0 <= now - pending_source.received_monotonic_s <= age:
-                # the candidate aged out while its scene frame never matched (CP-3493: T09 of the second v2 round ended here, T06 of
-                # the first at the deadline): the same facts, so that a stalled executor (everything old) and a lost frame (newer
+                # the candidate aged out while its scene frame never matched (seen at the deadline in two collection rounds): the same facts, so that a stalled executor (everything old) and a lost frame (newer
                 # frames present, this one absent) can be told apart
                 facts["ended_by"] = "pending_candidate_expired"
                 facts["pending_age_s"] = now - pending_source.received_monotonic_s
@@ -2000,7 +1999,7 @@ class RosDynamicMujocoExecution:
                     return source
             self._wait_progress()
         # the code stays DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE (what follows the colon is detail only); the facts say what the
-        # loop was waiting for, so that the next occurrence can be explained (CP-3489)
+        # loop was waiting for, so that the next occurrence can be explained
         facts["ended_by"] = "deadline"
         self._document["post_stop_source_unavailable"] = facts
         raise RuntimeError("DYNAMIC_RELEASE_POST_STOP_SOURCE_UNAVAILABLE: " + json.dumps(facts, sort_keys=True, default=str))

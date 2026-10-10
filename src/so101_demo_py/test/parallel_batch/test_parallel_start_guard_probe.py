@@ -1,6 +1,6 @@
 """The bounded startup probe: helper ownership, single-flight and durable cleanup state.
 
-Task 4 of the lightweight start guard plan. The real helper process is exercised here (not a
+Part of the lightweight start guard plan. The real helper process is exercised here (not a
 mock of the coordinator's decision): only the lowest-level process port is replaced, and only
 for the branch the kernel cannot be asked to produce on demand.
 """
@@ -367,7 +367,7 @@ def test_macos_mps_two_worker_helper_measures_cpu_and_ram_without_an_nvidia_prob
 
 
 # --------------------------------------------------------------------------------------
-# Fresh per-spawn admissions and the one-shot handover (Task 7, design section 7)
+# Fresh per-spawn admissions and the one-shot handover
 # --------------------------------------------------------------------------------------
 
 

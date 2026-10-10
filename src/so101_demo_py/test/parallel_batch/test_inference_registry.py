@@ -1,6 +1,6 @@
 """The Coordinator's local, one-time inference request registry.
 
-Task 7 of the macOS MPS / private IPC plan. The v4 control channel carries no token, generation or
+Part of the macOS MPS / private IPC plan. The v4 control channel carries no token, generation or
 lease, so the *only* thing that stops a late, duplicate or foreign inference result from reaching
 a robot action gate is this local registry. It therefore has to be exact:
 

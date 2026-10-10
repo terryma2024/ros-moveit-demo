@@ -1,4 +1,4 @@
-"""Task 11A GPU client: CUDA only, no silent fallback, model source echoed exactly."""
+"""GPU client: CUDA only, no silent fallback, model source echoed exactly."""
 
 import pytest
 

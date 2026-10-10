@@ -1,4 +1,4 @@
-"""Lossless Task 9 episode spool and immutable, uncommitted terminal seal."""
+"""Lossless episode spool and immutable, uncommitted terminal seal."""
 
 from __future__ import annotations
 
@@ -185,11 +185,11 @@ class EpisodeRecorder:
         bracket = scene.get("bracket") if isinstance(scene, dict) else None
         record = scene.get("record") if isinstance(scene, dict) else None
         if (isinstance(record, dict) and record.get("service") == "/apply_planning_scene" and bracket is None):
-            # CP-3449: an apply is a scene source only together with the read that follows it
+            # An apply is a scene source only together with the read that follows it
             raise ValueError("EPISODE_SOURCE_STALE")
         for name, stamp in physical.items():
             if name == "planning_scene" and bracket is not None:
-                # CP-3440 B: a read older than the age rule is admitted only with the next read it was bracketed by
+                # a read older than the age rule is admitted only with the next read it was bracketed by
                 if (not isinstance(bracket, dict) or set(bracket) != {"next_query_id", "next_record"}
                         or not isinstance(bracket["next_record"], dict)
                         or not bracketed_age_ok_ns(time_ns(t), time_ns(stamp),

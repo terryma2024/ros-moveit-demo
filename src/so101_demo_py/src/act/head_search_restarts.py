@@ -1,7 +1,7 @@
-"""Task 14 Step 4: one independent ``FULL_RESTART`` per anchor, with teardown proofs.
+"""One independent ``FULL_RESTART`` per anchor, with teardown proofs.
 
 The plan fixes exactly three restart phases - ``restart_default``, ``restart_left``,
-``restart_forward`` - and says what each one has to prove (Task 14 Step 4): *"Each phase tears down and
+``restart_forward`` - and says what each one has to prove: *"Each phase tears down and
 reconstructs the one stack, then passes graph, detector, search, lock, timing and stop gates. The manifest
 must contain exactly ``default``, ``left`` and ``forward``, once each."* Design section 10.2 repeats it:
 "after the forty scenarios, ``default``, ``left`` and ``forward`` each run one independent
@@ -252,7 +252,7 @@ def _utc_now(now=time.gmtime) -> str:
 
 
 def read_ownership_receipt(path, *, run_root) -> dict:
-    """Take Task 14 Step 1's receipt and refuse unless it guards exactly this run root.
+    """Take the exclusive-ownership receipt and refuse unless it guards exactly this run root.
 
     The receipt is not re-derived here: it is the Step 1 producer's observation, taken at its own instant.
     What this phase checks is that it is the right document (operation and status), that it refused

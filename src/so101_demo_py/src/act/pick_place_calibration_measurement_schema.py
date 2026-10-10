@@ -36,7 +36,7 @@ def _config_root() -> Path:
 
     `parents[2]` is `src/so101_demo_py` in the source layout, but `lib/python3.12/site-packages` once the package is
     installed - so the installed entry could not find its own admitted matrix and refused the whole formal path with
-    `PHASE_CAMERA_MATRIX_INVALID` (P1-1: the formal entry runs from the installed tree, so this is the loader it hits).
+    `PHASE_CAMERA_MATRIX_INVALID` (the formal entry runs from the installed tree, so this is the loader it hits).
     The share directory is where ament puts `config/`, and `_load` still refuses a symlink, so an install that symlinked
     it is refused rather than silently accepted.
     """
@@ -138,7 +138,7 @@ def load_contract(path: Path | None = None) -> dict:
 def load_phase_camera_matrix(path: Path | None = None) -> dict:
     """The admitted phase-camera matrix, or a refusal naming what is missing.
 
-    P1-3 (rereview 5): this used to accept a scaffold - `phases: []`, `status: SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`,
+    this used to accept a scaffold - `phases: []`, `status: SCAFFOLD_PENDING_DESIGN_TRANSCRIPTION`,
     no `camera` block - and the evaluator then invented 640/480/1.0 rad. A matrix that admits no phase cannot bind a
     measurement, so each of those three is now refused by name.
     """
@@ -209,7 +209,7 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
 
     root = Path(root)
     recorded = _load(root / "batch.json", "BATCH_INVALID")
-    # P1-3 of the re-review: the driver records an ``error_code`` on an INVALID seal, so a batch that is not
+    # the driver records an ``error_code`` on an INVALID seal, so a batch that is not
     # CLOSED may carry it - otherwise an INVALID batch could never be validated, and the entry is required to
     # read one back. A CLOSED batch stays exactly as strict as before.
     allowed = _BATCH_KEYS | ({"error_code"} if recorded.get("status") != "CLOSED" else set())

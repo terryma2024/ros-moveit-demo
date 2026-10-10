@@ -1,6 +1,6 @@
 """The Darwin private-path address strategy: permissions are the whole trust boundary.
 
-Task 4 of the macOS MPS / private IPC plan. The v4 design does not authenticate an IPC client,
+Part of the macOS MPS / private IPC plan. The v4 design does not authenticate an IPC client,
 so the filesystem contract carries the security weight: a canonical private base, an owned
 mode-0700 campaign directory, mode-0600 sockets, an encoded-length check against the real
 `sun_path` capacity, and cleanup that unlinks only exact paths from its own registry.

@@ -2,8 +2,8 @@
 
 The CLI parses arguments, validates the inputs a run declares and orchestrates nothing itself: `run`
 hands the phases to `so101_demo.act.head_search_calibration_run`, where the order, the entry binding, the
-trajectory precondition and the run status live (plan rule 4). `check-ownership` is Task 14 Step 1's
-stack-free gate: it reads the process table, ROS graph, GPU processes, tmux panes and evidence root,
+trajectory precondition and the run status live (plan rule 4). `check-ownership` is the
+stack-free ownership gate: it reads the process table, ROS graph, GPU processes, tmux panes and evidence root,
 refuses any second owner by name, binds the frozen runtime identity, writes its receipt into a brand-new
 root and starts nothing (`so101_demo.act.head_search_ownership`). Every subcommand refuses a run root that
 already exists, so there is no way to resume or continue a stage. `measure-coarse-step`,
@@ -20,7 +20,7 @@ here and produced by `so101_demo.act.head_search_coarse_step_measurement`,
 `measure-operating-point` are phase 3's two inputs: the first writes the rule record before any
 measurement can exist, the second measures the frames that rule consumes and has the installed phase 3
 select every candidate's point (`so101_demo.act.head_search_operating_point_measurement`).
-`measure-scenarios` is Task 14 Step 3's flight: it runs the declared qualification seeds one at a time through the producer controller's closed loop, journals every outcome - including the ones that fail or refuse - and writes the aggregate that claims no verdict. `measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
+`measure-scenarios` is the scenario flight: it runs the declared qualification seeds one at a time through the producer controller's closed loop, journals every outcome - including the ones that fail or refuse - and writes the aggregate that claims no verdict. `measure-admission` produces the run's `--admission` from the six sealed inputs the run declares - the
 flat measurement plan the installed controller is constructed with, the six-field
 `CalibrationMeasurementAdmission` for `role=calibration`, and the receipt that records every refusal the
 runtime contract fixes - and `measure-bundle-inputs` produces the declared geometry and perception
@@ -338,7 +338,7 @@ SCENARIO_REQUIRED_FLAGS = (
 )
 
 
-#: the `measure-restarts` entry: Task 14 Step 4's three independent FULL_RESTART anchor phases. The owner
+#: the `measure-restarts` entry: the three independent FULL_RESTART anchor phases. The owner
 #: presents Step 1's own receipt, the frozen runtime of record, the promoted configuration and bundle, and
 #: the sealed inputs the production composition is started from; `--run-root` is the brand-new campaign
 #: root whose three anchor directories hold the receipts, and `--workdir` is scratch. The neck's dead-man
@@ -1131,7 +1131,7 @@ def _measure_fine_correction_episodes(arguments: list[str]) -> int:
 def _scenario_parser() -> argparse.ArgumentParser:
     """The `measure-scenarios` entry: the sealed inputs, the campaign root and the declared subset.
 
-    This is Task 14 Step 3's flight: the forty declared qualification scenarios, one at a time, each in its
+    This is the scenario flight: the forty declared qualification scenarios, one at a time, each in its
     own prepared scene, from its own declared anchor, with the production controller's bounded sweep and
     its own fine corrections, and with the selected model closing the loop. Nothing is computed here
     beyond parsing and validating what the caller declared.
@@ -3065,7 +3065,7 @@ def _ownership_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-root", type=Path, required=True, help="a brand-new gate root")
     parser.add_argument("--evidence-root", type=Path, required=True, help="the registered campaign root")
     parser.add_argument("--planned-run-root", type=Path, help="the qualifier root that must not exist")
-    parser.add_argument("--final-run", type=Path, help="the frozen Task 13 runtime root of record")
+    parser.add_argument("--final-run", type=Path, help="the frozen qualification runtime root of record")
     parser.add_argument(
         "--production-config", type=Path, help="a promoted config; defaults to the frozen install copy"
     )
@@ -3128,7 +3128,7 @@ def _check_ownership(arguments: list[str]) -> int:
     return 2
 
 
-#: the `measure-production-smoke` entry: Task 14 Step 3's production smoke. It declares Step 1's receipt,
+#: the `measure-production-smoke` entry: the production smoke. It declares the exclusive-ownership receipt,
 #: the frozen runtime of record, the promoted configuration and bundle, and the sealed inputs the one
 #: production composition is started from; `--run-root` is the brand-new phase root the journal owns and
 #: the neck's dead-man directory is the one the sealed `--controller-config` declares.
@@ -3162,7 +3162,7 @@ def _production_smoke_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration measure-production-smoke",
         description=(
-            "Run Task 14 Step 3's production smoke: take the Step 1 ownership receipt, start the one "
+            "Run the production smoke: take the exclusive-ownership receipt, start the one "
             "production composition, place the anchor's cup where the seal declares it, run the bounded "
             "search through the real adapter and controller, prove the lock, the 10 Hz cadence, the "
             "bounded commands and the three-sample stop, then stop the stack and prove it is gone. The "
@@ -3207,8 +3207,8 @@ def _production_smoke_parser() -> argparse.ArgumentParser:
         dest="condition_class",
         default=CONDITION_CLASS,
         help=(
-            "the declared condition class the terminal is judged against (the flag Task 11's smoke "
-            "accepted and never read); plan Step 3's smoke is the legal single cup, `nominal`"
+            "the declared condition class the terminal is judged against (the flag the coverage smoke "
+            "accepted and never read); the production smoke is the legal single cup, `nominal`"
         ),
     )
     parser.add_argument(
@@ -3388,7 +3388,7 @@ def _qualification_readback_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration measure-qualification-readback",
         description=(
-            "Run Task 14's during-qualification approved-values readback: take the Step 1 ownership "
+            "Run the during-qualification approved-values readback: take the exclusive-ownership "
             "receipt that guards the qualification run root, start the one production composition, read "
             "each of the seventeen approved values off the production component that consumes it while "
             "the stack runs, read the four camera measurements off the running camera and TF, load the "
@@ -3622,11 +3622,11 @@ def main(argv: list[str] | None = None) -> int:
     # the production controller's own sweep and corrections, and the selected model closing the loop
     if arguments[:1] == ["measure-fine-correction-episodes"]:
         return _measure_fine_correction_episodes(arguments[1:])
-    # Task 14 Step 3's forty serial scenarios are their own installed flight: the closed loop per declared
+    # The forty serial scenarios are their own installed flight: the closed loop per declared
     # qualification seed, the per-scenario journal, and the honest aggregate that claims no verdict
     if arguments[:1] == ["measure-scenarios"]:
         return _measure_scenarios(arguments[1:])
-    # Task 14 Step 3's production smoke is its own installed flight: one owned stack, the production
+    # The production smoke is its own installed flight: one owned stack, the production
     # closed loop, the sealed journal and the aggregator the qualification gate consumes
     if arguments[:1] == ["measure-production-smoke"]:
         return _measure_production_smoke(arguments[1:])
@@ -3638,7 +3638,7 @@ def main(argv: list[str] | None = None) -> int:
             return _measure_qualification_readback(
                 arguments[1:], entry=f"so101_head_search_calibration {alias}"
             )
-    # Task 14 Step 4's three restarts are their own installed flight: one owned stack per anchor, the
+    # The three restarts are their own installed flight: one owned stack per anchor, the
     # production admission for every neck goal, and a teardown the phase proves before the next anchor
     if arguments[:1] == ["measure-restarts"]:
         return _measure_restarts(arguments[1:])
@@ -3777,7 +3777,7 @@ def _source_web_dir() -> Path | None:
 
 
 def _serve_teleop(parsed) -> int:
-    """Task 14 Step 6's owned acceptance: start, probe, run the case, tear down, then write the receipt.
+    """The owned acceptance: start, probe, run the case, tear down, then write the receipt.
 
     Refusing is a result and it is recorded as one: every declared input is read off disk, every probe is
     measured, and the receipt is written only after the teardown has been observed. There is no longer a

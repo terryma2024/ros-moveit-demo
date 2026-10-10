@@ -1,4 +1,4 @@
-"""Task 16 CLI: summarise one route on one split, with a per-scene evidence index.
+"""CLI: summarise one route on one split, with a per-scene evidence index.
 
 The report is written once and names the artifacts it was produced from, so a route comparison can be
 reproduced. Runs are read from the route's own runs file — never by scanning the root — and each scene's

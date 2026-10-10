@@ -2,7 +2,7 @@
 
 There is no resume path and no stage continuation anywhere here: every runner accepts only a run root that
 does not exist yet, writes RUNNING once and then SUCCEEDED or FAILED atomically. A qualified head-only report
-lets later Head Search consumers read it, and it never unlocks Task 8 readiness, release, recording, retreat
+lets later Head Search consumers read it, and it never unlocks pick-place readiness, release, recording, retreat
 or a dynamic pick.
 """
 
@@ -172,7 +172,7 @@ def _write(root: Path, name: str, document: Mapping[str, object]) -> Path:
 
 
 def restricted_admission(*, operation: str, report: Mapping[str, object] | None = None) -> dict:
-    """Create operation-bound head-only admission, never for Task 8 or anything that moves the arm."""
+    """Create operation-bound head-only admission, never for pick-place validation or anything that moves the arm."""
 
     if operation not in HEAD_ONLY_OPERATIONS:
         raise ValueError(
@@ -291,7 +291,7 @@ RUN_PHASES = (
 def run_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
     """Execute the fixed phase list once in a brand-new root; there is no way to continue a stage.
 
-    The heavy phases themselves belong to the frozen runtime assembled in Task 13; this function owns the
+    The heavy phases themselves belong to the frozen runtime assembled for the qualification; this function owns the
     no-resume contract around them: a new root, one RUNNING record, the ordered phase list, and a single
     atomic SUCCEEDED or FAILED record, with the frozen runtime identity required before any phase starts.
     """

@@ -647,7 +647,7 @@ def run_dynamic_execute(
     teacher_run = frozen is not None
     inject_failure_at = getattr(options, "inject_failure_at", None)
     if inject_failure_at is not None:
-        # CP-3513: the diagnostic injection is refused by name, before any motion, unless the run has frozen inputs and the state is LIFT
+        # The diagnostic injection is refused by name, before any motion, unless the run has frozen inputs and the state is LIFT
         refusal = None if teacher_run and inject_failure_at == "LIFT" else (
             "TEACHER_INJECTION_REQUIRES_FROZEN_INPUTS" if not teacher_run else f"TEACHER_INJECTION_STATE_UNSUPPORTED: {inject_failure_at}")
         if refusal is not None:

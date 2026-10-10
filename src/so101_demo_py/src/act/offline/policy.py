@@ -65,7 +65,7 @@ def load_recorder_policy(source) -> dict:
         "capturing_timeout_s": float(_number(document["capturing_timeout_s"], low=0.1, high=60.0, name="capturing_timeout_s")),
         "exit_wait_s": float(_number(document["exit_wait_s"], low=0.1, high=120.0, name="exit_wait_s")),
         "term_grace_s": float(_number(document["term_grace_s"], low=0.1, high=30.0, name="term_grace_s")),
-        # CP-3410: the raw-chunk data fails on a backlog, not on one late chunk. Upper bounds are the structures that hold
+        # The raw-chunk data fails on a backlog, not on one late chunk. Upper bounds are the structures that hold
         # the backlog: the adapter's 128-chunk pending queue and its 4096-step (8.19 s) lookup history.
         "physics_spool_backlog_frames_max": _number(document["physics_spool_backlog_frames_max"], low=1, high=128,
                                                     name="physics_spool_backlog_frames_max", integer=True),

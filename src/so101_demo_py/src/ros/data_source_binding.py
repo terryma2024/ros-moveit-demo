@@ -93,7 +93,7 @@ def bind_data_sources(node, *, session_id, reset_epoch, model_path,
                 reset_epoch=reset_epoch, nq=model.nq, nv=model.nv,
                 audit=episode_recorder.capture.audit, max_age_s=max_age_s,
                 max_samples=chunks["max_samples"], max_contacts=chunks["max_contacts"],
-                # CP-3410: the data fails on a receiver lag beyond the frozen policy, not on a late chunk
+                # The data fails on a receiver lag beyond the frozen policy, not on a late chunk
                 receiver_lag_max_s=physics_lag_max_s,
                 # Buffer capacity (about 8.2 s of 2 ms steps), not a threshold: endpoint lookup window.
                 history_capacity=4096)

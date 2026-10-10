@@ -70,7 +70,7 @@ def occluder_geometry_from_model(scene_path, names=None, *, joints_rad=None) -> 
 class ModelFrameSource:
     """The detector's frame source: the model's own camera, rendered headless.
 
-    P1-1 (rereview 5): the seam's `frame_source(request)` returns `object()` and records the call, so the detector is
+    the seam's `frame_source(request)` returns `object()` and records the call, so the detector is
     handed something no model produced. The composition can do better - a headless EGL context renders
     `head_camera` at the admitted 640x480 into a real image here - so this renders the camera the request names and
     returns the frame.
@@ -120,7 +120,7 @@ class ModelFrameSource:
             self.data.qpos[:len(values)] = values
         mujoco.mj_forward(self.model, self.data)
         self._renderer.update_scene(self.data, camera=camera)
-        # P1-1: the real `YoloSegDetector.detect(frame: DetectionFrame, query)` declares a DetectionFrame, and the
+        # the real `YoloSegDetector.detect(frame: DetectionFrame, query)` declares a DetectionFrame, and the
         # production ACT detector additionally requires a STRICTLY INCREASING `source_stamp_ns` (`detector.py:131/138`).
         # A bare ndarray satisfies neither, so the frame carries its pixels, the instant it was rendered on the real
         # clock, and the camera it was rendered from - which is this source's identity, exactly as a ROS image's

@@ -1,4 +1,4 @@
-"""One Worker lease executes exactly one hash-bound point (plan Task 3, design section 8).
+"""One Worker lease executes exactly one hash-bound point.
 
 The full installed catalog must never reach a Worker: the campaign turns one queue lease into one
 immutable single-point file, the Worker reads that file's id and digest back before it runs the

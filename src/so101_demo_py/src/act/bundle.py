@@ -1,4 +1,4 @@
-"""Task 12: decide which episodes a training bundle may contain.
+"""Decide which episodes a training bundle may contain.
 
 Two rules carry the weight here. Normalisation statistics may be computed from the train split only, so
 `training_rows` is the only sanctioned way to select rows for them. And an episode directory is not an

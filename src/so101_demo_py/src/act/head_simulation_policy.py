@@ -24,7 +24,7 @@ class HeadSimulationPolicy:
     search_timeout_s: float
     max_reobservations_per_stop: int
     max_reobservations_total: int
-    # the stop-window deadline and the dead-man budgets (CP-3537 ruling 3)
+    # the stop-window deadline and the dead-man budgets
     head_stop_window_deadline_s: float
     head_deadman_period_s: float
     head_deadman_timeout_s: float

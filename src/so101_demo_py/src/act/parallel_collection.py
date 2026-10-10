@@ -1,4 +1,4 @@
-"""Task 11A: partition a frozen manifest into fixed, ordered waves.
+"""Partition a frozen manifest into fixed, ordered waves.
 
 The wave boundary is the unit of recovery: a wave is re-entered whole or not at all, and the manifest
 order is preserved so a wave record can be compared against the manifest without re-sorting.
@@ -180,7 +180,7 @@ class FixedActCollectionCampaign:
 def campaign_config_from(collection_config: dict, *, qualification: bool) -> dict:
     """Derive the campaign config from the loaded v3 collection config.
 
-    The wave size and the qualification flag come from the config that Task 8P1 froze; the posture is
+    The wave size and the qualification flag come from the frozen collection config; the posture is
     checked here too, because a campaign that retried business failures or quietly degraded would defeat
     the point of running the collection in the first place.
     """

@@ -1,4 +1,4 @@
-"""CP-3504: `teacher_process_summary` - synthetic streams, incomplete streams and replays of known runs."""
+"""`teacher_process_summary` - synthetic streams, incomplete streams and replays of known runs."""
 
 import json
 import math

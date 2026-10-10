@@ -1,4 +1,4 @@
-"""Task 11A: the closed GPU workload contract.
+"""The closed GPU workload contract.
 
 The campaign is CUDA-only by policy, so this client has no CPU path to fall back to: if the device
 cannot be used, or a worker answers from a device other than the one requested, the submission is

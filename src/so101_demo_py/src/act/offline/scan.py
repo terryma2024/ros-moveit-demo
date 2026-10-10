@@ -68,7 +68,7 @@ def timeline(events) -> dict:
         elif kind == "phase_begin" and payload.get("goal_sent") is True and facts["first_command_sim_ns"] is None:
             facts["first_command_sim_ns"] = int(event["sim_time_ns"])
         elif kind == "normal_stop" and facts["terminal_sim_ns"] is not None:
-            # CP-3457: a stop confirmed after the terminal event has no place in the episode; it is refused, not taken as the last one
+            # A stop confirmed after the terminal event has no place in the episode; it is refused, not taken as the last one
             facts["normal_stop_after_terminal"] += 1
         elif kind == "normal_stop":
             # the Teacher confirms a stop at each release step and once more after its sequence: the episode's is the last
@@ -193,7 +193,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
         wrist_info = [s for s in cameras.get("/wrist_camera/camera_info", []) if reset_ns <= s <= stop_ns]
         head_image = [s for s in color_stamps.get("/head_camera/color", []) if reset_ns <= s <= stop_ns]
         wrist_image = [s for s in color_stamps.get("/wrist_camera/color", []) if reset_ns <= s <= stop_ns]
-        # CP-3494: the pair is judged on the IMAGE stamps (the frames the rows use). A camera_info lost on one camera while both
+        # The pair is judged on the IMAGE stamps (the frames the rows use). A camera_info lost on one camera while both
         # paired images are present is a transport loss the topic-loss gate already reports (diagnostic): the camera grid is then the
         # union of the two cameras' infos. Without images in the bag the camera_info pair decides, as before.
         if head_image or wrist_image:
@@ -235,7 +235,7 @@ def scan_bag(bag, *, info=None, transport_lost=None, scene_reads_expected=None, 
     gaps = [[a[:3], b[:3]] for a, b in zip(selected, selected[1:]) if b[0] != a[0] + 1 or b[1] != a[2] + 1]
     verdict(CHUNK_TOPIC, selected, gaps, inside[0][3] if inside else None, inside[-1][4] if inside else None)
     inside = [w for w in worlds if w[2] == epoch]
-    # ---- the episode window starts after the worker's last pre-Teacher pause (CP-3440 A): the worker freezes the simulation for
+    # ---- the episode window starts after the worker's last pre-Teacher pause: the worker freezes the simulation for
     # the inference snapshot after the Recorder has started, and a paused world record is not a legal source. The window begins
     # at the first UNPAUSED world record after the last paused record up to the verified reset; a paused record inside the
     # window stays INVALID.
@@ -432,7 +432,7 @@ def _topic_loss(report, facts, counts, reasons, *, begin, end, reset_ns, stop_ns
     if (scene_read_sidecar_stamps is not None and scene_reads_expected is not None
             and len(scene_read_sidecar_stamps) == scene_reads_expected and len(scene_read_stamps) == reads
             and all(type(t) is int for t in (*scene_read_sidecar_stamps, *scene_read_stamps))):
-        # CP-3489: the reads made before the window starts (the bag recorder may not have matched its subscription yet; sim time 0)
+        # The reads made before the window starts (the bag recorder may not have matched its subscription yet; sim time 0)
         # are recorded in the sidecar but no row uses them, so only the reads inside [begin, end] are counted, on both sides
         wanted = sum(1 for t in scene_read_sidecar_stamps if lo <= t <= end)
         found = sum(1 for t in scene_read_stamps if lo <= t <= end)

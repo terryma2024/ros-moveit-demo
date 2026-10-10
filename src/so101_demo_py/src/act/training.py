@@ -1,4 +1,4 @@
-"""Task 12: the gates a training run must pass, and the state it must leave behind.
+"""The gates a training run must pass, and the state it must leave behind.
 
 Training starts only against a verified export, a resolved dependency lock, a frozen configuration and a
 live owner lease on the GPU. Whatever happens next, the run leaves a terminal state on disk — `COMPLETED`

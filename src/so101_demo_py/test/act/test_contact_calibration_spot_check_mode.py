@@ -14,7 +14,7 @@ from so101_demo.act import contact_calibration as cal
 from so101_demo.act.contact_calibration import analyze_evidence, analyze_manifests, seal_cohort, verify_disabled_proposal
 
 MODE = "offline_fit_teacher_spot_check"
-DESCRIPTOR = hashlib.sha256(json.dumps({"validation_mode": MODE, "decision": "CP-3389"}, sort_keys=True,
+DESCRIPTOR = hashlib.sha256(json.dumps({"validation_mode": MODE, "decision": "owner_deviation_offline_cohort"}, sort_keys=True,
                                        separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
 
 
@@ -46,7 +46,7 @@ def test_offline_mode_builds_a_disabled_proposal_bound_to_the_descriptor(monkeyp
     proposal = analyze_evidence(offline, None, offline_metadata(), validation_mode=MODE)
     assert proposal["status"] == "DISABLED"
     assert proposal["payload"]["live_collector_sha256"] == DESCRIPTOR
-    assert proposal["validation"] == {"mode": MODE, "decision": "CP-3389", "teacher_spot_check": "PENDING",
+    assert proposal["validation"] == {"mode": MODE, "decision": "owner_deviation_offline_cohort", "teacher_spot_check": "PENDING",
                                       "live_cohort": "NOT_COLLECTED"}
     assert proposal["counts"] == {regime: {"offline": 20, "live": 0} for regime in base.REGIMES}
     assert proposal["confusion_matrix"]["stable_hold"]["stable_hold"] == 20

@@ -134,7 +134,7 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
     _integer(chunk["reset_epoch"])
     _integer(chunk["chunk_sequence"])
     for name in ("handoff_monotonic_ns", "publish_monotonic_ns", "publish_deferrals_total"):
-        _integer(chunk[name])     # publish-path instrumentation (CP-3410): telemetry, never a rule
+        _integer(chunk[name])     # publish-path instrumentation: telemetry, never a rule
     if chunk["evidence_loss"] is not False or _integer(chunk["failed_publish_attempts"]) != 0:
         raise ValueError("PHYSICS_RAW_SOURCE_LOSS")
     samples = chunk["samples"]
@@ -208,7 +208,7 @@ def verify_raw_chunk(record, *, previous=None, session_id=None, reset_epoch=None
                 _number(contact["signed_distance_m"])
                 _number(contact["normal_force_n"], nonnegative=True)
         prior = sample
-    # CP-3410 (user-authorized contract change): there is no per-chunk delivery-age rule. How long a chunk took from its newest
+    # User-authorized contract: there is no per-chunk delivery-age rule. How long a chunk took from its newest
     # sample to the receiver is recorded as telemetry; a late chunk is as valid as any other. Continuity, scope and every
     # content check above and below are unchanged; backlog and receiver lag are bounded by the adapter's frozen policy.
     if (_integer(chunk["first_physics_step"], 1) != samples[0]["physics_step"]

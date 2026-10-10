@@ -66,7 +66,7 @@ def test_the_unified_app_keeps_its_additions():
 
 
 def test_there_is_exactly_one_route_table_in_the_package():
-    """`api.create_app` and its duplicate closures are gone (CP-83)."""
+    """`api.create_app` and its duplicate closures are gone."""
     import so101_teleop.api as compat
 
     assert not hasattr(compat, "create_app")

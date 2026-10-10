@@ -1,4 +1,4 @@
-"""Task 12A: padded frames must not enter a joint metric, and bad rows must not vanish."""
+"""Padded frames must not enter a joint metric, and bad rows must not vanish."""
 
 import importlib.util
 import json

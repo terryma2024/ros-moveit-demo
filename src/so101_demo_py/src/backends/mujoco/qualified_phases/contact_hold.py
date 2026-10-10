@@ -221,7 +221,7 @@ def main() -> int:
         )
         atomic_write(result)
         print(
-            f"EXP101_OK q6={result['terminal_q6_rad']:.9f} samples={len(hold_samples)}",
+            f"CONTACT_HOLD_OK q6={result['terminal_q6_rad']:.9f} samples={len(hold_samples)}",
             flush=True,
         )
         return 0
@@ -229,7 +229,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         atomic_write(result)
-        print(f"EXP101_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"CONTACT_HOLD_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

@@ -1,6 +1,6 @@
 """The `aggregate` phase of the head search qualification: declared gates, and a refusal that names them.
 
-This module is the phase the plan's Task 14 Step 2 calls ``aggregate`` (the last entry of
+This module is the phase the qualification plan calls ``aggregate`` (the last entry of
 ``head_search_qualification.RUN_PHASES``) and the phase ``head_search_scenarios.aggregate_scenarios``
 names as the owner of the qualification verdict. It consumes the phase artefacts of a qualification run
 and publishes a verdict **only if every declared gate holds**.
@@ -398,7 +398,7 @@ def _write(root: Path, name: str, document: Mapping[str, object]) -> Path:
 def classify_qualification_terminal(entry: Mapping) -> dict:
     """The plan's per-scenario rule, re-derived from the artefact instead of read from its producer.
 
-    Plan Task 14 Step 3: "Legal single cup ends ``TARGET_LOCKED``; two cups end ``TARGET_AMBIGUOUS``; no
+    The plan's scenario rule: "Legal single cup ends ``TARGET_LOCKED``; two cups end ``TARGET_AMBIGUOUS``; no
     cup ends ``TARGET_NOT_FOUND`` only with complete coverage; interrupted input ends the old attempt
     fail-closed, proves stop, clears tracker/lock state and reacquires under a new attempt." A scenario
     passes only when its terminal status is one its condition class declares **and** the added obligation

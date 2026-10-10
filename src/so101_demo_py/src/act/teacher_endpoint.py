@@ -36,7 +36,7 @@ PLACE_HEIGHT_FIELDS = frozenset({
     "place_grasp_offset_m", "place_grasp_offset_half_band_m", "place_target_max_deviation_m", "place_geometry_scene_sha256",
     "place_reference_offset_m",
 })
-#: The Teacher execution policy (schema 3, CP-3502, CP-3504): the minimal runtime gates. The motion and carry values, the
+#: The Teacher execution policy: the minimal runtime gates. The motion and carry values, the
 #: tilt-compensated place height, the fixed dwells, the arm-stop wait of the release sequence and the provenance of the cup pose
 #: (broker RGB-D) and of the verdict (simulator truth).
 EXECUTION_SCHEMA = 3

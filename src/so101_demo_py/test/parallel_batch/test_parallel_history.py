@@ -1,6 +1,6 @@
 """History reading is pure: it decodes retained documents and grants nothing.
 
-Task 3 of the lightweight start guard plan. The active budget/measurement implementation is
+Part of the lightweight start guard plan. The active budget/measurement implementation is
 being deleted; retained profile documents must stay readable without dragging any of it back
 into the process, and without touching the sealed bytes on disk.
 """

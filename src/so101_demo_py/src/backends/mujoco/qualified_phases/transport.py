@@ -243,9 +243,9 @@ def main() -> int:
             raise RuntimeError("unexpected initial MuJoCo provenance")
         start_positions = tuple(float(latest_joint[name]) for name in ALL_JOINTS)
         if maximum_joint_error(start_positions[:5], EXPECTED_START_ARM) > 0.01:
-            raise RuntimeError("robot is not at the verified EXP-105 endpoint")
+            raise RuntimeError("robot is not at the verified remaining-lift endpoint")
         if abs(start_positions[-1] - EXPECTED_Q6) > 0.002:
-            raise RuntimeError("q6 is not at the verified EXP-104 endpoint")
+            raise RuntimeError("q6 is not at the verified policy-lift endpoint")
         stable = stable_bilateral(
             before.reset_epoch,
             ContactForceMode.PRE_TRANSPORT_STATIC_HOLD,
@@ -457,7 +457,7 @@ def main() -> int:
         )
         atomic_write(result)
         print(
-            f"EXP106_OK dz_m={total_vertical_change:.9f} lateral_m={total_lateral:.9f} "
+            f"TRANSPORT_OK dz_m={total_vertical_change:.9f} lateral_m={total_lateral:.9f} "
             f"segments={len(TARGETS)}",
             flush=True,
         )
@@ -474,7 +474,7 @@ def main() -> int:
         except Exception as close_error:
             result["dynamic_raw_close_error"] = f"{type(close_error).__name__}: {close_error}"
         atomic_write(result)
-        print(f"EXP106_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"TRANSPORT_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

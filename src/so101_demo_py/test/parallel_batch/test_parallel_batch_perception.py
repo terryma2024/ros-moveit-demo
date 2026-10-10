@@ -374,7 +374,7 @@ def test_unfresh_input_cannot_start_inference(tmp_path, boundary):
     ('RESET_WATERMARK', dict(rgb=100.0, depth=100.0)),                   # not newer than the reset watermark
 ])
 def test_a_stale_rgbd_names_its_reason_and_the_values(tmp_path, reason, values):
-    """CP-3512: the outcome is unchanged (still STALE_RGBD); only the report names the failed condition, now, the stamps and limits."""
+    """The outcome is unchanged (still STALE_RGBD); only the report names the failed condition, now, the stamps and limits."""
     from so101_demo.parallel_batch.perception import PerceptionError
     h = harness(tmp_path)
     h.control.now = values.get('now', h.control.now)

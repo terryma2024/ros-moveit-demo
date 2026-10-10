@@ -1,4 +1,4 @@
-"""Task 11 W1 debug CLI: build the closed collection spec and hand it to the unified service.
+"""Single-worker debug CLI: build the closed collection spec and hand it to the unified service.
 
 The CLI constructs the payload and the scene selection **before** any service exists, so a refusal
 (absent input, empty selection, qualification/formal mismatch, Rollout-only manifest) happens with zero

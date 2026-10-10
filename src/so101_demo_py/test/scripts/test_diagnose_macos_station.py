@@ -516,7 +516,7 @@ def test_station_robot_description_renders_the_shared_urdf(tmp_path: Path) -> No
 
 
 # --------------------------------------------------------------------------------------
-# The fixed-dylib-farm round owner (remediation Task 3)
+# The fixed-dylib-farm round owner
 #
 # One invocation owns exactly one station tree: it freezes the intent before spawning, reads
 # readiness and the controller attestation back, writes its report atomically and cleans up

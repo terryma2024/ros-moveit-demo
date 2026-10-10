@@ -383,7 +383,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
     assert seen["transform"] == ("world", "task_camera_frame", 12_000_000_000)
 
 
-# ---- R6 (CP-3467): the candidate that is the cup is the one that localizes as a cup and is >= 0.05 m tall ---------------------------
+# ---- R6: the candidate that is the cup is the one that localizes as a cup and is >= 0.05 m tall ---------------------------
 
 def _broker_response(masks):
     """A qualified Broker response with one candidate per entry of `masks` (a 2x3 list of lists of 0/1), ids cand-0, cand-1, ..."""
@@ -2505,7 +2505,7 @@ def test_running_evidence_returns_the_first_unpaused_message_past_the_image_stam
 
 
 def test_the_worker_binds_the_manifest_to_the_frozen_execution_policy(tmp_path):
-    """CP-3483: the frozen policy reaches the manifest validator, so a v2 run needs its place_height record and a v1 run has none."""
+    """The frozen policy reaches the manifest validator, so a v2 run needs its place_height record and a v1 run has none."""
     import json
     import os
 

@@ -93,7 +93,7 @@ def run(contract, batch_root, *, identity_override=None, contamination=None, wit
     (root / "raw.json").write_bytes(payload)
     identity = dict(identity_override) if identity_override else dict(contract["identities"])
     document = {
-        "schema_version": 1, "kind": "act_task8_measurement_batch", "status": "CLOSED",
+        "schema_version": 1, "kind": "act_pick_place_calibration_measurement_batch", "status": "CLOSED",
         "identity": identity,
         "files": {"raw.json": hashlib.sha256(payload).hexdigest()},
         "anchors": ["default", "left", "forward"],

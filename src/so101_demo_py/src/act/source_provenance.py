@@ -1,4 +1,4 @@
-"""Closed Task 8 source provenance: what the runtime actually loads, and from where.
+"""Closed pick-place validation source provenance: what the runtime actually loads, and from where.
 
 The registry below is the only source of runtime roles. A caller cannot trim it, add to it or
 reorder it: verification re-derives the same closed set and rejects anything else.

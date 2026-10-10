@@ -20,7 +20,7 @@ def request(operation_id: str = "op-1", *, generation: int = 3, deadline_ns: int
         service_epoch="epoch-1",
         owner_pid=111,
         owner_started_ticks=222,
-        workload="act-task8",
+        workload="act-pick-place",
         execution_generation=generation,
         deadline_ns=deadline_ns,
     )

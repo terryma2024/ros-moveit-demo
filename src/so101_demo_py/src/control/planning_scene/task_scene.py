@@ -177,7 +177,7 @@ def normalized_scene_geometry(scene) -> dict:
     }
 
 
-#: What the `initial` source alignment asserts (CP-3425): exactly what the worker's reset and cleanup guarantee before the Teacher
+#: What the `initial` source alignment asserts: exactly what the worker's reset and cleanup guarantee before the Teacher
 #: starts, which is the initial gate of `parallel_ros_runtime` (`POINT_INITIAL_GATE`, the scene read of
 #: ROBOT_STATE_ATTACHED_OBJECTS): NO attached collision object. World objects are not guaranteed either way before the
 #: Teacher's SETUP writes the task scene, so they are recorded (audit) and never required.

@@ -147,7 +147,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--journal", type=Path, required=True)
     parser.add_argument("--artifact-bundle", type=Path,
-                        help="prepared Task 8 receipt; verified before any resource is acquired")
+                        help="prepared pick-place validation receipt; verified before any resource is acquired")
     parser.add_argument("--journal-run-root", type=Path,
                         help="run root whose fourteen case journals must all be free before the run")
     args = parser.parse_args(argv)

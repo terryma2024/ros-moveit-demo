@@ -99,7 +99,7 @@ def _causal(*, sim_now=2.3, stamps, progress=None, max_skew_s=0.1, world_time_s=
     sources.world = SimpleNamespace(snapshot=lambda: record,
                                     retained_with_receipts=lambda: (SimpleNamespace(
                                         evidence=record, received_monotonic_s=time.monotonic()),))
-    # the verified reset (CP-3425): the Recorder's first retained evidence, on the producer's clock, from its raw step
+    # the verified reset: the Recorder's first retained evidence, on the producer's clock, from its raw step
     sources._raw_lookup = lambda step: {"sample": {"clock_interval_begin_monotonic_ns": time.monotonic_ns() - 3_000_000,
                                                    "clock_interval_end_monotonic_ns": time.monotonic_ns() - 2_000_000}}
     sources.node = SimpleNamespace(get_clock=lambda: SimpleNamespace(

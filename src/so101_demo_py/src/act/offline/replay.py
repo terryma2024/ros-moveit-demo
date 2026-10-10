@@ -368,7 +368,7 @@ class ReplayNode:
                  start_at_stamp_ns: int | None = None, teacher_clock_repair=None) -> None:
         self.camera_repair = camera_repair
         self.teacher_clock_repair = teacher_clock_repair
-        # the episode window start (CP-3440 A): world evidence recorded before this bag stamp (the receipt of the first unpaused
+        # the episode window start: world evidence recorded before this bag stamp (the receipt of the first unpaused
         # world record after the worker's last pre-Teacher pause) is not delivered
         self.start_at_stamp_ns = start_at_stamp_ns
         self.stream = stream

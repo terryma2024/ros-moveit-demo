@@ -1,4 +1,4 @@
-"""Task 10 candidate port: verifies EXACT candidate identities from a supplied reachability report.
+"""Candidate port: verifies EXACT candidate identities from a supplied reachability report.
 
 The report holds the 14 gate results and their evidence hashes per candidate identity. A candidate
 absent from the report is refused rather than guessed at, and a gate whose evidence hash is missing or

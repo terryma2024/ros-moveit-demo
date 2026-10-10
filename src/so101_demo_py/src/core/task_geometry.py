@@ -83,7 +83,7 @@ class TaskGeometry:
     #: the source-side facts this geometry was derived from - the producer's session, reset epoch and simulation
     #: step, and the stamp it was evaluated at. ``None`` means "not recorded", which is the honest value for the
     #: paths that build geometry without a source readback; the derivation that does have them fills them in
-    #: (source alignment's first difference, CP-2601).
+    #:.
     source: dict | None = None
 
     @property

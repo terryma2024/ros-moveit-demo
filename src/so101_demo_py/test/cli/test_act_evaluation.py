@@ -1,4 +1,4 @@
-"""Task 16: a search failure stays in the denominator, and no locked runs means no locked rate."""
+"""A search failure stays in the denominator, and no locked runs means no locked rate."""
 
 import pytest
 

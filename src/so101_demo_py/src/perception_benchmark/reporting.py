@@ -258,7 +258,7 @@ class ResourceTrace:
 
 @dataclass(frozen=True, slots=True)
 class RunAggregationEvidence:
-    """Task 8-only immutable evidence for one platform/model/config run.
+    """Immutable capability and safety evidence for one platform/model/config run.
 
     The legacy float/resource tuples exist only for explicit non-formal fixtures. Formal
     inputs must use fresh-process samples and a phase-tagged resource trace.
@@ -2128,7 +2128,7 @@ def _metric_cache_key(
     records: tuple[PredictionRecord, ...],
     inputs: tuple[ImageMetricInput, ...],
 ) -> tuple[object, ...]:
-    """Identify only inputs that can affect Task8 capability/safety metrics.
+    """Identify only inputs that can affect capability/safety metrics.
 
     Every mask in a matched non-error image has already been read and SHA-verified by
     ``_image_inputs`` before this key is used. Roots, platforms, runtimes, phases, and

@@ -1153,7 +1153,7 @@ def test_raw_adapter_result_must_match_registered_limits() -> None:
 
 
 def test_output_preflight_accepts_only_the_known_macos_tmp_alias() -> None:
-    output = Path("/tmp") / "so101-task9-fix2-preflight-does-not-exist"
+    output = Path("/tmp") / "so101-preflight-does-not-exist"
     assert not output.exists()
 
     assert perception_benchmark._preflight_output_root(output) == output

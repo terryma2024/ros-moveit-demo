@@ -9,7 +9,7 @@ from .contracts import finite, validate_action
 
 # the observer's raw frame fields; the tap preserves them when its port supplies them, all four or none
 _RAW_REFERENCE_KEYS = ("joint_names", "sim_stamp_ns", "received_monotonic_ns", "velocities")
-#: the ratified per-frame kinds, in the canonical order the projection map declares (CP-2176)
+#: the ratified per-frame kinds, in the canonical order the projection map declares
 _FRAME_ORDER = ("arm", "gripper")
 #: the ratified packed reference group's keys (Proposal A.1), the alternative to the legacy flat four
 _PACKED_REFERENCE_KEYS = ("frames", "projected_positions", "projection_map")
@@ -48,14 +48,14 @@ class MoveItExpertActionTap:
             except Exception:
                 frames = {}
             if frames:
-                # the map selects the evaluated values, the publication stays untouched (CP-2176)
+                # the map selects the evaluated values, the publication stays untouched
                 projected = [value for kind in _FRAME_ORDER
                              for value in frames[kind]["evaluated_positions"]]
                 mapping = [[kind, index] for kind in _FRAME_ORDER
                            for index in range(len(frames[kind]["evaluated_positions"]))]
                 packed = {"frames": frames, "projected_positions": projected,
                           "projection_map": mapping}
-        # the two raw shapes are exclusive alternatives (T3-F3): the ratified packed group replaces the
+        # the two raw shapes are exclusive alternatives: the ratified packed group replaces the
         # legacy flat keys rather than travelling beside them, which the audit refuses as a mixture
         return {"requested_sim_time_s": target, "source": "CONTROLLER_REFERENCE",
                 "positions": validate_action(reference.get("positions")), **(packed or raw)}

@@ -1,4 +1,4 @@
-"""Task 11A CLI and composition: every refusal happens before a service exists."""
+"""CLI and composition: every refusal happens before a service exists."""
 
 import json
 from pathlib import Path

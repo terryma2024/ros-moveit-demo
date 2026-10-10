@@ -1,4 +1,4 @@
-"""Task 14 Step 3: the production smoke journal, its sealed journal and the aggregator that reads it.
+"""The production smoke journal, its sealed journal and the aggregator that reads it.
 
 The plan's Step 3 requires a smoke that runs the **production path** - the real ``RosSearchAdapter`` and
 ``HeadSearchController`` over the real topic stream of the one owned stack - and leaves evidence the

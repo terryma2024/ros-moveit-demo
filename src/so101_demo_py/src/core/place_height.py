@@ -1,4 +1,4 @@
-"""Tilt-compensated place height (design `2026-10-09-teacher-tilt-compensated-place-height`, ledger CP-3480).
+"""Tilt-compensated place height (design `2026-10-09-teacher-tilt-compensated-place-height`).
 
 The held cup carries a small tilt, so a point of its round bottom rim touches the table before the arm has finished the descent.
 The DESCEND_TO_PLACE target is therefore computed from the measured tilt: the arm is aimed to end a small guard below first
@@ -184,7 +184,7 @@ def _check_compensated(document, policy: PlaceHeightPolicy | None) -> None:
         raise ValueError("PLACE_HEIGHT: policy")
 
 
-# ---- CP-3504: the tilt-compensated target is a strategy with a closed fallback, never a refusal ------------------------------
+# ---- the tilt-compensated target is a strategy with a closed fallback, never a refusal ------------------------------
 #: the closed set of reasons for which the Teacher uses the reference target (hover z + the reference offset) instead of the tilt-compensated one
 RECORD_SCHEMA = "teacher_place_height"
 MODE_FALLBACK = "fallback_reference"

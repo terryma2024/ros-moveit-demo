@@ -502,7 +502,7 @@ def _manifest_splits(
     if not isinstance(manifest, Mapping):
         raise CandidatePlanError(f"CANDIDATE_MANIFEST_INVALID: {name} must be a manifest mapping")
     # ``dataset_contract`` and ``promotable`` are produced by this work's generator, but the
-    # pinned external A dataset (Task 12 Step 1, revision b55430fb...) predates them and the plan
+    # pinned external A dataset (revision b55430fb...) predates them and the plan
     # consumes it as-is. They are therefore optional here; a manifest without ``promotable`` is
     # treated as non-promotable, which is the safe reading and keeps HS-052's refusal intact.
     required = {"camera_name", "split_counts", "samples"}

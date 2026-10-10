@@ -1,4 +1,4 @@
-"""Task 2: acquisition identity must be minted where the real frame is produced.
+"""Acquisition identity must be minted where the real frame is produced.
 
 The head and wrist frames come from the C++ camera plugin, which publishes a `sensor_msgs/Image`
 whose `header.stamp` is the MuJoCo sim time. Neither the plugin nor the message carries a source

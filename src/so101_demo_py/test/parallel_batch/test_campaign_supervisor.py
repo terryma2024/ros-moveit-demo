@@ -1,6 +1,6 @@
 """The CampaignSupervisor: real parent, real spawner, real reaper, durable intent.
 
-Task 3 of the macOS MPS / private IPC plan. The approved design (section 6.1) makes the
+Part of the macOS MPS / private IPC plan. The approved design (section 6.1) makes the
 supervisor the actual parent of the Broker and both Workers, and requires that every spawn is
 preceded by an atomically written ``SPAWNING`` intent in a durable ownership receipt. A child
 that never acknowledges its registration is never allowed to run, and an unclosed intent
@@ -550,7 +550,7 @@ def test_a_child_stderr_sink_is_accepted_and_used(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Owner records (Task 6): the intent is durable before Popen, the readback confirms it after
+# Owner records: the intent is durable before Popen, the readback confirms it after
 # --------------------------------------------------------------------------------------
 
 OWNER_BATCH = "batch-7"

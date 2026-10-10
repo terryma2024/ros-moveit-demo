@@ -1,4 +1,4 @@
-"""Task 11A: the collection boundary across a real process, not a mock.
+"""The collection boundary across a real process, not a mock.
 
 The campaign runs in a child interpreter, so this test exercises what a mock cannot: that the package
 imports where it will actually run, that a refusal reaches the parent as a non-zero exit with the reason on

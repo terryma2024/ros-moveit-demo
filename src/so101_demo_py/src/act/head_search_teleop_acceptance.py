@@ -1,4 +1,4 @@
-"""Task 14 Step 6: the separately owned Teleop acceptance, with a teardown the receipt can prove.
+"""The separately owned Teleop acceptance, with a teardown the receipt can prove.
 
 The plan starts *one* new stack from the frozen install, the promoted config, the approved bundle, the
 approval receipt and the closed head-only report; runs the installed unified app against that one stack

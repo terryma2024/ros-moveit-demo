@@ -26,7 +26,7 @@ def proposal(monkeypatch):
 
 def receipt(proposal, tmp_path, *, kind="spot_check_candidate", by="plan:R10-D4"):
     return make_activation_receipt(proposal, proposal["policy_fingerprint"], approved_by=by,
-                                   approval_reference="CP-3389 plan R10 D4 candidate", evidence_root=tmp_path,
+                                   approval_reference="spot-check deviation plan D4 candidate", evidence_root=tmp_path,
                                    approved_at="2026-10-07T00:00:00+00:00", receipt_kind=kind)
 
 
@@ -146,7 +146,7 @@ def test_the_activation_cli_writes_a_candidate_receipt_only_for_a_plan_signer(tm
     fingerprint = json.loads((tmp_path / "proposal.json").read_text())["policy_fingerprint"]
     common = ["--proposal", str(tmp_path / "proposal.json"), "--offline", str(manifest), "--metadata",
               str(tmp_path / "metadata.json"), "--validation-mode", MODE, "--policy-fingerprint", fingerprint,
-              "--approval-reference", "CP-3389 plan R10 D4", "--evidence-root", str(tmp_path),
+              "--approval-reference", "spot-check deviation plan D4", "--evidence-root", str(tmp_path),
               "--receipt-kind", "spot_check_candidate"]
     with pytest.raises(ValueError):
         activate_main(common + ["--approved-by", "zjumty", "--receipt", str(tmp_path / "bad.json")])

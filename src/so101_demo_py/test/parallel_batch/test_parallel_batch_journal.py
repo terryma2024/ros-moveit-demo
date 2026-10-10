@@ -461,7 +461,7 @@ def test_the_journal_records_schema_two_in_every_segment_header(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Task 4: committed watermark and the live committed prefix
+# committed watermark and the live committed prefix
 # --------------------------------------------------------------------------------------
 
 

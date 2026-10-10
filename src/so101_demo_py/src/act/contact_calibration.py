@@ -300,7 +300,7 @@ def analyze_evidence(offline: dict[str, Any], live: dict[str, Any] | None, metad
     """Fit on 20 deterministic samples and evaluate on five isolated live samples per regime.
 
     The default mode demands the live cohort. `validation_mode="offline_fit_teacher_spot_check"` (the user's recorded
-    deviation CP-3389) takes no live cohort: the offline cohort is self-classified with the fitted thresholds, every
+    deviation from the live-cohort rule) takes no live cohort: the offline cohort is self-classified with the fitted thresholds, every
     control is still required, and the mode is bound into the payload through `live_collector_sha256`.
     """
 

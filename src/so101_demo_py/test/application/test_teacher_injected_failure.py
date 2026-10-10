@@ -1,4 +1,4 @@
-"""CP-3513: the diagnostic-only injected Teacher execution failure.
+"""The diagnostic-only injected Teacher execution failure.
 
 A live acceptance item of the minimal-gates design needs one execution failure whose ERROR manifest validates. There was no sanctioned
 way to cause one, so the hook below exists: off by default, settable only in `preselected_target_diagnostic` collection mode, only at

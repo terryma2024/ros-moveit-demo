@@ -91,7 +91,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
     # from a context object and never by globbing - so the published sample can only carry what the seal vouches for
     descriptor_blocks = []
     for index in indexes:
-        # Astra item 4: EVERY root must carry the sealed, indexed descriptor. Skipping a bare root silently published a
+        # EVERY root must carry the sealed, indexed descriptor. Skipping a bare root silently published a
         # sample resting on fewer roots than it claimed; a missing seal is now a refusal, not a shorter comparison
         if "runtime-descriptor.json" not in index.files:
             raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
@@ -109,7 +109,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
     if len(provenances) != 1:
         raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     source_provenance_sha256 = provenances.pop()
-    # rereview4 P1-2: the batch's contract identity is the identity this contract ADMITTED, not the bound document's
+    # the batch's contract identity is the identity this contract ADMITTED, not the bound document's
     # self-digest. The self-digest is computed over the document that CONTAINS the identities, so no identity member
     # could ever equal it - comparing against it made every batch the formal entry seals look foreign, and the only way
     # to satisfy it was to rewrite the member in a fixture. One rule end to end: the seal carries the admitted
@@ -178,7 +178,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
         # would let a report claim a configuration nobody measured under
         # the sealed descriptor wins; a batch that claims a different one in its payload is refused rather than published
         if sealed_descriptor is not None:
-            # Astra re-review P1-4: the payload records the INNER head-search block while the seal is the WHOLE
+            # the payload records the INNER head-search block while the seal is the WHOLE
             # {schema_version, head_search} document, so the two are compared at ONE layer - and every sealed
             # descriptor is validated by the same complete production rule the binding uses.
             from so101_demo.act.head_search_binding import validate_head_search_shape
@@ -188,7 +188,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
             if isinstance(claimed, dict) and claimed != validated:
                 raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
             sample_document["head_search"] = validated
-        # Astra item 4: the SEALED descriptor is the only authority. The former fallback let a
+        # the SEALED descriptor is the only authority. The former fallback let a
         # measurements.json block stand in for a missing seal, which is the second authority the review refused
         else:
             raise ValueError("CALIBRATION_DESCRIPTOR_MISSING")
@@ -236,7 +236,7 @@ def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -
         "schema_version": SCHEMA_VERSION, "kind": "pick_place_calibration_aggregation_receipt",
         "batch_roots": [str(root) for root in roots],
         # the receipt names the CONTRACT DOCUMENT it aggregated - its self-digest, `BOUND_DOCUMENT_DIGEST_KEY` - which
-        # is a different quantity from the ten-field identity's contract member the batches carry (P1-2)
+        # is a different quantity from the ten-field identity's contract member the batches carry
         "contract_sha256": bound_document_digest(contract),
         "source_provenance_sha256": source_provenance_sha256,
         "checks": checks,
@@ -285,7 +285,7 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
                 threshold_source = contract[section][field].get("threshold_source") or ""
                 if ("config" in threshold_source.lower()
                         and field not in (raw.get("configured") or {})):
-                    # P1-2 (rereview 5), owner's disposition: a field whose THRESHOLD is not approved is UNMEASURED
+                    # a field whose THRESHOLD is not approved is UNMEASURED
                     # too. The search values in `pick-place-calibration-search-candidate.json` are
                     # `{"requires_approved_value": true, "value": null}`, so there is nothing to compare against and
                     # inventing a limit is exactly what this work must not do - same vocabulary, same refusal to

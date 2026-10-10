@@ -280,7 +280,7 @@ def test_sensitive_control_store_database_is_private_before_any_binding(tmp_path
 
 
 # --------------------------------------------------------------------------------------
-# Task 5: one transaction for idempotency, reducer state, attempts and accepted cursor
+# one transaction for idempotency, reducer state, attempts and accepted cursor
 # --------------------------------------------------------------------------------------
 
 
@@ -381,7 +381,7 @@ def test_projection_batch_is_transactional_idempotent_and_resumable(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Task 6: a recovery fence carries the exact generation its reaper committed
+# a recovery fence carries the exact generation its reaper committed
 # --------------------------------------------------------------------------------------
 
 
@@ -415,7 +415,7 @@ def test_recovery_fence_takes_the_exact_generation_the_reaper_committed(tmp_path
 
 
 # --------------------------------------------------------------------------------------
-# Task 9: one-time retry admission - one transaction, one command, one owner intent
+# one-time retry admission - one transaction, one command, one owner intent
 # --------------------------------------------------------------------------------------
 
 from so101_teleop.expert_validation.execution_context import (  # noqa: E402
@@ -630,7 +630,7 @@ def _json_document(value):
 
 
 # --------------------------------------------------------------------------------------
-# Task 12: an owner row is retired only on a proven-absent process identity
+# an owner row is retired only on a proven-absent process identity
 # --------------------------------------------------------------------------------------
 
 from so101_teleop.owned_group import terminate_group  # noqa: E402
@@ -1363,7 +1363,7 @@ def test_retry_appends_history_without_overwriting_the_first_pass(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Task 9: the durable canonical projection the admission reads back is committed by the service
+# the durable canonical projection the admission reads back is committed by the service
 # --------------------------------------------------------------------------------------
 
 
@@ -1468,7 +1468,7 @@ def test_a_delta_only_journal_is_never_given_a_canonical_durable_state(tmp_path)
 
 
 # --------------------------------------------------------------------------------------
-# Task 11 closure: candidate context issuance and the one-time first-pass admission
+# candidate context issuance and the one-time first-pass admission
 #
 # The gap this section closes: a candidate context could only be minted by a private method
 # with no entry point, and it authorized the retry endpoint alone. Issuance now consumes a

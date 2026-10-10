@@ -90,7 +90,7 @@ class ContinuousEpisodeCapture:
         self.audit = audit
         #: the **path** of the scope document the freezer wrote - the recorder's `finish` requires an absolute
         #: regular file there and cross-checks it against the episode, while the audit writer was handed the
-        #: document itself at construction (CP-2711/2712)
+        #: document itself at construction
         self.scope = Path(scope) if scope is not None else None
         if self.scope is not None and (not self.scope.is_absolute() or ".." in self.scope.parts):
             raise ValueError("CAPTURE_SCOPE_INVALID")
@@ -562,7 +562,7 @@ class ContinuousEpisodeCapture:
                 self._fail("NO_NEW_ACQUISITION")
             if self._asynchronous_sources and not self._sources_ready(at_s):
                 if self._awaiting_arrival(at_s):
-                    # A source is still IN FLIGHT (CP-3410: a late physics chunk is no failure). Its arrival is bounded by the
+                    # A source is still IN FLIGHT (a late physics chunk is no failure). Its arrival is bounded by the
                     # receiver-lag policy of the adapter that owns it, not by this wall-clock wait.
                     self._source_wait_started = None
                     break
@@ -640,7 +640,7 @@ class ContinuousEpisodeCapture:
         audit = dict(physical)
         audit.update(source_audit)
         # The recorder's closed audit set names the episode it belongs to; the physical half and the sampler do not supply
-        # it, the capture owns it (CP-3407: without these two keys the first live row was refused with EPISODE_AUDIT_SCHEMA).
+        # it, the capture owns it (without these two keys the first live row was refused with EPISODE_AUDIT_SCHEMA).
         audit.update({"head_acquisition_id": head.acquisition_id,
                       "wrist_acquisition_id": wrist.acquisition_id,
                       "session_id": self._session_id, "attempt_id": self._attempt_id})
@@ -681,7 +681,7 @@ class ContinuousEpisodeCapture:
                 # the row leaves pending work only once the recorder accepted it, so a refusal
                 # cannot silently drop evidence
                 # the recorder's audit channel is a closed sixteen-key set, while the acquisition identifiers
-                # belong to the audit's row-bindings records (CP-2727/2728): the row keeps them for the audit
+                # belong to the audit's row-bindings records: the row keeps them for the audit
                 # writer, and the recorder is handed the dictionary without them
                 self.recorder.append(row["observation"], entry["positions"],
                                      {k: v for k, v in audit.items() if k not in _RECORDER_LOCAL_KEYS})
@@ -697,7 +697,7 @@ class ContinuousEpisodeCapture:
             if self.audit is not None and entry.get("sequence") is not None:
                 # the seal requires every recorded row to be bound to the acquisitions it consumed, and that binding
                 # goes to the episode's audit writer directly - `audit_writer` stays the tail's callback for the
-                # evidence that never became a row (CP-2757/CP-2793)
+                # evidence that never became a row
                 try:
                     self.audit.bind_row(index, row["observation"]["sim_time_s"],
                                         audit["head_acquisition_id"], audit["wrist_acquisition_id"],

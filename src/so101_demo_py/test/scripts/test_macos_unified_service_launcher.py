@@ -1,4 +1,4 @@
-"""Contract tests for the frozen-identity service launcher (remediation Task 7B).
+"""Contract tests for the frozen-identity service launcher.
 
 The launcher is the only thing that may build the service's environment. It validates a closed
 launch document, re-resolves every frozen identity against the live filesystem and refuses before a

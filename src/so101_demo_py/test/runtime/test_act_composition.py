@@ -1,4 +1,4 @@
-"""Task 14: planning needs a mode; executing needs everything, verified."""
+"""Planning needs a mode; executing needs everything, verified."""
 
 import hashlib
 import json

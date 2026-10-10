@@ -1,4 +1,4 @@
-"""Task 15: the unified ACT collection path, from the command route to the service.
+"""The unified ACT collection path, from the command route to the service.
 
 The panel and the headless CLI are meant to drive the same session through the same service, so these tests
 follow one command from the HTTP route through the allow-list to the service, and check that a refused or

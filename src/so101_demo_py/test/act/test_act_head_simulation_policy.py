@@ -224,7 +224,7 @@ def test_default_one_second_policy_binds_controller_without_relaxing_feedback():
     assert parsed.feedback_values()['camera_interarrival_deadline_s'] == .5
 
 
-# ---- the stop-window and dead-man budgets (CP-3537 ruling 3) ------------------------------
+# ---- the stop-window and dead-man budgets ------------------------------
 
 def test_the_policy_has_the_four_head_stop_fields_and_reads_back_the_whole_document():
     cls = policy_type()

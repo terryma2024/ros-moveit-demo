@@ -264,13 +264,13 @@ class ActWorkerPort:
         fields = frozenset({
             "session_id", "attempt_id", "scenario_id", "mode", "stop_after",
             "contact_policy_fingerprint", "deadline_ns",
-            # P1-3: the case's admitted support distance travels with the request, because the evidence that says
+            # the case's admitted support distance travels with the request, because the evidence that says
             # "the cup is supported" is derived from it and the payload schema requires it
             "support_distance_max_m",
-            # the case's admitted gripper target travels with the request for the same reason (CP-1514)
+            # the case's admitted gripper target travels with the request for the same reason
             "gripper_closed_rad", "close_duration_s",
             # the admitted policy the case runs under, and the duration its motions take: both travel with the request
-            # because the payload schema requires them and the motion phases resolve against the policy (CP-1525)
+            # because the payload schema requires them and the motion phases resolve against the policy
             "pick_policy", "motion_duration_s",
         })
         session_id, attempt_id, deadline_ns = self._base(request, fields=fields)

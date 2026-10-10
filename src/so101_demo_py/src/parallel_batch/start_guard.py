@@ -5,7 +5,7 @@ cheap pre-start check. Everything here is either a closed data model, a pure dec
 low-level read against cgroup v2, ``/proc`` and NVML. No paging or memory-stall counter is
 consulted, no forecast scales with the worker count, and nothing is read from Git.
 
-The blocking reads are meant to be executed by a bounded helper process (Task 4): this
+The blocking reads are meant to be executed by a bounded helper process: this
 module only exposes them with an injectable low-level port so the helper, the CLI and the
 tests all use the same code path.
 """

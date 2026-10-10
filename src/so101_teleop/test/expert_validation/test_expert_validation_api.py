@@ -642,7 +642,7 @@ def test_the_capability_document_models_single_worker_two_worker_and_the_no_qual
 
 
 # --------------------------------------------------------------------------------------
-# Task 11 closure: the candidate context issuance and first-pass start entry points
+# the candidate context issuance and first-pass start entry points
 # --------------------------------------------------------------------------------------
 
 CANDIDATE_ISSUE_BODY = {

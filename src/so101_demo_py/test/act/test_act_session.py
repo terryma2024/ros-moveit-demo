@@ -1,4 +1,4 @@
-"""Task 14: a retry needs a known-empty cup, an unspent budget and a wall-clock allowance."""
+"""A retry needs a known-empty cup, an unspent budget and a wall-clock allowance."""
 
 import pytest
 

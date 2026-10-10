@@ -1,4 +1,4 @@
-"""Task 11A composition: turn closed inputs into the spec the unified service is asked to admit.
+"""Composition: turn closed inputs into the spec the unified service is asked to admit.
 
 Everything here happens **before** the service exists, so a refusal costs nothing: no spawn, no reset,
 no child process. The qualification contract is created atomically from the explicitly passed,

@@ -1,6 +1,6 @@
 """Whole-pool rebuild after a Broker failure: order, safety gates and the requeue decision.
 
-Task 9 of the macOS MPS / private IPC plan. These tests drive the recovery through injected ports
+Part of the macOS MPS / private IPC plan. These tests drive the recovery through injected ports
 that record their own call order, so the *sequence* is asserted rather than described, and each
 safety gate gets its own refusal case.
 """

@@ -1,4 +1,4 @@
-"""Task 12A: read-only evaluation of a frozen bundle on the Offline Test split.
+"""Read-only evaluation of a frozen bundle on the Offline Test split.
 
 Padded frames are not evidence. A tail padded to complete an action chunk must never contribute to a
 joint metric, and a metric must never quietly shrink its denominator to make a bad row disappear — the

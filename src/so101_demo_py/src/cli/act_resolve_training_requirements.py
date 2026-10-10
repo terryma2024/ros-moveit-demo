@@ -1,4 +1,4 @@
-"""Resolve the Task 12 training lock from a recorded uv install report.
+"""Resolve the training lock from a recorded uv install report.
 
 The lock is a claim about what was actually installed, so every package must arrive with the SHA of the
 artifact that was resolved and the resolver must record the interpreter and the indexes that produced it.
@@ -69,7 +69,7 @@ def index_digest(indexes) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Write the Task 12 training lock from a uv install report.")
+    parser = argparse.ArgumentParser(description="Write the training lock from a uv install report.")
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--lock", type=Path, default=_LOCK_PATH)
     parser.add_argument("--python", required=True)

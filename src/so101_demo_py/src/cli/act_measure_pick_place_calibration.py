@@ -91,7 +91,7 @@ def main(argv=None) -> int:
                 broker_generation=context["broker_generation"],
                 evidence_root=str(args.batch_root.parent),
                 resource_binding=context["resource_binding"],
-                # P1-1: the composition reads these from the context (the calibration) and takes the rest as arguments;
+                # the composition reads these from the context (the calibration) and takes the rest as arguments;
                 # the admitted document is where they come from, and a missing one is refused by name downstream
                 calibration_report=_document.get("calibration_report"),
                 session_id=_document.get("session_id"),
@@ -106,9 +106,9 @@ def main(argv=None) -> int:
                 session_id=_document.get("session_id"), attempt_id=_document.get("attempt_id"),
                 search_start_rad=_document.get("search_start_rad"),
                 contract=contract).run(context, args.batch_root)
-        # Astra item 3: the driver is the ONE seal owner; the entry only reports what it sealed
+        # the driver is the ONE seal owner; the entry only reports what it sealed
         sealed = args.batch_root / "batch.json"
-        # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
+        # read the seal back and refuse to call an INVALID measurement a success. The
         # path, the identity and the closure are checked by the schema's validator, and the terminal status
         # decides the outcome - evidence is left in place either way.
         from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch

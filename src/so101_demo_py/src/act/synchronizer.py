@@ -28,7 +28,7 @@ def source_age_ok_ns(at_ns, stamp_ns, max_age_ns=MAX_SOURCE_AGE_NS):
 
 
 def bracketed_age_ok_ns(at_ns, stamp_ns, next_stamp_ns):
-    """The one extension of the source-age rule (CP-3440 B): a planning-scene read whose content provably did not change up to the
+    """The one extension of the source-age rule: a planning-scene read whose content provably did not change up to the
     NEXT read is valid at every instant from its own stamp until that next read, not only for `max_age_ns`.
 
     "Provably" is established by the caller from the two reads (identical scene content, no Teacher apply between them) and

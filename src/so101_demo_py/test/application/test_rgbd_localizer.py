@@ -306,7 +306,7 @@ def test_localizer_rejects_wrong_radius_or_out_of_workspace_geometry() -> None:
         assert expected in caught.value.detail
 
 
-# ---- CP-3394 Q1: the landing ring and the table never enter the circle fit ------------------------------------------------------
+# ---- the landing ring and the table never enter the circle fit ------------------------------------------------------
 
 def _ring_points(center_xy, count=60):
     """A flat arc on the table at z 0.1201, the red landing ring's height (radius 0.052), partly overlapping the cup's mask."""

@@ -1,4 +1,4 @@
-"""The tilt-compensated place height (CP-3480 / CP-3394, CP-3504). Pure part: the geometry, the policy fields, the bounds, and the
+"""The tilt-compensated place height. Pure part: the geometry, the policy fields, the bounds, and the
 place target as a strategy with a closed fallback to the reference target - never a refusal - with its own record validator. The
 numbers in the comments are the 20 retained PASS bags of the force-stop investigation."""
 

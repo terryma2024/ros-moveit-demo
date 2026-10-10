@@ -1,7 +1,7 @@
 """The collection request of one run and the verdict type of the offline data path (Phase A4c, cleanup step 2).
 
 `CollectionOptions` is the validated `--collection` / `--collection-fault` pair a run carries; `RecorderOutcome` is the verdict on the
-data that `act/offline/orchestration.py` returns. The live Recorder process and its orchestrator are gone (CP-3456, cleanup step 2).
+data that `act/offline/orchestration.py` returns. The live Recorder process and its orchestrator are gone.
 
 Direction of dependence: the Teacher never waits for, reads from or is stopped by anything here after its own start. Every
 defect on this side is a verdict on the data (INVALID) and never an input to the Teacher. Nothing in this module imports
@@ -19,7 +19,7 @@ COLLECTION_MODES = ("on", "off")
 #: `recorder_absent` and `recorder_late` are orchestrator faults; the other three are bag faults (`act/offline/orchestration.py`).
 COLLECTION_FAULTS = ("none", "recorder_absent", "recorder_late", "queue_overflow", "source_gap", "output_write_failure")
 DIAGNOSTIC_MODE = "preselected_target_diagnostic"
-#: CP-3513: the Teacher states at which a diagnostic run may inject an execution failure (one: the cup is held and the arm has moved)
+#: The Teacher states at which a diagnostic run may inject an execution failure (one: the cup is held and the arm has moved)
 INJECTABLE_STATES = ("LIFT",)
 
 
@@ -35,7 +35,7 @@ class CollectionOptions:
     fault: str = "none"
     #: `<run>/fault-sandbox`; present only when a fault was requested
     sandbox_root: Path | None = None
-    #: CP-3513, diagnostic mode only: the Teacher state at whose execute boundary one execution failure is injected (default: none)
+    #: Diagnostic mode only: the Teacher state at whose execute boundary one execution failure is injected (default: none)
     inject_failure_at: str | None = None
 
     @property
@@ -44,7 +44,7 @@ class CollectionOptions:
 
     @property
     def raw_pilot(self) -> bool:
-        """CP-3456: the record-only bag is the only data path, so it is on exactly when the collection is."""
+        """The record-only bag is the only data path, so it is on exactly when the collection is."""
         return self.enabled
 
     def document(self) -> dict:
@@ -75,7 +75,7 @@ def validate_collection_request(collection: str, fault: str, *, run_mode: str, r
     if raw_pilot is False and collection == "on":
         raise CollectionRefused("COLLECTION_RAW_RECORDER_IS_THE_ONLY_DATA_PATH")
     if inject_failure_at is not None:
-        # CP-3513: refused by name, never ignored
+        # Refused by name, never ignored
         if run_mode != DIAGNOSTIC_MODE:
             raise CollectionRefused("TEACHER_INJECTION_REQUIRES_DIAGNOSTIC_MODE")
         if collection != "on":

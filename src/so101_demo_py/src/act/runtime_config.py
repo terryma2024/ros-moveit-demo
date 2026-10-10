@@ -1,4 +1,4 @@
-"""Task 13: the frozen runtime settings for the inference boundary.
+"""The frozen runtime settings for the inference boundary.
 
 One request in flight, a bounded wait, and a bound on how old a reply may be before it is worthless. All
 three exist so a slow model cannot stall the control loop and a late answer cannot be applied as if it

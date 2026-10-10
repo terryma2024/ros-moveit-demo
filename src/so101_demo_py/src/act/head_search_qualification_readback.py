@@ -1,6 +1,6 @@
 """The during-qualification readback: the seventeen approved values and the four camera measurements.
 
-Task 14's `approved_values_readback` gate (``head_search_aggregate``) consumes one document - the readback
+The `approved_values_readback` gate (``head_search_aggregate``) consumes one document - the readback
 of a qualification run - and refuses unless all seventeen approved values and the four camera measurements
 were read back **under that qualification run root**, unless the readback's own values digest is the digest
 the frozen promoted config carries, and unless exactly one CUDA detector was in play. Nothing produced
@@ -34,8 +34,8 @@ value                                the consumer it is read from
 ``min_bbox_aspect``                   readback builds from the frozen weights
 ===================================  ==========================================================
 
-The four camera measurements are observed **live from the running stack**, exactly as the Task 8
-measurement contract defines them (``config/act/pick-place-calibration-measurement-contract.json``):
+The four camera measurements are observed **live from the running stack**, exactly as the pick-place
+calibration measurement contract defines them (``config/act/pick-place-calibration-measurement-contract.json``):
 ``head_intrinsics_px`` from the ``/head_camera/camera_info`` the running camera plugin publishes,
 ``head_translation_m`` and ``head_rpy_rad`` from the ``base -> head_camera_frame`` transform the running
 description publishes, and ``yaw_zero_bearing_rad`` from the bearing of that rotation's optical forward
@@ -49,7 +49,7 @@ It is handed the same frozen artefacts the qualifier declares: the promoted prod
 ``values`` block is the promotion of record), the approved calibration bundle (whose parameters must agree
 with it, value by value, or the readback refuses with ``READBACK_BUNDLE_MISMATCH``), the frozen runtime
 identity, the sealed geometry, the scene, the URDF, the MuJoCo plugin configuration, the controller
-configuration, the selected weights and, through the controller configuration, the dead-man directory. It takes Task 14 Step 1's exclusive-ownership
+configuration, the selected weights and, through the controller configuration, the dead-man directory. It takes the exclusive-ownership
 receipt, refuses unless the receipt guards exactly this run root, and starts **one** stack - the same
 ``RestartStack`` the production smoke and the anchor restarts own - through the restart module's own
 helpers, so the qualification cannot drift into a second definition of "the stack".
@@ -130,7 +130,7 @@ SESSION_ID = "head-search-qualification-readback"
 #: the live run found this: ``Node("/head_search_qualification_readback")`` is refused by rclpy itself
 RUNNER_NODE = "head_search_qualification_readback"
 RUNNER_GRAPH_NODE = f"/{RUNNER_NODE}"
-#: the frame the camera measurements are taken in: the Task 8 contract's ``base -> head_camera_frame``
+#: the frame the camera measurements are taken in: the pick-place calibration contract's ``base -> head_camera_frame``
 BASE_FRAME = "base"
 CAMERA_FRAME = "head_camera_frame"
 IMAGE_TOPIC = "/head_camera/color"
@@ -183,7 +183,7 @@ TEARDOWN_FACTS = (
     "graph_clear",
 )
 
-#: the camera measurements and the live source each one is taken from, as the Task 8 contract names them
+#: the camera measurements and the live source each one is taken from, as the pick-place calibration contract names them
 CAMERA_SOURCES = {
     "head_intrinsics_px": f"{CAMERA_INFO_TOPIC} K, the running camera plugin's own calibration",
     "head_translation_m": f"{BASE_FRAME} -> {CAMERA_FRAME} translation, the running description's TF",
@@ -719,7 +719,7 @@ def _stamp_s(message) -> float:
 
 
 def _zyx_from_quaternion(quaternion) -> list[float]:
-    """The Task 8 contract's fixed decomposition: ZYX, in (-pi, pi]."""
+    """The pick-place calibration contract's fixed decomposition: ZYX, in (-pi, pi]."""
 
     x, y, z, w = (float(value) for value in quaternion)
     sinr_cosp = 2.0 * (w * x + y * z)

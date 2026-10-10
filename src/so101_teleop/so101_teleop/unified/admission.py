@@ -247,13 +247,13 @@ _ACT_PAYLOAD_KEYS = frozenset({
     "calibration_report_path", "calibration_report_sha256",
 })
 
-# a Task 8 payload additionally names its preparation receipt; a collection payload must not
+# a pick-place validation payload additionally names its preparation receipt; a collection payload must not
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
 _PICK_PLACE_VALIDATION_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "preparation_receipt_path", "preparation_receipt_sha256"})
 
 # the diagnostic payload additionally binds the frozen inputs and the explicit mode record; the
-# formal and Task 8 schemas above are unchanged, so neither can smuggle these fields in
+# formal and pick-place validation schemas above are unchanged, so neither can smuggle these fields in
 _DIAGNOSTIC_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "collection_scope_path", "collection_scope_sha256",
     "inputs_manifest_path", "inputs_manifest_sha256"})
@@ -433,12 +433,12 @@ class UnifiedWorkloadService:
                 require_gate(calibration,
                              "formal_collection" if spec.kind.startswith("act_collection")
                              else "pick_place_validation")
-            # the installed ACT profile must still exist and be readable; CP-1928 removed the
+            # the installed ACT profile must still exist and be readable; the
             # comparison of that identity with the report's recorded one
             (self.calibration_identity_probe or installed_calibration_identity)()
         except (OSError, TypeError, json.JSONDecodeError, ValueError) as error:
             raise ValueError("CALIBRATION_REQUIRED") from error
-        # Per the owner amendment recorded in CP-1928 the report's own recorded identity is not
+        # Per the owner's amendment the report's own recorded identity is not
         # compared with the tree that is running; the probe above still refuses a missing profile.
         if diagnostic:
             # the Head Search prerequisite is the only thing this scope removes: every non-Head
@@ -488,7 +488,7 @@ class UnifiedWorkloadService:
             if any(qualification.get(key) != value for key, value in required.items()):
                 raise ValueError("EIGHT_WORKER_QUALIFICATION_MISMATCH")
             # A self-declared PASSED document is not physical qualification.
-            # Task 11A must provide an independent verifier of the frozen
+            # the collection qualification must provide an independent verifier of the frozen
             # contract, two committed 20-scene waves and actual per-Worker
             # terminal leases before formal admission can become reachable.
             try:
@@ -574,7 +574,7 @@ class UnifiedWorkloadService:
                                           expected_inputs_sha256=manifest["inputs_sha256"])
             # every frozen calibration report carries its own structural contract: all five
             # non-Head checks, complete measurements with matching sample digests. Distinct reports
-            # are allowed since CP-1928, so each one is validated instead of relying on equality
+            # are allowed, so each one is validated instead of relying on equality
             # with the payload's report.
             for role in ("path_policy", "placement_qc", "rgb_skew"):
                 require_nonhead_gate(json.loads(frozen(role)))
@@ -589,7 +589,7 @@ class UnifiedWorkloadService:
                     or manifest["evidence_root"] != payload["evidence_root"]):
                 raise ValueError("DIAGNOSTIC_SCOPE_UNBOUND")
             # the resource policy is re-derived from the frozen config bytes rather than trusted
-            # from the manifest's own summary. Per CP-1928 the manifest's recorded source and config
+            # from the manifest's own summary. Per the owner's amendment the manifest's recorded source and config
             # identity is provenance, not a claim about the tree that is running now.
             derived_resource = resource_policy_identity(frozen("runtime_config"),
                                                         frozen("collection_config"))

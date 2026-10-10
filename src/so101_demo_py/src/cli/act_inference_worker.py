@@ -1,4 +1,4 @@
-"""Task 13 CLI: serve action prefixes for a session from a verified bundle.
+"""CLI: serve action prefixes for a session from a verified bundle.
 
 The worker runs in the training interpreter — the only place the pinned dependencies exist — reads one
 request per line, and writes one reply per line. It never appends into an existing replies file, so a

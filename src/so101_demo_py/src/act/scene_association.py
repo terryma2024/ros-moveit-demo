@@ -17,7 +17,7 @@ KIND = "ACT_SOURCE_ALIGNMENT_SCENE_ASSOCIATION"
 RULE = "frozen_geometry_from_native_step"
 #: operations a document may name. `initial` has no apply: the Recorder's own read-only query of the scene BEFORE the Teacher's
 #: SETUP, associated with a physics source, asserting that nothing is attached (what the worker's initial gate guarantees): schema_version 3
-#: (CP-3425; version 2 asserted the Teacher's setup scene and is never accepted again). The others carry the Teacher's apply;
+#: (version 2 asserted the Teacher's setup scene and is never accepted again). The others carry the Teacher's apply;
 #: `world_sync` is the Teacher's SETUP apply of the full task geometry (the cup's pose is audit-only: it is the perceived one).
 OPERATIONS = ("world_sync", "attach", "detach", "initial")
 _FIELDS = {"kind", "schema_version", "rule", "association_id", "operation", "execution_root",
@@ -114,7 +114,7 @@ def read_overlaps_apply(read, apply_record):
 
 
 def concurrent_apply_geometry_matches(read, read_geometry, governing_id, associations):
-    """CP-3489: a read that ran concurrently with an association's apply may legitimately show either the old or the new scene.
+    """A read that ran concurrently with an association's apply may legitimately show either the old or the new scene.
 
     True when `read` overlaps the apply of an association other than `governing_id` and `read_geometry` (canonical normalized
     geometry) is EXACTLY that association's receipt geometry. Anything else is still a mismatch."""

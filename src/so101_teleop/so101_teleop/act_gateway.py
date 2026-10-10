@@ -1,4 +1,4 @@
-"""Task 15: the ACT gateway behind the teleop panel.
+"""The ACT gateway behind the teleop panel.
 
 The panel and the headless CLI must drive the same session through the same service, so the gateway is an
 allow-list rather than a pass-through: a name that is not an ACT command is refused before anything else is

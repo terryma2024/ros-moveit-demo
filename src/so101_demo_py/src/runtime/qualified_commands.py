@@ -1,4 +1,4 @@
-"""Child commands run the qualified install, never whatever the PATH finds first (CP-3459).
+"""Child commands run the qualified install, never whatever the PATH finds first.
 
 Live L1 and L2 on freeze feAWPg9k showed what a command that is not pinned can do: the perception broker ran the `so101_demo` baked
 into its image, and the baked parser refused the freeze's runtime config. This module is the other half of that fix. A role command is

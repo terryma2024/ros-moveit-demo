@@ -1,6 +1,6 @@
 """The private-path Unix address strategy and its exact cleanup contract.
 
-Task 4 of the macOS MPS / private IPC plan. The production Linux transport addresses its sockets
+The production Linux transport addresses its sockets
 through ``/proc/self/fd/<dirfd>/<name>``, which pins the parent directory against replacement.
 Darwin has no ``bindat``/``connectat`` and ``/dev/fd/<dirfd>/<name>`` returns ``ENOENT`` (proved
 in the retained probe recorded as CP-UQ226), so the macOS transport instead uses a canonical

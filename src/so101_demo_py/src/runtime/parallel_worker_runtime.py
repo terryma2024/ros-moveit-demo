@@ -185,7 +185,7 @@ class WorkerOwnedProcessTree:
 
         prefix = qualified_prefix_from_env()
         if prefix is not None:
-            # CP-3459: in a qualified run no child is found by PATH or comes from outside the install
+            # In a qualified run no child is found by PATH or comes from outside the install
             argv = list(resolve_role_command(argv, prefix=prefix))
         child = self._popen(
             argv, start_new_session=False,
@@ -490,7 +490,7 @@ class RuntimeDecision:
 class ExecutionCompletionReceipt:
     decision: RuntimeDecision
     completion_monotonic_s: float
-    #: False when the wait for the Teacher child gave up with the child still alive (CP-3459): the Teacher has not exited
+    #: False when the wait for the Teacher child gave up with the child still alive: the Teacher has not exited
     teacher_child_exited: bool = True
 
     def __post_init__(self) -> None:
@@ -895,8 +895,8 @@ class ParallelWorkerRuntime:
         self._finalizing_acknowledged=finalizing_acknowledged
         self._started_leases={}
         self._reset_point = reset_point or _required("reset_point")
-        # Task 11 production always supplies the durable reservation owner.  The
-        # no-op default preserves the reusable Task 10 unit-test seam.
+        # Production always supplies the durable reservation owner.  The
+        # no-op default preserves the reusable unit-test seam.
         self._reserve_workspace = reserve_workspace or (lambda _lease, _receipt: True)
         self._initial_gate = initial_gate or _required("initial_gate")
         self._localize = localize or _required("localize")
@@ -912,7 +912,7 @@ class ParallelWorkerRuntime:
         # the episode being recorded for a point, opened by whoever holds the frozen inputs and the episode's own root
         # the scope document the parent wrote for this episode, if it wrote one: the consumer it spawns is given
         # this path rather than the frozen values, because a scope assembled from a second reading is how
-        # a document and the run it describes drift apart (CP-2862). None means no episode is recorded.
+        # a document and the run it describes drift apart. None means no episode is recorded.
         self.episode_scope_path = None if episode_scope_path is None else str(episode_scope_path)
         self.episode_inputs_manifest = (None if episode_inputs_manifest is None
                                         else str(episode_inputs_manifest))
@@ -1279,7 +1279,7 @@ class ParallelWorkerRuntime:
             self._paused_for_inference.add(key)
         return gate
 
-        # the episode begins here: whoever holds the frozen inputs and the episode's own root opens it (CP-2857), and
+        # the episode begins here: whoever holds the frozen inputs and the episode's own root opens it, and
         # the reset boundary this gate was given is the instant it starts at. Optional by design, so a runtime without
         # the port keeps working exactly as before.
         if self._open_episode is not None:
@@ -1440,11 +1440,11 @@ class ParallelWorkerRuntime:
             # the only Teacher-side difference collection makes: the confirmed final normal-stop proof
             argv = argv + ("--final-stop-proof",)
         if self._collection is not None and getattr(self._collection, "inject_failure_at", None) is not None:
-            # CP-3513, diagnostic only (validated when the request was made): the Teacher injects one execution failure there
+            # Diagnostic only (validated when the request was made): the Teacher injects one execution failure there
             argv = argv + ("--inject-failure-at", self._collection.inject_failure_at)
         return argv
 
-    # ---- the data side: a record-only bag during the run, the offline processor after it (CP-3456) ------------------
+    # ---- the data side: a record-only bag during the run, the offline processor after it ------------------
 
     def _offline_identity(self, lease: Any, reset_epoch: object) -> dict:
         return {"session_id": self.resources.session_id, "reset_epoch": self._reset_epoch_integer(reset_epoch),
@@ -1581,7 +1581,7 @@ class ParallelWorkerRuntime:
         if receipt.teacher_child_exited:
             self._teacher_has_exited()
         else:
-            # CP-3459: the wait gave up with the Teacher child alive. It is stopped first, by the same path the Teacher-deadline
+            # The wait gave up with the Teacher child alive. It is stopped first, by the same path the Teacher-deadline
             # revocation uses (`cancel_motion`: the consumer child and the controller goal); only then is the window closed. If it cannot be
             # stopped the window and its deadline guard stay open, and no data work runs.
             try:
@@ -1632,7 +1632,7 @@ class ParallelWorkerRuntime:
         # the episode ends here: the boundary the caller passes is the run's own end instant, and the window
         # the capture needs is built from the instant it started at. Sealing goes through the sink because the
         # outcome belongs to whoever knows the run's decision - a recorder that invented one would make the
-        # episode's own status worthless (CP-2857).
+        # episode's own status worthless.
         _sink = getattr(self, "episode_sink", None)
         if _sink is not None and _sink.current is not None:
             _sink.finish(boundary)

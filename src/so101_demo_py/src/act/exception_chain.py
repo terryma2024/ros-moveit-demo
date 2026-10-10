@@ -1,4 +1,4 @@
-"""A bounded account of an exception and everything it was raised from (CP-3412).
+"""A bounded account of an exception and everything it was raised from.
 
 `RecorderInfraError('RECORDER_WRITE_FAILED')` named a wrapper and hid the ValueError that caused it. Every writer and seal failure the
 Recorder reports now carries this chain: per link the type, the message (bounded), whether it was the `__cause__` or the `__context__`

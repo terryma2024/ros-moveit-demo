@@ -1,6 +1,6 @@
 """The durable owner-record writer: an intent before every spawn, a readback after it.
 
-Task 6 of the macOS service campaign closure plan. The service's recovery path reclaims
+Part of the macOS service campaign closure plan. The service's recovery path reclaims
 ``adapter -> campaign -> worker -> station`` leaf first, and it may only signal a process whose
 live kernel identity still matches a durable record. That only works if the records exist and are
 written in the right order, so these tests drive the real writer against the real filesystem:
@@ -649,7 +649,7 @@ def test_the_adapter_entry_point_refuses_by_name_when_the_record_cannot_be_writt
         lambda: types.SimpleNamespace(parse_args=lambda _argv: arguments),
     )
     # The route is resolved from the document and the fresh start guard runs before any campaign
-    # child exists (Task 7), so both are stubbed here: this test is about the owner record that
+    # child exists, so both are stubbed here: this test is about the owner record that
     # cannot be written, not about the admission.
     monkeypatch.setattr(
         adapter,

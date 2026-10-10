@@ -1,4 +1,4 @@
-"""Task 15: the ACT routes exist, are gated, and refuse rather than inventing a session."""
+"""The ACT routes exist, are gated, and refuse rather than inventing a session."""
 
 import asyncio
 from types import SimpleNamespace

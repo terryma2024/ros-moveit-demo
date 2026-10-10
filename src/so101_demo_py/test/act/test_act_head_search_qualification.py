@@ -53,7 +53,7 @@ def test_head_only_report_does_not_grant_pick_place_calibration_ready(tmp_path: 
 
     Deliberately changed in HS-317: this test used to hand `qualify_head_search` a mapping of
     well-formed hex digests and assert it published a pass. That is the HS-233/HS-315 defect, and the
-    aggregate phase now refuses it; the task8 refusal is proven on a closed report document instead.
+    aggregate phase now refuses it; the pick-place refusal is proven on a closed report document instead.
     """
 
     refused = qualify_head_search(

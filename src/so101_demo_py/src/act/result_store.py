@@ -175,7 +175,7 @@ def _seal_facts(seal_path) -> dict:
 
 
 def _qc_memo_covers(report_path, *, episode_root, scope, inputs_manifest) -> bool:
-    """True if a content-bound memo of the independent fresh-process QC covers this report and the files on disk now (CP-3456)."""
+    """True if a content-bound memo of the independent fresh-process QC covers this report and the files on disk now."""
     from . import qc_memo
     from .episode_qc import read_qc_report
 
@@ -239,7 +239,7 @@ def _verify_result_qc(report_path, *, episode_root, audit_manifest, scope, input
 class ActCollectionResultStore:
     """One writer at the workspace reserved by a Coordinator lease."""
 
-    #: CP-3456: trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation
+    #: Trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation
     TRUST_INDEPENDENT_QC_MEMO = False
 
     def __init__(self, workspace: Path, lease: LeaseIdentity, *, clock,
@@ -262,7 +262,7 @@ class ActCollectionResultStore:
         self.clock = clock
         self.expected_session_id = expected_session_id
         self.expected_reset_epoch = expected_reset_epoch
-        #: a v2 seal is verified only when the caller supplies both artifacts (CP-2765), so the store
+        #: a v2 seal is verified only when the caller supplies both artifacts, so the store
         #: carries the pair rather than assuming a convention about where an episode's audit lives
         self.audit_manifest = None if audit_manifest is None else _safe(Path(audit_manifest))
         self.scope = None if scope is None else _safe(Path(scope))
@@ -591,7 +591,7 @@ class ActCollectionResults:
 class ActCollectionResultVerifier:
     """Coordinator port: verify only its registered Worker and exact lease path."""
 
-    #: CP-3456: trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation. The Coordinator
+    #: Trust the offline processor's content-bound QC memo instead of repeating its five-minute recomputation. The Coordinator
     #: asks for it; the read-only readback never does.
     TRUST_INDEPENDENT_QC_MEMO = False
 
@@ -604,7 +604,7 @@ class ActCollectionResultVerifier:
             qc_memo.note_trusting_gate()
         self.worker_roots = {name: _safe(Path(root)) for name, root in worker_roots.items()}
         self.run_mode = RunMode.EXECUTE
-        #: a v2 seal is verified only when both artifacts are supplied (CP-2765)
+        #: a v2 seal is verified only when both artifacts are supplied
         self.audit_manifest = None if audit_manifest is None else _safe(Path(audit_manifest))
         self.scope = None if scope is None else _safe(Path(scope))
         self.inputs_manifest = None if inputs_manifest is None else _safe(Path(inputs_manifest))
@@ -687,12 +687,12 @@ class ActCollectionResultVerifier:
 
         The same contract the generic production adapter implements, so a composition can drive either port through
         the same call: a deterministic lookup under the trusted worker root, restricted to the execution parent the
-        journal reserved, and None for anything else (CP-2801).
+        journal reserved, and None for anything else.
         """
         root = self.worker_roots.get(lease.worker_id)
         if root is None:
             # an unknown worker is "not here", but a missing endpoint input is a misconfiguration and must not be
-            # mistaken for one - only the lookup above is allowed to say None (CP-2805)
+            # mistaken for one - only the lookup above is allowed to say None
             return None
         try:
             parent = Path(root) / "attempts" / lease.point_id / lease.attempt_id

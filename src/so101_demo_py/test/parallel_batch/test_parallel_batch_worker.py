@@ -682,7 +682,7 @@ def test_authorized_boundary_failure_reports_bounded_structured_diagnostic(
 
 
 def test_broker_terminal_diagnostic_is_projected_into_the_committed_input_refusal():
-    """Design 2026-10-10 section 1 (CP-3522): a perception-terminal decision is an input refusal before motion. It is committed in the
+    """Design 2026-10-10 section 1: a perception-terminal decision is an input refusal before motion. It is committed in the
     D8f form; the broker diagnostic stays in failure_message and its type moves to failure_origin_type."""
     fake = Fake(RunMode.EXECUTE)
     terminal = SimpleNamespace(

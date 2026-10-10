@@ -563,7 +563,7 @@ def _candidates_from_response(response: BrokerResponse) -> list[DetectionCandida
     return candidates
 
 
-#: R6 (CP-3467): a candidate is the cup only if it localizes as one (the xy circle fit of radius 0.04 +- 0.01 m succeeds) and its
+#: R6: a candidate is the cup only if it localizes as one (the xy circle fit of radius 0.04 +- 0.01 m succeeds) and its
 #: points span at least this much height. The red landing ring is flat (a few millimetres), the cup is 0.09 m tall.
 MINIMUM_CUP_Z_EXTENT_M = 0.05
 #: A candidate that fails for a reason of its own is dropped; a failure of the shared inputs (the TF, the depth image) is not a
@@ -794,7 +794,7 @@ def _ready_failure_message(completed) -> str:
 
 
 class ParallelRosRuntimePorts:
-    """Lazy concrete Task 10 ports; tests may replace individual observations."""
+    """Lazy concrete ROS ports; tests may replace individual observations."""
 
     REQUIRED = {
         "ready_probe",
@@ -1141,7 +1141,7 @@ class ParallelRosRuntimePorts:
             # every captured frame is offered to the episode being recorded, here where the pixels and the
             # simulation stamp are both in hand - reading the PNG back later would need a decoder and would put
             # the frame behind its own acquisition. The sink is optional: a runtime that records nothing simply
-            # does not have one, and `record` reports whether it took the frame (CP-2857).
+            # does not have one, and `record` reports whether it took the frame.
             _sink = getattr(self, "episode_sink", None)
             if _sink is not None:
                 _sink.record(camera, stamp_s=stamp / 1_000_000_000.0, pixels=rgb)

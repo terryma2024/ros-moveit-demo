@@ -9,14 +9,13 @@ hold, and the production owner must poll `check_health()` faster than
 
 Derivation (window-scoped observed maxima, margin rule `ceil_50ms(multiple x max)`):
 
-- source step gap: EXP-556 three isolated no-goal sessions, binding epoch-one
+- source step gap: three isolated no-goal sessions, binding epoch-one
   maximum inter-step source begin gap 2,536,550 ns (epoch-zero context including
   startup 2,898,716 ns). The frozen 6 ms is a heuristic *rejection threshold* for
   a stalled loop and is explicitly NOT reused as a silence, age or first-chunk
   bound (handoff 2026-09-28, item 2).
 - silence: population is the maximum chunk inter-arrival **inside a running
-  measurement window**, 122,997,815 ns (EXP-559 run-3; EXP-560 maxima are
-  108-110 ms). 2x = 246,000,000 ns -> 250 ms, frozen at 0.30 s for second-order
+  measurement window**, 122,997,815 ns. 2x = 246,000,000 ns -> 250 ms, frozen at 0.30 s for second-order
   scheduling effects. Note the 194.5 ms figure seen earlier crosses the reset and
   therefore belongs to the first-chunk population, not to silence. Watchdog poll
   slip (max 56.7 ms) extends *detection* latency and is not absorbed by this bound.
@@ -24,14 +23,14 @@ Derivation (window-scoped observed maxima, margin rule `ceil_50ms(multiple x max
   in-window age at callback entry (127,833,869 ns) plus the largest in-window
   callback cost (26,894,568 ns) = 154,728,437 ns, a conservative cross-chunk
   envelope rather than one observed sample. 2x = 309,440,000 ns -> 0.35 s.
-  EXP-560 after the copy removal measures an envelope of 133.7 ms.
+  A later measurement after the copy removal gives an envelope of 133.7 ms.
 - first chunk: maximum `arm()` to first positive-epoch chunk 128,046,778 ns
   (in-process resume accepted in <= 0.23 ms; the remaining ~120 ms is chunk
   batching plus transport). 3x = 384,140,334 ns -> 0.40 s. The owner-side
   arm-to-resume allowance implied by this margin is **not yet qualified**; the
   wiring experiment must measure the real owner path under representative load.
 
-The process-launch-inflated EXP-558 intervals (1.76-3.70 s) are excluded on
+The process-launch-inflated intervals (1.76-3.70 s) are excluded on
 purpose; they measured the harness, not the production path.
 """
 
@@ -65,8 +64,8 @@ OBSERVED_STEP_AT_P50_BEFORE_COPY_FIX_NS = 14_400_000
 OBSERVED_STEP_AT_P50_AFTER_COPY_FIX_NS = 195_000
 
 PROVENANCE = {
-    "source_step_gap": "EXP-556 / CP-581, three isolated no-goal sessions",
-    "age_and_silence_and_first_chunk": "EXP-559 / CP-584, three in-process sessions",
+    "source_step_gap": "three isolated no-goal sessions",
+    "age_and_silence_and_first_chunk": "three in-process sessions",
 }
 
 

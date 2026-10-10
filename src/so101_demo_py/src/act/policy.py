@@ -1,4 +1,4 @@
-"""Task 13: the runner-facing ACT policy contract.
+"""The runner-facing ACT policy contract.
 
 Two things are easy to get wrong here and expensive to notice later. The action chunk must stay anchored
 to the observation's own time origin — a chunk that quietly re-bases its timestamps desynchronises every

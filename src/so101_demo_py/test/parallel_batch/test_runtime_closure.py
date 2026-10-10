@@ -874,7 +874,7 @@ def test_stack_config_requires_closure_and_run_binding_together(tmp_path: Path) 
 
 
 # --------------------------------------------------------------------------------------
-# Owner-bound controller attestation (remediation Task 3)
+# Owner-bound controller attestation
 #
 # The role is bound when the spawn intent is written, the descendant is found along the owner
 # tree, and plugin/vendor readback has to name both the path and the digest. A live round may

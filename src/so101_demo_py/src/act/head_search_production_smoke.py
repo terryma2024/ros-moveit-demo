@@ -1,4 +1,4 @@
-"""Task 14 Step 3: the production smoke - the flight, its sealed journal, and the aggregator that reads it.
+"""The production smoke - the flight, its sealed journal, and the aggregator that reads it.
 
 The plan's Step 3 is one sentence of requirements and one sentence of refusals:
 
@@ -8,10 +8,10 @@ The plan's Step 3 is one sentence of requirements and one sentence of refusals:
 
 The installed ``so101_head_search_smoke`` proved something else: planning coverage of the bounded stop plan
 against the geometry seal, with no stack, no detector, no journal and its ``--scenario`` flag accepted but
-never read (HS-179, HS-315 row 5). That proof is still produced - the plan's Task 11 gate cites it - but it
+never read (HS-179, HS-315 row 5). That proof is still produced - the plan's coverage gate cites it - but it
 is **not** what this phase's success stands on. This module is the smoke the plan asks for:
 
-* **The producer owns the stack.** It takes Task 14 Step 1's exclusive-ownership receipt, refuses unless
+* **The producer owns the stack.** It takes the exclusive-ownership receipt, refuses unless
   that receipt guards exactly this run root, and then starts the one production composition through
   ``head_search_restarts.run_anchor_restart`` - the same start/stop discipline, the same graph probe, the
   same teardown proof, one anchor of the seal's ``in_frame_matrix``, and the cup placed at the seal's own
@@ -355,7 +355,7 @@ def classify_terminal(
     except CalibrationInputsRefused as error:
         raise _refuse(
             SMOKE_CLASS_UNDECLARED,
-            f"the smoke declares the condition class {condition_class!r}, which plan Task 14 Step 3 does "
+            f"the smoke declares the condition class {condition_class!r}, which the plan's scenario rule does "
             f"not name, so its terminal cannot be judged: {error}",
         ) from error
     entry = {
@@ -852,7 +852,7 @@ def aggregate_production_smoke(
 
 
 def coverage_proof_document(seal, anchor: str, *, anchor_rad: float, plan) -> dict:
-    """The planning-coverage proof the bounded plan produces: the document Task 11 cites.
+    """The planning-coverage proof the bounded plan produces: the document the coverage gate cites.
 
     This is the document ``so101_head_search_smoke`` has always written (one construction, so the
     coverage path and the production smoke cannot drift), and it is deliberately **not** the smoke's
@@ -1122,7 +1122,7 @@ def write_head_search_production_smoke(
     work = Path(workdir)
     work.mkdir(parents=True, exist_ok=True)
     # the plan the flight walks is proven before anything is commanded, and the proof stays in the run
-    # root: the plan's Task 11 gate cites this artefact, while the smoke's own success is the journal
+    # root: the plan's coverage gate cites this artefact, while the smoke's own success is the journal
     coverage = write_coverage_proof(
         root, seal, anchor, anchor_rad=float(declared["neck_start_rad"])
     )

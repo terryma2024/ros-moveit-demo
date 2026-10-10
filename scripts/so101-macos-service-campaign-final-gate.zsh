@@ -202,7 +202,7 @@ record_step web-test "$web_root" env -u NODE_ENV bun run test
 record_step web-build "$web_root" env -u NODE_ENV bun run build
 
 if (( with_playwright )); then
-  # The required contract projects for this remediation are the two whose subject Task 7 changed:
+  # The required contract projects for this remediation are the two whose subject this remediation changed:
   # `live-preflight.spec.ts` (the whole-machine scanner is isolated, production still fails closed)
   # and `live-evidence-layouts.spec.ts` (the evidence layouts). The rest of `contract/` drives the
   # dev-server UI through a mock harness this host does not stand up - measured at 43 passed / 18

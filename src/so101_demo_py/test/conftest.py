@@ -46,7 +46,7 @@ import pytest  # noqa: E402
 
 @pytest.fixture
 def isolated_ros_domain(monkeypatch):
-    """A ROS domain of this test's own (CP-3405).
+    """A ROS domain of this test's own.
 
     Tests that publish to fixed topic names (`/arm_controller/controller_state`, ...) and start a spooler process must not share a
     domain with the same test on another xdist worker, or with the live runs (domains 181 and 216-222): the frames of one worker

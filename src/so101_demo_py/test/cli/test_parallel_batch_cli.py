@@ -951,7 +951,7 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
     # under similar names and the contract is about which one the coordinator's gate recognises
     assert not isinstance(composition.result_verifier, ActCollectionResultVerifier)
     # The positive direction needs a spec whose evidence root does not collide with the one this composition already
-    # claimed, and the file's own idiom for that is to rebind it (CP-2805). With the episode scope present the
+    # claimed, and the file's own idiom for that is to rebind it. With the episode scope present the
     # composition must build the class the coordinator's gate selects, so a real ACT episode takes that path.
     judging = ProductionBatchComposition(
         replace(spec, request=replace(spec.request, evidence_root=scratch / "act-evidence")),
@@ -1684,7 +1684,7 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     composition = ProductionBatchComposition(
         spec, resource_probe=Probe(), claim_root=scratch / "race-claims",
         supervisor=Supervisor(), broker_command_builder=lambda _owner: ("broker",),
-        container_brokers=False,   # the bare host program `broker` is not a container (CP-2684)
+        container_brokers=False,   # the bare host program `broker` is not a container
         broker_health_client_factory=HealthClient,
     )
     ready = {
@@ -3116,7 +3116,7 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
         broker_command_builder=lambda owner: (
             "broker", str(owner.broker_spec_path),
         ),
-        container_brokers=False,   # the bare host program `broker` is not a container (CP-2684)
+        container_brokers=False,   # the bare host program `broker` is not a container
     )
     composition.coordinator.register_worker("worker-01", generation=1)
     old_process = composition._start_broker()

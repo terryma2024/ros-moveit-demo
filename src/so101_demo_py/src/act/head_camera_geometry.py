@@ -9,7 +9,7 @@ Two layers live here. The pure layer owns the contract, the projection maths, th
 domain and every acceptance rule; it never imports MuJoCo. The model layer is a port - the production
 `MuJoCoHeadCameraScene` supplies camera poses, safe angles, target points and rendered visibility -
 so the rules are testable without a GL context and the same rules run against the real scene at the
-Task 11 boundary.
+coverage-gate boundary.
 """
 
 from __future__ import annotations

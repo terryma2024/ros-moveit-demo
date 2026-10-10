@@ -1,6 +1,6 @@
 """E2 corrections 2 and 3: a capture seals its audit, and a failing verdict changes the terminal status.
 
-Both tests are marked xfail for a measured integration defect rather than a harness one (CP-2726): the capture adds
+Both tests are marked xfail for a measured integration defect rather than a harness one: the capture adds
 `head_acquisition_id` and `wrist_acquisition_id` to the audit it hands the recorder, and the recorder's closed
 `_AUDIT_KEYS` - sixteen keys - does not admit them, so every row is refused with EPISODE_AUDIT_SCHEMA. Nothing drived
 the capture and the recorder together before this file, which is why the defect survived.
@@ -38,7 +38,7 @@ IDENTITY = {"session_id": "session-1", "attempt_id": "attempt-1", "reset_epoch":
 
 
 class RecorderSampler(FakeSampler):
-    """The same sampler, minus the one key the recorder's closed audit set does not admit (CP-2723)."""
+    """The same sampler, minus the one key the recorder's closed audit set does not admit."""
 
     def sample_with_audit(self, session_id, attempt_id, at_s):
         observation, source = super().sample_with_audit(session_id, attempt_id, at_s)
@@ -60,23 +60,23 @@ def lease():
 
 
 def store_for(tmp_path):
-    """The store owns the episode root: <workspace>/working/episode, and refuses any other seal (CP-2762)."""
+    """The store owns the episode root: <workspace>/working/episode, and refuses any other seal."""
 
     workspace = tmp_path / "w00" / "attempts" / "point-1" / "attempt-1"
     return ActCollectionResultStore(workspace, lease(), clock=lambda: 15.0)
 
 
 def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None, audit_lease=None):
-    """Drive one real capture to its seal, with references one instant ahead of each row (CP-2725)."""
+    """Drive one real capture to its seal, with references one instant ahead of each row."""
 
     # the audit lives where the verifier resolves it by convention: <workspace>/sealed/episode/audit-manifest.json,
-    # which is the writer's own root with its streams in <root>/audit/ (CP-2768)
+    # which is the writer's own root with its streams in <root>/audit/
     audit_root = episode_root or (tmp_path / "episode")
 
     # the coordinates the physical half carries: the recorder suite's audit() hardcodes session-1 and defaults to
-    # reset_epoch 2, and the recorder requires the audit to agree with it (CP-2734)
+    # reset_epoch 2, and the recorder requires the audit to agree with it
     # the recorder creates its own root and refuses one that exists, so it must not be pointed at the writer's: the
-    # recorder reaches the audit through audit_manifest.parent, which is the writer's root (CP-2769)
+    # recorder reaches the audit through audit_manifest.parent, which is the writer's root
     # assembled by the production seam rather than by hand, so this test exercises the same wiring E3 will use
     capture = assemble_episode_capture(
         sampler=ProductionProducer(), physical_audit=recorder_physical_audit, guard=AcquisitionGuard(),
@@ -87,7 +87,7 @@ def sealed_episode(tmp_path, *, outcome, end_s=1.3, episode_root=None, audit_lea
     minter = AcquisitionMinter()
     capture.start("session-1", "attempt-1", 2, 1.0)
     # N rows need N+1 instants of frames: a row is released only once the observed sim clock has passed its target
-    # instant, because an early acceptance could still be revoked (CP-2741)
+    # instant, because an early acceptance could still be revoked
     for stamp in (1.0, 1.1, 1.2, 1.3):
         for camera in ("head", "wrist"):                 # the frames carry the episode's reset epoch too
             feed(capture, minter, camera=camera, stamp_s=stamp, session="session-1", reset_epoch=2)
@@ -127,9 +127,9 @@ def test_a_failing_endpoint_verdict_no_longer_downgrades_a_teacher_pass(tmp_path
         tmp_path, episode_root=store.episode_root,
         outcome={"status": "PASSED", "reason": "completed",
                  "pick_place_validation_success": True, "stopped_confirmed": True})
-    # a v2 seal is verified only when both artifacts are supplied, so the store is told where they are (CP-2765)
+    # a v2 seal is verified only when both artifacts are supplied, so the store is told where they are
     # the store verifies before it publishes, so it is handed the pre-publish pair; the verifier is handed the
-    # published one, because the publish renames working -> sealed (CP-2777)
+    # published one, because the publish renames working -> sealed
     store.audit_manifest = manifest_path
     store.scope = manifest_path.parent / "source.json"
     sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "PASSED"))
@@ -146,7 +146,7 @@ def test_a_failing_endpoint_verdict_no_longer_downgrades_a_teacher_pass(tmp_path
 
 
 def test_discover_finds_a_seal_only_at_the_location_the_lease_reserves(tmp_path):
-    """The ACT port's discover, which the composition drives exactly as it drives the generic adapter (CP-2801).
+    """The ACT port's discover, which the composition drives exactly as it drives the generic adapter.
 
     Two directions, because both matter: the reserved location yields a verified seal, and anything else yields None
     rather than a scan of the filesystem.
@@ -240,7 +240,7 @@ def test_coordinator_lease_binding_parses_closed_types_before_equality(tmp_path,
 
 
 def test_the_assembly_seam_builds_a_capture_from_the_parts_a_run_holds(tmp_path):
-    """The seam K1's forward half and E3 both need (CP-2822): given a producer's parts and the episode's identity, the
+    """The seam K1's forward half and E3 both need: given a producer's parts and the episode's identity, the
     recorder and audit writer are built and wired, and neither side has to know the other's internals.
 
     `scope` is the document, not a path - the writer takes the document and `Recorder.finish` takes the file the writer
@@ -277,7 +277,7 @@ def test_the_real_synchronizer_satisfies_the_sampler_contract_the_capture_calls(
     synchronizer = RgbObservationSynchronizer(max_age_s=0.1, max_skew_s=0.1)
     synchronizer.reset("session-1")
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    receipt = synchronizer.monotonic()          # the same clock the sampling compares against (CP-2823)
+    receipt = synchronizer.monotonic()          # the same clock the sampling compares against
     for camera in ("head", "wrist"):
         synchronizer.push(camera, "session-1", 1.0, frame, received_monotonic_s=receipt)
     synchronizer.push("arm", "session-1", 1.0, [0.0] * 6, received_monotonic_s=receipt)
@@ -294,7 +294,7 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
     the process that grades it.
 
     A sealed audit describes itself **relative to its own directory** - the manifest lists its files by name - so the
-    child is started in that directory as well as given absolute paths (CP-2826).
+    child is started in that directory as well as given absolute paths.
     """
     import subprocess
     import sys
@@ -309,7 +309,7 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
     sealed = store.seal(episode_seal, teacher=sealed_teacher(store, "FAILED"))
 
     # the publish renames working/ to sealed/, so the audit's directory is the published one - the same phase
-    # distinction the store's own verification and the verifier have to make (CP-2777)
+    # distinction the store's own verification and the verifier have to make
     audit_dir = (sealed / "episode" / "audit").resolve()
     program = (
         "import json, sys\n"
@@ -330,7 +330,7 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
 
 
 def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
-    """The convention the store, the seal's verification and the endpoint QC all share (CP-2768), named once."""
+    """The convention the store, the seal's verification and the endpoint QC all share, named once."""
     episode_root = tmp_path / "episode"
     manifest, scope = episode_audit_pair(episode_root)
     assert manifest == episode_root / "audit" / "audit-manifest.json"
@@ -338,7 +338,7 @@ def test_the_audit_pair_is_named_where_the_readers_resolve_it(tmp_path):
 
 
 def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_exportable(tmp_path):
-    """E3's closed loop, software side (CP-2827/CP-2828), under the schema 3 contract.
+    """E3's closed loop, software side, under the schema 3 contract.
 
     An episode sealed through the production assembly - the seam plus the real producer - committed through a
     real `BatchCoordinator` whose port is the ACT verifier. The Teacher passed; the data side's endpoint verdict is
@@ -346,7 +346,7 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
     QC verdict, so the episode is not exportable. Three dependencies had to be honoured, each measured
     rather than assumed: `finish` needs a `window` or the capture never seals; a row's identifiers come from
     the physical audit rather than from `start(...)`, so that callable reports the lease's attempt; and the
-    audit pair must be the pre-publish paths when the store verifies (CP-2777).
+    audit pair must be the pre-publish paths when the store verifies.
     """
     journal = CoordinatorJournal.create(tmp_path / "journal", "batch-a")
     try:
@@ -400,7 +400,7 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
         sealed = store.seal(store.episode_root / "seal.json", teacher=sealed_teacher(store, "PASSED"))
 
         # the verifier re-verifies the episode, so it needs the pair as well - and by now the store has published,
-        # so this is the post-publish location (CP-2777)
+        # so this is the post-publish location
         published_manifest, published_scope = episode_audit_pair(sealed / "episode")
         verifier.audit_manifest = published_manifest
         verifier.scope = published_scope
@@ -425,7 +425,7 @@ def test_the_producer_keeps_the_receipt_mapping_out_of_the_recorded_row():
 
 
 def test_the_physical_audit_adapter_owes_exactly_thirteen_keys():
-    """The contract the extraction fills: thirteen keys, checked where a wiring mistake should surface (CP-2845)."""
+    """The contract the extraction fills: thirteen keys, checked where a wiring mistake should surface."""
     complete = {key: None for key in PhysicalAuditAdapter.KEYS}
     adapter = PhysicalAuditAdapter(lambda at_s: complete)
     assert set(adapter(1.0)) == set(PhysicalAuditAdapter.KEYS)
@@ -438,7 +438,7 @@ def test_the_physical_audit_adapter_owes_exactly_thirteen_keys():
 def test_the_producer_pushes_the_runs_own_frames_when_it_has_them():
     """A live run must push the frames it captured, not zeroes: the capture compares a row's pixels against its
     acquisition (`ACQUISITION_PIXEL_MISMATCH`), so the frame source is injectable and defaults to zeroes only for a
-    harness (CP-2847)."""
+    harness."""
     import numpy as np
 
     seen = []
@@ -456,7 +456,7 @@ def test_the_producer_pushes_the_runs_own_frames_when_it_has_them():
 
 
 def test_the_live_sampler_only_delegates_and_leaves_feeding_to_the_run():
-    """A live run feeds the synchronizer itself, so the live sampler must not push anything (CP-2848)."""
+    """A live run feeds the synchronizer itself, so the live sampler must not push anything."""
     import numpy as np
 
     from so101_demo.act.synchronizer import RgbObservationSynchronizer
@@ -524,7 +524,7 @@ def test_the_live_shape_assembles_and_seals(tmp_path):
 
 
 def test_a_point_episode_records_frames_and_seals(tmp_path):
-    """The shared object a run's capture port and worker runtime both hold (CP-2857 piece 2)."""
+    """The shared object a run's capture port and worker runtime both hold."""
     import numpy as np
 
     episode_root = tmp_path / "episode"
@@ -546,7 +546,7 @@ def test_a_point_episode_records_frames_and_seals(tmp_path):
 
 
 def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
-    """The shared object a capture port is given before the episode that will consume its frames exists (CP-2857)."""
+    """The shared object a capture port is given before the episode that will consume its frames exists."""
     import numpy as np
 
     sink = EpisodeSink()
@@ -578,7 +578,7 @@ def test_an_episode_sink_takes_frames_only_while_an_episode_is_open(tmp_path):
 
 
 def test_the_capture_and_the_run_together_supply_exactly_the_thirteen_keys():
-    """The last piece of the wiring: where the audit's thirteen names actually come from (CP-2857/CP-2837)."""
+    """The last piece of the wiring: where the audit's thirteen names actually come from."""
     captured = {"world": {"step": 7}, "scene": {"objects": []}, "contact": {"held": True},
                 "reference": {"time_s": 2.5, "source": "mujoco", "positions": [0.1, 0.2, 0.3]},
                 "source_stamps_s": {"head": 2.4, "wrist": 2.4}}
@@ -598,7 +598,7 @@ def test_the_capture_and_the_run_together_supply_exactly_the_thirteen_keys():
 
 
 def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
-    """The boundary that already exists in the episode's own process (CP-2861)."""
+    """The boundary that already exists in the episode's own process."""
     from so101_demo.ports.cup_scene_observation import CupSceneObservation
     from so101_demo.ports.evidence import PoseEvidence
 
@@ -627,7 +627,7 @@ def test_the_observation_plus_the_run_supplies_the_thirteen_names_too():
 
 
 def test_one_instant_becomes_one_row_audit_without_a_robot(tmp_path):
-    """RED first: the per-instant step composes the row from an observation, and a fake observation is enough (CP-2862)."""
+    """RED first: the per-instant step composes the row from an observation, and a fake observation is enough."""
     from so101_demo.act.episode_assembly import record_instant
     from so101_demo.ports.cup_scene_observation import CupSceneObservation
     from so101_demo.ports.evidence import PoseEvidence

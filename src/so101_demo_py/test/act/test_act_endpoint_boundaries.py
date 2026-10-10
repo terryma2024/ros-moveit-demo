@@ -1,4 +1,4 @@
-"""E2: the initial endpoint sample must come from after the reset and before the gripper dispatch (CP-2620)."""
+"""E2: the initial endpoint sample must come from after the reset and before the gripper dispatch."""
 
 import json
 
@@ -15,7 +15,7 @@ def _sealed(tmp_path):
     """Run one episode through the fake port with a real audit, and return the rows it wrote."""
 
     # the audit's identity is built from the request the run will receive, so the two agree by construction
-    # rather than by relaxing the identity check the audit performs (CP-2621)
+    # rather than by relaxing the identity check the audit performs
     tmp_path.mkdir(parents=True, exist_ok=True)   # as the audit suite's own writer helper does
     request = boundary_request()
     audit_scope = dict(scope(), mode="formal")

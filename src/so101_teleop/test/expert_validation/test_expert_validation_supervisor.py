@@ -416,7 +416,7 @@ def test_the_runner_is_spawned_with_an_interpreter_that_has_its_dependencies(tmp
 
 
 # --------------------------------------------------------------------------------------
-# Task 9: a retry is admitted in one transaction, spawned once, and never replayed
+# a retry is admitted in one transaction, spawned once, and never replayed
 # --------------------------------------------------------------------------------------
 
 from so101_teleop.expert_validation.execution_context import (  # noqa: E402
@@ -648,7 +648,7 @@ def _production_context_for(candidate, request):
 
 
 # --------------------------------------------------------------------------------------
-# Task 11 closure: the candidate first-pass start runs on an issued context, once
+# the candidate first-pass start runs on an issued context, once
 # --------------------------------------------------------------------------------------
 
 

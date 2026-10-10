@@ -1,4 +1,4 @@
-"""Task 12 CLI: refuse before writing anything, then train one owned job."""
+"""CLI: refuse before writing anything, then train one owned job."""
 
 import hashlib
 import importlib.util

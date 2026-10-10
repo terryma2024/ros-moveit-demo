@@ -1,4 +1,4 @@
-"""Task 14 CLI: compose a search-to-ACT session and submit only its OperationSpec.
+"""CLI: compose a search-to-ACT session and submit only its OperationSpec.
 
 The command builds the composition — which is where the mode gates and the artifact checks live — and then
 hands a spec to the unified service. It never touches a controller, a socket or an inference process itself.

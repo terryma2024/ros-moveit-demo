@@ -1,4 +1,4 @@
-"""Task 12: training runs only past the gates, and always leaves a terminal state."""
+"""Training runs only past the gates, and always leaves a terminal state."""
 
 import hashlib
 import json

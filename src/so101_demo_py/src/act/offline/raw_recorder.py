@@ -1,4 +1,4 @@
-"""The record-only process of the offline pilot (CP-3428).
+"""The record-only process of the offline pilot.
 
 It writes every source an episode needs, losslessly, and does nothing else: no alignment, no association, no QC, no verdict. It
 never commands, cancels, pauses or resets anything and the Teacher does not know it exists.
@@ -31,7 +31,7 @@ from pathlib import Path
 READY_SCHEMA = "SO101_RAW_RECORDER_READY"
 STATS_SCHEMA = "SO101_RAW_RECORD_STATS"
 NODE_NAME = "so101_raw_recorder"
-#: CP-3517: how `stop` ends the bag process. A SIGINT that the recorder does not act on (two installed demo gates: its log ended at
+#: How `stop` ends the bag process. A SIGINT that the recorder does not act on (two installed demo gates: its log ended at
 #: "Topics discovery started" and nothing followed for 15 s) is re-sent every STOP_SIGINT_RESEND_S, a SIGTERM follows at STOP_SIGTERM_AT_S,
 #: and the process group is killed at STOP_SIGKILL_AT_S (RAW_BAG_CLOSE_TIMEOUT). The tail of the recorder log is kept on a timeout.
 STOP_SIGINT_RESEND_S = 2.0
@@ -60,7 +60,7 @@ CORE_TOPICS = ("/clock", "/head_camera/color", "/wrist_camera/color", "/so101/si
 DEEP_RELIABLE = {"/so101/simulation/physics_step_chunks": 1000, "/so101/simulation/robot_contacts": 10000,
                  "/arm_controller/controller_state": 20000, "/gripper_controller/controller_state": 20000,
                  "/neck_controller/controller_state": 20000, "/clock": 20000,
-                 # CP-3494: a single wrist camera_info was lost on the transport layer in two runs of the second v2 round (rosbag2's
+                 # A single wrist camera_info was lost on the transport layer in two runs of the second v2 round (rosbag2's
                  # default queue is 10 deep): camera_info is tiny and the images are 10 Hz, so a deep queue costs memory only
                  # while the recorder falls behind
                  "/head_camera/camera_info": 100, "/wrist_camera/camera_info": 100,
@@ -154,7 +154,7 @@ class SceneReadSidecar:
         self._thread = None
         self.count = 0
         self.errors = 0
-        #: CP-3489: reads are written to the sidecar file from the first one, but only published on the topic once the bag recorder has
+        #: Reads are written to the sidecar file from the first one, but only published on the topic once the bag recorder has
         #: matched its subscription (a read published earlier is not in the bag, which the bag/sidecar count would show as a loss)
         self._publish_ready = threading.Event()
         self.published = 0
@@ -176,7 +176,7 @@ class SceneReadSidecar:
 
     def _fsync_loop(self, descriptor: int) -> None:
         """Makes the sidecar durable off the read loop: an `fsync` on a busy filesystem takes up to hundreds of milliseconds, and the
-        read loop (about 20 Hz, and the Recorder's causal join needs every read) must not wait for it (CP-3489)."""
+        read loop (about 20 Hz, and the Recorder's causal join needs every read) must not wait for it."""
         while True:
             self._fsync_wanted.wait()
             self._fsync_wanted.clear()
@@ -324,7 +324,7 @@ class RawRecorder:
                                                                             received, profile, raw=True)
             recording = any(info.node_name == self.node_name for info in self._probe.get_subscriptions_info_by_topic(topic))
             if recording and topic == SCENE_READS_TOPIC and self._sidecar is not None:
-                self._sidecar.enable_publishing()       # the bag has matched: reads are published from now on (CP-3489)
+                self._sidecar.enable_publishing()       # the bag has matched: reads are published from now on
             count = self._received.get(topic, 0)
             if recording and topic not in self._matched_counts:
                 self._matched_counts[topic] = count

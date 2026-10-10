@@ -1,4 +1,4 @@
-"""Task 11A: wave partitioning is ordered, complete and non-duplicating."""
+"""Wave partitioning is ordered, complete and non-duplicating."""
 
 from pathlib import Path
 

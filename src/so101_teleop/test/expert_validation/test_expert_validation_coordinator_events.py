@@ -175,7 +175,7 @@ def test_reader_verifies_real_sealed_directory_manifest_and_merges_deltas(
 
 
 # --------------------------------------------------------------------------------------
-# Task 5: a projection source adapts and verifies, it never merges payload.delta
+# a projection source adapts and verifies, it never merges payload.delta
 # --------------------------------------------------------------------------------------
 
 
@@ -227,7 +227,7 @@ def test_projection_source_verifies_and_passes_deltas_through_unchanged(tmp_path
 
 
 # --------------------------------------------------------------------------------------
-# Task 5: one journal has exactly one format; the canonical path never reads a delta
+# one journal has exactly one format; the canonical path never reads a delta
 # --------------------------------------------------------------------------------------
 
 

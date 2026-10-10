@@ -157,7 +157,7 @@ def test_committed_release_time_cannot_drift_within_one_epoch(frozen_scene):
         source.ready(at_s + .004)
 
 
-# ---- CP-3489: a read concurrent with an apply may show the scene before or after it ----------------------------------------------
+# ---- a read concurrent with an apply may show the scene before or after it ----------------------------------------------
 
 def _concurrent_next(values, geometry, *, begin_offset_ns=-8_000_000, end_offset_ns=12_000_000):
     """A synthetic admitted association whose apply overlaps the row's planning read (only the fields the rule reads)."""
@@ -237,7 +237,7 @@ def test_the_concurrency_rule_itself():
 
 
 def test_the_offline_hook_finds_the_teachers_overlapping_applies_in_the_tracker():
-    """CP-3489: the Teacher's applies are in the scene-operation tracker, not among the Recorder's own reads; an overlapping apply with
+    """The Teacher's applies are in the scene-operation tracker, not among the Recorder's own reads; an overlapping apply with
     an admitted association is offered, one without is `pending`, a failed or disjoint one is ignored."""
     from types import SimpleNamespace
 

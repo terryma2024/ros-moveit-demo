@@ -1,4 +1,4 @@
-"""Task 13 CLI: one reply per request, from a bundle that verifies, into a file that does not exist."""
+"""CLI: one reply per request, from a bundle that verifies, into a file that does not exist."""
 
 import hashlib
 import importlib.util

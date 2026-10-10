@@ -154,7 +154,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
         raise ValueError('NATIVE_QC_TERMINAL_ORDER_INVALID')
     # ---- boundary order and lease clocks ----------------------------------------------------------------------
     clocks = [boundary_clock(boundaries[stage]) for stage in ('verified_reset', 'capture_start', 'initial_capture')]
-    # CP-3425: the Teacher starts after the capture is running with its initial boundary committed (the orchestrator waits for
+    # The Teacher starts after the capture is running with its initial boundary committed (the orchestrator waits for
     # CAPTURING): its `reset_complete` event comes after the initial capture and before its first command
     teacher_start = by_type['reset_complete'][0]
     clocks += [dict(sim_time_ns=teacher_start['sim_time_ns'], begin_monotonic_ns=teacher_start['monotonic_ns'],
@@ -165,7 +165,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
         if (before['end_monotonic_ns'] > after['begin_monotonic_ns']
                 or before['sim_time_ns'] > after['sim_time_ns']):
             raise ValueError('NATIVE_QC_BOUNDARY_ORDER_INVALID')
-    # ---- the source alignments the rows rest on (CP-3425): the empty scene before the capture, the SETUP scene before the
+    # ---- the source alignments the rows rest on: the empty scene before the capture, the SETUP scene before the
     # first command. The Teacher's later scene changes (attach, detach) are checked row by row against their own alignments.
     alignments = [item['payload']['association'] for item in events if item['kind'] == 'source_alignment']
     initial = [item for item in alignments if item['operation'] == 'initial']
@@ -233,7 +233,7 @@ def stop_native_step(raw_steps, stop_clock):
 
     The stamp is a received /clock value, so physics can already be a step ahead of it when the stamp is taken (bag 429dbf50: step
     116.548 s ended 46 us before a receipt that read 116.546 s). A step ahead of the stamp is not the state the Teacher confirmed
-    and is not stale evidence either; the receipt order stays exact (CP-3449)."""
+    and is not stale evidence either; the receipt order stays exact."""
     stamp_ns = stop_clock['sim_time_ns']
     before_stop = [sample for sample in raw_steps
                    if sample['clock_interval_end_monotonic_ns'] <= stop_clock['begin_monotonic_ns']
@@ -264,7 +264,7 @@ def reference_frames_needed_ns(instant_ns, period_ns):
 
 
 def verify_reference_continuity(report, *, identity, window):
-    """The reference must be continuous AT EVERY LABEL INSTANT; gaps that touch no label instant are diagnostic (CP-3439).
+    """The reference must be continuous AT EVERY LABEL INSTANT; gaps that touch no label instant are diagnostic.
 
     The arm and gripper `controller_state` frame at each row's label instant (`t + 0.1 s`) and the frames one controller period
     either side must exist. A gap is a consecutive per-controller stamp step other than one controller period; it removes the

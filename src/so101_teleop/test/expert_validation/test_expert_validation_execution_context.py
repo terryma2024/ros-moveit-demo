@@ -1,4 +1,4 @@
-"""Task 9: the two execution contexts, and the profile a restored campaign really ran.
+"""The two execution contexts, and the profile a restored campaign really ran.
 
 The design has no resource-measurement authorization: a live run is either a bounded candidate run
 or an installed production run, each bound to a task/dispatch or a service session, a profile and
@@ -524,7 +524,7 @@ def test_candidate_context_replay_is_refused_after_its_command_is_consumed(tmp_p
 
 
 # --------------------------------------------------------------------------------------
-# Task 11 closure: the candidate context has a real issuance entry point
+# the candidate context has a real issuance entry point
 #
 # The gap Task 11 found: `issue_candidate_context()` authorized the retry endpoint only and
 # had no HTTP route and no CLI caller, so no first-pass candidate run could be authorized.

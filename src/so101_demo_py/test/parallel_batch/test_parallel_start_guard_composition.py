@@ -1,6 +1,6 @@
 """The real composition: one epoch-scoped start guard covering the CLI and the allocator.
 
-Task 5 of the lightweight start guard plan. These tests drive the installed composition and
+Part of the lightweight start guard plan. These tests drive the installed composition and
 the real helper; the only thing they replace is the *lowest* port (the probe process port for
 the unreapable branch), never the admission decision itself.
 """

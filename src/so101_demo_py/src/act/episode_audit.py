@@ -70,7 +70,7 @@ _FRAME_KINDS = ("arm", "gripper")
 # the ratified source has five ordered arm joints and one gripper joint
 _FRAME_SIZES = {"arm": 5, "gripper": 1}
 #: the registered joint names each kind's frame must carry, in the action's own order — validated once the
-#: fixtures that predate the rule carry them (CP-2261)
+#: fixtures that predate the rule carry them
 _FRAME_JOINT_NAMES = {"arm": ("1", "2", "3", "4", "5"), "gripper": ("6",)}
 # ratified amendment A.1: the immutable publication lives beside the value evaluated for the
 # record's target instant, and the projection map selects the evaluated value
@@ -139,13 +139,13 @@ _PHYSICS_OBSERVATION_FIELDS = frozenset({
     "planning_scene_observation", "controller_feedback"})
 _SCENE_OBSERVATION_FIELDS = frozenset({"scene_revision", "attached_objects", "world_object_ids",
                                        "is_diff", "sim_time_s", "source"})
-# the eighth key is the owner's amendment (CP-2217, F13): the source-side instant the record was evaluated
+# the eighth key is the owner's amendment: the source-side instant the record was evaluated
 # from, beside `sim_time_s`, which stays the instant the record is *for* and the join its parent observation uses
 _FEEDBACK_FIELDS = frozenset({"controller", "commanded_positions", "measured_positions",
                               "measured_velocities", "joint_names", "status_sequence", "sim_time_s",
                               "source_sim_time_s"})
 _FEEDBACK_CONTROLLERS = ("arm", "gripper")
-#: how far a feedback record's source instant may sit from the instant it is for (CP-2217)
+#: how far a feedback record's source instant may sit from the instant it is for
 _FEEDBACK_SOURCE_SKEW_S = 0.1
 # one contact record, closed exactly as the registered contract defines it
 _CONTACT_FIELDS = frozenset({"robot_geom", "object_body", "normal_force_n", "signed_distance_m"})
@@ -243,7 +243,7 @@ def _feedback_ok(record) -> bool:
     names = record["joint_names"]
     if (not isinstance(names, list) or not names
             or any(not isinstance(name, str) or not name for name in names)
-            # T3-F13: the length alone let any name list through; the registered names and dimensions of the
+            # the length alone let any name list through; the registered names and dimensions of the
             # controller that produced the record are what make the vectors comparable to the action
             or tuple(names) != _FRAME_JOINT_NAMES.get(record["controller"])):
         return False
@@ -256,7 +256,7 @@ def _feedback_ok(record) -> bool:
             or not math.isfinite(record["sim_time_s"]) or record["sim_time_s"] < 0):
         return False
     # the source instant must be a real instant, and it must belong to the instant the record is for: a source
-    # stamp far from the join would mean the record claims measurements it did not take then (CP-2217)
+    # stamp far from the join would mean the record claims measurements it did not take then
     source = record["source_sim_time_s"]
     if (isinstance(source, bool) or not isinstance(source, (int, float))
             or not math.isfinite(source) or source < 0):
@@ -287,7 +287,7 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
         names = frame["joint_names"]
         if (not isinstance(names, list) or len(names) != _FRAME_SIZES[kind]
                 or any(not isinstance(name, str) or not name for name in names)
-                # T3-F1: the count alone let any six-entry map permute dimensions, so the names must be the
+                # the count alone let any six-entry map permute dimensions, so the names must be the
                 # registered ones in their registered order — the action the projection is supposed to carry
                 or tuple(names) != _FRAME_JOINT_NAMES[kind]):
             # the registered source publishes exactly five arm joints and one gripper joint
@@ -366,7 +366,7 @@ def _reference_frames_ok(record, *, history: dict | None = None) -> None:
             raise ValueError("AUDIT_SCHEMA_INVALID")
     if list(record["positions"]) != list(projected):
         raise ValueError("AUDIT_SCHEMA_INVALID")
-    # T3-F1: the map must be the canonical six-dimension action — the arm's five in their registered order, then
+    # the map must be the canonical six-dimension action — the arm's five in their registered order, then
     # the gripper's one — because a permuted map with a correspondingly permuted projection proved nothing about
     # the order the controller actually receives
     if mapping != ([["arm", index] for index in range(_FRAME_SIZES["arm"])]
@@ -425,7 +425,7 @@ def _physics_observation_typed(observation, *, kind: str) -> bool:
                     or any(not _feedback_ok(entry) for entry in value)
                     or any(entry["sim_time_s"] != observation["simulation_time_s"]
                            for entry in value)
-                           # T3-F13 (eighth verdict): an arm-only collection, or one repeating a kind, was accepted;
+                           # an arm-only collection, or one repeating a kind, was accepted;
                            # the action has two controllers, so exactly one record for each is the coverage required
                            or sorted(entry["controller"] for entry in value)
                            != sorted(_FEEDBACK_CONTROLLERS)):
@@ -483,7 +483,7 @@ def _event_identity_ok(event_identity, episode_identity, *, release_epoch: int |
     if type(epoch) is not int or epoch < 0:
         return False
     if release_epoch is None:
-        # T3-F3(a): the first event names the episode's own initial release epoch, the field `_IDENTITY_REQUIRED`
+        # the first event names the episode's own initial release epoch, the field `_IDENTITY_REQUIRED`
         # makes mandatory; the two constants remain only as the fallback for an identity declaring none
         initial = episode_identity.get("release_epoch")
         if type(initial) is int and initial >= 0:
@@ -601,18 +601,18 @@ def _window_ok(window, *, mode: str) -> bool:
     schedule = window["source_schedule"]
     if (not isinstance(schedule, dict) or not schedule
             or any(not isinstance(name, str) or not name or not isinstance(instants, list)
-                   # T3-F11: an empty list satisfied every instant and gap test vacuously, so a schedule
+                   # an empty list satisfied every instant and gap test vacuously, so a schedule
                    # naming no instant for a stream is not a schedule
                    or not instants
                    or any(not _number(instant) for instant in instants)
                    or instants != sorted(instants)
                    for name, instants in schedule.items())
-                # T3-F11: every claimed instant existed, but a shortened or duplicated schedule hid real
+                # every claimed instant existed, but a shortened or duplicated schedule hid real
                 # coverage, so the list must be strictly increasing — no repeats, nothing out of order
                 or any(instants != sorted(set(instants)) for instants in schedule.values())):
         # a schedule is a chronological list per stream, not a set in arbitrary order
         return False
-    # OWNER DECISION (CP-2217): `cadence_s`, `streams_required` and `permitted_gaps_s` are **episode
+    # OWNER DECISION: `cadence_s`, `streams_required` and `permitted_gaps_s` are **episode
     # parameters**, not frozen inputs. F11 asked for them to be checked against the frozen policy, but the
     # frozen input roles (act/diagnostic_episode_inputs.py:37) define no window policy, so the audit checks them for
     # internal consistency here and, through `_window_matches_observed`, against what the episode observed.
@@ -638,7 +638,7 @@ def _window_ok(window, *, mode: str) -> bool:
         return False
     if any(not (start - _TOLERANCE_S <= gap[0] and gap[1] <= end + _TOLERANCE_S)
            for gap in window["permitted_gaps_s"]):
-        # T3-F11: the negation must cover the whole conjunction; without the parentheses a gap that begins
+        # the negation must cover the whole conjunction; without the parentheses a gap that begins
         # inside the window and ends outside it satisfied `not A and B` and was accepted
         # a permitted gap outside the collection window is not a gap this episode could have had
         return False
@@ -761,9 +761,9 @@ def _capture_window_matches_observed(window, row_times, acquisitions, *, mode):
 
 
 def _window_matches_observed(window: dict, row_times, acquisitions, physics_times=()) -> bool:
-    """T3-F11: one predicate for the window, shared by the seal and the readback."""
+    """One predicate for the window, shared by the seal and the readback."""
 
-    """T3-F11: a formal window must describe the rows and acquisitions this audit actually holds."""
+    """A formal window must describe the rows and acquisitions this audit actually holds."""
 
     if window["outcome"] == "complete":
         if not row_times or abs(window["label_cutoff_s"] - max(row_times)) > _TOLERANCE_S:
@@ -772,10 +772,10 @@ def _window_matches_observed(window: dict, row_times, acquisitions, physics_time
     elif row_times:
         # an outcome other than complete may not accompany labelled rows
         return False
-    # T3-F11: the endpoints are compared with the physics history they claim to summarise — the command is
+    # the endpoints are compared with the physics history they claim to summarise — the command is
     # issued before the physics moves and the end must cover the last row
     if physics_times:
-        # T3-F11 (eighth verdict): the endpoints are DERIVED from the physics history rather than merely enclosing
+        # the endpoints are DERIVED from the physics history rather than merely enclosing
         # it - a window claiming 1.2 while every row ends at 1.1 was accepted by an inequality and is not now
         if (abs(window["first_command_s"] - min(physics_times)) > _TOLERANCE_S
                 or abs(window["physics_end_s"] - max(physics_times)) > _TOLERANCE_S):
@@ -783,7 +783,7 @@ def _window_matches_observed(window: dict, row_times, acquisitions, physics_time
     schedule = window["source_schedule"]
     if set(window["streams_required"]) - set(schedule):
         return False
-    # T3-F11: the reverse relation — every instant a stream claims must be an instant the episode actually acquired
+    # the reverse relation — every instant a stream claims must be an instant the episode actually acquired
     # for that stream, not only its endpoints, so a shortened or padded schedule cannot describe coverage it lacks
     acquired: dict = {}
     for row in acquisitions.values():
@@ -815,7 +815,7 @@ def _window_matches_observed(window: dict, row_times, acquisitions, physics_time
                     for start, end in window["permitted_gaps_s"]):
                 # a gap beyond the cadence must be one the frozen inputs permit
                 return False
-    # T3-F11: the collection window is the episode's own claim about what it observed, so its endpoints must be
+    # the collection window is the episode's own claim about what it observed, so its endpoints must be
     # the observed extremes rather than numbers the caller chose; each stream's held stamps are that evidence
     observed_stamps = [value for values in held.values() for value in values if value is not None]
     if not observed_stamps:
@@ -853,7 +853,7 @@ class EpisodeAuditWriter:
                                   if self._execution_model is not None else None)
         # the episode's directory is owned by the recorder, which creates it and refuses to reuse one; the audit
         # writer roots at that same directory so its manifest sits where verification resolves it, and accepts an
-        # existing root for exactly that reason - it still refuses anything that is not a directory (CP-2773)
+        # existing root for exactly that reason - it still refuses anything that is not a directory
         if self.root.exists():
             if not self.root.is_dir():
                 raise ValueError("AUDIT_ROOT_INVALID")
@@ -1230,8 +1230,8 @@ class EpisodeAuditWriter:
             # F5: one shared predicate governs both sides - the writer's coverage is the same requirement the
             # readback re-checks (which also names the accepted reference an inline check used to miss) - and
             # the F3 tie stays beside it
-            # T3-F3 (eighth verdict): the episode's declared initial epoch is not a transition, so the writer's own
-            # tie exempts it exactly as the readback's does (CP-2311) - the two must agree, or a stream the readback
+            # the episode's declared initial epoch is not a transition, so the writer's own
+            # tie exempts it exactly as the readback's does - the two must agree, or a stream the readback
             # accepts cannot be sealed at all
             _initial = self.identity.get("release_epoch")
             if type(_initial) is not int:
@@ -1259,7 +1259,7 @@ class EpisodeAuditWriter:
                 window, self._row_times, self._acquisitions, mode=self.scope["mode"]):
             raise ValueError("AUDIT_WINDOW_INVALID")
         if self.scope.get("mode") == "formal" and not self._window_matches_rows(window):
-            # T3-F11: and it must describe the rows and acquisitions this audit actually holds
+            # and it must describe the rows and acquisitions this audit actually holds
             raise ValueError("AUDIT_WINDOW_INVALID")
         for name, stream in self._streams.items():
             stream.flush()
@@ -1283,7 +1283,7 @@ class EpisodeAuditWriter:
     # -- helpers -----------------------------------------------------------
 
     def _window_matches_rows(self, window: dict) -> bool:
-        # T3-F11 (eighth verdict): the readback passed the physics history and the seal did not, so the endpoint
+        # the readback passed the physics history and the seal did not, so the endpoint
         # comparison was inert exactly where it mattered; both boundaries now supply the same arguments
         return _window_matches_observed(
             window, self._row_times, self._acquisitions,
@@ -1407,7 +1407,7 @@ def verify_audit_manifest(path: Path) -> dict:
                 mode=json.loads((audit / "source.json").read_bytes())["mode"]):
             raise ValueError("AUDIT_WINDOW_INVALID")
     if formal_window:
-        # T3-F11: the seal's window-to-observed predicate is repeated here, from the rows this readback holds,
+        # the seal's window-to-observed predicate is repeated here, from the rows this readback holds,
         # so an invented in-range instant cannot pass by satisfying `_window_ok` and the coverage gate alone
         _bound_rows = _records(audit / "row-bindings.jsonl", _ROW_FIELDS, "AUDIT_ROW_INVALID")
         _acquisition_rows = _records(audit / "acquisitions.jsonl", _ACQUISITION_FIELDS,
@@ -1462,7 +1462,7 @@ def _hex64(value) -> bool:
 
 #: the prescribed lifecycle a formal audit must cover, in order. Declared here rather than imported from the
 #: runner so the audit stays readable without it; `test_the_audit_names_the_runner_s_phases` asserts equality, so
-#: the two cannot drift apart silently (F5/CP-2147).
+#: the two cannot drift apart silently.
 FORMAL_PHASES = (
     "SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT",
     "ALIGN", "RELEASE", "RADIAL_RETREAT", "FINAL_CHECK",
@@ -1511,7 +1511,7 @@ def _formal_coverage_ok(audit: Path) -> bool:
     epochs = [row["release_epoch"] for row in physics]
     # F5 (eighth verdict): the episode's own declared initial epoch is exempt from transition naming — only the
     # epochs a release actually entered must be named — while the sequence itself never goes backwards
-    # T3-F5 (eighth verdict): the declared initial epoch lives in the manifest once sealed, but at SEAL time that
+    # the declared initial epoch lives in the manifest once sealed, but at SEAL time that
     # file does not exist yet and the episode's own identity is what states it - so read whichever is present, or
     # every positive epoch looks unnamed and a real run cannot be sealed at all
     initial = None
@@ -1641,7 +1641,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         last_time = row["sim_time_s"]
         target = _reference_target_s(row["sim_time_s"])
         if type(row["reference_sequence"]) is not int:
-            # T3-F3 residual: the writer admits an exact integer for this binding, and Python's key equality
+            # residual case: the writer admits an exact integer for this binding, and Python's key equality
             # would let `true` or `1.0` resolve integer key 1 on readback, so the type is required on both sides
             raise ValueError("AUDIT_ROW_INVALID")
         named = references.get(row["reference_sequence"])
@@ -1768,7 +1768,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
         if raw_physics_previous is None:
             raise ValueError("AUDIT_PHYSICS_RAW_INCOMPLETE")
     # F3: on a formal audit every release step the stream takes must be named by a release event - the
-    # writer's own tie (CP-2137) restated here, because a re-signed stream never passes through the writer.
+    # writer's own tie restated here, because a re-signed stream never passes through the writer.
     # A diagnostic audit is out of scope, exactly as it is for that gate.
     _source = audit / "source.json"
     _formal_mode = False
@@ -1783,7 +1783,7 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             _step = _row["identity"].get("release_epoch")
             if type(_step) is int:
                 _named[_step] = _named.get(_step, False) or _row["kind"] == "release"
-        # T3-F3 (eighth verdict): the episode's declared initial epoch is not a transition and is not required to
+        # the episode's declared initial epoch is not a transition and is not required to
         # be named by a release event; every later epoch still is, which is what a re-signed stream must not skip
         try:
             _initial = json.loads((audit / "audit-manifest.json").read_bytes())["identity"]["release_epoch"]

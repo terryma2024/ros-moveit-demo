@@ -1,4 +1,4 @@
-"""The data side of one Teacher attempt after the switch to raw-log recording (CP-3456, plan section 5 P3).
+"""The data side of one Teacher attempt after the switch to raw-log recording.
 
 Before the Teacher: one record-only process (`ros2 bag record`, owned by `PilotRecording`) is started and waited for a bounded time;
 the Teacher starts whatever happened to it. After the Teacher ended: the bag is closed, the offline processor builds the sealed
@@ -355,7 +355,7 @@ class OfflineCollection:
         if (result["status"] != "VALID" or report is None or report.get("verdict") != "VALID" or qc.get("status") != "PASS"
                 or not qc_output.is_file()):
             return RecorderOutcome("INVALID", "OFFLINE_PROCESSOR_RESULT_NOT_VALID_AND_QC_PASS", facts)
-        # CP-3459 (re-review R1): VALID needs the fresh QC's memo to cover these exact files. Without it the Worker's seal and the
+        # VALID needs the fresh QC's memo to cover these exact files. Without it the Worker's seal and the
         # Coordinator's commit would recompute the QC in full (about 290 s each, the Coordinator's twice under its lock), after the
         # processing budget was spent, and the Teacher's result would die at seal with RESULT_AFTER_LEASE_DEADLINE. Data that cannot
         # be sealed in time is INVALID data, not a lost Teacher result.

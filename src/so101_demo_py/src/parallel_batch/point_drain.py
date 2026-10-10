@@ -1,6 +1,6 @@
 """The campaign body drains the durable shared queue: one lease, one point (design section 8).
 
-Task 11's live gate found the gap this module closes. The campaign reported a pass while every
+The live campaign gate found the gap this module closes. The campaign reported a pass while every
 Worker refused to execute anything: the lease document the campaign wrote carried no
 `points_path`/`points_sha256`, so `single_point_input.pick_place_request` answered
 `{"requested": False, "error": "POINTS_PATH_MISSING"}` and the durable queue was never seeded from
@@ -789,7 +789,7 @@ def commit_attempt(*, queue: DurablePointQueue, binding, attempt: PointAttempt,
                    lease: PointLease | None, journal=None) -> PointAttempt:
     """Commit one attempt: the durable business result, or the honest infrastructure record.
 
-    A business outcome is committed only after the Task 3 durability object accepts the chain
+    A business outcome is committed only after the durability object accepts the chain
     (station ready, MoveIt/physics decision, evidence manifest, cleanup ownership, matching lease
     identity). Everything else is journalled as an infrastructure failure and never reaches the
     queue, so it can never be mistaken for an executed point.

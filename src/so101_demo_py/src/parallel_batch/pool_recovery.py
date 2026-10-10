@@ -1,6 +1,6 @@
 """Whole-pool rebuild after a Broker failure.
 
-Task 9 of the macOS MPS / private IPC plan. The v4 design (section 6.3) refuses to let a surviving
+The macOS MPS / private IPC design (section 6.3) refuses to let a surviving
 Worker discover or validate a new endpoint, so a Broker failure is recovered by rebuilding the
 entire W2 pool in a fixed order:
 

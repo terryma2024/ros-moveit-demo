@@ -1,6 +1,6 @@
 """The retired measurement entry point: it reports retirement and measures nothing.
 
-Task 6 of the lightweight start guard plan. The certified measurement runtime is deleted;
+Part of the lightweight start guard plan. The certified measurement runtime is deleted;
 the console entry stays registered so an operator who still types it gets an explicit
 retirement error instead of a silently different mode.
 """

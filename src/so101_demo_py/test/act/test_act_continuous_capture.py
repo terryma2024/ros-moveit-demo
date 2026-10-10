@@ -1,4 +1,4 @@
-"""Task 2: continuous, causal capture at the 10 Hz sim-time grid.
+"""Continuous, causal capture at the 10 Hz sim-time grid.
 
 The capture owns cadence, causal input selection, the per-row acquisition binding, the pixel-to-
 identity check and the bounded join to the controller reference the run actually accepted at
@@ -114,7 +114,7 @@ def test_a_slow_phase_joins_each_row_to_its_accepted_future_reference():
     rows = capture.recorder.rows
     assert [row["observation"]["sim_time_s"] for row in rows] == [1.0, 1.1]
     # the identifiers belong to the audit's row-bindings records, and the channel the recorder validates is closed at
-    # its own sixteen keys - so they must not appear here (CP-2727/2728)
+    # its own sixteen keys - so they must not appear here
     assert all("head_acquisition_id" not in row["audit"] and "wrist_acquisition_id" not in row["audit"]
                for row in rows)
     assert all(row["audit"]["reference_time_s"]
@@ -792,7 +792,7 @@ def test_the_capture_forwards_the_ratified_packed_reference_shape():
 
 
 def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_path):
-    """E2 correction 2 end to end: the capture seals its audit and the episode carries it (CP-2706..CP-2712).
+    """E2 correction 2 end to end: the capture seals its audit and the episode carries it.
 
     Three things the earlier attempts lacked: the writer and the recorder get different roots (each creates its own
     with exist_ok=False), the frozen scope document is written to a file first, and the recorder is handed that file's
@@ -822,7 +822,7 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     audit_root = tmp_path / "audit-root"
     audit = RecordingAudit(audit_root, scope, identity, {"inputs_sha256": "a" * 64})
     # the recorder cross-checks the scope file against the audit's own payload byte for byte, so the file it is
-    # handed IS the audit's source.json (CP-2713)
+    # handed IS the audit's source.json
     scope_path = audit_root / "audit" / "source.json"
     assert scope_path.is_file()
     recorder = EpisodeRecorder(tmp_path / "episode", session_id="s", attempt_id="attempt-1",

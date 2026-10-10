@@ -116,7 +116,7 @@ class ProductionProducer:
         self.stamps = {stream: [] for stream in self.STREAMS}
         self._pushed = 0
         self._latest = None
-        #: the synchronizer's own audit from the last sample (CP-2842)
+        #: the synchronizer's own audit from the last sample
         self.last_source_audit: dict = {}
 
     def sample_with_audit(self, session_id, attempt_id, at_s):
@@ -145,7 +145,7 @@ class ProductionProducer:
         observation, audit = self.synchronizer.sample_with_audit(session_id, attempt_id, at_s)
         # the full audit is kept here for the extraction path, which needs the receipt mapping as well
         # (`live_evidence_sample`'s `source_received_monotonic_s`); the episode row still records only `source_stamps`,
-        # because the recorder's channel is closed at sixteen keys (CP-2842)
+        # because the recorder's channel is closed at sixteen keys
         self.last_source_audit = dict(audit)
         return observation, {key: value for key, value in audit.items() if key in ("source_stamps",)}
 
@@ -162,12 +162,12 @@ def episode_audit_pair(episode_root: Path) -> tuple[Path, Path]:
     """The manifest and scope a sealed episode's audit lives at, given the episode's own directory.
 
     The audit writer roots at the episode directory and puts its document at `<root>/audit/`, which is where the
-    recorder, `verify_episode_seal` and the endpoint QC all resolve it by convention - measured, not assumed (CP-2768).
+    recorder, `verify_episode_seal` and the endpoint QC all resolve it by convention - measured, not assumed.
     Callers that seal an episode and then hand it to a store or a verifier need exactly this pair, and nothing about it
     is obvious from either side, so it lives here beside the seam rather than in each of them.
 
     Note the phase: a store renames `working/` to `sealed/` when it publishes, so a caller verifying *before* the
-    publish uses the working path and one verifying *after* uses the published one (CP-2777) - this function names the
+    publish uses the working path and one verifying *after* uses the published one - this function names the
     pair inside whichever root it is given, and the caller supplies the right one.
     """
     audit_dir = Path(episode_root) / "audit"
@@ -250,7 +250,7 @@ class LiveSampler:
                        for buffer in self.synchronizer.buffers.values())
 
     def source_received_monotonic_s(self) -> dict:
-        """The receipt times of the last sample, by stream - for the extraction, not for a row (CP-2842)."""
+        """The receipt times of the last sample, by stream - for the extraction, not for a row."""
         return dict(self.last_source_audit.get("source_received_wall_s") or {})
 
 
@@ -348,7 +348,7 @@ class PointEpisode:
         """Push the numeric evidence an instant needs.
 
         `causal_sample` runs over **every** stream buffer and refuses with `INPUT_STALE` when one of them holds no
-        stamp within `max_age_s` (CP-2824), so the two non-camera streams the sampler reads - `arm` for the joint state
+        stamp within `max_age_s`, so the two non-camera streams the sampler reads - `arm` for the joint state
         and `neck` for the yaw - have to be fed alongside the frames even though no acquisition is minted for them.
         """
         session_id = self.identity["session_id"]
@@ -438,7 +438,7 @@ def physical_audit_from_captured(captured: dict, *, reset_epoch: int, release_ep
                                  release_time_s: float, phase: str, controller_state: dict) -> dict:
     """Compose one row's physical audit from a readback capture and the run's own facts.
 
-    The thirteen names the recorder's closed channel requires (CP-2837) come from two places, and this is where they
+    The thirteen names the recorder's closed channel requires come from two places, and this is where they
     meet. Seven ride on the capture itself - a readback capture returns them under its own names, and
     they are the physics and perception facts nothing else can supply: the MuJoCo world, the planning scene, the
     contacts, the source stamps, and the reference the endpoint rule measures against. The other six are facts about
@@ -471,7 +471,7 @@ def physical_audit_from_observation(observation, *, release_epoch: int, release_
                                     controller_state: dict) -> dict:
     """Compose one row's physical audit from the scene observation and the run's own facts.
 
-    `CupSceneObservation` is the boundary that already exists in the episode's own process (CP-2861): it carries the
+    `CupSceneObservation` is the boundary that already exists in the episode's own process: it carries the
     simulator's pose beside MoveIt's, which is exactly the pair the physical-outcome rule wants kept independent - the
     simulator is the fact about where the cup is, the Planning Scene is the collision-planning shadow - plus the
     attachment, the reset epoch and whether the physics is paused. So four of the thirteen names come straight from it,

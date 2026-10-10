@@ -1,4 +1,4 @@
-"""Task 16: summarise runs without letting a search failure disappear from the denominator.
+"""Summarise runs without letting a search failure disappear from the denominator.
 
 The end-to-end rate counts every attempted run, including the ones whose search never locked — a rate that
 quietly excluded them would improve as the search got worse. The locked rate answers the narrower question,

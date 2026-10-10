@@ -1,4 +1,4 @@
-"""Task 3: one raw audit per episode, sealed once and verified by recomputation.
+"""One raw audit per episode, sealed once and verified by recomputation.
 
 The writer is the only writer. A row cannot be bound to an acquisition the audit never saw, one
 acquisition cannot fill two rows, a physics observation from a stale release epoch is refused, an
@@ -77,7 +77,7 @@ def complete_audit(tmp_path):
 
 
 def test_an_episode_that_starts_after_the_first_camera_frames_seals_and_verifies(tmp_path):
-    """CP-3440 A: the window starts after the worker's last pause, so frames the camera adapter numbered before the capture started
+    """The window starts after the worker's last pause, so frames the camera adapter numbered before the capture started
     (sequence 1 ...) are not in the episode: the retained sequence of a camera begins wherever the capture began and must then be
     contiguous. (Pilot bag 031b82c6: the first audited head frame was sequence 2 and the seal failed AUDIT_ACQUISITION_INVALID.)"""
 
@@ -1216,7 +1216,7 @@ def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
                                                 "no_fingertip_contact": True}},
                                    sort_keys=True, separators=(",", ":")))
     # the stream is kept at its initial epoch: this control is about coverage, and a step no release names
-    # would be refused by the tie before that gate is reached (CP-2140)
+    # would be refused by the tie before that gate is reached
     events_bytes = ("\n".join(json.dumps({**json.loads(line),
                                            "identity": {**json.loads(line)["identity"], "lease": _lease(),
                                                         "release_epoch": 1}},
@@ -1231,7 +1231,7 @@ def test_readback_reapplies_the_formal_coverage_gate(tmp_path):
 
 
 def _self_consistent_formal(tmp_path):
-    """A formal episode whose window is derived from the rows and frames it actually holds (CP-2078)."""
+    """A formal episode whose window is derived from the rows and frames it actually holds."""
 
     writer = _formal_writer(tmp_path / "formal")
     minter = AcquisitionMinter()

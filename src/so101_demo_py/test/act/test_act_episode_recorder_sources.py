@@ -339,7 +339,7 @@ def test_the_normal_stop_event_is_the_stop_boundary_the_final_boundary_will_use(
 
 
 def test_a_second_normal_stop_is_still_refused_and_a_marked_non_boundary_stop_is_audited_only():
-    """CP-3440: the Teacher publishes a `normal_stop` for every confirmed stop (three on the pilot bag). The Recorder takes exactly one
+    """The Teacher publishes a `normal_stop` for every confirmed stop (three on the pilot bag). The Recorder takes exactly one
     boundary; a repeat stays an error. The offline processor, which sees the whole bag, marks the stops that are not the final one."""
     sources, _, engine, latched = _prepared()
     host = sources.host

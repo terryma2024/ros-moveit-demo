@@ -1,4 +1,4 @@
-"""Bind the admitted head search model to its measured Task 6 sample."""
+"""Bind the admitted head search model to its measured synchronized-capture sample."""
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def _regular_digest(path: Path, code: str) -> str:
 def validate_head_search_shape(runtime: dict) -> dict:
     """The production head-search shape, in one place, so every entry enforces the same closed document.
 
-    Astra finding 2: the measurement bundle's shared descriptor rule checked the device policy but not the document's
+    the measurement bundle's shared descriptor rule checked the device policy but not the document's
     shape, so a descriptor with an unknown field or a malformed camera/motion block passed a check that the production
     binding would have refused. Both paths now call this.
     """
@@ -144,11 +144,11 @@ def validate_head_search_shape(runtime: dict) -> dict:
         "motion",
     }:
         raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-    # Astra re-review P1-2: the CONTENTS matter, not only the closed key sets. The inner version was lost when this
+    # the CONTENTS matter, not only the closed key sets. The inner version was lost when this
     # function was extracted, and empty or incomplete blocks passed a rule the production binding refused.
     if descriptor["schema_version"] != 1:
         raise ValueError("HEAD_SEARCH_CONFIG_INVALID")
-    # Astra re-review #3, finding 2: presence was never enough. The same closed sets, types and value bounds the
+    # presence was never enough. The same closed sets, types and value bounds the
     # production binding enforced are enforced HERE, so the measurement entry - which consumes the parsed context
     # document - cannot accept a descriptor the binding would refuse. Report pairing stays in the binding.
     detector, camera, motion = (descriptor[name] for name in ("detector", "camera", "motion"))
@@ -367,7 +367,7 @@ def validate_head_search_binding(runtime: dict, calibration: dict) -> HeadSearch
 def validate_head_only_admission(admission):
     """Accept only admission the restricted issuer created for a head-only operation.
 
-    The four operations are the whole surface: a release, a recorder, a retreat or a Task 8 readiness probe
+    The four operations are the whole surface: a release, a recorder, a retreat or a pick-place readiness probe
     cannot be smuggled in through an admission document, and a Teleop acceptance admission must be the
     Teleop head-camera one.
     """
@@ -377,7 +377,7 @@ def validate_head_only_admission(admission):
     from so101_demo.act.head_search_qualification import HEAD_ONLY_OPERATIONS
 
     if not isinstance(admission, Mapping):
-        # the Task 8 measurement protocol issues its own typed admission; a caller's plain object is not one
+        # the pick-place measurement protocol issues its own typed admission; a caller's plain object is not one
         if type(admission).__name__ == "CalibrationMeasurementAdmission":
             return admission
         raise ValueError("HEAD_ONLY_OPERATION_REFUSED: the admission is not a document")

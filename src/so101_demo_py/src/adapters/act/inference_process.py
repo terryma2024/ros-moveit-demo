@@ -1,4 +1,4 @@
-"""Task 13: keep inference off the control loop, and never apply a late answer.
+"""Keep inference off the control loop, and never apply a late answer.
 
 The boundary admits one request at a time. A reply that does not match the in-flight sequence, or that
 arrived later than the configured age allows, is refused rather than applied: an action chunk computed for

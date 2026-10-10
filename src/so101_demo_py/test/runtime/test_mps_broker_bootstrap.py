@@ -1,6 +1,6 @@
 """The MPS Broker bootstrap: import order, one lane, and a ready receipt that means "warm".
 
-Task 8 of the macOS MPS / private IPC plan. The environment checks run against *real* child
+Part of the macOS MPS / private IPC plan. The environment checks run against *real* child
 processes, because "the child refuses before importing torch" is a statement about a process, not
 about a function. The lane and warm-up checks run against a synthetic torch seam so every refusal
 branch is reachable without MPS hardware; the real-device smoke is a separate gate.

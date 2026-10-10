@@ -1,6 +1,6 @@
 """The one trusted production composition for the pick-place calibration measurement driver.
 
-Astra finding 1: the measurement CLI called ``production_driver()`` with no collaborators, so the production path
+the measurement CLI called ``production_driver()`` with no collaborators, so the production path
 could only raise ``PRODUCTION_DRIVER_WIRING_PENDING``. This module is the composition that replaces that dead end.
 
 The seam is at the **external I/O** level, deliberately: tests may supply the stack, detector, controller port,
@@ -21,7 +21,7 @@ from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime
 __all__ = ["build_production_measurement_driver", "PROVIDER_SEAM_ENV"]
 
 PROVIDER_SEAM_ENV = "SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM"
-#: P1-1: the seam a SUCCESS test may use. It names only the two BOTTOM boundaries - the MuJoCo/ROS client and the
+#: the seam a SUCCESS test may use. It names only the two BOTTOM boundaries - the MuJoCo/ROS client and the
 #: detector model - so the stack, clock, controller and phase camera are still the real composition's own.
 BOTTOM_IO_SEAM_ENV = "SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM"
 
@@ -69,7 +69,7 @@ def _bottom_io_from_seam():
 class MeasurementDetectorAdapter:
     """The driver calls its detector as a CALLABLE; the production detector's interface is ``detect(frame, query)``.
 
-    P1-1 named the mismatch: ``pick_place_calibration_measurement_driver`` does ``self.detector({...})`` while ``YoloSegDetector``
+    The mismatch: ``pick_place_calibration_measurement_driver`` does ``self.detector({...})`` while ``YoloSegDetector``
     exposes ``detect(frame, query)`` and declares no ``__call__``. Protocol matching belongs here, where the
     composition already adapts the controller for the same reason - and a missing frame source fails closed by name
     rather than being papered over with an empty image.
@@ -97,7 +97,7 @@ class MeasurementDetectorAdapter:
 def _serializable_detection(result):
     """Translate the detector's REAL return type into a closed document the driver can canonicalize.
 
-    P1-1 (rereview 5): the adapter used to return ``detect()`` unchanged. The production type is
+    the adapter used to return ``detect()`` unchanged. The production type is
     ``core/detection.DetectionBatch`` - a dataclass whose candidates carry ``mask: numpy.ndarray`` - while the driver
     embeds this value in a record it canonicalizes with ``json.dumps``. Tests passed dictionaries, so the mismatch was
     invisible. The translation is explicit and CLOSED: fixed keys, no numpy, and a mask reduced to the two things a
@@ -171,7 +171,7 @@ def _providers_from_seam():
 class PhaseCameraMatrixEvaluator:
     """The production phase-camera evaluator: the admitted matrix, and the GEOMETRY it must be judged against.
 
-    P1-3 (rereview4) named what this class used to be: *"configuration echo, not measurement."* It returned the matrix's
+    This class used to be *"configuration echo, not measurement."* It returned the matrix's
     own occluder names, camera block and hash, with `phase` and `index` as labels - so moving the cup, the camera or an
     occluder could not change the observation, and the driver's `period_s=0.002` was a claim about ONE sample per phase.
 
@@ -199,7 +199,7 @@ class PhaseCameraMatrixEvaluator:
         self.trajectory = trajectory
         self.target = target
         self.occluder_geometry = dict(occluder_geometry or {})
-        # P1-3 (rereview 5): an admitted occluder without geometry must be refused WHEN THE EVALUATOR IS BUILT, not
+        # an admitted occluder without geometry must be refused WHEN THE EVALUATOR IS BUILT, not
         # only when a particular target happens to project - otherwise a measurement can pass through this evaluator
         # with the visibility question silently unanswerable (`_occluded`'s own check still guards the call).
         for name in self.occluders:
@@ -248,7 +248,7 @@ class PhaseCameraMatrixEvaluator:
         """Pinhole projection: world point -> pixel, or None when it is behind the camera."""
 
         camera = self.document.get("camera", {})
-        # P1-3 (rereview 5): the projection is MADE of these three, so inventing them (640/480/1.0 rad) made
+        # the projection is MADE of these three, so inventing them (640/480/1.0 rad) made
         # `in_frame` a statement about the defaults rather than about the admitted camera. Missing is refused by name.
         for name in ("width_px", "height_px", "horizontal_fov_rad"):
             if camera.get(name) is None:
@@ -276,7 +276,7 @@ class PhaseCameraMatrixEvaluator:
         for name in self.occluders:
             geometry = self.occluder_geometry.get(name)
             if not isinstance(geometry, dict):
-                # P1-3 (rereview 5): the matrix ADMITS this occluder, so the visibility decision cannot be made
+                # the matrix ADMITS this occluder, so the visibility decision cannot be made
                 # without its geometry - skipping it silently published a measurement that ignored a named occluder
                 raise ProductionCompositionError(f"PHASE_CAMERA_OCCLUDER_GEOMETRY_REQUIRED: {name}")
             centre = tuple(float(value) for value in geometry.get("position_m", ()))
@@ -320,7 +320,7 @@ class PhaseCameraMatrixEvaluator:
         # (`FORBIDDEN_OUTPUT_TOKENS` contains "visible"), and whether the projection landed inside the image is a
         # measurement result rather than a verdict - so the key is named for what it measures
         #
-        # AND IT MEANS INSIDE THE IMAGE (P1-3, rereview 5): the old code marked every positive-depth projection
+        # AND IT MEANS INSIDE THE IMAGE: the old code marked every positive-depth projection
         # `in_frame=True`, so a cup a metre off-axis - `u` far beyond the width - was reported in frame. The bounds
         # are the admitted camera's own, and the check is on the bbox the sample carries.
         bbox = [u - radius_px, v - radius_px, u + radius_px, v + radius_px]
@@ -357,7 +357,7 @@ class _MonotonicClock:
     """The production clock the driver calls: one method, monotonic, no mapping dressed up as a clock.
 
     The previous `_monotonic_clock()` returned `{"now": time.monotonic}`, which the driver's `self.clock.monotonic()`
-    cannot use - so the composition could not run a measurement at all (Astra re-review #3, finding 1).
+    cannot use - so the composition could not run a measurement at all.
     """
 
     def monotonic(self) -> float:
@@ -411,8 +411,7 @@ class MeasurementControllerAdapter:
     """The callable controller the measurement driver uses, over the admitted head-search state machine.
 
     `HeadSearchController` is a state machine (`reset / tick / advance_deadline / fail`), and the driver calls
-    `self.controller({"anchor": ..., "sample": ...})` once per recorded sample and stores the returned document. Astra
-    re-review #3, finding 1: the composition handed the driver the bare state machine, which is not callable, so the
+    `self.controller({"anchor": ..., "sample": ...})` once per recorded sample and stores the returned document. The composition used to hand the driver the bare state machine, which is not callable, so the
     success path sealed INVALID with "'HeadSearchController' object is not callable".
 
     This adapter is that missing layer. It asks the low-level client for the anchor's current frame and neck feedback,
@@ -453,7 +452,7 @@ def _admitted_controller_config(*, context, descriptor, session_id=None, attempt
                               search_start_rad=None):
     """The controller's 18-field config, from the admitted calibration and this measurement's identity.
 
-    Astra re-review #3, finding 1: the composition used to leave `controller=None` unless a `controller_settings`
+    The composition used to leave `controller=None` unless a `controller_settings`
     argument was supplied - and nothing in the tree ever supplied it, so the production path had no controller at
     all. The config's one real source is `HeadSearchBinding.search_config`, which assembles it from the admitted
     calibration and validates it by constructing the controller; a missing calibration or identity fails closed by
@@ -493,7 +492,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     phase camera from the admitted phase-camera matrix.
     """
 
-    # P1-1 (rereview 5): the formal entry with nothing set in the environment must be able to produce its own bottom
+    # the formal entry with nothing set in the environment must be able to produce its own bottom
     # I/O. Three of the six are facts about the MODEL the run names - where the occluders are, what the camera sees,
     # where the cup is - and the composition builds those itself. The other two are facts about the RUN - the transport
     # to the child, and the trajectory being executed - and the model cannot supply them: it can report where the arm
@@ -531,7 +530,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         occluder_geometry = occluder_geometry or seam.get("occluder_geometry")
 
 
-    # P1-1: the formal entry reaches here with nothing in the environment, and the two facts about the RUN that the
+    # the formal entry reaches here with nothing in the environment, and the two facts about the RUN that the
     # model cannot supply are a transport to the stack and the trajectory being executed. The transport is the
     # production client over the real MuJoCo scene (it starts no child, so a measurement is not a second stack), and
     # the trajectory comes from the admitted phase path below. Neither is stood in for and neither is invented.
@@ -574,7 +573,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     built = (build_detector(options) if yolo_detector_factory is None
              else build_detector(options, yolo_detector_factory=yolo_detector_factory))
     # never None, and never a second source: the config is built from the admitted calibration and this
-    # measurement's identity, and any missing piece raises a named refusal (Astra re-review #3, finding 1)
+    # measurement's identity, and any missing piece raises a named refusal
     config = _admitted_controller_config(context=context, descriptor=descriptor, session_id=session_id,
                                            attempt_id=attempt_id, search_start_rad=search_start_rad)
     if controller_factory is not None:
@@ -586,8 +585,8 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
             raise ProductionCompositionError("PRODUCTION_CONTROLLER_ADAPTER_REQUIRED: io_client")
         controller = MeasurementControllerAdapter(
             HeadSearchController(config), client=io_client, clock=_monotonic_clock(),
-            session_id=session_id, attempt_id=attempt_id)          # P1-1: the parameters, not the context
-    # P1-1: `pick_place_calibration_measurement_driver` calls `self.detector({...})`, while the production detector's interface is
+            session_id=session_id, attempt_id=attempt_id)          # the parameters, not the context
+    # `pick_place_calibration_measurement_driver` calls `self.detector({...})`, while the production detector's interface is
     # `detect(frame, query)` and it declares no `__call__`. Match the protocols here, where the controller is adapted
     # for the same reason - and refuse by name when the frame source the real detector needs is not available.
     detector = built.detector
@@ -602,7 +601,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         # persistent stack is still built, but the adapter is what implements the protocol the driver calls
         "stack": PickPlaceValidationStackAdapter(io_client) if io_client is not None else PersistentTaskStack(),
         "clock": _monotonic_clock(),
-        # P1-3: the phase camera is built with the geometry a measurement actually has - the run's phase path, the
+        # the phase camera is built with the geometry a measurement actually has - the run's phase path, the
         # target it looks for, and the occluders' own geometry - so the replay measures instead of echoing the matrix.
         # Without them the evaluator says ABSENT, and the DRIVER refuses that by name rather than sealing it.
         "phase_camera": PhaseCameraMatrixEvaluator(

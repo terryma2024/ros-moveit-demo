@@ -5,7 +5,7 @@ from pathlib import Path
 from paths import PACKAGE_ROOT
 
 SOURCE = PACKAGE_ROOT / "src"
-QUALITY = "task8_measurement_contract"
+QUALITY = "pick_place_calibration_measurement_contract"
 
 
 def _imports(path: Path) -> set[str]:

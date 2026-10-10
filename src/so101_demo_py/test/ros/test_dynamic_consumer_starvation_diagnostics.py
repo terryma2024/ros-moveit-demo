@@ -164,7 +164,7 @@ def test_late_chunks_are_reported_bounded_with_counters_and_unchanged_verificati
 
 
 def test_a_very_late_chunk_is_admitted_and_its_delay_is_recorded(capsys):
-    """CP-3410: this chunk used to be refused (PHYSICS_RAW_CLOCK_INVALID). It is admitted now; the delay is telemetry."""
+    """This chunk used to be refused (PHYSICS_RAW_CLOCK_INVALID). It is admitted now; the delay is telemetry."""
     now = [10_000_000_000]
     adapter = _adapter(now)
     adapter.accept_message(_chunk())

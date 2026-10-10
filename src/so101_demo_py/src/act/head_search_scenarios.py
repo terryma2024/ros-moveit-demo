@@ -1,6 +1,6 @@
-"""Task 14 Step 3's 40 serial qualification scenarios, their per-scenario journal and their aggregate.
+"""The 40 serial qualification scenarios, their per-scenario journal and their aggregate.
 
-Plan Task 14 Step 3 asks for ten condition classes times four unseen seeds, run **one at a time**:
+The plan asks for ten condition classes times four unseen seeds, run **one at a time**:
 "Legal single cup ends ``TARGET_LOCKED``; two cups end ``TARGET_AMBIGUOUS``; no cup ends
 ``TARGET_NOT_FOUND`` only with complete coverage; interrupted input ends the old attempt fail-closed,
 proves stop, clears tracker/lock state and reacquires under a new attempt. Every scenario has zero wrong
@@ -137,7 +137,7 @@ EVIDENCE_DIR = "scenarios"
 
 #: what this document is evidence of, and the one claim it never makes
 QUALIFICATION_FIT_WARNING = (
-    "these forty scenarios are the plan Task 14 Step 3 evidence and nothing more: they do not by "
+    "these forty scenarios are the plan's scenario evidence and nothing more: they do not by "
     "themselves establish HEAD_SEARCH_QUALIFIED, which the qualifier's aggregate phase owns after the "
     "production smoke and the three anchor restarts have also been evidenced"
 )
@@ -418,7 +418,7 @@ def qualification_scenarios(partitions, *, seeds=None) -> list[dict]:
 def expected_terminals(condition_class: str) -> tuple[str, ...]:
     """The terminal statuses the plan declares for one condition class, and nothing this module chose.
 
-    Plan Task 14 Step 3: "Legal single cup ends ``TARGET_LOCKED``; two cups end ``TARGET_AMBIGUOUS``; no
+    The plan's scenario rule: "Legal single cup ends ``TARGET_LOCKED``; two cups end ``TARGET_AMBIGUOUS``; no
     cup ends ``TARGET_NOT_FOUND`` only with complete coverage". A class the plan does not name refuses,
     because a scenario whose expected outcome is undeclared cannot be judged.
     """
@@ -426,8 +426,8 @@ def expected_terminals(condition_class: str) -> tuple[str, ...]:
     if type(condition_class) is not str or condition_class not in EXPECTED_TERMINALS:
         raise _refuse(
             CAL_TIMING_EVIDENCE_MISSING,
-            f"the condition class {condition_class!r} declares no expected terminal status in plan Task 14 "
-            f"Step 3, so a scenario of that class cannot be judged; the declared classes are "
+            f"the condition class {condition_class!r} declares no expected terminal status in the plan's "
+            f"scenario rule, so a scenario of that class cannot be judged; the declared classes are "
             f"{sorted(EXPECTED_TERMINALS)}",
         )
     return tuple(EXPECTED_TERMINALS[condition_class])
@@ -1731,7 +1731,7 @@ def _ownership_gate(
 ):
     """Claim the run root through the exclusive-ownership gate, and refuse the run when it refuses.
 
-    The gate is Task 14 Step 1's own producer (`so101_demo.act.head_search_ownership`): it reads the fresh
+    The gate is the exclusive-ownership producer (`so101_demo.act.head_search_ownership`): it reads the fresh
     process table, the ROS graph, the GPU compute processes, tmux ownership and the evidence root, binds
     the frozen runtime identity, and writes its receipt into the brand-new root. Nothing runs before it
     passes, and a refusal stops the whole run rather than one scenario.

@@ -1,4 +1,4 @@
-"""Task 13: time alignment, the frozen execution prefix, and the runner's reset contract."""
+"""Time alignment, the frozen execution prefix, and the runner's reset contract."""
 
 import pytest
 

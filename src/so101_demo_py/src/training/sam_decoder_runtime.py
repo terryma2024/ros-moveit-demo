@@ -168,7 +168,7 @@ def run_training(*, output_root: Path, source_commit: str, inputs: Mapping[str, 
         "base_manifest_sha256": inputs["base_manifest_sha256"],
         "train_inventory_sha256": inputs["train_inventory_sha256"],
         "source_manifest_sha256": inputs["source_manifest_sha256"],
-        "recipe": "CP-170-CP-180-CP-184-five-epoch-decoder-only",
+        "recipe": "five-epoch-decoder-only",
     }
     root.mkdir(mode=0o700)
     exclusive_json(root / "training-contract.json", {

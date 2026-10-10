@@ -16,7 +16,7 @@ def main(arguments=None):
     parser.add_argument("--live", type=Path,
                         help="the sealed live cohort; required unless --validation-mode is given, refused with it")
     parser.add_argument("--validation-mode", choices=VALIDATION_MODES,
-                        help="explicit recorded deviation (CP-3389): fit offline, no live cohort, Teacher spot-checks pending")
+                        help="explicit recorded deviation: fit offline, no live cohort, Teacher spot-checks pending")
     parser.add_argument("--metadata", required=True, type=Path)
     parser.add_argument("--proposal", required=True, type=Path)
     options = parser.parse_args(arguments)

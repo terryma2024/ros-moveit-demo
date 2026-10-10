@@ -286,7 +286,7 @@ def main() -> int:
         result["status"] = "PRE_RELEASE_ALIGNMENT_PROVED"
         atomic_write(result)
         print(
-            f"EXP115_ALIGNMENT_OK attempts={aligned.attempt_count} position={aligned.position_m}",
+            f"PLACE_ALIGNMENT_OK attempts={aligned.attempt_count} position={aligned.position_m}",
             flush=True,
         )
         return 0
@@ -294,7 +294,7 @@ def main() -> int:
         result["status"] = "FAILED"
         result["error"] = f"{type(error).__name__}: {error}"
         atomic_write(result)
-        print(f"EXP115_ALIGNMENT_FAILED {type(error).__name__}: {error}", flush=True)
+        print(f"PLACE_ALIGNMENT_FAILED {type(error).__name__}: {error}", flush=True)
         return 1
     finally:
         del subscription

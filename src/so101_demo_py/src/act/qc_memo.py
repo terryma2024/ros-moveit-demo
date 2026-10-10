@@ -32,7 +32,7 @@ MEMO_KIND = "ACT_QC_VERIFICATION_MEMO"
 MEMO_SCHEMA = 2
 #: The modules whose source decides a QC verdict: the QC itself, the audit and seal readers, the physical-audit and native-endpoint
 #: rules, the scene-association rules and the frozen-input verification. A memo written by other source than the reader's own is
-#: not trusted (CP-3457), whatever `QC_RULE_VERSION` says.
+#: not trusted, whatever `QC_RULE_VERSION` says.
 CODE_MODULES = ("episode_qc", "episode_audit", "recorder", "native_endpoints", "raw_physics_chunks", "scene_association",
                 "execution_snapshot", "collection_boundaries", "diagnostic_episode_inputs", "qc_memo", "topic_loss")
 COVERS = ("episode_seal", "physical_audit", "native_qc")

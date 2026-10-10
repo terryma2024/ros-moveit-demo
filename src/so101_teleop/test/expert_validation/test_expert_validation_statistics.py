@@ -308,7 +308,7 @@ def test_adaptive_business_failure_does_not_imply_fallback():
 
 
 # --------------------------------------------------------------------------------------
-# Task 9: a retry appends history and never rewrites first-pass results or statistics
+# a retry appends history and never rewrites first-pass results or statistics
 # --------------------------------------------------------------------------------------
 
 from so101_teleop.expert_validation.statistics import (  # noqa: E402

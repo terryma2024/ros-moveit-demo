@@ -186,7 +186,7 @@ def _record(
         DecisionOutput.AMBIGUOUS: "TARGET_AMBIGUOUS",
     }.get(decision)
     return PredictionRecord(
-        run_id="run-task4-synthetic",
+        run_id="run-synthetic",
         schema_version="so101-perception-benchmark/v1",
         run_kind=RunKind.VAL_RAW,
         record_status=status,

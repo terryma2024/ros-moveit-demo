@@ -19,7 +19,7 @@ def main(arguments=None):
     parser.add_argument("--live", type=Path,
                         help="the sealed live cohort; required unless --validation-mode is given, refused with it")
     parser.add_argument("--validation-mode", choices=VALIDATION_MODES,
-                        help="must match the proposal's recorded mode (offline spot-check, CP-3389)")
+                        help="must match the proposal's recorded mode")
     parser.add_argument("--receipt-kind", choices=(SPOT_CHECK_CANDIDATE,),
                         help="spot_check_candidate: usable only by a frozen preselected_target_diagnostic input set; "
                              "--approved-by must be plan:... or agent:..., never the user")

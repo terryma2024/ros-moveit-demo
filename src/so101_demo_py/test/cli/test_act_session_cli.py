@@ -1,4 +1,4 @@
-"""Task 14 CLI: the composition is built first, and only then is a spec submitted."""
+"""CLI: the composition is built first, and only then is a spec submitted."""
 
 import json
 

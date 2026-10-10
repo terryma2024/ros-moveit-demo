@@ -1,4 +1,4 @@
-"""Task 12: a training run may not start against an unpinned dependency set."""
+"""A training run may not start against an unpinned dependency set."""
 
 
 import pytest

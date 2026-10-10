@@ -194,7 +194,7 @@ class PoseAdmissionLatch:
 
     def _fresh(self, rgb_stamp, depth_stamp, tf_stamp=None):
         """The freshness policy (unchanged); on a failure `stale_detail` names the first failed condition from the closed set
-        CLOCK_REGRESSION, RESET_WATERMARK, FUTURE_STAMP, AGE, SKEW, TF, with now, the stamps and the limits (CP-3512)."""
+        CLOCK_REGRESSION, RESET_WATERMARK, FUTURE_STAMP, AGE, SKEW, TF, with now, the stamps and the limits."""
         context = self.context
         now = _require_finite('source_clock', self._clock())
         values = (f'now={now!r} rgb={rgb_stamp!r} depth={depth_stamp!r}'

@@ -215,7 +215,7 @@ class ProcessSupervisor:
         self.manifest_path = None if manifest_path is None else Path(manifest_path)
         self._group_members_reader = group_members_reader
         self._owned: dict[int, tuple[OwnedProcess, Callable[[], int | None]]] = {}
-        #: CP-3459: where the qualified install is; role commands are resolved against it before anything starts
+        #: Where the qualified install is; role commands are resolved against it before anything starts
         self._qualified_prefix = None if qualified_prefix is None else Path(qualified_prefix)
 
     def _read_owned_identity(self, pid: int) -> OwnedProcess | None:

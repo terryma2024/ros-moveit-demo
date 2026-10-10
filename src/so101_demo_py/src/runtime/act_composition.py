@@ -1,4 +1,4 @@
-"""Task 14: compose a search-to-ACT session, and refuse an execute run that is not fully equipped.
+"""Compose a search-to-ACT session, and refuse an execute run that is not fully equipped.
 
 Planning a session is cheap and reversible; executing one moves the arm. So the two are gated differently:
 `dry_run` and `plan_only` need only a mode and an evidence root, while `execute` refuses unless every

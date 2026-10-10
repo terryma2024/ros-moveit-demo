@@ -1,4 +1,4 @@
-"""Task 10 CLI: closed inputs, fail-closed writes, deterministic qualification projection."""
+"""CLI: closed inputs, fail-closed writes, deterministic qualification projection."""
 
 import json
 

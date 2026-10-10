@@ -655,7 +655,7 @@ def write_recovery_receipt(root, identity, *, succeeded, fault_hook=None):
 
 
 class SealedResultAdapter:
-    """Coordinator result port; Task 11 supplies the trusted Worker-root mapping.
+    """Coordinator result port; the parallel runtime supplies the trusted Worker-root mapping.
 
     discover accepts only the deterministic execution parent reserved by the
     journal: Worker root / attempts|validations / point / execution ID. It never

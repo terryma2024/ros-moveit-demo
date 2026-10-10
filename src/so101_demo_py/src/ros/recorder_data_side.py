@@ -31,7 +31,7 @@ class RecorderDataSide:
         self._normal_stop_proof_callable = normal_stop_proof
         self._invalid_latched_callable = invalid_latched
         self._drain_collection_callable = drain_collection
-        #: how long a world source may wait for its raw chunk step before the boundary search gives up (CP-3410: the Recorder's
+        #: how long a world source may wait for its raw chunk step before the boundary search gives up (the Recorder's
         #: receiver-lag policy; it was a fixed 100 ms, the chunk delivery-age rule seen from the boundary code)
         self._native_source_wait_ns = round(native_source_wait_s * 1e9)
 
@@ -119,7 +119,7 @@ class RecorderDataSide:
         from ..act.native_endpoints import validate_normal_stop_boundary
 
         if getattr(self, "_data_skip_normal_stop_boundary", False):
-            # the offline processor knows from the whole bag that this stop is not the Teacher's final one (CP-3440): the event
+            # the offline processor knows from the whole bag that this stop is not the Teacher's final one: the event
             # is audited like every other, it is not the episode boundary
             self._data_skip_normal_stop_boundary = False
             return
@@ -189,7 +189,7 @@ class RecorderDataSide:
         if any(raw and source['physics']['simulation_step'] <= max(steps) for source in missing):
             self._endpoint_source_facts('initial', sources, raw, missing)
             raise ValueError('ENDPOINT_NATIVE_SOURCE_INVALID')
-        # CP-3489 (T08, T13, T14 of the first v2 round): a world source newer than the newest retained raw chunk has no native step
+        # A world source newer than the newest retained raw chunk has no native step
         # yet - its chunk is published 100 ms later. The selection needs raw steps only for the sources it examines, so it runs on
         # the covered prefix; waiting for the newer sources to be covered too made the capture land a whole chunk late, more than
         # 100 ms after the first eligible source whenever a world source fell on the first step of the next chunk.
@@ -273,7 +273,7 @@ class RecorderDataSide:
                 raise ValueError('ENDPOINT_NATIVE_SOURCE_INVALID')
             # Only the world records before the first one that still waits for its physics chunk can be the final boundary: a record
             # after it is not needed to select it, and waiting for the next chunk (up to 100 ms of simulation, one chunk) made the
-            # capture clock lag the selected record by more than the 100 ms the endpoint allows (CP-3394, L2 e6be258c: 110 ms).
+            # capture clock lag the selected record by more than the 100 ms the endpoint allows.
             ready = sources if not missing else sources[:next(i for i, source in enumerate(sources) if source is missing[0])]
             if not ready:
                 if self._native_sources_expired('final', sources, raw, missing, now):
@@ -335,7 +335,7 @@ class RecorderDataSide:
 
     def _native_sources_expired(self,site,sources,raw,missing,now):
         """True when a missing source's raw step was never received and its source is older than the wait (100 ms by default; the
-        Recorder passes its receiver-lag policy, CP-3410).
+        Recorder passes its receiver-lag policy).
 
         A step at or below the adapter's received maximum is covered by a received chunk that is only
         waiting for the next drain, so drain latency is not delivery latency. Prints one facts line
@@ -489,7 +489,7 @@ class RecorderDataSide:
     def _step_data_initial_boundary(self) -> None:
         """One non-waiting attempt at the initial boundary; INVALID once the first command went out without it.
 
-        Cheap checks first (CP-3423): after the first command the boundary can no longer be honest (its clock would end after
+        Cheap checks first: after the first command the boundary can no longer be honest (its clock would end after
         the command), so the verdict is raised ONCE and the search is never run again; and an attempt is skipped while
         nothing it reads has changed since the last unsuccessful one. The search deep-copies the retained worlds and raw
         steps: it cost 89 ms per pass on average and 503 ms at worst, which starved the loop (L2 5daa904e).

@@ -3187,7 +3187,7 @@ def test_measure_scenarios_prints_every_failed_and_refused_scenario(
     assert "failed=2" in printed.out
 
 
-# --- Task 14 Step 4: the three FULL_RESTART anchor phases (HS-318) -----------------------------------
+# --- the three FULL_RESTART anchor phases (HS-318) -----------------------------------
 
 
 def _restart_inputs(tmp_path: Path) -> dict:
@@ -3447,7 +3447,7 @@ def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
     assert restarts.RESTART_OWNERSHIP_REFUSED in capsys.readouterr().err
 
 
-# --- Task 14 Step 6: serve-teleop is the owned acceptance, not a descriptor writer -------------------
+# --- serve-teleop is the owned acceptance, not a descriptor writer -------------------
 
 
 def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
@@ -3550,7 +3550,7 @@ def test_serve_teleop_reports_a_library_refusal_by_name(tmp_path: Path, monkeypa
     assert acceptance.TELEOP_SOCKET_PATH_TOO_LONG in capsys.readouterr().err
 
 
-# --- Task 14 Step 3: the production smoke (HS-326) ---------------------------------------------------
+# --- the production smoke (HS-326) ---------------------------------------------------
 
 
 def _production_smoke_inputs(tmp_path: Path) -> dict:

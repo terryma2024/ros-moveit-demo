@@ -90,7 +90,7 @@ def test_a_spec_with_the_wrong_kind_is_refused_by_the_loader(tmp_path):
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
     document = _spec_document(evidence_root, tmp_path / "manifest.json")
-    document["kind"] = "not_task8_full"
+    document["kind"] = "not_pick_place_validation_full"
     path = _write_spec(tmp_path, document)
 
     with pytest.raises(ValueError, match="PICK_PLACE_VALIDATION_SPEC_INVALID"):

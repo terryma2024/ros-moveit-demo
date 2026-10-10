@@ -28,7 +28,7 @@ def configured(tmp_path, *, overrides=None):
             context.launch_configurations[action.name] = perform_substitutions(
                 context, action.default_value)
     context.launch_configurations.update({
-        "session_id": "act-task8-case-01", "task_evidence_root": str(tmp_path),
+        "session_id": "act-pick-place-case-01", "task_evidence_root": str(tmp_path),
         **(overrides or {}),
     })
     opaque = next(action for action in description.entities if isinstance(action, OpaqueFunction))

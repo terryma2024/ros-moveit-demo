@@ -1,4 +1,4 @@
-"""Task 14 Step 1: prove exclusive ownership before a qualifier starts its own stack.
+"""Prove exclusive ownership before a qualifier starts its own stack.
 
 The gate reads the five resources the plan names - the fresh process table, the ROS graph, the GPU
 compute processes, tmux ownership and the evidence root - plus the frozen runtime identity, and refuses
@@ -39,7 +39,7 @@ OPERATION = "QUALIFICATION_OWNERSHIP_CHECK"
 #: durable evidence on this host lives under this platform root (repository rule)
 EVIDENCE_ROOT_PLATFORM = Path("/data/work/so101-evidence")
 
-#: the approved bundle promotes exactly this many values, and Task 14 reads all of them back effective
+#: the approved bundle promotes exactly this many values, and the qualification reads all of them back effective
 APPROVED_VALUE_COUNT = 17
 
 #: argv basenames that mean a ROS/MuJoCo/controller owner already exists; matched exactly or as a

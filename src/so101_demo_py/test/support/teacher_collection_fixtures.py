@@ -77,7 +77,7 @@ def collection_materials(frozen_scene):
             last_simulation_time_s=.008, failed_publish_attempts=0, handoff_monotonic_ns=0, publish_monotonic_ns=0,
             publish_deferrals_total=0, evidence_loss=False, samples=samples))))]
     events += [dict(kind="world_source", payload=dict(world_source=source)) for source in sources]
-    # the two alignments the QC requires of a new episode (CP-3425): the Recorder's pre-SETUP one, the Teacher's SETUP world_sync
+    # the two alignments the QC requires of a new episode: the Recorder's pre-SETUP one, the Teacher's SETUP world_sync
     for operation, version, call, field, stamp in (("initial", 3, "request_ros_clock", "query", 1_000_000),
                                                     ("world_sync", 1, "response_ros_clock", "query", 3_000_000)):
         record = {"request_ros_clock": dict(sim_time_ns=stamp, begin_monotonic_ns=base, end_monotonic_ns=base),
@@ -86,7 +86,7 @@ def collection_materials(frozen_scene):
                            payload=dict(association=dict(operation=operation, schema_version=version,
                                                          query=dict(record=record)))))
     teacher = [
-        # the Teacher starts after the capture is running and its initial boundary is committed (CP-3425)
+        # the Teacher starts after the capture is running and its initial boundary is committed
         envelope(1, "reset_complete", 4_500_000, base + 2_800_000,
                  dict(session_id="alignment-session", reset_epoch=1, simulation_time_s=.002, simulation_step=1,
                       publisher_sequence=7, received_monotonic_ns=base + 2_700_000), identity=identity),

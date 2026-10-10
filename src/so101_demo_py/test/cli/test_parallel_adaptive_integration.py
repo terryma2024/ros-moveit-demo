@@ -424,7 +424,7 @@ def test_setup_installs_adaptive_config_and_cleanup_entry_point(monkeypatch):
     captured = {}
     monkeypatch.setattr(setuptools, "setup", lambda **values: captured.update(values))
 
-    runpy.run_path(str(package / "setup.py"), run_name="__task9_setup__")
+    runpy.run_path(str(package / "setup.py"), run_name="__setup__")
 
     installed = {
         source

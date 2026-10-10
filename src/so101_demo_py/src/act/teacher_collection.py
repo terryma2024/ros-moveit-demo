@@ -113,7 +113,7 @@ def normal_stop_boundary_from_event(document) -> dict:
 
 
 def validate_reset_complete_matches(document, reset_boundary) -> None:
-    """The Teacher's `reset_complete` event is consistent with the retained verified reset (CP-3425).
+    """The Teacher's `reset_complete` event is consistent with the retained verified reset.
 
     The boundary is the Recorder's own first evidence of the epoch; the Teacher names the first evidence of its own observer,
     which cannot be earlier: same session, attempt and epoch, and neither its sequence nor its simulation time precede the

@@ -1,4 +1,4 @@
-"""Task 3: the release boundary holds instead of opening.
+"""The release boundary holds instead of opening.
 
 The runner may only ask the controller to open after a fresh, supported, detached preflight, every
 refusal must stop the run rather than release the cup, and a release is only accepted under the
@@ -59,7 +59,7 @@ class FakePort:
                                            "cup_position_world_m": [0.02, -0.28, 0.165],
                                            # T3-F5: the runner writes its physics rows from this evidence, and
                                            # coverage requires one row carrying the scene record and the
-                                           # feedback, joined to the row by their own instant (CP-2296)
+                                           # feedback, joined to the row by their own instant
                                            "planning_scene_observation": {
                                                "scene_revision": 1, "attached_objects": [],
                                                "world_object_ids": [], "is_diff": False,
@@ -472,7 +472,7 @@ class AlignedPort(FakePort):
 
 
 class _OneFieldFlipped(FakePort):
-    """A port whose evidence for one phase has exactly one field flipped (CP-2806's checklist).
+    """A port whose evidence for one phase has exactly one field flipped.
 
     The predicates live in the evidence document, so a per-predicate negative is a single override applied where the
     runner will read it - every other field stays exactly as the passing fixture builds it.
@@ -499,12 +499,12 @@ class _OneFieldFlipped(FakePort):
     # override is applied wherever the runner will read it rather than only where the hold group is built
     def set_down(self, request):
         # the third gate, keyed to itself: it carries its own code (SET_DOWN_EVIDENCE_INVALID) and eleven boolean
-        # predicates, and nothing about a phase's flip should reach it (CP-2813)
+        # predicates, and nothing about a phase's flip should reach it
         return self._apply("SET_DOWN", super().set_down(request))
 
     def release_preflight(self, request):
         # its own key: the preflight and the release phase are two gates with two codes, so a flip meant for one must
-        # not leak into the other (CP-2813)
+        # not leak into the other
         return self._apply("RELEASE_PREFLIGHT", super().release_preflight(request))
 
     def run_retreat_segment(self, direction, distance, request):
@@ -551,7 +551,7 @@ def test_hold_requires_every_predicate(phase, flip):
     {"planning_attached": False},
 ])
 def test_the_release_preflight_refuses_each_predicate(flip):
-    """The first of the release half's two gates: four predicates, code RELEASE_UNSUPPORTED (CP-2813)."""
+    """The first of the release half's two gates: four predicates, code RELEASE_UNSUPPORTED."""
     port = _OneFieldFlipped("RELEASE_PREFLIGHT", **flip)
     with pytest.raises(PickPlaceError, match="RELEASE_UNSUPPORTED"):
         PickPlaceRunner(port).run(request())
@@ -580,7 +580,7 @@ def test_the_release_phase_refuses_each_predicate(phase, flip):
     "head_rgb_ok", "wrist_rgb_ok",
 ])
 def test_set_down_refuses_each_predicate(key):
-    """The third gate of the release half: eleven predicates, one code, each refusing alone (CP-2813).
+    """The third gate of the release half: eleven predicates, one code, each refusing alone.
 
     Its own key, so a flip here cannot leak into the release preflight or the release phase - the two gates that run
     before it must both pass for the run to reach this one at all.

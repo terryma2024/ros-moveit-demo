@@ -1,4 +1,4 @@
-"""Task 11A CLI: build the closed fixed-collection spec and ask the unified service to admit it.
+"""CLI: build the closed fixed-collection spec and ask the unified service to admit it.
 
 The spec is composed — and every refusal taken — before a service exists, so a bad invocation cannot
 spawn, reset or leave a child behind.

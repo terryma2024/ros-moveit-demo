@@ -1,4 +1,4 @@
-"""Task 15: the gateway is an allow-list, and a command without a service goes nowhere."""
+"""The gateway is an allow-list, and a command without a service goes nowhere."""
 
 import pytest
 

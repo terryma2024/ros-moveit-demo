@@ -7,7 +7,7 @@ process to reach `gw0` collides:
 
     INTERNALERROR> FileExistsError: [Errno 17] File exists: '/tmp/s101-v3-ipc-943257/gw0'
 
-That is what the first real eight-worker teleop gate did (CP-1606). The root therefore has to carry something that
+That is what the first real eight-worker teleop gate did. The root therefore has to carry something that
 differs between processes as well as between workers, and this test pins that property without launching any stack.
 """
 

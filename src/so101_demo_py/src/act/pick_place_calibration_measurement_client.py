@@ -15,7 +15,7 @@ This client is real, and it is MuJoCo-only:
   through the real camera and an occlusion decision against the real occluder geometry - so ``found`` is a measurement,
   not a constant;
 * ``camera_info`` reports the intrinsics of the camera the model actually has, **and says so in a provenance field**,
-  because P1-3 is explicit that a CameraInfo must not be presented as an independent measurement when it is derived from
+  because a CameraInfo must not be presented as an independent measurement when it is derived from
   the model's own ``cam_fovy``;
 * ``tf`` reads body poses out of the same ``mj_forward`` pass the frames come from;
 * ``probe`` applies the fixed non-contact probe command to the model and reports the contacts MuJoCo actually found;
@@ -170,8 +170,8 @@ class MujocoMeasurementClient:
                 "width_px": width, "height_px": height,
                 "fx_px": focal, "fy_px": focal, "cx_px": width / 2.0, "cy_px": height / 2.0,
                 "vertical_fov_rad": fovy_rad,
-                # P1-3: this is a MODEL-DERIVED value, and it says so rather than presenting itself as an independent
-                # measurement of the running camera; cross-verification is P1-3's job, not this field's.
+                # this is a MODEL-DERIVED value, and it says so rather than presenting itself as an independent
+                # measurement of the running camera; cross-verification is not this field's job.
                 "intrinsics_provenance": "model_cam_fovy",
                 "session_id": self.session_id, "attempt_id": self.attempt_id}
 

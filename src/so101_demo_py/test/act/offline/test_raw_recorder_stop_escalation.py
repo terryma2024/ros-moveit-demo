@@ -1,4 +1,4 @@
-"""CP-3517: `RawRecorder.stop` escalates when `ros2 bag record` does not react to a SIGINT.
+"""`RawRecorder.stop` escalates when `ros2 bag record` does not react to a SIGINT.
 
 Two installed demo gates lost the signal: the recorder's log ended at "Topics discovery started" and the process neither stopped nor logged
 anything for the whole 15 s wait, then was killed (RAW_BAG_CLOSE_TIMEOUT). The stop now re-sends SIGINT every STOP_SIGINT_RESEND_S, adds a

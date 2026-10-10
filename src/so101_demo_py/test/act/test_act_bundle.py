@@ -1,4 +1,4 @@
-"""Task 12: what a training bundle may contain, and what it must refuse."""
+"""What a training bundle may contain, and what it must refuse."""
 
 import json
 
@@ -73,7 +73,7 @@ def _write_bundle(tmp_path, *, policy_bytes=b"model-bytes", normalization=None, 
                 "policy_path": "policy.bin",
                 "policy_sha256": hashlib.sha256(policy_bytes).hexdigest(),
                 # `normalization or {...}` would repair the deliberately empty normalisation,
-                # so the case would never reach the guard it exists to exercise (as in CP-767)
+                # so the case would never reach the guard it exists to exercise
                 "normalization": ({"split": "train", "mean": [0.0]}
                                   if normalization is None else normalization),
                 "action": {"chunk_size": 10, "execution_prefix": 1,

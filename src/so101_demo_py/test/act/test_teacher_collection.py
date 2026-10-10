@@ -98,7 +98,7 @@ def test_collection_faults_are_invalid(frozen_scene, fault, match):
         events[:] = [row for row in events if row["kind"] != "controller_reference"]
     if fault == "continuity_gap":
         row = next(row for row in events if row["kind"] == "controller_reference")
-        row["payload"]["reference_continuity"]["kinds"]["arm"].update(gaps=1, steps=[[100_000_000, 104_000_000]])   # the label instant 0.102 s has no frame (CP-3439)
+        row["payload"]["reference_continuity"]["kinds"]["arm"].update(gaps=1, steps=[[100_000_000, 104_000_000]])   # the label instant 0.102 s has no frame
     if fault == "continuity_epoch":
         next(row for row in events if row["kind"] == "controller_reference")["payload"]["reference_continuity"]["reset_epoch"] = 2
     with pytest.raises(ValueError, match=match):

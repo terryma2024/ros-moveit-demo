@@ -328,11 +328,11 @@ class PickPlaceRunner:
             self._event_identity = {"session_id": request["session_id"],
                                     "attempt_id": request["attempt_id"],
                                     "reset_epoch": reset_epoch, "release_epoch": release_epoch}
-            # T3-F3(c): a formal writer admits a registered lease, and its events may not omit it
+            # a formal writer admits a registered lease, and its events may not omit it
             _lease = getattr(self.audit, "identity", None)
             if isinstance(_lease, dict) and _lease.get("lease") is not None:
                 self._event_identity["lease"] = _lease["lease"]
-            # T3-F5 integration: a formal writer fences the first event against the initial epoch its own identity
+            # a formal writer fences the first event against the initial epoch its own identity
             # declares, so the runner adopts that epoch instead of assuming zero and being refused
             if isinstance(_lease, dict) and type(_lease.get("release_epoch")) is int:
                 self._event_identity["release_epoch"] = _lease["release_epoch"]
@@ -368,7 +368,7 @@ class PickPlaceRunner:
                         phase, evidence, request, reset_epoch, release_epoch, latest_step,
                     )
                     if phase == "RELEASE":
-                        # T3-F3(c)+(eighth verdict): the epoch advances before the verification, because that
+                        # the epoch advances before the verification, because that
                         # verification must judge the post-release evidence, but the event that names the epoch is
                         # emitted only after it - so the event records what was verified, not what was assumed, and
                         # the flags are stated rather than coerced or defaulted (`is True` can only refuse a gate)

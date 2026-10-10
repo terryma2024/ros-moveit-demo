@@ -1,4 +1,4 @@
-"""Task 12A CLI: evaluate a frozen bundle on the Offline Test split, read-only.
+"""CLI: evaluate a frozen bundle on the Offline Test split, read-only.
 
 This runs in the training interpreter, never in the ROS environment, and it drives no controller. The
 policy loader is injected; the production path deliberately fails closed until the LeRobot adapter that

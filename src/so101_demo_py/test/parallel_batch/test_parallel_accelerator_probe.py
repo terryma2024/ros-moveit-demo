@@ -1,6 +1,6 @@
 """The Darwin MPS accelerator probe: one bounded read, fail-closed everywhere else.
 
-Task 2 of the macOS MPS / private IPC plan. The probe answers exactly one question for a
+Part of the macOS MPS / private IPC plan. The probe answers exactly one question for a
 schema-v4 Darwin campaign: how much unified memory is available to a single MPS process, and
 is that above the fixed headroom floor? Everything here is either a closed data model or a
 low-level read with an injected port, so the interesting branches (missing output, illegal

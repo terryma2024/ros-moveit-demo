@@ -86,7 +86,7 @@ class CalibrationMeasurementContext:
         # section 4.2/6: the parsed runtime descriptor travels in the context once, so no later component re-reads the
         # preparation directory; the one shared rule reads it, and an omitted descriptor is a state a caller must be
         # able to see rather than a silent default
-        # Astra item 2: required, not optional - a context without a descriptor cannot say which configuration was
+        # required, not optional - a context without a descriptor cannot say which configuration was
         # measured, so the ``None`` default was a bypass rather than a convenience
         from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
@@ -132,7 +132,7 @@ class CalibrationMeasurementContext:
                 "controller_generation": self.controller_generation,
                 "broker_generation": self.broker_generation, "evidence_root": self.evidence_root,
                 "resource_binding": dict(self.resource_binding),
-                # Astra re-review P1-2: the descriptor must survive the round trip, or a context that is
+                # the descriptor must survive the round trip, or a context that is
                 # serialised and rebuilt silently loses the configuration it was admitted under
                 "runtime_descriptor": json.loads(json.dumps(self.runtime_descriptor))}
 

@@ -1,4 +1,4 @@
-"""Task 10: freeze the split, collection and qualification scene sets from supplied evidence.
+"""Freeze the split, collection and qualification scene sets from supplied evidence.
 
 Every input is explicit and evidence-bound: a closed candidate-source document and a reachability
 report that answers for exact candidate identities. Nothing is inferred from calibration, no bounds or
