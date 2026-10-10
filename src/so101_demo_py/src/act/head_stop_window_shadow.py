@@ -5,10 +5,11 @@ stop witness. This module compares the two *offline* from the sealed run events 
 log; it grants nothing and changes no run. The comparison blocks the switch to the thin JTC
 subclass: any disagreement means the topic-based window is not a safe replacement.
 
-Startup. The native verdict is PASS when a ``PREARM_STATUS`` row is READY, with the sim stamp
-``L`` of its last proof sample. The shadow verdict is PASS when a quiet run of controller_state
-samples (unbroken, before the first goal) is still unbroken at ``L`` and a 51-sample window of
-it completes no later than ``L`` plus 102 ms. A run that ended before ``L`` is not evidence.
+Startup. The native verdict is PASS when a ``PREARM_STATUS`` row is READY. Both verdicts are
+judged at the native decision instant ``L`` (the last proof sample of the READY status, else of
+the native's last evaluation): the shadow is PASS when a quiet run of controller_state samples is
+still unbroken at ``L`` and a 51-sample window of it completes no later than ``L`` plus 102 ms.
+A run that ended before ``L`` is not evidence.
 
 End. The native verdict is PASS when ``NATIVE_CLOSE`` was acknowledged and ``CANCEL_STOP``
 confirmed the raw stop without service errors. The anchor is the sim stamp of that raw-stop
@@ -72,41 +73,42 @@ def _startup_candidates(shadow):
 
 
 def compare_startup(events, shadow):
-    """Native READY versus the shadow's quiet extent.
+    """Native PREARM versus the shadow, judged at the native decision instant ``L``.
 
-    The shadow must cover the native READY instant: some quiet run is still unbroken at the native
-    proof's last sim stamp ``L`` and a 51-sample window of it completes no later than ``L`` + 102 ms.
-    A run that ended before ``L`` is not evidence for it, however early it completed.
+    ``L`` is the sim stamp of the last proof sample of the READY status, or, when the native never
+    reached READY, of its last evaluation. The shadow says READY at ``L`` when some quiet run is
+    still unbroken at ``L`` and a 51-sample window of it completes no later than ``L`` + 102 ms. A
+    run that ended before ``L`` is not evidence for it, however early it completed, and a quiet
+    period that began after the native gave up (the post-fault hold) is not a startup run.
     """
-    ready = [row for row in _rows(events, 'PREARM_STATUS') if _record(row).get('status') == 'READY']
-    native_stamp = None
-    if ready:
-        proof = _record(ready[0]).get('proof')
-        stamp = proof.get('last_sim_time_ns') if isinstance(proof, dict) else None
-        native_stamp = stamp if type(stamp) is int else None
+    statuses = [row for row in _rows(events, 'PREARM_STATUS') if isinstance(_record(row).get('proof'), dict)]
+    ready = [row for row in statuses if _record(row).get('status') == 'READY']
     native = bool(ready)
+    decision_row = ready[0] if ready else (statuses[-1] if statuses else None)
+    stamp = None if decision_row is None else _record(decision_row)['proof'].get('last_sim_time_ns')
+    decision = stamp if type(stamp) is int else None
     candidates, refusal = _startup_candidates(shadow)
     span = (limits.STOP_WINDOW_SAMPLES - 1) * limits.STOP_WINDOW_STEP_NS
     chosen, margin = None, None
     if refusal is not None:
         outcome = {'pass': False, 'reason': refusal}
+    elif decision is None:
+        outcome = {'pass': False, 'reason': 'NATIVE_NEVER_EVALUATED'}
     elif not candidates:
         outcome = {'pass': False, 'reason': 'NO_WINDOW'}
-    elif native and native_stamp is not None:
-        bound = native_stamp + limits.STOP_WINDOW_STARTUP_SLACK_NS
-        covering = [run for run in candidates if run[1] >= native_stamp]
+    else:
+        bound = decision + limits.STOP_WINDOW_STARTUP_SLACK_NS
+        covering = [run for run in candidates if run[1] >= decision]
         if not covering:
-            outcome = {'pass': False, 'reason': 'RUN_ENDED_BEFORE_NATIVE_READY'}
+            outcome = {'pass': False, 'reason': 'RUN_ENDED_BEFORE_NATIVE_DECISION'}
             chosen = max(candidates, key=lambda run: run[1])
         else:
             chosen = min(covering, key=lambda run: run[0])
             margin = bound - (chosen[0] + span)
             outcome = {'pass': margin >= 0, 'reason': None if margin >= 0 else 'LATE'}
-    else:
-        chosen = min(candidates, key=lambda run: run[0])
-        outcome = {'pass': True, 'reason': None}
     return _verdict(native, outcome,
-                    native_ready_sim_ns=native_stamp, margin_ns=margin,
+                    native_ready_sim_ns=decision if native else None, native_decision_sim_ns=decision,
+                    margin_ns=margin,
                     shadow_first_sim_ns=None if chosen is None else chosen[0],
                     shadow_last_sim_ns=None if chosen is None else chosen[1],
                     shadow_complete_sim_ns=None if chosen is None else chosen[0] + span,

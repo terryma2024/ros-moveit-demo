@@ -69,7 +69,7 @@ def test_startup_fail_fail_agrees():
 
 
 def test_startup_native_fail_but_shadow_pass_is_a_disagreement():
-    verdict = compare_startup([prearm('NOT_READY')], [window(4_000_000_000)])
+    verdict = compare_startup([prearm('NOT_READY')], [window(NATIVE_LAST - 100_000_000)])
     assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('FAIL', 'PASS', False)
 
 
@@ -180,7 +180,7 @@ def test_a_quiet_run_that_ended_before_native_ready_is_not_evidence_for_it():
     shadow = [run_row(632_000_000, NATIVE_LAST - 2_000_000)]
     verdict = compare_startup([prearm()], shadow)
     assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('PASS', 'FAIL', False)
-    assert verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_READY'
+    assert verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_DECISION'
 
 
 def test_a_run_that_starts_more_than_102ms_after_native_ready_is_late():
@@ -195,9 +195,32 @@ def test_runs_win_over_a_window_row_and_only_startup_runs_count():
     shadow = [window(NATIVE_LAST - 100_000_000), run_row(0, NATIVE_LAST - 2_000_000),
               run_row(NATIVE_LAST - 500_000_000, NATIVE_LAST + 500_000_000, phase='end')]
     verdict = compare_startup([prearm()], shadow)
-    assert verdict['shadow'] == 'FAIL' and verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_READY'
+    assert verdict['shadow'] == 'FAIL' and verdict['shadow_reason'] == 'RUN_ENDED_BEFORE_NATIVE_DECISION'
 
 
-def test_native_fail_with_a_startup_run_is_a_disagreement_and_without_it_agrees():
-    assert compare_startup([prearm('NOT_READY')], [run_row(0, 1_000_000_000)])['equal'] is False
-    assert compare_startup([prearm('NOT_READY')], [])['equal'] is True
+def test_native_not_ready_is_judged_at_its_last_evaluation_stamp():
+    """The shadow's verdict is taken at the native decision instant: READY stamp, else the last evaluation."""
+    not_ready = [prearm('NOT_READY', last=4_000_000_000), prearm('NOT_READY', last=NATIVE_LAST)]
+    covering = [run_row(1_000_000_000, NATIVE_LAST + 10_000_000)]
+    verdict = compare_startup(not_ready, covering)
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('FAIL', 'PASS', False)
+    assert verdict['native_decision_sim_ns'] == NATIVE_LAST
+    ended_early = [run_row(0, NATIVE_LAST - 2_000_000)]
+    assert compare_startup(not_ready, ended_early)['equal'] is True
+    # a quiet period that only began after the native gave up (the post-fault hold) is not a startup run
+    after_the_fault = [run_row(NATIVE_LAST + 500_000_000, NATIVE_LAST + 900_000_000)]
+    verdict = compare_startup(not_ready, after_the_fault)
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('FAIL', 'FAIL', True)
+
+
+def test_a_run_that_completes_more_than_102ms_after_a_not_ready_evaluation_agrees_with_it():
+    not_ready = [prearm('NOT_READY', last=NATIVE_LAST)]
+    start = NATIVE_LAST + STOP_WINDOW_STARTUP_SLACK_NS - 100_000_000 + 2_000_000
+    assert compare_startup(not_ready, [run_row(start, start + 500_000_000)])['equal'] is True
+
+
+def test_without_any_native_evaluation_there_is_no_instant_and_the_shadow_fails():
+    verdict = compare_startup([], [run_row(0, 9_000_000_000)])
+    assert (verdict['native'], verdict['shadow'], verdict['equal']) == ('FAIL', 'FAIL', True)
+    assert verdict['shadow_reason'] == 'NATIVE_NEVER_EVALUATED' and verdict['native_decision_sim_ns'] is None
+    assert compare_startup([], [])['equal'] is True
