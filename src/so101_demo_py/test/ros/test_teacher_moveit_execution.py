@@ -755,7 +755,36 @@ def _pose(z=0.2176):
     return PoseEvidence((-0.0737, -0.2325, z), (0.0, 0.0, 0.0, 1.0))
 
 
-def test_without_frozen_inputs_the_place_target_is_unchanged(tmp_path):
+def test_a_teacher_run_without_frozen_inputs_keeps_the_place_target(tmp_path):
     value = make_adapter(tmp_path)
+    value._execution_policy = load_teacher_execution_policy(TEACHER_POLICY)
     original = _pose()
     assert value._place_target(State.DESCEND_TO_PLACE, original) is original
+
+
+def test_the_general_descent_to_place_is_the_hover_plus_the_policy_offset(tmp_path):
+    value = make_adapter(tmp_path)
+    value._execution_policy = {**value._execution_policy, "place_descend_offset_m": -0.004}
+    original = _pose(0.2176)
+    moved = value._place_target(State.DESCEND_TO_PLACE, original)
+    assert moved.position_m == pytest.approx((-0.0737, -0.2325, 0.2176 - 0.004), abs=1e-12)
+    assert moved.orientation_xyzw == original.orientation_xyzw
+    assert original.position_m[2] == 0.2176, "the input target is not modified"
+
+
+def test_the_general_place_offset_comes_from_the_installed_policy(tmp_path):
+    value = make_adapter(tmp_path)
+    moved = value._place_target(State.DESCEND_TO_PLACE, _pose(0.2176))
+    assert moved.position_m[2] == pytest.approx(0.2176 + value._execution_policy["place_descend_offset_m"], abs=1e-12)
+    assert value._execution_policy["place_descend_offset_m"] < 0
+
+
+@pytest.mark.parametrize("state", [state for state in State if state is not State.DESCEND_TO_PLACE])
+def test_the_general_offset_touches_no_other_state(tmp_path, state):
+    value = make_adapter(tmp_path)
+    original = _pose()
+    assert value._place_target(state, original) is original
+
+
+def test_a_state_without_a_target_stays_without_one(tmp_path):
+    assert make_adapter(tmp_path)._place_target(State.DESCEND_TO_PLACE, None) is None

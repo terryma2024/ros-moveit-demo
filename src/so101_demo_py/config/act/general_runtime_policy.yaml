@@ -1,8 +1,12 @@
 # SO-101 general runtime policy: the state-freshness and deadline bounds of the general (non-Teacher) dynamic pick-place
-# runtime. These are the three fields every execution policy shares; the Teacher's own policy is
+# runtime, and its place offset. The three bounds are the fields every execution policy shares; the Teacher's own policy is
 # teacher_execution_policy.yaml. Not the ACT 10 Hz / 100 ms data contract.
 kind: ACT_GENERAL_RUNTIME_POLICY
 schema_version: 1
 state_max_age_s: 0.5
 state_unavailable_stop_s: 1.0
 execution_deadline_s: 180.0
+# DESCEND_TO_PLACE lowers the policy place pose by this much (m), so the carried cup is force-bearing on the table before the
+# support-gated release. At the policy place pose the general grasp holds the cup about 18 mm above its resting height. The support
+# predicate first holds at -17.85 mm (offline replay of the general grasp); the constant is 0.5 mm deeper. Range +-0.05 m.
+place_descend_offset_m: -0.01835

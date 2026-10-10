@@ -18,7 +18,7 @@ from so101_demo.act.teacher_event_stream import (
 from so101_demo.core.domain import ActionStatus, State
 from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
-from test_act_teacher_data_decoupling import (CONTEXT, FORBIDDEN, _connection, _teacher_view, _workflow_states)
+from test_act_teacher_data_decoupling import (CONTEXT, FORBIDDEN, PLACE_POSE, _connection, _teacher_view, _workflow_states)
 from test_dynamic_teacher_result import START, _adapter, _end_pose, _end_sampler, _sample
 
 IDENTITY = StreamIdentity("s", 3, "a")
@@ -266,7 +266,7 @@ def _run_teacher(monkeypatch, *, stream=None):
     adapter._event_sink = StreamEventSink(stream)
     adapter._scene_source_binding = None
     adapter._scene_source_observer = None
-    adapter._targets.for_state = lambda state: object()
+    adapter._targets.for_state = lambda state: PLACE_POSE
     adapter._before_micro_lift, adapter._attached = None, False
     clock_progress = adapter._progress
 
@@ -287,7 +287,7 @@ def _run_teacher(monkeypatch, *, stream=None):
     adapter._wait_stable = lambda predicate, duration, timeout: start
     results = []
     for state in _workflow_states():
-        target = object() if state in DYNAMIC_MOTION_STATES else None
+        target = PLACE_POSE if state in DYNAMIC_MOTION_STATES else None
         results.append(adapter.perform(state, target))
     _end_sampler(adapter, _end_pose()[:3], _end_pose()[3:])
     adapter.finish(SimpleNamespace(status=SimpleNamespace(value="DONE"), current_state=State.DONE,

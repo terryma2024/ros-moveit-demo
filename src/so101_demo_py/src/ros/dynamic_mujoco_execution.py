@@ -2489,13 +2489,21 @@ class RosDynamicMujocoExecution:
     _CARRY_STATES = frozenset({State.LIFT, State.MOVE_ABOVE_PLACE, State.DESCEND_TO_PLACE})
 
     def _place_target(self, state: State, target):
-        """The DESCEND_TO_PLACE target for frozen inputs; every other target and run is untouched.
+        """The DESCEND_TO_PLACE target; every other target is untouched.
 
-        The tilt-compensated place height (``core.place_height``) is computed from the cup tilt and the grasp offset measured on
-        the evidence now. Called from ``_perform_state`` under ``_safety_state = DESCEND_TO_PLACE`` and before ``_phase_open``."""
+        With frozen inputs (the Teacher) the tilt-compensated place height (``core.place_height``) is computed from the cup tilt and
+        the grasp offset measured on the evidence now. Without them a general run descends by the general policy's
+        ``place_descend_offset_m`` below the policy place pose. A Teacher run without frozen inputs keeps the pose. Called from
+        ``_perform_state`` under ``_safety_state = DESCEND_TO_PLACE`` and before ``_phase_open``."""
 
-        if state is not State.DESCEND_TO_PLACE or target is None or getattr(self, "_execution_snapshot_root", None) is None:
+        if state is not State.DESCEND_TO_PLACE or target is None:
             return target
+        if getattr(self, "_execution_snapshot_root", None) is None:
+            policy = getattr(self, "_execution_policy", None)
+            if self._teacher_run() or policy is None:
+                return target
+            x, y, z = target.position_m
+            return PoseEvidence((x, y, z + float(policy["place_descend_offset_m"])), target.orientation_xyzw)
         policy = getattr(self, "_execution_policy", None)
         if policy is None or not policy.get("place_height_mode"):
             raise RuntimeError("TEACHER_POLICY_UNAVAILABLE: place_height_mode")

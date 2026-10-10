@@ -29,10 +29,10 @@ def test_the_teacher_policy_loads_with_the_motion_place_and_gate_values():
     assert policy["place_reference_offset_m"] == -0.01325 and "place_descend_offset_m" not in policy
 
 
-def test_the_general_runtime_policy_carries_exactly_the_three_shared_bounds_the_teacher_policy_agrees_with():
+def test_the_general_runtime_policy_carries_the_three_shared_bounds_the_teacher_policy_agrees_with_and_the_place_offset():
     general = load_general_runtime_policy(GENERAL_POLICY_PATH)
     teacher = load_teacher_execution_policy(TEACHER_POLICY_PATH)
-    assert set(general) == {"kind", "schema_version", "policy_sha256", *EXECUTION_VALUES}
+    assert set(general) == {"kind", "schema_version", "policy_sha256", "place_descend_offset_m", *EXECUTION_VALUES}
     for key in EXECUTION_VALUES:
         assert general[key] == teacher[key], key
     assert general["kind"] != teacher["kind"] and general["policy_sha256"] != teacher["policy_sha256"]
@@ -47,6 +47,30 @@ def test_the_general_runtime_loader_is_a_closed_schema(change):
         load_general_runtime_policy(yaml.safe_dump(document).encode())
     document = yaml.safe_load(GENERAL_POLICY_PATH.read_bytes())
     del document["execution_deadline_s"]
+    with pytest.raises(ValueError, match="GENERAL_RUNTIME_POLICY_INVALID"):
+        load_general_runtime_policy(yaml.safe_dump(document).encode())
+
+
+def test_the_general_place_offset_is_the_calibrated_constant():
+    assert load_general_runtime_policy(GENERAL_POLICY_PATH)["place_descend_offset_m"] == -0.01835
+
+
+@pytest.mark.parametrize("offset", [0.0501, -0.0501, 1.0, float("nan"), float("inf"), -float("inf"), True, "-0.01", None, [-0.01]])
+def test_the_general_place_offset_is_limited_to_five_centimetres_and_numeric(offset):
+    document = {**yaml.safe_load(GENERAL_POLICY_PATH.read_bytes()), "place_descend_offset_m": offset}
+    with pytest.raises(ValueError, match="GENERAL_RUNTIME_POLICY_INVALID"):
+        load_general_runtime_policy(yaml.safe_dump(document).encode())
+
+
+@pytest.mark.parametrize("offset", [0.05, -0.05, 0.0, -0.002])
+def test_the_general_place_offset_accepts_the_closed_range(offset):
+    document = {**yaml.safe_load(GENERAL_POLICY_PATH.read_bytes()), "place_descend_offset_m": offset}
+    assert load_general_runtime_policy(yaml.safe_dump(document).encode())["place_descend_offset_m"] == offset
+
+
+def test_the_general_place_offset_is_required():
+    document = yaml.safe_load(GENERAL_POLICY_PATH.read_bytes())
+    del document["place_descend_offset_m"]
     with pytest.raises(ValueError, match="GENERAL_RUNTIME_POLICY_INVALID"):
         load_general_runtime_policy(yaml.safe_dump(document).encode())
 
