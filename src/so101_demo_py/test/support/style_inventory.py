@@ -24,6 +24,7 @@ locals are never read as hits:
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import os
 import re
@@ -130,7 +131,8 @@ def _in_tree(rest: str, tree: str) -> bool:
     return rest == tree or rest.startswith(tree + "/")
 
 
-def package_files(repository: Path = REPOSITORY) -> list[tuple[str, str, str]]:
+@functools.lru_cache(maxsize=4)
+def _package_files(repository: Path) -> tuple[tuple[str, str, str], ...]:
     """``(repository-relative path, package, path-inside-package)`` for every inventoried file."""
 
     files: list[tuple[str, str, str]] = []
@@ -142,7 +144,13 @@ def package_files(repository: Path = REPOSITORY) -> list[tuple[str, str, str]]:
         roots = (PACKAGES[package], *TEST_TREES, *NAME_TREES)
         if any(_in_tree(rest, tree) for tree in roots) or "/" not in rest:
             files.append((path, package, rest))
-    return files
+    return tuple(files)
+
+
+def package_files(repository: Path = REPOSITORY) -> list[tuple[str, str, str]]:
+    """The inventoried files, computed once per process."""
+
+    return list(_package_files(repository))
 
 
 def _name_hits(scan: str, files: list[tuple[str, str, str]]) -> list[Hit]:
@@ -205,6 +213,7 @@ def _module_level_names(tree: ast.Module) -> list[tuple[str, str]]:
     return found
 
 
+@functools.lru_cache(maxsize=4096)
 def _parse(repository: Path, path: str) -> ast.Module | None:
     try:
         return ast.parse((repository / path).read_text(encoding="utf-8"))
@@ -329,14 +338,19 @@ def _wire_hits(files: list[tuple[str, str, str]], repository: Path) -> list[Hit]
 
 
 def scan(which: str, repository: Path = REPOSITORY) -> list[Hit]:
-    """Every hit of one scan, sorted and de-duplicated."""
+    """Every hit of one scan, sorted and de-duplicated (computed once per process)."""
 
+    return list(_scan(which, repository))
+
+
+@functools.lru_cache(maxsize=8)
+def _scan(which: str, repository: Path) -> tuple[Hit, ...]:
     files = package_files(repository)
     if which == SCAN_WIRE:
         found = _wire_hits(files, repository)
     else:
         found = _name_hits(which, files) + _symbol_hits(which, files, repository) + _console_script_hits(which, repository)
-    return sorted(set(found))
+    return tuple(sorted(set(found)))
 
 
 ALLOWLIST_COLUMNS = ("scan", "path", "kind", "name", "classification", "target", "confidence", "reason")
