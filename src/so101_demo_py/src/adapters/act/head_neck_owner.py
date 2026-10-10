@@ -20,6 +20,7 @@ import os
 import stat
 import threading
 import time
+from types import SimpleNamespace
 
 from so101_demo.act import head_neck_limits as limits
 
@@ -37,6 +38,8 @@ READBACK_PARAMETERS = tuple(EXPECTED_PARAMETERS) + (
     'head_deadman_directory', 'head_deadman_timeout_s', 'head_deadman_peer_pid', 'head_activation_id')
 #: the runtime's progress must be at most this old for the owner to keep ticking the helper
 LIVENESS_AGE_S = 0.1
+#: the local claim window of one goal (the former reservation window)
+_CLAIM_WINDOW_NS = 400_000_000
 
 
 def _refuse(code, detail=''):
@@ -185,6 +188,32 @@ class HeadNeckOwner:
         boot = hashlib.sha256(f'{self.session_id}|{self.generation}'.encode()).hexdigest()[:24]
         return dict(generation=self.generation, incarnation=f'act-{activation_id}-{helper.pid}',
                     boot=f'boot-{boot}')
+
+    def admit_local(self, *, goal, goal_uuid, before_reserve):
+        """The per-goal local claim that replaces the broker's reservation.
+
+        The stock controller has no reservation. The owner builds the same claim binding the dispatcher
+        registers in its typed inventory (400 ms window), voids the stop window (a goal is about to be sent)
+        and refuses once the dead-man is closed or the owner has faulted. ``before_reserve`` registers the
+        inventory; it must return True.
+        """
+        with self._lock:
+            helper, closure, faulted = self._helper, self._closure, self._faulted
+        if helper is None:
+            _refuse('HEAD_NECK_NOT_ACTIVE')
+        if closure is not None:
+            _refuse('HEAD_NECK_CLOSED')
+        if faulted is not None:
+            _refuse('HEAD_NECK_FAULTED', faulted[0])
+        identity = self.identity()
+        now = time.monotonic_ns()
+        binding = SimpleNamespace(
+            role='neck', generation=self.generation, session_id=self.session_id, goal_cdr=bytes(goal),
+            goal_uuid=bytes(goal_uuid), controller_incarnation=identity['incarnation'],
+            controller_boot_incarnation=identity['boot'], claim_monotonic_ns=now,
+            deadline_ns=now + _CLAIM_WINDOW_NS)
+        self.note_goal()
+        return before_reserve(binding) is True
 
     def graph_proof(self):
         proof = self.graph.proof()
