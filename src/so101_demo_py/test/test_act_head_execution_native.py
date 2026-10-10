@@ -23,9 +23,14 @@ def child():
     # This owned sleeper supplies OS identity only; no ROS, model or hardware.
     processes = []
     def start(environment):
-        process = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
-                                   env=dict(os.environ, **environment))
+        process = subprocess.Popen([sys.executable, '-c', "import time; print('READY',flush=True); time.sleep(60)"],
+                                   env=dict(os.environ, **environment),stdout=subprocess.PIPE,text=True)
         processes.append(process)
+        import selectors
+        with selectors.DefaultSelector() as ready:
+            ready.register(process.stdout,selectors.EVENT_READ)
+            assert ready.select(2.),'owned identity fixture did not finish exec'
+        assert process.stdout.readline()=='READY\n'
         return process
     try:
         yield start

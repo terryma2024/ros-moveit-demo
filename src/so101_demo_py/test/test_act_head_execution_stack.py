@@ -111,3 +111,94 @@ def test_startup_wait_uses_declared_absolute_deadline(tmp_path):
         assert time.monotonic()-started < .2
     finally:
         stack.stop()
+
+
+@pytest.mark.parametrize('exit_code', [0, 7])
+def test_batched_spawner_submits_all_roles_and_reaps_one_actual_child(tmp_path, exit_code):
+    from so101_demo.act.head_execution_stack import RestartStack
+    stack = RestartStack(controller_config_path=tmp_path/'controllers.yaml',
+        environment={}, urdf_path=tmp_path/'robot.urdf', scene_path=tmp_path/'scene.xml',
+        plugin_config_path=tmp_path/'plugins.yaml', workspace=tmp_path,
+        session_id='batch-test', batch_spawners=True, teardown_timeout_s=.15)
+    stack.log_path = tmp_path/'stack.log'
+    script = tmp_path/'spawner'
+    script.write_text(f'#!{sys.executable}\nimport sys,json\n'
+        f'print(json.dumps(sys.argv[1:]),flush=True)\nsys.exit({exit_code})\n')
+    script.chmod(0o700)
+    child = stack._spawn([str(script), 'joint_state_broadcaster', '--param-file',
+        str(tmp_path/'controllers.yaml')], 'spawner joint_state_broadcaster')
+    stack.processes.append(child)
+    try:
+        if exit_code:
+            with pytest.raises(PermissionError, match='HEAD_STACK_SPAWNER_FAILED'):
+                stack.wait_startup(deadline=time.monotonic()+1.)
+        else:
+            result = stack.wait_startup(deadline=time.monotonic()+1.)
+            assert result['ready'] and len(result['children']) == 1
+            assert result['children'][0]['pid'] == child.pid
+            assert result['children'][0]['rc'] == 0 and child.poll() == 0
+            import json
+            assert json.loads(stack.log_path.read_text()) == [
+                'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
+                'neck_controller', '--param-file', str(tmp_path/'controllers.yaml')]
+    finally:
+        stack.stop()
+
+
+def test_batched_spawner_cannot_extend_original_startup_deadline(tmp_path):
+    from so101_demo.act.head_execution_stack import RestartStack
+    stack = RestartStack(controller_config_path=tmp_path/'controllers.yaml',
+        environment={}, urdf_path=tmp_path/'robot.urdf', scene_path=tmp_path/'scene.xml',
+        plugin_config_path=tmp_path/'plugins.yaml', workspace=tmp_path,
+        session_id='batch-timeout-test', batch_spawners=True, teardown_timeout_s=.15)
+    stack.log_path = tmp_path/'stack.log'
+    script = tmp_path/'spawner'
+    script.write_text(f'#!{sys.executable}\nimport time\ntime.sleep(3.)\n')
+    script.chmod(0o700)
+    child = stack._spawn([str(script), 'joint_state_broadcaster'],
+                         'spawner joint_state_broadcaster')
+    stack.processes.append(child)
+    try:
+        started = time.monotonic()
+        with pytest.raises(TimeoutError, match='HEAD_STACK_SPAWNER_TIMEOUT'):
+            stack.wait_startup(deadline=started+.025)
+        assert time.monotonic()-started < .2
+    finally:
+        stack.stop()
+
+
+@pytest.mark.parametrize('batched, expected_children', [(False, 6), (True, 3)])
+def test_start_keeps_four_controllers_and_truthful_child_count(
+        tmp_path, monkeypatch, batched, expected_children):
+    from so101_demo.act.head_execution_stack import RestartStack
+    from so101_demo.act import head_search_transport_measurement as transport
+    script = tmp_path/'installed-child'
+    script.write_text(f'#!{sys.executable}\nimport sys,json\n'
+                      'print(json.dumps(sys.argv[1:]),flush=True)\n')
+    script.chmod(0o700)
+    monkeypatch.setattr(transport, '_package_executable', lambda *args: str(script))
+    robot = tmp_path/'robot.urdf'; robot.write_text('<robot name="owned-test"/>')
+    stack = RestartStack(controller_config_path=tmp_path/'controllers.yaml',
+        environment={}, urdf_path=robot, scene_path=tmp_path/'scene.xml',
+        plugin_config_path=tmp_path/'plugins.yaml', workspace=tmp_path,
+        session_id='start-test', batch_spawners=batched, teardown_timeout_s=.15)
+    try:
+        stack.start()
+        startup = stack.wait_startup(deadline=time.monotonic()+1.)
+        assert len(stack.processes) == expected_children
+        for child in stack.processes:
+            assert child.wait(timeout=1.) == 0
+        if batched:
+            assert stack.processes[2].args[1:5] == [
+                'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
+                'neck_controller']
+            assert len(startup['children']) == 1
+        else:
+            assert [child.args[1] for child in stack.processes[2:]] == [
+                'joint_state_broadcaster', 'arm_controller', 'gripper_controller',
+                'neck_controller']
+        retirement = stack.stop()
+        assert retirement['closed'] and len(retirement['children']) == expected_children
+        assert len({child['pid'] for child in retirement['children']}) == expected_children
+    finally:
+        stack.stop()

@@ -58,26 +58,32 @@ def _require_resource(handle, name, attribute, code, detail):
 
 
 def _bind_originals(composition, capture, port, observer, runtime):
-    """Deliver each original once to the local observer and bounded writer."""
+    """Deliver originals to the local observer and, when enabled, the writer."""
     from so101_demo.adapters.act.head_original_router import HeadOriginalRouter
 
-    def record(kind, original):
-        runtime.executor_progress()
-        composition.emit(kind, original, source_stamp_ns=original.get('source_ns'))
+    record = None
+    capture.emit = None
+    capture.detection_image_recorder = None
+    if composition.event_log_enabled:
+        def record(kind, original):
+            composition.emit(kind, original, source_stamp_ns=original.get('source_ns'))
 
-    router = HeadOriginalRouter(port, record)
+        def image_payload(kind, *, record, payload):
+            ref = composition.add_artifact(payload, media_type='application/octet-stream', suffix='rgb')
+            stamp = composition.monotonic_ns()
+            composition.writer.append('IMAGE_PAYLOAD', record,
+                source_stamp_ns=record['source_ns'], observed_mono_ns=stamp,
+                occurrence_mono_ns=round(record['wall_s'] * 1e9), artifact_refs=(ref,))
+
+        if composition.inputs.save_all_rgb_frames:
+            capture.emit = image_payload
+        else:
+            capture.detection_image_recorder = image_payload
+    router = HeadOriginalRouter(port, record, progress=runtime.executor_progress)
     router.bind_primary(observer)
     capture.bind_original_sink(router)
     port.bind_head_original_sink(router)
 
-    def image_payload(kind, *, record, payload):
-        ref = composition.add_artifact(payload, media_type='application/octet-stream', suffix='rgb')
-        stamp = composition.monotonic_ns()
-        composition.writer.append('IMAGE_PAYLOAD', record,
-            source_stamp_ns=record['source_ns'], observed_mono_ns=stamp,
-            occurrence_mono_ns=round(record['wall_s'] * 1e9), artifact_refs=(ref,))
-
-    capture.emit = image_payload
     capture.begin_live_capture()
     return router
 
@@ -119,9 +125,10 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
     revoker = revoker_callable(**revoker_keywords)
     runtime = HeadLocalRuntime(node=stack.node, port=stack.port, local_state=state, revoker=revoker,
                                observer=observer, policy=policy,
-                               sink=lambda kind, record, stamp: composition.emit(
+                               sink=(lambda kind, record, stamp: composition.emit(
                                    kind, record, source_stamp_ns=stamp,
                                    occurrence_mono_ns=record.get('callback_wall_ns')))
+                               if composition.event_log_enabled else None)
     router = _bind_originals(composition, capture, stack.port, observer, runtime)
     composition.begin_resource_lifetime('search_runtime')
     original_owner = handle.get('local_ros')
@@ -145,7 +152,8 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
             built['detector'] = build_run_detector_factory(inputs, loader=detector_loader,
                                                            builder=detector_builder)()
             if 'camera_shape_warmup' in built['detector']:
-                runtime.record('HEAD_CAMERA_SHAPE_WARMUP', built['detector']['camera_shape_warmup'])
+                if composition.event_log_enabled:
+                    runtime.record('HEAD_CAMERA_SHAPE_WARMUP', built['detector']['camera_shape_warmup'])
             return built['detector']
 
         make_owner = owner_factory or HeadInferenceOwner
@@ -169,7 +177,8 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
         bind_exposure = exposure_binder or _bind_exposure
         exposure = owner.bind_live(
             lambda detector: bind_exposure(detector, port=stack.port, primary=runtime, policy=policy,
-                                           buffer=handle.get('buffer')),
+                                           buffer=handle.get('buffer'),
+                                           image_recorder=capture.detection_image_recorder),
             timeout_s=1.)
         # the owner's bind answers with its metadata while the exposure it built lives on the owner
         # (CP-HFP-547/549); the capture needs the exposure, so take it from there when needed
@@ -187,39 +196,46 @@ def run_owned_search(composition, handle, *, max_ticks=None, clock=time.monotoni
         search = OwnedHeadSearch(config=config, primary=runtime, port=stack.port, owner=owner,
                                  settlement=settlement,
                                  stop_velocity_rad_s=config['settle_velocity_rad_s'],
-                                 emit=lambda kind, **record: runtime.record(kind, record),
+                                 emit=(lambda kind, **record: runtime.record(kind, record))
+                                 if composition.event_log_enabled else None,
                                  monotonic=clock, local_state=state, policy=policy)
         search.bind_transport(neck)
         composition.bind_search(search)
         from so101_demo.adapters.act.head_execution_owner_bridge import HeadExecutionOwnerBridge
         owner_bridge = HeadExecutionOwnerBridge(composition)
         handle['execution_owner'] = owner_bridge
-        composition.emit('EXECUTION_LOOP_BOUND',
-                         {'run': inputs.run, 'scope': inputs.execution_scope,
-                          'declarations': sorted(declarations)})
+        if composition.event_log_enabled:
+            composition.emit('EXECUTION_LOOP_BOUND',
+                             {'run': inputs.run, 'scope': inputs.execution_scope,
+                              'declarations': sorted(declarations)})
         _await_originals(observer, composition, clock=clock)
         guard = _build_trajectory_guard(composition, handle, runtime)
         def admit_initial_move():
             _bind_prepared_transport(composition,handle,runtime,guard)
-            composition.emit('EXECUTION_OWNER_DESCRIPTOR', owner_bridge.descriptor())
-            owner_bridge.submit_target(config['required_search_domain_rad'][0])
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_OWNER_DESCRIPTOR', owner_bridge.descriptor())
+            receipt = owner_bridge.submit_target(config['required_search_domain_rad'][0])
+            if handle.get('camera_relay') is not None:
+                handle['camera_relay'].cut_after_sdk_return(receipt)
         return _drive(composition, search, runtime, owner, capture, exposure,
                       max_ticks if max_ticks is not None else _loop_bound(policy),
                       after_arm=admit_initial_move)
     finally:
-        outcomes = {}
+        outcomes = {} if composition.event_log_enabled else None
         report = retire_run_resources(runtime, exposure, owner, outcomes=outcomes,
                              defer_original_retirement=original_owner is not None,
-                             emit=lambda stage, error: composition.emit(
+                             emit=(lambda stage, error: composition.emit(
                                  'EXECUTION_LOOP_RETIRE_FAILED', {'stage': stage, 'error': error}))
-        composition.emit('EXECUTION_LOOP_RETIREMENT', {'failures': report, 'outcomes': outcomes})
+                             if composition.event_log_enabled else None)
+        if composition.event_log_enabled:
+            composition.emit('EXECUTION_LOOP_RETIREMENT', {'failures': report, 'outcomes': outcomes})
         composition.finish_resource_lifetime('search_runtime', confirmed=not any(report.values()))
         if any(report.values()):
             _refuse(RUNNER_REFUSED, f'owned retirement unconfirmed: {report}')
 
 
 
-def _bind_exposure(detector, *, port, primary, policy, buffer):
+def _bind_exposure(detector, *, port, primary, policy, buffer, image_recorder=None):
     """The owner hands back the detector it built; the exposure is bound to it exactly once."""
 
     reset = getattr(detector, 'reset', None)
@@ -227,7 +243,9 @@ def _bind_exposure(detector, *, port, primary, policy, buffer):
         reset()
     return HeadLiveExposures(port=port, buffer=buffer, detector=detector, primary=primary, monitor=None,
                              camera_skew_s=min(.05, policy.perception_max_age_s),
-                             emit=lambda kind, **record: primary.record(kind, record))
+                             image_recorder=image_recorder,
+                             emit=(lambda kind, **record: primary.record(kind, record))
+                             if primary._sink is not None else None)
 
 
 def _loop_bound(policy) -> int:
@@ -252,17 +270,19 @@ def _await_originals(observer, composition, *, clock=time.monotonic, timeout_s=1
             if first_error is None:
                 first_error = last_error
             if observer.failed or observer.closed or now >= deadline:
-                composition.emit('EXECUTION_STARTUP_INPUT_REFUSED',
-                    {'first_error': first_error, 'last_error': last_error,
-                     'deadline_wall_s': deadline, 'observed_wall_s': now})
+                if composition.event_log_enabled:
+                    composition.emit('EXECUTION_STARTUP_INPUT_REFUSED',
+                        {'first_error': first_error, 'last_error': last_error,
+                         'deadline_wall_s': deadline, 'observed_wall_s': now})
                 _refuse(SOURCE_ABSENT, f'{first_error}; latest: {last_error}')
             time.sleep(min(.01, max(0., deadline - now)))
         else:
-            composition.emit('EXECUTION_STARTUP_INPUT_READY',
-                {'clock_source_ns': current['clock']['source_ns'],
-                 'joint_source_ns': current['joint']['source_ns'],
-                 'camera_source_ns': current['camera_pair']['source_ns'],
-                 'observed_wall_s': now})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_STARTUP_INPUT_READY',
+                    {'clock_source_ns': current['clock']['source_ns'],
+                     'joint_source_ns': current['joint']['source_ns'],
+                     'camera_source_ns': current['camera_pair']['source_ns'],
+                     'observed_wall_s': now})
             return current
 
 
@@ -291,52 +311,102 @@ def _bind_prepared_transport(composition, handle, runtime, guard):
     from so101_demo.adapters.act.head_inventory_dispatch import HeadInventoryDispatcher
     dispatcher = HeadInventoryDispatcher(runtime.port,runtime._authority,runtime.local_state,
         guard=guard,own_inventory=runtime.own_inventory,fault_callback=runtime.fault,
-        emit=lambda kind, **record: runtime.record(kind,record))
+        emit=(lambda kind, **record: runtime.record(kind,record))
+        if composition.event_log_enabled else None)
     handle['scene'].bind_admission(runtime=runtime, guard=guard)
     handle['neck'].bind_prepared_head(dispatcher,guard=guard,
         stop_handoff=lambda occurred_ns,deadline_ns: runtime.stop('signal',dict(
             occurred_ns=occurred_ns,deadline_ns=deadline_ns)))
-    composition.emit('EXECUTION_PREPARED_TRANSPORT_BOUND',dict(
-        scope=runtime.local_state.scope,reset_epoch=guard.reset_epoch,
-        model_semantic_sha256=guard.model_semantic_sha256,geometry_sha256=guard.geometry_sha256))
+    if composition.event_log_enabled:
+        composition.emit('EXECUTION_PREPARED_TRANSPORT_BOUND',dict(
+            scope=runtime.local_state.scope,reset_epoch=guard.reset_epoch,
+            model_semantic_sha256=guard.model_semantic_sha256,geometry_sha256=guard.geometry_sha256))
     return dispatcher
 
 
 def _drive(composition, search, runtime, owner, capture, exposure, bound_ticks, *, after_arm=None) -> int:
+    import signal
+    import threading
+    stop_requested = threading.Event()
+    original_handler = None
+    if threading.current_thread() is threading.main_thread():
+        original_handler = signal.getsignal(signal.SIGTERM)
+        signal.signal(signal.SIGTERM, lambda signum, frame: stop_requested.set())
+    try:
+        return _drive_loop(composition, search, runtime, owner, capture, exposure,
+                           bound_ticks, after_arm=after_arm, signal_stop=stop_requested)
+    finally:
+        if original_handler is not None:
+            signal.signal(signal.SIGTERM, original_handler)
+
+
+def _drive_loop(composition, search, runtime, owner, capture, exposure, bound_ticks, *,
+                after_arm=None, signal_stop=None) -> int:
     runtime.start()
-    runtime.arm()
+    from so101_demo.adapters.act.head_local_runtime import HeadStartupCancelled
+    def operator_stop():
+        if signal_stop is None or not signal_stop.is_set():return False
+        import signal
+        result=dict(status='INTERRUPTED',signal=signal.SIGTERM)
+        runtime.stop('sigterm',result)
+        if composition.event_log_enabled:composition.emit('EXECUTION_OPERATOR_TERMINAL',result)
+        return True
+    if operator_stop():return 1
+    try:
+        runtime.arm(cancel_event=signal_stop)
+    except HeadStartupCancelled:
+        operator_stop()
+        return 1
+    if operator_stop():return 1
     if after_arm is not None:
         try: after_arm()
         except Exception:
             runtime.fault('HEAD_EXECUTION_TRAJECTORY_BINDING_FAILED')
             raise
+    if operator_stop():return 1
     capture.bind_live_sink(exposure.observe)
+    if operator_stop():return 1
     owner.activate_live()
+    if operator_stop():return 1
     ticks = 0
     while ticks < bound_ticks:
         ticks += 1
+        if signal_stop is not None and signal_stop.is_set():
+            import signal
+            result = dict(status='INTERRUPTED', signal=signal.SIGTERM)
+            runtime.stop('sigterm', result)
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_OPERATOR_TERMINAL', result)
+            return 1
         if runtime.faulted:
-            composition.emit('EXECUTION_LOOP_RUNTIME_FAULT',
-                             {'ticks': ticks, 'reason': runtime.fault_reason})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_LOOP_RUNTIME_FAULT',
+                                 {'ticks': ticks, 'reason': runtime.fault_reason})
             return 1
         try:
             result = search.tick()
         except Exception as error:
-            composition.emit('EXECUTION_LOOP_REFUSED',
-                             {'ticks': ticks, 'error': type(error).__name__})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_LOOP_REFUSED',
+                                 {'ticks': ticks, 'error': type(error).__name__})
             return 1
         if result is not None:
-            composition.emit('EXECUTION_LOOP_TERMINAL',
-                             {'ticks': ticks, 'status': result.get('status')})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_LOOP_TERMINAL',
+                                 {'ticks': ticks, 'status': result.get('status')})
             if result.get('status') == 'TARGET_LOCKED':
                 runtime.stop('success',result)
                 return 0
+            if result.get('status') in ('TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL', 'TARGET_AMBIGUOUS'):
+                runtime.stop('not_found', result)
+                return 1
             if not runtime.stop_requested:
                 runtime.fault('HEAD_EXECUTION_TERMINAL_FAILED')
             return 1
         # Wait at the frozen watchdog cadence so callbacks/inference can
         # progress within the original search deadline and tick bound.
         runtime._shutdown.wait(runtime.policy.watchdog_period_s)
-    composition.emit('EXECUTION_LOOP_BOUND_REACHED', {'ticks': ticks})
+    if composition.event_log_enabled:
+        composition.emit('EXECUTION_LOOP_BOUND_REACHED', {'ticks': ticks})
     runtime.fault('HEAD_EXECUTION_LOOP_BOUND_REACHED')
     return 1

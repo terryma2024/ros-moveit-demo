@@ -17,6 +17,7 @@
 #include "so101_mujoco_support/controller_reservation_provision.hpp"
 #include "so101_mujoco_support/controller_reservation_socket.hpp"
 #include "so101_mujoco_support/controller_stop_witness.hpp"
+#include "so101_mujoco_support/controller_stop_evaluation.hpp"
 
 namespace so101_mujoco_support
 {
@@ -25,6 +26,7 @@ class BrokerOwnedTrajectoryController
   : public joint_trajectory_controller::JointTrajectoryController
 {
 public:
+  ~BrokerOwnedTrajectoryController() override;
   controller_interface::return_type update(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
@@ -99,9 +101,27 @@ protected:
       }, 250000000, 1048576, 2048, identity, revocation_latch_);
   }
   std::optional<ControllerStopWitness::Proof> controller_stop_proof();
+  ControllerStopEvaluation controller_stop_evaluation();
   std::optional<ControllerIngressWitness::Snapshot> controller_ingress_snapshot();
 
 private:
+  friend struct BrokerOwnedTrajectoryControllerTestAccess;
+  enum class StopFailureReason
+  {
+    INACTIVE_BEFORE, JOINT_SCOPE, ACTIVE_BEFORE, INACTIVE_AFTER, ACTIVE_AFTER, WITNESS, SNAPSHOT_UNAVAILABLE
+  };
+  struct StopFailure
+  {
+    const BrokerOwnedTrajectoryController * owner;
+    StopFailureReason wrapper_reason;
+    std::optional<ControllerStopWitness::Snapshot> snapshot;
+  };
+  // Proof and its post-reply diagnostic run on the same service worker. TLS
+  // keeps other callers isolated without introducing locks into RT feedback.
+  static thread_local std::optional<StopFailure> pending_stop_failure_;
+  std::atomic<uint64_t> stop_evaluation_id_{0};
+  void emit_stop_refusal_diagnostic();
+
   enum class HeadTerminalRequest : uint8_t {NONE, ABORT, CANCEL};
   struct HeadCandidate
   {
@@ -160,6 +180,8 @@ private:
   std::atomic<bool> head_goal_reserved_{false};
   std::atomic<bool> head_active_goal_{false};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr head_parameter_callback_;
+  std::unique_ptr<StopTimingCollector> stop_timing_collector_;
+  std::atomic<uint64_t> timing_update_id_{0};
   ControllerStopWitness arm_stop_witness_{5};
   ControllerStopWitness gripper_stop_witness_{1};
   ControllerStopWitness neck_stop_witness_{1};

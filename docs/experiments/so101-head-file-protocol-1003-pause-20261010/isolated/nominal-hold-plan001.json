@@ -1,0 +1,97 @@
+{
+  "schema": "COHERENT_NOMINAL_HOLD_PLAN_001",
+  "scope": "Three original holding-only 120-second checks after coherent sim-time repair; detector/search/perception/visual qualification remains separate",
+  "implementation_executor": "root inline under persistent user authorization",
+  "model_override": "User-authorized GPT-6.1 Sol High inline",
+  "count": 3,
+  "duration_s": 120,
+  "lifecycle": "FULL_RESTART",
+  "stop_on_first_failure": true,
+  "retry_until_green": false,
+  "source_head": "de70d83ed1e599c5dbb26843e06bd1af574f0a93",
+  "source_changes": "No further product change; frozen C node and manager plus unchanged R native/product",
+  "single_variable": "Remove injected actual-clock wait and optional diagnostic clock/exit observations from the original holding workload; retain coherent cycle contract",
+  "runtime": {
+    "node": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node",
+    "manager": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install/controller_manager/lib/libcontroller_manager.so",
+    "original_helper": "/data/work/ws_moveit/.worktrees/so101-head-file-protocol-1003/src/so101_demo_py/test/head_neck_timing_probe.py",
+    "product_native": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/stop-witness-isolation-fpfvhl3p/install",
+    "domain_id": 228,
+    "sessions": [
+      "hfp1010-nominal-001",
+      "hfp1010-nominal-002",
+      "hfp1010-nominal-003"
+    ],
+    "generations": [
+      109960001,
+      109960002,
+      109960003
+    ]
+  },
+  "worker_reuse": {
+    "base": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/holding-supervisor.py",
+    "guardian": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/bounded_guardian.py",
+    "guardian_changes": false,
+    "original_deadlines": {
+      "normal_cancel_s": 240,
+      "cleanup_s": 255,
+      "kill_s": 256,
+      "owner_kill_s": 285,
+      "total_s": 300,
+      "stop_s": 1,
+      "writer_finish_s": 1
+    },
+    "adaptation": [
+      "Separate new worker for nominal runs; do not alter sealed diagnostic worker or existing installed product",
+      "Fresh per-run inputs/reservation/IPC/snapshots/ROS homes/NVMe scratch and preflight; no optional clock/probe/exit environment variables",
+      "Exact owner and node identities/DSO role maps using existing verified validators; owner R transport only, node frozen C hardware/manager/linked diagnostic libraries plus R native",
+      "No phase or raw-clock reader for nominal runs; both optional observers remain disabled",
+      "All three original native full streams independently parsed only after original normal retirement: format/ready/controllerID/status/count/duration/period/sequence/sim continuity and >=60000 holding updates each",
+      "Original report qualified true/rc0, original strict startup/Stop/close/seal, original allchildrc0 and samePID/start absence, separate postflight ROS graph, original no fallback/forced cleanup",
+      "Guardian authoritative result must be retained and checked before the parent promotes a worker result to PASS or advances to the next run",
+      "Fixed three row progress retains failures and NOT_RUN rows, no replacement run after failure"
+    ]
+  },
+  "gates": [
+    "Independent design review before new worker implementation",
+    "Meaningful negative regression of native full-stream reader and nominal completeness/failure rules; xdist8/exact Python/newNVMe scratch",
+    "Fresh parser/scope/prefix/graph checks and frozen source/install binding",
+    "Independent worker/launch result review before starting three-run batch",
+    "Each run exact authoritative guardian output/rc and full strict raw native/OS/ROS readback; stop on first failure"
+  ],
+  "limits": [
+    "Three nominal holds do not prove Head search/case9 READY-to-ARM, perception, live20/fresh40 or visual outcomes",
+    "Historical original cause and old evidence-close timeout remain UNKNOWN",
+    "Root ordinary 176 baseline failures remain unwaived",
+    "No deletion, commit, push, global installs or model configuration changes"
+  ],
+  "retention": {
+    "root": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001",
+    "scratch": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/scratch/nominal-holds001",
+    "archived": [],
+    "deletion_candidates": "Completed/read-back scratch and retired canonical IPC only, no deletion authorized"
+  },
+  "original_helper_sha256": "08ac6330f2e75b04a783a58478d32406e9fc627d61ea09f0a5f320570cc9cdd2",
+  "frozen_references": [
+    {
+      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/runtime-source-manifest.json",
+      "sha256": "41034c093338854381da79e4ef33489e6de49425e84ae73678bd15d82019700d"
+    },
+    {
+      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/runtime-install-inventory.json",
+      "sha256": "bcb5d23bea3c30faaf5c12969e603f108209da20c5137695de8fecdc2a8c457a"
+    },
+    {
+      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/package-tests003-result.json",
+      "sha256": "107b957907f469bb424732dc8b0363133c630a04f77b4fa24cf391459f4755d9"
+    },
+    {
+      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/holding001/afterrepair-facts.json",
+      "sha256": "baee0976b5785768af6755e6a4c6424dd70d58d91334912295ff4f4924860229"
+    },
+    {
+      "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/holding001/analysis.json",
+      "sha256": "2b8a7f3984a2aedd675146a8c17a258f7cca098ec0ea57c6840e39587a038ed4"
+    }
+  ]
+}

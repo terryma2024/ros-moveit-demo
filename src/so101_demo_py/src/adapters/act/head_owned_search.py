@@ -56,8 +56,9 @@ class OwnedHeadSearch:
     def __init__(self,*,config,primary,port,owner,settlement,stop_velocity_rad_s,
                  emit,monotonic=time.monotonic,local_state=None,policy=None,
                  initial_settled_source_floor_ns=1):
-        self.controller=HeadSearchController(config)
-        if (not callable(settlement) or not callable(emit) or not callable(monotonic)
+        self.controller=HeadSearchController(config,simulation_policy=(
+            policy if 'required_search_domain_rad' in config else None))
+        if (not callable(settlement) or (emit is not None and not callable(emit)) or not callable(monotonic)
                 or type(stop_velocity_rad_s) not in (int,float)
                 or not math.isfinite(stop_velocity_rad_s) or stop_velocity_rad_s<=0):
             raise ValueError('HEAD_OWNED_SEARCH_CONFIG_INVALID')
@@ -95,7 +96,9 @@ class OwnedHeadSearch:
             # never be reset by a reobservation.
             self._budget=BoundedObservationBudget(policy,started_wall_s=(
                 local_state.search_deadline_ns*1e-9-policy.search_timeout_s))
-        self.commands=[];self.observations=[];self.result=None
+        self.commands=[] if emit is not None else ()
+        self.observations=[] if emit is not None else ()
+        self.result=None
 
     def bind_transport(self,neck):
         if self._neck is not None or not callable(getattr(neck,'command_neck',None)):
@@ -126,7 +129,7 @@ class OwnedHeadSearch:
         command = dict(target_rad=self._target,sequence=self._sequence,source_ns=current['source_ns'],
             original_deadline_ns=self._local_state.search_deadline_ns,dispatch_wall_s=now,
             initial_development_move=True)
-        self.commands.append(command)
+        if self.emit is not None:self.commands.append(command)
         try:
             gid = self._neck.command_neck(self._target,session_id=self.controller.config['session_id'],
                 attempt_id=self.controller.config['attempt_id'],
@@ -134,10 +137,12 @@ class OwnedHeadSearch:
         except Exception:
             self.primary.fault('HEAD_INITIAL_MOVE_REFUSED')
             raise
-        command['goal_uuid'], command['sdk_return_wall_s'] = gid, self.monotonic()
+        command['goal_uuid'] = gid
+        if self.emit is not None:command['sdk_return_wall_s'] = self.monotonic()
         self._active = command
         self.controller.target = self._target
-        self.emit('SEARCH_OWNED_GOAL_DISPATCHED',command=deepcopy(command))
+        if self.emit is not None:
+            self.emit('SEARCH_OWNED_GOAL_DISPATCHED',command=deepcopy(command))
         return gid
 
     def _settle(self,current):
@@ -146,8 +151,9 @@ class OwnedHeadSearch:
         with self.port._lock:
             state=dict(self.port._goals[gid])
         response=state.get('result')
-        command['accepted']=state.get('accepted');command['terminal_status']=getattr(response,'status',None)
-        command['result_error_code']=getattr(getattr(response,'result',None),'error_code',None)
+        if self.emit is not None:
+            command['accepted']=state.get('accepted');command['terminal_status']=getattr(response,'status',None)
+            command['result_error_code']=getattr(getattr(response,'result',None),'error_code',None)
         if (state.get('accepted') is False or state.get('error') is not None
                 or (response is not None and (response.status!=4 or response.result.error_code!=0))):
             raise PermissionError('HEAD_SEARCH_OWNED_GOAL_FAILED')
@@ -166,10 +172,12 @@ class OwnedHeadSearch:
             source_floor_ns=command['terminal_source_floor_ns'],dispatch_wall_s=command['dispatch_wall_s'],
             terminal_wall_s=command['terminal_observed_wall_s'])
         if proof is None:return False
-        command['confirming_samples']=deepcopy(proof);command['settled_wall_s']=self.monotonic()
+        if self.emit is not None:command['confirming_samples']=deepcopy(proof)
+        command['settled_wall_s']=self.monotonic()
         self._settled_floor=proof[-1]['source_ns'];self._settled_wall_s=command['settled_wall_s']
         self._active=None
-        self.emit('SEARCH_OWNED_GOAL_SETTLED',command=deepcopy(command))
+        if self.emit is not None:
+            self.emit('SEARCH_OWNED_GOAL_SETTLED',command=deepcopy(command))
         return True
 
     def _submit_observation_request(self):
@@ -189,8 +197,9 @@ class OwnedHeadSearch:
             settled_source_floor_ns=self._settled_floor,settled_wall_s=self._settled_wall_s,
             requested_wall_s=now,search_deadline_ns=deadline)
         self._pending_request=self.owner.request_observation(request)
-        self.emit('SEARCH_OBSERVATION_REQUESTED',request=dict(self._pending_request),
-            budget=self._budget.readback())
+        if self.emit is not None:
+            self.emit('SEARCH_OBSERVATION_REQUESTED',request=dict(self._pending_request),
+                budget=self._budget.readback())
         return self._pending_request
 
     @property
@@ -211,9 +220,10 @@ class OwnedHeadSearch:
         if not self._budget.reobserve(self._motion_epoch,outcome,self.monotonic()):
             return self._terminal(dict(status='SEARCH_OBSERVATION_BUDGET_EXHAUSTED',
                 found=False,observation_outcome=outcome,budget=self._budget.readback()))
-        self.emit('SEARCH_OBSERVATION_DISCARDED',sequence=row['sequence'],
-            observation_sequence=self._observation_sequence,outcome=outcome,
-            budget=self._budget.readback())
+        if self.emit is not None:
+            self.emit('SEARCH_OBSERVATION_DISCARDED',sequence=row['sequence'],
+                observation_sequence=self._observation_sequence,outcome=outcome,
+                budget=self._budget.readback())
         self._submit_observation_request()
         return None
 
@@ -234,8 +244,11 @@ class OwnedHeadSearch:
                 sequence=self._sequence,source_ns=None,decision_wall_s=self.monotonic(),
                 reason='lock')
         self.result=deepcopy(result)
-        self.emit('SEARCH_CONTROLLER_TERMINAL',result=self.result,commands=deepcopy(self.commands))
-        if result['status']!='TARGET_LOCKED':self.primary.fault('HEAD_SEARCH_'+result['status'])
+        if self.emit is not None:
+            self.emit('SEARCH_CONTROLLER_TERMINAL',result=self.result,commands=deepcopy(self.commands))
+        if result['status'] not in ('TARGET_LOCKED', 'TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL',
+                                    'TARGET_AMBIGUOUS'):
+            self.primary.fault('HEAD_SEARCH_'+result['status'])
         return deepcopy(self.result)
 
     def tick(self):
@@ -245,9 +258,10 @@ class OwnedHeadSearch:
             if self.result is not None:return deepcopy(self.result)
             self.owner.infer();self.primary.dispatch_guard();current=self.port.feedback_snapshot()
             now=self.monotonic()
-            self.emit('SEARCH_CONTROL_DECISION',decision=current['decision'],
-                original_joint={key:value for key,value in current.items() if key!='decision'},
-                controller_thread_native_id=threading.get_native_id())
+            if self.emit is not None:
+                self.emit('SEARCH_CONTROL_DECISION',decision=current['decision'],
+                    original_joint={key:value for key,value in current.items() if key!='decision'},
+                    controller_thread_native_id=threading.get_native_id())
             terminal=self.controller.advance_deadline(now)
             if terminal is not None:return self._terminal(terminal)
             settled=self._settle(current)
@@ -289,8 +303,9 @@ class OwnedHeadSearch:
                     raise PermissionError('HEAD_SEARCH_COMPLETED_SEQUENCE_INVALID')
                 self._sequence=row['sequence']
             if not settled or row['source_ns']<=self._settled_floor:
-                self.emit('SEARCH_EXPOSURE_BEFORE_OWNED_SETTLEMENT',sequence=self._sequence,
-                    source_ns=row['source_ns'],settled_source_floor_ns=self._settled_floor)
+                if self.emit is not None:
+                    self.emit('SEARCH_EXPOSURE_BEFORE_OWNED_SETTLEMENT',sequence=self._sequence,
+                        source_ns=row['source_ns'],settled_source_floor_ns=self._settled_floor)
                 return None
             deadline=row['deadline_ns']
             frame,feedback=map_owned_search_exposure(row,self.controller.config)
@@ -310,11 +325,12 @@ class OwnedHeadSearch:
                 if self._local_state is not None:return self._discard_observation(row,'EXPIRED')
                 raise PermissionError('HEAD_SEARCH_SELECTED_EXPOSURE_EXPIRED')
             self.controller=candidate
-            self.observations.append(dict(sequence=self._sequence,source_ns=row['source_ns'],
-                track_id=self.controller.track,lock_count=self.controller.lock_count,
-                core_tick_wall_s=core_wall,current_joint=context['sample'],
-                current_joint_decision=context['decision'],decision=deepcopy(decision)))
-            self.emit('SEARCH_EXPOSURE_DECISION',observation=deepcopy(self.observations[-1]))
+            if self.emit is not None:
+                self.observations.append(dict(sequence=self._sequence,source_ns=row['source_ns'],
+                    track_id=self.controller.track,lock_count=self.controller.lock_count,
+                    core_tick_wall_s=core_wall,current_joint=context['sample'],
+                    current_joint_decision=context['decision'],decision=deepcopy(decision)))
+                self.emit('SEARCH_EXPOSURE_DECISION',observation=deepcopy(self.observations[-1]))
             if 'found' in decision:return self._terminal(decision)
             if decision['stop']:
                 raise PermissionError('HEAD_SEARCH_'+decision['status'])
@@ -332,14 +348,16 @@ class OwnedHeadSearch:
             # Preserve an incomplete command if the existing dispatcher sends
             # before a later boundary refuses. Its authoritative UUID inventory
             # still belongs to primary/CPU and must participate in owned stop.
-            self.commands.append(command)
+            if self.emit is not None:self.commands.append(command)
             gid=self._neck.command_neck(target,session_id=self.controller.config['session_id'],
                 attempt_id=self.controller.config['attempt_id'],observation_time_s=frame['sim_time_s'])
-            command['goal_uuid']=gid;command['sdk_return_wall_s']=self.monotonic()
+            command['goal_uuid']=gid
+            if self.emit is not None:command['sdk_return_wall_s']=self.monotonic()
             self.primary.dispatch_observation_deadline(None)
             if self._local_state is None:self._target=target
             self._active=command
-            self.emit('SEARCH_OWNED_GOAL_DISPATCHED',command=deepcopy(command))
+            if self.emit is not None:
+                self.emit('SEARCH_OWNED_GOAL_DISPATCHED',command=deepcopy(command))
             return None
         except Exception:
             self.primary.fault('HEAD_OWNED_SEARCH_REFUSED')

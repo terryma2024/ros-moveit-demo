@@ -42,6 +42,7 @@ class _AckServer:
         self.socket.bind(str(self.path))
         os.chmod(self.path, 0o600)
         self.socket.listen(1)
+        self._stop = threading.Event()
         self.thread = threading.Thread(target=self._serve, daemon=True)
         self.thread.start()
 
@@ -49,10 +50,7 @@ class _AckServer:
         # the real service is long-lived: arm, per-role query and close each arrive on
         # their own short connection
         self.socket.settimeout(0.05)
-        self._stop = threading.Event()
-        for _ in range(8):
-            if self._stop.is_set():
-                return
+        while not self._stop.is_set():
             try:
                 connection, _ = self.socket.accept()
             except (socket.timeout, TimeoutError):
@@ -91,8 +89,7 @@ class _AckServer:
                 connection.sendall(struct.pack(">I", len(payload)) + payload)
 
     def close(self):
-        if hasattr(self, "_stop"):
-            self._stop.set()
+        self._stop.set()
         try:
             self.socket.close()
         except OSError:
@@ -115,6 +112,17 @@ def _real_client(roles):
     client = ControllerReservationClient({role: str(server.path) for role, server in servers.items()},
                                          capability=capabilities, timeout_s=1.0)
     return client, servers
+
+
+def test_ack_service_remains_available_during_delayed_authority_setup():
+    """A scheduling delay must not end the real socket service before the client arms."""
+    client, servers = _real_client(("arm", "gripper"))
+    try:
+        servers["arm"].thread.join(timeout=0.6)
+        assert client.arm_generation((4, "clock-session", "broker", "permit", 1)) is True
+    finally:
+        for server in servers.values():
+            server.close()
 
 
 def _domain():

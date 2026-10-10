@@ -190,6 +190,8 @@ def resource_plan(inputs, *, modules: Mapping | None = None):
                       'keywords': {'controller_config_path': refs['controller_config']['path'],
                                    'session_id': inputs.run['session_id'],
                                    'teardown_timeout_s': teardown_timeout_s,
+                                   'event_log_enabled': inputs.event_log_enabled,
+                                   'batch_spawners': True,
                                    # the stack spawns its children with this mapping (CP-HFP-586), so it carries the run's
                                    # environment — and with it the PYTHONPATH the controller spawner needs
                                    'environment': dict(os.environ,
@@ -225,6 +227,18 @@ def assemble(composition, inputs, *, plan):
     built: list[tuple[str, object]] = []
     handle: dict[str, object] = {'run': dict(inputs.run), 'scope': inputs.execution_scope}
     composition.begin_resource_lifetime('provider_ros')
+    def attach_campaign_truth(node):
+        if ('scenario_fixture' not in inputs.refs
+                or inputs.document.get('campaign_truth_enabled', True) is False):
+            return
+        if 'campaign_truth' in handle:
+            raise PermissionError('HEAD_TRUTH_OWNER_REBOUND')
+        from .head_campaign_truth_collector import create_campaign_truth_collector
+        collector=create_campaign_truth_collector(node=node,inputs=inputs,writer=composition.writer)
+        handle['campaign_truth']=collector
+        # Preserve callbacks until the owned native child has exited; retire
+        # them before the local node/context and writer are closed.
+        built.insert(max(0,len(built)-1),('campaign_truth',collector))
     try:
         stack_entry = plan['constructors']['stack']
         stack = stack_entry['callable'](**stack_entry['keywords'])
@@ -236,6 +250,7 @@ def assemble(composition, inputs, *, plan):
         # ros is bound exactly once per path: a stack that carries an in-process node and port is bound
         # here, and a launcher stack is bound below, after the run has built its own local set (CP-HFP-216)
         if node is not None and port is not None:
+            attach_campaign_truth(node)
             composition.bind_ros(node=node, port=port)
         handle['stack'] = stack
         if node is None or port is None:
@@ -287,9 +302,22 @@ def assemble(composition, inputs, *, plan):
                                                 max_age_s=development_values['max_age_s'],
                                                 feedback_policy=bound_feedback)
                 local_ros.port = local_port
+                camera_relay = None
+                if 'CAMERA_LOSS_AFTER_FIRST_SDK_RETURN' in inputs.document.get('fault_stop_probes', []):
+                    if 'scenario_fixture' not in inputs.refs:
+                        raise PermissionError('HEAD_CAMERA_INJECTION_SCOPE_INVALID')
+                    fixture = json.loads(Path(inputs.refs['scenario_fixture']['path']).read_text())
+                    if fixture.get('injection', {}).get('kind') != 'camera_loss':
+                        raise PermissionError('HEAD_CAMERA_INJECTION_SCOPE_INVALID')
+                    from .head_campaign_camera_relay import HeadCampaignCameraRelay
+                    camera_relay = HeadCampaignCameraRelay(emit=(
+                        lambda kind, **record: composition.emit(kind, record))
+                        if composition.event_log_enabled else None)
+                    handle['camera_relay'] = camera_relay
+                    built.insert(0, ('camera_relay', camera_relay))
                 capture = StoppedHeadCapture(local_node, local_port,
                                               frame_id=development_config['camera']['frame_id'],
-                                              strict=False, emit=lambda *arguments, **keywords: None)
+                                              strict=False, emit=None, camera_relay=camera_relay)
                 from so101_demo.adapters.act.ros_neck import RosNeckSearchPort
                 # MUJOCO_DEVELOPMENT_UNQUALIFIED scope (plan lines 163/207, CP-HFP-273): the run's values
                 # come from the development config it declares, and the neck duration from the declared search
@@ -304,6 +332,7 @@ def assemble(composition, inputs, *, plan):
                                   command_guard=lambda *arguments, **keywords: False,
                                   controller_port=local_port, feedback_policy=bound_feedback)
                 handle['node'], handle['port'] = local_node, local_port
+                attach_campaign_truth(local_node)
                 # the launcher stack owns the ROS graph as child processes (plan line 194) and starts
                 # it itself (CP-HFP-569): without a live graph the observer receives nothing and the
                 # runtime cannot arm, which is what runs 076-087 measured
@@ -331,14 +360,15 @@ def assemble(composition, inputs, *, plan):
                             executor = SingleThreadedExecutor(context=node.context)
                             executor.add_node(node)
                             turns = 0
-                            last_report = time.monotonic()
+                            last_report = time.monotonic() if composition.event_log_enabled else None
                             while node.context.ok() and not local_ros.stop.is_set():
                                 executor.spin_once(timeout_sec=.1)
-                                turns += 1
-                                now = time.monotonic()
-                                if turns % 200 == 0 or now - last_report > 5.0:
-                                    last_report = now
-                                    print('SPIN_TURNS %d' % turns, flush=True)
+                                if composition.event_log_enabled:
+                                    turns += 1
+                                    now = time.monotonic()
+                                    if turns % 200 == 0 or now - last_report > 5.0:
+                                        last_report = now
+                                        print('SPIN_TURNS %d' % turns, flush=True)
                         except Exception as error:
                             import sys
                             if not local_ros.stop.is_set():
@@ -382,11 +412,12 @@ def assemble(composition, inputs, *, plan):
             credentials = provision_owned_native(inputs, stack, composition.policy)
             handle['native_provisions'] = credentials['provision_receipts']
             handle['native_child'] = credentials['native_child']
-            composition.emit('NATIVE_CHILD_BOUND', credentials['native_child'])
-            composition.emit('NATIVE_PROVISIONS', credentials['provision_receipts'])
+            if composition.event_log_enabled:
+                composition.emit('NATIVE_CHILD_BOUND', credentials['native_child'])
+                composition.emit('NATIVE_PROVISIONS', credentials['provision_receipts'])
             for stage, key in (('native', 'native_keywords'), ('revoker', 'revoker_keywords')):
                 handle[stage + '_entry'] = dict(plan['constructors'][stage],
-                                               keywords=credentials[key])
+                    keywords=dict(credentials[key], event_log_enabled=composition.event_log_enabled))
         else:
             # Explicit constructor injection is used by directed tests. Native
             # production constructors refuse empty/missing scope themselves.
@@ -396,10 +427,14 @@ def assemble(composition, inputs, *, plan):
             from .head_execution_scene import load_scene_safety
             from .head_execution_reset import OwnedHeadScene, rebase_startup_originals
             safety = load_scene_safety(inputs)
+            collector=handle.get('campaign_truth')
             scene = OwnedHeadScene(node=stack.node, inputs=inputs, safety=safety,
                 max_age_s=composition.policy.feedback_receipt_timeout_s,
                 startup_ready=stack.wait_startup,
-                emit=lambda kind, record: composition.emit(kind, record))
+                on_verified_reset=(collector.recorder.wait_initial_reset_frame
+                                   if collector is not None else None),
+                emit=(lambda kind, record: composition.emit(kind, record))
+                if composition.event_log_enabled else None)
             # Keep scene originals through stack teardown, then retire this
             # subscription before its owned node/context closes.
             built.insert(max(0,len(built)-1), ('scene',scene))
@@ -414,8 +449,10 @@ def assemble(composition, inputs, *, plan):
         failures = teardown(built)
         composition.finish_resource_lifetime('provider_ros', confirmed=not failures)
         _preserve_stack_log(composition, handle.get('stack'))
+        _preserve_campaign_truth(composition,handle)
         if failures:
-            composition.emit('EXECUTION_PROVIDER_RETIRE_FAILED', {'failures': failures})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_PROVIDER_RETIRE_FAILED', {'failures': failures})
         raise
 
 
@@ -441,6 +478,8 @@ def teardown(built):
                     receipt = candidate()
                     if stage == 'stack':
                         resource.head_retirement_receipt = receipt
+                    elif stage == 'campaign_truth':
+                        resource.retirement_receipt = receipt
                     from so101_demo.act.head_execution_documents import retirement_unconfirmed
                     if retirement_unconfirmed(receipt):
                         failures.append((stage, name, 'HEAD_RETIREMENT_UNCONFIRMED'))
@@ -483,17 +522,27 @@ def provide(composition, inputs, *, plan=None):
                                               detector_loader=development_detector_loader(inputs))
         return plan['runner']['callable'](composition, handle)
     finally:
-        failures = teardown([(stage, handle[stage]) for stage in ('local_ros', 'scene', 'stack')
+        failures = teardown([(stage, handle[stage]) for stage in ('local_ros', 'campaign_truth', 'scene', 'stack')
                   if stage in handle])
         composition.finish_resource_lifetime('provider_ros', confirmed=not failures)
         _preserve_stack_log(composition, handle.get('stack'))
+        _preserve_campaign_truth(composition,handle)
         if failures:
-            composition.emit('EXECUTION_PROVIDER_RETIRE_FAILED', {'failures': failures})
+            if composition.event_log_enabled:
+                composition.emit('EXECUTION_PROVIDER_RETIRE_FAILED', {'failures': failures})
             _refuse(PROVIDER_REFUSED, f'owned teardown failed: {failures}')
+
+
+def _preserve_campaign_truth(composition,handle):
+    collector=handle.get('campaign_truth')
+    if collector is not None and composition.event_log_enabled:
+        receipt=getattr(collector,'retirement_receipt',None)
+        composition.emit('EXECUTION_TRUTH_RETIREMENT',dict(receipt=receipt))
 
 
 def _preserve_stack_log(composition, stack):
     """Retain the closed child log before sealing; no atexit producer mutates a seal."""
+    if not composition.event_log_enabled:return
     path = getattr(stack, 'log_path', None)
     children = getattr(stack,'head_retirement_children',None)
     receipt = getattr(stack, 'head_retirement_receipt', None)

@@ -1,0 +1,205 @@
+"""Offline generated native streams. Never count these as runtime acceptance."""
+import copy
+import importlib
+import json
+import os
+from pathlib import Path
+import shutil
+import struct
+
+import pytest
+
+api = importlib.import_module('legacy_nominal_test_adapter' if
+    os.environ.get('SO101_NOMINAL_LEGACY_BASELINE') == '1' else 'nominal_contract')
+ROW = struct.Struct('=5Q5qQ')
+START = 20_000_000_000
+END = START + 120_000_000_000
+
+
+@pytest.fixture(scope='session')
+def recorded(tmp_path_factory):
+    root = tmp_path_factory.mktemp('offline-records')
+    assert root.is_relative_to(Path(os.environ['TMPDIR']))
+    for name, cid in [('arm', 1), ('gripper', 2), ('neck', 3)]:
+        with (root / (name + '_controller.bin')).open('wb') as out:
+            out.write(b'SOTM0001')
+            for i in range(60002):
+                mono = START - 4_000_000 + i * 2_000_000
+                # One startup reset; this is allowed only before the hold.
+                sim = 10_000_000 if i == 0 else (i - 1) * 2_000_000
+                out.write(ROW.pack(1, 0, cid, i + 1, 0, 0, sim,
+                                   2_000_000, mono, mono + 1000, 1))
+            out.write(ROW.pack(2, 0, cid, 60002, 0, 0, 120_000_000_000,
+                               2_000_000, END - 1000, END - 500, 1))
+            if cid == 3:
+                out.write(ROW.pack(3, 1, cid, 60002, 0, 0, 120_000_000_000,
+                                   2_000_000, END - 500, END - 100, 1))
+            out.flush()
+            os.fsync(out.fileno())
+        count = 60004 if cid == 3 else 60003
+        (root / (name + '_controller.bin.status.json')).write_text(json.dumps(dict(
+            records_reserved=count, records_written=count, overflow=False, io_failed=False)))
+    return root
+
+
+@pytest.fixture
+def raw(recorded, tmp_path):
+    # Only the controller mutated by each test needs a separate copy.
+    for path in recorded.iterdir():
+        os.symlink(path, tmp_path / path.name)
+    return tmp_path
+
+
+def mutable(raw, name):
+    target = raw / name
+    data = target.read_bytes()
+    target.unlink()
+    target.write_bytes(data)
+    return target
+
+
+def mutate_row(raw, field, value, name='arm', index=40):
+    path = mutable(raw, name + '_controller.bin')
+    with path.open('r+b') as f:
+        f.seek(8 + index * ROW.size)
+        row = list(ROW.unpack(f.read(ROW.size)))
+        row[field] = value(row[field]) if callable(value) else value
+        f.seek(8 + index * ROW.size)
+        f.write(ROW.pack(*row))
+
+
+def test_all_three_complete_streams(recorded):
+    value = api.read_all(recorded, START, END)
+    assert set(value['controllers']) == {'arm', 'gripper', 'neck'}
+    assert all(v['holding_update_count'] == 60000 for v in value['controllers'].values())
+    assert all(len(v['startup_simulation_discontinuities']) == 1
+               for v in value['controllers'].values())
+
+
+@pytest.mark.parametrize('name', ['arm', 'gripper', 'neck'])
+def test_controller_omission_refused(raw, name):
+    (raw / (name + '_controller.bin')).unlink()
+    with pytest.raises((ValueError, OSError)):
+        api.read_all(raw, START, END)
+
+
+@pytest.mark.parametrize('name', ['arm', 'gripper', 'neck'])
+def test_truncated_controller_refused(raw, name):
+    path = mutable(raw, name + '_controller.bin')
+    with path.open('r+b') as f:
+        f.truncate(path.stat().st_size - 1)
+    with pytest.raises(ValueError):
+        api.read_all(raw, START, END)
+
+
+@pytest.mark.parametrize('key,value', [('records_written', 1), ('records_reserved', 1),
+    ('overflow', True), ('io_failed', True), ('records_written', True)])
+def test_status_fault_refused(raw, key, value):
+    path = mutable(raw, 'gripper_controller.bin.status.json')
+    status = json.loads(path.read_text())
+    status[key] = value
+    path.write_text(json.dumps(status))
+    with pytest.raises(ValueError):
+        api.read_all(raw, START, END)
+
+
+@pytest.mark.parametrize('field,value', [(0, 7), (2, 3), (10, 0),
+    (3, lambda v: v + 1), (7, 4_000_000), (7, 0),
+    (6, lambda v: v + 2_000_000), (9, lambda v: v + 2_000_000),
+    (9, lambda v: v - 2000), (8, lambda v: v - 20_000_000)])
+def test_native_original_boundaries_refused(raw, field, value):
+    mutate_row(raw, field, value)
+    with pytest.raises(ValueError):
+        api.read_all(raw, START, END)
+
+
+def test_59999_holding_updates_refused(recorded):
+    with pytest.raises(ValueError):
+        api.read_all(recorded, START + 2_000_000, END + 2_000_000)
+
+
+def test_neck_proof_unavailable_refused(raw):
+    mutate_row(raw, 1, 0, name='neck', index=60003)
+    with pytest.raises(ValueError):
+        api.read_all(raw, START, END)
+
+
+@pytest.mark.parametrize('key', ['SO101_CLOCK_TRACE_DIR', 'SO101_CLOCK_PROBE_CYCLE',
+    'SO101_CLOCK_PROBE_WAIT_NS', 'SO101_EXIT_PHASE_OWNER_FILE', 'SO101_EXIT_PHASE_CONFIG'])
+def test_inherited_diagnostic_activation_refused(key):
+    with pytest.raises(ValueError):
+        api.require_observers_off({'PATH': '/usr/bin', key: 'enabled'})
+
+
+def test_plain_environment_accepted():
+    api.require_observers_off({'PATH': '/usr/bin', 'SO101_STOP_TIMING_OUTPUT_DIR': '/native'})
+
+
+def complete_worker():
+    return dict(schema='NOMINAL_WORKER_001', status='PROVISIONAL_PASS', rc=0,
+        original_timing_qualified=True, strict_startup_stop_close=True,
+        maps_verified=True, holding_complete=True, cleanup_within15=True,
+        postflight_empty=True, owner_absent=True, children_absent=True,
+        seal_verified=True, all_child_rc0=True, native_all_valid=True,
+        cancel_sent=False, fallback_used=False, elapsed_s=130.,
+        original_problem=None)
+
+
+def complete_guard():
+    return dict(schema='CLOCK_GUARD_001', worker_rc=0, elapsed_s=132.,
+        cancel_sent=False, forced_cleanup=False, error=None, all_owned_absent=True,
+        production_qualified=False)
+
+
+def test_complete_pair_passes():
+    assert api.worker_valid(complete_worker())
+    assert api.guardian_valid(complete_guard(), 0)
+
+
+@pytest.mark.parametrize('key', ['maps_verified', 'owner_absent', 'children_absent',
+    'seal_verified', 'all_child_rc0', 'postflight_empty', 'strict_startup_stop_close',
+    'native_all_valid', 'holding_complete', 'original_timing_qualified'])
+def test_worker_missing_evidence_refused(key):
+    row = complete_worker()
+    del row[key]
+    assert not api.worker_valid(row)
+
+
+@pytest.mark.parametrize('key,value', [('rc', 1), ('cancel_sent', True),
+    ('fallback_used', True), ('original_problem', {'type': 'TimingPeriod'}),
+    ('elapsed_s', 301.), ('native_all_valid', 1)])
+def test_worker_failure_refused(key, value):
+    row = complete_worker()
+    row[key] = value
+    assert not api.worker_valid(row)
+
+
+@pytest.mark.parametrize('key,value', [('schema', 'other'), ('worker_rc', 1),
+    ('all_owned_absent', False), ('forced_cleanup', True), ('cancel_sent', True),
+    ('error', 'failure'), ('elapsed_s', 301.), ('worker_rc', False)])
+def test_guardian_failure_refused(key, value):
+    row = complete_guard()
+    row[key] = value
+    assert not api.guardian_valid(row, 0)
+
+
+@pytest.mark.parametrize('rc', [None, 1, -9, False])
+def test_actual_guardian_rc_required(rc):
+    assert not api.guardian_valid(complete_guard(), rc)
+
+
+def test_absent_guardian_refused():
+    assert not api.guardian_valid(None, 0)
+
+
+@pytest.mark.parametrize('statuses,index,expected', [
+    (['NOT_RUN', 'NOT_RUN', 'NOT_RUN'], 0, True),
+    (['PASS', 'NOT_RUN', 'NOT_RUN'], 1, True),
+    (['PASS', 'PASS', 'NOT_RUN'], 2, True),
+    (['FAIL', 'NOT_RUN', 'NOT_RUN'], 1, False),
+    (['PASS', 'FAIL', 'NOT_RUN'], 2, False),
+    (['PROVISIONAL_PASS', 'NOT_RUN', 'NOT_RUN'], 1, False),
+    (['PASS', 'NOT_RUN', 'NOT_RUN'], 2, False),
+    (['PASS', 'PASS', 'PASS'], 2, False)])
+def test_fixed_three_advancement(statuses, index, expected):
+    assert api.can_start(statuses, index) is expected

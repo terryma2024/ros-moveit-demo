@@ -30,7 +30,7 @@ class HeadSimulationPolicy:
                 or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search_file_v1'):
             raise ValueError('HEAD_SIMULATION_POLICY_SCOPE_INVALID')
         ceilings = dict(watchdog_period_s=.1, fault_reaction_limit_s=.5, native_close_timeout_s=.25,
-            stop_confirmation_timeout_s=3., perception_max_age_s=.15,
+            stop_confirmation_timeout_s=3., perception_max_age_s=1.,
             perception_job_timeout_s=3., camera_loss_timeout_s=2.,
             feedback_receipt_timeout_s=1., joint_source_age_s=.1,
             camera_source_age_s=.3, search_timeout_s=120.)
@@ -66,7 +66,7 @@ class HeadSimulationPolicy:
         return dict(schema_version=2, mode='mujoco_bounded_stop_search_file_v1',
             watchdog_period_s=.02,
             fault_reaction_limit_s=.25, native_close_timeout_s=.05,
-            stop_confirmation_timeout_s=1., perception_max_age_s=.15,
+            stop_confirmation_timeout_s=1., perception_max_age_s=1.,
             perception_job_timeout_s=1., camera_loss_timeout_s=.5,
             feedback_receipt_timeout_s=.25, joint_source_age_s=.05,
             camera_source_age_s=.2, search_timeout_s=30.,

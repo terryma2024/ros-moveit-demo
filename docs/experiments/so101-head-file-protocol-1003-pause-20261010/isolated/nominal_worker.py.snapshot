@@ -1,0 +1,186 @@
+from pathlib import Path
+import hashlib,json,os,signal,struct,subprocess,time,sys
+D=Path(__file__).parent
+checkpoint=sys.argv[1]
+assert checkpoint in ('001','002','003')
+G=D/'checkpoints/nominal-holds001'/checkpoint;R=Path('/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/stop-witness-isolation-fpfvhl3p')
+P='/data/work/venvs/so101-v5-t004-perception/bin/python3'
+def sha(p):
+ h=hashlib.sha256()
+ with Path(p).open('rb') as f:
+  for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+ return h.hexdigest()
+def write(p,v):
+ with Path(p).open('w')as f:json.dump(v,f,indent=2,allow_nan=False);f.write('\n');f.flush();os.fsync(f.fileno())
+def check_ref(row):assert sha(row['path'])==row['sha256'],row['path']
+def graph(env,destination,timeout=15):
+ try:
+  q=subprocess.run(['/opt/ros/jazzy/bin/ros2','node','list','--no-daemon'],env=env,text=True,capture_output=True,timeout=timeout)
+ except subprocess.TimeoutExpired as e:
+  write(destination,dict(rc=None,status='INVALID_GRAPH_TIMEOUT',stdout=str(e.stdout),stderr=str(e.stderr),timeout_s=timeout));return False
+ write(destination,dict(rc=q.returncode,stdout=q.stdout,stderr=q.stderr));return q.returncode==0 and not q.stdout.strip()
+from nominal_contract import require_observers_off, read_all, worker_valid
+
+def scope_preflight(env):
+ require_observers_off(os.environ)
+ require_observers_off(env)
+ q=subprocess.run([P,str(D/'nominal_scope_preflight.py'),str(G/'inputs.json')],env=env,text=True,capture_output=True,timeout=15)
+ (G/'scope-preflight.stdout').write_text(q.stdout);(G/'scope-preflight.stderr').write_text(q.stderr)
+ assert q.returncode==0,q.stderr
+ result=json.loads(q.stdout);assert result['optional_observers_off'] is True
+ return result
+from process_provenance import process, scoped_child
+from map_evidence import file_ref, snapshot as map_snapshot, role_valid, validate as map_validate
+def same_process(row):
+ try:return process(row['pid'])['start_ticks']==row['start_ticks']
+ except FileNotFoundError:return False
+
+if '--preflight-only' in sys.argv:
+ inputs=json.loads((G/'inputs.json').read_text());env=dict(os.environ,**inputs['ros']['environment'])
+ for exe in (P,'/usr/bin/python3','/opt/ros/jazzy/bin/ros2',D/'install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node'):assert os.access(exe,os.X_OK)
+ for row in inputs['refs'].values():check_ref(row)
+ plan=json.loads((G/'planned.json').read_text())
+ for key in ('input','helper','freeze','nominal_plan','source_manifest','install_inventory'):check_ref(plan[key])
+ for row in plan['source_refs']:check_ref(row)
+ assert sha(G/'head_neck_timing_probe.py')==json.loads((D/'nominal-hold-plan001.json').read_text())['original_helper_sha256']
+ for row in json.loads((D/'runtime-install-inventory.json').read_text())['files']:assert sha(D/'install'/row['path'])==row['sha256']
+ scope_preflight(env)
+ assert graph(env,G/'preflight-graph.json')
+ q=subprocess.run([P,'-c','import sys,json,os;from so101_demo.act.head_execution_inputs import HeadExecutionInputs;from ament_index_python.packages import get_package_prefix;v=HeadExecutionInputs.parse(sys.argv[1]);assert get_package_prefix("mujoco_ros2_control")==sys.argv[2];print(json.dumps(dict(run=v.run,stop=v.document["stop_declaration"],prefix=get_package_prefix("mujoco_ros2_control"))))',str(G/'inputs.json'),str(D/'install/mujoco_ros2_control')],env=env,text=True,capture_output=True)
+ (G/'parser-preflight.stdout').write_text(q.stdout);(G/'parser-preflight.stderr').write_text(q.stderr);assert q.returncode==0,q.stderr
+ print('PREFLIGHT_ONLY_PASS_NO_RUNTIME');raise SystemExit(0)
+
+assert os.environ.get('SO101_BOUNDED_GUARD')=='CLOCK_GUARD_001', 'must launch through reviewed independent guardian'
+# A parent-authored, hash-bound admission is written only after independent review and gates.
+admission=json.loads((G/'launch-admission.json').read_text());assert admission['allowed'] is True
+for row in admission['refs'].values():check_ref(row)
+guard_config=json.loads(Path(os.environ['SO101_GUARD_CONFIG']).read_text())
+assert {k:guard_config[k] for k in ('cancel_s','cleanup_s','kill_s','owner_kill_s','total_s')}==dict(cancel_s=240,cleanup_s=255,kill_s=256,owner_kill_s=285,total_s=300)
+plan=json.loads((G/'planned.json').read_text());assert plan['count']==1 and plan['duration_s']==120
+for key in ('input','helper','freeze','nominal_plan','source_manifest','install_inventory'):check_ref(plan[key])
+for row in plan['source_refs']:check_ref(row)
+inputs=json.loads((G/'inputs.json').read_text());env=dict(os.environ,**inputs['ros']['environment'])
+assert sha(G/'head_neck_timing_probe.py')==json.loads((D/'nominal-hold-plan001.json').read_text())['original_helper_sha256']
+for row in inputs['refs'].values():check_ref(row)
+for row in json.loads((D/'runtime-install-inventory.json').read_text())['files']:
+ assert sha(D/'install'/row['path'])==row['sha256']
+scope_preflight(env)
+assert inputs['stop_declaration']['teardown_timeout_s']==1. and graph(env,G/'launch-preflight-graph.json')
+scratch=D/'scratch/nominal-holds001'/checkpoint/'tmp';scratch.mkdir(parents=True,exist_ok=False);env.update(TMPDIR=str(scratch),TMP=str(scratch),TEMP=str(scratch))
+for i,exe in enumerate((P,'/usr/bin/python3')):
+ assert os.access(exe,os.X_OK)
+ q=subprocess.run([exe,'-c','import tempfile,os;assert tempfile.gettempdir()==os.environ["TMPDIR"];print(tempfile.gettempdir())'],env=env,text=True,capture_output=True,check=True);(G/f'scratch-proof-{i}.txt').write_text(q.stdout)
+assert not (G/'holding-started.json').exists() and not (G/'output').exists()
+command=[P,str(G/'head_neck_timing_probe.py'),'--execution-inputs',str(G/'inputs.json'),'--duration-s','120','--output',str(G/'output')]
+write(G/'command.json',dict(argv=command,scratch=str(scratch),normal_cancel=240,total=300))
+started=time.monotonic();write(G/'holding-started.json',dict(monotonic_ns=time.monotonic_ns(),wall_ns=time.time_ns(),count=1))
+tracked={};maps={};role_maps={};role_expected={};verified_map_roles=set();cancel_sent=False;fallback=False;owner_killed=False;last_snapshot=0.
+with(G/'stdout.log').open('w')as out,(G/'stderr.log').open('w')as err:
+ owner=subprocess.Popen(command,env=env,cwd=D,stdout=out,stderr=err,start_new_session=True)
+ owner_identity=process(owner.pid);write(G/'owner.json',owner_identity)
+ role_expected['owner']=dict(identity=owner_identity,executable=str(Path(P).resolve()),session=inputs['run']['session_id'],libraries=[file_ref(R/'install/so101_mujoco_support/lib/libso101_head_revocation_transport.so')])
+ node_exe=D/'install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node'
+ node_libraries=[file_ref(p)for p in (D/'install/mujoco_ros2_control/lib/libmujoco_ros2_control.so',D/'install/mujoco_ros2_control/lib/libmujoco_clock_trace.so',R/'install/so101_mujoco_support/lib/libso101_broker_owned_trajectory_controller.so',D/'install/mujoco_ros2_control/lib/libso101_exit_phase.so',D/'install/controller_manager/lib/libcontroller_manager.so')]
+ def observed_environment(identity,role):
+  raw=Path('/proc',str(identity['pid']),'environ').read_bytes()
+  observed={v.split(b'=',1)[0].decode(errors='strict'):v.split(b'=',1)[1].decode(errors='strict')for v in raw.split(b'\0')if b'='in v}
+  require_observers_off(observed)
+  assert observed['SO101_SIMULATION_SESSION_ID']==inputs['run']['session_id']
+  write(G/(role+'-environment-proof.json'),dict(identity=identity,optional_observers_off=True,environment_keys=sorted(observed)))
+ observed_environment(owner_identity,'owner')
+ def collect_role(role):
+  expected=role_expected[role]
+  if role in verified_map_roles:return
+  try:
+   proof=map_snapshot(expected['identity']['pid'],expected['identity'],expected['executable'],expected['session'],expected['libraries'])
+   if proof is not None:
+    role_maps[role]=proof
+    if role_valid(proof,expected):verified_map_roles.add(role)
+  except (FileNotFoundError,ProcessLookupError):return
+  except PermissionError:
+   try:row=process(expected['identity']['pid'])
+   except (FileNotFoundError,ProcessLookupError):return
+   if row['state']=='Z'and all(row[k]==expected['identity'][k]for k in ('pid','start_ticks','uid')):return
+   raise
+ while owner.poll() is None:
+  elapsed=time.monotonic()-started
+  collect_role('owner')
+  # Discover only descendants of this exact owner; retain immutable pid/start identity.
+  pending=[owner.pid]
+  while pending:
+   pid=pending.pop()
+   try:children=[int(s)for s in Path('/proc',str(pid),'task',str(pid),'children').read_text().split()]
+   except FileNotFoundError:continue
+   for child in children:
+    record=None
+    try:
+     record=scoped_child(child,tracked.get(str(child)),inputs['run']['session_id'])
+     if record is None:continue
+     record['group_owned']=os.getpgid(child)==child
+     tracked.setdefault(str(child),record);pending.append(child)
+     if record['state']=='Z':continue
+     if record['argv'].split()and record['argv'].split()[0]==str(node_exe):
+      expected=dict(identity=record,executable=str(node_exe),session=inputs['run']['session_id'],libraries=node_libraries)
+      if 'node'in role_expected and any(role_expected['node']['identity'][k]!=record[k]for k in ('pid','start_ticks','uid')):raise ValueError('MAP_NATIVE_NODE_CHANGED')
+      if 'node'not in role_expected:role_expected['node']=expected;observed_environment(record,'node')
+      collect_role('node')
+      if 'node'in role_maps:maps[str(child)]=dict(identity=record,maps=role_maps['node']['maps'])
+    except (FileNotFoundError,ProcessLookupError):continue
+    except PermissionError:
+     try:retired=process(child)
+     except (FileNotFoundError,ProcessLookupError):continue
+     if retired['state']=='Z' and (record is None or retired['start_ticks']==record['start_ticks']):continue
+     raise
+  if elapsed-last_snapshot>=1.:
+   if tracked:write(G/'owned-children.json',tracked)
+   if maps:write(G/'actual-maps.json',maps)
+   if role_maps:write(G/'process-maps.json',dict(proofs=role_maps,expected=role_expected))
+   last_snapshot=elapsed
+  if elapsed>=240 and not cancel_sent:
+   assert same_process(owner_identity);owner.send_signal(signal.SIGTERM);cancel_sent=True
+  # Original helper must retire within15s after cancellation. If it cannot, retain INVALID
+  # and mirror its exact owned-group SIGINT / one-second SIGKILL fallback; never claim Stop proof.
+  if elapsed>=255 and not fallback:
+   fallback=True;write(G/'cleanup-budget-exceeded.json',dict(elapsed_s=elapsed,status='INVALID'))
+   for row in tracked.values():
+    if row['group_owned'] and same_process(row) and os.getpgid(row['pid'])==row['pid']:os.killpg(row['pid'],signal.SIGINT)
+  if elapsed>=256 and fallback:
+   for row in tracked.values():
+    if row['group_owned'] and same_process(row) and os.getpgid(row['pid'])==row['pid']:os.killpg(row['pid'],signal.SIGKILL)
+  if elapsed>=285 and not owner_killed:
+   assert same_process(owner_identity);owner.kill();owner_killed=True
+  if elapsed>=290:break
+  time.sleep(.05)
+ rc=owner.poll()
+ if rc is None:rc=owner.wait(timeout=1)
+exit_elapsed=time.monotonic()-started
+post=graph(env,G/'postflight-graph.json',timeout=min(15,max(1,300-exit_elapsed)))
+absence={pid:not same_process(row)for pid,row in tracked.items()};write(G/'independent-os-readback.json',dict(owner_absent=not same_process(owner_identity),children_absent=absence))
+report=json.loads((G/'output/report.json').read_text())if(G/'output/report.json').is_file()else None
+native_error=None;native_result=None
+try:
+ receipts=(report or{}).get('receipts',{})
+ assert not same_process(owner_identity) and all(absence.values())
+ native_result=read_all(G/'output/controller-records',receipts.get('hold_started_ns'),receipts.get('hold_ended_ns'))
+except Exception as e:native_error=dict(type=type(e).__name__,message=str(e))
+write(G/'native-readback.json',dict(result=native_result,error=native_error))
+native_child=(report or{}).get('receipts',{}).get('native_child')or{}
+map_ok=map_validate(role_maps,role_expected)
+if map_ok:
+ map_ok=bool(native_child.get('executable')==role_expected['node']['executable'] and all(native_child.get('owner',{}).get(k)==role_expected['node']['identity'][k]for k in ('pid','start_ticks','uid')))
+write(G/'process-maps.json',dict(proofs=role_maps,expected=role_expected,native_child=native_child,verified=map_ok))
+from receipt_facts import assemble
+facts=assemble(report,Path(inputs['run_root'])/'events.jsonl',post,not same_process(owner_identity))
+write(G/'protocol-facts.json',facts)
+q=subprocess.run([P,'-c','import json,sys;from so101_demo.cli.head_search_functional_campaign import may_continue;print(json.dumps(dict(strict=may_continue(json.load(open(sys.argv[1])),require_startup_protocol=True))))',str(G/'protocol-facts.json')],env=env,text=True,capture_output=True,timeout=5)
+(G/'strict-startup.stdout').write_text(q.stdout);(G/'strict-startup.stderr').write_text(q.stderr);strict=q.returncode==0 and json.loads(q.stdout)['strict']
+problem=report.get('problem')if report else None
+held=bool(report and report['receipts'].get('hold_ended_ns',0)-report['receipts'].get('hold_started_ns',0)>=120_000_000_000)
+cleanup=bool(report and 0<report['receipts'].get('retirement_ended_ns',0)-report['receipts'].get('retirement_started_ns',0)<15_000_000_000)
+children=(report or{}).get('receipts',{}).get('children',[])
+child_ids={row['pid']for row in children}
+all_child_rc0=len(children)==3 and len(child_ids)==3 and all(type(row.get('rc'))is int and row['rc']==0 for row in children) and child_ids.issubset({int(pid)for pid in tracked})
+result=dict(schema='NOMINAL_WORKER_001',status='PROVISIONAL_PASS',rc=rc,elapsed_s=time.monotonic()-started,report=report,strict_startup_stop_close=strict,maps_verified=map_ok,holding_complete=held,cleanup_within15=cleanup,postflight_empty=post,owner_absent=not same_process(owner_identity),children_absent=bool(tracked)and all(absence.values()),seal_verified=bool(report and report['receipts'].get('seal_verified')),all_child_rc0=all_child_rc0,native_all_valid=native_error is None and native_result is not None,cancel_sent=cancel_sent,fallback_used=fallback or owner_killed,original_timing_qualified=bool(report and report['qualified']),original_problem=problem,production_qualified=False,live20_allowed=False,fresh40_allowed=False)
+valid=worker_valid(result)
+if not valid:result['status']='FAIL'
+write(G/'receipt.json',result);print(json.dumps(result),flush=True);raise SystemExit(0 if valid else 1)

@@ -1,9 +1,9 @@
 """The one resource composition of a file-protocol stage-one development run.
 
-A run has exactly one writer, one ROS node/controller port, one native
+A run has an optional evidence writer, one ROS node/controller port, one native
 authority/revocation pair, one detector, one inference owner, one local
 runtime/observer pair and one owned search. This module is the entry's binding
-point: it opens the single writer under the previously nonexistent run root,
+point: when logging is enabled it opens one writer under the fresh run root,
 binds each resource exactly once in one fixed order, proves the bound resources
 share the same frozen policy and run identity, and seals the run once.
 
@@ -55,6 +55,7 @@ class HeadExecutionComposition:
         self.inputs = inputs
         self.policy = policy
         self.writer = writer
+        self.event_log_enabled = inputs.event_log_enabled
         self.monotonic_ns = clock_ns
         self._bound: dict[str, object] = {}
         self._sealed: dict | None = None
@@ -77,9 +78,11 @@ class HeadExecutionComposition:
             policy = HeadSimulationPolicy.parse(json.loads(policy_bytes.decode('utf-8')))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError) as error:
             _refuse(COMPOSITION_REFUSED, f'local_policy is not a frozen policy document ({error})')
-        manifest = cls.manifest(inputs, policy, opened_wall_s=time.monotonic())
-        writer = HeadRunEvidence.create(inputs.run_root, manifest, capacities,
-                                        fault_callback=fault_callback)
+        writer = None
+        if inputs.event_log_enabled:
+            manifest = cls.manifest(inputs, policy, opened_wall_s=time.monotonic())
+            writer = HeadRunEvidence.create(inputs.run_root, manifest, capacities,
+                                            fault_callback=fault_callback)
         return cls(inputs=inputs, policy=policy, writer=writer, clock_ns=clock_ns)
 
     @staticmethod
@@ -113,7 +116,7 @@ class HeadExecutionComposition:
 
     def _require_open(self):
         if self._closed:
-            _refuse(COMPOSITION_CLOSED, 'the run composition is already sealed')
+            _refuse(COMPOSITION_CLOSED, 'the run composition is already closed')
 
     def _same_policy(self, candidate):
         """True when the candidate carries the exact frozen policy document."""
@@ -134,10 +137,11 @@ class HeadExecutionComposition:
 
     def _bind(self, stage: str, value):
         self._bound[stage] = value
-        stamp = self.monotonic_ns()
-        self.writer.append('EXECUTION_RESOURCE_BOUND', {'stage': stage, 'run': self.inputs.run},
-                           source_stamp_ns=None, observed_mono_ns=stamp,
-                           occurrence_mono_ns=stamp)
+        if self.event_log_enabled:
+            stamp = self.monotonic_ns()
+            self.writer.append('EXECUTION_RESOURCE_BOUND', {'stage': stage, 'run': self.inputs.run},
+                               source_stamp_ns=None, observed_mono_ns=stamp,
+                               occurrence_mono_ns=stamp)
         return value
 
     @property
@@ -284,6 +288,8 @@ class HeadExecutionComposition:
         """Enqueue one bounded event on the run's single writer."""
 
         self._require_open()
+        if not self.event_log_enabled:
+            return None
         stamp = self.monotonic_ns()
         return self.writer.append(
             kind, record, source_stamp_ns=source_stamp_ns,
@@ -292,6 +298,8 @@ class HeadExecutionComposition:
 
     def add_artifact(self, data, *, media_type, suffix):
         self._require_open()
+        if not self.event_log_enabled:
+            return None
         return self.writer.add_artifact(data, media_type=media_type, suffix=suffix)
 
     def begin_resource_lifetime(self, name):
@@ -316,6 +324,11 @@ class HeadExecutionComposition:
         if not isinstance(completion, Mapping):
             _refuse(COMPOSITION_REFUSED, 'the seal needs a completion mapping')
         self._closed = True
+        if not self.event_log_enabled:
+            if not self.complete:
+                missing = [stage for stage in BIND_ORDER if stage not in self._bound]
+                _refuse(COMPOSITION_REFUSED, f'incomplete composition: missing {missing}')
+            return dict(completion, complete_composition=True, file_evidence_generated=False)
         if not self.complete:
             missing = [stage for stage in BIND_ORDER if stage not in self._bound]
             stamp = self.monotonic_ns()
@@ -337,6 +350,10 @@ class HeadExecutionComposition:
     def sealed(self):
         return None if self._sealed is None else dict(self._sealed)
 
+    @property
+    def closed(self):
+        return self._closed
+
     def readback(self):
         return {
             'run': self.inputs.run,
@@ -349,6 +366,10 @@ class HeadExecutionComposition:
             'device': self.inputs.document['resources']['cuda_device'],
             'allow_cpu_fallback': self.inputs.document['resources']['allow_cpu_fallback'],
             'sealed': self.sealed is not None,
+            'closed': self.closed,
+            'event_log_enabled': self.event_log_enabled,
+            'save_all_rgb_frames': self.inputs.save_all_rgb_frames,
+            'file_evidence_generated': self.writer is not None,
         }
 
 

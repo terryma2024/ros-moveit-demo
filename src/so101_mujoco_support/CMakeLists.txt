@@ -95,7 +95,18 @@ ament_target_dependencies(graceful_shutdown_move_group moveit_ros_move_group rcl
 target_link_libraries(graceful_shutdown_move_group
   moveit_ros_move_group::moveit_move_group_capabilities_base)
 
+add_executable(stop_witness_timing_stress test/stop_witness_timing_stress.cpp)
+target_compile_features(stop_witness_timing_stress PRIVATE cxx_std_17)
+target_include_directories(stop_witness_timing_stress PRIVATE include)
+target_link_libraries(stop_witness_timing_stress Threads::Threads)
+install(TARGETS stop_witness_timing_stress RUNTIME DESTINATION lib/${PROJECT_NAME})
+
 if(BUILD_TESTING)
+  ament_add_gtest(test_controller_stop_witness_stress test/test_controller_stop_witness_stress.cpp TIMEOUT 300)
+  target_compile_features(test_controller_stop_witness_stress PRIVATE cxx_std_17)
+  target_include_directories(test_controller_stop_witness_stress PRIVATE include)
+  target_link_libraries(test_controller_stop_witness_stress Threads::Threads)
+
   find_package(ament_cmake_gtest REQUIRED)
   set(so101_test_library_dirs)
   if(APPLE)

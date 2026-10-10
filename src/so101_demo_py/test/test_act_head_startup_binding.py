@@ -102,7 +102,8 @@ def test_guarded_runtime_binds_matching_native_channels_then_allows_dispatch(mon
 @pytest.mark.parametrize('damage', ['primary', 'identity_exception', 'fault_after_readback'])
 def test_failure_after_native_arm_stays_unbound_and_wakes_independent_close(monkeypatch, damage):
     row = runtime_setup(monkeypatch, unbound=True)
-    def identity():
+    def identity(*,overall_deadline_ns):
+        assert type(overall_deadline_ns) is int
         if damage == 'identity_exception':
             raise OSError('lost primary identity reply')
         result = dict(generation=7, incarnation='inc-1', boot='boot-1')
@@ -206,7 +207,8 @@ def test_parallel_runtime_arm_cannot_issue_a_second_native_arm(monkeypatch):
     entered, release = threading.Event(), threading.Event()
     original = row.authority.identity
     results = []
-    def identity(role):
+    def identity(role,*,overall_deadline_ns):
+        assert type(overall_deadline_ns) is int
         entered.set()
         assert release.wait(timeout=1.)
         return original(role)

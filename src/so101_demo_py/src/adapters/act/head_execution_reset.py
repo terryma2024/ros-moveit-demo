@@ -99,7 +99,7 @@ class HeadSceneServices:
         states = {row.name: row.state for row in response.controller}
         return all(states.get(name) == 'active' for name in names)
 
-    def reset_pose(self, pose, *, deadline):
+    def reset_pose(self, pose, *, deadline, fixture=None):
         from so101_demo.backends.mujoco.client import (
             JointResetOverride, FreeJointResetOverride, joint_override_message, _free_joint_message)
         request = self.types['reset'].Request()
@@ -109,8 +109,16 @@ class HeadSceneServices:
         joints = tuple(JointResetOverride(name, value) for name, value in zip(
             ('1','2','3','4','5','6','neck_yaw_joint'), (*pose['arm_rad'],pose['neck_rad']),strict=True))
         request.state_overrides.joint_states = joint_override_message(joints)
-        request.state_overrides.free_joints = [
-            _free_joint_message(FreeJointResetOverride('plastic_cup',tuple(pose['cup_xyz'])))]
+        if fixture is None:
+            request.state_overrides.free_joints = [
+                _free_joint_message(FreeJointResetOverride('plastic_cup',tuple(pose['cup_xyz'])))]
+        else:
+            overrides=[]
+            for name,row in fixture['reset_free_bodies'].items():
+                w,x,y,z=row['quat_wxyz']
+                overrides.append(_free_joint_message(FreeJointResetOverride(
+                    name,tuple(row['xyz']),orientation_xyzw=(x,y,z,w))))
+            request.state_overrides.free_joints=overrides
         return self._call('reset', request, deadline=deadline).success is True
 
     def close(self):
@@ -127,11 +135,18 @@ class OwnedHeadScene:
     """Keep the same full-state subscriber live through reset, dispatch and Stop."""
 
     def __init__(self, *, node, inputs, safety, max_age_s, services=None, startup_ready=None,
-                 emit=lambda kind, record: None):
+                 emit=lambda kind, record: None, on_verified_reset=None):
         if type(safety) is not HeadSceneSafety:
             raise ValueError('HEAD_RESET_SAFETY_INVALID')
         self.node, self.inputs, self.safety, self.emit = node, inputs, safety, emit
+        self.fixture = None
+        if 'scenario_fixture' in getattr(inputs,'refs',{}):
+            from so101_demo.act.head_search_campaign_scene import load_case_fixture
+            self.fixture = load_case_fixture(inputs,safety)
         self.startup_ready = startup_ready
+        if on_verified_reset is not None and not callable(on_verified_reset):
+            raise ValueError('HEAD_RESET_INITIAL_FRAME_HOOK_INVALID')
+        self.on_verified_reset = on_verified_reset
         self._lock = threading.RLock()
         self._latest = self._expected_epoch = self.receipt = self.hazard = None
         self._latest_wall = None
@@ -168,7 +183,8 @@ class OwnedHeadScene:
         if reason is not None: callback(reason)
 
     def _record(self, frame):
-        self.emit('SCENE_STATE',frame)
+        if self.emit is not None:
+            self.emit('SCENE_STATE',frame)
         with self._lock:
             self._latest, self._latest_wall = copy.deepcopy(frame), time.monotonic()
 
@@ -198,14 +214,28 @@ class OwnedHeadScene:
 
     def _verify_pose(self, frame):
         pose = self.inputs.document['development_pose']
+        if self.fixture is not None:
+            truth=self.fixture['truth_manifest']
+            if (frame.get('paused') is not True or type(frame.get('simulation_step')) is not int
+                    or frame['simulation_step']!=0 or type(frame.get('reset_epoch')) is not int
+                    or frame['reset_epoch']!=self._expected_epoch
+                    or frame['reset_epoch']!=truth['reset_epoch']
+                    or frame.get('simulation_session_id')!=truth['simulation_session_id']
+                    or frame.get('model_sha256')!=truth['model_sha256']):
+                raise ValueError('HEAD_RESET_FIXTURE_IDENTITY_INVALID')
         for name,value in zip(('1','2','3','4','5','6','neck_yaw_joint'),
                                (*pose['arm_rad'],pose['neck_rad']),strict=True):
             if abs(frame['qpos'][self.safety.joint_map[name]['qpos']]-value) > 1e-9:
                 raise ValueError('HEAD_RESET_JOINT_POSE_INVALID')
-        address = self.safety.free_body_map['plastic_cup']['qpos']
-        expected = (*pose['cup_xyz'],1.,0.,0.,0.)
-        if any(abs(a-b)>1e-9 for a,b in zip(frame['qpos'][address:address+7],expected,strict=True)):
-            raise ValueError('HEAD_RESET_CUP_POSE_INVALID')
+        bodies = {'plastic_cup':dict(xyz=pose['cup_xyz'],quat_wxyz=[1.,0.,0.,0.])}
+        if self.fixture is not None:
+            bodies=self.fixture['reset_free_bodies']
+        for name,row in bodies.items():
+            address=self.safety.free_body_map[name]['qpos']
+            expected=(*row['xyz'],*row['quat_wxyz'])
+            if any(abs(a-b)>1e-9 for a,b in zip(frame['qpos'][address:address+7],expected,strict=True)):
+                raise ValueError('HEAD_RESET_CUP_POSE_INVALID' if self.fixture is None
+                                 else 'HEAD_RESET_FREE_BODY_POSE_INVALID:'+name)
         if any(abs(value)>1e-9 for value in frame['qvel']):
             raise ValueError('HEAD_RESET_VELOCITY_INVALID')
 
@@ -222,7 +252,8 @@ class OwnedHeadScene:
             if self.startup_ready is not None:
                 startup = self.startup_ready(deadline=deadline)
                 require(startup.get('ready'), 'STARTUP')
-                self.emit('STACK_STARTUP_VERIFIED', startup)
+                if self.emit is not None:
+                    self.emit('STACK_STARTUP_VERIFIED', startup)
             # Spawners are owned asynchronous children. Do not pause their
             # controller-manager cycle or strictly deactivate missing roles.
             while not self.services.active(_CONTROLLERS,deadline=deadline):
@@ -235,11 +266,16 @@ class OwnedHeadScene:
             require(self.services.pause(False,deadline=deadline),'PREPARE_RUNNING')
             require(self.services.switch(activate=(),deactivate=_CONTROLLERS,deadline=deadline),'DEACTIVATE')
             require(self.services.pause(True,deadline=deadline),'PAUSE')
-            require(self.services.reset_pose(self.inputs.document['development_pose'],deadline=deadline),'RESET')
+            reset_options={} if self.fixture is None else dict(fixture=self.fixture)
+            require(self.services.reset_pose(self.inputs.document['development_pose'],
+                                             deadline=deadline,**reset_options),'RESET')
             frame = self._wait(lambda row: row['reset_epoch']==self._expected_epoch
                 and row['paused'] and row['simulation_step']==0,deadline)
             self._verify_pose(frame)
             self.adapter.arm(SimpleNamespace(**frame))
+            if self.on_verified_reset is not None:
+                initial=self.on_verified_reset(copy.deepcopy(frame),deadline=deadline)
+                require(type(initial) is dict and initial.get('ready') is True,'INITIAL_FRAME')
             require(self.services.pause(False,deadline=deadline),'RESUME_FOR_ACTIVATE')
             require(self.services.switch(activate=_CONTROLLERS,deactivate=(),deadline=deadline),'ACTIVATE')
             while not self.services.active(_CONTROLLERS,deadline=deadline):
@@ -249,7 +285,11 @@ class OwnedHeadScene:
             self._wait(lambda row: row['paused'] and row['reset_epoch']==self._expected_epoch,deadline)
             self.receipt = dict(frame,old_epoch=old['reset_epoch'],
                 safety_sha256=self.safety.source_sha256,verified_pose=copy.deepcopy(self.inputs.document['development_pose']))
-            self.emit('SCENE_RESET_VERIFIED',self.receipt)
+            if self.fixture is not None:
+                self.receipt['verified_free_bodies']=copy.deepcopy(self.fixture['reset_free_bodies'])
+                self.receipt['scenario_fixture_ref']=copy.deepcopy(self.inputs.refs['scenario_fixture'])
+            if self.emit is not None:
+                self.emit('SCENE_RESET_VERIFIED',self.receipt)
             return copy.deepcopy(self.receipt)
         except Exception:
             # Failure does not reactivate controllers or invent successful proof.
@@ -380,12 +420,13 @@ class OwnedHeadScene:
             from so101_demo.act.head_feedback import nanoseconds
             deadline_ns = min(wait_deadline_ns, nanoseconds(observation_deadline))
             runtime.dispatch_guard()
-            self.emit('HEAD_ADMISSION_INPUT_READY', dict(
-                started_ns=started_ns, wait_deadline_ns=wait_deadline_ns,
-                source_floor_ns=source_floor_ns, source_ns=current['image']['source_ns'],
-                image_receipt_wall_s=current['image']['wall_s'],
-                info_receipt_wall_s=current['info']['wall_s'], deadline_ns=deadline_ns,
-                selection='selected_observation_current_complete_pair'))
+            if self.emit is not None:
+                self.emit('HEAD_ADMISSION_INPUT_READY', dict(
+                    started_ns=started_ns, wait_deadline_ns=wait_deadline_ns,
+                    source_floor_ns=source_floor_ns, source_ns=current['image']['source_ns'],
+                    image_receipt_wall_s=current['image']['wall_s'],
+                    info_receipt_wall_s=current['info']['wall_s'], deadline_ns=deadline_ns,
+                    selection='selected_observation_current_complete_pair'))
             runtime.dispatch_guard()
             return deadline_ns
         while time.monotonic_ns() < wait_deadline_ns:
@@ -399,11 +440,12 @@ class OwnedHeadScene:
                 if time.monotonic_ns() >= wait_deadline_ns:
                     break
                 deadline_ns = self._admission_deadline(runtime, guard)
-                self.emit('HEAD_ADMISSION_INPUT_READY', dict(
-                    started_ns=started_ns, wait_deadline_ns=wait_deadline_ns,
-                    source_floor_ns=source_floor_ns, source_ns=image['source_ns'],
-                    image_receipt_wall_s=image['wall_s'], info_receipt_wall_s=info['wall_s'],
-                    deadline_ns=deadline_ns))
+                if self.emit is not None:
+                    self.emit('HEAD_ADMISSION_INPUT_READY', dict(
+                        started_ns=started_ns, wait_deadline_ns=wait_deadline_ns,
+                        source_floor_ns=source_floor_ns, source_ns=image['source_ns'],
+                        image_receipt_wall_s=image['wall_s'], info_receipt_wall_s=info['wall_s'],
+                        deadline_ns=deadline_ns))
                 runtime.dispatch_guard()
                 return deadline_ns
             time.sleep(min(.001, max(0., (wait_deadline_ns-time.monotonic_ns())*1e-9)))
@@ -432,8 +474,9 @@ class OwnedHeadScene:
             frame, received = self._await_admission_state(True, request_ns=request_ns,
                 deadline_ns=deadline_ns, guard=guard)
             self._admission_lease = dict(thread=threading.get_ident(), deadline_ns=deadline_ns)
-            self.emit('HEAD_ADMISSION_PAUSED', dict(deadline_ns=deadline_ns,
-                request_ns=request_ns, scene=frame, receipt_wall_s=received))
+            if self.emit is not None:
+                self.emit('HEAD_ADMISSION_PAUSED', dict(deadline_ns=deadline_ns,
+                    request_ns=request_ns, scene=frame, receipt_wall_s=received))
             self._require_lease(guard, check_scene=True)
             yield
             self._require_lease(guard, check_scene=True)
@@ -454,8 +497,9 @@ class OwnedHeadScene:
                             raise PermissionError('HEAD_ADMISSION_RESUME_REFUSED')
                         frame, received = self._await_admission_state(False,
                             request_ns=request, deadline_ns=bound, guard=guard, allow_stop=True)
-                        self.emit('HEAD_ADMISSION_RESUMED', dict(request_ns=request,
-                            deadline_ns=bound, scene=frame, receipt_wall_s=received))
+                        if self.emit is not None:
+                            self.emit('HEAD_ADMISSION_RESUMED', dict(request_ns=request,
+                                deadline_ns=bound, scene=frame, receipt_wall_s=received))
                     if runtime.stop_requested:
                         stop_deadline = runtime.stop_receipt()['stop_deadline_wall_s']
                         bound = round(stop_deadline*1e9)
@@ -476,9 +520,10 @@ class OwnedHeadScene:
                             try:
                                 resume_before(cleanup, service_deadline=cleanup_deadline)
                             except BaseException as cleanup_error:
-                                self.emit('HEAD_ADMISSION_RESUME_UNCONFIRMED',
-                                    {'error': type(cleanup_error).__name__, 'reason': str(cleanup_error),
-                                     'deadline_ns': cleanup})
+                                if self.emit is not None:
+                                    self.emit('HEAD_ADMISSION_RESUME_UNCONFIRMED',
+                                        {'error': type(cleanup_error).__name__, 'reason': str(cleanup_error),
+                                         'deadline_ns': cleanup})
             finally:
                 self._admission_gate.release()
         if operation_error is None and resume_error is None and not runtime.ready:

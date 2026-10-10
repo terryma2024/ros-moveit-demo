@@ -1,0 +1,110 @@
+"""Strict offline readback/promotion rules for the approved fixed nominal holds."""
+import hashlib
+import json
+import math
+from pathlib import Path
+import struct
+
+PERIOD = 2_000_000
+ROW = struct.Struct('=5Q5qQ')
+CONTROLLERS = {'arm': 1, 'gripper': 2, 'neck': 3}
+
+
+def require_observers_off(environment):
+    forbidden = [key for key in environment if key.startswith((
+        'SO101_CLOCK_', 'SO101_EXIT_PHASE_', 'SO101_DIAGNOSTIC_'))]
+    if forbidden:
+        raise ValueError('NOMINAL_OBSERVER_ENVIRONMENT:' + ','.join(sorted(forbidden)))
+
+
+def read_all(root, hold_start, hold_end):
+    if (type(hold_start) is not int or type(hold_end) is not int or
+            hold_start <= 0 or hold_end - hold_start < 120_000_000_000):
+        raise ValueError('NOMINAL_HOLD_INTERVAL')
+    controllers = {}
+    for name, cid in CONTROLLERS.items():
+        path = Path(root) / (name + '_controller.bin')
+        status_path = Path(str(path) + '.status.json')
+        raw = path.read_bytes()
+        if raw[:8] != b'SOTM0001' or (len(raw) - 8) % ROW.size:
+            raise ValueError('NOMINAL_NATIVE_FORMAT:' + name)
+        count = (len(raw) - 8) // ROW.size
+        status = json.loads(status_path.read_text())
+        if (any(type(status.get(key)) is not int or status[key] != count
+                for key in ('records_reserved', 'records_written')) or
+                status.get('overflow') is not False or status.get('io_failed') is not False):
+            raise ValueError('NOMINAL_NATIVE_STATUS:' + name)
+        kinds = {kind: dict(count=0, max_ns=0) for kind in (1, 2, 3)}
+        previous = previous_hold = None
+        holding_count = 0
+        discontinuities = []
+        for row in struct.iter_unpack(ROW.format, raw[8:]):
+            kind = row[0]
+            if kind not in kinds or row[2] != cid or row[10] != 1:
+                raise ValueError('NOMINAL_NATIVE_IDENTITY_OR_KIND:' + name)
+            duration = row[9] - row[8]
+            if not 0 <= duration < PERIOD:
+                raise ValueError('NOMINAL_NATIVE_BODY_BOUND:' + name)
+            kinds[kind]['count'] += 1
+            kinds[kind]['max_ns'] = max(kinds[kind]['max_ns'], duration)
+            if kind == 3 and name == 'neck' and row[1] != 1:
+                raise ValueError('NOMINAL_NECK_PROOF_UNAVAILABLE')
+            if kind != 1:
+                continue
+            if row[7] != PERIOD:
+                raise ValueError('NOMINAL_NATIVE_PERIOD:' + name)
+            if previous is not None:
+                if row[3] != previous[3] + 1 or row[8] <= previous[8]:
+                    raise ValueError('NOMINAL_NATIVE_UPDATE_SEQUENCE:' + name)
+                if row[8] < hold_start and row[6] != previous[6] + PERIOD:
+                    discontinuities.append(dict(before_update=previous[3], after_update=row[3],
+                        before_sim_ns=previous[6], after_sim_ns=row[6], after_started_ns=row[8]))
+            if hold_start <= row[8] <= hold_end:
+                if previous_hold is not None and row[6] != previous_hold[6] + PERIOD:
+                    raise ValueError('NOMINAL_NATIVE_HOLD_GAP:' + name)
+                previous_hold = row
+                holding_count += 1
+            previous = row
+        if (not kinds[1]['count'] or not kinds[2]['count'] or
+                (name == 'neck' and not kinds[3]['count']) or holding_count < 60000):
+            raise ValueError('NOMINAL_NATIVE_COUNT:' + name)
+        controllers[name] = dict(controller_id=cid, path=str(path),
+            sha256=hashlib.sha256(raw).hexdigest(), bytes=len(raw), records=count,
+            status=status, status_sha256=hashlib.sha256(status_path.read_bytes()).hexdigest(),
+            timing=kinds, holding_update_count=holding_count,
+            startup_simulation_discontinuities=discontinuities)
+    return dict(schema='NOMINAL_NATIVE_READBACK_001', controllers=controllers,
+                hold_started_ns=hold_start, hold_ended_ns=hold_end, valid=True)
+
+
+def bounded_elapsed(value):
+    return (type(value) in (int, float) and math.isfinite(value) and 0 < value < 300)
+
+
+def worker_valid(row):
+    if not isinstance(row, dict):
+        return False
+    required = ('original_timing_qualified', 'strict_startup_stop_close', 'maps_verified',
+        'holding_complete', 'cleanup_within15', 'postflight_empty', 'owner_absent',
+        'children_absent', 'seal_verified', 'all_child_rc0', 'native_all_valid')
+    return (row.get('schema') == 'NOMINAL_WORKER_001' and
+            row.get('status') == 'PROVISIONAL_PASS' and type(row.get('rc')) is int and
+            row['rc'] == 0 and all(row.get(key) is True for key in required) and
+            row.get('original_problem') is None and 'original_problem' in row and
+            row.get('cancel_sent') is False and row.get('fallback_used') is False and
+            bounded_elapsed(row.get('elapsed_s')))
+
+
+def guardian_valid(row, actual_rc):
+    return (isinstance(row, dict) and type(actual_rc) is int and actual_rc == 0 and
+            row.get('schema') == 'CLOCK_GUARD_001' and
+            type(row.get('worker_rc')) is int and row['worker_rc'] == 0 and
+            row.get('all_owned_absent') is True and row.get('cancel_sent') is False and
+            row.get('forced_cleanup') is False and 'error' in row and row['error'] is None and
+            bounded_elapsed(row.get('elapsed_s')))
+
+
+def can_start(statuses, index):
+    return (len(statuses) == 3 and type(index) is int and 0 <= index < 3 and
+            all(status == 'PASS' for status in statuses[:index]) and
+            all(status == 'NOT_RUN' for status in statuses[index:]))

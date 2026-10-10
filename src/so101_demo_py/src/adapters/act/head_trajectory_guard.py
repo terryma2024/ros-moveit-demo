@@ -32,16 +32,19 @@ from .pick_place_neck_sweep import MujocoNeckSweepChecker
 
 
 _QUIET_VELOCITY = 0.04136050464213824
-_MAX_VELOCITY = 0.5
-_MAX_ACCELERATION = 0.5
+_MAX_VELOCITY = 1.0
+_MAX_ACCELERATION = 2.0
 _MIN_DURATION_NS = 100_000_000
 _MAX_DURATION_NS = 5_000_000_000
 _LEAD_NS = 4_000_000
-_FIRST_OFFSET_NS = 600_000_000
+_MIN_FIRST_OFFSET_NS = 50_000_000
+_MAX_FIRST_OFFSET_NS = 600_000_000
 _PATH_STEP_S = 0.002
 _CLEARANCE_M = 0.001
 _MAX_SAMPLES = 50_000
-_PREFIX_MAX_SPACING_MOTION_RAD = _MAX_VELOCITY * _PATH_STEP_S
+# Retain the original angular collision resolution as motion limits increase.
+_PATH_MAX_SPACING_MOTION_RAD = 0.001
+_PREFIX_MAX_SPACING_MOTION_RAD = _PATH_MAX_SPACING_MOTION_RAD
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,8 +376,12 @@ class HeadTrajectoryGuard:
         return state, sample, scene
 
     def _check_physical_path(self, snapshot: _Snapshot, target: float,
-                             duration_ns: int) -> dict:
-        offset_s = _FIRST_OFFSET_NS * 1e-9
+                             duration_ns: int, *, first_offset_ns=None) -> dict:
+        if first_offset_ns is None:
+            first_offset_ns = self._prefix_offset_ns(
+                snapshot.qpos[self._neck_qpos] - snapshot.neck_position,
+                snapshot.neck_velocity)
+        offset_s = first_offset_ns * 1e-9
         duration_s = duration_ns * 1e-9
         first = snapshot.neck_position
         delta = target - first
@@ -384,7 +391,8 @@ class HeadTrajectoryGuard:
             raise PermissionError("HEAD_TRAJECTORY_PREFIX_OUTSIDE_GEOMETRY")
         envelope_intervals = max(1, math.ceil(
             (high - low) / _PREFIX_MAX_SPACING_MOTION_RAD))
-        main_intervals = max(1, math.ceil(duration_s / _PATH_STEP_S))
+        main_intervals = max(1, math.ceil(duration_s / _PATH_STEP_S),
+                             math.ceil(1.875 * abs(delta) / _PATH_MAX_SPACING_MOTION_RAD))
         sample_count = envelope_intervals + 1 + main_intervals + 1
         if sample_count > _MAX_SAMPLES:
             raise PermissionError("HEAD_TRAJECTORY_SAMPLE_BUDGET")
@@ -459,6 +467,27 @@ class HeadTrajectoryGuard:
             raise PermissionError("HEAD_TRAJECTORY_COLLISION_POLICY_MUTATED")
 
     @staticmethod
+    def _prefix_offset_ns(position_mismatch_rad: float, velocity_rad_s: float) -> int:
+        mismatch = _finite(position_mismatch_rad, "PREFIX_POSITION")
+        velocity = _finite(velocity_rad_s, "PREFIX_VELOCITY")
+        if abs(mismatch) > 0.002 or abs(velocity) > _QUIET_VELOCITY:
+            raise PermissionError("HEAD_TRAJECTORY_MEASURED_ANCHOR_INVALID")
+        # Reserve the native first-update timing allowance and a small pose
+        # margin. The native guard independently checks its actual measured
+        # prefix; this estimate never grants permission to bypass that check.
+        drift = abs(velocity) * 0.014 + 0.000002
+        for offset_ns in range(_MIN_FIRST_OFFSET_NS, _MAX_FIRST_OFFSET_NS + 1, 10_000_000):
+            remaining = offset_ns * 1e-9 - 0.014
+            bounded = True
+            for position in (mismatch - drift, mismatch + drift):
+                extrema = quintic_extrema(position, velocity, 0., 0., 0., 0., remaining)
+                bounded &= (max(abs(v) for v in extrema["velocity"]) <= 0.9 * _MAX_VELOCITY
+                            and max(abs(a) for a in extrema["acceleration"]) <= 0.9 * _MAX_ACCELERATION)
+            if bounded:
+                return offset_ns
+        raise PermissionError("HEAD_TRAJECTORY_PREFIX_DURATION_LIMIT")
+
+    @staticmethod
     def _duration_ns(delta: float) -> int:
         distance = abs(delta)
         required = max(_MIN_DURATION_NS,
@@ -492,7 +521,7 @@ class HeadTrajectoryGuard:
             times.append(_point_ns(point))
         q0, v0, a0 = rows[0]
         q1, v1, a1 = rows[1]
-        if (times[0] != _FIRST_OFFSET_NS or times[1] <= times[0]
+        if (not _MIN_FIRST_OFFSET_NS <= times[0] <= _MAX_FIRST_OFFSET_NS or times[1] <= times[0]
                 or times[1] > _MAX_DURATION_NS
                 or times[1] - times[0] < _MIN_DURATION_NS
                 or (v0, a0, v1, a1) != (0.0, 0.0, 0.0, 0.0)
@@ -521,15 +550,18 @@ class HeadTrajectoryGuard:
         if not self.safe_interval[0] <= target <= self.safe_interval[1]:
             raise PermissionError("HEAD_TRAJECTORY_TARGET_OUTSIDE_GEOMETRY")
         before, _, _ = self._capture()
+        first_offset_ns = self._prefix_offset_ns(
+            before.qpos[self._neck_qpos] - before.neck_position, before.neck_velocity)
         duration_ns = self._duration_ns(target - before.neck_position)
-        if _FIRST_OFFSET_NS + duration_ns > _MAX_DURATION_NS:
+        if first_offset_ns + duration_ns > _MAX_DURATION_NS:
             raise PermissionError("HEAD_TRAJECTORY_TOTAL_DURATION_LIMIT")
         wall_now_ns = nanoseconds(self.monotonic())
-        endpoint_offset_ns = _FIRST_OFFSET_NS + duration_ns
+        endpoint_offset_ns = first_offset_ns + duration_ns
         if (wall_now_ns + _LEAD_NS + endpoint_offset_ns
                 > self._local_state.search_deadline_ns):
             raise PermissionError("HEAD_TRAJECTORY_SEARCH_DEADLINE_TOO_SHORT")
-        collision = self._check_physical_path(before, target, duration_ns)
+        collision = self._check_physical_path(before, target, duration_ns,
+                                              first_offset_ns=first_offset_ns)
         after, _, _ = self._capture()
         if (after.scope != before.scope or after.scene_session != before.scene_session
                 or after.reset_epoch != before.reset_epoch
@@ -552,13 +584,13 @@ class HeadTrajectoryGuard:
         first.positions = [before.neck_position]
         first.velocities = [0.0]
         first.accelerations = [0.0]
-        _set_time(first.time_from_start, _FIRST_OFFSET_NS)
+        _set_time(first.time_from_start, first_offset_ns)
         trajectory.points.append(first)
         terminal = JointTrajectoryPoint()
         terminal.positions = [target]
         terminal.velocities = [0.0]
         terminal.accelerations = [0.0]
-        _set_time(terminal.time_from_start, _FIRST_OFFSET_NS + duration_ns)
+        _set_time(terminal.time_from_start, first_offset_ns + duration_ns)
         trajectory.points.append(terminal)
         typed_curve = self._validate_goal_curve(goal)
         serialized = serialize_message(goal)
@@ -574,7 +606,7 @@ class HeadTrajectoryGuard:
         if (now_after_ns >= self._local_state.search_deadline_ns
                 or header_ns - decision != _LEAD_NS
                 or _stamp_ns(goal) != header_ns
-                or _point_ns(trajectory.points[0]) != _FIRST_OFFSET_NS
+                or _point_ns(trajectory.points[0]) != first_offset_ns
                 or _point_ns(trajectory.points[-1]) > _MAX_DURATION_NS):
             raise PermissionError("HEAD_TRAJECTORY_FINAL_CLOCK_INVALID")
         proof = {
@@ -596,8 +628,8 @@ class HeadTrajectoryGuard:
             "measured_neck_velocity_rad_s": before.neck_velocity,
             "requested_target_rad": target,
             "header_stamp_ns": header_ns,
-            "first_point_offset_ns": _FIRST_OFFSET_NS,
-            "last_point_offset_ns": _FIRST_OFFSET_NS + duration_ns,
+            "first_point_offset_ns": first_offset_ns,
+            "last_point_offset_ns": first_offset_ns + duration_ns,
             "search_deadline_ns": self._local_state.search_deadline_ns,
             "lead_ns": _LEAD_NS,
             "main_duration_ns": duration_ns,

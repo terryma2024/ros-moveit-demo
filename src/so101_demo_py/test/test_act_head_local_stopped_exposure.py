@@ -74,8 +74,8 @@ def feed_joint(row, sim, velocity=0.0, position=.2):
     return message
 
 
-def exposure_setup(monkeypatch, *, camera_skew_s=.02):
-    row = runtime_setup(monkeypatch)
+def exposure_setup(monkeypatch, *, camera_skew_s=.02, clock=None):
+    row = runtime_setup(monkeypatch, clock=clock)
     runtime = armed_runtime(row)
     events = []
     detector = FakeDetector()

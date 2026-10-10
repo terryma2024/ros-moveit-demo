@@ -39,7 +39,7 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as listener:
 
 
 @pytest.fixture
-def native_server(tmp_path):
+def native_server(tmp_path, tmp_path_factory):
     processes=[]
     def start(reply,delay=0.):
         base=Path(os.environ['SO101_IPC_SOCKET_BASE'])
@@ -54,11 +54,14 @@ def native_server(tmp_path):
         (tmp_path/('peer-'+str(process.pid)+'.json')).write_text(
             __import__('json').dumps(dict(path=str(path),native_owner=owner)))
         return path,owner,process
-    yield start
-    for process in processes:
-        if process.poll() is None:
-            process.terminate()
-        process.wait(timeout=3)
+    from head_admission_peer_support import admission_peer_cpu_slot
+    # Preserve the strict transport budget while excluding expensive model assembly.
+    with admission_peer_cpu_slot(tmp_path_factory):
+        yield start
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+            process.wait(timeout=3)
 
 
 def ack(generation=5):
@@ -130,7 +133,7 @@ def test_close_checks_execute_outside_python_syscall_scheduling(native_server,mo
     receipt=revoker.close_strict()
     assert receipt['ack_validated'] is True
     assert receipt['ack_wall_s']-receipt['request_wall_s']<=.002
-    assert revoker.transport_origin['abi']==1
+    assert revoker.transport_origin['abi']==2
     assert Path(revoker.transport_origin['path']).is_file()
 
 
@@ -265,3 +268,82 @@ def test_explicit_simulation_transport_cannot_fall_back_to_legacy_library(native
     monkeypatch.setattr(head_revocation.ctypes,'CDLL',legacy_only)
     with pytest.raises(RuntimeError,match='HEAD_REVOKER_NATIVE_TRANSPORT_REQUIRED'):
         client(path,owner,simulation=True)
+
+
+def test_native_revocation_peer_excludes_parallel_model_assembly(native_server, tmp_path_factory):
+    import fcntl
+    native_server(ack())
+    scratch = tmp_path_factory.getbasetemp()
+    shared = scratch.parent if os.environ.get('PYTEST_XDIST_WORKER') else scratch
+    descriptor = os.open(shared/'head-admission-peer.lock', os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW, 0o600)
+    try:
+        with pytest.raises(BlockingIOError):
+            fcntl.flock(descriptor, fcntl.LOCK_EX|fcntl.LOCK_NB)
+    finally:
+        os.close(descriptor)
+
+
+def scoped_reply(*,close=False,status=0,stored=0,inc=b'inc',boot=b'boot',generation=5):
+    body=(b'SOPD' if close else b'SOPI')+bytes((1,status,3,0))+generation.to_bytes(8,'big')+stored.to_bytes(8,'big')
+    body+=bytes([len(inc)])+inc+bytes([len(boot)])+boot
+    return len(body).to_bytes(4,'big')+body
+
+
+def test_fault_bootstrap_requires_exact_peer_before_pin(native_server):
+    path,owner,process=native_server(scoped_reply());revoker=client(path,owner,simulation=True)
+    identity=revoker.bootstrap_identity(overall_deadline_ns=time.monotonic_ns()+2_000_000_000)
+    assert (identity['role'],identity['generation'],identity['stored_generation'],identity['incarnation'],identity['boot'])==(3,5,0,'inc','boot')
+    assert identity['native_transport']['abi']==2 and identity['ack_validated']
+    assert process.stdout.readline()=='RECEIVED\n';frame=bytes.fromhex(process.stdout.readline())
+    assert frame[4:10]==b'SOPQ\x01\x02' and len(frame)==66
+
+
+@pytest.mark.parametrize('stored,status',[(0,1),(5,0)])
+def test_fault_scoped_close_keeps_truthful_never_armed_and_armed_receipts(native_server,stored,status):
+    path,owner,process=native_server(scoped_reply(close=True,status=status,stored=stored))
+    revoker=client(path,owner,simulation=True)
+    identity=dict(role=3,generation=5,incarnation='inc',boot='boot')
+    receipt=revoker.close_scoped_strict(expected_identity=identity)
+    assert receipt['status']==('NOT_ARMED_CLOSED' if stored==0 else 'ARMED_CLOSED')
+    assert receipt['stored_generation']==stored and receipt['ack_validated']
+    assert identity==dict(role=3,generation=5,incarnation='inc',boot='boot')
+    assert process.stdout.readline()=='RECEIVED\n';frame=bytes.fromhex(process.stdout.readline())
+    body=b'SOPC\x01\x01'+revoker.capability+int(5).to_bytes(8,'big')+b'\x03\x03inc\x04boot'
+    assert frame==len(body).to_bytes(4,'big')+body
+
+
+@pytest.mark.parametrize('damage',['incarnation','generation','status','stored','reserved','truncated','abi'])
+def test_fault_close_rejects_abi_bad_reply_and_new_incarnation(native_server,damage,monkeypatch):
+    reply=bytearray(scoped_reply(close=True,status=1))
+    if damage=='incarnation':reply[29]=ord('x')
+    elif damage=='generation':reply[19]=6
+    elif damage=='status':reply[9]=4
+    elif damage=='stored':reply[27]=5
+    elif damage=='reserved':reply[11]=1
+    elif damage=='truncated':reply=reply[:-2]
+    if damage=='abi':
+        from types import SimpleNamespace
+        class WrongABI:
+            def __call__(self):return 1
+        monkeypatch.setattr(head_revocation.ctypes,'CDLL',lambda _:SimpleNamespace(
+            so101_head_revocation_abi=WrongABI(),so101_head_revocation_result_size=WrongABI()))
+    path,owner,_=native_server(bytes(reply))
+    with pytest.raises((RuntimeError,TimeoutError)):client(path,owner,simulation=True).close_scoped_strict(
+        expected_identity=dict(role=3,generation=5,incarnation='inc',boot='boot'))
+
+
+def test_fault_identity_uses_remaining_startup_budget(native_server):
+    body=b'SOID'+bytes((1,1,3))+int(5).to_bytes(8,'big')+b'\x03inc\x04boot'
+    path,owner,_=native_server(len(body).to_bytes(4,'big')+body,delay=.02)
+    revoker=client(path,owner,simulation=True)
+    with pytest.raises(TimeoutError):revoker.identity(overall_deadline_ns=time.monotonic_ns()+5_000_000)
+    trace=revoker.exchange_trace
+    assert 0<trace['deadline_wall_s']-trace['request_wall_s']<=.0051
+
+
+def test_ordinary_fault_two_ms_ceiling_survives(native_server):
+    path,owner,_=native_server(scoped_reply(),delay=.01);revoker=client(path,owner)
+    with pytest.raises(TimeoutError):revoker.bootstrap_identity(overall_deadline_ns=time.monotonic_ns()+2_000_000_000)
+    trace=revoker.exchange_trace
+    assert abs(trace['deadline_wall_s']-trace['request_wall_s']-.002)<1e-9
+    assert revoker.timeout==.002

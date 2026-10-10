@@ -37,9 +37,9 @@ ROOT_REFUSED = 'EXECUTION_RUN_ROOT_REFUSED'
 REF_NAMES = (
     'weights', 'frozen_c', 'camera_geometry', 'development_config', 'local_policy',
     'controller_config', 'mujoco_plugin', 'scene', 'urdf', 'safety_inputs',
-    'binding', 'report',
+    'binding', 'report', 'scenario_fixture',
 )
-REQUIRED_REF_NAMES = frozenset(REF_NAMES) - {'binding', 'report'}
+REQUIRED_REF_NAMES = frozenset(REF_NAMES) - {'binding', 'report', 'scenario_fixture'}
 RUN_DECLARATION_FIELDS = {'stop_declaration', 'seal_expectation', 'log_capture',
                           'fault_stop_probes'}
 DECLARATION_FIELDS = RUN_DECLARATION_FIELDS | {'snapshot_root'}
@@ -48,9 +48,10 @@ TOP_LEVEL_FIELDS = {
     'schema_version', 'kind', 'operation', 'execution_scope', 'run', 'evidence_root',
     'run_root', 'freeze_receipt', 'refs', 'development_pose', 'resources', 'ros',
     'stop_declaration', 'seal_expectation', 'log_capture', 'fault_stop_probes',
-    'snapshot_root',
+    'snapshot_root', 'event_log_enabled', 'save_all_rgb_frames', 'campaign_truth_enabled',
 }
-REQUIRED_DOCUMENT_FIELDS = TOP_LEVEL_FIELDS - DECLARATION_FIELDS
+REQUIRED_DOCUMENT_FIELDS = TOP_LEVEL_FIELDS - DECLARATION_FIELDS - {
+    'event_log_enabled', 'save_all_rgb_frames', 'campaign_truth_enabled'}
 RUN_FIELDS = {'run_id', 'session_id', 'epoch', 'generation'}
 POSE_FIELDS = {'arm_rad', 'neck_rad', 'cup_xyz'}
 RESOURCE_FIELDS = {'cuda_device', 'allow_cpu_fallback', 'cpu_allocation'}
@@ -170,6 +171,12 @@ def _parse(path):
     if (type(document['schema_version']) is not int or document['schema_version'] != SCHEMA_VERSION
             or document['kind'] != KIND or document['operation'] != OPERATION):
         _refuse(DOCUMENT_REFUSED, 'execution_inputs: schema/kind/operation mismatch')
+    if type(document.get('event_log_enabled', True)) is not bool:
+        _refuse(DOCUMENT_REFUSED, 'event_log_enabled must be a boolean')
+    if type(document.get('save_all_rgb_frames', False)) is not bool:
+        _refuse(DOCUMENT_REFUSED, 'save_all_rgb_frames must be a boolean')
+    if type(document.get('campaign_truth_enabled', True)) is not bool:
+        _refuse(DOCUMENT_REFUSED, 'campaign_truth_enabled must be a boolean')
     if 'snapshot_root' in document:
         root = _plain_path('snapshot_root', document['snapshot_root'], code=DOCUMENT_REFUSED)
         if root.is_symlink() or not root.is_dir():
@@ -285,10 +292,20 @@ class HeadExecutionInputs:
     def execution_scope(self):
         return self.document['execution_scope']
 
+    @property
+    def event_log_enabled(self):
+        return self.document.get('event_log_enabled', True)
+
+    @property
+    def save_all_rgb_frames(self):
+        return self.document.get('save_all_rgb_frames', False)
+
     def readback(self):
         return {
             'schema_version': SCHEMA_VERSION, 'kind': KIND, 'operation': OPERATION,
             'execution_scope': self.execution_scope, 'run': self.run,
+            'event_log_enabled': self.event_log_enabled,
+            'save_all_rgb_frames': self.save_all_rgb_frames,
             'evidence_root': str(self.evidence_root), 'run_root': str(self.run_root),
             'document_path': str(self.document_path),
             'document_sha256': self.document_sha256,

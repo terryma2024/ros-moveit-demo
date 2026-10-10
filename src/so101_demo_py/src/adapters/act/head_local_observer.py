@@ -159,7 +159,8 @@ class HeadLocalObserver:
             except Exception as error:
                 self._fault_callback_error = type(error).__name__
         try:
-            self._record(reason, {'reason': reason, 'kind': 'OBSERVER_INVALID'})
+            if self._sink is not None:
+                self._record(reason, {'reason': reason, 'kind': 'OBSERVER_INVALID'})
         except Exception:
             pass
         return reason
@@ -227,7 +228,8 @@ class HeadLocalObserver:
                 self._closed_admission = True
         if invalid:
             self._invalidate('HEAD_LOCAL_OBSERVER_JOINT_INVALID', token=fault_token)
-        self._emit_event('JOINT_ORIGINAL', {'source_ns': source_ns, 'sequence': sequence})
+        if self._emit is not None:
+            self._emit_event('JOINT_ORIGINAL', {'source_ns': source_ns, 'sequence': sequence})
         return True
 
     def _clock_original(self, record, source_ns):
@@ -244,7 +246,8 @@ class HeadLocalObserver:
         if stored['valid'] is not True:
             self._invalidate('HEAD_LOCAL_OBSERVER_CLOCK_NONADVANCING')
         else:
-            self._record('CLOCK_ORIGINAL', stored)
+            if self._sink is not None:
+                self._record('CLOCK_ORIGINAL', stored)
         return stored['valid']
 
     def _camera_original(self, kind, record, source_ns):
@@ -292,7 +295,8 @@ class HeadLocalObserver:
         if reason is not None:
             self._invalidate(reason, token=fault_token)
             return False
-        self._record('IMAGE_ORIGINAL' if image else 'INFO_ORIGINAL', stored)
+        if self._sink is not None:
+            self._record('IMAGE_ORIGINAL' if image else 'INFO_ORIGINAL', stored)
         return True
 
     # ---- read-only views ---------------------------------------------------
@@ -372,8 +376,9 @@ class HeadLocalObserver:
                 with self.port._lock:
                     known = gid in self.port._goals
                 if known:
-                    self.port.record_head_action('HEAD_ACTION_STATUS',gid,status,
-                                                 callback_wall_s=callback_wall)
+                    if self.port._head_action_sink is not None:
+                        self.port.record_head_action('HEAD_ACTION_STATUS',gid,status,
+                                                     callback_wall_s=callback_wall)
                 continue
             contradiction = False
             with self.port._lock:
@@ -389,8 +394,9 @@ class HeadLocalObserver:
             observed.append(dict(goal_uuid=gid, status=value))
             if contradiction:
                 self._invalidate('HEAD_LOCAL_OBSERVER_ACCEPTANCE_CONTRADICTION')
-            self.port.record_head_action('HEAD_ACTION_STATUS',gid,status,
-                                         callback_wall_s=callback_wall)
+            if self.port._head_action_sink is not None:
+                self.port.record_head_action('HEAD_ACTION_STATUS',gid,status,
+                                             callback_wall_s=callback_wall)
         return tuple(observed)
 
     def _pending_ids(self):
@@ -440,8 +446,9 @@ class HeadLocalObserver:
             if (gid, kind) in self._outstanding:
                 self._outstanding[(gid, kind)] = future
         future.add_done_callback(lambda done: self._response(gid, kind, done))
-        self.port.record_head_action('HEAD_ACTION_SERVICE_REQUEST',gid,request,
-                                      callback_wall_s=requested_wall)
+        if self.port._head_action_sink is not None:
+            self.port.record_head_action('HEAD_ACTION_SERVICE_REQUEST',gid,request,
+                                          callback_wall_s=requested_wall)
 
     def _response(self, gid, kind, future):
         callback_wall = self.monotonic()
@@ -473,11 +480,12 @@ class HeadLocalObserver:
                     contradiction = 'HEAD_LOCAL_OBSERVER_RESULT_STATUS_INVALID'
             if contradiction is not None:
                 self._invalidate(contradiction)
-            self.port.record_head_action(
-                'HEAD_ACTION_CANCEL' if kind == 'cancel' else 'HEAD_ACTION_GET_RESULT',gid,
-                lambda: (self.port._head_cancel_reply(response) if kind == 'cancel'
-                         else self.port._head_result_reply(response)),
-                callback_wall_s=callback_wall)
+            if self.port._head_action_sink is not None:
+                self.port.record_head_action(
+                    'HEAD_ACTION_CANCEL' if kind == 'cancel' else 'HEAD_ACTION_GET_RESULT',gid,
+                    lambda: (self.port._head_cancel_reply(response) if kind == 'cancel'
+                             else self.port._head_result_reply(response)),
+                    callback_wall_s=callback_wall)
         except Exception as error:
             self.port._head_io_failed(gid, error)
         finally:

@@ -1,0 +1,56 @@
+"""TEST ONLY: exercise the original helper's actual neck-only readback block.
+
+The other adapters expose the earlier diagnostic completion expression and the
+guardian's existing return expression. This is an offline boundary comparison,
+not a claim that an unmodified nominal production worker existed or ran RED.
+"""
+from pathlib import Path
+import importlib.util
+import struct
+import json
+import textwrap
+
+ORIGINAL = Path('/data/work/ws_moveit/.worktrees/so101-head-file-protocol-1003/src/so101_demo_py/test/head_neck_timing_probe.py')
+spec = importlib.util.spec_from_file_location('original_probe', ORIGINAL)
+original = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(original)
+source = ORIGINAL.read_text()
+block = textwrap.dedent(source[source.index('    rows = []\n    binary = timing_root'):source.index('    # DDS may still advertise')])
+
+
+def read_all(root, start, end):
+    ns = dict(timing_root=Path(root), Path=Path, struct=struct, json=json,
+              problem=None, receipts=dict(hold_started_ns=start, hold_ended_ns=end),
+              continuous_updates=original.continuous_updates)
+    exec(compile(block, str(ORIGINAL), 'exec'), ns)
+    if ns['problem']:
+        raise ValueError(ns['problem'])
+    return dict(controllers={'neck': ns['receipts']})
+
+
+def require_observers_off(env):
+    # Previous resource_plan merged the inherited environment verbatim.
+    return dict(env)
+
+
+def worker_valid(row):
+    # Prior diagnostic allowed timing-only failures and had no all-native gate.
+    return bool(row and row.get('strict_startup_stop_close') and
+                row.get('maps_verified') and row.get('holding_complete') and
+                row.get('cleanup_within15') and row.get('postflight_empty') and
+                not row.get('cancel_sent') and not row.get('fallback_used') and
+                row.get('elapsed_s', 300) < 300 and
+                (row.get('original_problem') is None or
+                 row['original_problem'].get('type') in
+                 ('TimingPeriod', 'TimingContinuity', 'TimingBound', 'TimingCount')))
+
+
+def guardian_valid(row, rc):
+    return bool(row and rc == 0 and row.get('worker_rc') == 0 and
+                row.get('all_owned_absent') and not row.get('cancel_sent') and
+                not row.get('forced_cleanup') and not row.get('error') and
+                row.get('elapsed_s', 300) < 300)
+
+
+def can_start(statuses, index):
+    return statuses[index] == 'NOT_RUN'

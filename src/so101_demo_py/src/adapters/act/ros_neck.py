@@ -165,25 +165,25 @@ class RosNeckSearchPort:
                     raise RuntimeError('NECK_ACTION_SERVER_UNAVAILABLE')
                 with self._lock:
                     if self._stopped:raise PermissionError('NECK_STOPPED')
-                previous_traces = len(self.port.dispatch_traces)
+                previous_traces = len(self.port.dispatch_traces) if scene.emit is not None else None
                 try:
                     gid=self.port.send_prepared_head(prepared)
                     with self._lock:
                         # Retain the actual UUID before evidence or resume can fail.
                         self._goals.append(gid)
                 finally:
-                    traces = self.port.dispatch_traces
-                    entered = len(traces) == previous_traces + 1
-                    trace = dict(traces[-1]) if entered else dict(goal_uuid=None, phases=[])
-                    payload = trace.pop('original_cdr', None)
-                    if payload is None:
-                        payload = prepared.original_cdr
-                    proof = prepared.proof
-                    trace.update(dispatch_entered=entered, original_cdr_hex=payload.hex(),
-                        original_cdr_sha256=hashlib.sha256(payload).hexdigest(), prepared_proof=proof)
-                    # Exact bytes, typed inventory and original phase times
-                    # survive process exit in the same bounded main writer.
-                    scene.emit('HEAD_PREPARED_DISPATCH_TRACE', trace)
+                    if scene.emit is not None:
+                        traces = self.port.dispatch_traces
+                        entered = len(traces) == previous_traces + 1
+                        trace = dict(traces[-1]) if entered else dict(goal_uuid=None, phases=[])
+                        payload = trace.pop('original_cdr', None)
+                        if payload is None:
+                            payload = prepared.original_cdr
+                        proof = prepared.proof
+                        trace.update(dispatch_entered=entered, original_cdr_hex=payload.hex(),
+                            original_cdr_sha256=hashlib.sha256(payload).hexdigest(), prepared_proof=proof)
+                        # Preserve exact bytes and phase times only for enabled evidence.
+                        scene.emit('HEAD_PREPARED_DISPATCH_TRACE', trace)
             return gid
         finally:
             with self._lock:

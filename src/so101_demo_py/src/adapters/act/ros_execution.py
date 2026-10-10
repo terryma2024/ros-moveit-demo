@@ -403,15 +403,17 @@ class RosControllerPort:
             claim=record.get('primary_claim_window_ns')
             if claim is not None and not claim[0]<=time.monotonic_ns()<claim[1]:
                 raise PermissionError('HEAD_PREPARED_CLAIM_EXPIRED')
-            record['sdk_dispatch_wall_s']=self.monotonic()
+            if self._head_action_sink is not None:
+                record['sdk_dispatch_wall_s']=self.monotonic()
             response=self.client.send_goal_async(message,goal_uuid=owned_uuid)
-            record['sdk_returned_wall_s']=self.monotonic()
-            self.record_head_action('HEAD_ACTION_SDK_RETURNED',gid,
-                lambda:dict(future_done=response.done(),accepted=record['accepted'],
-                    sdk_dispatch_wall_s=record['sdk_dispatch_wall_s'],
-                    sdk_returned_wall_s=record['sdk_returned_wall_s'],
-                    prepared_cdr_sha256=record['prepared_cdr_sha256']),
-                callback_wall_s=record['sdk_returned_wall_s'])
+            if self._head_action_sink is not None:
+                record['sdk_returned_wall_s']=self.monotonic()
+                self.record_head_action('HEAD_ACTION_SDK_RETURNED',gid,
+                    lambda:dict(future_done=response.done(),accepted=record['accepted'],
+                        sdk_dispatch_wall_s=record['sdk_dispatch_wall_s'],
+                        sdk_returned_wall_s=record['sdk_returned_wall_s'],
+                        prepared_cdr_sha256=record['prepared_cdr_sha256']),
+                    callback_wall_s=record['sdk_returned_wall_s'])
             response.add_done_callback(lambda future:self._accepted(gid,future))
             return gid
         except Exception as error:
@@ -438,8 +440,9 @@ class RosControllerPort:
                 record=self._goals[gid]
                 record['handle']=handle;record['accepted']=accepted
                 cancel=record['cancel_requested']
-            self.record_head_action('HEAD_ACTION_SDK_ACCEPTANCE',gid,
-                lambda:self._head_acceptance_reply(handle),callback_wall_s=callback_wall)
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_ACCEPTANCE',gid,
+                    lambda:self._head_acceptance_reply(handle),callback_wall_s=callback_wall)
             if accepted:
                 if cancel:self._cancel_handle(gid)
                 self._head_dispatch_io(gid,'result',lambda:
@@ -462,8 +465,9 @@ class RosControllerPort:
                 self._head_io_failed(gid,error)
                 return
             with self._lock:self._goals[gid]['result']=result
-            self.record_head_action('HEAD_ACTION_SDK_RESULT',gid,
-                lambda:self._head_result_reply(result),callback_wall_s=callback_wall)
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_RESULT',gid,
+                    lambda:self._head_result_reply(result),callback_wall_s=callback_wall)
             return
         with self._lock:
             try:self._goals[gid]['result']=future.result()
@@ -494,8 +498,9 @@ class RosControllerPort:
                 self._head_io_failed(gid,error)
                 return
             with self._lock:self._goals[gid]['cancel_ack']=ack
-            self.record_head_action('HEAD_ACTION_SDK_CANCEL',gid,
-                lambda:self._head_cancel_reply(response),callback_wall_s=callback_wall)
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_CANCEL',gid,
+                    lambda:self._head_cancel_reply(response),callback_wall_s=callback_wall)
             return
         with self._lock:
             try:

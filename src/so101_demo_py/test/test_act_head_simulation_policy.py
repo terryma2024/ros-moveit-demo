@@ -25,9 +25,9 @@ def document():
 def test_file_policy_has_no_online_budgets_and_maps_local_feedback_exactly():
     cls = policy_type()
     candidate = cls.default_document()
-    assert candidate == document()
+    assert candidate == dict(document(), perception_max_age_s=1.)
     encoded = (json.dumps(candidate, sort_keys=True, indent=2) + '\n').encode('utf-8')
-    assert hashlib.sha256(encoded).hexdigest() == 'd246828d0b77a7ef89b51bc74819ce63ea110dbbaf2542b0a6ea4559b85c598d'
+    assert hashlib.sha256(encoded).hexdigest() == '5e19873303640edc5e323721e2861de3745741edad188f47cb8d4f6a4248520d'
     parsed = cls.parse(document())
     assert parsed.feedback_values() == dict(joint_max_receipt_age_s=.25,
         joint_max_source_age_s=.05, camera_interarrival_deadline_s=.5,
@@ -66,7 +66,7 @@ def test_file_policy_rejects_inconsistent_local_stop_and_retry_budgets(change):
 @pytest.mark.parametrize('name,value', [
     ('watchdog_period_s', .101), ('fault_reaction_limit_s', .501),
     ('native_close_timeout_s', .251), ('stop_confirmation_timeout_s', 3.01),
-    ('perception_max_age_s', .151), ('perception_job_timeout_s', 3.01),
+    ('perception_max_age_s', 1.000000001), ('perception_job_timeout_s', 3.01),
     ('camera_loss_timeout_s', 2.01), ('feedback_receipt_timeout_s', 1.01),
     ('joint_source_age_s', .101), ('camera_source_age_s', .301),
     ('search_timeout_s', 120.01), ('max_reobservations_per_stop', 11),
@@ -195,3 +195,26 @@ def test_reobservation_never_recovers_identity_fault_or_backward_clock(stop,reas
     observed=budget()
     with pytest.raises(ValueError):observed.reobserve(stop,reason,wall)
     assert observed.readback()['reobservations_total']==0
+
+
+@pytest.mark.parametrize('age_s', [.151, .5, 1.])
+def test_file_policy_accepts_authorized_observation_age_up_to_one_second(age_s):
+    parsed = policy_type().parse(dict(document(), perception_max_age_s=age_s))
+    parsed.validate_search_values(dict(max_age_s=age_s, search_timeout_s=30., stop_latency_s=1.))
+    assert parsed.readback()['perception_max_age_s'] == age_s
+
+
+def test_default_one_second_policy_binds_controller_without_relaxing_feedback():
+    from so101_demo.act.search import HeadSearchController
+    from test_act_search import config
+
+    parsed = policy_type().parse(policy_type().default_document())
+    values = config(max_age_s=1., required_search_domain_rad=[-.2, .2],
+                    lock_valid_neck_rad=[-.3, .3])
+    controller = HeadSearchController(values, simulation_policy=parsed)
+    assert controller.advance_deadline(10.) is None
+    assert controller.advance_deadline(40.)['status'] == 'SEARCH_TIMEOUT'
+    with pytest.raises(ValueError, match='HEAD_SEARCH_SIMULATION_CONFIG_INVALID'):
+        HeadSearchController(dict(values, max_age_s=.15), simulation_policy=parsed)
+    assert parsed.feedback_values()['joint_max_receipt_age_s'] == .25
+    assert parsed.feedback_values()['camera_interarrival_deadline_s'] == .5

@@ -1,3 +1,4 @@
+#include <future>
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <chrono>
@@ -33,6 +34,8 @@
 #include <vector>
 
 #include "so101_mujoco_support/broker_owned_trajectory_controller.hpp"
+#include "so101_mujoco_support/controller_stop_evaluation.hpp"
+#include "controller_stop_witness_test_access.hpp"
 #include "so101_mujoco_support/controller_goal_admission.hpp"
 #include "so101_mujoco_support/controller_stop_witness.hpp"
 #include "so101_mujoco_support/sha256.hpp"
@@ -59,6 +62,8 @@ public:
     }
     return gate;
   }
+  so101_mujoco_support::ControllerStopEvaluation stop_evaluation()
+  {return controller_stop_evaluation();}
   bool topic_subscriber_exists() const {return static_cast<bool>(joint_command_subscriber_);}
   bool action_server_exists() const {return static_cast<bool>(action_server_);}
   void publish_trajectory_for_test(
@@ -1686,7 +1691,7 @@ TEST(BrokerOwnedTrajectoryController, HeadPrimaryCloseAndConcurrentCancelPublish
   exercise_primary_close_owned_action(true, true);
 }
 
-static void exercise_file_mode_prefix_edges(bool continuous_neck)
+static void exercise_file_mode_prefix_edges(bool continuous_neck, int speed_profile = 0)
 {
   struct PrefixCase
   {
@@ -1701,7 +1706,7 @@ static void exercise_file_mode_prefix_edges(bool continuous_neck)
     bool expected_holding;
   };
   const double velocity_limit = 0.04136050464213824;
-  const std::vector<PrefixCase> cases{
+  std::vector<PrefixCase> cases{
     {"nominal_T404ms", 404000000, 400000000, 0.1, 0.0, 0.1, 0.101, "", false},
     {"positive_residual_velocity_T404ms", 404000000, 400000000, 0.1,
       velocity_limit, 0.1, 0.101, "", false},
@@ -1755,9 +1760,9 @@ static void exercise_file_mode_prefix_edges(bool continuous_neck)
     {"zero_header", 404000000, 400000000, 0.1, 0.0,
       0.1, 0.101, "zero_header", true},
     {"main_velocity_bound", 404000000, 400000000, 0.1, 0.0,
-      0.1, 0.4, "", true},
+      0.1, 1.2, "two_second_main", true},
     {"main_acceleration_bound", 404000000, 400000000, 0.1, 0.0,
-      0.1, 0.2, "", true},
+      0.1, 0.2, "short_main_time", true},
     {"main_position_geometry", 404000000, 400000000, 0.1, 0.0,
       0.1, 7.0, "", true},
     {"positive_geometry_edge", 404000000, 400000000, 6.283, 0.0,
@@ -1773,6 +1778,21 @@ static void exercise_file_mode_prefix_edges(bool continuous_neck)
     {"main_time_limit", 404000000, 400000000, 0.1, 0.0,
       0.1, 0.101, "long_main_time", true},
   };
+  if (speed_profile >= 1) {
+    // One-second rest-to-rest motion: peak v=0.2625, peak a=0.808291.
+    cases.push_back({"faster_acceleration_1", 54000000, 50000000, 0.1, 0.0,
+      0.1, 0.24, "", false});
+  }
+  if (speed_profile >= 2) {
+    // One-second rest-to-rest motion: peak v=0.45, peak a=1.385641.
+    cases.push_back({"faster_acceleration_2", 54000000, 50000000, 0.1, 0.0,
+      0.1, 0.34, "", false});
+  }
+  if (speed_profile >= 3) {
+    // 1.1-second rest-to-rest motion: peak v=0.681818, peak a=1.908596.
+    cases.push_back({"faster_velocity_1_acceleration_2", 54000000, 50000000, 0.1, 0.0,
+      0.1, 0.5, "eleven_tenths_main", false});
+  }
   const auto directory = private_socket_directory();
   const ScopedReservationEnvironment reservation_scope(directory, "session-17");
   ScopedNativeMonitor primary(directory, true);
@@ -1859,6 +1879,16 @@ static void exercise_file_mode_prefix_edges(bool continuous_neck)
       trajectory.header.stamp.nanosec = 0;
     } else if (std::string(test_case.damage) == "invalid_header_nanosec") {
       trajectory.header.stamp.nanosec = 1000000000U;
+    } else if (std::string(test_case.damage) == "short_main_time" ||
+      std::string(test_case.damage) == "two_second_main" ||
+      std::string(test_case.damage) == "eleven_tenths_main")
+    {
+      const auto duration_ns = std::string(test_case.damage) == "short_main_time" ?
+        500000000LL : (std::string(test_case.damage) == "two_second_main" ?
+        2000000000LL : 1100000000LL);
+      const auto end_ns = test_case.first_point_ns + duration_ns;
+      trajectory.points[1].time_from_start.sec = static_cast<int32_t>(end_ns / 1000000000LL);
+      trajectory.points[1].time_from_start.nanosec = static_cast<uint32_t>(end_ns % 1000000000LL);
     } else if (std::string(test_case.damage) == "long_main_time") {
       trajectory.points[1].time_from_start.sec = std::numeric_limits<int32_t>::max();
       trajectory.points[1].time_from_start.nanosec = 0;
@@ -1915,6 +1945,21 @@ static void exercise_file_mode_prefix_edges(bool continuous_neck)
   ASSERT_EQ(controller.get_node()->deactivate().id(),
     lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE);
   controller.release_interfaces();
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeAcceptsFasterAccelerationProfile)
+{
+  exercise_file_mode_prefix_edges(true, 1);
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeAcceptsAccelerationTwoProfile)
+{
+  exercise_file_mode_prefix_edges(true, 2);
+}
+
+TEST(BrokerOwnedTrajectoryController, FileModeAcceptsVelocityOneAccelerationTwoProfile)
+{
+  exercise_file_mode_prefix_edges(true, 3);
 }
 
 TEST(BrokerOwnedTrajectoryController, FileModeLoanedUpdateCoversMeasuredPrefixEdgesAndRefusals)
@@ -2445,4 +2490,177 @@ TEST(BrokerOwnedTrajectoryController, FileModePrimaryProvisionRejectsWrongActorC
   {
     exercise_head_local_provision_refusal(damage);
   }
+}
+
+namespace
+{
+void fill_wrapper_window(so101_mujoco_support::ControllerStopWitness & witness)
+{
+  const int64_t now=std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  for(uint64_t seq=1;seq<=51;++seq) {
+    so101_mujoco_support::ControllerStopWitness::Observation sample;
+    sample.sequence=seq; sample.sim_time_ns=seq*2000000; sample.joint_count=1;
+    sample.received_monotonic_ns=now-102000000+seq*2000000; sample.holding=true;
+    witness.observe(sample);
+  }
+}
+}
+TEST(BrokerOwnedTrajectoryController, wrapper_inactive_joint_scope_active_before_after)
+{
+  using namespace so101_mujoco_support;
+  ControllerStopWitness witness(1);
+  for(int mode=0;mode<6;++mode) {
+    fill_wrapper_window(witness);
+    int active_calls=0,goal_calls=0;
+    const auto result=evaluate_controller_stop(100+mode,
+      [&] {return mode!=0 && (mode!=3 || ++active_calls==1);},
+      [&]() -> ControllerStopWitness * {return mode==1 ? nullptr : &witness;},
+      [&] {return mode==2 || (mode==4 && ++goal_calls==2);});
+    const StopWrapperReason reasons[]={StopWrapperReason::INACTIVE_BEFORE,StopWrapperReason::JOINT_SCOPE,
+      StopWrapperReason::ACTIVE_BEFORE,StopWrapperReason::INACTIVE_AFTER,StopWrapperReason::ACTIVE_AFTER,
+      StopWrapperReason::PASS};
+    EXPECT_EQ(result.record.wrapper_reason,reasons[mode]) << mode;
+    EXPECT_EQ(result.record.evaluation_id,100u+mode);
+    EXPECT_EQ(result.allowed,mode==5);
+    EXPECT_EQ(result.snapshot.has_value(),mode>=3);
+    if((mode==3 || mode==4) && result.snapshot) {EXPECT_TRUE(result.snapshot->rejection==ControllerStopWitness::RejectionReason::NONE);}
+  }
+}
+TEST(BrokerOwnedTrajectoryController, evaluation_ids_remain_bound_after_subsequent_observe)
+{
+  using namespace so101_mujoco_support;
+  ControllerStopWitness witness(1);
+  fill_wrapper_window(witness);
+  auto evaluation=evaluate_controller_stop(41,[] {return true;},[&] {return &witness;},[] {return false;});
+  ASSERT_TRUE(evaluation.allowed); ASSERT_TRUE(evaluation.snapshot);
+  const auto bytes=encode_stop_proof_record(evaluation.record);
+  witness.reset();
+  const auto next=evaluate_controller_stop(42,[] {return true;},[&] {return &witness;},[] {return false;});
+  EXPECT_FALSE(next.allowed); EXPECT_EQ(next.record.wrapper_reason,StopWrapperReason::WITNESS_REJECT);
+  EXPECT_EQ(next.record.witness_rejection,2); EXPECT_EQ(next.record.last_reset_reason,2);
+  EXPECT_EQ(next.record.sample_count,0);
+  EXPECT_EQ(encode_stop_proof_record(evaluation.record),bytes);
+  EXPECT_EQ(next.record.evaluation_id,42u);
+}
+TEST(BrokerOwnedTrajectoryController, fault_close_does_not_wait_for_witness_mutex)
+{
+  using namespace so101_mujoco_support;
+  ControllerStopWitness witness(1); fill_wrapper_window(witness);
+  ControllerGoalAdmission gate([] {return 1000;},100,1024,2048,
+    ServiceControllerIdentity{ControllerReservationRole::NECK,"inc","boot"});
+  std::promise<void> locked,release; auto unlock=release.get_future();
+  auto query=std::async(std::launch::async,[&] {return witness.checked_proof_with_clock([&] {
+      locked.set_value(); unlock.wait(); return int64_t(0);
+    });});
+  locked.get_future().wait();
+  auto close=std::async(std::launch::async,[&] {return gate.close_scoped(17,ControllerReservationRole::NECK,"inc","boot");});
+  EXPECT_EQ(close.wait_for(std::chrono::milliseconds(50)),std::future_status::ready);
+  release.set_value(); query.get();
+  EXPECT_EQ(close.get().status,ControllerGoalAdmission::ScopedCloseStatus::NOT_ARMED_CLOSED);
+}
+
+TEST(BrokerOwnedTrajectoryController, EvaluationIdsIncreaseBeforeAnyOuterCheck)
+{
+  InspectableController controller;
+  const auto first=controller.stop_evaluation();
+  const auto second=controller.stop_evaluation();
+  EXPECT_FALSE(first.allowed);
+  EXPECT_EQ(first.record.wrapper_reason,so101_mujoco_support::StopWrapperReason::INACTIVE_BEFORE);
+  EXPECT_GT(first.record.evaluation_id,0u);
+  EXPECT_GT(second.record.evaluation_id,first.record.evaluation_id);
+  EXPECT_FALSE(first.snapshot);
+}
+
+TEST(BrokerOwnedTrajectoryController, UnavailableEvaluationHasNoSnapshotAndKeepsId)
+{
+  using namespace so101_mujoco_support;
+  ControllerStopWitness witness(1);
+  fill_wrapper_window(witness);
+  ControllerStopWitnessTestAccess::reader_lock(witness);
+  int active_calls = 0, goal_calls = 0;
+  auto future = std::async(std::launch::async, [&]() {
+      return evaluate_controller_stop(97, [&]() {++active_calls; return true;},
+        [&]() {return &witness;}, [&]() {++goal_calls; return false;});
+    });
+  const auto evaluation = future.get();
+  ControllerStopWitnessTestAccess::reader_unlock(witness);
+  EXPECT_FALSE(evaluation.allowed);
+  EXPECT_FALSE(evaluation.snapshot);
+  EXPECT_FALSE(evaluation.proof);
+  EXPECT_EQ(evaluation.record.evaluation_id, 97u);
+  EXPECT_EQ(static_cast<uint8_t>(evaluation.record.wrapper_reason), 8);
+  EXPECT_EQ(active_calls, 2);
+  EXPECT_EQ(goal_calls, 2);
+  EXPECT_NO_THROW(encode_stop_proof_record(evaluation.record));
+  witness.reset();
+  EXPECT_EQ(evaluation.record.flags, 0);
+  EXPECT_EQ(evaluation.record.evaluated_ns, 0);
+  EXPECT_EQ(evaluation.record.cumulative_observation_lock_losses, 0u);
+}
+
+
+namespace so101_mujoco_support
+{
+struct BrokerOwnedTrajectoryControllerTestAccess
+{
+  static ControllerStopWitness & prepare(BrokerOwnedTrajectoryController & controller)
+  {
+    controller.witness_active_.store(true);
+    controller.monitored_joints_.store(1);
+    controller.reservation_role_ = ControllerReservationRole::NECK;
+    controller.head_simulation_mode_ = true;
+    controller.rt_is_holding_.store(true);
+    return controller.neck_stop_witness_;
+  }
+  static bool unavailable_pending_without_snapshot(BrokerOwnedTrajectoryController & controller)
+  {
+    const auto & pending = controller.pending_stop_failure_;
+    return pending && pending->owner == &controller && !pending->snapshot &&
+      pending->wrapper_reason == BrokerOwnedTrajectoryController::StopFailureReason::SNAPSHOT_UNAVAILABLE;
+  }
+  static void emit(BrokerOwnedTrajectoryController & controller)
+  {
+    controller.emit_stop_refusal_diagnostic();
+  }
+};
+}
+
+TEST(BrokerOwnedTrajectoryController, UnavailableRefusalLogDoesNotRereadWitness)
+{
+  using namespace so101_mujoco_support;
+  rclcpp::init(0, nullptr);
+  InspectableController controller;
+  rclcpp::NodeOptions options;
+  options.parameter_overrides({
+    rclcpp::Parameter("joints", std::vector<std::string>{"neck_yaw_joint"}),
+    rclcpp::Parameter("command_interfaces", std::vector<std::string>{"position"}),
+    rclcpp::Parameter("state_interfaces", std::vector<std::string>{"position", "velocity"})});
+  ASSERT_EQ(controller.init("neck_controller", neck_urdf(), 500, "", options),
+    controller_interface::return_type::OK);
+  auto & witness = BrokerOwnedTrajectoryControllerTestAccess::prepare(controller);
+  fill_wrapper_window(witness);
+  std::promise<void> locked, release;
+  auto released = release.get_future();
+  auto pin = std::async(std::launch::async, [&]() {
+      ControllerStopWitnessTestAccess::reader_lock(witness);
+      locked.set_value();
+      released.wait();
+      ControllerStopWitnessTestAccess::reader_unlock(witness);
+    });
+  locked.get_future().wait();
+  const auto evaluation = controller.stop_evaluation();
+  release.set_value();
+  pin.get();
+  EXPECT_FALSE(evaluation.allowed);
+  EXPECT_EQ(evaluation.record.wrapper_reason, StopWrapperReason::SNAPSHOT_UNAVAILABLE);
+  EXPECT_TRUE(BrokerOwnedTrajectoryControllerTestAccess::unavailable_pending_without_snapshot(controller));
+  witness.reset();
+  fill_wrapper_window(witness);
+  ASSERT_TRUE(witness.proof());
+  // The post-reply sink must emit the captured refusal even after recovery.
+  EXPECT_TRUE(BrokerOwnedTrajectoryControllerTestAccess::unavailable_pending_without_snapshot(controller));
+  BrokerOwnedTrajectoryControllerTestAccess::emit(controller);
+  EXPECT_FALSE(BrokerOwnedTrajectoryControllerTestAccess::unavailable_pending_without_snapshot(controller));
+  rclcpp::shutdown();
 }

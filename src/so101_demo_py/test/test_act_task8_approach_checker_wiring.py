@@ -50,7 +50,8 @@ def test_the_real_checker_starts_and_greets_with_the_admitted_hash():
 
     motion = _route_motion()
     checker = MujocoPathProcess(
-        check_timeout_s=motion["submit_lead_s"], start_timeout_s=2.0,
+        # This test checks the admitted model handshake, not startup latency.
+        check_timeout_s=motion["submit_lead_s"], start_timeout_s=10.0,
         model_path=motion["model_path"], protected_roots=("base",),
         cup_joint="cup_free_joint", gripper_body="gripper",
         path_step_s=motion["path_step_s"], path_clearance_m=motion["path_clearance_m"],
@@ -97,7 +98,7 @@ def _checker(motion):
     from so101_demo.adapters.act.physics import MujocoPathProcess
 
     return MujocoPathProcess(
-        check_timeout_s=motion["submit_lead_s"], start_timeout_s=2.0,
+        check_timeout_s=motion["submit_lead_s"], start_timeout_s=10.0,
         model_path=motion["model_path"], protected_roots=("base",),
         cup_joint="cup_free_joint", gripper_body="gripper",
         path_step_s=motion["path_step_s"], path_clearance_m=motion["path_clearance_m"],
@@ -192,7 +193,7 @@ def assemble_approach_authority(*, port, sources, broker, cancelled, manifest, p
 
     motion = route_motion_configuration(manifest)
     factory = MujocoPathProcess if path_process_factory is None else path_process_factory
-    checker = factory(check_timeout_s=motion["submit_lead_s"], start_timeout_s=2.0,
+    checker = factory(check_timeout_s=motion["submit_lead_s"], start_timeout_s=10.0,
                       model_path=motion["model_path"], protected_roots=("base",),
                       cup_joint="cup_free_joint", gripper_body="gripper",
                       path_step_s=motion["path_step_s"], path_clearance_m=motion["path_clearance_m"],

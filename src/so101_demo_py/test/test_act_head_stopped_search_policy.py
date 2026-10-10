@@ -8,7 +8,10 @@ from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
 
 
 def bounded_config(**changes):
-    return config(required_search_domain_rad=[-.2,.2],lock_valid_neck_rad=[-.3,.3],**changes)
+    values = dict(max_age_s=1., required_search_domain_rad=[-.2,.2],
+                  lock_valid_neck_rad=[-.3,.3])
+    values.update(changes)
+    return config(**values)
 
 
 def simulation():return HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
@@ -40,7 +43,7 @@ def test_simulation_controller_refuses_unbounded_or_different_effective_config_b
 
 
 def test_simulation_controller_never_qualifies_an_incomplete_degenerate_stop_plan():
-    search=HeadSearchController(config(required_search_domain_rad=[0.,0.],lock_valid_neck_rad=[0.,0.]),
+    search=HeadSearchController(config(max_age_s=1., required_search_domain_rad=[0.,0.],lock_valid_neck_rad=[0.,0.]),
         simulation_policy=simulation())
     result=search.tick(*evidence(1.),1.)
     assert result['status']=='SEARCH_COVERAGE_INCOMPLETE' and result['found'] is False

@@ -61,7 +61,7 @@ def test_runner_post_arm_binder_uses_bound_runtime_authority_and_stop_origin(pau
         return original_stop(owner, origin, evidence)
 
     monkeypatch.setattr(type(runtime), 'stop', stop)
-    composition = SimpleNamespace(emit=lambda *args: emitted.append(args))
+    composition = SimpleNamespace(event_log_enabled=True, emit=lambda *args: emitted.append(args))
     client = neck.client
     dispatcher = _bind_prepared_transport(composition,
         dict(neck=neck, scene=case.scene), runtime, case.guard)

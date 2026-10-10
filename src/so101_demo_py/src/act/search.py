@@ -85,6 +85,8 @@ class HeadSearchController:
         self.coarse_angle = self.fine_angle = 0.0
         self.fine_count = self.lock_count = 0
         self.track = None
+        self.previous_horizontal_error = None
+        self.centering_gain = 1.0
         self.started_wall_s = self.last_wall_s = self.last_frame_s = None
         self.motion_source_s = None
         self.terminal = None
@@ -261,6 +263,8 @@ class HeadSearchController:
             )
             if self.track != detection["track_id"]:
                 self.track, self.lock_count = detection["track_id"], 0
+                self.previous_horizontal_error = None
+                self.centering_gain = 1.0
             vertical = self.config["vertical_bounds_px"]
             horizontal_error = center[0] - frame["k"][2]
             if (
@@ -288,6 +292,15 @@ class HeadSearchController:
                 frame["rotation_optical_to_base"],
             )
             correction = (bearing(ray) - bearing(axis) + math.pi) % (2 * math.pi) - math.pi
+            if self._simulation_policy is not None:
+                previous_error = self.previous_horizontal_error
+                # A large improvement can cross center without oscillating. Reduce
+                # gain only for a same-track reversal that retains most of its error.
+                if (previous_error is not None and horizontal_error * previous_error < 0
+                        and abs(horizontal_error) >= 0.8 * abs(previous_error)):
+                    self.centering_gain *= 0.5
+                self.previous_horizontal_error = horizontal_error
+                correction *= self.centering_gain
             if (
                 self.fine_count >= self.config["max_fine_corrections"]
                 or self.fine_angle + abs(correction) > self.config["max_fine_total_rad"]
@@ -301,6 +314,8 @@ class HeadSearchController:
             self.state = "CENTER_CUP"
             return self._command()
         self.lock_count, self.track = 0, None
+        self.previous_horizontal_error = None
+        self.centering_gain = 1.0
         if self.plan is not None:
             target = self.next_target()
             if target is None:

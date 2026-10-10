@@ -7,7 +7,7 @@
 extern "C" {
 #endif
 
-/* ABI 1: CLOCK_MONOTONIC originals, no capability or request bytes in evidence.
+/* ABI 2: CLOCK_MONOTONIC originals, no capability or request bytes in evidence.
  * Phases: path, connect, request-peer, send, receive, reply-peer, deadline,
  * complete. Errors: config, path, peer, I/O, deadline, reply, rejection.
  */
@@ -21,8 +21,17 @@ typedef struct So101HeadRevocationResult
   uint64_t ack_ns;
   uint64_t ended_ns;
   uint64_t phases_ns[6];
-  uint8_t reply[145];
+  uint8_t reply[154];
 } So101HeadRevocationResult;
+
+typedef struct So101HeadExpectedIdentity
+{
+  uint8_t role;
+  uint8_t incarnation_length;
+  uint8_t incarnation[64];
+  uint8_t boot_length;
+  uint8_t boot[64];
+} So101HeadExpectedIdentity;
 
 uint32_t so101_head_revocation_abi(void);
 uint32_t so101_head_revocation_result_size(void);
@@ -30,6 +39,7 @@ uint32_t so101_head_revocation_exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
   uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  const So101HeadExpectedIdentity * expected_identity,
   So101HeadRevocationResult * result);
 
 /* Explicit simulation entry only; the legacy entry retains its 2 ms ceiling.
@@ -40,6 +50,7 @@ uint32_t so101_head_revocation_simulation_exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
   uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  const So101HeadExpectedIdentity * expected_identity,
   So101HeadRevocationResult * result);
 
 #ifdef __cplusplus

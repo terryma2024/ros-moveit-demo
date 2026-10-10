@@ -37,9 +37,17 @@ class RestartStack(MujocoRosTransport):
         controller_config_path,
         environment,
         teardown_timeout_s=None,
+        event_log_enabled=True,
+        batch_spawners=False,
         **kwargs,
     ) -> None:
+        if type(event_log_enabled) is not bool:
+            raise ValueError('HEAD_STACK_LOG_FLAG_INVALID')
+        if type(batch_spawners) is not bool:
+            raise ValueError('HEAD_STACK_BATCH_SPAWNERS_INVALID')
         super().__init__(controller_config_path=controller_config_path, **kwargs)
+        self.event_log_enabled = event_log_enabled
+        self.batch_spawners = batch_spawners
         self.controller_config_path = Path(controller_config_path)
         self.environment = dict(environment)
         if (teardown_timeout_s is not None
@@ -52,12 +60,22 @@ class RestartStack(MujocoRosTransport):
 
     def _spawn(self, argv, name: str):
         argv = list(argv)
+        if self.batch_spawners and name == 'spawner joint_state_broadcaster':
+            if len(argv) < 2 or argv[1] != CONTROLLERS[0]:
+                raise ValueError('HEAD_STACK_BATCH_COMMAND_INVALID')
+            # Upstream spawners serialize on one ROS_HOME lock, before creating
+            # their ROS nodes. One supported multi-controller invocation avoids
+            # repeating service discovery while preserving every controller.
+            argv[2:2] = CONTROLLERS[1:]
+            name = 'spawner ' + ' '.join(CONTROLLERS)
         if name == 'robot_state_publisher':
             argv.extend(('-p', 'publish_frequency:=100.0'))
         self.workspace.mkdir(parents=True, exist_ok=True)
-        handle = open(self.log_path, "ab")  # noqa: SIM115 - one handle per child, closed on stop
-        self.handles.append(handle)
-        if self.logger is not None:
+        handle = subprocess.DEVNULL
+        if self.event_log_enabled:
+            handle = open(self.log_path, "ab")  # noqa: SIM115 - closed on stop
+            self.handles.append(handle)
+        if self.event_log_enabled and self.logger is not None:
             self.logger(f"starting {name}: {' '.join(argv)}")
         process = subprocess.Popen(  # noqa: S603 - the argv is built from installed package prefixes
             list(argv),
@@ -72,11 +90,12 @@ class RestartStack(MujocoRosTransport):
 
     def wait_startup(self, *, deadline):
         """Reap every owned spawner before reset, using its original deadline."""
+        groups = (' '.join(CONTROLLERS),) if self.batch_spawners else CONTROLLERS
         if (type(deadline) not in (int, float) or not math.isfinite(deadline)
-                or set(self._spawners) != set(CONTROLLERS)):
+                or set(self._spawners) != set(groups)):
             raise PermissionError('HEAD_STACK_SPAWNERS_INVALID')
         outcomes = []
-        for controller in CONTROLLERS:
+        for controller in groups:
             process = self._spawners[controller]
             try:
                 code = process.wait(timeout=max(0., deadline-time.monotonic()))
@@ -95,6 +114,8 @@ class RestartStack(MujocoRosTransport):
         if self.log_path is None:
             self.log_path = self.workspace / STACK_LOG
         super().start()
+        if self.batch_spawners:
+            return
         for controller in CONTROLLERS:
             if controller == "joint_state_broadcaster":
                 continue

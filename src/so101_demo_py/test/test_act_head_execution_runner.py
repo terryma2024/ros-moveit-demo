@@ -464,3 +464,109 @@ def test_runner_adapts_live_exposure_keyword_events_to_actual_runtime_writer(mon
             detector_builder=lambda *args, **kw: {'runtime': 'controlled detector'},
             owner_factory=_FakeOwner, exposure_binder=bind_actual_exposure)
     assert delivered == [(probe, {'source_stamp_ns': None, 'occurrence_mono_ns': None})]
+
+
+@pytest.mark.parametrize('phase',['not_ready','ready','inflight_arm','after_arm','capture'])
+def test_runner_real_sigterm_startup_never_activates_owner(monkeypatch,phase):
+    import signal,threading
+    from test_act_head_local_runtime import runtime_setup,prime_current_inputs
+    row=runtime_setup(monkeypatch);prime_current_inputs(row)
+    seen=[];calls=[]
+    original_arm=row.runtime.arm
+    def observe_arm(*,cancel_event=None):
+        assert isinstance(cancel_event,threading.Event)
+        seen.append(cancel_event)
+        return original_arm(cancel_event=cancel_event)
+    monkeypatch.setattr(row.runtime,'arm',observe_arm)
+    original_status=row.authority.prearm_status;original_native_arm=row.authority.arm
+    def status(role,**kwargs):
+        reply=original_status(role,**kwargs)
+        if phase in ('not_ready','ready'):
+            signal.raise_signal(signal.SIGTERM)
+            if phase=='not_ready':reply['status']='NOT_READY'
+        return reply
+    def native_arm(role,**kwargs):
+        if phase=='inflight_arm':signal.raise_signal(signal.SIGTERM)
+        return original_native_arm(role,**kwargs)
+    monkeypatch.setattr(row.authority,'prearm_status',status)
+    monkeypatch.setattr(row.authority,'arm',native_arm)
+    def after_arm():
+        calls.append('after_arm')
+        if phase=='after_arm':signal.raise_signal(signal.SIGTERM)
+    def capture(sink):
+        calls.append('capture')
+        if phase=='capture':signal.raise_signal(signal.SIGTERM)
+    owner=types.SimpleNamespace(activate_live=lambda:calls.append('activate'))
+    composition=types.SimpleNamespace(event_log_enabled=True,emit=lambda *args:None)
+    search=types.SimpleNamespace(tick=lambda:calls.append('tick'))
+    try:
+        assert runner_module()._drive(composition,search,row.runtime,owner,
+            types.SimpleNamespace(bind_live_sink=capture),types.SimpleNamespace(observe=lambda *args:None),
+            1,after_arm=after_arm)==1
+        assert seen and seen[0].is_set()
+        assert 'activate' not in calls and 'tick' not in calls
+        assert row.authority.arm_calls==(0 if phase in ('not_ready','ready') else 1)
+        assert row.runtime.stop_receipt()['stop_origin_kind']=='sigterm'
+        assert not row.runtime.faulted
+    finally:row.runtime.close(timeout_s=1.)
+
+
+@pytest.mark.parametrize('boundary',['bootstrap','prearm','arm_timeout','arm_disconnect','arm_reject','main_identity','fault_identity'])
+def test_runner_real_sigterm_and_failed_exchange_preserves_operator_stop(monkeypatch,boundary):
+    import signal
+    from test_act_head_local_runtime import runtime_setup,prime_current_inputs,wait_for
+    from so101_demo.adapters.act.head_reservation_authority import HeadArmRefused
+    row=runtime_setup(monkeypatch);prime_current_inputs(row);calls=[]
+    def refused(*args,**kwargs):
+        if boundary.startswith('arm_'):row.authority.arm_calls+=1
+        signal.raise_signal(signal.SIGTERM)
+        if boundary!='bootstrap':row.runtime.fault('HEAD_MAIN_AUTHORITY_FAILED')
+        if boundary=='arm_timeout':raise HeadArmRefused('ARM_OUTCOME_UNKNOWN','timeout')
+        if boundary=='arm_reject':raise HeadArmRefused('HEAD_MAIN_ARM_STOP_BEFORE','refused',record=dict(
+            status='REJECT',phase='STOP_BEFORE',proof=dict(evaluation_id=48,wrapper_reason=6)))
+        raise OSError('channel disconnected')
+    if boundary=='bootstrap':monkeypatch.setattr(row.revoker,'bootstrap_identity',refused)
+    elif boundary=='prearm':monkeypatch.setattr(row.authority,'prearm_status',refused)
+    elif boundary.startswith('arm_'):monkeypatch.setattr(row.authority,'arm',refused)
+    elif boundary=='main_identity':monkeypatch.setattr(row.authority,'identity',refused)
+    else:monkeypatch.setattr(row.revoker,'identity',refused)
+    composition=types.SimpleNamespace(event_log_enabled=True,emit=lambda *args:calls.append(args))
+    try:
+        assert runner_module()._drive(composition,types.SimpleNamespace(tick=lambda:calls.append('tick')),
+            row.runtime,types.SimpleNamespace(activate_live=lambda:calls.append('activate')),
+            types.SimpleNamespace(bind_live_sink=lambda *args:None),types.SimpleNamespace(observe=lambda *args:None),1)==1
+        assert not row.runtime.faulted and not row.runtime.ready
+        assert row.runtime.stop_receipt()['stop_origin_kind']=='sigterm'
+        assert 'activate' not in calls and 'tick' not in calls
+        assert row.authority.arm_calls==(0 if boundary in ('bootstrap','prearm') else 1)
+        assert any(isinstance(c,tuple) and c[0]=='EXECUTION_OPERATOR_TERMINAL' for c in calls)
+        if boundary=='bootstrap':
+            assert wait_for(lambda:row.runtime.retirement_snapshot()['native_close']['finished'])
+            assert row.revoker.closed==0 and not row.runtime.retirement_snapshot()['native_close']['ack']
+        else:assert wait_for(lambda:row.revoker.closed==1)
+        if boundary.startswith('arm_'):
+            arm=[r for k,r,_ in row.sink.rows if k=='ARM_RESULT']
+            assert arm and arm[-1]['status']==('REJECT' if boundary=='arm_reject' else 'UNKNOWN')
+    finally:row.runtime.close(timeout_s=1.)
+
+
+def test_earlier_fault_survives_later_startup_sigterm(monkeypatch):
+    import signal
+    from test_act_head_local_runtime import runtime_setup,prime_current_inputs
+    row=runtime_setup(monkeypatch);prime_current_inputs(row)
+    def failed(*args,**kwargs):
+        row.runtime.fault('EARLIER_NATIVE_FAULT')
+        origin=row.runtime.local_state.fault_occurrence_ns
+        signal.raise_signal(signal.SIGTERM)
+        row.runtime.fault('HEAD_MAIN_AUTHORITY_FAILED')
+        assert row.runtime.local_state.fault_occurrence_ns==origin
+        raise OSError('cancelled exchange')
+    monkeypatch.setattr(row.authority,'prearm_status',failed)
+    try:
+        assert runner_module()._drive(types.SimpleNamespace(event_log_enabled=False),None,row.runtime,
+            types.SimpleNamespace(activate_live=lambda:pytest.fail('activated')),
+            types.SimpleNamespace(bind_live_sink=lambda *args:None),None,1)==1
+        assert row.runtime.faulted and row.runtime.fault_reason=='EARLIER_NATIVE_FAULT'
+        assert row.runtime.stop_receipt()['stop_origin_kind']=='fault'
+        assert row.authority.arm_calls==0 and not row.runtime.ready
+    finally:row.runtime.close(timeout_s=1.)

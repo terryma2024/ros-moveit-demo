@@ -16,14 +16,14 @@ def test_drive_success_requests_stop_and_waits_for_callback_progress():
     from so101_demo.cli.head_execution_runner import _drive
     trace, stops = [], []
     outcomes = iter((None,dict(status='TARGET_LOCKED')))
-    runtime = SimpleNamespace(start=lambda:trace.append('start'),arm=lambda:trace.append('arm'),
+    runtime = SimpleNamespace(start=lambda:trace.append('start'),arm=lambda **kwargs:trace.append('arm'),
         faulted=False,stop_requested=False,policy=SimpleNamespace(watchdog_period_s=.02),
         _shutdown=SimpleNamespace(wait=lambda period:trace.append(('wait',period))),
         stop=lambda *a:stops.append(a),fault=lambda *a:trace.append(('fault',a)))
-    result = _drive(SimpleNamespace(emit=lambda *a:None),SimpleNamespace(tick=lambda:next(outcomes)),
+    result = _drive(SimpleNamespace(event_log_enabled=True, emit=lambda *a:None),SimpleNamespace(tick=lambda:next(outcomes)),
         runtime,SimpleNamespace(activate_live=lambda:trace.append('activate')),
         SimpleNamespace(bind_live_sink=lambda *a:trace.append('live')),
-        SimpleNamespace(observe=lambda *a:None),3,after_arm=lambda:trace.append('prepared'))
+        SimpleNamespace(observe=lambda *a:None),3,after_arm=lambda **kwargs:trace.append('prepared'))
     assert result == 0 and stops[0][0] == 'success'
     assert trace == ['start','arm','prepared','live','activate',('wait',.02)]
 
@@ -32,7 +32,7 @@ def test_drive_binding_failure_faults_before_live_camera_or_inference():
     from so101_demo.cli.head_execution_runner import _drive
     import pytest
     trace = []
-    runtime = SimpleNamespace(start=lambda:None,arm=lambda:None,
+    runtime = SimpleNamespace(start=lambda:None,arm=lambda **kwargs:None,
                               fault=lambda reason:trace.append(reason))
     def refused(): raise PermissionError('prepared binding refused')
     with pytest.raises(PermissionError):
@@ -79,6 +79,13 @@ def test_execution_routes_raw_originals_and_payload_without_measurement_window(m
     capture = StoppedHeadCapture(row.node, row.port, frame_id='head_camera_frame',
                                  monotonic=row.clock.monotonic)
     inputs, _ = build_inputs(tmp_path, policy=row.policy)
+    # This regression explicitly exercises full-frame evidence; omitted inputs
+    # now retain only frames actually submitted to the detector.
+    document = json.loads(inputs.document_path.read_text())
+    document['save_all_rgb_frames'] = True
+    inputs.document_path.write_text(json.dumps(document))
+    from so101_demo.act.head_execution_inputs import HeadExecutionInputs
+    inputs = HeadExecutionInputs.parse(inputs.document_path)
     composition = module().HeadExecutionComposition.open(inputs)
     progress = []
     runtime = SimpleNamespace(executor_progress=lambda: progress.append(True))
@@ -154,7 +161,7 @@ def test_startup_timeout_reports_the_first_missing_original(monkeypatch):
     from so101_demo.cli import head_execution_runner as runner
     row = observer_setup(monkeypatch, bind_port_sink=False)
     events = []
-    composition = SimpleNamespace(emit=lambda kind, record: events.append((kind, record)))
+    composition = SimpleNamespace(event_log_enabled=True, emit=lambda kind, record: events.append((kind, record)))
     with pytest.raises(runner.HeadExecutionRunnerRefused, match='HEAD_LOCAL_OBSERVER_CLOCK_INVALID'):
         runner._await_originals(row.observer, composition, timeout_s=.001)
     assert events[-1][1]['first_error'] == 'HEAD_LOCAL_OBSERVER_CLOCK_INVALID'

@@ -12,6 +12,8 @@ import mujoco
 import numpy as np
 import pytest
 
+from head_admission_peer_support import admission_peer_cpu_slot, release_guard_buffers
+
 from so101_demo.act.head_evidence_identity import canonical_bytes
 from so101_demo.adapters.act.head_trajectory_guard import (
     HeadTrajectoryGuard, _Snapshot, quintic_extrema,
@@ -28,11 +30,12 @@ REPOSITORY = Path(os.environ.get(
 MODEL = REPOSITORY / "src/so101_demo_py/assets/mujoco/act/head_search_scene.xml"
 GEOMETRY = Path(
     "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/"
-    "head-camera-probe11-20260930T101722Z/head-camera-geometry.json"
+    "head-file-protocol-1003/head-camera-yolo-sampling-20261009-001/"
+    "geometry-new/head-camera-geometry.json"
 )
-GEOMETRY_SHA256 = "0db2eb4c8a0cfe55b77044c499bb644c5d8f8e9f17f1c9780d6b15609f56c8e6"
+GEOMETRY_SHA256 = "f0f04d0e4519a13f9657de6f1bd2bab5b4443c0f935360968c1cee2eb6fad72a"
 MODEL_XML_SHA256 = "aea2df3b0bfb608d7d3aec2e58cd8f45b51affd8bf92511de5e99475fcc47f14"
-MODEL_SEMANTIC_SHA256 = "c68ddb19ec5108f5379e5417c96271a42f2ee3903a1fd3d9a36fc0351cb7985c"
+MODEL_SEMANTIC_SHA256 = "970546aa5354add3b744fe027905f45a4477ae10bc7db3d4f7862a9bf05359b7"
 
 
 class _Scene:
@@ -45,7 +48,16 @@ class _Scene:
 
 
 @pytest.fixture
-def guard():
+def guard(tmp_path_factory):
+    with admission_peer_cpu_slot(tmp_path_factory):
+        assembled = _assemble_guard()
+    try:
+        yield assembled
+    finally:
+        release_guard_buffers(assembled, owns_model=True)
+
+
+def _assemble_guard():
     assert hashlib.sha256(MODEL.read_bytes()).hexdigest() == MODEL_XML_SHA256
     assert hashlib.sha256(GEOMETRY.read_bytes()).hexdigest() == GEOMETRY_SHA256
     pristine = mujoco.MjModel.from_xml_path(str(MODEL))
@@ -113,7 +125,7 @@ def test_full_model_collision_is_found_inside_clear_endpoint_curve(guard):
     # the actual geometry-bound full model. Endpoints remain clear at 1 mm.
     theta = .7330382858376184
     distance = .0473
-    center = (-.06, .06, .4299186)
+    center = (-.06, .06, .5791703831546664)
     bottle = (center[0] + distance*math.cos(theta),
               center[1] + distance*math.sin(theta), center[2])
     state = snapshot_for(guard, neck=0., bottle_pose=bottle)
@@ -131,7 +143,7 @@ def test_same_neck_curve_changes_result_when_full_free_body_pose_changes(guard):
     assert result["safe"] is True
     theta = .7330382858376184
     distance = .0473
-    center = (-.06, .06, .4299186)
+    center = (-.06, .06, .5791703831546664)
     bottle = (center[0] + distance*math.cos(theta),
               center[1] + distance*math.sin(theta), center[2])
     changed = snapshot_for(guard, neck=0., bottle_pose=bottle)
@@ -255,9 +267,48 @@ def test_actual_rich_ros_curve_guard_refuses_effort_payload(guard):
         guard._validate_goal_curve(goal)
 
 
+def test_actual_guard_accepts_acceleration_one_rest_to_rest_profile(guard):
+    goal = _rich_goal_for_curve_validation()
+    goal.trajectory.points[-1].positions = [.34]
+    guard._validate_goal_curve(goal)
+
+
+def test_actual_guard_accepts_acceleration_two_rest_to_rest_profile(guard):
+    goal = _rich_goal_for_curve_validation()
+    goal.trajectory.points[-1].positions = [.44]
+    goal.trajectory.points[-1].time_from_start.nanosec = 600_000_000
+    guard._validate_goal_curve(goal)
+
+
+def test_actual_guard_accepts_velocity_one_acceleration_two_profile(guard):
+    goal = _rich_goal_for_curve_validation()
+    goal.trajectory.points[-1].positions = [.6]
+    goal.trajectory.points[-1].time_from_start.nanosec = 700_000_000
+    guard._validate_goal_curve(goal)
+
+
+def test_collision_screen_keeps_one_milliradian_checked_pose_spacing(guard, monkeypatch):
+    checked = []
+    original = guard._check_collision_pose
+
+    def check_pose(qpos, position):
+        original(qpos, position)
+        checked.append(position)
+
+    monkeypatch.setattr(guard, '_check_collision_pose', check_pose)
+    state = snapshot_for(guard, neck=0.)
+    proof = guard._check_physical_path(state, .5, guard._duration_ns(.5))
+    split = proof['prefix_envelope_samples']
+    for positions in (checked[:split], checked[split:]):
+        assert len(positions) >= 2
+        assert max(abs(b - a) for a, b in zip(positions, positions[1:])) <= .001 + 1e-12
+    assert proof['path_step_s'] == .002
+    assert proof['clearance_m'] == .001
+
+
 def test_actual_guard_rejects_continuous_velocity_over_limit_with_rest_derivatives(guard):
     goal = _rich_goal_for_curve_validation()
-    goal.trajectory.points[-1].positions = [1.3]
+    goal.trajectory.points[-1].positions = [2.4]
     goal.trajectory.points[-1].time_from_start.sec = 4
     goal.trajectory.points[-1].time_from_start.nanosec = 600_000_000
     with pytest.raises(PermissionError, match="HEAD_TRAJECTORY_CONTINUOUS_LIMIT"):
@@ -266,7 +317,8 @@ def test_actual_guard_rejects_continuous_velocity_over_limit_with_rest_derivativ
 
 def test_actual_guard_rejects_continuous_acceleration_over_limit_with_rest_derivatives(guard):
     goal = _rich_goal_for_curve_validation()
-    goal.trajectory.points[-1].positions = [.4]
+    goal.trajectory.points[-1].time_from_start.sec = 1
+    goal.trajectory.points[-1].time_from_start.nanosec = 100_000_000
     with pytest.raises(PermissionError, match="HEAD_TRAJECTORY_CONTINUOUS_LIMIT"):
         guard._validate_goal_curve(goal)
 
@@ -282,7 +334,7 @@ def test_actual_guard_rejects_rich_goal_outside_geometry_position_bounds(guard):
 def test_collision_replay_refuses_protected_mask_mutated_after_guard_binding(guard):
     state = snapshot_for(guard, neck=0.)
     theta, distance = .7330382858376184, .0473
-    center = (-.06, .06, .4299186)
+    center = (-.06, .06, .5791703831546664)
     bottle = (center[0] + distance*math.cos(theta),
               center[1] + distance*math.sin(theta), center[2])
     changed = snapshot_for(guard, neck=0., bottle_pose=bottle)

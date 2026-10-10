@@ -5,6 +5,7 @@
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+#include <sstream>
 #include <system_error>
 
 #include <pluginlib/class_list_macros.hpp>
@@ -16,8 +17,8 @@ namespace so101_mujoco_support
 namespace
 {
 constexpr double kHeadGeometryLimit = 6.283175307179587;
-constexpr double kHeadVelocityLimit = 0.5;
-constexpr double kHeadAccelerationLimit = 0.5;
+constexpr double kHeadVelocityLimit = 1.0;
+constexpr double kHeadAccelerationLimit = 2.0;
 constexpr double kHeadMeasuredVelocityLimit = 0.04136050464213824;
 constexpr double kHeadMeasuredPositionMismatchLimit = 0.002;
 constexpr int64_t kNanosecondsPerSecond = 1000000000LL;
@@ -91,9 +92,21 @@ bool subdivide_bernstein(
 }
 }  // namespace
 
+BrokerOwnedTrajectoryController::~BrokerOwnedTrajectoryController()
+{
+  close_reservation_service();
+  if (stop_timing_collector_) {stop_timing_collector_->stop_drain();}
+}
+
 controller_interface::return_type BrokerOwnedTrajectoryController::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
+  StopTimingScope timing(stop_timing_collector_.get(), 1);
+  if (timing.collector) {
+    timing.update_id = timing_update_id_.fetch_add(1, std::memory_order_relaxed) + 1;
+    timing.sim_time = time.nanoseconds();
+    timing.period = period.nanoseconds();
+  }
   if (head_simulation_mode_) {
     read_state_from_state_interfaces(state_current_);
     const auto candidate_slot = head_candidate_buffer_.readFromRT();
@@ -232,22 +245,104 @@ controller_interface::return_type BrokerOwnedTrajectoryController::update(
     sample.reference_positions[joint] = state_desired_.positions[joint];
     sample.reference_velocities[joint] = state_desired_.velocities[joint];
   }
-  witness.observe(sample);
+  timing.sequence = sample.sequence;
+  witness.observe(sample, timing.update_id);
   return result;
+}
+
+thread_local std::optional<BrokerOwnedTrajectoryController::StopFailure>
+BrokerOwnedTrajectoryController::pending_stop_failure_{};
+
+void BrokerOwnedTrajectoryController::emit_stop_refusal_diagnostic()
+{
+  if (!pending_stop_failure_ || pending_stop_failure_->owner != this) {return;}
+  const auto failure = *pending_stop_failure_;
+  pending_stop_failure_.reset();
+  const char * wrapper_reason = "unknown";
+  switch (failure.wrapper_reason) {
+    case StopFailureReason::INACTIVE_BEFORE: wrapper_reason = "inactive_before"; break;
+    case StopFailureReason::JOINT_SCOPE: wrapper_reason = "joint_scope"; break;
+    case StopFailureReason::ACTIVE_BEFORE: wrapper_reason = "active_before"; break;
+    case StopFailureReason::INACTIVE_AFTER: wrapper_reason = "inactive_after"; break;
+    case StopFailureReason::ACTIVE_AFTER: wrapper_reason = "active_after"; break;
+    case StopFailureReason::WITNESS: wrapper_reason = "witness"; break;
+    case StopFailureReason::SNAPSHOT_UNAVAILABLE: wrapper_reason = "snapshot_unavailable"; break;
+  }
+  const auto * snapshot = failure.snapshot ? &*failure.snapshot : nullptr;
+  // The socket has closed admission and attempted the REJECT reply.
+  // Formatting uses a local copy without holding an observation/gate lock.
+  const char * role = reservation_role_ == ControllerReservationRole::ARM ? "arm" :
+    reservation_role_ == ControllerReservationRole::NECK ? "neck" : "gripper";
+  std::ostringstream detail;
+  detail << "role=" << role << " wrapper_reason=" << wrapper_reason
+         << " snapshot_available=" << (snapshot != nullptr);
+  if (snapshot) {
+    detail << " rejection=" << ControllerStopWitness::reason_name(snapshot->rejection)
+           << " reset_reason=" <<
+      ControllerStopWitness::reason_name(snapshot->last_reset_reason)
+           << " count=" << snapshot->sample_count << " lost=" << snapshot->lost
+           << " now_ns=" << snapshot->evaluated_monotonic_ns
+           << " failing_index=" << snapshot->failing_sample_index
+           << " failing_joint=" << snapshot->failing_joint_index
+           << " reset_joint=" << snapshot->last_reset_joint_index
+           << " has_samples=" << snapshot->has_samples;
+    const auto append_sample = [&detail](
+      const char * label, const ControllerStopWitness::Observation & sample) {
+        detail << " " << label << "_sequence=" << sample.sequence
+               << " " << label << "_sim_ns=" << sample.sim_time_ns
+               << " " << label << "_received_ns=" << sample.received_monotonic_ns
+               << " " << label << "_joints=" << sample.joint_count
+               << " " << label << "_holding=" << sample.holding
+               << " " << label << "_active=" << sample.active_goal;
+        const auto append_values = [&detail, label](
+          const char * field, const std::array<double, 5> & values) {
+            detail << " " << label << "_" << field << "=[";
+            for (size_t joint = 0; joint < values.size(); ++joint) {
+              if (joint != 0) {detail << ",";}
+              detail << values[joint];
+            }
+            detail << "]";
+          };
+        append_values("measured_positions", sample.measured_positions);
+        append_values("measured_velocities", sample.measured_velocities);
+        append_values("reference_positions", sample.reference_positions);
+        append_values("reference_velocities", sample.reference_velocities);
+      };
+    append_sample("first", snapshot->first);
+    append_sample("last", snapshot->last);
+    append_sample("reset", snapshot->last_reset_sample);
+  }
+  RCLCPP_WARN(get_node()->get_logger(), "Controller stop proof refused: %s",
+    detail.str().c_str());
 }
 
 std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::controller_stop_proof()
 {
-  if (!witness_active_.load(std::memory_order_acquire)) {return std::nullopt;}
-  const auto joints = monitored_joints_.load(std::memory_order_acquire);
-  ControllerStopWitness * witness = nullptr;
-  if (joints == 5) {witness = &arm_stop_witness_;}
-  if (joints == 1) {
-    witness = reservation_role_ == ControllerReservationRole::NECK ?
-      &neck_stop_witness_ : &gripper_stop_witness_;
-  }
-  if (!witness) {return std::nullopt;}
-  const auto goal_is_active = [this]() {
+  return controller_stop_evaluation().proof;
+}
+
+ControllerStopEvaluation BrokerOwnedTrajectoryController::controller_stop_evaluation()
+{
+  pending_stop_failure_.reset();
+  auto previous = stop_evaluation_id_.load(std::memory_order_relaxed);
+  do {
+    if (previous == std::numeric_limits<uint64_t>::max()) {
+      throw std::runtime_error("CONTROLLER_STOP_EVALUATION_ID_EXHAUSTED");
+    }
+  } while (!stop_evaluation_id_.compare_exchange_weak(
+      previous, previous + 1, std::memory_order_relaxed));
+  const auto result = evaluate_controller_stop(previous + 1,
+    [this] {return witness_active_.load(std::memory_order_acquire);},
+    [this]() -> ControllerStopWitness * {
+      const auto joints = monitored_joints_.load(std::memory_order_acquire);
+      if (joints == 5) {return &arm_stop_witness_;}
+      if (joints == 1) {
+        return reservation_role_ == ControllerReservationRole::NECK ?
+          &neck_stop_witness_ : &gripper_stop_witness_;
+      }
+      return nullptr;
+    },
+    [this] {
       if (head_simulation_mode_) {
         return head_goal_reserved_.load(std::memory_order_acquire) ||
                head_active_goal_.load(std::memory_order_acquire) ||
@@ -256,17 +351,23 @@ std::optional<ControllerStopWitness::Proof> BrokerOwnedTrajectoryController::con
       const auto active_goal = rt_active_goal_.readFromRT();
       return rt_has_pending_goal_.load() || !rt_is_holding_.load() ||
              (active_goal && *active_goal);
-    };
-  if (goal_is_active()) {
-    witness->invalidate_nonblocking();
-    return std::nullopt;
+    });
+  if (!result.allowed) {
+    StopFailureReason reason = StopFailureReason::WITNESS;
+    switch (result.record.wrapper_reason) {
+      case StopWrapperReason::INACTIVE_BEFORE: reason = StopFailureReason::INACTIVE_BEFORE; break;
+      case StopWrapperReason::JOINT_SCOPE: reason = StopFailureReason::JOINT_SCOPE; break;
+      case StopWrapperReason::ACTIVE_BEFORE: reason = StopFailureReason::ACTIVE_BEFORE; break;
+      case StopWrapperReason::INACTIVE_AFTER: reason = StopFailureReason::INACTIVE_AFTER; break;
+      case StopWrapperReason::ACTIVE_AFTER: reason = StopFailureReason::ACTIVE_AFTER; break;
+      case StopWrapperReason::SNAPSHOT_UNAVAILABLE: reason = StopFailureReason::SNAPSHOT_UNAVAILABLE; break;
+      case StopWrapperReason::WITNESS_REJECT:
+      case StopWrapperReason::NOT_EVALUATED:
+      case StopWrapperReason::PASS: break;
+    }
+    pending_stop_failure_ = StopFailure{this, reason, result.snapshot};
   }
-  const auto stopped = witness->proof();
-  if (!witness_active_.load(std::memory_order_acquire) || goal_is_active()) {
-    witness->invalidate_nonblocking();
-    return std::nullopt;
-  }
-  return stopped;
+  return result;
 }
 
 std::optional<ControllerIngressWitness::Snapshot>
@@ -576,6 +677,31 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
   const rclcpp_lifecycle::State & previous_state)
 {
   close_reservation_service();
+  if (stop_timing_collector_) {
+    stop_timing_collector_->stop_drain();
+    arm_stop_witness_.set_timing_collector(nullptr);
+    gripper_stop_witness_.set_timing_collector(nullptr);
+    neck_stop_witness_.set_timing_collector(nullptr);
+    stop_timing_collector_.reset();
+  }
+  const char * timing_directory = std::getenv("SO101_STOP_TIMING_OUTPUT_DIR");
+  if (timing_directory && timing_directory[0] != '\0') {
+    try {
+      const auto name = std::string(get_node()->get_name());
+      auto collector = std::make_unique<StopTimingCollector>();
+      collector->configure((std::filesystem::path(timing_directory) / (name + ".bin")).string(),
+        name == "arm_controller" ? 1 : name == "gripper_controller" ? 2 : 3);
+      collector->start_drain();
+      stop_timing_collector_ = std::move(collector);
+      arm_stop_witness_.set_timing_collector(stop_timing_collector_.get());
+      gripper_stop_witness_.set_timing_collector(stop_timing_collector_.get());
+      neck_stop_witness_.set_timing_collector(stop_timing_collector_.get());
+      timing_update_id_.store(0);
+    } catch (const std::exception & error) {
+      RCLCPP_ERROR(get_node()->get_logger(), "Stop timing collector refused: %s", error.what());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+  }
   try {
     configure_head_parameters();
   } catch (const std::exception & failure) {
@@ -959,8 +1085,10 @@ void BrokerOwnedTrajectoryController::poll_reservation_provision()
     auto reservation_service = std::make_unique<ControllerReservationService>(
       reservation_socket_path_, gate, provision.capability, provision.peer,
       std::chrono::milliseconds(50), [this]() {
-        return controller_stop_proof().has_value();
-      }, reservation_role_, [this]() {return controller_ingress_snapshot();});
+        return controller_stop_evaluation();
+      }, reservation_role_, [this]() {return controller_ingress_snapshot();},
+      ControllerReservationSocket::Authority::PRIMARY,
+      [this]() {emit_stop_refusal_diagnostic();});
     primary_fault_service_ = std::move(primary_fault_service);
     reservation_service_ = std::move(reservation_service);
     active_goal_admission_ = std::move(gate);      // publish under the same lock

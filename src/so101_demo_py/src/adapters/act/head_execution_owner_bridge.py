@@ -29,7 +29,7 @@ class HeadExecutionOwnerBridge:
         self._target_attempted = False
 
     def _require_live(self):
-        if self.composition.sealed or self.runtime.retirement_snapshot()['closed']:
+        if self.composition.closed or self.runtime.retirement_snapshot()['closed']:
             raise PermissionError('HEAD_BRIDGE_CLOSED')
 
     def descriptor(self):

@@ -1,0 +1,81 @@
+{
+  "schema": "PAUSED_HANDOFF_DOCUMENTATION_ASTRA_REVIEW_001",
+  "reviewer": "Independent GPT-6 Astra / High",
+  "verdict": "PASS",
+  "scope": "Documentation and portable-manifest review only. Investigation remains PAUSED. This review does not resume investigation, approve runtime, certify new tests, or attest completion of the pending parent branch publication/merge.",
+  "manifest_sha256": "222980863f023c079e5f54759e9eff39217e6427d6992b20b4672a1a4247e4f4",
+  "blocking_findings": [],
+  "verification": {
+    "six_snapshots_and_current_originals_sha256_and_size_match": true,
+    "ledger_read": "CP-HFP-1028 through CP-HFP-1030",
+    "source_bundle_sha256_verified": "449daf4eb2d6b441b0730061a5fa55127ac8e15b3c6c48dd7aeb426f8365f70f",
+    "source_manifest_members": 659,
+    "evidence_bundle_sha256_verified": "0d95a1e61b0b1e31108fed2d344d4ad843faa801f9f17ae9e7fc7f7cf878e834",
+    "evidence_manifest_members": 1874,
+    "evidence_uncompressed_bytes": 530461036,
+    "both_manifest_member_names_unique_relative_and_without_parent_traversal": true,
+    "full_tar_member_readback": "Root-provided completed readback retained; not repeated by reviewer.",
+    "actual_regression_cmake_default_and_explicit_header_override_read": true,
+    "tests_builds_runtime_or_source_document_edits_by_reviewer": false
+  },
+  "assessment": [
+    {
+      "topic": "Paused state and latest failure",
+      "files": [
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:3",
+        "docs/guides/so101-head-stability-resume-on-another-host.md:3"
+      ],
+      "conclusion": "The docs explicitly preserve paused state, the 120.000065023s first-run TimingPeriod failure, 59999 hold updates per controller, single shared4ms/no0ms boundary and FAIL/NOT_RUN/NOT_RUN. They distinguish valid observed timing failure from invalid evidence or forced cleanup, and do not restart or replace the terminal batch."
+    },
+    {
+      "topic": "Causal and qualification limits",
+      "files": [
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:19",
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:28",
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:43"
+      ],
+      "conclusion": "Observed controller/owner-clock omissions are not promoted to missing physical-step or publisher-admission proof. The independently accepted midcycle repair remains narrowly scoped. New nominal/live20/fresh40/visual qualification and original176 baseline failures remain unresolved; old close and historical causes remain UNKNOWN. Retained test results are identified as prior results, and the legacy nominal adapter is explicitly offline."
+    },
+    {
+      "topic": "Portable source and evidence scope",
+      "files": [
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:102",
+        "portable-source-manifest.json",
+        "portable-evidence-manifest.json"
+      ],
+      "conclusion": "The source bundle includes the copied overlay, pinned official ros2_control4.45.2 commit4324cabf03a1371951f0a039d239fcf09f563e54, actual regression, legacy header and R native source. The guide distinguishes these from compiled installs, venvs, model/raw evidence and incomplete historical coverage. R Python must be compared against frozen provenance; Git alone is not represented as a byte-identical restored old install. The separate evidence bundle remains on the original host and is not claimed uploaded in Git."
+    },
+    {
+      "topic": "Rebuild and dependency binding",
+      "files": [
+        "docs/guides/so101-head-stability-resume-on-another-host.md:20"
+      ],
+      "conclusion": "The guide identifies hardware_interface_testing and actual mujoco_ros2_control_msgs dependencies, platform ROS underlay and package/ABI/executable/DSO verification. Its explicit -DCYCLE_INCLUDE_ROOT=<new-staging>/coherent/overlay-source/mujoco_ros2_control/include corrects the actual regression CMake default that otherwise points at the historical legacy header. Prior green binaries cannot be reused as cross-host validation."
+    },
+    {
+      "topic": "Relocation and host-specific proof",
+      "files": [
+        "docs/guides/so101-head-stability-resume-on-another-host.md:11",
+        "docs/guides/so101-head-stability-resume-on-another-host.md:25"
+      ],
+      "conclusion": "Immutable history and original seals remain unchanged; new paths are separately registered through relocation and newly hashed working copies. Host/OS/architecture/environment and executable paths must be re-established. Old guardian/admission bindings and PID/start identities cannot be reused. macOS lacks Linux /proc and must supply equivalent identity/retirement proof; the Linux NVMe scratch path is explicitly not applied to macOS. Missing evidence or incompatible environment blocks simulation."
+    },
+    {
+      "topic": "No automatic resume or relaxed predicates",
+      "files": [
+        "docs/experiments/so101-head-file-protocol-1003-handoff-20261010.md:121",
+        "docs/guides/so101-head-stability-resume-on-another-host.md:32"
+      ],
+      "conclusion": "A new finite diagnostic requires explicit user resume, fresh run identities and review. No synthetic timestamps, period clamps, relaxed60000/2ms/1s predicates, implicit global coordinator approval or until-green retries are authorized. New-host results remain separate from original-host acceptance counts."
+    }
+  ],
+  "publication_limit": "Guide references to the published source branch describe the intended post-publication continuation state. CP1029/1030 correctly retain parent publication/merge as pending. Root must verify actual push and merge ancestry before reporting publication complete; this documentation PASS is not that receipt.",
+  "runtime_eligible": false,
+  "goal_status": "paused",
+  "retention": {
+    "all_prior_success_failure_setup_invalid_NOT_RUN_evidence_retained": true,
+    "archival_or_deletion_by_review": false,
+    "deletion_authorized": false,
+    "scratch_and_retired_ipc": "Candidates only; prepared second/third IPC retained."
+  }
+}

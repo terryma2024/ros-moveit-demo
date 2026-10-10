@@ -121,9 +121,53 @@ uint64_t generation_of(const uint8_t * bytes)
   return value;
 }
 
-Error validate_reply(const So101HeadRevocationResult & result, uint32_t operation, uint64_t generation)
+bool valid_expected_identity(const So101HeadExpectedIdentity * id)
+{
+  if (!id || id->role != 3 || id->incarnation_length == 0 || id->incarnation_length > 64 ||
+    id->boot_length == 0 || id->boot_length > 64) {return false;}
+  for (size_t i = 0; i < id->incarnation_length; ++i) {
+    if (id->incarnation[i] < 32 || id->incarnation[i] > 126) {return false;}
+  }
+  for (size_t i = 0; i < id->boot_length; ++i) {
+    if (id->boot[i] < 32 || id->boot[i] > 126) {return false;}
+  }
+  return true;
+}
+
+Error validate_reply(const So101HeadRevocationResult & result, uint32_t operation,
+  uint64_t generation, const So101HeadExpectedIdentity * expected)
 {
   const auto * reply = result.reply;
+  if (operation == 3 || operation == 4) {
+    const bool close = operation == 4;
+    if (result.reply_size < 28 || result.reply_size > 154 ||
+      std::memcmp(reply, close ? "SOPD" : "SOPI", 4) != 0 ||
+      reply[4] != 1 || reply[5] > (close ? 3 : 1) || reply[6] != 3 || reply[7] != 0 ||
+      generation_of(reply + 8) != generation) {return REPLY;}
+    const auto stored = generation_of(reply + 16);
+    if (close && ((reply[5] == 0 && stored != generation) || (reply[5] == 1 && stored != 0) ||
+      (reply[5] == 2 && (stored == 0 || stored == generation)))) {return REPLY;}
+    size_t offset = 24;
+    bool identity_matches = true;
+    for (int value = 0; value < 2; ++value) {
+      if (offset >= result.reply_size) {return REPLY;}
+      const auto length = reply[offset++];
+      if (length == 0 || length > 64 || offset + length > result.reply_size) {return REPLY;}
+      for (size_t i = 0; i < length; ++i) {
+        if (reply[offset + i] < 32 || reply[offset + i] > 126) {return REPLY;}
+      }
+      if (close) {
+        const size_t expected_length = value == 0 ? expected->incarnation_length : expected->boot_length;
+        const auto * bytes = value == 0 ? expected->incarnation : expected->boot;
+        identity_matches = identity_matches && length == expected_length &&
+          std::memcmp(reply + offset, bytes, length) == 0;
+      }
+      offset += length;
+    }
+    if (offset != result.reply_size) {return REPLY;}
+    if (close && reply[5] != 3 && !identity_matches) {return REPLY;}
+    return reply[5] == 0 || (close && reply[5] == 1) ? OK : REJECTED;
+  }
   if (operation == 2) {
     if (result.reply_size != 16 || std::memcmp(reply, "SOGA\x01", 5) != 0 ||
       reply[6] != 0 || reply[7] != 0 || reply[5] > 1 || generation_of(reply + 8) != generation)
@@ -150,12 +194,14 @@ Error exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t uid, int32_t pid, uint64_t ticks, uint64_t request,
   uint64_t budget, uint64_t maximum_budget, uint32_t operation,
-  So101HeadRevocationResult & result)
+  const So101HeadExpectedIdentity * expected_identity, So101HeadRevocationResult & result)
 {
   result.entry_ns = now_ns();
   if (!path || !capability || !request || !budget || budget > maximum_budget ||
     request > result.entry_ns || budget > std::numeric_limits<uint64_t>::max() - request ||
-    !generation || pid <= 0 || !ticks || (operation != 1 && operation != 2) ||
+    !generation || pid <= 0 || !ticks || operation < 1 || operation > 4 ||
+    (operation == 4 ? !valid_expected_identity(expected_identity) : expected_identity != nullptr) ||
+    ((operation == 3 || operation == 4) && budget > 50000000) ||
     std::all_of(capability, capability + 32, [](auto byte) {return byte == 0;}))
   {return CONFIG;}
   const auto deadline = request + budget;
@@ -182,15 +228,27 @@ Error exchange(
   result.phases_ns[1] = now_ns();result.phases_present |= 2;result.phase = 2;
   if (!matches_peer(connection.fd, uid, pid, ticks)) {return PEER;}
   result.phases_ns[2] = now_ns();result.phases_present |= 4;result.phase = 3;
-  std::array<uint8_t, 66> frame{};
-  frame[3] = operation == 1 ? 39 : 62;
-  std::memcpy(frame.data() + 4, operation == 1 ? "SOIA" : "SOGR", 4);
-  frame[8] = 1;frame[9] = operation == 1 ? 1 : 2;
+  std::array<uint8_t, 181> frame{};
+  size_t frame_size = operation == 1 ? 43 : 66;
+  const char * magic = operation == 1 ? "SOIA" : operation == 2 ? "SOGR" :
+    operation == 3 ? "SOPQ" : "SOPC";
+  std::memcpy(frame.data() + 4, magic, 4);
+  frame[8] = 1; frame[9] = operation == 1 || operation == 4 ? 1 : 2;
   std::memcpy(frame.data() + 10, capability, 32);
   if (operation == 1) {frame[42] = 3;} else {
     for (int index = 0; index < 8; ++index) {frame[42 + index] = generation >> (56 - 8 * index);}
   }
-  const size_t frame_size = operation == 1 ? 43 : 66;
+  if (operation == 4) {
+    size_t offset = 50;
+    frame[offset++] = expected_identity->role;
+    frame[offset++] = expected_identity->incarnation_length;
+    std::memcpy(frame.data() + offset, expected_identity->incarnation, expected_identity->incarnation_length);
+    offset += expected_identity->incarnation_length;
+    frame[offset++] = expected_identity->boot_length;
+    std::memcpy(frame.data() + offset, expected_identity->boot, expected_identity->boot_length);
+    frame_size = offset + expected_identity->boot_length;
+  }
+  frame[3] = static_cast<uint8_t>(frame_size - 4);
   size_t sent{};
   while (sent < frame_size) {
     const auto ready = wait_ready(connection.fd, POLLOUT, deadline);
@@ -203,20 +261,22 @@ Error exchange(
   }
   result.phases_ns[3] = now_ns();result.phases_present |= 8;result.phase = 4;
   result.reply_size = 16;
-  if (operation == 1) {
+  if (operation != 2) {
     std::array<uint8_t, 4> header{};
     const auto read = read_exact(connection.fd, header.data(), header.size(), deadline);
     if (read != OK) {return read;}
     result.reply_size = (static_cast<uint32_t>(header[0]) << 24) |
       (static_cast<uint32_t>(header[1]) << 16) | (static_cast<uint32_t>(header[2]) << 8) | header[3];
-    if (result.reply_size < 17 || result.reply_size > sizeof(result.reply)) {return REPLY;}
+    const uint32_t minimum = operation == 1 ? 17 : 28;
+    const uint32_t maximum = operation == 1 ? 145 : 154;
+    if (result.reply_size < minimum || result.reply_size > maximum) {return REPLY;}
   }
   const auto read = read_exact(connection.fd, result.reply, result.reply_size, deadline);
   if (read != OK) {return read;}
   result.phases_ns[4] = now_ns();result.phases_present |= 16;result.phase = 5;
   if (!matches_peer(connection.fd, uid, pid, ticks)) {return PEER;}
   result.phases_ns[5] = now_ns();result.phases_present |= 32;result.phase = 6;
-  const auto validated = validate_reply(result, operation, generation);
+  const auto validated = validate_reply(result, operation, generation, expected_identity);
   if (validated != OK) {return validated;}
   const auto now = now_ns();
   if (now == 0 || now >= deadline) {return DEADLINE;}
@@ -225,13 +285,14 @@ Error exchange(
 }
 }  // namespace
 
-uint32_t so101_head_revocation_abi(void) {return 1;}
+uint32_t so101_head_revocation_abi(void) {return 2;}
 uint32_t so101_head_revocation_result_size(void) {return sizeof(So101HeadRevocationResult);}
 
 uint32_t so101_head_revocation_exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
   uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  const So101HeadExpectedIdentity * expected_identity,
   So101HeadRevocationResult * result)
 {
   if (!result) {return CONFIG;}
@@ -239,7 +300,7 @@ uint32_t so101_head_revocation_exchange(
   Error code = IO;
   try {
     code = exchange(path, capability, generation, native_uid, native_pid,
-      native_start_ticks, request_ns, budget_ns, 2000000, operation, *result);
+      native_start_ticks, request_ns, budget_ns, 2000000, operation, expected_identity, *result);
   } catch (...) {code = IO;}
   result->error_number = code == OK ? 0 : errno;
   result->ended_ns = now_ns();
@@ -252,6 +313,7 @@ uint32_t so101_head_revocation_simulation_exchange(
   const char * path, const uint8_t * capability, uint64_t generation,
   uint32_t native_uid, int32_t native_pid, uint64_t native_start_ticks,
   uint64_t request_ns, uint64_t budget_ns, uint32_t operation,
+  const So101HeadExpectedIdentity * expected_identity,
   So101HeadRevocationResult * result)
 {
   if (!result) {return CONFIG;}
@@ -260,7 +322,7 @@ uint32_t so101_head_revocation_simulation_exchange(
   try {
     code = exchange(path, capability, generation, native_uid, native_pid,
       native_start_ticks, request_ns, budget_ns,
-      so101_head_revocation_simulation_max_budget_ns(), operation, *result);
+      so101_head_revocation_simulation_max_budget_ns(), operation, expected_identity, *result);
   } catch (...) {code = IO;}
   result->error_number = code == OK ? 0 : errno;
   result->ended_ns = now_ns();

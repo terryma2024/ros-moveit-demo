@@ -23,15 +23,19 @@ def _wire(value):return json.loads(json.dumps(value,allow_nan=False))
 
 
 class HeadLiveExposures:
-    def __init__(self,*,port,buffer,detector,primary,monitor,camera_skew_s,emit):
+    def __init__(self,*,port,buffer,detector,primary,monitor,camera_skew_s,emit,
+                 image_recorder=None):
         if monitor is not None:
             raise ValueError('HEAD_LIVE_LOCAL_MONITOR_REFUSED')
-        if (primary.port is not port or port.feedback_policy is None or not callable(emit)
+        if (primary.port is not port or port.feedback_policy is None
+                or (emit is not None and not callable(emit))
+                or (image_recorder is not None and not callable(image_recorder))
                 or type(camera_skew_s) not in (int,float) or not 0<camera_skew_s<=.05):
             raise ValueError('HEAD_LIVE_EXPOSURE_CONFIG_INVALID')
         self.port=port;self.buffer=buffer;self.detector=detector
         self.primary=primary;self.monitor=monitor;self.skew_ns=math.floor(camera_skew_s*1e9)
         self.emit=emit;self.monotonic=port.monotonic;self.frame=primary.observer.camera_frame
+        self.image_recorder=image_recorder
         self.age_ns=math.floor(primary.observer.camera_age*1e9)
         self._lock=threading.Lock();self._pending=None;self._infos={};self._closed=False
         self._sequence=0;self._source_floor=0;self._image_source=0;self._info_source=0
@@ -39,7 +43,8 @@ class HeadLiveExposures:
         self._inference_owner=threading.get_ident()
         # Only the existing inference owner mutates these small original records.
         # Formatting and readback happen at retirement, outside the live path.
-        self._original_attempts=[];self._pending_trace=None
+        self._original_attempts=[] if emit is not None else None
+        self._pending_trace=None
         self._activation_wall=None;self._retirement=None
         self._simulation_policy=primary._simulation_policy
         if self._simulation_policy is not None:
@@ -61,8 +66,9 @@ class HeadLiveExposures:
             if (pending[0]['wall_s']>=wall
                     and (info is None or info['wall_s']>=wall)):return
             self._pending=None
-        self.emit('LIVE_EXPOSURE_BEFORE_ACTIVATION',original=pending[0],
-            original_info=info,activation_wall_s=wall,reason='original received before activation')
+        if self.emit is not None:
+            self.emit('LIVE_EXPOSURE_BEFORE_ACTIVATION',original=pending[0],
+                original_info=info,activation_wall_s=wall,reason='original received before activation')
 
     def activate(self):
         refused=False
@@ -101,8 +107,9 @@ class HeadLiveExposures:
                     self._info_source=source;self._infos[source]=owned
                     while len(self._infos)>32:self._infos.pop(next(iter(self._infos)))
             if dropped is not None:
-                self.emit('LIVE_EXPOSURE_DROPPED_BEFORE_ADMISSION',original=dropped[0],
-                    replacing_source_ns=source)
+                if self.emit is not None:
+                    self.emit('LIVE_EXPOSURE_DROPPED_BEFORE_ADMISSION',original=dropped[0],
+                        replacing_source_ns=source)
         except Exception:
             self.primary.fault('HEAD_LIVE_ORIGINAL_REFUSED');raise
 
@@ -172,27 +179,36 @@ class HeadLiveExposures:
                 or age>nanoseconds(self._simulation_policy.camera_source_age_s))
         if outcome=='VALID' and expired(validation['decision']):
             outcome='EXPIRED'
-        saved=_wire(dict(row,observation_request=request,observation_request_sha256=digest(request),
+        saved=dict(row,observation_request=request,
             observation_sequence=request['observation_sequence'],motion_epoch=request['motion_epoch'],
-            simulation_policy_sha256=digest(self._simulation_policy.readback()),
             observation_outcome=outcome,detections=list(detections) if outcome=='VALID' else [],
-            discarded_detections=list(detections) if outcome!='VALID' else [],
-            validation_decision=validation['decision'],
-            record_saved_wall_s=self.monotonic()))
-        self.emit('LIVE_STOPPED_OBSERVATION_FINISHED',record=saved)
+            validation_decision=validation['decision'])
+        if self.emit is not None:
+            saved.update(observation_request_sha256=digest(request),
+                simulation_policy_sha256=digest(self._simulation_policy.readback()),
+                discarded_detections=list(detections) if outcome!='VALID' else [],
+                record_saved_wall_s=self.monotonic())
+        saved=_wire(saved)
+        if self.emit is not None:
+            self.emit('LIVE_STOPPED_OBSERVATION_FINISHED',record=saved)
         self._guard(request['search_deadline_ns'])
         # Journal latency cannot turn an already expired image into authority.
         handoff=self.port.original_feedback_snapshot();self.port.feedback_policy.check_joint(handoff['sample'],handoff['decision'])
         saved['handoff_decision']=handoff['decision']
         if saved['observation_outcome']=='VALID' and expired(handoff['decision']):
-            saved['observation_outcome']='EXPIRED';saved['discarded_detections']=saved['detections'];saved['detections']=[]
-            self.emit('LIVE_STOPPED_OBSERVATION_EXPIRED_AT_HANDOFF',record=saved)
-        self.emit('LIVE_STOPPED_OBSERVATION_HANDOFF',record=saved)
+            saved['observation_outcome']='EXPIRED'
+            if self.emit is not None:saved['discarded_detections']=saved['detections']
+            saved['detections']=[]
+            if self.emit is not None:
+                self.emit('LIVE_STOPPED_OBSERVATION_EXPIRED_AT_HANDOFF',record=saved)
+        if self.emit is not None:
+            self.emit('LIVE_STOPPED_OBSERVATION_HANDOFF',record=saved)
         with self._lock:self.results.append(_wire(saved))
         trace=self._stopped_candidate['trace']
-        trace['outcome']='COMPLETED' if saved['observation_outcome']=='VALID' else 'DISCARDED'
-        trace['phases']['record_saved']=saved['record_saved_wall_s']
-        trace['observation_outcome']=saved['observation_outcome']
+        if trace is not None:
+            trace['outcome']='COMPLETED' if saved['observation_outcome']=='VALID' else 'DISCARDED'
+            trace['phases']['record_saved']=saved['record_saved_wall_s']
+            trace['observation_outcome']=saved['observation_outcome']
         self._observation_sequence=request['observation_sequence'];self._last_stopped_request=dict(request)
         self._stopped_request=None;self._stopped_candidate=None
         return saved
@@ -277,7 +293,8 @@ class HeadLiveExposures:
                 raise PermissionError('HEAD_LIVE_SOURCE_MISMATCH')
             candidate=self._stopped_candidate
             if candidate is None or candidate['pending'] is not pending:
-                if candidate is not None and candidate['trace']['outcome']=='WAITING':
+                if (candidate is not None and candidate['trace'] is not None
+                        and candidate['trace']['outcome']=='WAITING'):
                     candidate['trace']['outcome']='SUPERSEDED_BEFORE_ADMISSION'
                 started=self.monotonic();deadline=min(nanoseconds(image['wall_s']),nanoseconds(info['wall_s']))+self.age_ns
                 claim=dict(schema_version=2,epoch=epoch.epoch,generation=epoch.generation,session_id=epoch.session_id,
@@ -287,12 +304,14 @@ class HeadLiveExposures:
                     info_received_wall_s=info['wall_s'],deadline_ns=deadline,observation_request=dict(request),
                     job_started_wall_s=started,job_deadline_ns=min(nanoseconds(started)
                         +nanoseconds(policy.perception_job_timeout_s),request['search_deadline_ns']))
-                trace=dict(source_ns=source,observation_sequence=request['observation_sequence'],
-                    observation_request=dict(request),image_received_wall_s=image['wall_s'],
-                    info_received_wall_s=info['wall_s'],root_deadline_ns=deadline,
-                    job_started_wall_s=started,job_deadline_ns=claim['job_deadline_ns'],
-                    phases=dict(pair_selected=started),outcome='WAITING',error_type=None)
-                self._original_attempts.append(trace)
+                trace=None
+                if self.emit is not None:
+                    trace=dict(source_ns=source,observation_sequence=request['observation_sequence'],
+                        observation_request=dict(request),image_received_wall_s=image['wall_s'],
+                        info_received_wall_s=info['wall_s'],root_deadline_ns=deadline,
+                        job_started_wall_s=started,job_deadline_ns=claim['job_deadline_ns'],
+                        phases=dict(pair_selected=started),outcome='WAITING',error_type=None)
+                    self._original_attempts.append(trace)
                 candidate=dict(pending=pending,claim=claim,trace=trace);self._stopped_candidate=candidate
             trace=candidate['trace']
             claim=candidate['claim'];job=claim['job_deadline_ns'];deadline=claim['deadline_ns']
@@ -301,9 +320,11 @@ class HeadLiveExposures:
                 inference_performed=False,cuda_started_wall_s=None,completion_wall_s=None,
                 causal_joint=causal,payload_sha256=image['payload_sha256'],image_received_wall_s=image['wall_s'],
                 info_received_wall_s=info['wall_s'],original_info=info,deadline_ns=deadline,job_started_wall_s=claim['job_started_wall_s'],
-                job_deadline_ns=job,tf_translation=translation,tf_rotation=rotation,root_settled_samples=proof,
-                exposure_pipeline_owner=dict(name=threading.current_thread().name,ident=threading.get_ident(),
-                    native_id=threading.get_native_id()))
+                job_deadline_ns=job,tf_translation=translation,tf_rotation=rotation)
+            if self.emit is not None:
+                base.update(root_settled_samples=proof,
+                    exposure_pipeline_owner=dict(name=threading.current_thread().name,ident=threading.get_ident(),
+                        native_id=threading.get_native_id()))
             self._guard(job)
             with self._lock:
                 replaced = self._pending is not pending
@@ -311,7 +332,8 @@ class HeadLiveExposures:
                 base['deadline_ns']=deadline
                 return self._save_stopped_observation(base,'SHORT_DROP')
             verdict=self._local_frame_verdict(image,claim)
-            trace['local_verdict']=dict(verdict,decision=dict(verdict['decision']))
+            if trace is not None:
+                trace['local_verdict']=dict(verdict,decision=dict(verdict['decision']))
             if verdict['discarded']:
                 base['deadline_ns']=verdict['deadline_ns']
                 return self._save_stopped_observation(base,verdict['outcome'])
@@ -330,14 +352,16 @@ class HeadLiveExposures:
                     or expected!=min(deadline,nanoseconds(image['wall_s'])+self.age_ns,
                         nanoseconds(info['wall_s'])+self.age_ns)):
                 raise PermissionError('HEAD_LIVE_LOCAL_ADMISSION_INVALID')
-            trace['local_admission']=dict(admitted_sha256=digest(dict(admitted,deadline_ns=expected)),
-                image_source_ns=source,info_source_ns=source,joint_source_ns=causal['source_ns'])
+            if trace is not None:
+                trace['local_admission']=dict(admitted_sha256=digest(dict(admitted,deadline_ns=expected)),
+                    image_source_ns=source,info_source_ns=source,joint_source_ns=causal['source_ns'])
             with self._lock:
                 if self._pending is pending:self._pending=None
                 self._sequence=claim['sequence'];self._source_floor=source
             base.update(sequence=self._sequence,deadline_ns=expected)
             self.primary.inference_deadline(job*1e-9);self._guard(job)
-            trace['outcome']='ADMITTED';trace['sequence']=self._sequence
+            if trace is not None:
+                trace['outcome']='ADMITTED';trace['sequence']=self._sequence
             current=self.port.original_feedback_snapshot()
             self.port.feedback_policy.check_joint(current['sample'],current['decision'])
             if self._stopped_root_proof(request,image,current) is None:
@@ -347,14 +371,24 @@ class HeadLiveExposures:
             detections=[]
             if (nanoseconds(current['decision']['wall_after_s'])<expected
                     and source_age<=nanoseconds(policy.camera_source_age_s)):
-                cuda_started=self.monotonic();base['cuda_started_wall_s']=cuda_started
-                trace['phases']['cuda_started']=cuda_started
+                if trace is not None:
+                    cuda_started=self.monotonic();base['cuda_started_wall_s']=cuda_started
+                    trace['phases']['cuda_started']=cuda_started
                 base['inference_performed']=True;self._inference_calls+=1
-                detections=_wire(self.detector.detect(np.frombuffer(data,dtype=np.uint8).reshape(480,640,3),
-                    session_id=epoch.session_id,attempt_id=epoch.epoch,source_stamp_ns=source,source_frame_id=self.frame))
-            completion=self.monotonic();base['completion_wall_s']=completion;self._guard(job)
-            trace['phases']['model_returned_or_skipped']=completion
-            base['result_sha256']=digest(detections)
+                try:
+                    detections=_wire(self.detector.detect(np.frombuffer(data,dtype=np.uint8).reshape(480,640,3),
+                        session_id=epoch.session_id,attempt_id=epoch.epoch,source_stamp_ns=source,source_frame_id=self.frame))
+                finally:
+                    # Preserve this exact detector input, including empty and
+                    # failed detections. Frames skipped before this call never
+                    # reach the evidence writer in detection-only mode.
+                    if self.image_recorder is not None:
+                        self.image_recorder('IMAGE',record=image,payload=data)
+            if trace is not None:
+                completion=self.monotonic();base['completion_wall_s']=completion
+                trace['phases']['model_returned_or_skipped']=completion
+            self._guard(job)
+            if self.emit is not None:base['result_sha256']=digest(detections)
             self._guard(job);self.primary.inference_deadline(None)
             return self._save_stopped_observation(base,'VALID',detections=detections)
         except Exception as error:
@@ -395,7 +429,8 @@ class HeadLiveExposures:
             self._retirement=dict(retired=True,inference_calls=self._inference_calls,
                 completed_exposures=len(self.results),sequence=self._sequence,source_floor_ns=self._source_floor,
                 inference_thread='owned caller; no child workers')
-        if pending is not None:self.emit('LIVE_EXPOSURE_UNADMITTED_AT_RETIRE',original=pending[0])
+        if pending is not None and self.emit is not None:
+            self.emit('LIVE_EXPOSURE_UNADMITTED_AT_RETIRE',original=pending[0])
         return dict(self._retirement)
 
     def _retirement_record(self):
@@ -403,6 +438,7 @@ class HeadLiveExposures:
             if self._busy or not self._closed or self._retirement is None:
                 raise PermissionError('HEAD_LIVE_INFERENCE_RETIRE_UNCONFIRMED')
             receipt=dict(self._retirement)
+        if self.emit is None:return receipt
         return dict(receipt,original_attempts=_wire(self._original_attempts))
 
     def retirement_snapshot(self):

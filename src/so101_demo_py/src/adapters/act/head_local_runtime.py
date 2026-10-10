@@ -37,6 +37,11 @@ STOP_ORIGINS = ('success', 'not_found', 'budget', 'camera', 'feedback', 'writer'
 _WATCHDOG_GAP_HISTORY = 64
 
 
+class HeadStartupCancelled(RuntimeError):
+    """Operator cancellation before startup can publish readiness."""
+
+
+
 def _identity_triple(value):
     if (type(value) is not dict
             or type(value.get('generation')) is not int
@@ -98,7 +103,7 @@ class HeadLocalRuntime:
             raise ValueError('HEAD_LOCAL_RUNTIME_CONFIG_INVALID')
         if port.feedback_policy is None or port._head_policy_binding_failed:
             raise PermissionError('HEAD_LOCAL_RUNTIME_POLICY_REQUIRED')
-        if any(not callable(getattr(revoker, name, None)) for name in ('close_strict', 'identity')):
+        if any(not callable(getattr(revoker, name, None)) for name in ('close_scoped_strict', 'bootstrap_identity', 'identity')):
             raise ValueError('HEAD_LOCAL_RUNTIME_REVOKER_INVALID')
         if (type(getattr(revoker, 'generation', None)) is not int
                 or not 0 < revoker.generation < 2 ** 64
@@ -131,7 +136,8 @@ class HeadLocalRuntime:
         self._sink = sink
         self._emit = emit
         self._lock = threading.Lock()
-        self._arm_lock = threading.Lock()
+        self._arm_in_progress = False
+        self._startup_cancel_event = None
         self._stop_event = threading.Event()
         self._shutdown = threading.Event()
         self._started = False
@@ -144,14 +150,15 @@ class HeadLocalRuntime:
         self._fault_occurred_ns = None
         self._refused_reason = None
         self._armed_identity = None
+        self._bootstrap_identity = None
         self._native_policy_receipt = None
         self._authority = None
         self._threads = {}
         self._watchdog_wall = None
         self._executor_wall = None
-        self._watchdog_gaps = []
+        self._watchdog_gaps = [] if sink is not None else ()
         self._inference_deadline_wall_s = None
-        self._inference_deadlines = []
+        self._inference_deadlines = [] if sink is not None else ()
         self._observation_deadline_wall_s = None
         self._owned = set()
         self._stop_origin_kind = None
@@ -229,7 +236,7 @@ class HeadLocalRuntime:
     def bind_authority(self, authority):
         """Bind the authenticated main authority and its exact local scope once."""
         if any(not callable(getattr(authority, name, None))
-               for name in ('arm', 'identity', 'close')):
+               for name in ('arm', 'prearm_status', 'identity', 'close')):
             raise ValueError('HEAD_LOCAL_RUNTIME_AUTHORITY_INVALID')
         scope = self.local_state.scope
         if (getattr(authority, 'generation', None) != scope['generation']
@@ -315,65 +322,139 @@ class HeadLocalRuntime:
             if self._native_policy_receipt is not None:
                 raise PermissionError('HEAD_LOCAL_RUNTIME_NATIVE_POLICY_REBOUND')
             self._native_policy_receipt = body
-        self.record('NATIVE_POLICY_VERIFIED', owned)
+        if self._sink is not None:
+            self.record('NATIVE_POLICY_VERIFIED', owned)
         return True
 
     def _port_stop_velocity(self):
         return self.port.stop_velocity
 
-    def arm(self):
-        """Bind the authenticated main/primary-fault identity to the local scope."""
-        if not self._arm_lock.acquire(blocking=False):
-            raise PermissionError('HEAD_LOCAL_RUNTIME_ARM_IN_PROGRESS')
-        try:
-            return self._arm_once()
-        finally:
-            self._arm_lock.release()
-
-    def _arm_once(self):
+    def arm(self, *, cancel_event=None):
+        """One bounded startup, with a separately authenticated close identity."""
+        cancel_event=threading.Event() if cancel_event is None else cancel_event
+        if not isinstance(cancel_event,threading.Event):
+            raise ValueError('HEAD_STARTUP_CANCEL_EVENT_INVALID')
         with self._lock:
-            authority = self._authority
-            if self._closed:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_CLOSED')
-            if self._armed_identity is not None:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_ALREADY_ARMED')
+            if self._arm_in_progress:
+                raise PermissionError('HEAD_LOCAL_RUNTIME_ARM_IN_PROGRESS')
+            self._arm_in_progress=True
+            self._startup_cancel_event=cancel_event
+        try:
+            return self._arm_once(cancel_event)
+        finally:
+            with self._lock:
+                self._arm_in_progress=False
+                self._startup_cancel_event=None
+
+    def _startup_check(self, cancel_event, deadline, *, ready_wait=False):
+        if cancel_event.is_set():raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED')
+        if self.clock_ns()>=deadline:
+            raise TimeoutError('PREARM_READY_DEADLINE' if ready_wait else 'HEAD_STARTUP_DEADLINE_EXPIRED')
+
+    def _arm_once(self, cancel_event):
+        deadline=self.clock_ns()+2_000_000_000
+        with self._lock:
+            authority=self._authority
+            if self._closed:raise PermissionError('HEAD_LOCAL_RUNTIME_CLOSED')
+            if self._armed_identity is not None:raise PermissionError('HEAD_LOCAL_RUNTIME_ALREADY_ARMED')
             if self._faulted or not self._admission_open:
                 raise PermissionError('HEAD_LOCAL_RUNTIME_STATE_INVALID')
-        if authority is None:
-            raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_UNBOUND')
-        # The authority re-runs this exact guard itself before native ARM.
+        if authority is None:raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_UNBOUND')
+        # A local precondition refusal remains correctable before native startup.
         self.prearm_guard()
+        def check(*,ready_wait=False):
+            self._startup_check(cancel_event,deadline,ready_wait=ready_wait)
+            self.prearm_guard()
+            self._startup_check(cancel_event,deadline,ready_wait=ready_wait)
         try:
-            authority.arm('neck')
-            main = _identity_triple(authority.identity('neck'))
-            primary = _identity_triple(self.revoker.identity())
-            expected = self.local_state.scope['controller_identity']
-            if (main != primary or main['generation'] != self.local_state.scope['generation']
-                    or (expected is not None and main != expected)):
-                raise PermissionError('HEAD_LOCAL_RUNTIME_NATIVE_IDENTITY_MISMATCH')
+            from .head_control_protocol import identity_fields
+            check()
+            bootstrap=self.revoker.bootstrap_identity(overall_deadline_ns=deadline)
+            pinned=identity_fields(bootstrap,self.local_state.scope['generation'])
+            expected=self.local_state.scope['controller_identity']
+            if bootstrap.get('ack_validated') is not True or bootstrap.get('status')!='AVAILABLE' or (
+                    expected is not None and _identity_triple(pinned)!=expected):
+                raise PermissionError('HEAD_LOCAL_RUNTIME_BOOTSTRAP_IDENTITY_MISMATCH')
+            if self.clock_ns()>=deadline:raise TimeoutError('HEAD_STARTUP_DEADLINE_EXPIRED')
             with self._lock:
+                self._bootstrap_identity=dict(pinned)
+            if self._sink is not None:self.record('BOOTSTRAP_IDENTITY',dict(bootstrap))
+            check()
+            for attempt in range(16):
+                check(ready_wait=True)
+                status=authority.prearm_status('neck',overall_deadline_ns=deadline,expected_identity=dict(pinned))
+                self._startup_check(cancel_event,deadline,ready_wait=True)
+                if identity_fields(status,self.local_state.scope['generation'])!=pinned:
+                    raise PermissionError('HEAD_LOCAL_RUNTIME_PREARM_IDENTITY_MISMATCH')
+                if self._sink is not None:self.record('PREARM_STATUS',dict(status))
+                check(ready_wait=True)
+                if status['status']=='READY':break
+                if status['status']!='NOT_READY':raise PermissionError('HEAD_LOCAL_RUNTIME_PREARM_SCOPE_REFUSED')
+                if status['proof']['wrapper_reason']==8:
+                    raise PermissionError('HEAD_LOCAL_RUNTIME_SNAPSHOT_UNAVAILABLE')
+                remaining=(deadline-self.clock_ns())*1e-9
+                if remaining<=.125 or attempt==15:raise TimeoutError('PREARM_READY_DEADLINE')
+                if cancel_event.wait(.125):raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED')
+                self._startup_check(cancel_event,deadline,ready_wait=True)
+            check()
+            try:
+                authority.arm('neck',overall_deadline_ns=deadline)
+            except Exception as error:
+                if cancel_event.is_set():
+                    if self._sink is not None:
+                        self.record('ARM_RESULT',getattr(error,'record',None) or dict(
+                            status='UNKNOWN',reason=getattr(error,'code',str(error)[:256])))
+                    raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED') from error
+                self.fault('HEAD_LOCAL_RUNTIME_NATIVE_STARTUP_FAILED',
+                    {'error_type':type(error).__name__,'reason':str(error)[:256]})
+                if self._sink is not None:
+                    self.record('ARM_RESULT',getattr(error,'record',None) or dict(
+                        status='UNKNOWN',reason=getattr(error,'code',str(error)[:256])))
+                raise
+            if self._sink is not None:
+                result=getattr(authority,'last_arm_result',None)
+                if result is not None:self.record('ARM_RESULT',dict(result))
+            check()
+            main=_identity_triple(authority.identity('neck',overall_deadline_ns=deadline))
+            check()
+            primary=_identity_triple(self.revoker.identity(overall_deadline_ns=deadline))
+            check()
+            if main!=primary or main!=_identity_triple(pinned):
+                raise PermissionError('HEAD_LOCAL_RUNTIME_NATIVE_IDENTITY_MISMATCH')
+            # This records the native ARM identity; publish runtime readiness
+            # only after diagnostics return and the startup fence still holds.
+            if self._sink is not None:self.record('ARMED',dict(identity=dict(main)))
+            with self._lock:
+                self._startup_check(cancel_event,deadline)
                 if self._closed or self._faulted or not self._admission_open:
                     raise PermissionError('HEAD_LOCAL_RUNTIME_STATE_INVALID')
-                if expected is None:
-                    self.local_state.bind_controller_identity(main, primary)
-                if self.local_state.faulted:
-                    raise PermissionError('HEAD_LOCAL_STATE_FAULTED')
-                self._armed_identity = dict(main)
-            self.record('ARMED', dict(identity=dict(main)))
+                if expected is None:self.local_state.bind_controller_identity(main,primary)
+                if self.local_state.faulted:raise PermissionError('HEAD_LOCAL_STATE_FAULTED')
+                self._startup_check(cancel_event,deadline)
+                self._armed_identity=dict(main)
+        except HeadStartupCancelled:
+            self.stop('sigterm',dict(startup_cancelled=True))
+            raise
         except Exception as error:
+            if cancel_event.is_set():
+                self.stop('sigterm',dict(startup_cancelled=True,error_type=type(error).__name__,
+                                        reason=str(error)[:256]))
+                raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED') from error
             self.fault('HEAD_LOCAL_RUNTIME_NATIVE_STARTUP_FAILED',
-                       {'error_type': type(error).__name__, 'reason': str(error)[:256]})
+                       {'error_type':type(error).__name__,'reason':str(error)[:256]})
             raise
         return dict(main)
 
     def _current(self, *, require_armed=True, refusal_faults=True):
-        now = self.monotonic()
         with self._lock:
             tick, progress = self._watchdog_wall, self._executor_wall
             started, open_ = self._started, self._admission_open
             faulted = self._faulted
             armed = self._armed_identity is not None
             observation_deadline = self._observation_deadline_wall_s
+        # Sample after each snapshot: callbacks may have advanced its receipt
+        # during this read. An earlier clock would give fresh data a negative age.
+        now = self.monotonic()
         if not started or faulted or not open_:
             self._refuse('HEAD_LOCAL_RUNTIME_STATE_INVALID', faults=refusal_faults)
         limit = nanoseconds(self.policy.fault_reaction_limit_s)
@@ -393,6 +474,7 @@ class HeadLocalRuntime:
             current = self.observer.current_inputs(now)
         except Exception:
             self._refuse('HEAD_LOCAL_RUNTIME_ORIGINALS_INVALID', faults=refusal_faults)
+        now = self.monotonic()
         image_wall = current['image_source_wall_s']
         if (image_wall is None
                 or not 0 <= now - image_wall <= self.policy.camera_loss_timeout_s
@@ -409,6 +491,13 @@ class HeadLocalRuntime:
             self.port.feedback_policy.check_joint(admission_joint, feedback['decision'])
         except Exception:
             self._refuse('HEAD_LOCAL_RUNTIME_FEEDBACK_STALE', faults=refusal_faults)
+        now = self.monotonic()
+        # Later reads never renew the absolute budgets checked at entry.
+        if nanoseconds(now) >= self.local_state.search_deadline_ns:
+            self._refuse('HEAD_LOCAL_RUNTIME_SEARCH_EXPIRED', faults=refusal_faults)
+        if (observation_deadline is not None
+                and nanoseconds(now) >= nanoseconds(observation_deadline)):
+            self._refuse('HEAD_LOCAL_RUNTIME_OBSERVATION_EXPIRED', faults=refusal_faults)
         clock_age_ns = (nanoseconds(feedback['decision']['wall_after_s'])
                         - nanoseconds(current['clock']['wall_s']))
         if not 0 <= clock_age_ns <= math.floor(
@@ -445,8 +534,9 @@ class HeadLocalRuntime:
                 raise PermissionError('HEAD_LOCAL_INVENTORY_REFUSED')
             with self._lock:
                 self._owned.add(gid)
-            self.record('INVENTORY_OWNED', dict(goal_uuid=gid,
-                                                payload_sha256=record['payload_sha256']))
+            if self._sink is not None:
+                self.record('INVENTORY_OWNED', dict(goal_uuid=gid,
+                                                    payload_sha256=record['payload_sha256']))
             return True
         except Exception:
             self.fault('HEAD_LOCAL_INVENTORY_REFUSED')
@@ -497,7 +587,7 @@ class HeadLocalRuntime:
                         or (value is not None and previous is not None and value > previous)):
                     refusal = 'HEAD_LOCAL_INFERENCE_DEADLINE_EXTENDED'
                 else:
-                    if value is None and previous is not None:
+                    if value is None and previous is not None and self._sink is not None:
                         self._inference_deadlines.append(previous)
                         del self._inference_deadlines[:-2]
                     self._inference_deadline_wall_s = value
@@ -556,6 +646,14 @@ class HeadLocalRuntime:
         """Latch the first immutable origin, close admission and wake both workers."""
         if type(reason) is not str or not reason:
             raise ValueError('HEAD_LOCAL_FAULT_INVALID')
+        # A cancelled startup channel still revokes its local authority; its
+        # callback must not replace the operator's immutable stop origin.
+        with self._lock:
+            startup_cancelled=(reason=='HEAD_MAIN_AUTHORITY_FAILED' and self._arm_in_progress
+                and self._startup_cancel_event is not None and self._startup_cancel_event.is_set()
+                and not self._faulted)
+        if startup_cancelled:
+            return self.stop('sigterm',dict(startup_cancelled=True,channel_error=reason))
         token = self.local_state.latch_fault(reason)
         occurred_ns = self.local_state.fault_occurrence_ns
         with self._lock:
@@ -584,7 +682,8 @@ class HeadLocalRuntime:
             # Claim before calling the sink. A broken sink may itself call
             # fault(), but can never reenter fault reporting or shift origin.
             try:
-                self.record('FAULT', dict(reason=first_reason, occurred_ns=first_ns))
+                if self._sink is not None:
+                    self.record('FAULT', dict(reason=first_reason, occurred_ns=first_ns))
             except Exception:
                 pass
         return dict(self.fault_receipt(), first=token is not None)
@@ -603,7 +702,8 @@ class HeadLocalRuntime:
                          clocks=clocks)
         self._stop_event.set()
         try:
-            self.record('STOP_REQUEST', dict(origin=origin, evidence=evidence))
+            if self._sink is not None:
+                self.record('STOP_REQUEST', dict(origin=origin, evidence=evidence))
         except Exception:
             pass
         return self.stop_receipt()
@@ -670,7 +770,18 @@ class HeadLocalRuntime:
                                       finished=False)
         receipt, error_type = None, None
         try:
-            receipt = self.revoker.close_strict()
+            with self._lock:
+                pinned=None if self._bootstrap_identity is None else dict(self._bootstrap_identity)
+            if pinned is None:raise RuntimeError('HEAD_NATIVE_CLOSE_IDENTITY_UNPROVEN')
+            candidate=self.revoker.close_scoped_strict(expected_identity=pinned)
+            from .head_control_protocol import identity_fields
+            if type(candidate) is not dict or candidate.get('ack_validated') is not True or (
+                    identity_fields(candidate,pinned['generation'])!=pinned or
+                    candidate.get('status') not in ('ARMED_CLOSED','NOT_ARMED_CLOSED') or
+                    type(candidate.get('stored_generation')) is not int or
+                    candidate['stored_generation']!=(pinned['generation'] if candidate['status']=='ARMED_CLOSED' else 0)):
+                raise RuntimeError('HEAD_NATIVE_CLOSE_RECEIPT_INVALID')
+            receipt=dict(candidate)
         except Exception as error:
             error_type = type(error).__name__
         with self._lock:
@@ -678,8 +789,10 @@ class HeadLocalRuntime:
                                       ack=receipt is not None, error=error_type,
                                       receipt=None if receipt is None else dict(receipt))
         try:
-            self.record('NATIVE_CLOSE', dict(ack=receipt is not None, error=error_type,
-                                             requested_wall_s=started))
+            if self._sink is not None:
+                self.record('NATIVE_CLOSE', dict(ack=receipt is not None, error=error_type,
+                                                 requested_wall_s=started,
+                                                 receipt=None if receipt is None else dict(receipt)))
         except Exception:
             pass
 
@@ -743,10 +856,11 @@ class HeadLocalRuntime:
                                      abandoned_on_retirement=(self._shutdown.is_set()
                                                               and not confirmed))
         try:
-            self.record('CANCEL_STOP', dict(raw_stop_confirmed=confirmed,
-                                            cancel_error=cancel_error,
-                                            result_error=result_error,
-                                            observation_count=len(observations)))
+            if self._sink is not None:
+                self.record('CANCEL_STOP', dict(raw_stop_confirmed=confirmed,
+                                                cancel_error=cancel_error,
+                                                result_error=result_error,
+                                                observation_count=len(observations)))
         except Exception:
             pass
 
@@ -777,7 +891,7 @@ class HeadLocalRuntime:
             progress = self._executor_wall
             armed = self._armed_identity is not None
             gaps = self._watchdog_gaps
-        if previous is not None:
+        if previous is not None and self._sink is not None:
             gaps.append(now - previous)
             del gaps[:-_WATCHDOG_GAP_HISTORY]
         if not started:
@@ -817,7 +931,8 @@ class HeadLocalRuntime:
             pass
         self._stop_event.set()
         try:
-            self.record('STATE_FAULT_DETECTED', dict(reason=reason, occurred_ns=occurred_ns))
+            if self._sink is not None:
+                self.record('STATE_FAULT_DETECTED', dict(reason=reason, occurred_ns=occurred_ns))
         except Exception:
             pass
 

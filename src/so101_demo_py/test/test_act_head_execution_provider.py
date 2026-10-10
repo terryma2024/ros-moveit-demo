@@ -34,6 +34,14 @@ def provider_module():
     return importlib.import_module('so101_demo.adapters.act.head_execution_provider')
 
 
+def test_file_provider_batches_controller_startup_without_changing_inputs(tmp_path):
+    inputs, _ = build_inputs(tmp_path)
+    before = json.dumps(inputs.document, sort_keys=True)
+    plan = provider_module().resource_plan(inputs)
+    assert plan['constructors']['stack']['keywords']['batch_spawners'] is True
+    assert json.dumps(inputs.document, sort_keys=True) == before
+
+
 def composition_module():
     import importlib
     return importlib.import_module('so101_demo.adapters.act.head_execution_composition')

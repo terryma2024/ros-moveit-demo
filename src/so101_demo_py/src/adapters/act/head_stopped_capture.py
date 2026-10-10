@@ -36,7 +36,8 @@ def stopped_window_boundary(receipts,*,now_ns,processing_margin_s=0.):
 
 
 class StoppedHeadCapture:
-    def __init__(self,node,port,*,frame_id,monotonic=time.monotonic,strict=True,emit=None):
+    def __init__(self,node,port,*,frame_id,monotonic=time.monotonic,strict=True,emit=None,
+                 camera_relay=None):
         self.node,self.port,self.frame_id,self.monotonic=node,port,frame_id,monotonic
         self.strict=strict;self.emit=emit;self._started=False;self._failure=None
         self.camera_messages=deque(maxlen=40000);self.info_messages=deque(maxlen=40000)
@@ -45,9 +46,13 @@ class StoppedHeadCapture:
         self._original_sink=None;self._window=None;self._window_finished=False
         self._live_sink=None;self._live_floor=None
         self._live_mode=False
+        image_callback = self._image if camera_relay is None else (
+            lambda message: camera_relay.deliver(message, self._image))
+        info_callback = self._info if camera_relay is None else (
+            lambda message: camera_relay.deliver(message, self._info))
         self.subscriptions=[
-            node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
-            node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
+            node.create_subscription(Image,'/head_camera/color',image_callback,RGB_QOS),
+            node.create_subscription(CameraInfo,'/head_camera/camera_info',info_callback,RGB_QOS),
             bind_head_clock(node,self._clock,monotonic=self.monotonic)]
 
     def begin_capture(self):

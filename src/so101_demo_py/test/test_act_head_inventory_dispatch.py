@@ -135,7 +135,7 @@ def test_local_inventory_precedes_native_reserve_and_sdk_without_monitor_ack(com
     assert tuple(wire.points[1].velocities) == (0.,)
     assert tuple(wire.points[1].accelerations) == (0.,)
     assert wire.points[0].time_from_start.sec == 0
-    assert wire.points[0].time_from_start.nanosec == 600_000_000
+    assert wire.points[0].time_from_start.nanosec == 50_000_000
     assert wire.points[-1].time_from_start.nanosec != 0
 
 
@@ -332,7 +332,7 @@ def test_fine_target_outside_coarse_domain_reaches_original_typed_sdk_path(compo
     assert trajectory.header.stamp.nanosec == 4_000_000
     assert [_point_ns for _point_ns in (
         p.time_from_start.sec * 1_000_000_000 + p.time_from_start.nanosec
-        for p in trajectory.points)] == [600_000_000,
+        for p in trajectory.points)] == [50_000_000,
             proof['last_point_offset_ns']]
     assert [p.positions[0] for p in trajectory.points] == pytest.approx([.2, .3])
     assert [p.velocities[0] for p in trajectory.points] == [0., 0.]
@@ -354,7 +354,7 @@ def test_search_deadline_covers_replay_elapsed_header_lead_and_full_endpoint(
     duration_ns = guard._duration_ns(target_rad - snapshot.neck_position)
     # The full endpoint fits before replay with 100 ms left, but not after a
     # deterministic 200 ms replay delay. Keep the original deadline immutable.
-    state._search_deadline_ns = start_wall_ns + 600_000_000 + duration_ns + 4_000_000 + 100_000_000
+    state._search_deadline_ns = start_wall_ns + 50_000_000 + duration_ns + 4_000_000 + 100_000_000
     replay = guard._check_physical_path
     def delayed_replay(*args, **kwargs):
         result = replay(*args, **kwargs)
@@ -677,17 +677,32 @@ def test_actual_prepare_records_rounded_duration_and_exact_original_point_nanose
     proof = prepared.proof
     distance = abs(.3 - proof['measured_neck_position_rad'])
     expected_ns = max(100_000_000,
-        math.ceil(1.875 * distance / .5 * 1e9),
-        math.ceil((5.773502691896258 * distance / .5) ** .5 * 1e9))
+        math.ceil(1.875 * distance / 1.0 * 1e9),
+        math.ceil((5.773502691896258 * distance / 2.0) ** .5 * 1e9))
     assert proof['main_duration_ns'] == expected_ns
-    assert proof['last_point_offset_ns'] == 600_000_000 + expected_ns
+    assert proof['last_point_offset_ns'] == 50_000_000 + expected_ns
     from control_msgs.action import FollowJointTrajectory
     from rclpy.serialization import deserialize_message
     wire = deserialize_message(prepared.original_cdr, FollowJointTrajectory.Goal)
     assert wire.trajectory.points[0].time_from_start.sec * 1_000_000_000 + \
-        wire.trajectory.points[0].time_from_start.nanosec == 600_000_000
+        wire.trajectory.points[0].time_from_start.nanosec == 50_000_000
     assert wire.trajectory.points[1].time_from_start.sec * 1_000_000_000 + \
-        wire.trajectory.points[1].time_from_start.nanosec == expected_ns + 600_000_000
+        wire.trajectory.points[1].time_from_start.nanosec == expected_ns + 50_000_000
+
+
+def test_actual_prepare_shortens_aligned_resting_prefix_with_declared_main_limits(composed):
+    config, events, owned, faults, servers, calls = composed
+    sender = HeadInventoryDispatcher(**config)
+    prepared = config['guard'].prepare(.3)
+    proof = prepared.proof
+    assert proof['first_point_offset_ns'] == 50_000_000
+    assert proof['max_velocity_rad_s'] == 1.0
+    assert proof['max_acceleration_rad_s2'] == 2.0
+    assert proof['last_point_offset_ns'] == 50_000_000 + proof['main_duration_ns']
+    sender.send_prepared_head(prepared)
+    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
+    assert owned[0][1] == prepared.original_cdr
+    assert not faults
 
 
 def test_boundary_revalidation_accepts_new_scene_step_with_unchanged_full_state(composed):
@@ -739,15 +754,26 @@ def test_original_400ms_claim_does_not_renew_after_slow_reservation(composed, mo
     assert 'sdk_attempt_ns' not in record
 
 
-def test_original_search_deadline_is_rechecked_at_final_sdk_without_refresh(composed):
+def test_original_search_deadline_is_rechecked_at_final_sdk_without_refresh(composed, monkeypatch):
     config, events, owned, faults, servers, calls = composed
     sender = HeadInventoryDispatcher(**config)
     guard = config['guard']
     wall = config['port']._test_wall
+    # This test advances the guard's clock deliberately. Keep claim/inventory
+    # clocks in that same domain so slow fixture construction cannot expire a
+    # real-time claim before the final-SDK boundary under test is reached.
+    from types import SimpleNamespace
+    from so101_demo.adapters.act import head_inventory_dispatch, ros_execution
+    clock_view = SimpleNamespace(**vars(time))
+    clock_view.monotonic_ns = lambda: round(wall[0] * 1e9)
+    monkeypatch.setattr(head_inventory_dispatch, 'time', clock_view)
+    monkeypatch.setattr(ros_execution, 'time', clock_view)
+    monkeypatch.setattr(config['authority'], 'clock', clock_view.monotonic_ns)
+    monkeypatch.setattr(config['local_state'], 'clock_ns', clock_view.monotonic_ns)
     start_ns = round(wall[0] * 1e9)
     snapshot, _, _ = guard._capture()
     duration_ns = guard._duration_ns(.3 - snapshot.neck_position)
-    last_offset_ns = 600_000_000 + duration_ns
+    last_offset_ns = 50_000_000 + duration_ns
     config['local_state']._search_deadline_ns = start_ns + 4_000_000 + last_offset_ns + 150_000_000
     original = guard.revalidate
     calls_seen = 0

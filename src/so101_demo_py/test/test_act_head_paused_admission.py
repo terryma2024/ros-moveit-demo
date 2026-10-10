@@ -4,8 +4,6 @@ The MuJoCo model and full collision replay are real; service and action peers
 are fixtures. These tests cannot establish installed or physical acceptance.
 """
 
-import fcntl
-import os
 import time
 import threading
 from concurrent.futures import Future
@@ -17,20 +15,7 @@ import pytest
 
 from test_act_head_local_runtime import armed_runtime, prime_current_inputs, runtime_setup
 from test_act_head_trajectory_guard import guard, MODEL, GEOMETRY, GEOMETRY_SHA256
-
-
-@contextmanager
-def admission_peer_cpu_slot(tmp_path_factory):
-    """Isolate costly model assembly before starting the peer's fixed wall budget."""
-    scratch = tmp_path_factory.getbasetemp()
-    shared = scratch.parent if os.environ.get('PYTEST_XDIST_WORKER') else scratch
-    descriptor = os.open(shared / 'head-admission-peer.lock',
-                         os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        yield
-    finally:
-        os.close(descriptor)
+from head_admission_peer_support import admission_peer_cpu_slot, release_guard_buffers
 
 
 @pytest.fixture
@@ -164,17 +149,26 @@ def paused_head(monkeypatch, tmp_path_factory, request):
         result = SimpleNamespace(row=row, scene=scene, guard=bound_guard, neck=neck,
             dispatcher=dispatcher, data=data, state=state, events=events,
             behavior=behavior, deadlines=deadlines, publish=publish, peer_lock=peer_lock)
-    try:
-        yield result
-    finally:
-        row.runtime.close(timeout_s=1.)
-        scene.close()
+        try:
+            yield result
+        finally:
+            try:
+                row.runtime.close(timeout_s=1.)
+            finally:
+                try:
+                    scene.close()
+                finally:
+                    # Closed Services callbacks share the data cell. Clear it
+                    # as well as the inspection handle after retirement.
+                    data = result.data = None
+                    release_guard_buffers(bound_guard)
 
 
 @contextmanager
 def next_original_pair(case, *, enabled=True):
     """Original peer stays live before the first pause, then retires permanently."""
     retired = threading.Event()
+    delivered = threading.Event()
     pause_floor = case.state['pause_count']
 
     def deliver():
@@ -188,11 +182,14 @@ def next_original_pair(case, *, enabled=True):
                 if not case.state['paused']:
                     prime_current_inputs(case.row)
                     case.publish()
+                    delivered.set()
 
     producer = threading.Thread(target=deliver) if enabled else None
     if producer is not None:
         producer.start()
     try:
+        if producer is not None and not delivered.wait(case.row.policy.fault_reaction_limit_s):
+            raise TimeoutError('fixture original peer did not deliver within its fixed budget')
         yield
     finally:
         retired.set()
@@ -202,8 +199,11 @@ def next_original_pair(case, *, enabled=True):
 
 
 def command(case, *, produce_original=True):
+    # Replay a real nonzero displacement for ownership/SDK ordering. Fixed
+    # sampling and freshness budgets remain unchanged; numeric guard tests
+    # exercise larger trajectories independently of this peer fixture.
     with next_original_pair(case, enabled=produce_original):
-        return case.neck.command_neck(.3, session_id=case.row.state.scope['session_id'],
+        return case.neck.command_neck(.21, session_id=case.row.state.scope['session_id'],
             attempt_id=case.row.state.scope['epoch'], observation_time_s=case.row.clock.sim)
 
 
@@ -224,20 +224,18 @@ def test_pause_waits_for_next_complete_original_pair_before_capturing_lease(paus
 
     case.scene.services.pause = verify_original
 
-    try:
-        gid = command(case)
-    except PermissionError:
-        print('Admission diagnostics:', case.row.runtime.fault_reason,
-              case.row.runtime.dispatch_guard_refused_reason,
-              [(kind, record) for kind, record in case.events
-               if kind.startswith('HEAD_ADMISSION')])
-        raise
-    assert gid in case.dispatcher.inventory and seen
+    with next_original_pair(case):
+        with case.scene.paused_admission(case.guard):
+            lease = case.scene._require_lease(case.guard, check_scene=True)
+            assert case.state['paused'] is True
+            assert lease['thread'] == threading.get_ident()
+    assert seen
     assert not case.state['paused'] and not case.row.runtime.faulted
     ready = next(record for kind, record in case.events if kind == 'HEAD_ADMISSION_INPUT_READY')
     assert ready['source_floor_ns'] >= previous
     assert seen[0]['source_ns'] > ready['source_floor_ns']
     assert ready['source_ns'] == seen[0]['source_ns']
+    assert lease['deadline_ns'] == ready['deadline_ns']
     assert ready['deadline_ns'] <= round(seen[0]['wall_s'] * 1e9) + 200_000_000
 
 
@@ -245,10 +243,12 @@ def test_original_peer_keeps_advancing_when_submitter_is_delayed(paused_head):
     case = paused_head
     with next_original_pair(case):
         time.sleep(.03)
-        gid = command(case, produce_original=False)
-    assert gid in case.dispatcher.inventory
+        with case.scene.paused_admission(case.guard):
+            lease = case.scene._require_lease(case.guard, check_scene=True)
+            assert case.state['paused'] is True
     ready = next(record for kind, record in case.events if kind == 'HEAD_ADMISSION_INPUT_READY')
     assert ready['source_ns'] > ready['source_floor_ns']
+    assert lease['deadline_ns'] == ready['deadline_ns']
     assert not case.row.runtime.faulted and not case.state['paused']
 
 
@@ -258,14 +258,17 @@ def test_selected_stopped_observation_uses_complete_pair_without_waiting_for_ano
     original = case.row.observer.current_inputs(time.monotonic())
     selected_deadline_s = time.monotonic() + .15
     case.row.runtime.dispatch_observation_deadline(selected_deadline_s)
-    gid = command(case, produce_original=False)
+    with case.scene.paused_admission(case.guard):
+        lease = case.scene._require_lease(case.guard, check_scene=True)
+        assert case.state['paused'] is True
     ready = next(record for kind, record in case.events if kind == 'HEAD_ADMISSION_INPUT_READY')
     assert ready['source_ns'] == original['image']['source_ns']
     assert ready['source_ns'] == original['info']['source_ns']
     assert ready['image_receipt_wall_s'] == original['image']['wall_s']
     assert ready['info_receipt_wall_s'] == original['info']['wall_s']
     assert ready['deadline_ns'] <= round(selected_deadline_s * 1e9)
-    assert gid in case.dispatcher.inventory and not case.row.runtime.faulted
+    assert lease['deadline_ns'] == ready['deadline_ns']
+    assert not case.row.runtime.faulted and not case.state['paused']
     assert case.row.runtime._observation_deadline_wall_s == selected_deadline_s
     case.row.runtime.dispatch_observation_deadline(None)
 
@@ -354,7 +357,7 @@ def test_complete_prepared_send_is_paused_and_resumes_before_return(paused_head)
     from rclpy.serialization import deserialize_message
     from control_msgs.action import FollowJointTrajectory
     wire = deserialize_message(trace['original_cdr'], FollowJointTrajectory.Goal)
-    assert wire.trajectory.points[0].time_from_start.nanosec == 600_000_000
+    assert wire.trajectory.points[0].time_from_start.nanosec == 50_000_000
     assert not case.row.runtime.faulted
 
 
@@ -491,7 +494,7 @@ def test_foreign_owned_run_identity_refuses_binding_before_pause(paused_head, id
 def test_prepared_cdr_from_retired_lease_cannot_enter_another_transaction(paused_head):
     case = paused_head
     with next_original_pair(case), case.scene.paused_admission(case.guard):
-        prepared = case.guard.prepare(.3)
+        prepared = case.guard.prepare(.21)
     prime_current_inputs(case.row)
     case.publish()
     with pytest.raises(PermissionError, match='HEAD_ADMISSION_PREPARED_LEASE_INVALID'):

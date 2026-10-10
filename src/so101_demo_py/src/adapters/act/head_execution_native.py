@@ -76,11 +76,12 @@ def provision_owned_native(inputs, stack, policy):
     if main_capability == fault_capability:
         raise PermissionError('HEAD_EXECUTION_NATIVE_CAPABILITIES_NOT_INDEPENDENT')
     receipts = {}
-    for name in ('neck.provision', 'neck-primary-revoke.provision'):
-        path = directory / name
-        payload = path.read_bytes()
-        receipts[name] = dict(path=str(path), sha256=hashlib.sha256(payload).hexdigest(),
-                              bytes=len(payload))
+    if inputs.event_log_enabled:
+        for name in ('neck.provision', 'neck-primary-revoke.provision'):
+            path = directory / name
+            payload = path.read_bytes()
+            receipts[name] = dict(path=str(path), sha256=hashlib.sha256(payload).hexdigest(),
+                                  bytes=len(payload))
     return dict(native_keywords=dict(directory=str(directory), capability=main_capability,
                                     native_owner=owner, generation=inputs.run['generation'],
                                     session_id=session),
