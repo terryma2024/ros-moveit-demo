@@ -49,7 +49,7 @@ It is handed the same frozen artefacts the qualifier declares: the promoted prod
 ``values`` block is the promotion of record), the approved calibration bundle (whose parameters must agree
 with it, value by value, or the readback refuses with ``READBACK_BUNDLE_MISMATCH``), the frozen runtime
 identity, the sealed geometry, the scene, the URDF, the MuJoCo plugin configuration, the controller
-configuration, the selected weights and the reservation root. It takes Task 14 Step 1's exclusive-ownership
+configuration, the selected weights and, through the controller configuration, the dead-man directory. It takes Task 14 Step 1's exclusive-ownership
 receipt, refuses unless the receipt guards exactly this run root, and starts **one** stack - the same
 ``RestartStack`` the production smoke and the anchor restarts own - through the restart module's own
 helpers, so the qualification cannot drift into a second definition of "the stack".
@@ -105,7 +105,6 @@ from so101_demo.act.head_search_restarts import (
     RESTART_OWNERSHIP_REFUSED,
     RESTART_RUNTIME_UNVERIFIED,
     probe_owners,
-    publish_provisions,
     read_ownership_receipt,
     require_runtime_of_record,
     stack_environment,
@@ -125,7 +124,7 @@ TEARDOWN_ARTIFACT = "teardown-proof.json"
 STDOUT_LOG = "stdout.log"
 STDERR_LOG = "stderr.log"
 
-#: this phase's own session identity: the reservation scope, the runner node and the detector's identity
+#: this phase's own session identity: the simulation session, the runner node and the detector's identity
 SESSION_ID = "head-search-qualification-readback"
 #: the runtime name rclpy accepts (a node name is not a graph name) and the graph name the probes read;
 #: the live run found this: ``Node("/head_search_qualification_readback")`` is refused by rclpy itself
@@ -852,11 +851,37 @@ def _camera_measurements_from_live(*, infos, frames, transform, joints) -> dict:
     return live
 
 
+def prepare_deadman_directory(controller_config_path) -> str:
+    """The private dead-man directory the sealed controllers file declares for the neck, created.
+
+    The neck controller refuses to activate without it (design section 1.4), so the readback creates it
+    (mode 0700, owned by this process) before the stack starts. An undeclared directory, or one whose
+    socket path would exceed the AF_UNIX bound, is a refusal, never a default.
+    """
+
+    from so101_demo.adapters.act.head_neck_owner import HeadNeckOwner
+    from so101_demo.adapters.act.head_neck_owner_build import deadman_directory_from_controllers
+
+    try:
+        directory = HeadNeckOwner.ensure_directory(deadman_directory_from_controllers(controller_config_path))
+    except Exception as error:  # noqa: BLE001 - an undeclared directory is a refusal, not a default
+        raise _refuse(
+            READBACK_PROBE_FAILED,
+            f"the controller configuration declares no usable dead-man directory: "
+            f"{type(error).__name__}: {error}",
+        ) from error
+    if len(os.fsencode(os.path.join(directory, "neck-18446744073709551615.sock"))) > 107:
+        raise _refuse(
+            READBACK_PROBE_FAILED,
+            f"the AF_UNIX dead-man sockets under {directory} exceed the 107-byte bound",
+        )
+    return str(directory)
+
+
 def run_readback_observation(
     *,
     run_root=None,
     evidence_root,
-    reservation_root,
     workdir,
     production: Mapping,
     seal: Mapping,
@@ -883,7 +908,7 @@ def run_readback_observation(
     """Bring up the one production composition, observe everything, tear it down and prove it gone.
 
     The order is the restarts phase's own and it is not negotiable: the pre-start probe must be empty, the
-    provisions are published before the stack starts, one ``RestartStack`` is started and waited for as a
+    dead-man directory exists before the stack starts, one ``RestartStack`` is started and waited for as a
     steady state, the observations are taken while it runs, and the post-teardown probe must be empty
     before this function returns. The observation is returned raw; deciding what it means is the caller's.
     """
@@ -931,20 +956,12 @@ def run_readback_observation(
         raise _refuse(READBACK_FOREIGN_OWNER_ACTIVE, f"{error.code}: {error.detail}") from error
     log(f"pre-start probe clean: {before['owner_processes']}")
 
-    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
-
-    reservation_directory = controller_reservation_directory(Path(reservation_root), SESSION_ID)
-    if len(os.fsencode(reservation_directory / "gripper.sock")) > 107:
-        raise _refuse(
-            READBACK_PROBE_FAILED,
-            f"the AF_UNIX reservation sockets under {reservation_root} exceed the frozen 107-byte bound",
-        )
-    provisions = publish_provisions(reservation_root, session_id=SESSION_ID)
-    environment = stack_environment(reservation_directory, SESSION_ID)
+    deadman_directory = prepare_deadman_directory(controller_config_path)
+    environment = stack_environment(SESSION_ID)
 
     stack = None
     rclpy_state: dict = {}
-    observations: dict = {"reservation_directory": str(reservation_directory)}
+    observations: dict = {"deadman_directory": str(deadman_directory)}
     try:
         factory = stack_factory or _stack_factory
         stack = factory(
@@ -1137,10 +1154,6 @@ def run_readback_observation(
             except Exception as error:  # noqa: BLE001 - a stop failure is verified, not asserted
                 warn(f"the stack stop raised {error!r}")
             _kill_stragglers(excluded_pids=excluded_pids, log=log)
-        try:
-            provisions.close()
-        except Exception as error:  # noqa: BLE001 - the provisions are private files, not authority
-            warn(f"the provision close raised {error!r}")
 
     log("post-teardown ownership probe")
     after = observer(excluded_pids=excluded_pids, excluded_nodes=(RUNNER_GRAPH_NODE,))

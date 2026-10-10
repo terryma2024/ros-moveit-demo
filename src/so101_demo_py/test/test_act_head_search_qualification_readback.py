@@ -659,8 +659,6 @@ def _cli_arguments(tmp_path: Path, run_root: Path, evidence: Path, *extra: str) 
         str(fixture_source / "approved-bundle.json"),
         "--weights",
         str(fixture_source / "final-run/weights/best.pt"),
-        "--reservation-root",
-        str(tmp_path / "ipc"),
         "--workdir",
         str(tmp_path / "work"),
         *extra,
@@ -718,3 +716,45 @@ def test_the_cli_runs_the_readback_and_prints_the_measured_values(
         "so101_head_search_calibration measure-qualification-readback"
     )
     assert not run_root.exists()
+
+
+def _controllers_yaml(tmp_path, directory):
+    path = tmp_path / "controllers.yaml"
+    path.write_text(
+        "controller_manager:\n  ros__parameters:\n    update_rate: 500\n"
+        "neck_controller:\n  ros__parameters:\n    head_deadman_directory: " + str(directory) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_the_readback_creates_the_declared_private_deadman_directory(tmp_path):
+    import os
+    import shutil
+    import stat
+    import tempfile
+
+    # a short base: the socket path inside it must fit the AF_UNIX bound
+    base = Path(tempfile.mkdtemp(prefix="dm", dir="/tmp"))
+    directory = base / "dm"
+    try:
+        got = readback.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
+        assert got == str(directory)
+        assert stat.S_IMODE(os.stat(directory).st_mode) == 0o700 and os.stat(directory).st_uid == os.getuid()
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
+def test_the_readback_refuses_a_controller_file_that_declares_no_deadman_directory(tmp_path):
+    path = tmp_path / "controllers.yaml"
+    path.write_text("neck_controller:\n  ros__parameters:\n    joints: [neck_yaw_joint]\n", encoding="utf-8")
+    with pytest.raises(readback.QualificationReadbackRefused) as refused:
+        readback.prepare_deadman_directory(path)
+    assert refused.value.code == readback.READBACK_PROBE_FAILED
+
+
+def test_the_readback_refuses_a_deadman_directory_whose_socket_path_is_too_long(tmp_path):
+    directory = tmp_path / ("d" * 90)
+    with pytest.raises(readback.QualificationReadbackRefused) as refused:
+        readback.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
+    assert refused.value.code == readback.READBACK_PROBE_FAILED

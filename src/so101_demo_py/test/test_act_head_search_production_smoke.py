@@ -174,7 +174,7 @@ def _flight(
             "weights_sha256": RUNTIME["weight_sha256_observed"],
             "model_id": "head-search-v2",
         },
-        "reservation": {"generation": 17, "armed_roles": ["neck"]},
+        "admission": {"protocol": "HeadNeckTrajectoryController owner dead-man admission"},
         "adapter_liveness": {
             "executor_spinning": True,
             "adapter_image_count": 10,

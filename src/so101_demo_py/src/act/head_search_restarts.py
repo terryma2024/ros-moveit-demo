@@ -27,12 +27,11 @@ What this producer implements, stated exactly:
   which is written into the stack's one MuJoCo instance through the simulator's own
   ``~/set_free_joint_state`` service. The loop is ``HeadSearchController`` driven by
   ``RosSearchAdapter`` over the real topic stream, and the neck is commanded through the neck controller's
-  own ``FollowJointTrajectory`` action. That action is admission-wrapped
-  (``so101_mujoco_support/BrokerOwnedTrajectoryController``) and refuses every goal that carries no bound
-  reservation, so this producer publishes its own role provisions and reserves each goal over the frozen
-  ``SOGB`` v2 protocol - the same protocol the pick-place broker speaks. That is a **declared** role: the
-  restart owner *is* the single owner of the stack (the plan's "the qualifier owns every start and
-  teardown"), so it provisions its own capability rather than running a second broker.
+  own ``FollowJointTrajectory`` action. That controller (``so101_mujoco_support/HeadNeckTrajectoryController``)
+  accepts a goal only while the single owner's dead-man socket is connected, so the owner of the stack
+  activates the neck through ``HeadNeckOwner`` and the restart commands it through the owner's local
+  admission. The restart owner *is* the single owner of the stack (the plan's "the qualifier owns every start
+  and teardown").
 * **The stop proof is the production criterion.** After the terminal, the neck is held and raw
   ``/joint_states`` feedback is sampled; three consecutive samples within the promoted
   ``stop_velocity_rad_s`` are the proof.
@@ -52,16 +51,12 @@ import json
 import math
 import os
 import re
-import secrets
 import signal
-import struct
 import subprocess
 import sys
 import time
 import traceback
-import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
@@ -161,15 +156,6 @@ NECK_JOINT = "neck_yaw_joint"
 #: the sealed scene's own cup: ``<body name="plastic_cup" pos="0.02 -0.28 0.165">``, which is exactly the
 #: seal's declared ``default`` anchor point. ``plastic_cup_b`` sits at ``(2, 2, 2)``, outside every frame.
 CUP_BODY = "plastic_cup"
-#: the reservation roles the frozen protocol knows; the restart provisions all three so the controller
-#: sides are all in the same declared state, and reserves only the neck it commands
-RESERVATION_ROLES = {"arm": 1, "gripper": 2, "neck": 3}
-RESERVATION_KIND_TO_ROLE = {"neck": 3}
-#: one bound reservation is single-use and expires; the claim window leaves the action goal time to arrive
-RESERVATION_CLAIM_LEAD_NS = 2_000_000
-RESERVATION_WINDOW_NS = 400_000_000
-RESERVATION_TIMEOUT_S = 0.5
-
 #: how long a start, a rate probe, a search and a teardown may take before the phase refuses
 STACK_START_TIMEOUT_S = 120.0
 GRAPH_TIMEOUT_S = 60.0
@@ -187,8 +173,6 @@ RESTART_RUN_ROOT_EXISTS = "RESTART_RUN_ROOT_EXISTS"
 RESTART_RUNTIME_UNVERIFIED = "RESTART_RUNTIME_UNVERIFIED"
 RESTART_ANCHOR_UNDECLARED = "RESTART_ANCHOR_UNDECLARED"
 RESTART_SCENE_CONTRADICTORY = "RESTART_SCENE_CONTRADICTORY"
-RESTART_RESERVATION_REFUSED = "RESTART_RESERVATION_REFUSED"
-RESTART_RESERVATION_PATH_TOO_LONG = "RESTART_RESERVATION_PATH_TOO_LONG"
 RESTART_STACK_START_FAILED = "RESTART_STACK_START_FAILED"
 RESTART_FOREIGN_OWNER_ACTIVE = "RESTART_FOREIGN_OWNER_ACTIVE"
 RESTART_NODE_MISSING = "RESTART_NODE_MISSING"
@@ -978,7 +962,7 @@ def receipt_document(
         "teardown": dict(anchor_run.get("teardown") or {}),
         "frames": frames,
         "scene": dict(anchor_run.get("scene") or {}),
-        "reservation": dict(anchor_run.get("reservation") or {}),
+        "admission": dict(anchor_run.get("admission") or {}),
         "reconstruction": dict(anchor_run.get("reconstruction") or {}),
         "started_at_utc": started_at_utc,
         "finished_at_utc": finished_at_utc,
@@ -1127,485 +1111,13 @@ def validate_restart_receipt(document: Mapping) -> list[str]:
     return problems
 
 
-# --- the reservation protocol -------------------------------------------------------------------------
-
-
-def goal_digest(goal_cdr: bytes) -> bytes:
-    """The digest the frozen gate computes: sha256 over the serialised goal."""
-
-    return hashlib.sha256(bytes(goal_cdr)).digest()
-
-
-def _bounded_string(value: str) -> bytes:
-    raw = str(value).encode("ascii")
-    if not 0 < len(raw) <= 64 or any(byte < 0x20 or byte > 0x7E for byte in raw):
-        raise ValueError("the frozen protocol bounds every identifier at 64 printable ASCII bytes")
-    return bytes((len(raw),)) + raw
-
-
-def encode_bound_reservation_frame(
-    *,
-    generation: int,
-    goal_uuid: bytes,
-    role: int,
-    permit_uuid: bytes,
-    target_digest: bytes,
-    claim_monotonic_ns: int,
-    deadline_ns: int,
-    session_id: str,
-    broker_incarnation: str,
-    controller_incarnation: str,
-    controller_boot_incarnation: str,
-    goal_cdr: bytes,
-    capability: bytes,
-) -> bytes:
-    """The frozen ``SOGB`` v2 bound-reservation frame, byte for byte.
-
-    ``tests/test_act_head_search_restarts.py`` compares this encoder against the installed
-    ``controller_reservation_client._encode_bound_frame`` so the two can never drift, and
-    ``controller_reservation_protocol.cpp`` parses exactly this layout.
-    """
-
-    if not isinstance(capability, bytes) or len(capability) != 32 or not any(capability):
-        raise ValueError("BOUND_CAPABILITY_INVALID")
-    if type(generation) is not int or generation <= 0:
-        raise ValueError("BOUND_GENERATION_INVALID")
-    if len(bytes(goal_uuid)) != 16 or not any(goal_uuid):
-        raise ValueError("BOUND_GOAL_UUID_INVALID")
-    if role not in RESERVATION_ROLES.values():
-        raise ValueError("BOUND_ROLE_INVALID")
-    if (
-        len(bytes(permit_uuid)) != 16
-        or not any(permit_uuid)
-        or (permit_uuid[6] >> 4) != 4
-        or (permit_uuid[8] & 0xC0) != 0x80
-    ):
-        raise ValueError("BOUND_PERMIT_UUID_INVALID")
-    if len(bytes(target_digest)) != 32 or not any(target_digest):
-        raise ValueError("BOUND_DIGEST_INVALID")
-    if (
-        type(claim_monotonic_ns) is not int
-        or type(deadline_ns) is not int
-        or claim_monotonic_ns <= 0
-        or deadline_ns <= 0
-        or claim_monotonic_ns > deadline_ns
-    ):
-        raise ValueError("BOUND_TIME_INVALID")
-    if not goal_cdr or len(goal_cdr) > 1048576:
-        raise ValueError("BOUND_GOAL_INVALID")
-
-    body = b"SOGB" + bytes((2, 1)) + capability
-    body += struct.pack(">Q", generation) + bytes(goal_uuid) + bytes((role,))
-    body += bytes(permit_uuid) + bytes(target_digest)
-    body += struct.pack(">q", claim_monotonic_ns) + struct.pack(">q", deadline_ns)
-    body += _bounded_string(session_id) + _bounded_string(broker_incarnation)
-    body += _bounded_string(controller_incarnation) + _bounded_string(controller_boot_incarnation)
-    body += struct.pack(">I", len(goal_cdr)) + bytes(goal_cdr)
-    if len(body) > 1048640:
-        raise ValueError("BOUND_BODY_TOO_LARGE")
-    return struct.pack(">I", len(body)) + body
-
-
-@dataclass(frozen=True)
-class PreparedReservation:
-    """Owned immutable binding; no native capability crosses the inventory hook."""
-
-    role: str
-    generation: int
-    goal_cdr: bytes
-    goal_uuid: bytes
-    permit_uuid: bytes
-    claim_monotonic_ns: int
-    deadline_ns: int
-    session_id: str
-    broker_incarnation: str
-    controller_incarnation: str
-    controller_boot_incarnation: str
-
-
-class ReservationAuthority:
-    """The single owner's own bound reservations for the admission-wrapped production controllers.
-
-    ``BrokerOwnedTrajectoryController`` refuses every goal that carries no bound reservation, and the
-    reservation service it exposes exists only after a private ``<role>.provision`` file carries this
-    process's own uid/pid/start-ticks and a fresh capability. This phase IS the single owner of the stack
-    (the plan: "the qualifier owns every start and teardown"), so it publishes those provisions through the
-    frozen ``ControllerReservationProvisions`` writer and then speaks the frozen protocol: arm one
-    generation, read the controller's own identity, and reserve each goal exactly once before sending it.
-    A rejected exchange closes the controller's gate, so every failure here is a refusal of the phase.
-    """
-
-    def __init__(
-        self,
-        *,
-        directory,
-        capabilities: Mapping[str, bytes],
-        session_id: str,
-        generation: int,
-        broker_incarnation: str = "so101-head-search-restart-owner",
-        timeout_s: float = RESERVATION_TIMEOUT_S,
-        claim_window_ns: int = RESERVATION_WINDOW_NS,
-        clock=time.monotonic_ns,
-        exchange=None,
-        transport_attempts: int = 3,
-    ) -> None:
-        self.directory = Path(directory)
-        self.session_id = str(session_id)
-        self.generation = int(generation)
-        self.broker_incarnation = str(broker_incarnation)
-        self.timeout_s = float(timeout_s)
-        self.claim_window_ns = int(claim_window_ns)
-        self.clock = clock
-        self._capabilities = {str(role): bytes(value) for role, value in capabilities.items()}
-        self._exchange = exchange or self._socket_exchange
-        self._identities: dict[str, dict] = {}
-        self._armed: set[str] = set()
-        self._registration_failed = False
-        self._registration_required = False
-        self.reserved: list[dict] = []
-        self.transport_attempts = int(transport_attempts)
-        #: transport-level failures that were retried, so the receipt carries them instead of hiding them
-        self.transport_retries: list[dict] = []
-        if self.generation <= 0:
-            raise ValueError("the reservation generation must be a positive whole number")
-
-    # --- the wire -----------------------------------------------------------------------------------
-    def _path(self, role: str) -> Path:
-        return self.directory / f"{role}.sock"
-
-    def _socket_exchange(self, role: str, frame: bytes, *, expect: str):
-        import socket as _socket
-
-        path = self._path(role)
-        with _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM) as connection:
-            connection.settimeout(self.timeout_s)
-            connection.connect(str(path))
-            connection.sendall(frame)
-            if expect == "identity":
-                header = self._read_exactly(connection, 4)
-                size = int.from_bytes(header, "big")
-                if not 0 < size <= 1_048_640:
-                    raise RuntimeError("the identity reply is not bounded")
-                return self._read_exactly(connection, size)
-            return self._read_exactly(connection, 16)
-
-    def _exchange_with_retry(self, role: str, frame: bytes, *, expect: str):
-        """One frozen exchange, retried only when the *transport* failed.
-
-        The controller serves one connection per iteration of a worker thread, and a connection that is
-        accepted but not served before the frozen 50 ms window closes surfaces here as an OS-level error
-        (a broken pipe or a refused connect). A protocol refusal is a well-formed ``SOGA``/``SOID`` reply and
-        is never retried; a transport error is retried a bounded number of times with the exchange, its
-        role and its error recorded, so the receipt says how many attempts a reservation really took.
-        """
-
-        last: Exception | None = None
-        for attempt in range(1, max(1, self.transport_attempts) + 1):
-            try:
-                return self._exchange(role, frame, expect=expect)
-            except OSError as error:
-                last = error
-                self.transport_retries.append(
-                    {"role": role, "expect": expect, "attempt": attempt, "error": repr(error)}
-                )
-                time.sleep(0.05)
-        raise last if last is not None else RuntimeError("the exchange never ran")
-
-    def _read_exactly(self, connection, size: int) -> bytes:
-        data = bytearray()
-        while len(data) < size:
-            chunk = connection.recv(size - len(data))
-            if not chunk:
-                raise RuntimeError("the reservation service closed the connection early")
-            data.extend(chunk)
-        return bytes(data)
-
-    @staticmethod
-    def _ack(response: bytes, generation: int) -> bool:
-        if (len(response) != 16 or response[:4] != b"SOGA" or response[4] != 1
-                or response[6:8] != bytes(2) or response[5] not in (0, 1)):
-            raise RuntimeError("the reservation reply is not a frozen SOGA acknowledgement")
-        if int.from_bytes(response[8:16], "big") != generation:
-            raise RuntimeError("the reservation reply names another generation")
-        return response[5] == 0
-
-    # --- the protocol -------------------------------------------------------------------------------
-    def arm(self, role: str) -> int:
-        """Arm one generation on this role's gate; the controller's identity is readable afterwards."""
-
-        if self._registration_failed:
-            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory failure consumed this authority")
-        capability = self._capabilities.get(role)
-        if capability is None:
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED, f"no capability was provisioned for {role!r}"
-            )
-        body = b"SOGR" + bytes((1, 3)) + capability + self.generation.to_bytes(8, "big") + bytes(16)
-        frame = len(body).to_bytes(4, "big") + body
-        try:
-            response = self._exchange_with_retry(role, frame, expect="ack")
-            accepted = self._ack(response, self.generation)
-        except Exception as error:
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED,
-                f"the {role} controller refused the reservation arm: {error!r}",
-            ) from error
-        if not accepted:
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED,
-                f"the {role} controller refused the reservation arm with a REJECT",
-            )
-        self._armed.add(role)
-        return self.generation
-
-    def identity(self, role: str) -> dict:
-        """The controller's own ACK-confirmed identity, read after the arm."""
-
-        if role in self._identities:
-            return dict(self._identities[role])
-        if role not in self._armed:
-            self.arm(role)
-        capability = self._capabilities[role]
-        frame_body = b"SOIA" + bytes((1, 1)) + capability + bytes((RESERVATION_ROLES[role],))
-        frame = len(frame_body).to_bytes(4, "big") + frame_body
-        try:
-            reply = self._exchange_with_retry(role, frame, expect="identity")
-            identity = self._parse_identity(role, reply)
-        except Exception as error:
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED,
-                f"the {role} controller did not report its identity: {error!r}",
-            ) from error
-        self._identities[role] = identity
-        return dict(identity)
-
-    @staticmethod
-    def _parse_identity(role: str, reply: bytes) -> dict:
-        if len(reply) < 15 or reply[:4] != b"SOID" or reply[4] != 1 or reply[5] != 1:
-            raise RuntimeError("the identity reply is not a frozen SOID document")
-        if reply[6] != RESERVATION_ROLES[role]:
-            raise RuntimeError("the identity reply names another role")
-        generation = int.from_bytes(reply[7:15], "big")
-        offset = 15
-        values = []
-        for _ in range(2):
-            length = reply[offset]
-            offset += 1
-            if not 0 < length <= 64 or offset + length > len(reply):
-                raise RuntimeError("the identity reply is malformed")
-            values.append(reply[offset : offset + length].decode("ascii"))
-            offset += length
-        if offset != len(reply):
-            raise RuntimeError("the identity reply carries trailing bytes")
-        return {"generation": generation, "incarnation": values[0], "boot": values[1]}
-
-    def reserve(self, role: str, *, goal: bytes, goal_uuid: bytes, before_reserve=None) -> bool:
-        """Reserve exactly this goal, once, before its action goal is sent."""
-
-        if self._registration_failed:
-            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory failure consumed this authority")
-        if self._registration_required and before_reserve is None:
-            self._registration_failed = True
-            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory acknowledgement is required")
-        if before_reserve is not None and not callable(before_reserve):
-            self._registration_failed = True
-            raise _refuse(RESTART_RESERVATION_REFUSED, "inventory hook must be callable")
-        if before_reserve is not None:
-            self._registration_required = True
-        goal, goal_uuid = bytes(goal), bytes(goal_uuid)
-        identity = self.identity(role)
-        capability = self._capabilities[role]
-        claim = int(self.clock()) - RESERVATION_CLAIM_LEAD_NS
-        deadline = claim + self.claim_window_ns
-        permit = uuid.uuid4().bytes
-        binding = PreparedReservation(role=role, generation=self.generation, goal_cdr=goal,
-            goal_uuid=goal_uuid, permit_uuid=permit, claim_monotonic_ns=claim,
-            deadline_ns=deadline, session_id=self.session_id,
-            broker_incarnation=self.broker_incarnation,
-            controller_incarnation=str(identity["incarnation"]),
-            controller_boot_incarnation=str(identity["boot"]))
-        try:
-            frame = encode_bound_reservation_frame(
-                generation=self.generation,
-                goal_uuid=bytes(goal_uuid),
-                role=RESERVATION_ROLES[role],
-                permit_uuid=permit,
-                target_digest=goal_digest(goal),
-                claim_monotonic_ns=claim,
-                deadline_ns=deadline,
-                session_id=self.session_id,
-                broker_incarnation=self.broker_incarnation,
-                controller_incarnation=str(identity["incarnation"]),
-                controller_boot_incarnation=str(identity["boot"]),
-                goal_cdr=bytes(goal),
-                capability=capability,
-            )
-            if before_reserve is not None:
-                if before_reserve(binding) is not True:
-                    raise PermissionError("the exact inventory was not acknowledged")
-                if (self.generation != binding.generation or role not in self._armed
-                        or self._identities.get(role) != identity
-                        or self.session_id != binding.session_id
-                        or self.broker_incarnation != binding.broker_incarnation
-                        or not binding.claim_monotonic_ns <= int(self.clock()) <= binding.deadline_ns):
-                    raise PermissionError("the authority changed during inventory registration")
-            response = self._exchange_with_retry(role, frame, expect="ack")
-            accepted = self._ack(response, binding.generation)
-        except Exception as error:
-            if before_reserve is not None:
-                self._registration_failed = True
-            # Head inventory failures must reach the owned fault closer before
-            # any arbitrary exception formatter can run on the dispatch worker.
-            detail = type(error).__name__ if before_reserve is not None else repr(error)
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED,
-                f"the {role} controller refused the bound reservation: {detail}",
-            ) from error
-        if not accepted:
-            if before_reserve is not None:
-                self._registration_failed = True
-            raise _refuse(
-                RESTART_RESERVATION_REFUSED,
-                f"the {role} controller rejected the bound reservation for the goal "
-                f"{bytes(goal_uuid).hex()}",
-            )
-        self.reserved.append(
-            {"role": role, "generation": binding.generation, "goal_uuid": binding.goal_uuid}
-        )
-        return True
-
-    def close(self) -> None:
-        """Close every generation this authority armed; a closed gate is a dead controller, by design."""
-
-        for role in sorted(self._armed):
-            capability = self._capabilities.get(role)
-            if capability is None:
-                continue
-            body = (
-                b"SOGR"
-                + bytes((1, 2))
-                + capability
-                + self.generation.to_bytes(8, "big")
-                + bytes(16)
-            )
-            frame = len(body).to_bytes(4, "big") + body
-            try:
-                self._exchange_with_retry(role, frame, expect="ack")
-            except Exception:  # noqa: BLE001 - a controller already gone needs no close
-                continue
-        self._armed.clear()
-        self._identities.clear()
-
-
-class ReservedControllerPort:
-    """The production controller port whose every goal carries its own bound reservation.
-
-    The port is the installed ``RosControllerPort`` - the same goal construction, the same goal-UUID
-    bookkeeping, the same ``stopped()`` criterion - with one addition: the goal's CDR serialisation is
-    reserved on the controller's admission gate under the *same* goal UUID before the action goal is sent.
-    """
-
-    def __init__(
-        self,
-        port,
-        *,
-        authority: ReservationAuthority,
-        role: str = "neck",
-        send=None,
-        serialize=None,
-    ) -> None:
-        if role not in RESERVATION_ROLES:
-            raise ValueError("RESERVED_PORT_ROLE_INVALID")
-        self.port = port
-        self.authority = authority
-        self.role = role
-        self.serialize = serialize or _default_serialize
-        self._send = send
-        self.reservations: list[dict] = []
-
-    def _goal_uuid(self):
-        return _new_goal_uuid()
-
-    def send(self, goal):
-        goal_uuid = self._goal_uuid()
-        payload = self.serialize(goal)
-        self.authority.reserve(self.role, goal=payload, goal_uuid=bytes(goal_uuid.uuid))
-        self.reservations.append(
-            {"role": self.role, "goal_uuid": goal_uuid, "goal_sha256": goal_digest(payload).hex()}
-        )
-        if self._send is not None:
-            return self._send(goal, goal_uuid)
-        return self.port.send(goal, goal_uuid=goal_uuid)
-
-    def cancel(self, gid):
-        return self.port.cancel(gid)
-
-    def stopped(self):
-        return self.port.stopped()
-
-    def _feedback(self, message):
-        return self.port._feedback(message)
-
-
-def _default_serialize(goal) -> bytes:
-    """The wire bytes the controller digests: the ``FollowJointTrajectory`` goal, not the goal dict.
-
-    ``RosNeckSearchPort`` hands its port a *goal dict*; ``RosControllerPort`` turns that dict into a
-    ``control_msgs/FollowJointTrajectory`` goal with ``trajectory_message`` and sends it under a caller
-    supplied action goal UUID. The bound reservation must cover exactly the bytes that arrive at the
-    controller, and the installed ``ControllerReservationClient.reserve`` serialises the *message* (it
-    type-checks it), so the same construction is used here. Serialising the dict raised
-    ``AttributeError: type object 'type' has no attribute '_TYPE_SUPPORT'`` the first time a goal was
-    really sent - which no restart had ever done, because no frame was ever accepted.
-    """
-
-    from control_msgs.action import FollowJointTrajectory
-    from rclpy.serialization import serialize_message
-    from so101_demo.adapters.act.ros_execution import trajectory_message
-
-    message = FollowJointTrajectory.Goal()
-    message.trajectory = trajectory_message(goal)
-    return serialize_message(message)
-
-
-def _new_goal_uuid():
-    from unique_identifier_msgs.msg import UUID
-
-    message = UUID()
-    message.uuid = list(uuid.uuid4().bytes)
-    return message
-
-
 # --- the running stack --------------------------------------------------------------------------------
 
 
-def publish_provisions(reservation_root, session_id: str, environment: Mapping | None = None):
-    """Publish the three role provisions through the frozen writer, before the stack starts."""
-
-    from so101_demo.adapters.act.controller_reservation_provision import (
-        ControllerReservationProvisions,
-    )
-    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
-
-    root = Path(reservation_root)
-    directory = controller_reservation_directory(root, session_id)
-    if len(os.fsencode(directory / "gripper.sock")) > 107:
-        raise _refuse(
-            RESTART_RESERVATION_PATH_TOO_LONG,
-            f"the AF_UNIX reservation sockets under {root} would exceed the frozen 107-byte bound",
-        )
-    scope = dict(environment or os.environ)
-    scope["SO101_ACT_RESERVATION_ROOT"] = str(root)
-    scope["SO101_ACT_CONTROLLER_RESERVATION_DIR"] = str(directory)
-    scope["SO101_SIMULATION_SESSION_ID"] = session_id
-    return ControllerReservationProvisions.publish(scope, session_id)
-
-
-def stack_environment(directory, session_id: str, base: Mapping | None = None) -> dict:
-    """The environment the production controllers read their reservation scope from."""
+def stack_environment(session_id: str, base: Mapping | None = None) -> dict:
+    """The environment the production stack starts under: the base plus this phase's session identity."""
 
     environment = dict(os.environ if base is None else base)
-    environment["SO101_ACT_CONTROLLER_RESERVATION_DIR"] = str(directory)
     environment["SO101_SIMULATION_SESSION_ID"] = str(session_id)
     return environment
 
@@ -1861,9 +1373,7 @@ def measure_and_search(
     production_config_path,
     weights_path,
     frozen_candidate_path,
-    reservation_directory,
     session_id: str,
-    provisions,
     clock=time.monotonic,
     sleep=time.sleep,
     log=lambda message: None,
@@ -2033,26 +1543,13 @@ def measure_and_search(
                 f"{config['search_start_rad']!r}",
             )
         goal_duration = _neck_goal_duration(values)
-        authority = ReservationAuthority(
-            directory=reservation_directory,
-            capabilities=provisions.capabilities,
-            session_id=session_id,
-            generation=int.from_bytes(secrets.token_bytes(7), "big") or 1,
-            clock=time.monotonic_ns,
-        )
-        identity = authority.identity("neck")
         executor, spinner = _ensure_executor(
             executor, spinner, node, log=log, clock=clock, sleep=sleep
         )
-        observations["reservation"] = {
-            "generation": authority.generation,
-            "controller_identity": identity,
-            "armed_roles": ["neck"],
+        observations["admission"] = {
             "goal_duration_s": goal_duration,
-            "protocol": "SOGB v2 bound reservation over the frozen controller reservation socket",
-            "transport_retries": list(authority.transport_retries),
+            "protocol": "HeadNeckTrajectoryController owner dead-man admission",
         }
-        log(f"neck admission armed: generation {authority.generation}, identity {identity}")
 
         neck = RosNeckSearchPort(
             node,
@@ -2065,16 +1562,12 @@ def measure_and_search(
             max_age_s=float(values["max_age_s"]),
             command_guard=lambda current, target: True,
         )
-        neck.port = ReservedControllerPort(
-            RosControllerPort(
-                node,
-                neck.client,
-                (NECK_JOINT,),
-                stop_velocity_rad_s=float(values["stop_velocity_rad_s"]),
-                max_age_s=float(values["max_age_s"]),
-            ),
-            authority=authority,
-            role="neck",
+        neck.port = RosControllerPort(
+            node,
+            neck.client,
+            (NECK_JOINT,),
+            stop_velocity_rad_s=float(values["stop_velocity_rad_s"]),
+            max_age_s=float(values["max_age_s"]),
         )
 
         from tf2_ros import Buffer, TransformListener
@@ -2633,7 +2126,6 @@ def run_anchor_restart(
     production_config_path,
     weights_path,
     frozen_candidate_path,
-    reservation_root,
     values: Mapping,
     seal: Mapping,
     production: Mapping,
@@ -2674,10 +2166,7 @@ def run_anchor_restart(
     started = clock()
     started_at = _utc_now()
     observer = probe or (lambda **kwargs: probe_owners(**kwargs))
-    reservation_directory = _reservation_directory(
-        reservation_root, session_id=module_session_id(anchor)
-    )
-    log(f"pre-start ownership probe ({reservation_directory})")
+    log("pre-start ownership probe")
     before = observer(excluded_pids=excluded_pids, excluded_nodes=RUNNER_NODE_NAMES)
     _require_empty(before, anchor=anchor, stage="pre-start")
     if before.get("excluded_runner_nodes"):
@@ -2687,19 +2176,15 @@ def run_anchor_restart(
         )
     log(f"pre-start probe clean: {before['owner_processes']}")
 
-    provisions = publish_provisions(reservation_root, session_id=module_session_id(anchor))
-    environment = stack_environment(reservation_directory, module_session_id(anchor))
+    environment = stack_environment(module_session_id(anchor))
     evidence: dict = {
         "anchor": anchor,
         "runner_node": f"/head_search_restart_{anchor}",
         "declared_anchor": dict(declared),
         "producer": dict(producer),
-        "reservation": {
-            "directory": str(reservation_directory),
-            "path_bytes": len(os.fsencode(reservation_directory / "gripper.sock")),
+        "admission": {
             "session_id": module_session_id(anchor),
-            "protocol": "SOGB v2 bound reservation over the frozen controller reservation socket",
-            "provisions": sorted(provisions.capabilities),
+            "protocol": "HeadNeckTrajectoryController owner dead-man admission",
         },
     }
     stack = None
@@ -2740,9 +2225,7 @@ def run_anchor_restart(
                 production_config_path=production_config_path,
                 weights_path=weights_path,
                 frozen_candidate_path=frozen_candidate_path,
-                reservation_directory=reservation_directory,
                 session_id=module_session_id(anchor),
-                provisions=provisions,
                 clock=clock,
                 sleep=sleep,
                 log=log,
@@ -2758,10 +2241,6 @@ def run_anchor_restart(
             except Exception as error:  # noqa: BLE001 - a stop failure is verified, not asserted
                 warn(f"the stack stop raised {error!r}")
             _kill_stragglers(excluded_pids=excluded_pids, log=log)
-        try:
-            provisions.close()
-        except Exception as error:  # noqa: BLE001 - the provisions are private files, not authority
-            warn(f"the provision close raised {error!r}")
 
     log("post-teardown ownership probe")
     after = observer(excluded_pids=excluded_pids, excluded_nodes=RUNNER_NODE_NAMES)
@@ -2805,21 +2284,9 @@ def run_anchor_restart(
 
 
 def module_session_id(anchor: str) -> str:
-    """One session id per anchor: the controllers' reservation scope and the detector's identity."""
+    """One session id per anchor: the stack's simulation session and the detector's identity."""
 
     return f"head-search-restart-{anchor}"
-
-
-def _reservation_directory(reservation_root, *, session_id: str) -> Path:
-    from so101_teleop.unified.controller_reservation_paths import controller_reservation_directory
-
-    directory = controller_reservation_directory(Path(reservation_root), session_id)
-    if len(os.fsencode(directory / "gripper.sock")) > 107:
-        raise _refuse(
-            RESTART_RESERVATION_PATH_TOO_LONG,
-            f"the reservation sockets under {reservation_root} exceed the frozen 107-byte bound",
-        )
-    return directory
 
 
 def _stack_factory(**kwargs) -> RestartStack:
@@ -3059,18 +2526,13 @@ __all__ = [
     "OPERATION",
     "PHASE_BY_ANCHOR",
     "RECEIPTS_KIND",
-    "ReservationAuthority",
-    "ReservedControllerPort",
     "RestartRefused",
     "RestartStack",
     "anchor_declarations",
     "camera_rate",
     "classify_nodes",
-    "encode_bound_reservation_frame",
     "frame_thresholds",
-    "goal_digest",
     "probe_owners",
-    "publish_provisions",
     "read_ownership_receipt",
     "read_runtime_of_record",
     "receipt_document",

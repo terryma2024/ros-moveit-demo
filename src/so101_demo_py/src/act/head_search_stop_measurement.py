@@ -3,12 +3,12 @@
 Phase 7 consumes five measurement documents this module produces. Two of them are **declarations** the
 running controller already carries and this module only reads:
 
-* ``controller_stop_config`` cites the controller's own stopped-velocity tolerance - the constant its
-  ``ControllerStopWitness`` applies to every feedback sample, read out of the *installed* controller header
-  and cross-checked against the same declaration in the source tree and against the sealed controller
-  period. Nothing here measures it; the document says ``measured_here: false`` and carries the declaring
-  path, digest and source line. A system whose header declares no such constant is refused
-  (``CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED``); a source tree and an installed header that disagree, or a
+* ``controller_stop_config`` cites the Head neck's own stopped-velocity tolerance - the constant the stop
+  window applies to every ``controller_state`` sample, read out of the *installed* ``head_neck_limits``
+  module (the one Python home of the stop-window constants) and cross-checked against the same declaration
+  in the source tree and against the sealed controller period. Nothing here measures it; the document says ``measured_here: false`` and carries the declaring
+  path, digest and source line. A system whose limits module declares no such constant is refused
+  (``CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED``); a source tree and an installed limits module that disagree, or a
   window whose step is not the controller's own period, are refused as contradictory.
 * ``feedback_measurements`` carries the declared feedback period - the rate `/joint_states` arrives at, which
   is the feedback the stop path's own criterion consumes - and the feedback path's quantisation resolution.
@@ -139,11 +139,11 @@ JOINT_SCOPE_RULE = (
     "the neck, and the production cadence-correct history verifier requires exactly seven robot dof indices"
 )
 
-#: the controller's own stop declaration, as its installed header spells the constants
-STOP_TOLERANCE_CONSTANT = "stop_velocity_rad_s"
-WINDOW_SAMPLES_CONSTANT = "required_samples"
-WINDOW_STEP_CONSTANT = "step_ns"
-WINDOW_MAX_AGE_CONSTANT = "max_age_ns"
+#: the controller's own stop declaration, as the installed limits module spells the constants
+STOP_TOLERANCE_CONSTANT = "STOP_WINDOW_MAX_VELOCITY_RAD_S"
+WINDOW_SAMPLES_CONSTANT = "STOP_WINDOW_SAMPLES"
+WINDOW_STEP_CONSTANT = "STOP_WINDOW_STEP_NS"
+WINDOW_MAX_AGE_CONSTANT = "STOP_WINDOW_MAX_AGE_NS"
 DECLARED_CONSTANTS = (
     WINDOW_SAMPLES_CONSTANT,
     WINDOW_STEP_CONSTANT,
@@ -151,15 +151,15 @@ DECLARED_CONSTANTS = (
     STOP_TOLERANCE_CONSTANT,
 )
 STOP_DECLARATION_RULE = (
-    "the controller's own stopped-velocity tolerance, read from the installed "
-    "`ControllerStopWitness::stop_velocity_rad_s` constant: a feedback sample whose measured or reference "
-    "velocity exceeds it is not a stopped sample, and the controller's stop proof requires a whole window of "
+    "the Head neck's own stopped-velocity tolerance, read from the installed "
+    "`head_neck_limits.STOP_WINDOW_MAX_VELOCITY_RAD_S` constant: a `controller_state` sample whose measured or "
+    "reference velocity exceeds it is not a stopped sample, and the stop proof requires a whole window of "
     "them. It is a declaration of the running controller, so the document records `measured_here: false` and "
-    "cites the installed header's path, digest and source line, plus the identical source declaration"
+    "cites the installed limits module's path, digest and source line, plus the identical source declaration"
 )
 _CONSTANT = re.compile(
-    r"static\s+constexpr\s+[A-Za-z_][\w:]*\s+(?P<name>\w+)\s*=\s*"
-    r"(?P<value>[0-9]+(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?)\s*;"
+    r"^(?P<name>[A-Z][A-Z0-9_]*)\s*=\s*"
+    r"(?P<value>[0-9][0-9_]*(?:\.[0-9_]*)?(?:[eE][-+]?[0-9]+)?)\s*(?:#.*)?$"
 )
 
 #: the declared feedback period is the rate the stop path's own criterion consumes receipts at
@@ -193,7 +193,7 @@ QUANTISATION_SEARCH = {
     "searched": [
         "the installed share tree's config and asset trees (URDF, MJCF, controller and plugin configuration)",
         "the sealed head camera geometry and calibration contract",
-        "the controller's own installed headers (the stop witness declares a velocity tolerance only)",
+        "the installed Head neck limits module (it declares the stop window's velocity tolerance only)",
     ],
     "keys": ["quantisation_rad", "encoder_resolution", "counts_per_revolution", "resolution_rad"],
     "result": (
@@ -310,10 +310,10 @@ def _mapping(name: str, value) -> Mapping:
 
 
 def read_controller_stop_declaration(path) -> dict:
-    """The constants the installed controller's stop witness declares, read out of its own header.
+    """The constants the Head neck's stop window declares, read out of the installed limits module.
 
-    The header is C++, so the declaration is parsed rather than executed: every declared constant of the stop
-    witness has to be present with a literal value. A header that declares none of them, or only some of them,
+    The module is parsed rather than imported: every declared constant of the stop window has to be present
+    with a literal value. A module that declares none of them, or only some of them,
     is refused as undeclared - a missing tolerance is not a zero tolerance.
     """
 
@@ -327,17 +327,17 @@ def read_controller_stop_declaration(path) -> dict:
     constants: dict[str, float] = {}
     source_lines: dict[str, str] = {}
     for line in text.splitlines():
-        match = _CONSTANT.search(line)
+        match = _CONSTANT.match(line.strip())
         if match is None:
             continue
-        constants[match.group("name")] = float(match.group("value"))
+        constants[match.group("name")] = float(match.group("value").replace("_", ""))
         source_lines[match.group("name")] = line.strip()
     missing = [name for name in DECLARED_CONSTANTS if name not in constants]
     if missing:
         raise _refuse(
             CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED,
             f"the controller's stop declaration {header} declares no {missing}: a controller whose stop "
-            f"witness declares no stopped tolerance has no tolerance to cite, and a default would be an "
+            f"window declares no stopped tolerance has no tolerance to cite, and a default would be an "
             f"invented number",
         )
     tolerance = constants[STOP_TOLERANCE_CONSTANT]
@@ -403,7 +403,7 @@ def declared_controller_stop_tolerance(
             "sha256": installed["sha256"],
             "constant": STOP_TOLERANCE_CONSTANT,
             "source_line": installed["source_lines"][STOP_TOLERANCE_CONSTANT],
-            "constant_path": f"ControllerStopWitness::{STOP_TOLERANCE_CONSTANT}",
+            "constant_path": f"head_neck_limits.{STOP_TOLERANCE_CONSTANT}",
         },
         "window_samples": installed["window_samples"],
         "window_step_s": step,
@@ -644,8 +644,8 @@ def build_controller_stop_config(
         "controller_config": {"path": str(config_path), "sha256": _digest(config_path)},
         "cross_checks": dict(tolerance["cross_checks"]),
         "production_owner": (
-            "so101_mujoco_support::ControllerStopWitness::stop_velocity_rad_s "
-            "(so101_mujoco_support/BrokerOwnedTrajectoryController)"
+            "so101_demo.act.head_neck_limits.STOP_WINDOW_MAX_VELOCITY_RAD_S "
+            "(so101_mujoco_support/HeadNeckTrajectoryController)"
         ),
         "consumed_by": (
             "so101_demo.act.head_search_timing_params.compute_stop_velocity_rad_s(controller=...): the "

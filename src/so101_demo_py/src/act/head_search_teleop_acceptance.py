@@ -1252,10 +1252,10 @@ class TeleopAcceptance:
 # --- the real seams -----------------------------------------------------------------------------------
 
 
-def stack_environment(directory, session_id: str, base: Mapping | None = None) -> dict:
+def stack_environment(session_id: str, base: Mapping | None = None) -> dict:
     from so101_demo.act.head_search_restarts import stack_environment as build
 
-    return build(directory, session_id, base)
+    return build(session_id, base)
 
 
 def real_stack_factory(**kwargs):
@@ -1271,7 +1271,7 @@ def real_stack_factory(**kwargs):
         controller_config_path=kwargs["controller_config_path"],
         workspace=kwargs["workspace"],
         session_id=kwargs["session_id"],
-        environment=stack_environment(kwargs["workspace"], kwargs["session_id"]),
+        environment=stack_environment(kwargs["session_id"]),
     )
 
 

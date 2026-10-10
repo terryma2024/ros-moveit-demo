@@ -1755,14 +1755,10 @@ def test_measure_camera_prints_the_librarys_refusal_and_returns_two(
 # --- the stop, feedback, submission and stop-proof measurement entries --------------------------------
 
 #: the installed controller's own stopped tolerance, as its header declares it
-STOP_DECLARATION = """class ControllerStopWitness final
-{
-public:
-  static constexpr size_t required_samples = 51;
-  static constexpr int64_t step_ns = 2000000;
-  static constexpr int64_t max_age_ns = 200000000;
-  static constexpr double stop_velocity_rad_s = 0.002;
-};
+STOP_DECLARATION = """STOP_WINDOW_SAMPLES = 51
+STOP_WINDOW_STEP_NS = 2_000_000
+STOP_WINDOW_MAX_AGE_NS = 200_000_000
+STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002
 """
 
 
@@ -1791,7 +1787,7 @@ def _stop_inputs(tmp_path: Path) -> dict:
     declared = tmp_path / "head_search_v2_stop.json"
     declared.write_text(json.dumps(production), encoding="utf-8")
     inputs["production"] = declared
-    inputs["declaration"] = tmp_path / "controller_stop_witness.hpp"
+    inputs["declaration"] = tmp_path / "head_neck_limits.py"
     inputs["declaration"].write_text(STOP_DECLARATION, encoding="utf-8")
     return inputs
 
@@ -1920,9 +1916,9 @@ def test_measure_controller_stop_config_refuses_a_header_without_the_tolerance(
     tmp_path: Path, capsys
 ) -> None:
     inputs = _stop_inputs(tmp_path)
-    bare = tmp_path / "no-tolerance.hpp"
+    bare = tmp_path / "no-tolerance.py"
     bare.write_text(
-        STOP_DECLARATION.replace("  static constexpr double stop_velocity_rad_s = 0.002;\n", ""),
+        STOP_DECLARATION.replace("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002\n", ""),
         encoding="utf-8",
     )
     from so101_demo.act.head_search_stop_measurement import (
@@ -3219,8 +3215,6 @@ def _restart_inputs(tmp_path: Path) -> dict:
     urdf.write_text("<robot/>", encoding="utf-8")
     inputs["urdf"] = urdf
     inputs["plugins"] = inputs["controllers"]
-    inputs["reservation_root"] = tmp_path / "ipc"
-    inputs["reservation_root"].mkdir()
     inputs["workdir"] = tmp_path / "workdir"
     inputs["workdir"].mkdir()
     inputs["ownership"] = tmp_path / "exclusive-ownership.json"
@@ -3265,8 +3259,6 @@ def _restart_arguments(inputs: dict, output: Path, *extra: str) -> list:
         str(inputs["weights"]),
         "--frozen-candidate",
         str(inputs["frozen"]),
-        "--reservation-root",
-        str(inputs["reservation_root"]),
         "--workdir",
         str(inputs["workdir"]),
         *extra,
@@ -3611,8 +3603,6 @@ def _production_smoke_arguments(inputs: dict, run_root: Path, *extra: str) -> li
         str(inputs["weights"]),
         "--frozen-candidate",
         str(inputs["frozen"]),
-        "--reservation-root",
-        str(inputs["reservation_root"]),
         "--workdir",
         str(inputs["workdir"]),
         *extra,

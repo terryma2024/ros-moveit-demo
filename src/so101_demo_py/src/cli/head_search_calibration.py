@@ -341,8 +341,8 @@ SCENARIO_REQUIRED_FLAGS = (
 #: the `measure-restarts` entry: Task 14 Step 4's three independent FULL_RESTART anchor phases. The owner
 #: presents Step 1's own receipt, the frozen runtime of record, the promoted configuration and bundle, and
 #: the sealed inputs the production composition is started from; `--run-root` is the brand-new campaign
-#: root whose three anchor directories hold the receipts, `--reservation-root` is the registered root's
-#: short `ipc/` namespace the frozen AF_UNIX reservation sockets live in, and `--workdir` is scratch.
+#: root whose three anchor directories hold the receipts, and `--workdir` is scratch. The neck's dead-man
+#: directory is the one the sealed `--controller-config` declares.
 RESTART_REQUIRED_FLAGS = (
     ("ownership_receipt", "--ownership-receipt"),
     ("run_root", "--run-root"),
@@ -356,7 +356,6 @@ RESTART_REQUIRED_FLAGS = (
     ("controller_config", "--controller-config"),
     ("weights", "--weights"),
     ("frozen_candidate", "--frozen-candidate"),
-    ("reservation_root", "--reservation-root"),
     ("workdir", "--workdir"),
 )
 
@@ -389,11 +388,6 @@ def _restart_parser() -> argparse.ArgumentParser:
     parser.add_argument("--controller-config", type=Path, help="the sealed controller configuration")
     parser.add_argument("--weights", type=Path, help="the selected model's weights file")
     parser.add_argument("--frozen-candidate", type=Path, help="the selected frozen candidate document")
-    parser.add_argument(
-        "--reservation-root",
-        type=Path,
-        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
-    )
     parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
     parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")
     parser.add_argument(
@@ -513,7 +507,6 @@ def _measure_restarts(arguments: list[str]) -> int:
                 production_config_path=parsed.production_config,
                 weights_path=parsed.weights,
                 frozen_candidate_path=parsed.frozen_candidate,
-                reservation_root=parsed.reservation_root,
                 values=values,
                 seal=seal,
                 production=production,
@@ -3138,7 +3131,7 @@ def _check_ownership(arguments: list[str]) -> int:
 #: the `measure-production-smoke` entry: Task 14 Step 3's production smoke. It declares Step 1's receipt,
 #: the frozen runtime of record, the promoted configuration and bundle, and the sealed inputs the one
 #: production composition is started from; `--run-root` is the brand-new phase root the journal owns and
-#: `--reservation-root` is the registered root's short `ipc/` namespace the AF_UNIX sockets live in.
+#: the neck's dead-man directory is the one the sealed `--controller-config` declares.
 PRODUCTION_SMOKE_REQUIRED_FLAGS = (
     ("ownership_receipt", "--ownership-receipt"),
     ("run_root", "--run-root"),
@@ -3152,7 +3145,6 @@ PRODUCTION_SMOKE_REQUIRED_FLAGS = (
     ("controller_config", "--controller-config"),
     ("weights", "--weights"),
     ("frozen_candidate", "--frozen-candidate"),
-    ("reservation_root", "--reservation-root"),
     ("workdir", "--workdir"),
 )
 
@@ -3203,11 +3195,6 @@ def _production_smoke_parser() -> argparse.ArgumentParser:
     parser.add_argument("--weights", type=Path, help="the selected model's weights file")
     parser.add_argument(
         "--frozen-candidate", type=Path, help="the selected frozen candidate document"
-    )
-    parser.add_argument(
-        "--reservation-root",
-        type=Path,
-        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
     )
     parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
     parser.add_argument(
@@ -3348,7 +3335,6 @@ def _measure_production_smoke(arguments: list[str], *, entry: str = PRODUCTION_S
                 production_config_path=parsed.production_config,
                 weights_path=parsed.weights,
                 frozen_candidate_path=parsed.frozen_candidate,
-                reservation_root=parsed.reservation_root,
                 production=production,
                 device=parsed.device,
                 excluded_pids=process_ancestry(),
@@ -3393,7 +3379,6 @@ QUALIFICATION_READBACK_REQUIRED_FLAGS = (
     ("plugin_config", "--plugin-config"),
     ("controller_config", "--controller-config"),
     ("weights", "--weights"),
-    ("reservation_root", "--reservation-root"),
 )
 
 
@@ -3438,11 +3423,6 @@ def _qualification_readback_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plugin-config", type=Path, help="the production MuJoCo plugin configuration")
     parser.add_argument("--controller-config", type=Path, help="the sealed controller configuration")
     parser.add_argument("--weights", type=Path, help="the selected model's weights file")
-    parser.add_argument(
-        "--reservation-root",
-        type=Path,
-        help="the registered root's short ipc/ namespace the AF_UNIX reservation sockets live in",
-    )
     parser.add_argument("--workdir", type=Path, help="the scratch directory the phase writes into")
     parser.add_argument(
         "--anchor",
@@ -3568,7 +3548,6 @@ def _measure_qualification_readback(
             production_config=production,
             observe=partial(
                 run_readback_observation,
-                reservation_root=parsed.reservation_root,
                 workdir=parsed.workdir,
                 production=production,
                 seal=seal,

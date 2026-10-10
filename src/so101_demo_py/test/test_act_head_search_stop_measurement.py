@@ -1,6 +1,6 @@
 """The stop and feedback measurement producers: every number is a declaration or a measurement.
 
-The fixtures here are synthetic: a controller declaration whose constants are written in the test, a
+The fixtures here are synthetic: a limits declaration whose constants are written in the test, a
 controller configuration that declares its own rates, and a scripted plant that reports the velocities the
 test asks for. Nothing in this file starts MuJoCo, a detector, a ROS node or a GPU. The last group of tests
 hands the produced documents to the installed phase-7 consumers, so the shapes this module writes are the
@@ -24,27 +24,20 @@ from so101_demo.act.head_search_timing_params import (
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
-#: the installed controller's own stopped-velocity window, as the running controller declares it
-STOP_HEADER = """#ifndef SO101_MUJOCO_SUPPORT__CONTROLLER_STOP_WITNESS_HPP_
-#define SO101_MUJOCO_SUPPORT__CONTROLLER_STOP_WITNESS_HPP_
+#: the stopped-velocity window as the Head neck limits module declares it (the one Python home)
+STOP_HEADER = """\"\"\"Head neck limits.\"\"\"
 
-class ControllerStopWitness final
-{
-public:
-  static constexpr size_t required_samples = 51;
-  static constexpr int64_t step_ns = 2000000;
-  static constexpr int64_t max_age_ns = 200000000;
-  static constexpr double stop_velocity_rad_s = 0.002;
-};
-
-#endif
+STOP_WINDOW_SAMPLES = 51
+STOP_WINDOW_STEP_NS = 2_000_000
+STOP_WINDOW_MAX_AGE_NS = 200_000_000
+STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002
 """
 
 CONTROLLERS = """controller_manager:
   ros__parameters:
     update_rate: 500
     neck_controller:
-      type: so101_mujoco_support/BrokerOwnedTrajectoryController
+      type: so101_mujoco_support/HeadNeckTrajectoryController
 joint_state_broadcaster:
   ros__parameters:
     update_rate: 100
@@ -55,7 +48,7 @@ neck_controller:
 """
 
 
-def _header(tmp_path: Path, text: str = STOP_HEADER, name: str = "controller_stop_witness.hpp") -> Path:
+def _header(tmp_path: Path, text: str = STOP_HEADER, name: str = "head_neck_limits.py") -> Path:
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
     return path
@@ -108,8 +101,8 @@ def test_the_stop_config_reads_the_installed_declaration_and_cites_it(tmp_path: 
     assert tolerance["stopped_tolerance_rad_s"] == 0.002
     assert tolerance["measured_here"] is False
     assert tolerance["declared_by"]["path"] == str(documents["header"])
-    assert tolerance["declared_by"]["constant"] == "stop_velocity_rad_s"
-    assert tolerance["declared_by"]["source_line"].strip().endswith("stop_velocity_rad_s = 0.002;")
+    assert tolerance["declared_by"]["constant"] == "STOP_WINDOW_MAX_VELOCITY_RAD_S"
+    assert tolerance["declared_by"]["source_line"].strip().endswith("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002")
     assert tolerance["window_samples"] == 51
     assert tolerance["window_step_s"] == 0.002
     assert tolerance["window_max_age_s"] == 0.2
@@ -130,7 +123,7 @@ def test_the_stop_config_reads_the_installed_declaration_and_cites_it(tmp_path: 
 def test_the_stop_config_refuses_a_declaration_that_carries_no_tolerance(tmp_path: Path) -> None:
     """A header that declares the window but no stopped tolerance declares nothing to write."""
 
-    header = _header(tmp_path, STOP_HEADER.replace("  static constexpr double stop_velocity_rad_s = 0.002;\n", ""))
+    header = _header(tmp_path, STOP_HEADER.replace("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002\n", ""))
     with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
         stop.declared_controller_stop_tolerance(
             installed_declaration=header,
@@ -143,8 +136,8 @@ def test_the_stop_config_refuses_a_declaration_that_carries_no_tolerance(tmp_pat
 def test_the_stop_config_refuses_two_disagreeing_declarations(tmp_path: Path) -> None:
     """The running controller's declaration is the one to cite: a source that differs is refused."""
 
-    installed = _header(tmp_path, STOP_HEADER, name="installed.hpp")
-    source = _header(tmp_path, STOP_HEADER.replace("0.002", "0.010"), name="source.hpp")
+    installed = _header(tmp_path, STOP_HEADER, name="installed.py")
+    source = _header(tmp_path, STOP_HEADER.replace("0.002", "0.010"), name="source.py")
     with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
         stop.declared_controller_stop_tolerance(
             installed_declaration=installed,
@@ -159,7 +152,7 @@ def test_the_stop_config_refuses_a_window_step_that_contradicts_the_controller_p
 ) -> None:
     """A window that does not step at the controller's own period is another controller's declaration."""
 
-    header = _header(tmp_path, STOP_HEADER.replace("step_ns = 2000000", "step_ns = 1000000"))
+    header = _header(tmp_path, STOP_HEADER.replace("STOP_WINDOW_STEP_NS = 2_000_000", "STOP_WINDOW_STEP_NS = 1_000_000"))
     with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
         stop.declared_controller_stop_tolerance(
             installed_declaration=header,
