@@ -96,6 +96,8 @@
 - If that machine has no usable Codex environment, `dst` must pause the task and wait for the
   coordinator to perform the review and communicate the result. Resume only after receiving the
   result and satisfying the review checkpoint's requirements.
+- When the coordinating agent is Claude, execute implementation plans with Claude Sonnet 5.5
+  (`claude-sonnet-5-5`) subagents instead of `dst`.
 - If a required model or tool is unavailable, report the limitation explicitly. Do not silently
   substitute another model or tool or automatically switch to a lower-capability model.
 - These task rules do not authorize changes to global default model configuration.
