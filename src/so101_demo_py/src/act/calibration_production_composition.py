@@ -20,10 +20,10 @@ from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime
 
 __all__ = ["build_production_measurement_driver", "PROVIDER_SEAM_ENV"]
 
-PROVIDER_SEAM_ENV = "SO101_TASK8_PROVIDER_SEAM"
+PROVIDER_SEAM_ENV = "SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM"
 #: P1-1: the seam a SUCCESS test may use. It names only the two BOTTOM boundaries - the MuJoCo/ROS client and the
 #: detector model - so the stack, clock, controller and phase camera are still the real composition's own.
-BOTTOM_IO_SEAM_ENV = "SO101_TASK8_BOTTOM_IO_SEAM"
+BOTTOM_IO_SEAM_ENV = "SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM"
 
 #: the five collaborators the driver needs, and the order the composition builds them in
 PROVIDER_NAMES = ("stack", "clock", "detector", "controller", "phase_camera")
@@ -36,7 +36,7 @@ class ProductionCompositionError(ValueError):
 def _bottom_io_from_seam():
     """The TWO bottom boundaries the success test may stand in for, and nothing else.
 
-    ``SO101_TASK8_BOTTOM_IO_SEAM="pkg.mod:client,pkg.mod:detector_factory"`` - an entry whose attribute name mentions
+    ``SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM="pkg.mod:client,pkg.mod:detector_factory"`` - an entry whose attribute name mentions
     the detector is the model factory, anything else is the lowest-level client. Anything not named here (the stack,
     the clock, the controller, the phase camera) is still built by this composition.
     """

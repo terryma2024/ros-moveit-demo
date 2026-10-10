@@ -236,8 +236,8 @@ class AdmissionGateway:
 
 
 _ACT_START_KINDS = frozenset({"task8_phase", "task8_full", "act_collection_start",
-                              "act_collection_resume", "act_first_episode_diagnostic"})
-_DIAGNOSTIC_START_KIND = "act_first_episode_diagnostic"
+                              "act_collection_resume", "act_diagnostic_episode"})
+_DIAGNOSTIC_START_KIND = "act_diagnostic_episode"
 _ACT_PAYLOAD_KEYS = frozenset({
     "campaign_id", "backend", "worker_count", "source_path", "source_sha256",
     "manifest_path", "manifest_sha256", "runtime_config_path", "runtime_config_sha256",

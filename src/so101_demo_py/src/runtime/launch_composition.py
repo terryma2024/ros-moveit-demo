@@ -2328,7 +2328,7 @@ def _configured_task_station_actions(context):
     if act_profile:
         # The ACT profile is the same station with the frozen diagnostic-episode inputs checked before anything starts.
         # There is no command broker and no reservation: the Teacher drives plain JointTrajectoryControllers.
-        first_inputs = context.launch_configurations.get("act_first_episode_inputs", "")
+        first_inputs = context.launch_configurations.get("act_diagnostic_episode_inputs", "")
         first_pin = context.launch_configurations.get("act_expected_inputs_sha256", "")
         if bool(first_inputs) != bool(first_pin):
             raise ValueError("EPISODE_INPUTS_IDENTITY_REQUIRED")
@@ -2463,7 +2463,7 @@ def build_task_station_launch_description(*, act_profile: bool = False) -> Launc
                 choices=MUJOCO_CUP_KEYFRAMES[:4] if act_profile else MUJOCO_CUP_KEYFRAMES,
             ),
             *([DeclareLaunchArgument("act_profile", default_value="true", choices=("true",)),
-               DeclareLaunchArgument("act_first_episode_inputs", default_value=""),
+               DeclareLaunchArgument("act_diagnostic_episode_inputs", default_value=""),
                DeclareLaunchArgument("act_expected_inputs_sha256", default_value="")]
               if act_profile else []),
             OpaqueFunction(function=_configured_task_station_actions),

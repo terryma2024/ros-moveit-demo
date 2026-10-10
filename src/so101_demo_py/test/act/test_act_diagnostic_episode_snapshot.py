@@ -80,7 +80,7 @@ def test_snapshot_rejects_existing_root_without_changing_it(tmp_path):
     with pytest.raises(ValueError, match="EXECUTION_SNAPSHOT_EXISTS"):
         freeze_execution_snapshot(SOURCE, tmp_path / "execution")
     assert (tmp_path / "execution/execution-manifest.json").read_bytes() == raw
-    assert document["kind"] == "ACT_FIRST_EPISODE_EXECUTION_INPUTS"
+    assert document["kind"] == "ACT_DIAGNOSTIC_EPISODE_EXECUTION_INPUTS"
 
 
 def test_resigned_motion_recipe_cannot_override_retained_approved_variant(tmp_path):
@@ -102,7 +102,7 @@ def test_resigned_motion_recipe_cannot_override_retained_approved_variant(tmp_pa
         document["files"][copied] = metadata
     document["source_files"][source_relative] = metadata
     canonical = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-    document["source_sha256"] = hashlib.sha256(canonical({"kind": "ACT_FIRST_EPISODE_SOURCE",
+    document["source_sha256"] = hashlib.sha256(canonical({"kind": "ACT_DIAGNOSTIC_EPISODE_SOURCE",
         "schema_version": 1, "files": document["source_files"]})).hexdigest()
     template = load_dynamic_pick_template(path)
     document["targets"]["final_target"] = list(compose_pose(

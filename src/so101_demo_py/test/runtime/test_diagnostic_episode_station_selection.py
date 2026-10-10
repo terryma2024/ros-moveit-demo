@@ -82,7 +82,7 @@ def test_the_production_station_is_the_act_launch_bound_to_the_frozen_inputs(tmp
     argv, environment, manifest, document, snapshot, _ = production_station(tmp_path)
     assert "so101_mujoco_act.launch.py" in argv and "so101_mujoco_task_station.launch.py" not in argv
     values = arguments(argv)
-    assert values["act_first_episode_inputs"] == str(manifest)
+    assert values["act_diagnostic_episode_inputs"] == str(manifest)
     assert values["act_expected_inputs_sha256"] == document["inputs_sha256"]
     assert values["mujoco_scene"].endswith(snapshot["scene_path"]) and "/execution/" in values["mujoco_scene"]
     assert values["headless"] == "true" and values["sensor_rendering"] == "true" and values["include_teleop"] == "false"

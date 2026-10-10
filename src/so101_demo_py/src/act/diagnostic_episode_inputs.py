@@ -31,8 +31,8 @@ import yaml
 from .calibration import CHECK_MEASUREMENTS, REQUIRED_CHECKS, REQUIRED_MEASUREMENTS
 from .contracts import ContractError, fields, finite, integer, sha256, vector
 
-CANDIDATES_KIND = "ACT_FIRST_EPISODE_INPUT_CANDIDATES"
-MANIFEST_KIND = "ACT_FIRST_EPISODE_INPUTS"
+CANDIDATES_KIND = "ACT_DIAGNOSTIC_EPISODE_INPUT_CANDIDATES"
+MANIFEST_KIND = "ACT_DIAGNOSTIC_EPISODE_INPUTS"
 SCHEMA_VERSION = 1
 #: The manifest schema. Version 2 dropped the broker stop policy and the bound-timing roles (design 10-06: no broker); a
 #: version 1 manifest - or any manifest still carrying those roles - is refused, never accepted silently.

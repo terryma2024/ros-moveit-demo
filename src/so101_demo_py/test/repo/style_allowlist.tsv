@@ -38,14 +38,12 @@ wire	src/so101_demo_py/config/act/pick-place-calibration-search-candidate.json	s
 wire	src/so101_demo_py/config/act/pick-place-calibration-search-policy.json	str	docs/superpowers/plans/2026-09-29-so101-act-task8-measurement-protocol-implementation.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
 wire	src/so101_demo_py/config/act/pick-place-calibration-search-policy.json	str	docs/superpowers/specs/2026-09-29-so101-act-task8-measurement-protocol-design.md	permanent	-	design	reference to a frozen historical document (R5): history is not rewritten
 wire	src/so101_demo_py/config/mujoco/act/head_search_runtime.json	str	head-search-v2	single-version-rename	head-search-runtime	decided	root decision 13: kind of head_search_v2.json (renamed head_search_runtime.json)
-wire	src/so101_demo_py/config/mujoco/headless_execution.yaml	str	task12_safe	wire-rename	headless_safe	decided	root decision 5: the business meaning of this step name is not in the design
 wire	src/so101_demo_py/config/mujoco/parallel_batch_act_offline.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/perception/head_camera_yolo_seg.yaml	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/perception/head_camera_yolo_seg_smoke.yaml	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_test_v1.yaml	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/perception/plastic_cup_grounding_dino_nonpenetrating_train_val_v1.yaml	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/perception_benchmark/benchmark.yaml	str	plastic-cup-yolo11s-seg-v2	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_demo_py/config/perception_benchmark/benchmark.yaml	str	task11-remediation	wire-rename	post-report-remediation	decided	root decision 5: the business meaning of this step name is not in the design
 wire	src/so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_first_pass.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/config/mujoco/parallel_batch_macos_mps_single_worker_retry.yaml	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
@@ -57,8 +55,6 @@ wire	src/so101_demo_py/src/act/head_run_reader.py	str	F022-file-v1	single-versio
 wire	src/so101_demo_py/src/act/head_search_qualification_readback.py	str	head-search-v2	single-version-rename	head-search-runtime	decided	root decision 13: kind of head_search_v2.json (renamed head_search_runtime.json)
 wire	src/so101_demo_py/src/act/head_search_restarts.py	str	head-search-v2	single-version-rename	head-search-runtime	decided	root decision 13: kind of head_search_v2.json (renamed head_search_runtime.json)
 wire	src/so101_demo_py/src/act/head_search_teleop_acceptance.py	str	head-search-v2	single-version-rename	head-search-runtime	decided	root decision 13: kind of head_search_v2.json (renamed head_search_runtime.json)
-wire	src/so101_demo_py/src/act/calibration_production_composition.py	str	SO101_TASK8_BOTTOM_IO_SEAM	wire-rename	SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM	mechanical	process name replaced by its business phrase (phase D)
-wire	src/so101_demo_py/src/act/calibration_production_composition.py	str	SO101_TASK8_PROVIDER_SEAM	wire-rename	SO101_PICK_PLACE_VALIDATION_PROVIDER_SEAM	mechanical	process name replaced by its business phrase (phase D)
 wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset.py	str	so101-head-search-yolo-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)

@@ -1,6 +1,6 @@
 """The diagnostic operation is recognised, and it removes the Head proof and nothing else.
 
-`act_first_episode_diagnostic` is a distinct admission kind: it reuses the same reservation, GPU
+`act_diagnostic_episode` is a distinct admission kind: it reuses the same reservation, GPU
 lease, contact activation and child ownership as the formal path, but it is fixed to one Worker,
 cannot claim qualification, and must present the frozen inputs plus the explicit diagnostic mode
 record. The formal and pick-place validation payload schemas are unchanged, so neither can inherit these fields.
@@ -96,7 +96,7 @@ def _diagnostic_spec(tmp_path, *, tag="a", calibration_mutation=None, scope_muta
     if payload_mutation is not None:
         payload_mutation(payload)
     return OperationSpec(command_id="start-1", domain=Domain.VALIDATION,
-                         kind="act_first_episode_diagnostic", payload=payload,
+                         kind="act_diagnostic_episode", payload=payload,
                          runtime_id="runtime-1", execution_generation=3,
                          deadline_ns=time.monotonic_ns() + 10**12)
 
@@ -106,7 +106,7 @@ def test_diagnostic_admits_one_worker_with_the_frozen_inputs(tmp_path):
     try:
         service = _service(store)
         context = service.start(_diagnostic_spec(tmp_path))
-        assert context.workload_kind == "act_first_episode_diagnostic"
+        assert context.workload_kind == "act_diagnostic_episode"
         assert context.worker_count == 1
         assert context.physical_gpu_uuid == "GPU-physical-a"
         assert len(service.child_registry.launches()) == 1
@@ -361,7 +361,7 @@ def test_diagnostic_accepts_a_frozen_set_whose_identity_is_not_current(tmp_path)
         try:
             service = _service(store)
             context = service.start(_refresh_payload(spec, manifest_path))
-            assert context.workload_kind == "act_first_episode_diagnostic"
+            assert context.workload_kind == "act_diagnostic_episode"
             assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
         finally:
             store.close()
@@ -419,7 +419,7 @@ def test_diagnostic_accepts_two_distinct_approved_calibration_reports(tmp_path):
     try:
         service = _service(store)
         context = service.start(payload)
-        assert context.workload_kind == "act_first_episode_diagnostic"
+        assert context.workload_kind == "act_diagnostic_episode"
         assert store._query_one("SELECT * FROM gpu_workload_leases") is not None
     finally:
         store.close()

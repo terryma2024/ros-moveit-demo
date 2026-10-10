@@ -31,7 +31,7 @@ BROKER_STEMS = frozenset({
     "teacher_forward_diagnostics", "teacher_goal_capture", "teacher_trajectory", "teacher_reset_binding",
     "teacher_initial_empty_reset", "teacher_episode_binding", "teacher_coordinator_receipt",
     "teacher_phase_lifecycle", "native_dispatch", "native_stop", "broker_stop_policy",
-    "act_first_episode_composition", "teacher_worker_lifecycle", "teacher_cup_safety", "teacher_table_support",
+    "act_diagnostic_episode_composition", "teacher_worker_lifecycle", "teacher_cup_safety", "teacher_table_support",
 })
 
 

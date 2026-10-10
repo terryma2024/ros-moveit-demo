@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .qc_session import session_memo
 
-KIND = "ACT_FIRST_EPISODE_EXECUTION_INPUTS"
+KIND = "ACT_DIAGNOSTIC_EPISODE_EXECUTION_INPUTS"
 SCENE = "assets/mujoco/act/scene.xml"
 MOTION = "config/policies/dynamic_cup_pick/mujoco.yaml"
 _FIELDS = frozenset({"kind", "schema_version", "files", "source_files", "source_sha256",
@@ -176,7 +176,7 @@ def freeze_execution_snapshot(source_root: Path, output: Path) -> dict:
     descriptor = {"kind": KIND, "schema_version": 1,
                   "files": {path: _metadata(payload) for path, payload in sorted(payloads.items())},
                   "source_files": source_files,
-                  "source_sha256": _sha(_canonical({"kind": "ACT_FIRST_EPISODE_SOURCE",
+                  "source_sha256": _sha(_canonical({"kind": "ACT_DIAGNOSTIC_EPISODE_SOURCE",
                                                     "schema_version": 1, "files": source_files})),
                   "scene_path": SCENE, "motion_policy_path": MOTION,
                   **_model_and_targets(target)}
@@ -239,7 +239,7 @@ def verify_execution_snapshot(root: Path, *, expected_sha256: str | None = None)
             if relative.startswith("config/") or relative == "assets/common/geometry-manifest.yaml":
                 if metadata != source_files.get("src/so101_demo_py/" + relative):
                     raise ValueError("EXECUTION_SNAPSHOT_SOURCE_COPY_MISMATCH")
-        if document["source_sha256"] != _sha(_canonical({"kind": "ACT_FIRST_EPISODE_SOURCE",
+        if document["source_sha256"] != _sha(_canonical({"kind": "ACT_DIAGNOSTIC_EPISODE_SOURCE",
                                                          "schema_version": 1, "files": source_files})):
             raise ValueError("EXECUTION_SNAPSHOT_SOURCE_INVALID")
         derived = _model_and_targets(root)

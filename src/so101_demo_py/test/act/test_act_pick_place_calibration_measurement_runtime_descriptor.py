@@ -101,7 +101,7 @@ def test_the_cli_composes_the_production_driver_without_the_injected_test_seam(t
         f"    pathlib.Path({str(recorded)!r}).write_text('built')\n"
         "    return {'stack': object(), 'clock': object(), 'detector': object(),\n"
         "            'controller': object(), 'phase_camera': object()}\n")
-    monkeypatch.setenv("SO101_TASK8_PROVIDER_SEAM", "fake_providers:build")
+    monkeypatch.setenv("SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM", "fake_providers:build")
 
     context = _context_document(tmp_path, _descriptor())
     # P1-3: the entry now reads the seal back, and a provider stand-in that captures no anchors legitimately
@@ -170,12 +170,12 @@ def test_the_context_requires_a_runtime_descriptor(tmp_path):
 def test_the_formal_entry_composes_real_providers_without_any_seam(tmp_path, monkeypatch):
     """Astra P1-1 (re-review): the formal entry must build the real composition by itself.
 
-    No ``SO101_TASK8_PROVIDER_SEAM`` is set, so today the composition raises PRODUCTION_PROVIDERS_UNAVAILABLE and the
+    No ``SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM`` is set, so today the composition raises PRODUCTION_PROVIDERS_UNAVAILABLE and the
     formal CLI has no production path at all. The test asserts the opposite: the entry reaches a built driver whose
     collaborators came from the admitted context - and it must not require a test-only environment seam to do it.
     """
 
-    monkeypatch.delenv("SO101_TASK8_PROVIDER_SEAM", raising=False)
+    monkeypatch.delenv("SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM", raising=False)
     context = _context_document(tmp_path, _descriptor())
     with pytest.raises(BaseException) as caught:
         _invoke(tmp_path, context, driver=None)

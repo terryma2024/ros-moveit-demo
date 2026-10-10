@@ -1,6 +1,6 @@
 """The bottom-I/O values the formal entry must build for ITSELF.
 
-The verdict's finding is that the formal entry reaches `SO101_TASK8_BOTTOM_IO_SEAM` for six values - the client, the
+The verdict's finding is that the formal entry reaches `SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM` for six values - the client, the
 detector factory, the frame source, the phase path, the target and the occluder geometry - so with nothing set in the
 environment it cannot produce the bottom I/O at all. This module starts replacing those six with the model's own
 answers, beginning with the two the headless model can supply directly.

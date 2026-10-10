@@ -24,8 +24,8 @@ from pathlib import Path
 import pytest
 
 
-BOTTOM_IO_ENV = "SO101_TASK8_BOTTOM_IO_SEAM"
-PROVIDER_SEAM_ENV = "SO101_TASK8_PROVIDER_SEAM"
+BOTTOM_IO_ENV = "SO101_PICK_PLACE_CALIBRATION_BOTTOM_IO_SEAM"
+PROVIDER_SEAM_ENV = "SO101_PICK_PLACE_CALIBRATION_PROVIDER_SEAM"
 
 BOTTOM_IO_MODULE = '''"""Only the two bottom boundaries: the MuJoCo/ROS client and the detector model."""
 

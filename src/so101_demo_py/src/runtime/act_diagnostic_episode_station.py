@@ -81,7 +81,7 @@ class DiagnosticEpisodeStation:
             f"session_id:={resources.session_id}", f"task_evidence_root:={resources.worker_root}",
             f"mujoco_scene:={snapshot_root / snapshot['scene_path']}",
             f"mujoco_initial_keyframe:={snapshot['targets']['reset_keyframe']}",
-            f"act_first_episode_inputs:={self.inputs_manifest}",
+            f"act_diagnostic_episode_inputs:={self.inputs_manifest}",
             f"act_expected_inputs_sha256:={self.inputs_sha256}")
         return PersistentStackConfig(resources.session_id, True, resources.worker_root,
                                      (StackProcessSpec("task-station", tuple(command)),))

@@ -7,7 +7,7 @@ controller_mapping:
   gripper_controller: ["6"]
   joint_state_broadcaster: []
 safe_poses:
-  task12_safe: [0.0, 0.1, 0.1, 0.2, 0.0]
+  headless_safe: [0.0, 0.1, 0.1, 0.2, 0.0]
 planning_time_s: 5.0
 velocity_scaling: 0.05
 acceleration_scaling: 0.05
