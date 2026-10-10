@@ -42,7 +42,7 @@ CLASSIFICATIONS = (
     "wire-rename",
     "permanent",
 )
-CONFIDENCES = ("design", "mechanical", "strip", "uncertain")
+CONFIDENCES = ("design", "mechanical", "strip", "uncertain", "decided")
 DELETE = "(delete)"
 
 
@@ -776,10 +776,10 @@ def rename_map_text(allowlist: Path, repository: Path = inventory.REPOSITORY) ->
         w(f"| {scan_name} | {cls} | {number} |")
     w(f"| **total** |  | **{len(parsed)}** |")
     w("")
-    w(f"## Rows the root should decide ({len(uncertain)})")
+    w(f"## Rows still marked uncertain ({len(uncertain)})")
     w("")
-    w("Every `uncertain` row, with the reason for the doubt. Name proposals follow the design where it speaks; these are the")
-    w("remaining choices.")
+    w("Rows the root decision section did not settle. Rows with confidence `decided` carry the number of the decision in their reason.")
+    w("")
     w("")
     w("| Scan | Location | Kind | Old name | Proposed | Why uncertain |")
     w("|---|---|---|---|---|---|")
@@ -804,13 +804,23 @@ def main(argv: list[str]) -> int:
     allowlist = inventory.REPOSITORY / "src/so101_demo_py/test/repo/style_allowlist.tsv"
     rows = all_rows()
     if "--seed" in argv:
+        if allowlist.exists():
+            raise SystemExit("the allowlist holds root decisions and is the source of truth; edit it, do not re-seed")
         allowlist.parent.mkdir(parents=True, exist_ok=True)
         allowlist.write_text(allowlist_text(rows), encoding="utf-8")
         print("wrote", allowlist, len(rows), "entries")
         return 0
     if "--write-map" in argv:
         target = inventory.REPOSITORY / "docs/experiments/so101-code-style-rename-map-20261010.md"
-        target.write_text(rename_map_text(allowlist), encoding="utf-8")
+        text = rename_map_text(allowlist)
+        if target.exists():
+            old = target.read_text(encoding="utf-8")
+            marker = "## Root decisions on the 128 uncertain rows"
+            if marker in old:
+                section = old[old.index(marker):]
+                section = section[: section.index("\n## ", 1) + 1] if "\n## " in section[1:] else section
+                text = text.replace("## Rows still marked uncertain", section + "\n## Rows still marked uncertain", 1)
+        target.write_text(text, encoding="utf-8")
         print("wrote", target)
         return 0
     counts: dict[tuple[str, str], int] = {}

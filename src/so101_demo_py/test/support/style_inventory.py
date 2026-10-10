@@ -363,7 +363,7 @@ ALLOWLIST_CLASSIFICATIONS = (
     "wire-rename",
     "permanent",
 )
-ALLOWLIST_CONFIDENCES = ("design", "mechanical", "strip", "uncertain")
+ALLOWLIST_CONFIDENCES = ("design", "mechanical", "strip", "uncertain", "decided")
 
 
 @dataclass(frozen=True)
