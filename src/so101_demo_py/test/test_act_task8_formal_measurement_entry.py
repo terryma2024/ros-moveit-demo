@@ -71,7 +71,7 @@ def occluder_geometry():
     measurement may not silently ignore an occluder the matrix admits.
     """
 
-    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+    from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS
 
     return {name: {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005} for name in EXPECTED_OCCLUDERS}
 
@@ -146,11 +146,11 @@ def _formal_run(tmp_path, monkeypatch):
     """Drive the formal entry: no `--driver`, no provider seam, only bottom I/O substituted."""
 
     from test_act_task8_measurement_runtime_descriptor import _context_document, _descriptor
-    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
+    from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
     from test_act_task8_measurement_runtime_descriptor import TEMPLATE
-    from so101_demo.act.task8_measurement_contract import require_identity
+    from so101_demo.act.pick_place_calibration_measurement_contract import require_identity
     from test_act_task8_calibration_aggregator import _cli_identities
-    from so101_demo.cli import act_measure_task8_calibration as measure
+    from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     monkeypatch.delenv(PROVIDER_SEAM_ENV, raising=False)          # the verdict forbids this seam
     # a UNIQUE module name per run: `importlib.import_module` caches by name, so a fixed name would hand a later test
@@ -208,7 +208,7 @@ def test_the_formal_entry_seals_a_closed_batch_with_no_driver_and_no_provider_se
 def test_the_formal_path_exposes_the_missing_calibration_by_name(tmp_path, monkeypatch):
     """A missing parameter must be named as itself - the verdict's 'the same path must expose missing parameters'."""
 
-    from so101_demo.act.task8_production_composition import ProductionCompositionError
+    from so101_demo.act.calibration_production_composition import ProductionCompositionError
 
     measure, argv = _formal_run(tmp_path, monkeypatch)
     # drop the one thing the composition validates first, and require the refusal to SAY SO

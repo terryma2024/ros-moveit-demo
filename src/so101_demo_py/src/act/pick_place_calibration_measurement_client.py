@@ -1,6 +1,6 @@
 """P1-1: the PRODUCTION low-level client the default composition needs, over the real MuJoCo scene.
 
-The composition's `Task8StackAdapter` delegates to exactly these methods - ``launch``, ``close``, ``cleanup``,
+The composition's `PickPlaceValidationStackAdapter` delegates to exactly these methods - ``launch``, ``close``, ``cleanup``,
 ``readback``, ``run_search``, ``camera_info``, ``tf``, ``probe``, plus ``frame``, ``neck_feedback`` and ``command`` that
 the controller adapter calls. Until now every implementation of that surface lived in a test file, which is what the
 verdict named: *"接通正式 builder 的真实 io_client/phase_path/trajectory"*.
@@ -281,7 +281,7 @@ class MujocoMeasurementClient:
 
     def _occluders(self) -> list[dict]:
         try:
-            from so101_demo.act.task8_bottom_io import occluder_geometry_from_model
+            from so101_demo.act.pick_place_calibration_bottom_io import occluder_geometry_from_model
 
             geometry = occluder_geometry_from_model(self.scene_path)
         except Exception:

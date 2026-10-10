@@ -17,13 +17,13 @@ DOCUMENTS = ("head-search-qualification.json", "task8-ready-support.json", "task
 
 
 def _render():
-    from so101_demo.act.task8_calibration_aggregator import render_task8_calibration, publish_task8_calibration
+    from so101_demo.act.pick_place_calibration_aggregator import render_pick_place_calibration, publish_pick_place_calibration
 
-    return render_task8_calibration, publish_task8_calibration
+    return render_pick_place_calibration, publish_pick_place_calibration
 
 
 def _contract():
-    from so101_demo.act.task8_measurement_schema import load_contract
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 
     return load_contract()
 

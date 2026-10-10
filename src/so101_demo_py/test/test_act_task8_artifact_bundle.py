@@ -65,10 +65,10 @@ class ValidInputs:
 
 
 def _inputs(tmp_path):
-    from so101_demo.act.task8_artifact_bundle import Task8ArtifactInputs
+    from so101_demo.act.pick_place_validation_artifact_bundle import PickPlaceValidationArtifactInputs
 
     source = ValidInputs(tmp_path / "evidence")
-    return Task8ArtifactInputs(
+    return PickPlaceValidationArtifactInputs(
         source_root=tmp_path / "repo", install_overlay=tmp_path / "install",
         source_provenance=source.paths["source_provenance"],
         runtime_config=source.paths["runtime_config"],
@@ -87,23 +87,23 @@ def valid_inputs(tmp_path):
 
 
 def test_committed_bundle_survives_source_evidence_becoming_unavailable(valid_inputs, tmp_path):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
-    receipt = prepare_task8_bundle(valid_inputs, tmp_path / "bundle-001")
+    receipt = prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-001")
     assert Path(receipt).name == "preparation-receipt.json"
     original = valid_inputs.calibration_report.parent
     original.rename(tmp_path / "old-evidence-unavailable")
-    verified = verify_prepared_task8_bundle(receipt)
+    verified = verify_prepared_pick_place_validation_bundle(receipt)
     assert Path(verified.calibration_report).parent == Path(receipt).parent
     assert Path(verified.calibration_report).is_file()
 
 
 def test_bundle_without_receipt_is_never_admitted(valid_inputs, tmp_path, monkeypatch):
-    import so101_demo.act.task8_artifact_bundle as bundle_module
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    import so101_demo.act.pick_place_validation_artifact_bundle as bundle_module
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
     def fail_publish(*_args, **_kwargs):
@@ -112,50 +112,50 @@ def test_bundle_without_receipt_is_never_admitted(valid_inputs, tmp_path, monkey
     monkeypatch.setattr(bundle_module, "_publish_receipt", fail_publish)
     root = tmp_path / "bundle-002"
     with pytest.raises(OSError):
-        prepare_task8_bundle(valid_inputs, root)
+        prepare_pick_place_validation_bundle(valid_inputs, root)
     assert not (root / "preparation-receipt.json").exists()
     monkeypatch.undo()
     with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
-        verify_prepared_task8_bundle(root / "preparation-receipt.json")
+        verify_prepared_pick_place_validation_bundle(root / "preparation-receipt.json")
 
 
 def test_receipt_records_every_artifact_hash_and_identity(valid_inputs, tmp_path):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
-    receipt = Path(prepare_task8_bundle(valid_inputs, tmp_path / "bundle-003"))
+    receipt = Path(prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-003"))
     document = json.loads(receipt.read_text())
     assert document["kind"] == "task8_preparation_receipt"
     assert set(document["artifacts"]) == set(ARTIFACTS)
     for name, entry in document["artifacts"].items():
         bundled = receipt.parent / entry["relative_path"]
         assert bundled.is_file() and _sha(bundled) == entry["sha256"]
-        # each artifact is its own Task8ArtifactInputs field, not a dict entry
+        # each artifact is its own PickPlaceValidationArtifactInputs field, not a dict entry
         assert entry["source_sha256"] == _sha(Path(getattr(valid_inputs, name)))
     assert document["identities"] == valid_inputs.identities
-    assert verify_prepared_task8_bundle(receipt)
+    assert verify_prepared_pick_place_validation_bundle(receipt)
 
 
 def test_tampered_bundle_artifact_is_refused(valid_inputs, tmp_path):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
-    receipt = Path(prepare_task8_bundle(valid_inputs, tmp_path / "bundle-004"))
+    receipt = Path(prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-004"))
     document = json.loads(receipt.read_text())
     target = receipt.parent / document["artifacts"]["calibration_report"]["relative_path"]
     target.write_bytes(target.read_bytes() + b" ")
     with pytest.raises(ValueError):
-        verify_prepared_task8_bundle(receipt)
+        verify_prepared_pick_place_validation_bundle(receipt)
 
 
 def test_startup_validation_is_pure_and_acquires_nothing(valid_inputs, tmp_path, monkeypatch):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, validate_task8_startup_artifacts,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, validate_pick_place_validation_startup_artifacts,
     )
 
-    receipt = prepare_task8_bundle(valid_inputs, tmp_path / "bundle-005")
+    receipt = prepare_pick_place_validation_bundle(valid_inputs, tmp_path / "bundle-005")
     calls = []
 
     class Spy:
@@ -172,72 +172,72 @@ def test_startup_validation_is_pure_and_acquires_nothing(valid_inputs, tmp_path,
                         lambda *a, **k: calls.append("compose"), raising=False)
     payload = {"preparation_receipt_path": str(receipt),
                "preparation_receipt_sha256": _sha(Path(receipt))}
-    verified = validate_task8_startup_artifacts(payload)
+    verified = validate_pick_place_validation_startup_artifacts(payload)
     assert Path(verified.calibration_report).is_file()
     assert calls == []
 
 
 def test_validate_cli_reports_the_bundle_and_refuses_a_bare_directory(tmp_path):
-    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
-    from so101_demo.cli import act_validate_task8_artifacts as validate_cli
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
+    from so101_demo.cli import act_validate_pick_place_validation_artifacts as validate_cli
 
     inputs = _inputs(tmp_path)
-    receipt = prepare_task8_bundle(inputs, tmp_path / "bundle-cli")
+    receipt = prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle-cli")
     assert validate_cli.main(["--preparation-receipt", str(receipt)]) == 0
     with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
         validate_cli.main(["--preparation-receipt", str(tmp_path / "bundle-cli" / "missing.json")])
 
 
 def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, task8_bundle_payload,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, pick_place_validation_bundle_payload,
     )
 
-    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle-payload")
-    payload = task8_bundle_payload(receipt)
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle-payload")
+    payload = pick_place_validation_bundle_payload(receipt)
     assert set(payload) == {"preparation_receipt_path", "preparation_receipt_sha256"}
     assert payload["preparation_receipt_path"] == str(receipt)
     assert payload["preparation_receipt_sha256"] == hashlib.sha256(receipt.read_bytes()).hexdigest()
     # an uncommitted or tampered bundle can never produce a payload
     with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
-        task8_bundle_payload(tmp_path / "bundle-payload" / "missing.json")
+        pick_place_validation_bundle_payload(tmp_path / "bundle-payload" / "missing.json")
     broken = tmp_path / "bundle-broken"
     broken.mkdir()
     (broken / "preparation-receipt.json").write_text("{}")
     with pytest.raises(ValueError):
-        task8_bundle_payload(broken / "preparation-receipt.json")
+        pick_place_validation_bundle_payload(broken / "preparation-receipt.json")
 
 
 def test_task8_payload_names_its_receipt_and_never_mixes_shapes(tmp_path):
-    from so101_demo.act.task8_artifact_bundle import require_task8_payload
+    from so101_demo.act.pick_place_validation_artifact_bundle import require_pick_place_validation_payload
 
     payload = {"preparation_receipt_path": "/run/bundle/preparation-receipt.json",
                "preparation_receipt_sha256": "a" * 64}
-    assert require_task8_payload(payload) == payload
+    assert require_pick_place_validation_payload(payload) == payload
     for broken in ({}, {"preparation_receipt_path": "/x"}, dict(payload, preparation_receipt_sha256="nope"),
                    dict(payload, preparation_receipt_path="relative/path")):
         with pytest.raises(ValueError, match="TASK8_PAYLOAD_INVALID"):
-            require_task8_payload(broken)
+            require_pick_place_validation_payload(broken)
     # a collection-only field in a Task 8 payload is refused, whichever side supplies the key list
     with pytest.raises(ValueError, match="TASK8_PAYLOAD_SHAPE_CONFLICT"):
-        require_task8_payload(dict(payload, collection_profile="formal"),
+        require_pick_place_validation_payload(dict(payload, collection_profile="formal"),
                               collection_only_keys=("collection_profile", "collection_output_root"))
 
 
 def test_startup_receipt_must_match_its_payload_digest(tmp_path):
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_task8_startup_receipt,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_pick_place_validation_startup_receipt,
     )
 
-    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle-startup")
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle-startup")
     payload = {"preparation_receipt_path": str(receipt),
                "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()}
-    bundle = verify_task8_startup_receipt(payload)
+    bundle = verify_pick_place_validation_startup_receipt(payload)
     assert Path(bundle.receipt) == receipt
     with pytest.raises(ValueError, match="TASK8_PREPARATION_RECEIPT_MISMATCH"):
-        verify_task8_startup_receipt(dict(payload, preparation_receipt_sha256="0" * 64))
+        verify_pick_place_validation_startup_receipt(dict(payload, preparation_receipt_sha256="0" * 64))
     with pytest.raises(ValueError, match="TASK8_PREPARATION_REQUIRED"):
-        verify_task8_startup_receipt(dict(payload,
+        verify_pick_place_validation_startup_receipt(dict(payload,
                                           preparation_receipt_path=str(tmp_path / "absent.json")))
 
 
@@ -281,7 +281,7 @@ def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
     from so101_demo.act.pick_place_validation_manifest import (
         ANCHOR_NAMES, build_pick_place_validation_manifest,
     )
-    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
 
     inputs = _inputs(tmp_path)
     identities = dict(inputs.identities)
@@ -295,7 +295,7 @@ def test_live_cli_plans_all_fourteen_journals_or_nothing(tmp_path, monkeypatch):
         collection_config_sha256=identities["act_profile_sha256"],
         contact_policy_fingerprint=identities["contact_policy_fingerprint"],
         calibration_report_path="calibration-report.json", calibration_report_sha256="e" * 64)))
-    receipt = prepare_task8_bundle(dataclasses.replace(inputs, manifest=manifest_path),
+    receipt = prepare_pick_place_validation_bundle(dataclasses.replace(inputs, manifest=manifest_path),
                                    tmp_path / "bundle-cli-plan")
     run_root = tmp_path / "run"
     (run_root / "task8-live" / "cases").mkdir(parents=True)

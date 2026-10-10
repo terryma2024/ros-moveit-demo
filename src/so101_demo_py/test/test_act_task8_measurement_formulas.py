@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.task8_measurement_schema import load_contract
+from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 
 CONTRACT = load_contract()
 HEAD_FIELDS = sorted(CONTRACT["measurements"])
@@ -26,7 +26,7 @@ FORBIDDEN_LABELS = ("qualified", "target_in_view", "contact_ok", "stop_confirmed
 
 
 def _formulas():
-    from so101_demo.act import task8_measurement_formulas as formulas
+    from so101_demo.act import pick_place_calibration_measurement_formulas as formulas
 
     return formulas
 

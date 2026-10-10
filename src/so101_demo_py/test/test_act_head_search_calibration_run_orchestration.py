@@ -58,7 +58,7 @@ from so101_demo.act.head_search_coarse_step_measurement import (
 from so101_demo.act.head_search_operating_point import record_selection_rule
 from so101_demo.act.head_search_search_params import CAL_TIMEOUT_UNBOUNDED
 from so101_demo.act.head_search_timing_params import CAL_FRESHNESS_EXCEEDED
-from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 GENERATION = "g1"

@@ -2008,7 +2008,7 @@ class RosDynamicMujocoExecution:
             raise RuntimeError("DYNAMIC_RELEASE_SOURCE_EXPIRED")
 
     def _require_supported_bilateral(self, source):
-        from ..act.task8_live_evidence import actual_table_support
+        from ..act.pick_place_live_evidence import actual_table_support
 
         _, distance = self._release_bounds()
         if (not actual_table_support(source, support_distance_max_m=distance)

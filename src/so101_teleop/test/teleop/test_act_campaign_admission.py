@@ -91,9 +91,9 @@ def _prepared_receipt(tmp_path):
         if str(directory) not in sys.path:
             sys.path.insert(0, str(directory))
     from test_act_task8_artifact_bundle import _inputs
-    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
 
-    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle")
     return receipt, hashlib.sha256(receipt.read_bytes()).hexdigest()
 
 
@@ -619,7 +619,7 @@ def test_formal_w8_rejects_a_self_declared_passed_json_without_independent_verif
     store = IntentStore.open(tmp_path / "state")
     try:
         service = _service(store)
-        # the refusal now comes from the independent verifier itself (so101_demo.act.w8_qualification):
+        # the refusal now comes from the independent verifier itself (so101_demo.act.parallel_qualification_verifier):
         # the self-declared document cites no re-derivable evidence, so it is refused as invalid evidence
         # rather than as a missing verifier. The test's point is unchanged: the document is rejected and
         # nothing is launched.

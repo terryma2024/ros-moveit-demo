@@ -14,7 +14,7 @@ POLICY_STATE = {"neck_start_rad": 0.1, "coarse_step_rad": 0.2, "horizontal_fov_r
 
 
 def _admission():
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 
     return CalibrationMeasurementAdmission(
         generation="g1", status="CALIBRATION_REQUIRED", measurement_plan_sha256=PLAN_SHA,
@@ -66,7 +66,7 @@ class _Receipt:
 
 
 def _context(**overrides):
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     arguments = {"generation": "g1", "contract_sha256": "a" * 64, "measurement_plan_sha256": PLAN_SHA,
                  "safe_interval_rad": SAFE_INTERVAL, "candidate_sha256": "b" * 64,
@@ -98,7 +98,7 @@ def _context(**overrides):
 
 
 def test_the_context_requires_an_entry_origin_resource_binding():
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     with pytest.raises(ValueError, match="RESOURCE_BINDING_REQUIRED"):
         _context(resource_binding={"bound_at_entry": False, "cpu_cores": 8, "gpu_device": 0})

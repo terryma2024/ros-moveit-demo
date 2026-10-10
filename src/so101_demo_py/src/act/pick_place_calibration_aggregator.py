@@ -1,10 +1,10 @@
-"""Derive Task 8 calibration verdicts from sealed raw evidence, never from labels.
+"""Derive pick-place calibration verdicts from sealed raw evidence, never from labels.
 
 A batch is only usable when it is sealed, its recorded file hashes still match, and every batch
 in the set shares one source provenance. Missing evidence is ``UNMEASURED``, out-of-contract
 evidence is ``FAIL``, a polluted batch is refused outright, and ``TASK8_READY`` is emitted only
 when fov/collision/search/synchronization/execution all PASS while release/retreat stay
-``UNMEASURED`` (Task 8P4 computes those from live journals).
+``UNMEASURED`` (the live qualification computes those from live journals).
 """
 
 from __future__ import annotations
@@ -78,13 +78,13 @@ def _write(path: Path, document: dict) -> Path:
     return path
 
 
-def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dict:
+def aggregate_pick_place_calibration(batch_roots, contract, output_root: Path) -> dict:
     """Aggregate sealed batches into the qualification sample, report and receipt."""
 
     # Boundary IV: one entry, and it begins with the strict closed-batch validation - a batch that is not closed,
     # carries a mixed contract, hides a symlink or an unindexed file, or was contaminated by a failed cleanup is
     # refused here, before a single canonical document exists
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
 
     indexes = [validate_closed_batch(Path(root)) for root in batch_roots]
     # section 4.2's readback: the descriptor the measurement ran under is read from the sealed, indexed evidence - never
@@ -114,7 +114,7 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     # could ever equal it - comparing against it made every batch the formal entry seals look foreign, and the only way
     # to satisfy it was to rewrite the member in a fixture. One rule end to end: the seal carries the admitted
     # ten-field identity, and `load_measurement_contract` already requires the document to carry the same one.
-    from so101_demo.act.task8_measurement_contract import (
+    from so101_demo.act.pick_place_calibration_measurement_contract import (
         IDENTITY_CONTRACT_MEMBER, admitted_identity, bound_document_digest,
     )
 
@@ -126,7 +126,7 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
             raise ValueError("CALIBRATION_IDENTITY_MISMATCH")
     # and every member must agree across roots, not only the provenance: two batches measured under different anchor
     # sets or camera matrices are not the same generation, however equal their provenance happens to be
-    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
+    from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES
 
     for name in MEASUREMENT_IDENTITIES:
         values = {identity.get(name) for _, identity in batches}
@@ -198,7 +198,7 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
     support_names = set(contract.get("support", {}))
     support_sample = None
     if sample is not None and support_names:
-        from so101_demo.act.task8_measurement_formulas import build_support_closed_sample
+        from so101_demo.act.pick_place_calibration_measurement_formulas import build_support_closed_sample
 
         support_document = build_support_closed_sample(
             support={name: _bare(readings["measurements"][name]) for name in sorted(support_names)
@@ -263,8 +263,8 @@ def aggregate_task8_calibration(batch_roots, contract, output_root: Path) -> dic
 def derive_field_verdicts(roots, contract: dict) -> dict:
     """Per-root, per-field verdicts recomputed from the sealed batch's raw records."""
 
-    from so101_demo.act.task8_measurement_formulas import compute_field, require_raw_inputs
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+    from so101_demo.act.pick_place_calibration_measurement_formulas import compute_field, require_raw_inputs
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
 
     per_root = {}
     for root in roots:
@@ -280,7 +280,7 @@ def derive_field_verdicts(roots, contract: dict) -> dict:
                     continue
                 # `threshold_source` is free text, not a controlled vocabulary: the contract says `"config"`,
                 # `"bound calibration-search config"`, and for the camera `"模型 FOV + tolerance"`. A threshold that
-                # comes from a CONFIG document is the one that is pending approval (CP-1789); one sourced from the
+                # comes from a CONFIG document is the one that is pending approval; one sourced from the
                 # model is not, and must still be measured.
                 threshold_source = contract[section][field].get("threshold_source") or ""
                 if ("config" in threshold_source.lower()
@@ -353,13 +353,13 @@ def derived_phase_camera_checks(replay_rows, live_frames, window_kind: str, matr
     never be presented as live-continuity success.
     """
 
-    from so101_demo.act.task8_phase_camera import evaluate_live_continuity, evaluate_replay_coverage
+    from so101_demo.act.pick_place_phase_camera import evaluate_live_continuity, evaluate_replay_coverage
 
     return {"replay_coverage": evaluate_replay_coverage(replay_rows, matrix),
             "live_continuity": evaluate_live_continuity(live_frames, window_kind, matrix)}
 
 
-# --- Task 6: deterministic rendering and publishing --------------------------------------------------------
+# --- deterministic rendering and publishing --------------------------------------------------------
 # One v2 sealed batch with exactly three anchors in canonical order renders four documents whose bytes depend only
 # on the batch, the contract and the caller's publication root. Only files registered in `batch.json.files` are ever
 # read; a label never influences a verdict, and a number change always changes the bytes.
@@ -415,7 +415,7 @@ def _read_indexed(root: Path, batch: dict) -> dict:
 def _field_verdicts(batch: dict, records: dict, contract: dict) -> dict:
     """Combine per-anchor verdicts: a field passes only when every anchor that measured it passes."""
 
-    from so101_demo.act.task8_measurement_formulas import compute_field
+    from so101_demo.act.pick_place_calibration_measurement_formulas import compute_field
 
     per_field = {}
     for relative, record in records.items():
@@ -447,7 +447,7 @@ def _split_fields(contract: dict, verdicts: dict) -> tuple:
     return head, support
 
 
-def render_task8_calibration(batch_root, contract: dict, publication_root) -> dict:
+def render_pick_place_calibration(batch_root, contract: dict, publication_root) -> dict:
     """Render the four documents as canonical bytes; nothing is written here."""
 
     root, publication = Path(batch_root), Path(publication_root)
@@ -487,7 +487,7 @@ def _unit_for(contract: dict, field: str) -> str:
     return ""
 
 
-def publish_task8_calibration(rendered, publication_root) -> dict:
+def publish_pick_place_calibration(rendered, publication_root) -> dict:
     """Write exactly those bytes, plus each receipt field's sample file, atomically."""
 
     publication = Path(publication_root)

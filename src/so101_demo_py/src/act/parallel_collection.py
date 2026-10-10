@@ -30,7 +30,7 @@ def partition_waves(scene_ids, *, max_wave_size: int = 20) -> tuple:
 
 
 QUALIFICATION_KINDS = frozenset({"W1", "W2", "W8"})
-_W8_SCENES = 40
+_EIGHT_WORKER_SCENES = 40
 
 
 def create_qualification_contract(path, *, payload: dict, kind: str) -> str:
@@ -108,7 +108,7 @@ def require_collection_mode(*, manifest_kind: str, qualification_mode: bool, con
         raise ValueError("FORMAL_MANIFEST_NOT_EXACT_W8")
     if not isinstance(contract, dict) or contract.get("revoked") is not False:
         raise ValueError("FORMAL_QUALIFICATION_CONTRACT_MISSING_OR_REVOKED")
-    if contract.get("scenes") != _W8_SCENES:
+    if contract.get("scenes") != _EIGHT_WORKER_SCENES:
         raise ValueError("FORMAL_QUALIFICATION_SCENE_COUNT_INVALID")
 
 

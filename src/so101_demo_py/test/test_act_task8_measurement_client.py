@@ -23,7 +23,7 @@ def _scene() -> Path:
 
 @pytest.fixture()
 def client():
-    from so101_demo.act.task8_measurement_client import MujocoMeasurementClient
+    from so101_demo.act.pick_place_calibration_measurement_client import MujocoMeasurementClient
 
     instance = MujocoMeasurementClient(scene_path=_scene(), session_id="session-p1-1", attempt_id="attempt-p1-1")
     yield instance

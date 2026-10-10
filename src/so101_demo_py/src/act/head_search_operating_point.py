@@ -194,7 +194,7 @@ def _geometry(detection: Mapping) -> tuple[float | None, float | None]:
     """The `(area_px2, aspect)` the detection's record supports, each `None` when it is undeclared.
 
     The aspect is height over width, the convention the repository's own formula layer uses for a cup
-    bbox (`task8_measurement_formulas._aspect`), so a floor of 1.15 keeps cups and drops wide clutter.
+    bbox (`pick_place_calibration_measurement_formulas._aspect`), so a floor of 1.15 keeps cups and drops wide clutter.
     """
 
     width, height = detection.get("w"), detection.get("h")

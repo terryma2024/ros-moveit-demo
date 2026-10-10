@@ -1,4 +1,4 @@
-"""Publish and verify a self-contained Task 8 artifact bundle.
+"""Publish and verify a self-contained pick-place validation artifact bundle.
 
 A bundle is admitted only through its atomically published ``preparation-receipt.json``: the
 receipt records every business artifact's bundled and source hash plus the frozen identities, and
@@ -29,7 +29,7 @@ _IDENTITIES = ("source_provenance_sha256", "runtime_config_sha256", "anchors_sha
 
 
 @dataclass(frozen=True)
-class Task8ArtifactInputs:
+class PickPlaceValidationArtifactInputs:
     source_root: Path
     install_overlay: Path
     source_provenance: Path
@@ -46,7 +46,7 @@ class Task8ArtifactInputs:
 
 
 @dataclass(frozen=True)
-class PreparedTask8Bundle:
+class PreparedPickPlaceValidationBundle:
     receipt: Path
     source_provenance: Path
     manifest: Path
@@ -134,7 +134,7 @@ def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> N
     """Approved preparation design section 4.2: the runtime config is parsed, never bound as opaque bytes.
 
     Reuses the production validator's own reading of the descriptor, and adds the CUDA policy that section 4.2 states:
-    Task 8 live requests CUDA with allow_cpu_fallback false, and a resource shortage is a human decision rather than a
+    Pick-place validation requests CUDA with allow_cpu_fallback false, and a resource shortage is a human decision rather than a
     silent recovery on CPU.
     """
 
@@ -144,15 +144,15 @@ def _require_runtime_descriptor(runtime_path: Path, calibration_path: Path) -> N
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("TASK8_PREPARATION_RUNTIME_CONFIG_INVALID") from error
     require_runtime_descriptor(runtime)
-    # the full runtime/report pairing is the aggregator's check (measurement design section 8, proven at CP-1122);
+    # the full runtime/report pairing is the aggregator's check;
     # demanding a fully bound report here would make every bundle fixture carry a measured calibration, which is a
     # different decision taken at a different boundary
     del calibration_path
 
-def prepare_task8_bundle(inputs: Task8ArtifactInputs, bundle_root: Path) -> Path:
+def prepare_pick_place_validation_bundle(inputs: PickPlaceValidationArtifactInputs, bundle_root: Path) -> Path:
     """Copy every business artifact into one bundle and commit its receipt."""
 
-    if not isinstance(inputs, Task8ArtifactInputs):
+    if not isinstance(inputs, PickPlaceValidationArtifactInputs):
         raise ValueError("TASK8_PREPARATION_INPUTS_INVALID")
     if (type(inputs.identities) is not dict
             or tuple(sorted(inputs.identities)) != tuple(sorted(_IDENTITIES))
@@ -195,7 +195,7 @@ def prepare_task8_bundle(inputs: Task8ArtifactInputs, bundle_root: Path) -> Path
     return _publish_receipt(document, bundle_root / RECEIPT_NAME)
 
 
-def verify_prepared_task8_bundle(receipt_path: Path) -> PreparedTask8Bundle:
+def verify_prepared_pick_place_validation_bundle(receipt_path: Path) -> PreparedPickPlaceValidationBundle:
     """Re-derive the bundle from its own copies; the source evidence tree is not consulted."""
 
     receipt_path = Path(receipt_path)
@@ -235,12 +235,12 @@ def verify_prepared_task8_bundle(receipt_path: Path) -> PreparedTask8Bundle:
     _regular(manifest_target, "TASK8_PREPARATION_ARTIFACT_MISSING")
     if _digest(manifest_target) != document["manifest_sha256"]:
         raise ValueError("TASK8_PREPARATION_ARTIFACT_DIRTY")
-    return PreparedTask8Bundle(
+    return PreparedPickPlaceValidationBundle(
         receipt=receipt_path, manifest=manifest_target,
         identities=dict(document["identities"]), **resolved)
 
 
-def validate_task8_startup_artifacts(payload) -> PreparedTask8Bundle:
+def validate_pick_place_validation_startup_artifacts(payload) -> PreparedPickPlaceValidationBundle:
     """Pure read-only validation: no lease, no worker, no broker, no ROS child."""
 
     if not isinstance(payload, dict):
@@ -257,11 +257,11 @@ def validate_task8_startup_artifacts(payload) -> PreparedTask8Bundle:
     _regular(receipt_path, "TASK8_PREPARATION_REQUIRED")
     if _digest(receipt_path) != digest:
         raise ValueError("TASK8_PREPARATION_RECEIPT_INVALID")
-    return verify_prepared_task8_bundle(receipt_path)
+    return verify_prepared_pick_place_validation_bundle(receipt_path)
 
 
-def task8_bundle_payload(receipt_path: Path) -> dict:
-    """The two production payload fields a Task 8 run carries for its committed bundle.
+def pick_place_validation_bundle_payload(receipt_path: Path) -> dict:
+    """The two production payload fields a pick-place validation run carries for its committed bundle.
 
     The receipt is verified first, so a payload can never point at an uncommitted or tampered
     bundle; the digest is taken over the receipt's raw bytes, which is what admission re-checks.
@@ -270,16 +270,16 @@ def task8_bundle_payload(receipt_path: Path) -> dict:
     receipt_path = Path(receipt_path)
     if not receipt_path.is_absolute() or ".." in receipt_path.parts:
         raise ValueError("TASK8_PREPARATION_REQUIRED")
-    verify_prepared_task8_bundle(receipt_path)
+    verify_prepared_pick_place_validation_bundle(receipt_path)
     return {"preparation_receipt_path": str(receipt_path),
             "preparation_receipt_sha256": _digest(receipt_path)}
 
 
-_TASK8_PAYLOAD_KEYS = ("preparation_receipt_path", "preparation_receipt_sha256")
+_PICK_PLACE_VALIDATION_PAYLOAD_KEYS = ("preparation_receipt_path", "preparation_receipt_sha256")
 
 
-def require_task8_payload(payload: dict, *, collection_only_keys=()) -> dict:
-    """A Task 8 run's payload names its receipt and carries no collection-only field.
+def require_pick_place_validation_payload(payload: dict, *, collection_only_keys=()) -> dict:
+    """A pick-place validation run's payload names its receipt and carries no collection-only field.
 
     The two shapes are closed and exclusive: a payload that mixes them would leave admission unable
     to decide which lifecycle it is authorising, so mixing is refused rather than resolved by
@@ -288,7 +288,7 @@ def require_task8_payload(payload: dict, *, collection_only_keys=()) -> dict:
 
     if type(payload) is not dict:
         raise ValueError("TASK8_PAYLOAD_INVALID")
-    if any(key not in payload for key in _TASK8_PAYLOAD_KEYS):
+    if any(key not in payload for key in _PICK_PLACE_VALIDATION_PAYLOAD_KEYS):
         raise ValueError("TASK8_PAYLOAD_INVALID")
     path = payload["preparation_receipt_path"]
     if not isinstance(path, str) or not path.startswith("/"):
@@ -301,17 +301,17 @@ def require_task8_payload(payload: dict, *, collection_only_keys=()) -> dict:
     return dict(payload)
 
 
-def verify_task8_startup_receipt(payload: dict, *, collection_only_keys=()) -> PreparedTask8Bundle:
+def verify_pick_place_validation_startup_receipt(payload: dict, *, collection_only_keys=()) -> PreparedPickPlaceValidationBundle:
     """Verify the payload's receipt and bundle before any resource is acquired.
 
     The payload's digest must match the receipt's raw bytes, and the receipt must verify as a
     committed bundle; only then is the returned bundle safe to build an `ActArtifactBinding` from.
     """
 
-    payload = require_task8_payload(payload, collection_only_keys=collection_only_keys)
+    payload = require_pick_place_validation_payload(payload, collection_only_keys=collection_only_keys)
     receipt = Path(payload["preparation_receipt_path"])
     if not receipt.is_file():
         raise ValueError("TASK8_PREPARATION_REQUIRED")
     if _digest(receipt) != payload["preparation_receipt_sha256"]:
         raise ValueError("TASK8_PREPARATION_RECEIPT_MISMATCH")
-    return verify_prepared_task8_bundle(receipt)
+    return verify_prepared_pick_place_validation_bundle(receipt)

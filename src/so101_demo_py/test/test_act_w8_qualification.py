@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.w8_qualification import verify_w8_qualification
+from so101_demo.act.parallel_qualification_verifier import verify_eight_worker_qualification
 
 
 def _document(tmp_path, **overrides):
@@ -39,7 +39,7 @@ def _document(tmp_path, **overrides):
 
 def test_a_document_whose_evidence_re_derives_verifies(tmp_path):
     path, _root = _document(tmp_path)
-    assert verify_w8_qualification(path, {}) is True
+    assert verify_eight_worker_qualification(path, {}) is True
 
 
 @pytest.mark.parametrize("mutation,code", [
@@ -61,12 +61,12 @@ def test_the_verifier_refuses_what_it_cannot_re_derive(tmp_path, mutation, code)
     mutation(document, root)
     path.write_text(json.dumps(document))
     with pytest.raises(ValueError, match=code):
-        verify_w8_qualification(path, {})
+        verify_eight_worker_qualification(path, {})
 
 
 def test_a_missing_document_refuses(tmp_path):
     with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_INVALID"):
-        verify_w8_qualification(tmp_path / "absent.json", {})
+        verify_eight_worker_qualification(tmp_path / "absent.json", {})
 
 
 @pytest.mark.parametrize("payload,code", [
@@ -82,7 +82,7 @@ def test_a_named_bundle_that_cannot_be_opened_refuses(tmp_path, payload, code):
 
     path, _root = _document(tmp_path)
     with pytest.raises(ValueError, match=code):
-        verify_w8_qualification(path, payload)
+        verify_eight_worker_qualification(path, payload)
 
 
 def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consumes(tmp_path):
@@ -90,13 +90,13 @@ def test_a_prepared_bundle_yields_the_identities_and_manifest_the_verifier_consu
 
     from test_act_task8_artifact_bundle import _inputs
 
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
-    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle")
     assert receipt.is_file()
-    bundle = verify_prepared_task8_bundle(receipt)
+    bundle = verify_prepared_pick_place_validation_bundle(receipt)
     assert Path(bundle.manifest).is_file()
     assert set(bundle.identities) == {"source_provenance_sha256", "runtime_config_sha256",
                                       "anchors_sha256", "contact_policy_fingerprint",
@@ -108,15 +108,15 @@ def test_journal_rows_for_a_prepared_bundle_can_be_built_and_match_it(tmp_path):
 
     from test_act_task8_artifact_bundle import _inputs
 
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         case_row_to_journal_row, require_case_row_matches_bundle,
     )
 
-    receipt = prepare_task8_bundle(_inputs(tmp_path), tmp_path / "bundle")
-    bundle = verify_prepared_task8_bundle(receipt)
+    receipt = prepare_pick_place_validation_bundle(_inputs(tmp_path), tmp_path / "bundle")
+    bundle = verify_prepared_pick_place_validation_bundle(receipt)
     manifest = json.loads(Path(bundle.manifest).read_bytes())
     document_sha = manifest["manifest_document_sha256"]
     evidence = tmp_path / "full-01.json"
@@ -151,10 +151,10 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
 
     from test_act_task8_artifact_bundle import _inputs
 
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         case_row_to_journal_row, require_case_row_matches_bundle,
     )
 
@@ -166,8 +166,8 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
         "schema_version": 2, "kind": "ACT_TASK8_LIVE", "manifest_sha256": "f" * 64,
         "prefix_cases": [{"case_id": case_id} for case_id in prefixes],
         "full_cases": [{"case_id": case_id} for case_id in fulls]}))
-    receipt = prepare_task8_bundle(inputs, tmp_path / "bundle")
-    bundle = verify_prepared_task8_bundle(receipt)
+    receipt = prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle")
+    bundle = verify_prepared_pick_place_validation_bundle(receipt)
     manifest = json.loads(Path(bundle.manifest).read_bytes())
     document_sha = manifest["manifest_document_sha256"]
     case_root = tmp_path / "campaign"
@@ -212,9 +212,9 @@ def test_a_qualified_document_over_a_prepared_bundle_and_fourteen_journals_verif
     path = tmp_path / "qualified.json"
     path.write_text(json.dumps(document))
     payload = {"preparation_receipt_path": str(receipt), "manifest_path": str(bundle.manifest)}
-    assert verify_w8_qualification(path, payload) is True
+    assert verify_eight_worker_qualification(path, payload) is True
     # one variable: a journal edited after sealing is no longer the one the document cites
     sealed = cases / f"{fulls[0]}.json"
     sealed.write_bytes(sealed.read_bytes().replace(b'"PASSED"', b'"FAILED"'))
     with pytest.raises(ValueError, match="W8_QUALIFICATION_EVIDENCE_MISMATCH"):
-        verify_w8_qualification(path, payload)
+        verify_eight_worker_qualification(path, payload)

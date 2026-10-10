@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 
-from so101_demo.act.task8_phase_camera_sampler import (  # noqa: E402
+from so101_demo.act.pick_place_phase_camera_sampler import (  # noqa: E402
     MIN_SAMPLES_PER_ANCHOR, PhaseCameraSamplingError, build_phase_camera_matrix,
     sample_phase_camera_geometry,
 )

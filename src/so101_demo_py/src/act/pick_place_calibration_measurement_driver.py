@@ -1,4 +1,4 @@
-"""Task 5: the production MuJoCo measurement driver.
+"""The production MuJoCo measurement driver.
 
 For each anchor in order (default, left, forward) the driver brings up exactly one stack, resets to the anchor's
 own FULL_RESTART identity, collects raw camera/detector/TF/controller/MuJoCo records, and closes the stack before
@@ -37,7 +37,7 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-class Task8MujocoMeasurementDriver:
+class PickPlaceCalibrationMujocoMeasurementDriver:
     """Orchestrates three anchor acquisitions; dependencies are injected so unit tests launch no real stack."""
 
     def __init__(self, *, stack, clock, detector, controller, phase_camera, identity,
@@ -47,7 +47,7 @@ class Task8MujocoMeasurementDriver:
         self.detector = detector
         self.controller = controller
         self.phase_camera = phase_camera
-        from so101_demo.act.task8_measurement_schema import MeasurementIdentity
+        from so101_demo.act.pick_place_calibration_measurement_schema import MeasurementIdentity
 
         # Astra item 3: the identity is the schema's ten-member document, passed in rather than invented
         self.identity = MeasurementIdentity.require(identity)
@@ -231,7 +231,7 @@ class Task8MujocoMeasurementDriver:
             if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
                 x1, y1, x2, y2 = (float(value) for value in bbox)
                 boxes.append({"x1": x1, "y1": y1, "x2": x2, "y2": y2, "accepted": True})
-        from so101_demo.act.task8_measurement_formulas import BBOX_EVIDENCE_FIELDS
+        from so101_demo.act.pick_place_calibration_measurement_formulas import BBOX_EVIDENCE_FIELDS
 
         # the camera evidence: the admitted camera block's own horizontal FOV, which is what the FOV field is
         # measured against (its `threshold_source` is the model's FOV, not a pending config value)
@@ -260,7 +260,7 @@ class Task8MujocoMeasurementDriver:
         # ONLY the fields this measurement truly produced, under the names whose formula reads them: the bbox
         # evidence goes to `BBOX_EVIDENCE_FIELDS`. Emitting it under EVERY declared field - which is what this did
         # first - made fields look measured whose evidence a calibration head search produces and this chain does not;
-        # those are now simply absent, and the aggregator reports them UNMEASURED (the owner's disposition, CP-1789).
+        # those are now simply absent, and the aggregator reports them UNMEASURED.
         for field in BBOX_EVIDENCE_FIELDS:
             if boxes and field in measurements_section:
                 measurements[field] = boxes
@@ -300,8 +300,8 @@ class Task8MujocoMeasurementDriver:
 
     def _seal(self, root: Path, context, anchors: list, *, status: str, error_code,
               cleanup=None, contamination=None) -> Path:
-        from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-        from so101_demo.act.task8_measurement_schema import BATCH_KIND, write_closed_json
+        from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+        from so101_demo.act.pick_place_calibration_measurement_schema import BATCH_KIND, write_closed_json
 
         # Astra item 3: this is the ONE seal owner, and its document is the schema's, not a private shape
         # Astra item 3: the provenance rows are the driver's own record and cannot live in the sealed document
@@ -337,4 +337,4 @@ def production_driver(**overrides):
     missing = [name for name in required if name not in overrides]
     if missing:
         raise ValueError(f"PRODUCTION_DRIVER_WIRING_PENDING: {missing[0]}")
-    return Task8MujocoMeasurementDriver(**overrides)
+    return PickPlaceCalibrationMujocoMeasurementDriver(**overrides)

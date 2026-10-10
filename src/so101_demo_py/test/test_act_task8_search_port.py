@@ -48,9 +48,9 @@ def bind(port):
 def _p13_window(tmp_path):
     """A real window and recorder for the case, so the port's own feed can be observed."""
 
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow, PickPlaceLiveEvidenceRecorder
 
-    recorder = Task8LiveEvidenceRecorder(case_id="prefix-01", evidence_root=tmp_path,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="prefix-01", evidence_root=tmp_path,
                                          session_id=SESSION, attempt_id=ATTEMPT)
     window = LiveEvidenceWindow(
         recorder,

@@ -37,7 +37,7 @@ from so101_demo.act.head_search_calibration_inputs import (
     CalibrationInputsRefused,
 )
 from so101_demo.act.search import HeadSearchController
-from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 FOVY_RAD = 1.0471975511965976

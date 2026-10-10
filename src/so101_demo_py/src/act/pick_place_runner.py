@@ -27,7 +27,7 @@ class PickPlaceExecutionPort(Protocol):
     def safe_stop(self, reason: str, request: dict) -> bool: ...
 
 
-#: the only nested records the raw block may carry, by their ratified names (CP-2115)
+#: the only nested records the raw block may carry, by their ratified names
 _RAW_RECORD_KEYS = ("planning_scene_observation", "controller_feedback")
 
 
@@ -108,7 +108,7 @@ class PickPlaceRunner:
                 # the source contract also carries names, such as the contact geometry list
                 continue
             if isinstance(value, dict) and key in _RAW_RECORD_KEYS and value:
-                # the ratified typed records travel inside the raw block (F12/CP-2115); every other key keeps
+                # the ratified typed records travel inside the raw block; every other key keeps
                 # the flat rule above, and the common audit validates these records strictly for itself
                 continue
             if isinstance(value, str) and value:

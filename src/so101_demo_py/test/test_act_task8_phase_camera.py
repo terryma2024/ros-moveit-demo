@@ -40,7 +40,7 @@ def _live_frame(**overrides):
 
 
 def _phase_camera():
-    from so101_demo.act import task8_phase_camera as module
+    from so101_demo.act import pick_place_phase_camera as module
 
     return module
 
@@ -127,7 +127,7 @@ def test_other_or_unknown_owners_are_rejected(owner):
 
 
 def test_the_aggregator_hook_keeps_replay_and_live_results_separate():
-    from so101_demo.act.task8_calibration_aggregator import derived_phase_camera_checks
+    from so101_demo.act.pick_place_calibration_aggregator import derived_phase_camera_checks
 
     replay_rows = [{"phase": phase, "camera": camera, "monotonic_s": 0.0, "visible_fraction": 0.9,
                     "out_of_frame_fraction": 0.0, "bbox_center_px": [320.0, 240.0]}

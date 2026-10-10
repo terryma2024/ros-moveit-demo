@@ -1,4 +1,4 @@
-"""Task 8P4: derive a `QUALIFIED` calibration report from a complete live campaign.
+"""Derive a `QUALIFIED` calibration report from a complete live campaign.
 
 Nothing here trusts a status: the campaign summary, every case journal, both retirement receipts
 and the release/retreat samples are re-checked, and a failure leaves no `QUALIFIED` behind. The
@@ -117,7 +117,7 @@ def validate_case_journals(case_root: Path, manifest: dict, *, identities: dict,
 
     import json
 
-    from .task8_live_evidence import (
+    from .pick_place_live_evidence import (
         require_campaign_cases, require_case_journal_row, require_case_row_matches_bundle,
     )
 
@@ -147,7 +147,7 @@ _READY_KEYS = frozenset({"schema_version", "status", "source_commit", "config_sh
 _QUALIFICATION_CHECKS = ("fov", "collision", "search", "synchronization", "execution")
 
 
-def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: Path,
+def build_pick_place_validation_qualified_report(calibration_ready_report: Path, preparation_receipt: Path,
                                  campaign_result: Path, case_root: Path, output: Path, *,
                                  live_extractors=None, contract=None) -> Path:
     """Upgrade a `TASK8_READY` report to `QUALIFIED` from a complete live campaign.
@@ -158,12 +158,12 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
 
     import json
 
-    from .task8_artifact_bundle import verify_prepared_task8_bundle
+    from .pick_place_validation_artifact_bundle import verify_prepared_pick_place_validation_bundle
 
     output = Path(output)
     if output.exists() or output.is_symlink():
         raise ValueError("TASK8_QUALIFICATION_OUTPUT_EXISTS")
-    ready_path = require_regular_file(Path(task8_ready_report),
+    ready_path = require_regular_file(Path(calibration_ready_report),
                                       "TASK8_QUALIFICATION_READY_MISSING")
     try:
         ready = json.loads(ready_path.read_bytes())
@@ -178,7 +178,7 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
     if checks.get("release") != "UNMEASURED" or checks.get("retreat") != "UNMEASURED":
         raise ValueError("TASK8_QUALIFICATION_CHECKS_INCOMPLETE")
 
-    bundle = verify_prepared_task8_bundle(Path(preparation_receipt))
+    bundle = verify_prepared_pick_place_validation_bundle(Path(preparation_receipt))
     identities = bundle.identities
     try:
         manifest = json.loads(require_regular_file(
@@ -232,7 +232,7 @@ def build_task8_qualified_report(task8_ready_report: Path, preparation_receipt: 
     return output
 
 
-# --- protocol v2 (Task 8): the five live-only fields -------------------------------------------------------
+# --- the five live-only fields -------------------------------------------------------
 # Each field's extrema direction is fixed by the approved plan: the occlusion window and the cup support distance
 # take the maximum across the five runs, while the three stability/distance fields take the minimum. The cup support
 # distance additionally has a raw rule: when a run carries the frames before its first open in the release epoch,

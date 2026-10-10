@@ -2,7 +2,7 @@
 
 import json
 
-from so101_demo.act import task8_artifact_bundle as module
+from so101_demo.act import pick_place_validation_artifact_bundle as module
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT

@@ -12,7 +12,7 @@ from pathlib import Path
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="Build a QUALIFIED Task 8 calibration report from live campaign evidence")
+        description="Build a QUALIFIED pick-place calibration report from live campaign evidence")
     parser.add_argument("--task8-ready", type=Path, required=True)
     parser.add_argument("--preparation-receipt", type=Path, required=True)
     parser.add_argument("--campaign-result", type=Path, required=True)
@@ -20,9 +20,9 @@ def main(argv=None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
 
-    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+    from so101_demo.act.pick_place_live_qualification import build_pick_place_validation_qualified_report
 
-    print(build_task8_qualified_report(args.task8_ready, args.preparation_receipt,
+    print(build_pick_place_validation_qualified_report(args.task8_ready, args.preparation_receipt,
                                        args.campaign_result, args.case_root, args.output))
     return 0
 

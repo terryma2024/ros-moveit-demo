@@ -35,7 +35,7 @@ def occluder_geometry_from_model(scene_path, names=None, *, joints_rad=None) -> 
 
     import mujoco
 
-    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+    from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS
 
     wanted = tuple(EXPECTED_OCCLUDERS if names is None else names)
     scene = Path(scene_path)
@@ -71,7 +71,7 @@ class ModelFrameSource:
     """The detector's frame source: the model's own camera, rendered headless.
 
     P1-1 (rereview 5): the seam's `frame_source(request)` returns `object()` and records the call, so the detector is
-    handed something no model produced. The composition can do better - CP-1798 proved a headless EGL context renders
+    handed something no model produced. The composition can do better - a headless EGL context renders
     `head_camera` at the admitted 640x480 into a real image here - so this renders the camera the request names and
     returns the frame.
 

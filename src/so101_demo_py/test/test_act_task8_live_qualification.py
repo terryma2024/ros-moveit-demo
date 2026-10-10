@@ -24,7 +24,7 @@ def _sample(tmp_path, name="release.json"):
 
 
 def test_campaign_summary_requires_passed_complete_and_consecutive():
-    from so101_demo.act.task8_live_qualification import validate_campaign_summary
+    from so101_demo.act.pick_place_live_qualification import validate_campaign_summary
 
     assert validate_campaign_summary(_summary())["status"] == "PASSED"
     for broken, code in ((_summary(status="FAILED"), "TASK8_QUALIFICATION_NOT_PASSED"),
@@ -42,7 +42,7 @@ def test_campaign_summary_requires_passed_complete_and_consecutive():
 
 
 def test_release_sample_requires_support_then_contact_loss_and_a_real_file(tmp_path):
-    from so101_demo.act.task8_live_qualification import validate_release_sample
+    from so101_demo.act.pick_place_live_qualification import validate_release_sample
 
     sample = dict(_sample(tmp_path), supported_before_open=True, contact_lost_after_open=True,
                   stable_window_s=0.5)
@@ -58,7 +58,7 @@ def test_release_sample_requires_support_then_contact_loss_and_a_real_file(tmp_p
 
 
 def test_retreat_sample_requires_distance_stability_and_the_deadline(tmp_path):
-    from so101_demo.act.task8_live_qualification import validate_retreat_sample
+    from so101_demo.act.pick_place_live_qualification import validate_retreat_sample
 
     sample = dict(_sample(tmp_path, "retreat.json"), retreat_distance_m=0.06, target_stable=True,
                   completed_s=12.5)
@@ -104,7 +104,7 @@ def _write_journals(root, identity, manifest_document_sha256, *, skip=None, muta
 
 
 def test_all_fourteen_journals_must_exist_and_match_the_bundle(tmp_path):
-    from so101_demo.act.task8_live_qualification import validate_case_journals
+    from so101_demo.act.pick_place_live_qualification import validate_case_journals
 
     identity = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
                 "contact_policy_fingerprint": "a" * 64}
@@ -125,7 +125,7 @@ def test_all_fourteen_journals_must_exist_and_match_the_bundle(tmp_path):
     (None, ("full-01", {"stack_retirement_receipt_sha256": "nope"}), "TASK8_JOURNAL_HASH_INVALID"),
 ])
 def test_incomplete_or_foreign_journals_refuse_qualification(tmp_path, skip, mutate, code):
-    from so101_demo.act.task8_live_qualification import validate_case_journals
+    from so101_demo.act.pick_place_live_qualification import validate_case_journals
 
     identity = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
                 "contact_policy_fingerprint": "a" * 64}
@@ -148,8 +148,8 @@ def _full_fixture(tmp_path):
     from so101_demo.act.pick_place_validation_manifest import (
         ANCHOR_NAMES, build_pick_place_validation_manifest,
     )
-    from so101_demo.act.task8_artifact_bundle import (
-        prepare_task8_bundle, verify_prepared_task8_bundle,
+    from so101_demo.act.pick_place_validation_artifact_bundle import (
+        prepare_pick_place_validation_bundle, verify_prepared_pick_place_validation_bundle,
     )
 
     inputs = _inputs(tmp_path)
@@ -165,9 +165,9 @@ def _full_fixture(tmp_path):
         calibration_report_sha256="e" * 64)
     real_manifest = tmp_path / "real-manifest.json"
     real_manifest.write_text(json.dumps(manifest))
-    receipt = prepare_task8_bundle(dataclasses.replace(inputs, manifest=real_manifest),
+    receipt = prepare_pick_place_validation_bundle(dataclasses.replace(inputs, manifest=real_manifest),
                                    tmp_path / "bundle")
-    verified = verify_prepared_task8_bundle(receipt)
+    verified = verify_prepared_pick_place_validation_bundle(receipt)
     bundled = json.loads(_Path(verified.manifest).read_bytes())
     return receipt, receipt.parent, bundled, dict(verified.identities)
 
@@ -226,7 +226,7 @@ def _ready(identities, **overrides):
 
 
 def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path):
-    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+    from so101_demo.act.pick_place_live_qualification import build_pick_place_validation_qualified_report
 
     receipt, _, manifest, identities = _full_fixture(tmp_path)
     case_root, summary_path = _campaign(tmp_path, manifest, identities)
@@ -234,7 +234,7 @@ def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path
     ready_path.write_text(json.dumps(_ready(identities)))
     before = ready_path.read_bytes()
 
-    output = build_task8_qualified_report(ready_path, receipt, summary_path, case_root,
+    output = build_pick_place_validation_qualified_report(ready_path, receipt, summary_path, case_root,
                                           tmp_path / "qualified.json")
     document = json.loads(output.read_bytes())
     assert document["status"] == "QUALIFIED"
@@ -257,7 +257,7 @@ def test_qualified_report_upgrades_a_ready_document_without_touching_it(tmp_path
      "TASK8_QUALIFICATION_CHECKS_INCOMPLETE"),
 ])
 def test_a_failing_gate_leaves_no_qualified_behind(tmp_path, mutation, code):
-    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+    from so101_demo.act.pick_place_live_qualification import build_pick_place_validation_qualified_report
 
     receipt, _, manifest, identities = _full_fixture(tmp_path)
     case_root, summary_path = _campaign(tmp_path, manifest, identities)
@@ -265,12 +265,12 @@ def test_a_failing_gate_leaves_no_qualified_behind(tmp_path, mutation, code):
     ready_path.write_text(json.dumps(_ready(identities, **mutation)))
     output = tmp_path / "qualified.json"
     with pytest.raises(ValueError, match=code):
-        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output)
+        build_pick_place_validation_qualified_report(ready_path, receipt, summary_path, case_root, output)
     assert not output.exists()
 
 
 def test_an_existing_output_is_never_overwritten(tmp_path):
-    from so101_demo.act.task8_live_qualification import build_task8_qualified_report
+    from so101_demo.act.pick_place_live_qualification import build_pick_place_validation_qualified_report
 
     receipt, _, manifest, identities = _full_fixture(tmp_path)
     case_root, summary_path = _campaign(tmp_path, manifest, identities)
@@ -279,12 +279,12 @@ def test_an_existing_output_is_never_overwritten(tmp_path):
     output = tmp_path / "qualified.json"
     output.write_text("{}")
     with pytest.raises(ValueError, match="TASK8_QUALIFICATION_OUTPUT_EXISTS"):
-        build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output)
+        build_pick_place_validation_qualified_report(ready_path, receipt, summary_path, case_root, output)
     assert output.read_text() == "{}"
 
 
 def test_qualified_cli_runs_the_producer_end_to_end(tmp_path, capsys):
-    from so101_demo.cli import act_build_task8_qualified_report as cli
+    from so101_demo.cli import act_build_pick_place_validation_qualified_report as cli
 
     receipt, _, manifest, identities = _full_fixture(tmp_path)
     case_root, summary_path = _campaign(tmp_path, manifest, identities)
@@ -333,7 +333,7 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     from test_act_task8_live_evidence import _Contact, _Evidence   # the physics-evidence doubles
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         CaseEvidenceDriver, LiveEvidenceWindow, derive_frame_aggregates,
     )
 
@@ -440,7 +440,7 @@ def _evidence_port(driver, *, session_id="session-1", attempt_id="attempt-1"):
     from test_act_task8 import FakePort                       # noqa: E402
     from test_act_task8_live_evidence import _Contact, _Evidence   # noqa: E402
 
-    from so101_demo.act.task8_live_evidence import (            # noqa: E402
+    from so101_demo.act.pick_place_live_evidence import (            # noqa: E402
         LiveEvidenceWindow, derive_frame_aggregates,
     )
 
@@ -523,7 +523,7 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
     from test_act_task8 import request as runner_request
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
-    from so101_demo.act.task8_live_evidence import CaseEvidenceDriver
+    from so101_demo.act.pick_place_live_evidence import CaseEvidenceDriver
 
     case_root = tmp_path / "staging"
     case_root.mkdir()
@@ -549,7 +549,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
     from test_act_task8 import request as runner_request
 
     from so101_demo.act.pick_place_runner import PickPlaceRunner
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
     )
 
@@ -606,7 +606,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
 
     from so101_demo.act.pick_place_validation_manifest import write_new_manifest
     from so101_demo.act.pick_place_runner import PickPlaceRunner
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
     )
 
@@ -736,7 +736,7 @@ def _live_run(index, *, occlusion=0.5, support=0.01, release=1.0, retreat=0.06, 
 
 
 def test_the_five_live_fields_take_the_documented_extrema_across_five_runs():
-    from so101_demo.act.task8_live_qualification import derive_live_measurements
+    from so101_demo.act.pick_place_live_qualification import derive_live_measurements
 
     runs = [_live_run(0, occlusion=0.30, support=0.02, release=1.5, retreat=0.08, placement=2.0),
             _live_run(1, occlusion=0.55, support=0.05, release=0.9, retreat=0.05, placement=1.2),
@@ -764,14 +764,14 @@ def test_the_five_live_fields_take_the_documented_extrema_across_five_runs():
      "IDENTITY_MISMATCH"),
 ])
 def test_derivation_refuses_fewer_than_five_runs_or_a_mixed_identity(runs, reason):
-    from so101_demo.act.task8_live_qualification import derive_live_measurements
+    from so101_demo.act.pick_place_live_qualification import derive_live_measurements
 
     with pytest.raises(ValueError, match=reason):
         derive_live_measurements(runs, {})
 
 
 def test_a_summary_without_a_sealed_sample_is_refused():
-    from so101_demo.act.task8_live_qualification import derive_live_measurements
+    from so101_demo.act.pick_place_live_qualification import derive_live_measurements
 
     runs = [_live_run(index) for index in range(5)]
     runs[2] = {key: value for key, value in runs[2].items() if key != "sample_sha256"}
@@ -781,7 +781,7 @@ def test_a_summary_without_a_sealed_sample_is_refused():
 
 
 def test_qualified_measurements_copy_by_value_and_add_exactly_five():
-    from so101_demo.act.task8_live_qualification import (LIVE_ONLY_FIELDS, build_qualified_measurements,
+    from so101_demo.act.pick_place_live_qualification import (LIVE_ONLY_FIELDS, build_qualified_measurements,
                                                          derive_live_measurements)
 
     ready = {f"ready_field_{index}": {"value": float(index), "unit": "rad"} for index in range(28)}
@@ -799,7 +799,7 @@ def test_qualified_measurements_copy_by_value_and_add_exactly_five():
 
 
 def test_a_ready_field_that_is_already_live_only_is_refused():
-    from so101_demo.act.task8_live_qualification import build_qualified_measurements
+    from so101_demo.act.pick_place_live_qualification import build_qualified_measurements
 
     ready = {"grasp_occlusion_window_s": {"value": 0.1, "unit": "s"}}
     with pytest.raises(ValueError, match="LIVE_FIELD_ALREADY_PRESENT"):
@@ -812,7 +812,7 @@ def _sample_row(phase, sim_time, *, position=(0.0, 0.0, 0.1), stable=True):
 
 
 def test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readback():
-    from so101_demo.act.task8_live_qualification import retreat_distance_m
+    from so101_demo.act.pick_place_live_qualification import retreat_distance_m
 
     def frame(stamp, effector, *, clearing=False):
         return {"phase": "RADIAL_RETREAT", "source_stamp": stamp, "cup_position_m": [0.0, 0.0, 0.1],
@@ -831,7 +831,7 @@ def test_retreat_distance_is_radial_from_the_cup_at_the_first_qualifying_readbac
 
 
 def test_placement_stability_is_the_longest_contiguous_final_check_span():
-    from so101_demo.act.task8_live_qualification import placement_stable_s
+    from so101_demo.act.pick_place_live_qualification import placement_stable_s
 
     def frame(stamp, *, settled):
         return {"phase": "FINAL_CHECK", "source_stamp": stamp, "settled": settled}
@@ -859,7 +859,7 @@ def _contact_pair(geom_a, geom_b, distance):
 
 
 def test_support_distance_needs_the_exact_pair_in_every_pre_open_frame():
-    from so101_demo.act.task8_live_qualification import support_distance_from_frames
+    from so101_demo.act.pick_place_live_qualification import support_distance_from_frames
 
     def frame(stamp, contacts, before=True):
         return {"phase": "RELEASE", "release_epoch": 7, "before_first_open": before,
@@ -890,7 +890,7 @@ def test_support_distance_needs_the_exact_pair_in_every_pre_open_frame():
 
 
 def test_longest_contiguous_span_ends_at_a_break_and_can_refuse_one():
-    from so101_demo.act.task8_live_qualification import longest_contiguous_span_s
+    from so101_demo.act.pick_place_live_qualification import longest_contiguous_span_s
 
     frames = [{"phase": "RELEASE", "source_stamp": stamp, "ok": ok}
               for stamp, ok in ((0.0, True), (0.1, True), (0.2, True), (0.3, False), (0.4, True), (0.5, True))]
@@ -906,7 +906,7 @@ def test_longest_contiguous_span_ends_at_a_break_and_can_refuse_one():
 
 
 def test_release_stability_and_occlusion_window_use_the_span_structure():
-    from so101_demo.act.task8_live_qualification import grasp_occlusion_window_s, release_stable_s
+    from so101_demo.act.pick_place_live_qualification import grasp_occlusion_window_s, release_stable_s
 
     release = [{"phase": "RELEASE", "source_stamp": stamp, "steady": steady}
                for stamp, steady in ((0.0, False), (0.1, True), (0.2, True), (0.3, False))]
@@ -935,7 +935,7 @@ def _sealed_artifact(tmp_path, index, *, digest_matches=True):
 
 
 def test_collect_live_runs_reads_five_sealed_full_rows_and_refuses_anything_else(tmp_path):
-    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, collect_live_runs
+    from so101_demo.act.pick_place_live_qualification import LIVE_ONLY_FIELDS, collect_live_runs
 
     extractors = {field: (lambda samples, document: 0.5) for field in LIVE_ONLY_FIELDS}
     rows = []
@@ -968,7 +968,7 @@ def test_the_raw_reader_resolves_only_indexed_records_with_matching_digests(tmp_
     import hashlib
     import json as _json
 
-    from so101_demo.act.task8_live_qualification import make_raw_reader
+    from so101_demo.act.pick_place_live_qualification import make_raw_reader
 
     (tmp_path / "raw").mkdir()
     payload = _json.dumps({"pairs": [{"geom1": "cup_a_bottom_collision", "geom2": "table_collision",
@@ -992,7 +992,7 @@ def test_the_raw_reader_resolves_only_indexed_records_with_matching_digests(tmp_
 
 
 def test_live_extractors_bind_each_rule_to_its_supplied_evidence():
-    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, live_extractors
+    from so101_demo.act.pick_place_live_qualification import LIVE_ONLY_FIELDS, live_extractors
 
     extractors = live_extractors(occluded=lambda f: f.get("occluded") is True,
                                 release_stable=lambda f: f.get("steady") is True,
@@ -1028,7 +1028,7 @@ def test_live_extractors_bind_each_rule_to_its_supplied_evidence():
 
 
 def test_the_world_distance_fallback_is_opt_in_and_not_the_default():
-    from so101_demo.act.task8_live_qualification import support_distance_from_frames
+    from so101_demo.act.pick_place_live_qualification import support_distance_from_frames
 
     def frame(stamp, *, distance=None, contacts=()):
         entry = {"phase": "RELEASE", "release_epoch": 7, "before_first_open": True, "source_stamp": stamp,
@@ -1081,7 +1081,7 @@ def _r580_fixture(tmp_path):
 
 
 def test_record_extractors_bind_the_rules_to_the_records(tmp_path):
-    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, record_live_extractors
+    from so101_demo.act.pick_place_live_qualification import LIVE_ONLY_FIELDS, record_live_extractors
 
     artifact, samples = _r580_fixture(tmp_path)
     # the occlusion rule applies no phase filter of its own - the caller's predicate owns the phase and owner
@@ -1121,7 +1121,7 @@ def test_the_weld_publishes_a_thirty_three_field_qualified_report(tmp_path):
     import hashlib
     import json as _json
 
-    from so101_demo.act.task8_live_qualification import LIVE_ONLY_FIELDS, build_task8_qualified_report
+    from so101_demo.act.pick_place_live_qualification import LIVE_ONLY_FIELDS, build_pick_place_validation_qualified_report
 
     receipt, _, manifest, identities = _full_fixture(tmp_path)
     artifacts = {}
@@ -1168,7 +1168,7 @@ def test_the_weld_publishes_a_thirty_three_field_qualified_report(tmp_path):
 
     extractors = {field: (lambda samples, document: 1.0) for field in LIVE_ONLY_FIELDS}
     output = tmp_path / "qualified-33.json"
-    build_task8_qualified_report(ready_path, receipt, summary_path, case_root, output,
+    build_pick_place_validation_qualified_report(ready_path, receipt, summary_path, case_root, output,
                                  live_extractors=extractors, contract={})
     document = json.loads(output.read_bytes())
     assert document["status"] == "QUALIFIED"

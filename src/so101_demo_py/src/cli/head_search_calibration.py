@@ -2570,7 +2570,7 @@ def _phase_inputs(parsed) -> CalibrationPhaseInputs:
 
     from so101_demo.act.head_search_calibration_run import CalibrationPhaseInputs
     from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 
     admission_document = _json_document(parsed.admission)
     fields = (

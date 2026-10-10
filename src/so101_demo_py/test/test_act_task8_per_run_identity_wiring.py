@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 
 
-from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext  # noqa: E402
+from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext  # noqa: E402
 
 
 def _formal_context(tmp_path, **extra):
@@ -31,7 +31,7 @@ def test_the_composition_takes_the_per_run_values_as_arguments(tmp_path):
 
     import inspect
 
-    from so101_demo.act.task8_production_composition import build_real_providers
+    from so101_demo.act.calibration_production_composition import build_real_providers
 
     parameters = inspect.signature(build_real_providers).parameters
     missing = [name for name in ("session_id", "attempt_id", "search_start_rad") if name not in parameters]
@@ -45,7 +45,7 @@ def test_the_controller_config_comes_from_the_arguments_and_the_admitted_calibra
 
     from test_act_head_search_binding import _inputs
 
-    from so101_demo.act.task8_production_composition import _admitted_controller_config
+    from so101_demo.act.calibration_production_composition import _admitted_controller_config
 
     runtime, calibration, _weights, _sample = _inputs(tmp_path)
     context = _formal_context(tmp_path, calibration_report=calibration, runtime_descriptor=runtime)

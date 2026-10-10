@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 
-from so101_demo.act.task8_bottom_io import BottomIOError, occluder_geometry_from_model  # noqa: E402
-from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS  # noqa: E402
+from so101_demo.act.pick_place_calibration_bottom_io import BottomIOError, occluder_geometry_from_model  # noqa: E402
+from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS  # noqa: E402
 from paths import PACKAGE_ROOT
 
 #: the seam's invented values, quoted from `test_act_task8_formal_measurement_entry.py`
@@ -89,7 +89,7 @@ def test_a_missing_scene_is_refused_by_name(tmp_path):
 def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():
     import numpy as np
 
-    from so101_demo.act.task8_bottom_io import ModelFrameSource
+    from so101_demo.act.pick_place_calibration_bottom_io import ModelFrameSource
     from so101_demo.core.detection import DetectionFrame
 
     with ModelFrameSource(_scene()) as source:
@@ -108,7 +108,7 @@ def test_the_frame_source_renders_the_named_camera_at_the_admitted_size():
 
 
 def test_an_unknown_camera_is_refused_by_name():
-    from so101_demo.act.task8_bottom_io import ModelFrameSource
+    from so101_demo.act.pick_place_calibration_bottom_io import ModelFrameSource
 
     with pytest.raises(BottomIOError) as error:
         ModelFrameSource(_scene(), camera="no_such_camera")
@@ -123,7 +123,7 @@ def test_an_unknown_camera_is_refused_by_name():
 def test_posing_the_arm_changes_what_the_wrist_camera_sees():
     import numpy as np
 
-    from so101_demo.act.task8_bottom_io import ModelFrameSource
+    from so101_demo.act.pick_place_calibration_bottom_io import ModelFrameSource
 
     with ModelFrameSource(_scene(), camera="wrist_camera") as source:
         at_rest = source({}).rgb8.copy()
@@ -139,7 +139,7 @@ def test_posing_the_arm_changes_what_the_wrist_camera_sees():
 def test_the_target_is_the_cups_own_pose_and_size():
     import mujoco
 
-    from so101_demo.act.task8_bottom_io import target_from_model
+    from so101_demo.act.pick_place_calibration_bottom_io import target_from_model
 
     model = mujoco.MjModel.from_xml_path(str(_scene()))
     data = mujoco.MjData(model)
@@ -161,7 +161,7 @@ def test_the_target_is_the_cups_own_pose_and_size():
 def test_moving_the_free_cup_moves_the_target():
     """A free body's pose is the run's, so the target must follow it - not be a constant."""
 
-    from so101_demo.act.task8_bottom_io import target_from_model
+    from so101_demo.act.pick_place_calibration_bottom_io import target_from_model
 
     at_rest = target_from_model(_scene())
     displaced = target_from_model(_scene(), joints_rad=[0.0] * 7 + [0.05, 0.0, 0.0])
@@ -170,7 +170,7 @@ def test_moving_the_free_cup_moves_the_target():
 
 
 def test_a_missing_target_body_is_refused_by_name():
-    from so101_demo.act.task8_bottom_io import target_from_model
+    from so101_demo.act.pick_place_calibration_bottom_io import target_from_model
 
     with pytest.raises(BottomIOError) as error:
         target_from_model(_scene(), body="no_such_cup_body")

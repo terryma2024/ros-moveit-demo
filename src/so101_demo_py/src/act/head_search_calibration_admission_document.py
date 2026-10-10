@@ -50,7 +50,7 @@ from so101_demo.act.head_search_calibration_inputs import (
     validate_sealed_inputs,
 )
 from so101_demo.act.head_search_operating_point_measurement import toolchain_identity
-from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1

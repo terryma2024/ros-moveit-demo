@@ -73,9 +73,9 @@ def _identity():
 
 
 def _driver(stack):
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
-    return Task8MujocoMeasurementDriver(stack=stack, clock=FakeClock(), detector=lambda frame: {"bbox": [10, 10, 20, 20]},
+    return PickPlaceCalibrationMujocoMeasurementDriver(stack=stack, clock=FakeClock(), detector=lambda frame: {"bbox": [10, 10, 20, 20]},
                                         controller=lambda command: {"accepted": True},
                                         # the phase camera reports raw observation rows; a verdict here is refused by
                                         # the raw layer's own token rule, which is what the driver enforces
@@ -85,7 +85,7 @@ def _driver(stack):
 
 
 def _context():
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     return CalibrationMeasurementContext(runtime_descriptor={"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False,
                              # the shared rule is closed over the detector block, so the fixture supplies every member
@@ -153,13 +153,13 @@ def test_only_a_closed_or_invalid_batch_is_ever_returned(tmp_path):
 
 
 def test_the_cli_defaults_to_the_production_driver():
-    source = (PACKAGE_ROOT / "src/cli/act_measure_task8_calibration.py").read_text()
-    assert "Task8MujocoMeasurementDriver" in source
+    source = (PACKAGE_ROOT / "src/cli/act_measure_pick_place_calibration.py").read_text()
+    assert "PickPlaceCalibrationMujocoMeasurementDriver" in source
     assert "--driver" in source, "injection must be an explicit, test-only option"
 
 
 def test_the_production_factory_fails_closed_while_stack_wiring_is_absent():
-    from so101_demo.act.task8_measurement_driver import production_driver
+    from so101_demo.act.pick_place_calibration_measurement_driver import production_driver
 
     with pytest.raises(ValueError, match="PRODUCTION_DRIVER_WIRING_PENDING"):
         production_driver()
@@ -172,8 +172,8 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
     ever evaluated - the coverage the measurement contract's phase matrix depends on.
     """
 
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
-    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_measurement_driver import ANCHORS, PickPlaceCalibrationMujocoMeasurementDriver
 
     phases: list[tuple[str, str]] = []
 
@@ -216,7 +216,7 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
             return self.now
 
     stack = Stack()
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=stack, clock=Clock(), detector=lambda request: {"anchor": request["anchor"]},
         controller=lambda request: {"ack": True},
         phase_camera=lambda phase, sample: (phases.append((phase, sample)) or
@@ -242,7 +242,7 @@ def test_each_anchor_runs_the_private_phase_replay_through_the_phase_camera(tmp_
 
 
 def _measurement_context(tmp_path, generation="generation-1"):
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     return CalibrationMeasurementContext(runtime_descriptor={"schema_version": 1, "head_search": {"schema_version": 1, "detector": {"backend": "yolo_seg", "weights_path": "/weights/best.pt", "weights_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "model_id": "plastic-cup", "image_size_px": 640, "requested_device": "cuda", "allow_cpu_fallback": False, "torch_threads": 4, "torch_interop_threads": 2, "torch_version": "2.0", "ultralytics_version": "8.0"}, "camera": {"frame_id": "head_camera_frame", "ray_origin_frame_id": "head_camera_frame", "width_px": 640, "height_px": 480}, "motion": {"goal_tolerance_rad": 0.02, "settle_velocity_rad_s": 0.01, "neck_goal_duration_s": 0.5}}},
         generation=generation, contract_sha256="a" * 64, measurement_plan_sha256="b" * 64,
@@ -255,7 +255,7 @@ def _measurement_context(tmp_path, generation="generation-1"):
 def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
     """Boundary II: a failure seals INVALID, cleans up once for this generation, and keeps the receipt as evidence."""
 
-    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import ANCHORS, PickPlaceCalibrationMujocoMeasurementDriver
 
     cleaned = []
 
@@ -291,7 +291,7 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
     def detector(request):
         raise RuntimeError("DETECTOR_UNAVAILABLE")
 
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=detector, controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
                        "samples": [{"t_s": 0.0, "joints_rad": [0.0] * 7, "bbox_px": None,
@@ -309,7 +309,7 @@ def test_a_failed_anchor_keeps_a_cleanup_receipt_in_the_sealed_batch(tmp_path):
 def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
     """A cleanup that fails must be recorded as contamination rather than escaping as an unattributed exception."""
 
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
     class Stack:
         def run_search(self, anchor, request):
@@ -340,7 +340,7 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
         def monotonic(self):
             return 0.0
 
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
@@ -355,7 +355,7 @@ def test_a_cleanup_failure_contaminates_the_batch_and_stops_the_run(tmp_path):
 def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_path):
     """Boundary II: session, reset epoch and attempt come from the stack's readback, not from the anchor ordinal."""
 
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
     class Stack:
         def run_search(self, anchor, request):
@@ -386,7 +386,7 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
         def monotonic(self):
             return 0.0
 
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
@@ -401,7 +401,7 @@ def test_rows_carry_the_stack_readback_rather_than_a_synthesized_identity(tmp_pa
 
 
 def test_a_stack_without_readback_is_refused_by_name(tmp_path):
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
     class Stack:
         def run_search(self, anchor, request):
@@ -429,7 +429,7 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
         def monotonic(self):
             return 0.0
 
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
@@ -444,7 +444,7 @@ def test_a_stack_without_readback_is_refused_by_name(tmp_path):
 def test_every_anchor_is_an_independent_full_restart(tmp_path):
     """Boundary II: default, left and forward are three separate FULL_RESTART lifecycles, never overlapping."""
 
-    from so101_demo.act.task8_measurement_driver import ANCHORS, Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import ANCHORS, PickPlaceCalibrationMujocoMeasurementDriver
 
     events: list[tuple[str, str]] = []
 
@@ -478,7 +478,7 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
         def monotonic(self):
             return 0.0
 
-    driver = Task8MujocoMeasurementDriver(
+    driver = PickPlaceCalibrationMujocoMeasurementDriver(
         stack=Stack(), clock=Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
@@ -496,13 +496,13 @@ def test_every_anchor_is_an_independent_full_restart(tmp_path):
 
 
 def _probe_driver(stack, clock=None):
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
     class Clock:
         def monotonic(self):
             return 0.0
 
-    return Task8MujocoMeasurementDriver(
+    return PickPlaceCalibrationMujocoMeasurementDriver(
         stack=stack, clock=clock or Clock(), detector=lambda request: {"bbox": [0, 0, 1, 1]},
         controller=lambda command: {"accepted": True},
         phase_camera=lambda phase, index: {"phase": phase, "frame_index": index, "row_count": 0, "geometry_state": "MEASURED",
@@ -695,7 +695,7 @@ def test_the_drivers_own_batch_passes_the_schema_validator_and_carries_the_descr
     so the validator refuses it; that is the RED.
     """
 
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
 
     context = _measurement_context(tmp_path)
     driver = _driver(FakeStack())

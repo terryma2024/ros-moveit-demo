@@ -1,6 +1,6 @@
 """P1-1 RED/GREEN - the bottom-io frame must be what the REAL detector declares.
 
-The verdict's P1-1: *"``task8_bottom_io`` 的 frame 必须返回真实 YoloSegDetector 所需的 DetectionFrame（含 rgb8、真实
+The verdict's P1-1: *"``pick_place_calibration_bottom_io`` 的 frame 必须返回真实 YoloSegDetector 所需的 DetectionFrame（含 rgb8、真实
 时间戳和 frame identity），不能返回 ndarray"*.
 
 Two facts are asserted here rather than assumed:
@@ -88,7 +88,7 @@ class _DetectorEnforcingTheDeclaration:
 def test_the_bottom_io_frame_source_returns_a_detection_frame() -> None:
     """RED before the fix: the source returned ``renderer.render()`` - a bare ndarray."""
 
-    from so101_demo.act.task8_bottom_io import ModelFrameSource
+    from so101_demo.act.pick_place_calibration_bottom_io import ModelFrameSource
 
     source = ModelFrameSource(_scene_path())
     try:
@@ -102,8 +102,8 @@ def test_the_bottom_io_frame_source_returns_a_detection_frame() -> None:
 def test_the_production_adapter_carries_that_frame_to_the_detector() -> None:
     """The object the driver actually calls, with the real frame source and a contract-enforcing detector."""
 
-    from so101_demo.act.task8_bottom_io import ModelFrameSource
-    from so101_demo.act.task8_production_composition import MeasurementDetectorAdapter
+    from so101_demo.act.pick_place_calibration_bottom_io import ModelFrameSource
+    from so101_demo.act.calibration_production_composition import MeasurementDetectorAdapter
 
     detector = _DetectorEnforcingTheDeclaration()
     source = ModelFrameSource(_scene_path())

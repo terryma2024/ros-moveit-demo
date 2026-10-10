@@ -1,4 +1,4 @@
-"""Task 4: bounded calibration admission.
+"""Bounded calibration admission.
 
 A `CALIBRATION_REQUIRED` status may admit exactly **one** calibration measurement flight. The production `act`
 child stays rejected throughout, release and Recorder operations are never admissible, and a foreign or stale
@@ -80,7 +80,7 @@ class CalibrationMeasurementContext:
                  evidence_root: str, resource_binding, runtime_descriptor,
                  # The production controller path reads these four through the context, and until they existed here the
                  # formal composition failed at its first check while a duck-typed test namespace satisfied it
-                 # (CP-1632/1633). They default to None so existing callers keep working: what ENFORCES them is the
+                 # They default to None so existing callers keep working: what ENFORCES them is the
                  # composition, which refuses by name when they are absent.
                  calibration_report=None, session_id=None, attempt_id=None, search_start_rad=None) -> None:
         # section 4.2/6: the parsed runtime descriptor travels in the context once, so no later component re-reads the
@@ -88,7 +88,7 @@ class CalibrationMeasurementContext:
         # able to see rather than a silent default
         # Astra item 2: required, not optional - a context without a descriptor cannot say which configuration was
         # measured, so the ``None`` default was a bypass rather than a convenience
-        from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+        from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
         require_runtime_descriptor(runtime_descriptor)
         self.runtime_descriptor = runtime_descriptor

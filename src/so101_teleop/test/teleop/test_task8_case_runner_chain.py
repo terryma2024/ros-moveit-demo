@@ -10,7 +10,7 @@ from pathlib import Path
 
 from test_task8_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCES, _identity,  # noqa: E402
                                                        _raw_records)
-from so101_demo.act.task8_live_evidence import build_live_evidence_sample      # noqa: E402
+from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample      # noqa: E402
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.act.pick_place_runner import PickPlaceRunner
@@ -181,12 +181,12 @@ def _request():
 def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     """The phase set is `PickPlaceRunner.PHASES`, so a missing or reordered phase fails here rather than downstream."""
 
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow, PickPlaceLiveEvidenceRecorder
     from test_task8_live_evidence_production_chain import _identity
 
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
-    recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
     window.bind_reset_epoch(_identity()["reset_epoch"])

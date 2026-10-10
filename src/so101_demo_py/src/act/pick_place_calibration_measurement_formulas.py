@@ -1,4 +1,4 @@
-"""Task 2: pure formulas for the 21 head-search and seven support fields.
+"""Pure formulas for the 21 head-search and seven support fields.
 
 Everything here consumes only already validated, indexed raw records - no filesystem guessing and no runtime
 imports. Each field returns its configured limit, an observed summary, the reported value and the raw references
@@ -30,7 +30,7 @@ class FieldResultSet(dict):
 
 def _load_contract(path: Path | None = None) -> dict:
     if path is None:
-        from .task8_measurement_schema import load_contract
+        from .pick_place_calibration_measurement_schema import load_contract
         return load_contract()
     return json.loads(Path(path).read_bytes())
 
@@ -152,7 +152,7 @@ def _unit_for(name: str) -> str:
 # --- raw evidence shape ------------------------------------------------------------------------------------
 # Every implementation reads only `raw["measurements"][field]` (the field's own raw records) and the field's
 # configured limit from `raw["configured"][field]`. A missing configured limit is refused rather than defaulted,
-# because the approved candidate document that supplies those limits is still pending approval (CP-879).
+# because the approved candidate document that supplies those limits is still pending approval.
 
 def _limit(raw: dict, field: str):
     configured = raw.get("configured")
@@ -168,7 +168,7 @@ def _limit(raw: dict, field: str):
 DOCUMENT_EVIDENCE_FIELDS = ("center_deadband_px", "horizontal_fov_rad")   # both read `evidence[...]`, not a list
 
 #: fields whose formula reads the evidence as a LIST OF BBOXES through `_bboxes` - the one family a producing driver
-#: can honestly fill from a detection. A behavioural probe (CP-1794) found five fields that merely TOLERATE a list
+#: can honestly fill from a detection. A behavioural probe found five fields that merely TOLERATE a list
 #: (`max_fine_corrections` counts its items, `search_timeout_s` sums durations), so tolerance is not the test: these
 #: three are the ones the bboxes are actually about. The probe test asserts that distinction.
 BBOX_EVIDENCE_FIELDS = ("min_area_px2", "min_bbox_aspect", "vertical_bounds_px")

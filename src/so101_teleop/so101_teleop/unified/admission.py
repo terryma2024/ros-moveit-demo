@@ -249,7 +249,7 @@ _ACT_PAYLOAD_KEYS = frozenset({
 
 # a Task 8 payload additionally names its preparation receipt; a collection payload must not
 # (its expected set is _ACT_PAYLOAD_KEYS, so any receipt field there is a schema error)
-_TASK8_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
+_PICK_PLACE_VALIDATION_PAYLOAD_KEYS = _ACT_PAYLOAD_KEYS | frozenset({
     "preparation_receipt_path", "preparation_receipt_sha256"})
 
 # the diagnostic payload additionally binds the frozen inputs and the explicit mode record; the
@@ -352,7 +352,7 @@ class UnifiedWorkloadService:
             raise ValueError("CAMPAIGN_START_SCHEMA")
         task8 = spec.kind in ("task8_phase", "task8_full")
         diagnostic = spec.kind == _DIAGNOSTIC_START_KIND
-        expected = (_TASK8_PAYLOAD_KEYS if task8 else
+        expected = (_PICK_PLACE_VALIDATION_PAYLOAD_KEYS if task8 else
                     _DIAGNOSTIC_PAYLOAD_KEYS if diagnostic else _ACT_PAYLOAD_KEYS)
         if set(payload) != expected:
             # a payload missing only the calibration pair is a calibration problem, not a schema one
@@ -363,8 +363,8 @@ class UnifiedWorkloadService:
         if task8:
             # the receipt is verified before any mutation/GPU acquisition, and the verified bundle is
             # the only object an ActArtifactBinding may be built from
-            from so101_demo.act.task8_artifact_bundle import verify_task8_startup_receipt
-            verify_task8_startup_receipt(payload)
+            from so101_demo.act.pick_place_validation_artifact_bundle import verify_pick_place_validation_startup_receipt
+            verify_pick_place_validation_startup_receipt(payload)
         if payload["backend"] != "mujoco":
             raise ValueError("MUJOCO_ONLY")
         if payload["service_epoch"] != self.service_epoch or payload["resource_binding_id"] != self.resource_binding_id:
@@ -492,11 +492,11 @@ class UnifiedWorkloadService:
             # contract, two committed 20-scene waves and actual per-Worker
             # terminal leases before formal admission can become reachable.
             try:
-                from so101_demo.act.w8_qualification import verify_w8_qualification
+                from so101_demo.act.parallel_qualification_verifier import verify_eight_worker_qualification
             except ImportError as error:
                 raise ValueError("W8_QUALIFICATION_VERIFIER_UNAVAILABLE") from error
             try:
-                verified = verify_w8_qualification(Path(qualified_path), payload)
+                verified = verify_eight_worker_qualification(Path(qualified_path), payload)
             except (OSError, KeyError, TypeError, ValueError) as error:
                 raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
             if verified is not True:

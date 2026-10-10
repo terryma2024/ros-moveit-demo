@@ -1,6 +1,6 @@
 """P1-1: the production composition must DRIVE a real measurement, not merely construct providers.
 
-The review's finding is that `task8_production_composition.py` returns a controller of `None`, a clock that is
+The review's finding is that `calibration_production_composition.py` returns a controller of `None`, a clock that is
 not a clock, and a `PersistentTaskStack` that implements none of the protocol the measurement driver calls - so
 the composition cannot run a measurement at all. These are contract tests, so they fail while that is true.
 
@@ -39,7 +39,7 @@ def _occluders():
     # the names must be ones the admitted matrix actually names: the evaluator refuses an admitted occluder it has no
     # geometry for (P1-3, rereview 5), and `fixed_fingertip_00` is not in `EXPECTED_OCCLUDERS` - so a stand-in that
     # invents its own vocabulary makes the composition refuse for the right reason.
-    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+    from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS
 
     return {name: {"position_m": [0.02, 0.0, 0.10], "radius_m": 0.005} for name in EXPECTED_OCCLUDERS}
 
@@ -112,7 +112,7 @@ class CannedMujocoClient:
 def _run(tmp_path, monkeypatch, client):
     """Drive the whole measurement through the real composition path, with only the I/O client replaced."""
 
-    from so101_demo.act.task8_production_composition import (
+    from so101_demo.act.calibration_production_composition import (
         PROVIDER_SEAM_ENV, build_production_measurement_driver, build_real_providers,
     )
 
@@ -134,7 +134,7 @@ def _run(tmp_path, monkeypatch, client):
     # the PRODUCTION context type, not a duck-typed namespace: the previous version satisfied `getattr` reads with a
     # throwaway class, so it never exercised the type the CLI constructs - which is how item 1's four missing fields
     # survived a green contract test (CP-1633). A test that proves the formal path must use the formal object.
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     context = CalibrationMeasurementContext(**document)
 
@@ -163,7 +163,7 @@ def _run(tmp_path, monkeypatch, client):
                                      phase_path=_phase_path, target=_target, occluder_geometry=_occluders)
     # the driver requires the schema's ten-member identity document, so the test supplies one rather than a
     # single convenient hash (the same document the batch seal and the aggregator share)
-    from so101_demo.act.task8_measurement_schema import MeasurementIdentity
+    from so101_demo.act.pick_place_calibration_measurement_schema import MeasurementIdentity
 
     identity = {"source_commit": "a" * 40,
                 **{name: hashlib.sha256(name.encode()).hexdigest() for name in MeasurementIdentity.MEMBERS

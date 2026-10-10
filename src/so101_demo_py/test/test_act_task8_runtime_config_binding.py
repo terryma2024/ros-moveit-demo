@@ -37,9 +37,9 @@ def _runtime_document(cpu_fallback: bool, device: str = "cuda"):
 def test_a_runtime_config_that_allows_cpu_fallback_is_refused(tmp_path):
     """§4.2: allow_cpu_fallback must be false; resource shortage is a human decision, never a CPU recovery."""
 
-    from so101_demo.act.task8_artifact_bundle import prepare_task8_bundle
+    from so101_demo.act.pick_place_validation_artifact_bundle import prepare_pick_place_validation_bundle
 
     inputs = _inputs(tmp_path)
     _write(Path(inputs.runtime_config), _runtime_document(cpu_fallback=True))
     with pytest.raises(ValueError, match="TASK8_PREPARATION_CUDA_REQUIRED"):
-        prepare_task8_bundle(inputs, tmp_path / "bundle")
+        prepare_pick_place_validation_bundle(inputs, tmp_path / "bundle")

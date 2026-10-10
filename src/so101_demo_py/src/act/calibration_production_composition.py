@@ -1,4 +1,4 @@
-"""The one trusted production composition for the Task 8 measurement driver.
+"""The one trusted production composition for the pick-place calibration measurement driver.
 
 Astra finding 1: the measurement CLI called ``production_driver()`` with no collaborators, so the production path
 could only raise ``PRODUCTION_DRIVER_WIRING_PENDING``. This module is the composition that replaces that dead end.
@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 import time
 
-from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
 __all__ = ["build_production_measurement_driver", "PROVIDER_SEAM_ENV"]
 
@@ -69,7 +69,7 @@ def _bottom_io_from_seam():
 class MeasurementDetectorAdapter:
     """The driver calls its detector as a CALLABLE; the production detector's interface is ``detect(frame, query)``.
 
-    P1-1 named the mismatch: ``task8_measurement_driver`` does ``self.detector({...})`` while ``YoloSegDetector``
+    P1-1 named the mismatch: ``pick_place_calibration_measurement_driver`` does ``self.detector({...})`` while ``YoloSegDetector``
     exposes ``detect(frame, query)`` and declares no ``__call__``. Protocol matching belongs here, where the
     composition already adapts the controller for the same reason - and a missing frame source fails closed by name
     rather than being papered over with an empty image.
@@ -368,7 +368,7 @@ def _monotonic_clock() -> _MonotonicClock:
     return _MonotonicClock()
 
 
-class Task8StackAdapter:
+class PickPlaceValidationStackAdapter:
     """The driver's stack protocol over ONE low-level MuJoCo/ROS client.
 
     The review's finding was that the composition handed the driver a `PersistentTaskStack()` that implements none of
@@ -466,7 +466,7 @@ def _admitted_controller_config(*, context, descriptor, session_id=None, attempt
     if not isinstance(calibration, dict):
         raise ProductionCompositionError("PRODUCTION_CALIBRATION_REPORT_REQUIRED")
     admitted = validate_head_search_binding(descriptor, calibration)
-    # CP-1635: the per-run values arrive as ARGUMENTS. They are produced by the run - the ids belong to the case being
+    # The per-run values arrive as ARGUMENTS. They are produced by the run - the ids belong to the case being
     # measured and the search start is derived from its reset targets - so a context built at admission cannot carry
     # them, and reading them from one refused the formal path at its first check. The refusals are unchanged in
     # substance and in name: a missing value still fails closed rather than being defaulted.
@@ -499,7 +499,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     # to the child, and the trajectory being executed - and the model cannot supply them: it can report where the arm
     # IS, but only the run knows where it is going. Those two are REQUIRED and refused by name rather than stood in for.
     if any(value is None for value in (frame_source, target, occluder_geometry)):
-        from so101_demo.act.task8_bottom_io import (ModelFrameSource, occluder_geometry_from_model,
+        from so101_demo.act.pick_place_calibration_bottom_io import (ModelFrameSource, occluder_geometry_from_model,
                                                     target_from_model)
 
         try:
@@ -538,7 +538,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
     if io_client is None:
         if not session_id or not attempt_id:
             raise ProductionCompositionError("PRODUCTION_IO_CLIENT_IDENTITY_REQUIRED: session_id/attempt_id")
-        from so101_demo.act.task8_measurement_client import MujocoMeasurementClient
+        from so101_demo.act.pick_place_calibration_measurement_client import MujocoMeasurementClient
 
         try:
             from ament_index_python.packages import get_package_share_directory
@@ -554,7 +554,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
                 f"PRODUCTION_IO_CLIENT_UNAVAILABLE: {type(error).__name__}: {error}") from error
 
     from so101_demo.act.search import HeadSearchController
-    from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_phase_camera_matrix
     from so101_demo.adapters.perception.detector_factory import DetectorFactoryOptions, build_detector
     from so101_demo.runtime.task_stack import PersistentTaskStack
 
@@ -587,7 +587,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         controller = MeasurementControllerAdapter(
             HeadSearchController(config), client=io_client, clock=_monotonic_clock(),
             session_id=session_id, attempt_id=attempt_id)          # P1-1: the parameters, not the context
-    # P1-1: `task8_measurement_driver` calls `self.detector({...})`, while the production detector's interface is
+    # P1-1: `pick_place_calibration_measurement_driver` calls `self.detector({...})`, while the production detector's interface is
     # `detect(frame, query)` and it declares no `__call__`. Match the protocols here, where the controller is adapted
     # for the same reason - and refuse by name when the frame source the real detector needs is not available.
     detector = built.detector
@@ -600,7 +600,7 @@ def build_real_providers(*, context, descriptor, binding=None, io_client=None,
         "controller": controller,
         # the stack is the adapter over the one low-level client when one is supplied; without a client the
         # persistent stack is still built, but the adapter is what implements the protocol the driver calls
-        "stack": Task8StackAdapter(io_client) if io_client is not None else PersistentTaskStack(),
+        "stack": PickPlaceValidationStackAdapter(io_client) if io_client is not None else PersistentTaskStack(),
         "clock": _monotonic_clock(),
         # P1-3: the phase camera is built with the geometry a measurement actually has - the run's phase path, the
         # target it looks for, and the occluders' own geometry - so the replay measures instead of echoing the matrix.
@@ -645,7 +645,7 @@ def build_production_measurement_driver(*, context, identity, providers=None,
     if missing:
         raise ProductionCompositionError(f"PRODUCTION_PROVIDER_MISSING: {missing[0]}")
 
-    from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+    from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
 
     # one stack, built once, for the whole measurement - never a stack per anchor
     stack = supplied["stack"]
@@ -653,7 +653,7 @@ def build_production_measurement_driver(*, context, identity, providers=None,
     if not cleanup_scope:
         raise ProductionCompositionError("PRODUCTION_GENERATION_REQUIRED")
 
-    return Task8MujocoMeasurementDriver(
+    return PickPlaceCalibrationMujocoMeasurementDriver(
         contract=contract,
         identity=identity,
         stack=stack,

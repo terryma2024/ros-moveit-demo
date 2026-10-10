@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 
-from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext  # noqa: E402
+from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext  # noqa: E402
 
 
 def _formal_context(**extra):

@@ -22,7 +22,7 @@ import stat
 from collections.abc import Mapping
 from pathlib import Path
 
-from so101_demo.act.task8_calibration_admission import (
+from so101_demo.act.pick_place_calibration_admission import (
     ADMISSIBLE_OPERATIONS,
     REFUSED_OPERATIONS,
 )

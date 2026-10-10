@@ -67,7 +67,7 @@ def _mutations():
 def test_the_measurement_entry_refuses_a_descriptor_the_binding_would_refuse(tmp_path, name, mutate):
     """The measurement entry consumes the parsed context document, so it is the one that must be complete."""
 
-    from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+    from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
     runtime, _calibration, _weights, _sample = _inputs(tmp_path)
     mutated = copy.deepcopy(runtime)

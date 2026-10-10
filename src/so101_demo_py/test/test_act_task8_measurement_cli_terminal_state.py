@@ -25,7 +25,7 @@ from test_act_task8_measurement_contract import _bound_contract  # noqa: E402
 def _run(tmp_path, monkeypatch, *, driver_source, extra_document=None):
     """Drive the entry through its own seam and return (raised, ledger text)."""
 
-    from so101_demo.cli import act_measure_task8_calibration as measure
+    from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     contract_path, identities_path = _bound_contract(tmp_path)
     driver_dir = tmp_path / "drivers"
@@ -85,7 +85,7 @@ import hashlib, json
 from pathlib import Path
 
 def _canonical(value):
-    from so101_demo.act.task8_measurement_contract import _canonical as canonical
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as canonical
     return canonical(value)
 
 def run(contract, batch_root, *, identity_override=None, contamination=None, with_cleanup=True):
@@ -117,7 +117,7 @@ def run_foreign_identity(contract, batch_root):
 
 
 def _seal_run(tmp_path, monkeypatch, entry_point):
-    from so101_demo.cli import act_measure_task8_calibration as measure
+    from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     contract_path, identities_path = _bound_contract(tmp_path)
     driver_dir = tmp_path / "drivers"
@@ -176,7 +176,7 @@ def test_the_entry_exits_non_zero_when_its_seal_is_refused(tmp_path):
     ledger = tmp_path / "ledger.md"
     program = (
         "import sys;"
-        "from so101_demo.cli.act_measure_task8_calibration import main;"
+        "from so101_demo.cli.act_measure_pick_place_calibration import main;"
         "raise SystemExit(main(sys.argv[1:]))"
     )
     env = dict(os.environ)

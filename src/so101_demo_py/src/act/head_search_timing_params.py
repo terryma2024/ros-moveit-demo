@@ -105,7 +105,7 @@ PRODUCTION_OWNERS = {
     "stop_velocity_rad_s": (
         "so101_demo.adapters.act.cadence_correct_search_history (stop_velocity_rad_s)"
     ),
-    "stop_latency_s": "so101_demo.act.task8_measurement_formulas (stop_latency_s stop proof)",
+    "stop_latency_s": "so101_demo.act.pick_place_calibration_measurement_formulas (stop_latency_s stop proof)",
 }
 
 #: the declared frame contract of the design (section 7.1, final paragraph): every cap of this phase is

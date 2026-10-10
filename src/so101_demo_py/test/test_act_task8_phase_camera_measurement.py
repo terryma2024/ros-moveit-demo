@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 
-from so101_demo.act.task8_production_composition import PhaseCameraMatrixEvaluator  # noqa: E402
+from so101_demo.act.calibration_production_composition import PhaseCameraMatrixEvaluator  # noqa: E402
 
 PERIOD_S = 0.002
 PHASE_DURATION_S = 0.02                      # ten samples at the admitted period
@@ -148,7 +148,7 @@ def test_the_shipped_matrix_is_frozen_and_a_scaffold_is_refused():
 
     import json
 
-    from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_phase_camera_matrix
 
     shipped = load_phase_camera_matrix()
     assert shipped["status"] == "FROZEN", "the scaffold status is what this fixes"

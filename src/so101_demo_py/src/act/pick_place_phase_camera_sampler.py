@@ -155,7 +155,7 @@ def build_phase_camera_matrix(*, scene_path, anchors, phases, image_width: int =
                               samples_per_anchor: int = MIN_SAMPLES_PER_ANCHOR) -> dict:
     """Assemble the frozen matrix document from real samples, with a non-empty phase list and a real camera block."""
 
-    from so101_demo.act.task8_measurement_schema import EXPECTED_OCCLUDERS
+    from so101_demo.act.pick_place_calibration_measurement_schema import EXPECTED_OCCLUDERS
 
     phase_names = tuple(phases)
     if not phase_names:

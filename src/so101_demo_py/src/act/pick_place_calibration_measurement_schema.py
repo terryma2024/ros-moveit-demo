@@ -1,4 +1,4 @@
-"""Task 8 measurement protocol v2: the closed identity, the sealed batch, and closed JSON writes.
+"""The calibration measurement protocol: the closed identity, the sealed batch, and closed JSON writes.
 
 The approved protocol requires every measurement to be recomputed from raw evidence, so the batch is the only
 source of truth: `validate_closed_batch` compares the recursive regular-file set against `batch.json.files`
@@ -225,7 +225,7 @@ def validate_closed_batch(root: Path, contract: dict | None = None) -> BatchInde
         raise ValueError("BATCH_INVALID")
     # the seal computes this digest over the document minus itself, which is what makes a sealed batch uneditable, so
     # the validator recomputes it with the seal's own canonicalisation instead of trusting the field's shape
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
 
     recomputed = hashlib.sha256(_seal_canonical({key: value for key, value in recorded.items()
                                                 if key != "batch_sha256"})).hexdigest()

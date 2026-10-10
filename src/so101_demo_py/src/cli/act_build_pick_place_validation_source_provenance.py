@@ -1,4 +1,4 @@
-"""Build the canonical Task 8 source provenance document for the current tree and overlay."""
+"""Build the canonical pick-place validation source provenance document for the current tree and overlay."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="Build the Task 8 live source provenance document")
+        description="Build the pick-place validation live source provenance document")
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--install-overlay", type=Path, required=True)
     parser.add_argument("--dependency-overlay", type=Path)

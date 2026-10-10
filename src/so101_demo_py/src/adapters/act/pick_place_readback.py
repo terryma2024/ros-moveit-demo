@@ -392,7 +392,7 @@ class PickPlacePhysicalReadback:
         for CLOSE..FINAL_CHECK is the remaining wiring step.
         """
 
-        from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+        from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample
 
         return build_live_evidence_sample(
             identity=identity, phase=phase, physics_step=physics_step, sim_time_s=sim_time_s,
@@ -421,7 +421,7 @@ def capture_evidence_fields(captured, *, support_distance_max_m, raw_records,
     release-epoch-relative fields are the phase sequence's business, not this method's.
     """
 
-    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+    from so101_demo.act.pick_place_live_evidence import derive_frame_aggregates
 
     if type(captured) is not dict or set(captured) != {
             "world", "scene", "contact", "observation", "reference", "source_stamps_s",

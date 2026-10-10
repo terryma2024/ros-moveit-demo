@@ -64,7 +64,7 @@ def _sealed_files(tmp_path) -> dict:
 
 
 def _admission(*, generation: str = GENERATION):
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementAdmission
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementAdmission
 
     return CalibrationMeasurementAdmission(
         generation=generation,
@@ -128,7 +128,7 @@ def test_the_manifest_carries_every_sealed_input_and_its_digest(tmp_path):
 
 
 def test_the_phase_grants_one_calibration_flight_and_binds_the_resources_once(tmp_path):
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     module = _module()
     admission = _admission()

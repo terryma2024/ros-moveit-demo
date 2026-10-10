@@ -1,4 +1,4 @@
-"""Run one Task 8 calibration measurement and seal its raw batch.
+"""Run one pick-place calibration measurement and seal its raw batch.
 
 The measurement itself is the driver named by ``--driver`` (``module:callable``); this entry
 point owns admission (bound contract), the ledger transitions PLANNED -> RUNNING ->
@@ -28,14 +28,14 @@ def _append_ledger(path: Path, state: str, identity: dict, note: str) -> None:
         raise ValueError("MEASUREMENT_LEDGER_STATE_INVALID")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
-        handle.write(f"- Task 8P2 measurement {state}: "
+        handle.write(f"- calibration measurement {state}: "
                      f"contract={identity.get('contract_sha256')} "
                      f"provenance={identity.get('source_provenance_sha256')} {note}\n")
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run one Task 8 calibration measurement and close its raw batch")
+        description="Run one pick-place calibration measurement and close its raw batch")
     parser.add_argument("--contract", type=Path, required=True)
     parser.add_argument("--identities", type=Path, required=True)
     parser.add_argument("--batch-root", type=Path, required=True)
@@ -47,10 +47,10 @@ def main(argv=None) -> int:
                              "candidate/policy digests, controller/broker generation and resource binding")
     args = parser.parse_args(argv)
 
-    from so101_demo.act.task8_measurement_contract import (
+    from so101_demo.act.pick_place_calibration_measurement_contract import (
         close_measurement_batch, load_measurement_contract, require_identity,
     )
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     identities = json.loads(args.identities.read_text())
     contract = load_measurement_contract(args.contract, expected_hashes=identities)
@@ -64,7 +64,7 @@ def main(argv=None) -> int:
         # section 4.2: a supplied runtime descriptor is parsed and its CUDA policy enforced before either branch -
         # the driver injection used by tests must not be a way around the rule
         if args.context is not None:
-            from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+            from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
             _document = json.loads(args.context.read_text())
             # section 4.2: a digest is not a descriptor. A context that carries only a hash of the runtime config cannot
@@ -79,7 +79,7 @@ def main(argv=None) -> int:
             if args.context is None:
                 raise ValueError("MEASUREMENT_CONTEXT_REQUIRED")
             context = _document          # parsed once above, not read from disk a second time
-            from so101_demo.act.task8_measurement_driver import Task8MujocoMeasurementDriver
+            from so101_demo.act.pick_place_calibration_measurement_driver import PickPlaceCalibrationMujocoMeasurementDriver
             context = CalibrationMeasurementContext(
                 generation=context["generation"],
                 contract_sha256=identity["measurement_contract_sha256"],
@@ -99,7 +99,7 @@ def main(argv=None) -> int:
                 search_start_rad=_document.get("search_start_rad"),
                 # section 4.2: the same parsed descriptor the CUDA policy was enforced on, not a re-read of the file
                 runtime_descriptor=_document["runtime_descriptor"])
-            from so101_demo.act.task8_production_composition import build_production_measurement_driver
+            from so101_demo.act.calibration_production_composition import build_production_measurement_driver
 
             build_production_measurement_driver(
                 context=context, identity=identity,
@@ -111,7 +111,7 @@ def main(argv=None) -> int:
         # Astra re-review P1-3: read the seal back and refuse to call an INVALID measurement a success. The
         # path, the identity and the closure are checked by the schema's validator, and the terminal status
         # decides the outcome - evidence is left in place either way.
-        from so101_demo.act.task8_measurement_schema import validate_closed_batch
+        from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
 
         validate_closed_batch(args.batch_root)
         record = json.loads(sealed.read_text())

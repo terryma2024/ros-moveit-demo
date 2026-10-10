@@ -54,11 +54,11 @@ def sample(root: Path, *, step=0, phase="CLOSE", **overrides):
 
 @pytest.fixture
 def recorder(tmp_path):
-    from so101_demo.act.task8_live_evidence import Task8LiveEvidenceRecorder
+    from so101_demo.act.pick_place_live_evidence import PickPlaceLiveEvidenceRecorder
 
     root = tmp_path / "case-root"
     root.mkdir()
-    return Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=root,
+    return PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=root,
                                      session_id="session-1", attempt_id="attempt-1"), root
 
 
@@ -126,7 +126,7 @@ def test_occlusion_is_only_timed_for_a_valid_frame_with_hidden_target(recorder):
 def test_ten_hertz_grid_rejects_gaps_duplicates_and_regressions(mutation, code):
     """A missing grid point is not occlusion and may not be smoothed over."""
 
-    from so101_demo.act.task8_live_evidence import validate_evidence_grid
+    from so101_demo.act.pick_place_live_evidence import validate_evidence_grid
 
     times = [0.0, 0.1, 0.2, 0.3]
     if mutation == "gap":
@@ -141,7 +141,7 @@ def test_ten_hertz_grid_rejects_gaps_duplicates_and_regressions(mutation, code):
 
 
 def test_grid_accepts_a_complete_causal_sequence_and_reports_its_length():
-    from so101_demo.act.task8_live_evidence import validate_evidence_grid
+    from so101_demo.act.pick_place_live_evidence import validate_evidence_grid
 
     samples = [{"sim_time_s": index * 0.1} for index in range(5)]
     assert validate_evidence_grid(samples, period_s=0.1, tolerance_s=0.01) == 5
@@ -152,7 +152,7 @@ def test_grid_accepts_a_complete_causal_sequence_and_reports_its_length():
 def test_sample_builder_cannot_drift_from_the_recorder_shape(recorder):
     """The builder and the recorder must agree: a built sample is accepted verbatim."""
 
-    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+    from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample
 
     rec, root = recorder
     canonical = sample(root, step=0)
@@ -176,7 +176,7 @@ def test_sample_builder_cannot_drift_from_the_recorder_shape(recorder):
 
 
 def test_sample_builder_refuses_incomplete_readback_inputs(recorder):
-    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+    from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample
 
     rec, root = recorder
     with pytest.raises(ValueError, match="TASK8_LIVE_EVIDENCE_SAMPLE_INVALID"):
@@ -254,7 +254,7 @@ def _records_root():
 
 
 def test_case_journal_path_is_strict_and_refuses_reuse(tmp_path):
-    from so101_demo.act.task8_live_evidence import resolve_case_journal_path
+    from so101_demo.act.pick_place_live_evidence import resolve_case_journal_path
 
     run_root = tmp_path / "run"
     run_root.mkdir()
@@ -286,7 +286,7 @@ def _journal_row(**overrides):
 
 
 def test_full_journal_row_requires_evidence_and_both_retirement_receipts():
-    from so101_demo.act.task8_live_evidence import require_case_journal_row
+    from so101_demo.act.pick_place_live_evidence import require_case_journal_row
 
     assert require_case_journal_row(_journal_row(), mode="full")["status"] == "PASSED"
     for missing in ("live_evidence_sha256", "child_retirement_receipt_sha256",
@@ -300,7 +300,7 @@ def test_full_journal_row_requires_evidence_and_both_retirement_receipts():
 
 
 def test_prefix_journal_row_may_never_carry_live_evidence():
-    from so101_demo.act.task8_live_evidence import require_case_journal_row
+    from so101_demo.act.pick_place_live_evidence import require_case_journal_row
 
     prefix = _journal_row(case_id="prefix-01", mode="phase_prefix", status="PASSED",
                           live_evidence_path="", live_evidence_sha256="0" * 64)
@@ -316,7 +316,7 @@ def _manifest(prefixes=9, fulls=5):
 
 
 def test_campaign_case_list_is_exactly_nine_prefixes_then_five_fulls():
-    from so101_demo.act.task8_live_evidence import require_campaign_cases
+    from so101_demo.act.pick_place_live_evidence import require_campaign_cases
 
     ids = require_campaign_cases(_manifest())
     assert ids == tuple([f"prefix-{index:02d}" for index in range(1, 10)]
@@ -333,7 +333,7 @@ def test_campaign_case_list_is_exactly_nine_prefixes_then_five_fulls():
 
 
 def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tmp_path):
-    from so101_demo.act.task8_live_evidence import plan_campaign_journals
+    from so101_demo.act.pick_place_live_evidence import plan_campaign_journals
 
     plan = plan_campaign_journals(tmp_path, _manifest())
     assert [case_id for case_id, _ in plan] == [f"prefix-{i:02d}" for i in range(1, 10)] + \
@@ -351,7 +351,7 @@ def test_campaign_journal_plan_covers_all_fourteen_cases_before_anything_runs(tm
 
 
 def test_journal_row_must_belong_to_the_bundle_that_produced_it():
-    from so101_demo.act.task8_live_evidence import require_case_row_matches_bundle
+    from so101_demo.act.pick_place_live_evidence import require_case_row_matches_bundle
 
     identities = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
                   "contact_policy_fingerprint": "a" * 64}
@@ -400,7 +400,7 @@ class _Evidence:
 
 
 def test_frame_aggregates_follow_the_contact_evidence_not_a_label():
-    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+    from so101_demo.act.pick_place_live_evidence import derive_frame_aggregates
 
     held = derive_frame_aggregates(_Evidence(left=[_Contact()], right=[_Contact()],
                                             minimum_signed_distance_m=0.02),
@@ -436,7 +436,7 @@ def test_frame_aggregates_follow_the_contact_evidence_not_a_label():
     ([_Contact(body2="table", signed_distance_m=-0.001)], True),
 ])
 def test_support_requires_actual_cup_table_contact_with_force(contacts, expected):
-    from so101_demo.act.task8_live_evidence import derive_frame_aggregates
+    from so101_demo.act.pick_place_live_evidence import derive_frame_aggregates
 
     evidence = _Evidence(left=[_Contact()], right=[_Contact()], other=contacts,
                          minimum_signed_distance_m=0.0)
@@ -451,7 +451,7 @@ def _window_sample(recorder_root, time_s, phase, step):
 
 
 def test_window_opens_at_search_and_enforces_the_frozen_grid(recorder):
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow
 
     rec, root = recorder
     reference = sample(root, step=0)
@@ -474,7 +474,7 @@ def test_window_opens_at_search_and_enforces_the_frozen_grid(recorder):
 
 
 def test_window_seals_only_after_final_check_and_then_refuses_more_samples(recorder):
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow
 
     rec, root = recorder
     reference = sample(root, step=0)
@@ -491,7 +491,7 @@ def test_window_seals_only_after_final_check_and_then_refuses_more_samples(recor
 
 
 def test_case_driver_reaches_the_window_and_seals_into_the_case_directory(tmp_path):
-    from so101_demo.act.task8_live_evidence import (
+    from so101_demo.act.pick_place_live_evidence import (
         CaseEvidenceDriver, LiveEvidenceWindow,
     )
 
@@ -554,7 +554,7 @@ def _published_row(**overrides):
 
 
 def test_published_case_row_translates_into_the_journal_row_shape():
-    from so101_demo.act.task8_live_evidence import case_row_to_journal_row
+    from so101_demo.act.pick_place_live_evidence import case_row_to_journal_row
 
     identities = {"source_provenance_sha256": "e" * 64, "runtime_config_sha256": "f" * 64,
                   "contact_policy_fingerprint": "a" * 64}
@@ -586,7 +586,7 @@ ROW_KEYS = {"head_rgb_ref", "wrist_rgb_ref", "head_camera_info_ref", "wrist_came
 
 
 def test_the_window_requires_exactly_the_designs_nine_phases():
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow
 
     assert LiveEvidenceWindow.REQUIRED_PHASES == LIVE_PHASES
 
@@ -594,7 +594,7 @@ def test_the_window_requires_exactly_the_designs_nine_phases():
 def _live_sample(**overrides):
     """Call the real builder with the real keyword-only interface."""
 
-    from so101_demo.act.task8_live_evidence import build_live_evidence_sample
+    from so101_demo.act.pick_place_live_evidence import build_live_evidence_sample
 
     refs = {"head_rgb": "raw/head.png", "wrist_rgb": "raw/wrist.png",
             "head_camera_info": "raw/head.json", "wrist_camera_info": "raw/wrist.json",
@@ -639,7 +639,7 @@ def _release_fixture(rows_suffix=0):
 
 
 def test_release_correlation_needs_three_consecutive_preceding_rows_and_a_same_epoch_open():
-    from so101_demo.act.task8_live_evidence import correlate_release_open
+    from so101_demo.act.pick_place_live_evidence import correlate_release_open
 
     rows = _release_fixture()
     open_event = {"operation": "gripper_open", "release_epoch": 7, "source_stamp": 1.45,
@@ -653,7 +653,7 @@ def test_release_correlation_needs_three_consecutive_preceding_rows_and_a_same_e
 
 
 def test_release_correlation_refuses_a_gap_a_summary_and_an_unindexed_mask():
-    from so101_demo.act.task8_live_evidence import correlate_release_open
+    from so101_demo.act.pick_place_live_evidence import correlate_release_open
 
     gapped = _release_fixture()
     gapped[1]["source_stamp"] = 1.35                       # not consecutive at 10 Hz
@@ -673,7 +673,7 @@ def test_release_correlation_refuses_a_gap_a_summary_and_an_unindexed_mask():
 
 
 def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recorder):
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow
 
     rec, root = recorder
     reference = sample(root, step=0)
@@ -694,7 +694,7 @@ def test_a_failed_run_invalid_seals_its_window_instead_of_sealing_evidence(recor
 def test_a_window_refuses_observation_until_the_reset_epoch_is_bound(recorder):
     """The epoch is unknown until the reset receipt is verified, so an unbound window must not record or seal."""
 
-    from so101_demo.act.task8_live_evidence import UNBOUND_RESET_EPOCH, LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import UNBOUND_RESET_EPOCH, LiveEvidenceWindow
 
     rec, root = recorder
     reference = sample(root, step=0)
@@ -712,7 +712,7 @@ def test_a_window_refuses_observation_until_the_reset_epoch_is_bound(recorder):
 
 
 def test_the_reset_epoch_binds_once_and_reaches_the_identity(recorder):
-    from so101_demo.act.task8_live_evidence import LiveEvidenceWindow
+    from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow
 
     rec, root = recorder
     reference = sample(root, step=0)

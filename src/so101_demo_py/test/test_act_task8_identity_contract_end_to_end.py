@@ -1,8 +1,8 @@
 """P1-2 (rereview4): one ten-field identity rule, end to end, with no rewriting.
 
-The verdict's finding: `task8_measurement_contract.py` preserves the input identity and then computes a BOUND-DOCUMENT
+The verdict's finding: `pick_place_calibration_measurement_contract.py` preserves the input identity and then computes a BOUND-DOCUMENT
 self-digest that contains it; the CLI requires a sealed batch's identity to equal the admitted one exactly; and
-`task8_calibration_aggregator.py` instead requires the batch's `measurement_contract_sha256` to equal the
+`pick_place_calibration_aggregator.py` instead requires the batch's `measurement_contract_sha256` to equal the
 bound-document self-digest. Those are two different quantities, so - unless a fixture rewrites the field - a batch the
 formal entry seals is refused by the aggregator as a foreign contract.
 
@@ -41,7 +41,7 @@ def _formally_sealed(tmp_path, monkeypatch):
 def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_path, monkeypatch):
     """The end-to-end rule: what the entry seals is what the aggregator must accept."""
 
-    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
+    from so101_demo.act.pick_place_calibration_aggregator import aggregate_pick_place_calibration
 
     batch_root, bound_path, sealed = _formally_sealed(tmp_path, monkeypatch)
     contract = json.loads(bound_path.read_bytes())
@@ -54,7 +54,7 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
     # `CALIBRATION_IDENTITY_MISMATCH` - so a TOTAL aggregator failure (`RAW_EVIDENCE_REQUIRED`) still produced GREEN.
     # The rule is the end-to-end one: the entry's seal must be CONSUMED, and the consumption must produce output.
     output_root = tmp_path / "out"
-    report = aggregate_task8_calibration([batch_root], contract, output_root)
+    report = aggregate_pick_place_calibration([batch_root], contract, output_root)
     assert isinstance(report, dict) and report, "the aggregator returns a report rather than raising"
 
     # real output: the published documents on disk
@@ -63,7 +63,7 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
 
     # and the field verdicts RECOMPUTED from the sealed raw records - `derive_field_verdicts` is the aggregator's own
     # entry point for exactly that ("Per-root, per-field verdicts recomputed from the sealed batch's raw records")
-    from so101_demo.act.task8_calibration_aggregator import derive_field_verdicts
+    from so101_demo.act.pick_place_calibration_aggregator import derive_field_verdicts
 
     per_root = derive_field_verdicts([batch_root], contract)
     assert per_root, "the aggregator recomputed verdicts for the sealed batch"
@@ -72,7 +72,7 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
 
     # the owner's disposition (CP-1789): a field whose THRESHOLD is not approved reports UNMEASURED rather than a
     # comparison against a limit that does not exist
-    from so101_demo.act.task8_measurement_schema import load_contract
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 
     contract_v2 = load_contract()
     # "pending" means the THRESHOLD comes from a config document that has not been approved yet - the same
@@ -95,8 +95,8 @@ def test_a_formally_sealed_batch_reaches_the_aggregator_without_rewriting(tmp_pa
 def test_a_batch_naming_another_contract_is_still_refused(tmp_path, monkeypatch):
     """And the consistency must not become an absence of the rule: a foreign contract is a refusal."""
 
-    from so101_demo.act.task8_calibration_aggregator import aggregate_task8_calibration
-    from so101_demo.act.task8_measurement_contract import close_measurement_batch
+    from so101_demo.act.pick_place_calibration_aggregator import aggregate_pick_place_calibration
+    from so101_demo.act.pick_place_calibration_measurement_contract import close_measurement_batch
 
     batch_root, bound_path, sealed = _formally_sealed(tmp_path, monkeypatch)
     contract = json.loads(bound_path.read_bytes())
@@ -114,4 +114,4 @@ def test_a_batch_naming_another_contract_is_still_refused(tmp_path, monkeypatch)
                             cleanup={"group_clear": True, "generation": "g1", "reason": "foreign-contract negative"})
 
     with pytest.raises(ValueError, match="CALIBRATION_IDENTITY_MISMATCH"):
-        aggregate_task8_calibration([foreign], contract, tmp_path / "out-foreign")
+        aggregate_pick_place_calibration([foreign], contract, tmp_path / "out-foreign")

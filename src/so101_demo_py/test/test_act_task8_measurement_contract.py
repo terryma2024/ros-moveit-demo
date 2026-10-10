@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.task8_measurement_contract import (
+from so101_demo.act.pick_place_calibration_measurement_contract import (
     bind_measurement_contract, close_measurement_batch, load_measurement_contract,
 )
 from paths import PACKAGE_ROOT
@@ -21,7 +21,7 @@ def _sha(path: Path) -> str:
 
 @pytest.fixture
 def identities():
-    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
+    from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES
 
     value = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     value.update(source_commit="0" * 40, anchors_sha256=_sha(PACKAGE / "config/act/task8-live-anchors.yaml"),
@@ -53,7 +53,7 @@ def test_bind_refuses_to_overwrite_and_rejects_wrong_identity(tmp_path, identiti
 def test_batch_close_is_one_way_and_identity_bound(tmp_path):
     root = tmp_path / "batch"
     # the batch carries the contract's ten-member identity: the schema that admitted the measurement seals it
-    from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES
+    from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES
 
     identity = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identity["source_commit"] = "0" * 40
@@ -95,7 +95,7 @@ EXPECTED_OCCLUDERS = [
 
 def test_contract_freezes_the_21_head_search_fields_with_calibration_units():
     from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
-    from so101_demo.act.task8_measurement_schema import load_contract
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 
     document = load_contract()
     assert set(document["measurements"]) == HEAD_SEARCH_FIELDS
@@ -108,7 +108,7 @@ def test_contract_freezes_the_21_head_search_fields_with_calibration_units():
 
 def test_contract_freezes_the_seven_support_fields():
     from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
-    from so101_demo.act.task8_measurement_schema import load_contract
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_contract
 
     document = load_contract()
     assert set(document["support"]) == SUPPORT_FIELDS
@@ -118,14 +118,14 @@ def test_contract_freezes_the_seven_support_fields():
 
 
 def test_identity_binds_exactly_the_ten_approved_members():
-    from so101_demo.act.task8_measurement_schema import MeasurementIdentity
+    from so101_demo.act.pick_place_calibration_measurement_schema import MeasurementIdentity
 
     assert MeasurementIdentity.MEMBERS == IDENTITY_MEMBERS
     assert len(IDENTITY_MEMBERS) == 10
 
 
 def test_phase_camera_matrix_rejects_a_changed_occluder_list(tmp_path):
-    from so101_demo.act.task8_measurement_schema import load_phase_camera_matrix
+    from so101_demo.act.pick_place_calibration_measurement_schema import load_phase_camera_matrix
 
     document = load_phase_camera_matrix()
     assert document["occluders"] == EXPECTED_OCCLUDERS
@@ -136,7 +136,7 @@ def test_phase_camera_matrix_rejects_a_changed_occluder_list(tmp_path):
 
 
 def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tmp_path):
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     root = tmp_path / "batch"
     root.mkdir()
@@ -148,7 +148,7 @@ def test_closed_batch_accepts_an_indexed_batch_and_rejects_closure_violations(tm
              "identity": identity,
              "files": _index_anchor_evidence(root, {str(raw.relative_to(root)): hashlib.sha256(raw.read_bytes()).hexdigest()},
                                              write_closed_json, hashlib)}
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
 
     batch.pop("batch_sha256")
     batch["batch_sha256"] = hashlib.sha256(_seal_canonical(batch)).hexdigest()
@@ -187,7 +187,7 @@ def test_closing_a_batch_refuses_an_identity_that_is_not_the_contract_identity(t
     contract already defines: an identity that is not ``MEASUREMENT_IDENTITIES`` cannot close a batch.
     """
 
-    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
+    from so101_demo.act.pick_place_calibration_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
                                                           require_identity)
 
     batch = tmp_path / "batch"
@@ -208,11 +208,11 @@ def test_the_measurement_cli_requires_a_context_document_separate_from_the_ident
     that carries only the contract's ten identity members fails with a bare ``KeyError`` instead of a named refusal.
     """
 
-    from so101_demo.cli.act_measure_task8_calibration import main
+    from so101_demo.cli.act_measure_pick_place_calibration import main
 
     # a bound v2 contract plus an identities file carrying exactly the contract's ten identity members, so the run
     # reaches the context boundary instead of stopping at an unbound template or a missing file
-    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
+    from so101_demo.act.pick_place_calibration_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
                                                           _contract_sha256)
 
     identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
@@ -236,7 +236,7 @@ def test_the_measurement_cli_requires_a_context_document_separate_from_the_ident
 def _bound_contract(tmp_path):
     """A bound v2 contract plus the identities file that matches it - the pair the CLI's admission requires."""
 
-    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
+    from so101_demo.act.pick_place_calibration_measurement_contract import (MEASUREMENT_IDENTITIES, KIND, SCHEMA_VERSION,
                                                           _contract_sha256)
 
     identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
@@ -261,7 +261,7 @@ def test_the_entry_does_not_seal_on_the_drivers_behalf(tmp_path, monkeypatch):
     with ``MEASUREMENT_BATCH_ALREADY_CLOSED``.
     """
 
-    from so101_demo.cli import act_measure_task8_calibration as measure
+    from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     contract_path, identities_path = _bound_contract(tmp_path)
     driver_dir = tmp_path / "drivers"
@@ -288,9 +288,9 @@ def test_a_batch_whose_self_digest_does_not_match_its_document_is_refused(tmp_pa
     like a sha256.
     """
 
-    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
+    from so101_demo.act.pick_place_calibration_measurement_contract import (MEASUREMENT_IDENTITIES, close_measurement_batch,
                                                           require_identity)
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch
 
     identities = {name: "a" * 64 for name in MEASUREMENT_IDENTITIES}
     identities["source_commit"] = "0" * 40
@@ -324,8 +324,8 @@ def test_a_batch_hiding_a_symlink_is_refused_even_when_it_is_indexed(tmp_path):
 
     import hashlib as _hashlib
 
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     root = tmp_path / "batch"
     (root / "raw").mkdir(parents=True)
@@ -360,8 +360,8 @@ def test_a_batch_records_its_cleanup_and_a_contaminated_one_is_refused(tmp_path)
 
     import hashlib as _hashlib
 
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     def build(root, contamination):
         (root / "raw").mkdir(parents=True)
@@ -392,8 +392,8 @@ def test_a_batch_that_does_not_cover_every_declared_anchor_is_refused(tmp_path):
 
     import hashlib as _hashlib
 
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     root = tmp_path / "batch"
     (root / "anchors" / "default").mkdir(parents=True)
@@ -416,8 +416,8 @@ def test_a_driver_batch_that_misses_a_phase_for_an_anchor_is_refused(tmp_path):
 
     import hashlib as _hashlib
 
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     root = tmp_path / "batch"
     files = {}
@@ -445,8 +445,8 @@ def test_a_driver_batch_whose_phase_stamps_go_backwards_is_refused(tmp_path):
 
     import hashlib as _hashlib
 
-    from so101_demo.act.task8_measurement_contract import _canonical as _seal_canonical
-    from so101_demo.act.task8_measurement_schema import validate_closed_batch, write_closed_json
+    from so101_demo.act.pick_place_calibration_measurement_contract import _canonical as _seal_canonical
+    from so101_demo.act.pick_place_calibration_measurement_schema import validate_closed_batch, write_closed_json
 
     phases = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN", "RELEASE",
               "RADIAL_RETREAT", "FINAL_CHECK")
@@ -482,7 +482,7 @@ def test_a_changed_controlled_input_is_refused_against_the_bound_contract(tmp_pa
 
     import json as _json
 
-    from so101_demo.act.task8_measurement_contract import (MEASUREMENT_IDENTITIES, bind_measurement_contract,
+    from so101_demo.act.pick_place_calibration_measurement_contract import (MEASUREMENT_IDENTITIES, bind_measurement_contract,
                                                           load_measurement_contract)
 
     template_path = (PACKAGE_ROOT

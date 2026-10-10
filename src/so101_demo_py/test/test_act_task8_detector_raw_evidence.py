@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 
-from so101_demo.act.task8_production_composition import (  # noqa: E402
+from so101_demo.act.calibration_production_composition import (  # noqa: E402
     MeasurementDetectorAdapter, ProductionCompositionError,
 )
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate  # noqa: E402
@@ -64,7 +64,7 @@ def test_the_adapters_result_is_a_closed_serializable_document():
     result = adapter({"anchor": "default", "sample": 0})
     assert detector.calls, "the real detector interface was exercised"
 
-    # the driver's own rule (`task8_measurement_driver._canonical`): ordinary json.dumps, sorted keys
+    # the driver's own rule (`pick_place_calibration_measurement_driver._canonical`): ordinary json.dumps, sorted keys
     try:
         payload = json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
     except TypeError as error:  # the RED: a dataclass with an ndarray mask is not JSON-serializable

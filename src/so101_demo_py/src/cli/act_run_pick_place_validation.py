@@ -158,12 +158,12 @@ def main(argv: list[str] | None = None) -> int:
         # with the spec's declared receipt, must stop the run with nothing acquired
         import hashlib
 
-        from so101_demo.act.task8_artifact_bundle import verify_task8_startup_receipt
+        from so101_demo.act.pick_place_validation_artifact_bundle import verify_pick_place_validation_startup_receipt
 
         receipt = Path(args.artifact_bundle)
         if not receipt.is_file():
             raise ValueError("TASK8_PREPARATION_REQUIRED")
-        verify_task8_startup_receipt({
+        verify_pick_place_validation_startup_receipt({
             "preparation_receipt_path": str(receipt),
             "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
         })
@@ -174,9 +174,9 @@ def main(argv: list[str] | None = None) -> int:
             # all-or-nothing: either every one of the fourteen journals is free, or nothing starts
             import json
 
-            from so101_demo.act.task8_live_evidence import plan_campaign_journals
+            from so101_demo.act.pick_place_live_evidence import plan_campaign_journals
 
-            bundle = verify_task8_startup_receipt({
+            bundle = verify_pick_place_validation_startup_receipt({
                 "preparation_receipt_path": str(receipt),
                 "preparation_receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest()})
             manifest = json.loads(Path(bundle.manifest).read_bytes())

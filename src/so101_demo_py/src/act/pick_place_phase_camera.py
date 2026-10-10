@@ -1,6 +1,6 @@
-"""Task 3: phase-camera replay coverage, live continuity and deterministic projection.
+"""Phase-camera replay coverage, live continuity and deterministic projection.
 
-Three time axes stay separate: 2 ms replay rows, 10 Hz calibration-live rows and 10 Hz Task 8 live rows. A replay
+Three time axes stay separate: 2 ms replay rows, 10 Hz calibration-live rows and 10 Hz pick-place validation live rows. A replay
 result may satisfy geometric feasibility, but it can never be reported as live continuity - the two axes are
 checked by different functions and the live check refuses replay-shaped input outright. Nothing here imports ROS.
 """

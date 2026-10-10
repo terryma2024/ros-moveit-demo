@@ -1,4 +1,4 @@
-"""Collect one Task 8 full case's live evidence as a closed 10 Hz causal record.
+"""Collect one pick-place validation full case's live evidence as a closed 10 Hz causal record.
 
 Every gap that is not "valid frame and the target is genuinely not visible" is evidence loss and
 is refused here rather than degraded into a bounded occlusion. The canonical index written by
@@ -56,7 +56,7 @@ def _fsync_dir(path: Path) -> None:
         os.close(descriptor)
 
 
-class Task8LiveEvidenceRecorder:
+class PickPlaceLiveEvidenceRecorder:
     """Append canonical samples for one case and seal them into one artifact."""
 
     def __init__(self, *, case_id: str, evidence_root: Path, session_id: str,
@@ -173,7 +173,7 @@ class Task8LiveEvidenceRecorder:
         # The release epoch is CREATED at the release, so a case's entries legitimately span it: the phases before
         # RELEASE are captured in epoch 0 and those after it in epoch 1, and both are true. The rule is therefore
         # "non-decreasing, and the last entry is the epoch the case ended in" - a backwards sequence and a last entry
-        # that disagrees with the sealing identity are both still refused (CP-1612, chosen by the owner).
+        # that disagrees with the sealing identity are both still refused.
         previous = None
         for entry in self._entries:
             if entry["reset_epoch"] != identity["reset_epoch"]:
@@ -689,7 +689,7 @@ class CaseEvidenceDriver:
         if case_root.exists() and (case_root.is_symlink() or not case_root.is_dir()):
             raise ValueError("TASK8_CASE_STAGING_ROOT_INVALID")
         case_root.mkdir(exist_ok=True)
-        factory = recorder_factory or Task8LiveEvidenceRecorder
+        factory = recorder_factory or PickPlaceLiveEvidenceRecorder
         recorder = factory(case_id=case_id, evidence_root=case_root, session_id=session_id,
                            attempt_id=attempt_id)
         self.case_root = case_root

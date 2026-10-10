@@ -118,16 +118,16 @@ setup(
             "act_activate_contact_policy = so101_demo.cli.act_activate_contact_policy:main",
             "act_prepare_pick_place_validation = so101_demo.cli.act_prepare_pick_place_validation:main",
             "act_run_pick_place_validation = so101_demo.cli.act_run_pick_place_validation:main",
-            "act_build_task8_source_provenance = "
-            "so101_demo.cli.act_build_task8_source_provenance:main",
-            "act_measure_task8_calibration = "
-            "so101_demo.cli.act_measure_task8_calibration:main",
-            "act_build_task8_calibration_report = "
-            "so101_demo.cli.act_build_task8_calibration_report:main",
-            "act_validate_task8_artifacts = "
-            "so101_demo.cli.act_validate_task8_artifacts:main",
-            "act_build_task8_qualified_report = "
-            "so101_demo.cli.act_build_task8_qualified_report:main",
+            "act_build_pick_place_validation_source_provenance = "
+            "so101_demo.cli.act_build_pick_place_validation_source_provenance:main",
+            "act_measure_pick_place_calibration = "
+            "so101_demo.cli.act_measure_pick_place_calibration:main",
+            "act_build_pick_place_calibration_report = "
+            "so101_demo.cli.act_build_pick_place_calibration_report:main",
+            "act_validate_pick_place_validation_artifacts = "
+            "so101_demo.cli.act_validate_pick_place_validation_artifacts:main",
+            "act_build_pick_place_validation_qualified_report = "
+            "so101_demo.cli.act_build_pick_place_validation_qualified_report:main",
             "act_sample = so101_demo.cli.act_sample:main",
             "act_collect = so101_demo.cli.act_collect:main",
             "act_collect_parallel = so101_demo.cli.act_collect_parallel:main",

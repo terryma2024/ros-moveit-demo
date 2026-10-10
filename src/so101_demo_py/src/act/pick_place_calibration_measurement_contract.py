@@ -1,4 +1,4 @@
-"""Bind the Task 8 measurement contract to frozen identities before any measurement runs.
+"""Bind the pick-place calibration measurement contract to frozen identities before any measurement runs.
 
 The repository template is a closed threshold document with no identity. Binding copies it into
 the evidence root, records the raw hash of every threshold source, and stamps the contract hash;
@@ -70,7 +70,7 @@ def _canonical(document: dict) -> bytes:
 
 #: The BOUND DOCUMENT's own self-digest, over the document minus this key. It is an INTEGRITY value: a member of the
 #: ten-field identity can never equal it, because the identities live inside the document the digest is computed over,
-#: so requiring equality would demand a hash fixed point that does not exist (CP-1673).
+#: so requiring equality would demand a hash fixed point that does not exist.
 BOUND_DOCUMENT_DIGEST_KEY = "contract_sha256"
 #: The ten-field identity's own name for the contract this run was ADMITTED under. The bound document carries it
 #: verbatim in its `identities` field - which `load_measurement_contract` already requires to equal the caller's
@@ -191,7 +191,7 @@ def close_measurement_batch(root: Path, identity: dict, *, status: str = "CLOSED
                 "anchors": ["default", "left", "forward"]}
     # the same optional fields the production seal carries: a CLOSED batch must be able to name its cleanup proof,
     # and a refused one its error code - so this helper produces documents the validator accepts rather than ones it
-    # must refuse (CP-1619)
+    # must refuse
     if cleanup is not None:
         document["cleanup"] = cleanup
     if contamination is not None:

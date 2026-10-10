@@ -13,7 +13,7 @@ import sys
 import pytest
 
 from test_act_task8_calibration_aggregator import SEAL_VALID_HELPER
-from so101_demo.act.task8_artifact_bundle import require_runtime_descriptor
+from so101_demo.act.pick_place_validation_artifact_bundle import require_runtime_descriptor
 
 from test_act_task8_calibration_aggregator import TEMPLATE, _cli_identities   # noqa: E402
 
@@ -41,8 +41,8 @@ def _context_document(tmp_path, descriptor):
 
 
 def _invoke(tmp_path, context, driver="descriptor_driver:fill"):
-    from so101_demo.act.task8_measurement_contract import bind_measurement_contract
-    from so101_demo.cli import act_measure_task8_calibration as measure
+    from so101_demo.act.pick_place_calibration_measurement_contract import bind_measurement_contract
+    from so101_demo.cli import act_measure_pick_place_calibration as measure
 
     bound = bind_measurement_contract(TEMPLATE, _cli_identities(), tmp_path / "bound-v2.json")
 
@@ -157,7 +157,7 @@ def test_a_descriptor_whose_head_search_payload_is_not_the_production_shape_is_r
 def test_the_context_requires_a_runtime_descriptor(tmp_path):
     """Astra item 2: the descriptor is required, so the ``None`` bypass cannot exist."""
 
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     with pytest.raises(TypeError):
         CalibrationMeasurementContext(
@@ -194,9 +194,9 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
     whose stack implements the driver's protocol and whose controller is callable.
     """
 
-    from so101_demo.act.task8_production_composition import (
+    from so101_demo.act.calibration_production_composition import (
         MeasurementControllerAdapter, PhaseCameraMatrixEvaluator, ProductionCompositionError,
-        Task8StackAdapter, build_real_providers,
+        PickPlaceValidationStackAdapter, build_real_providers,
     )
 
     weights = tmp_path / "best.pt"
@@ -261,7 +261,7 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
     # P1-1: the composition MATCHES the detector's protocol, exactly as it already matches the controller's - the
     # driver calls its detector as a callable while the production detector exposes `detect(frame, query)`. So the
     # provider handed to the driver is the adapter, and the built detector is reachable through it.
-    from so101_demo.act.task8_production_composition import MeasurementDetectorAdapter
+    from so101_demo.act.calibration_production_composition import MeasurementDetectorAdapter
 
     assert isinstance(providers["detector"], MeasurementDetectorAdapter), (
         "a detector that is not callable must be adapted, not handed to the driver as it is")
@@ -272,7 +272,7 @@ def test_real_production_providers_are_built_from_the_admitted_context(tmp_path)
     assert isinstance(providers["phase_camera"], PhaseCameraMatrixEvaluator)
     assert callable(providers["phase_camera"])
     # the two that used to be missing entirely: a stack with the driver's protocol, and a CALLABLE controller
-    assert isinstance(providers["stack"], Task8StackAdapter)
+    assert isinstance(providers["stack"], PickPlaceValidationStackAdapter)
     for name in ("launch", "close", "cleanup", "readback", "run_search", "camera_info", "tf", "probe"):
         assert callable(getattr(providers["stack"], name)), f"the stack implements {name}"
     assert isinstance(providers["controller"], MeasurementControllerAdapter)
@@ -305,7 +305,7 @@ def test_the_shared_rule_enforces_the_production_head_search_contents(tmp_path):
 def test_the_context_keeps_its_descriptor_through_a_round_trip(tmp_path):
     """Astra re-review P1-2: to_dict must carry the descriptor, so a rebuilt context is the same admission."""
 
-    from so101_demo.act.task8_calibration_admission import CalibrationMeasurementContext
+    from so101_demo.act.pick_place_calibration_admission import CalibrationMeasurementContext
 
     descriptor = _descriptor()
     context = CalibrationMeasurementContext(
@@ -329,8 +329,8 @@ def _invalid_sealing_driver(tmp_path):
     module.write_text(
         "import hashlib, json\n"
         "from pathlib import Path\n"
-        "from so101_demo.act.task8_measurement_contract import MEASUREMENT_IDENTITIES, _canonical\n"
-        "from so101_demo.act.task8_measurement_schema import write_closed_json\n"
+        "from so101_demo.act.pick_place_calibration_measurement_contract import MEASUREMENT_IDENTITIES, _canonical\n"
+        "from so101_demo.act.pick_place_calibration_measurement_schema import write_closed_json\n"
         "def fill(contract, root):\n"
         "    root = Path(root); root.mkdir(parents=True, exist_ok=True)\n"
         "    kept = root / 'anchors' / 'default' / 'phase-release.json'\n"

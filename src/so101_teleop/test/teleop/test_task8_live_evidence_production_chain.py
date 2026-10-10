@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.act.task8_live_evidence import (
-    LiveEvidenceWindow, Task8LiveEvidenceRecorder, _SOURCES, build_live_evidence_sample,
+from so101_demo.act.pick_place_live_evidence import (
+    LiveEvidenceWindow, PickPlaceLiveEvidenceRecorder, _SOURCES, build_live_evidence_sample,
     correlate_release_open,
 )
 
@@ -30,7 +30,7 @@ def _identity():
     # P1-4: the release epoch is CREATED at the release, so the samples this fixture builds must end in the epoch the
     # port itself will seal with (`FINAL_RELEASE_EPOCH`) - a literal like 7 is the value no case ever reaches, and the
     # seal compares the last entry against the identity rather than trusting it
-    from so101_demo.act.task8_live_evidence import FINAL_RELEASE_EPOCH
+    from so101_demo.act.pick_place_live_evidence import FINAL_RELEASE_EPOCH
 
     return {"case_id": "full-01", "session_id": "session-1", "attempt_id": "attempt-1",
             "reset_epoch": 4, "release_epoch": FINAL_RELEASE_EPOCH}
@@ -67,7 +67,7 @@ def _sample(root: Path, *, phase: str, step: int, sim_time: float) -> dict:
 def test_the_nine_phase_chain_seals_and_reads_back(tmp_path):
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
-    recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
     window.bind_reset_epoch((_identity())["reset_epoch"])
@@ -104,7 +104,7 @@ def test_the_nine_phase_chain_seals_and_reads_back(tmp_path):
 def test_a_window_that_never_reached_final_check_invalid_seals_instead(tmp_path):
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
-    recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
     window.bind_reset_epoch((_identity())["reset_epoch"])
@@ -136,7 +136,7 @@ def test_the_journal_row_readback_refuses_a_missing_or_mismatched_artifact(tmp_p
 def _sealed_chain(tmp_path):
     evidence_root = tmp_path / "evidence"
     evidence_root.mkdir()
-    recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=_identity(), period_s=PERIOD_S)
     window.bind_reset_epoch((_identity())["reset_epoch"])
@@ -181,7 +181,7 @@ def test_the_real_owner_invalid_seals_an_open_window_before_child_retirement(tmp
     # the window is open (one SEARCH sample only), so retirement must invalid-seal it rather than seal it
     evidence_root = tmp_path / "open-evidence"
     evidence_root.mkdir()
-    open_recorder = Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
+    open_recorder = PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=evidence_root,
                                               session_id="session-1", attempt_id="attempt-1")
     open_window = LiveEvidenceWindow(open_recorder, identity=_identity(), period_s=PERIOD_S)
     open_window.bind_reset_epoch((_identity())["reset_epoch"])

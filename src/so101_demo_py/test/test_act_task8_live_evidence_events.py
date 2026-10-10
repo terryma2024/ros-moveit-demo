@@ -15,14 +15,14 @@ from pathlib import Path
 import pytest
 
 
-from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder  # noqa: E402
+from so101_demo.act.pick_place_live_evidence import LiveEvidenceWindow, PickPlaceLiveEvidenceRecorder  # noqa: E402
 
 IDENTITY = {"case_id": "case-1", "session_id": "session-1", "attempt_id": "attempt-1",
             "reset_epoch": 0, "release_epoch": 0}
 PERIOD_S = 0.1
 
 
-#: the sampler's own seven sources (`task8_live_evidence._SOURCES`), so a fixture cannot quietly use one
+#: the sampler's own seven sources (`pick_place_live_evidence._SOURCES`), so a fixture cannot quietly use one
 SOURCES = ("world", "scene", "contact", "head", "wrist", "arm", "neck")
 
 
@@ -59,7 +59,7 @@ def _sample(index: int, phase: str = "SEARCH", *, root: Path) -> dict:
 
 
 def _sealed(tmp_path) -> dict:
-    recorder = Task8LiveEvidenceRecorder(case_id="case-1", evidence_root=tmp_path,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="case-1", evidence_root=tmp_path,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=IDENTITY, period_s=PERIOD_S)
     window.bind_reset_epoch(0)
@@ -109,7 +109,7 @@ def test_the_sealed_evidence_describes_its_own_grid(tmp_path):
 def test_the_grid_still_refuses_a_gap_duplicate_or_regression(tmp_path):
     """The discipline that already exists must survive the change - recorded so it cannot be traded away."""
 
-    recorder = Task8LiveEvidenceRecorder(case_id="case-1", evidence_root=tmp_path,
+    recorder = PickPlaceLiveEvidenceRecorder(case_id="case-1", evidence_root=tmp_path,
                                          session_id="session-1", attempt_id="attempt-1")
     window = LiveEvidenceWindow(recorder, identity=IDENTITY, period_s=PERIOD_S)
     window.bind_reset_epoch(0)

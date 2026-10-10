@@ -19,14 +19,14 @@ import pytest
 
 from test_act_task8_live_evidence import sample  # noqa: E402
 
-from so101_demo.act.task8_live_evidence import Task8LiveEvidenceRecorder  # noqa: E402
+from so101_demo.act.pick_place_live_evidence import PickPlaceLiveEvidenceRecorder  # noqa: E402
 
 PRE_RELEASE = ("SEARCH", "APPROACH", "CLOSE", "MICRO_LIFT", "TRANSPORT", "ALIGN")
 POST_RELEASE = ("RELEASE", "RADIAL_RETREAT", "FINAL_CHECK")
 
 
-def _recorder(root: Path) -> Task8LiveEvidenceRecorder:
-    return Task8LiveEvidenceRecorder(case_id="full-01", evidence_root=root,
+def _recorder(root: Path) -> PickPlaceLiveEvidenceRecorder:
+    return PickPlaceLiveEvidenceRecorder(case_id="full-01", evidence_root=root,
                                      session_id="session-1", attempt_id="attempt-1")
 
 

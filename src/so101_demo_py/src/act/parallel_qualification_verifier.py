@@ -1,4 +1,4 @@
-"""Independent verification of a W8 qualification document (Task 4's first deliverable).
+"""Independent verification of an eight-worker qualification document.
 
 `so101_teleop`'s admission refuses a self-declared `PASSED` qualification: it requires an independent
 verifier of the frozen contract, of the committed campaign waves and of the actual per-Worker terminal
@@ -36,7 +36,7 @@ def _read_document(path: Path) -> dict:
     return document
 
 
-def verify_w8_qualification(qualified_path, payload) -> bool:
+def verify_eight_worker_qualification(qualified_path, payload) -> bool:
     """Return `True` only when the qualification document's evidence verifies from disk.
 
     Refusals, each with its own code so a caller can tell them apart: a missing or malformed document or
@@ -72,7 +72,7 @@ def verify_w8_qualification(qualified_path, payload) -> bool:
         summary = json.loads(campaign_result.read_bytes())
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID") from error
-    from .task8_live_qualification import validate_campaign_summary
+    from .pick_place_live_qualification import validate_campaign_summary
 
     try:
         summary = validate_campaign_summary(summary)
@@ -97,9 +97,9 @@ def verify_w8_qualification(qualified_path, payload) -> bool:
         if not isinstance(receipt_path, str) or not receipt_path:
             raise ValueError("W8_QUALIFICATION_EVIDENCE_INVALID")
         try:
-            from .task8_artifact_bundle import verify_prepared_task8_bundle
+            from .pick_place_validation_artifact_bundle import verify_prepared_pick_place_validation_bundle
 
-            bundle = verify_prepared_task8_bundle(Path(receipt_path))
+            bundle = verify_prepared_pick_place_validation_bundle(Path(receipt_path))
             manifest_path = Path(bundle.manifest)
             manifest = json.loads(manifest_path.read_bytes())
         except (OSError, KeyError, TypeError, ValueError, UnicodeDecodeError,
@@ -110,7 +110,7 @@ def verify_w8_qualification(qualified_path, payload) -> bool:
             raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
         if payload.get("manifest_path") is not None and Path(payload["manifest_path"]) != manifest_path:
             raise ValueError("W8_QUALIFICATION_EVIDENCE_MISMATCH")
-        from .task8_live_qualification import validate_case_journals
+        from .pick_place_live_qualification import validate_case_journals
 
         try:
             validate_case_journals(case_root, manifest, identities=bundle.identities,
