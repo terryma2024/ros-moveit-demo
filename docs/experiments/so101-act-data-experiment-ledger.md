@@ -69,11 +69,44 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3524
+latest_checkpoint: CP-3525
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3525 — Phase C committed (8cc0bcb26): export frames + LeRobot trainer + bundle loader; ordinary gate 8185/0/188, training gate 144/0/3; GPU smoke 500 steps PASS; follow-ups dispatched
+
+- Export:
+  - Content comes from the sealed recorder rows, bound to the commit proof's episode_seal_sha256. records.jsonl and the frames are verified against the seal files map. Frames are copied with digests into episodes/<scene>/frames/, written via `.partial` then renamed.
+  - Frame digests are in the export manifest and re-verified by require_exported_dataset.
+  - New refusals: FRAME_MISSING, FRAME_DIGEST_MISMATCH, DIMENSION_INVALID, SEAL_UNBOUND.
+  - attach_episode_content always verifies the content hash.
+- Config v2: steps, learning_rate, batch_size, std_floor; v1 still readable. preprocessing_sha256 = 47fea580…6083 (the D8 table plus decode constants).
+- Adapter:
+  - D8 table, PNG decode, load_training_view with digest re-verification, train-only statistics with a std floor (floored dims [6, 7], neck sin/cos).
+  - train_act_bundle builds LeRobot 0.6.1 ACTPolicy (normalisation IDENTITY in the policy; the adapter normalises, because 0.6.1 keeps normalisation in processors) and trains with AdamW.
+  - build_policy_from_bundle verifies hashes; infer normalises state, de-normalises actions and now returns the whole chunk (act/policy.py takes the execution prefix).
+- act_train: passes the lock sha256. New local_owner_factory + ProcessTableArbiter, with --gpu-binding as the lease and idle only when nvidia-smi lists no compute process.
+- RED evidence: genuine RED for frames (17), config (19), CLI (5 + 2) and the DataLoader AF_UNIX path-length bug (1), which the smoke found. Dataset-helper, trainer and adapter REDs were produced after implementation, against the HEAD files via a PYTHONPATH overlay (deviation from strict RED-first; accepted).
+- Gates:
+  - ordinary sonnet-fullgate3.rv9MbTD7 rc 0, 8185/0/188;
+  - training gate sonnet-traingate.3Z39z6QJ under train-venv rc 0, 144/0/3 (13 torch/export/config files).
+- train-venv: torch 2.11.0+cu128 and lerobot 0.6.1, hash-required from the lock, with torch and torchvision installed in a second pass from the pytorch cu128 index (the lock's triton hash is the PyPI file). The lock is unchanged; pytest and xdist were added outside the lock. CUDA check: RTX 5060 Ti, capability (12,0), sm_120 in the arch list, matmul and conv OK.
+- Smoke (smoke-phase-c/run.FPrBNDmt):
+  - Data: 10 synthetic episodes (6/2/2, 60 rows, 640×480) built through the real export_dataset and the lease, then train_act.
+  - Training: 500 CUDA steps in 112 s; loss 85.16 → 2.16 (first-20 mean 24.05, last-20 mean 2.28).
+  - Inference: hashes verified; finite 10×6 chunks; first-step MAE 0.036 rad on offline_test.
+  - Decode check: real p11 12238f8e, 1636 frames uint8 480×640×3, state 8, action 6, digests match, nothing written.
+- Root review, open items:
+  1. The cli/act_train.py REQUIREMENTS_LOCK default resolves to a non-existent path (bug).
+  2. The ACT ResNet18 backbone has no pretrained weights. Standard ACT uses ImageNet weights; random init will hurt real training.
+  3. evaluate_offline is not wired to the exported dataset (it expects decoded frames in the manifest).
+  4. training.yaml numbers (20000 steps, batch 8, lr 1e-5, std_floor 0.01) are executor choices.
+- Decision (CP-3394, recommended): fix 1–3 now.
+  - For 2, fetch the torchvision ResNet18 ImageNet weights once into <root>/models/ with a pinned sha256, bound in the config/bundle; loading is offline with hash verification.
+  - Keep the 4 values (LeRobot ACT defaults are lr 1e-5, batch 8) and record them as provisional until real-data training.
+  - Deletion candidates: smoke-phase-c/run.icMkzk7C, run.vT9Y51Ap and the Phase C scratch dirs.
 
 ## CP-3524 — U2 signing draft written (unsigned); cleanup side effect found and restored; input chain verified
 
