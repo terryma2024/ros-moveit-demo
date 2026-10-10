@@ -69,11 +69,34 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3528
+latest_checkpoint: CP-3529
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3529 — host-path audit done (guard test), IK exact-zero fix, dangling import removed; 43 old-hash tests and the 8 artifacts to be retired; freeze tooling to admit the Head-owned neck controller; remaining red items assigned
+
+- Commits:
+  - 74fc8d398: vendored head-camera geometry (f0f04d0e…, 0db2eb4c…).
+  - 878a8084a: host-path audit of every test tree. 49 hits fixed or allowlisted, 19 pure-string inputs allowlisted with reasons. Guard test test_no_host_paths_in_tests.py; user rule CP-3528 "单元测试…不能假设 /data/work/下预先有文件").
+  - d3746d45a: orientation_error_rad uses 4·atan2(|a−s·b|,|a+s·b|), exactly 0 for identical poses. The code was fixed, not the test.
+  - 8c2b8cb71: controller_reservation_client install_authority, reserve_bound and RESERVATION_BINDING_FIELDS removed (they could never succeed; no caller).
+- The gate interpreter is now /data/work/venvs/so101-grounded-sam (user choice) with pytest 7.4.4 and xdist 3.8.0 added (+execnet, iniconfig, pluggy; freeze diff recorded). test-venv is retired for this package's gate, untouched, and still asserted by the live tooling.
+- Final gates on fresh build scratch/merge-head-final.*:
+  - so101_demo_py merge-gate-gsam-FINAL.s824fnt0: 11245 pass / 43 fail / 0 err / 165 skip.
+  - plugins 8/8, mujoco_ros2_control 14/14, quik 2/2, teleop 113/113.
+  - mujoco_ros2_control_tests 1/7 (also 1/7 on clean pre-merge 16ca7bc).
+  - so101_mujoco_support 16/17 (the broker-owned JTC parameter test also fails on a clean Head-line build).
+- Static import graphs (Teacher CLI 368 modules, Head CLI 120): neither reaches any deleted module or the 8 old-hash artifacts' modules (task6_*, held_cup_*, visible_approach_*). No dangling so101_* import.
+- Contact policy r11-headgeom (calibration/r11-headgeom-20261010T053243Z): 104 samples offline. Fingerprint 0dc5a897… (r10b 131c2bdc…). Thresholds change only by 1e-11 to 1e-10 relative; the model, config and collector hashes changed. Candidate receipt only. Spot checks are BLOCKED: freeze-copy-build-20261008-r8.zsh rejects broker_owned_trajectory_controller.cpp / so101_trajectory_controllers.xml / native_sampler_c_api.cpp, which the Head merge reintroduced for the Head-owned neck controller (FREEZE_FAIL rc 95; freeze AmotsuTN is a deletion candidate).
+- Decisions (CP-3394, recommended):
+  - (1) Retire, not re-seal, the 8 old-hash artifacts and their 43 tests. They have no generator in the tree, are not on the v3 Teacher or Head search paths, and hand-editing sealed hashes is forbidden. Remove their test-only/diagnostic modules if nothing else imports them, and record the retirement with the artifact list. contact-calibration-schema.json must first be proven unused by the contact calibration and analysis CLIs that produced r11.
+  - (2) Revise the freeze, qualify and live assertions from "these files must not exist" to "the ACT/Teacher launch and controller configuration does not load the broker-owned controller, and the deleted broker-chain libraries (command broker etc.) are absent". The Head-owned neck controller files are allowed. New tooling versions sit beside the old ones.
+  - (3) "All UT pass" includes the two pre-existing red items:
+    - diagnose the 6 mujoco_ros2_control_tests launch failures, reported as "no usable GL in this sandbox". Live MuJoCo with sensor rendering has worked on this host, so rerun with the approved host access before concluding, and fix the real cause;
+    - fix the broker-owned JTC parameter mismatch against the Jazzy JTC, because the merged line keeps that controller.
+  - (4) head_search_v2.json points at Head weights on another host's path; the live run must use the imported weights (imports/antzb-head-20261010/weights/candidate-c2a/best.pt) through a supported override, not a hard-coded host path.
 
 ## CP-3528 — Head line merged (97b4c499e + fixups to 8ab61b431); camera path unified; Head geometry adopted; UT not yet green (161 classified); next phase dispatched
 
