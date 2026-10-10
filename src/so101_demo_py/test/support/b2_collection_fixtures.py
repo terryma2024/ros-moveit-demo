@@ -1,27 +1,27 @@
-"""B2 fixtures: complete V2 collection originals (no native dispatch, no broker stop proof). Not a test module."""
+"""B2 fixtures: complete TEACHER_EVENT_SCHEMA collection originals (no native dispatch, no broker stop proof). Not a test module."""
 
 import copy
 
-V2 = "SO101_TEACHER_EVENT_V2"
+TEACHER_EVENT_SCHEMA = "SO101_TEACHER_EVENT"
 
 
 def envelope(seq, type_, sim_time_ns, monotonic_ns, payload, *, identity):
-    return {"schema": V2, "seq": seq, "type": type_, "session_id": identity["session_id"],
+    return {"schema": TEACHER_EVENT_SCHEMA, "seq": seq, "type": type_, "session_id": identity["session_id"],
             "reset_epoch": identity["reset_epoch"], "attempt_id": identity["attempt_id"],
             "sim_time_ns": sim_time_ns, "monotonic_ns": monotonic_ns, "payload": payload}
 
 
 def event_row(document, *, monotonic_ns):
-    return dict(kind="teacher_event_v2", sim_time_s=document["sim_time_ns"] / 1e9, monotonic_ns=monotonic_ns,
+    return dict(kind="teacher_event", sim_time_s=document["sim_time_ns"] / 1e9, monotonic_ns=monotonic_ns,
                 payload=dict(teacher_event=document))
 
 
 def summary_row(accepted, last_seq, types, *, monotonic_ns, sim_time_s=None):
-    return dict(kind="teacher_event_summary_v2", sim_time_s=sim_time_s, monotonic_ns=monotonic_ns,
-                payload=dict(event_summary=dict(schema=V2, accepted=accepted, last_seq=last_seq, types=types)))
+    return dict(kind="teacher_event_summary", sim_time_s=sim_time_s, monotonic_ns=monotonic_ns,
+                payload=dict(event_summary=dict(schema=TEACHER_EVENT_SCHEMA, accepted=accepted, last_seq=last_seq, types=types)))
 
 
-def materials_v2(frozen_scene):
+def collection_materials(frozen_scene):
     import mujoco
     from so101_demo.act.collection_boundaries import boundary_clock
     from so101_demo.act.joints import ACT_JOINTS
@@ -113,7 +113,7 @@ def materials_v2(frozen_scene):
                            monotonic_ns=base + 8_000_000, payload=dict(collection_boundary=doc)))
     continuity = dict(schema_version=2, period_ns=2_000_000, session_id="alignment-session", reset_epoch=1,
         kinds={kind: dict(frames=500, gaps=0, steps=[]) for kind in ("arm", "gripper", "neck")})
-    events.append(dict(kind="controller_reference_v2", sim_time_s=None, monotonic_ns=base + 8_000_002,
+    events.append(dict(kind="controller_reference", sim_time_s=None, monotonic_ns=base + 8_000_002,
                        payload=dict(reference_continuity=continuity)))
     window = dict(first_command_s=.005, physics_end_s=.006, collection_start_s=.002, label_cutoff_s=.004)
     return events, identity, window, boundaries, sources, samples, teacher

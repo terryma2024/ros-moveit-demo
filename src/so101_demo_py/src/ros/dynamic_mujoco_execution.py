@@ -2337,7 +2337,7 @@ class RosDynamicMujocoExecution:
             final_upright_tilt_rad=upright,
         )
 
-    # ---- phase events (SO101_TEACHER_EVENT_V2) ------------------------------------------------------------------------
+    # ---- phase events (SO101_TEACHER_EVENT) ------------------------------------------------------------------------
     # One `phase_begin` and one `phase_finish` per state, each with the sim stamp read at that instant. A state that
     # sends a goal begins at the goal send (after any pre-dispatch check), so the stamp is the one at which the Teacher
     # sent its first command; the Recorder takes its first-command clock from the first such event.

@@ -1,4 +1,4 @@
-"""B2 (plan R3 + R9.9 + R9.10): boundaries, the audit and native QC on V2 Teacher events instead of dispatch receipts.
+"""B2 (plan R3 + R9.9 + R9.10): boundaries, the audit and native QC on TEACHER_EVENT_SCHEMA Teacher events instead of dispatch receipts.
 
 First command = the first goal-sending `phase_begin`; verified reset = `reset_complete`; normal end = `normal_stop`
 followed by `terminal`. A missing one, a V1 receipt, an event sequence gap, a reference gap or a cross-reset frame is
@@ -8,7 +8,7 @@ import copy
 
 import pytest
 
-from b2_collection_fixtures import V2, envelope, event_row, materials_v2, summary_row
+from b2_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope, event_row, collection_materials, summary_row
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 
 
@@ -18,11 +18,11 @@ def verify(events, identity, window, frozen_scene):
 
 
 def teacher_rows(events):
-    return [row for row in events if row["kind"] == "teacher_event_v2"]
+    return [row for row in events if row["kind"] == "teacher_event"]
 
 
-def test_the_v2_collection_reads_back_complete_with_no_dispatch_receipt(frozen_scene):
-    events, identity, window, _boundaries, sources, _samples, _teacher = materials_v2(frozen_scene)
+def test_the_collection_reads_back_complete_with_no_dispatch_receipt(frozen_scene):
+    events, identity, window, _boundaries, sources, _samples, _teacher = collection_materials(frozen_scene)
     answer = verify(events, identity, window, frozen_scene)
     assert answer["initial_source"] == sources[1] and answer["final_source"] == sources[3]
     assert answer["normal_stop_step"] == 3 and answer["goal_phase_begins"] == 1
@@ -52,8 +52,8 @@ def test_the_v2_collection_reads_back_complete_with_no_dispatch_receipt(frozen_s
     ("continuity_gap", "REFERENCE_GAP_IN_LABEL_WINDOW"),
     ("continuity_epoch", "REFERENCE_EPOCH_MISMATCH"),
 ])
-def test_v2_collection_faults_are_invalid(frozen_scene, fault, match):
-    events, identity, window, _b, _s, _samples, teacher = materials_v2(frozen_scene)
+def test_collection_faults_are_invalid(frozen_scene, fault, match):
+    events, identity, window, _b, _s, _samples, teacher = collection_materials(frozen_scene)
     rows = teacher_rows(events)
     if fault == "missing_phase_begin":
         events.remove(rows[1])
@@ -68,12 +68,12 @@ def test_v2_collection_faults_are_invalid(frozen_scene, fault, match):
     if fault == "terminal_before_stop":
         rows[4]["payload"]["teacher_event"]["monotonic_ns"] = rows[3]["payload"]["teacher_event"]["monotonic_ns"] - 5
     if fault == "summary_missing":
-        events[:] = [row for row in events if row["kind"] != "teacher_event_summary_v2"]
+        events[:] = [row for row in events if row["kind"] != "teacher_event_summary"]
     if fault == "sequence_gap":
         for row in rows[2:]:
             row["payload"]["teacher_event"]["seq"] += 1
     if fault == "summary_gap":
-        next(row for row in events if row["kind"] == "teacher_event_summary_v2")["payload"]["event_summary"]["accepted"] = 4
+        next(row for row in events if row["kind"] == "teacher_event_summary")["payload"]["event_summary"]["accepted"] = 4
     if fault == "repeated_seq":
         rows[2]["payload"]["teacher_event"]["seq"] = 2
     if fault == "v1_schema":
@@ -95,12 +95,12 @@ def test_v2_collection_faults_are_invalid(frozen_scene, fault, match):
         boundary = next(row for row in events if row.get("payload", {}).get("collection_boundary", {}).get("stage") == "normal_stop")
         boundary["payload"]["collection_boundary"]["value"]["joint_velocities"]["1"] = .00201
     if fault == "continuity_missing":
-        events[:] = [row for row in events if row["kind"] != "controller_reference_v2"]
+        events[:] = [row for row in events if row["kind"] != "controller_reference"]
     if fault == "continuity_gap":
-        row = next(row for row in events if row["kind"] == "controller_reference_v2")
+        row = next(row for row in events if row["kind"] == "controller_reference")
         row["payload"]["reference_continuity"]["kinds"]["arm"].update(gaps=1, steps=[[100_000_000, 104_000_000]])   # the label instant 0.102 s has no frame (CP-3439)
     if fault == "continuity_epoch":
-        next(row for row in events if row["kind"] == "controller_reference_v2")["payload"]["reference_continuity"]["reset_epoch"] = 2
+        next(row for row in events if row["kind"] == "controller_reference")["payload"]["reference_continuity"]["reset_epoch"] = 2
     with pytest.raises(ValueError, match=match):
         verify(events, identity, window, frozen_scene)
 
@@ -128,7 +128,7 @@ def test_a_step_finished_before_the_stop_receipt_but_ahead_of_its_sim_stamp_is_n
 
 
 def test_the_first_command_clock_comes_from_the_first_goal_sending_phase_begin(frozen_scene):
-    events, identity, window, boundaries, _s, _samples, teacher = materials_v2(frozen_scene)
+    events, identity, window, boundaries, _s, _samples, teacher = collection_materials(frozen_scene)
     # a later goal phase_begin does not move the first command
     extra = copy.deepcopy(teacher_rows(events)[1])
     extra["payload"]["teacher_event"]["seq"] = 3
@@ -138,9 +138,9 @@ def test_the_first_command_clock_comes_from_the_first_goal_sending_phase_begin(f
 
 # ---- boundary documents ----------------------------------------------------------------------------------------
 
-def test_the_v2_reset_boundary_is_closed_and_bound_to_its_scope(frozen_scene):
+def test_the_reset_boundary_is_closed_and_bound_to_its_scope(frozen_scene):
     from so101_demo.act.collection_boundaries import validate_verified_reset
-    _e, identity, _w, boundaries, _s, _x, _t = materials_v2(frozen_scene)
+    _e, identity, _w, boundaries, _s, _x, _t = collection_materials(frozen_scene)
     reset = boundaries["verified_reset"]
     assert validate_verified_reset(reset, identity=identity) == reset
     for change in ({"generation": 1}, {"controller_readback_sha256": "a" * 64}, {"schema_version": 1},
@@ -150,7 +150,7 @@ def test_the_v2_reset_boundary_is_closed_and_bound_to_its_scope(frozen_scene):
             validate_verified_reset(bad, identity=identity)
 
 
-def test_a_v1_verified_reset_boundary_is_rejected():
+def test_a_retired_verified_reset_boundary_is_rejected():
     from so101_demo.act.collection_boundaries import validate_verified_reset
     identity = dict(session_id="s", attempt_id="a", reset_epoch=1)
     clock = dict(sim_time_ns=0, begin_monotonic_ns=10_000_000_000, end_monotonic_ns=10_000_000_001)
@@ -164,23 +164,23 @@ def test_a_v1_verified_reset_boundary_is_rejected():
         validate_verified_reset(v1, identity=identity)
 
 
-def test_the_v2_normal_stop_boundary_needs_a_successful_result_and_a_stopped_arm(frozen_scene):
-    from so101_demo.act.native_endpoints import validate_normal_stop_boundary_v2
-    _e, identity, _w, boundaries, _s, _x, _t = materials_v2(frozen_scene)
+def test_the_normal_stop_boundary_needs_a_successful_result_and_a_stopped_arm(frozen_scene):
+    from so101_demo.act.native_endpoints import validate_normal_stop_boundary
+    _e, identity, _w, boundaries, _s, _x, _t = collection_materials(frozen_scene)
     stop = boundaries["normal_stop"]
-    assert validate_normal_stop_boundary_v2(stop, identity=identity).publisher_sequence == 9
+    assert validate_normal_stop_boundary(stop, identity=identity).publisher_sequence == 9
     for path, value in (("trajectory_result", "TIMED_OUT"), ("confirmed_monotonic_ns", 1), ("schema_version", 1)):
         bad = {**copy.deepcopy(stop), path: value}
         with pytest.raises(ValueError):
-            validate_normal_stop_boundary_v2(bad, identity=identity)
+            validate_normal_stop_boundary(bad, identity=identity)
     moving = copy.deepcopy(stop)
     moving["joint_velocities"]["3"] = .01
     with pytest.raises(ValueError):
-        validate_normal_stop_boundary_v2(moving, identity=identity)
+        validate_normal_stop_boundary(moving, identity=identity)
 
 
 def test_reset_complete_event_must_be_consistent_with_the_recorders_own_verified_reset():
-    from so101_demo.act.teacher_collection_v2 import validate_reset_complete_matches
+    from so101_demo.act.teacher_collection import validate_reset_complete_matches
     identity = dict(session_id="s", attempt_id="a", reset_epoch=2)
     document = envelope(1, "reset_complete", 2_000_000, 9_000_000_000,
                         dict(session_id="s", reset_epoch=2, simulation_time_s=.002, simulation_step=1,
@@ -207,7 +207,7 @@ def test_reset_complete_event_must_be_consistent_with_the_recorders_own_verified
 
 
 def test_the_goal_sending_phase_begin_becomes_the_first_command_clock():
-    from so101_demo.act.teacher_collection_v2 import first_command_clock
+    from so101_demo.act.teacher_collection import first_command_clock
     identity = dict(session_id="s", attempt_id="a", reset_epoch=2)
     goal = envelope(2, "phase_begin", 5_000_000, 9_000_100_000, dict(state="X", sim_time_ns=5_000_000,
         monotonic_ns=9_000_100_000, goal_sent=True, goal_kind="arm"), identity=identity)
@@ -220,7 +220,7 @@ def test_the_goal_sending_phase_begin_becomes_the_first_command_clock():
 
 # ---- audit writer ----------------------------------------------------------------------------------------------
 
-def test_the_audit_refuses_a_v1_dispatch_row_a_v1_event_and_a_repeated_v2_event(tmp_path):
+def test_the_audit_refuses_a_retired_dispatch_row_a_retired_event_and_a_repeated_event(tmp_path):
     from test_act_episode_audit import complete_audit
     writer, _window = complete_audit(tmp_path)
     identity = dict(writer.identity)
@@ -242,7 +242,7 @@ def test_the_audit_refuses_a_v1_dispatch_row_a_v1_event_and_a_repeated_v2_event(
 
 
 def test_reset_complete_payload_is_closed_and_coherent():
-    from so101_demo.act.teacher_collection_v2 import validate_reset_complete_payload
+    from so101_demo.act.teacher_collection import validate_reset_complete_payload
     identity = dict(session_id="s", attempt_id="a", reset_epoch=2)
     good = dict(session_id="s", reset_epoch=2, simulation_time_s=.002, simulation_step=1,
                 publisher_sequence=7, received_monotonic_ns=9_000_000_000)

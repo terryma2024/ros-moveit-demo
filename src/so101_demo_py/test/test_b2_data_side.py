@@ -1,11 +1,11 @@
-"""B2: the Recorder data side consumes V2 Teacher events (no dispatch receipt, no sequence_complete, no stop RPC)."""
+"""B2: the Recorder data side consumes TEACHER_EVENT_SCHEMA Teacher events (no dispatch receipt, no sequence_complete, no stop RPC)."""
 import copy
 import time
 from types import SimpleNamespace
 
 import pytest
 
-from b2_collection_fixtures import V2, envelope
+from b2_collection_fixtures import TEACHER_EVENT_SCHEMA, envelope
 from so101_demo.ros.recorder_data_side import RecorderDataSide
 
 IDENTITY = dict(session_id="s", attempt_id="a", reset_epoch=4, release_epoch=0,
@@ -125,7 +125,7 @@ def test_the_initial_boundary_cannot_follow_the_first_command():
         side._step_data_initial_boundary()
 
 
-def test_normal_stop_event_is_kept_as_the_v2_stop_boundary_and_needs_no_rpc():
+def test_normal_stop_event_is_kept_as_the_stop_boundary_and_needs_no_rpc():
     side, episode, retained = consumer()
     mono = time.monotonic_ns() - 1_000_000
     clock = dict(sim_time_ns=3_000_000_000, begin_monotonic_ns=mono, end_monotonic_ns=mono)
@@ -139,7 +139,7 @@ def test_normal_stop_event_is_kept_as_the_v2_stop_boundary_and_needs_no_rpc():
     assert stop["source_clock"] == clock and stop["confirmed_monotonic_ns"] == mono
 
 
-def test_a_v1_event_and_a_repeated_sequence_are_data_failures():
+def test_a_retired_schema_event_and_a_repeated_sequence_are_data_failures():
     """Contiguity across all events (scene operations included) is the engine's `EventStreamMonitor`; the data side
     only needs retained events strictly ordered (scene operations take numbers it never sees)."""
     side, episode, _retained = consumer()

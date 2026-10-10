@@ -147,7 +147,7 @@ def validate_source_clock(clock):
     return clock
 
 
-def validate_normal_stop_boundary_v2(boundary, *, identity):
+def validate_normal_stop_boundary(boundary, *, identity):
     """The V2 normal-stop boundary: a successful `ExecuteTrajectory` result, then every arm and gripper joint at rest.
 
     It names the world sample the stop is anchored to (session, epoch, step, publisher sequence, sim stamp) and the
@@ -195,7 +195,7 @@ def first_world_after_stop(sources, boundary, *, identity, capture_clock, raw_st
     Native/FK source authenticity and full stop verdict/normal-end/lease proofs remain
     required by the enclosing independent audit reader; this selection alone is not QC.
     """
-    bound = validate_normal_stop_boundary_v2(boundary, identity=identity)
+    bound = validate_normal_stop_boundary(boundary, identity=identity)
     capture = validate_source_clock(capture_clock)
     last_native_step = None
     for sample in raw_steps:

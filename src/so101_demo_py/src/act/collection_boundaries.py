@@ -14,7 +14,7 @@ def validate_verified_reset(document, *, identity=None):
     Its clock is the evidence producer's own: the sample's simulation time and the producer's monotonic interval of that
     physics step, never a receipt time. The Recorder runs before the Teacher, so this boundary precedes the capture start and
     the Teacher's first command on both clocks; the Teacher's `reset_complete` event is a later, consistent claim
-    (`teacher_collection_v2.validate_reset_complete_matches`). Version 2 (the Teacher's receipt time) is never accepted.
+    (`teacher_collection.validate_reset_complete_matches`). Version 2 (the Teacher's receipt time) is never accepted.
     """
     fields(document, {'kind', 'schema_version', 'session_id', 'attempt_id', 'reset_epoch', 'source_clock',
                       'physical_source'})
@@ -58,8 +58,8 @@ def validate_collection_boundary(document, *, identity=None):
     elif document['stage'] == 'capture_start':
         validate_source_clock(document['value'])
     elif document['stage'] == 'normal_stop':
-        from .native_endpoints import validate_normal_stop_boundary_v2
-        validate_normal_stop_boundary_v2(document['value'], identity=identity if identity is not None else dict(
+        from .native_endpoints import validate_normal_stop_boundary
+        validate_normal_stop_boundary(document['value'], identity=identity if identity is not None else dict(
             session_id=document['value']['epoch']['session_id'], reset_epoch=document['value']['epoch']['reset_epoch']))
     elif document['stage'] in ('initial_capture','final_capture'):
         from .native_endpoints import validate_world_source

@@ -32,7 +32,7 @@ def _stream(published, **kwargs):
 
 def test_the_stream_names_the_topic_schema_and_every_event_type_the_design_lists():
     assert STREAM_TOPIC == "/so101/teacher/events"
-    assert STREAM_SCHEMA == "SO101_TEACHER_EVENT_V2"
+    assert STREAM_SCHEMA == "SO101_TEACHER_EVENT"
     assert set(EVENT_TYPES) == {
         "reset_complete", "teacher_start_observation", "phase_begin", "phase_finish", "normal_stop",
         "teacher_end_observation", "terminal", "scene_operation"}
@@ -421,7 +421,7 @@ def test_normal_stop_events_reach_the_stream_through_the_executions_own_publishe
     assert event["type"] == "normal_stop" and event["payload"] == {"proof": {"stop_confirmed_wall_s": 1.0}}
 
 
-# REPLACED_BY test_b2_teacher_events_v2.py: the phase port's start and dispatch receipts are gone with the
+# REPLACED_BY test_teacher_events.py: the phase port's start and dispatch receipts are gone with the
 # broker; the V2 phase events (with the sim stamp of the goal send) are tested there.
 
 

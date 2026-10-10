@@ -179,7 +179,7 @@ def _binding():
 def _engine(latched):
     return SimpleNamespace(on_event_text=lambda text: None, latch=lambda reason, **facts: latched.append(reason),
                            invalid=latched, policy={"finish_budget_s": 1.0}, end_obs=None,
-                           event_summary=lambda: {"schema": "SO101_TEACHER_EVENT_V2", "accepted": 0, "last_seq": 0,
+                           event_summary=lambda: {"schema": "SO101_TEACHER_EVENT", "accepted": 0, "last_seq": 0,
                                                   "types": {}})
 
 
@@ -329,7 +329,7 @@ def _stop_proof(clock_ns):
                 joint_velocities={n: 0.0 for n in "123456"})
 
 
-def test_the_normal_stop_event_is_the_v2_stop_boundary_the_final_boundary_will_use():
+def test_the_normal_stop_event_is_the_stop_boundary_the_final_boundary_will_use():
     sources, _, engine, _ = _prepared()
     proof = _stop_proof(time.monotonic_ns() - 1_000_000)
     sources.on_teacher_event(engine, _stream_event("normal_stop", {"proof": proof}))

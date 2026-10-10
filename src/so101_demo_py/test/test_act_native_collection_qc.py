@@ -2,18 +2,18 @@ import copy
 
 import pytest
 
-from b2_collection_fixtures import materials_v2
+from b2_collection_fixtures import collection_materials
 from test_act_scene_association import frozen_scene
 from paths import PACKAGE_ROOT
 
 
 def materials(frozen_scene):
     """The complete V2 originals (reset_complete, goal phase_begin, normal_stop, terminal, summary, continuity)."""
-    events, identity, window, boundaries, sources, samples, _teacher = materials_v2(frozen_scene)
+    events, identity, window, boundaries, sources, samples, _teacher = collection_materials(frozen_scene)
     return events, identity, window, boundaries, sources, samples
 
 
-# REPLACED_BY test_b2_collection_v2.py: the dispatch-receipt / stop-evidence fault matrix of the broker contract
+# REPLACED_BY test_teacher_collection.py: the dispatch-receipt / stop-evidence fault matrix of the broker contract
 # (`test_current_native_qc_recomputes_complete_original_boundary_causality`, the previous-terminal-before-next-enqueue
 # test) is gone with that contract; the V2 matrix is there.
 

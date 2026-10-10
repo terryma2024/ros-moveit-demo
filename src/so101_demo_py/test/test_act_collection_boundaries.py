@@ -79,7 +79,7 @@ def test_sealed_reader_refuses_resigned_boundary_tamper_after_positive_control(t
 
 
 def test_the_expert_sequence_boundary_stage_is_gone_the_terminal_event_replaces_it():
-    """REPLACED_BY: test_b2_collection_v2 (the terminal V2 event follows normal_stop); contract removed, plan R9.9."""
+    """REPLACED_BY: test_teacher_collection (the terminal V2 event follows normal_stop); contract removed, plan R9.9."""
     from so101_demo.act.collection_boundaries import validate_collection_boundary
     now=10_000_000_100
     clock=dict(sim_time_ns=5_000_000,begin_monotonic_ns=now,end_monotonic_ns=now+1)

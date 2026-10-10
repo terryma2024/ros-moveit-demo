@@ -1,4 +1,4 @@
-"""B2: the offline engine turns a missing, foreign, V1 or gapped Teacher event into an INVALID verdict."""
+"""B2: the offline engine turns a missing, foreign, retired-schema or gapped Teacher event into an INVALID verdict."""
 import json
 from types import SimpleNamespace
 
@@ -9,7 +9,7 @@ import time
 from so101_demo.act.offline.engine import OfflineEngine
 from so101_demo.act.teacher_event_stream import StreamIdentity
 
-V2 = "SO101_TEACHER_EVENT_V2"
+TEACHER_EVENT_SCHEMA = "SO101_TEACHER_EVENT"
 IDENTITY = StreamIdentity("s", 1, "a")
 
 
@@ -30,7 +30,7 @@ def make_engine(tmp_path):
     return engine
 
 
-def text(seq, type_, payload=None, *, schema=V2, attempt="a"):
+def text(seq, type_, payload=None, *, schema=TEACHER_EVENT_SCHEMA, attempt="a"):
     return json.dumps({"schema": schema, "seq": seq, "type": type_, "session_id": "s", "reset_epoch": 1,
                        "attempt_id": attempt, "sim_time_ns": seq * 1000, "monotonic_ns": seq * 1000,
                        "payload": payload or {}})
@@ -54,7 +54,7 @@ def complete(engine):
          text(3, "normal_stop", {"proof": {"stop_confirmed_wall_s": 1.0}}), text(4, "terminal", {"status": "DONE"}))
 
 
-def test_a_complete_v2_run_has_no_missing_event(tmp_path):
+def test_a_complete_run_has_no_missing_event(tmp_path):
     engine = make_engine(tmp_path)
     complete(engine)
     engine.require_teacher_events()
@@ -82,14 +82,14 @@ def test_a_phase_begin_that_sent_no_goal_is_not_the_first_command(tmp_path):
     assert "RECORDER_EVENT_MISSING: phase_begin" in reasons(engine)
 
 
-def test_a_v1_event_is_rejected_and_breaks_the_stream(tmp_path):
+def test_a_retired_schema_event_is_rejected_and_breaks_the_stream(tmp_path):
     engine = make_engine(tmp_path)
     feed(engine, text(1, "reset_complete", schema="SO101_TEACHER_EVENT_V1"))
     assert "TEACHER_EVENT_SCHEMA_UNKNOWN" in reasons(engine) and engine._stream_broken
     assert engine.sources.seen == []
 
 
-def test_a_removed_v1_event_type_is_rejected(tmp_path):
+def test_a_removed_event_type_is_rejected(tmp_path):
     engine = make_engine(tmp_path)
     feed(engine, text(1, "native_dispatch", {"goal_id": "g"}))
     assert "TEACHER_EVENT_TYPE_UNKNOWN" in reasons(engine)
@@ -112,5 +112,5 @@ def test_the_engine_counts_every_accepted_event_for_the_sealed_summary(tmp_path)
     complete(engine)
     feed(engine)
     summary = engine.event_summary()
-    assert summary == {"schema": V2, "accepted": 4, "last_seq": 4,
+    assert summary == {"schema": TEACHER_EVENT_SCHEMA, "accepted": 4, "last_seq": 4,
                        "types": {"reset_complete": 1, "phase_begin": 1, "normal_stop": 1, "terminal": 1}}

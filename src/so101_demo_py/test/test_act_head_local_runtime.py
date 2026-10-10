@@ -533,7 +533,7 @@ class Producer:
         self.thread.join(1.)
 
 
-def test_startup_goes_through_the_owner_and_records_the_v2_events_in_order(monkeypatch):
+def test_startup_goes_through_the_owner_and_records_the_events_in_order(monkeypatch):
     row = runtime_setup(monkeypatch)
     runtime = armed_runtime(row)
     assert kinds_of(row, 'CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF', 'STARTUP_STOP_WINDOW',

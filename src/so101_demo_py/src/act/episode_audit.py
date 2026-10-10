@@ -107,9 +107,9 @@ _EVENT_PAYLOADS = {
     "physics_chunk_v1": frozenset({"raw_chunk"}),
     "source_alignment_v1": frozenset({"association"}),
     "world_source_v1": frozenset({"world_source"}),
-    "teacher_event_v2": frozenset({"teacher_event"}),
-    "teacher_event_summary_v2": frozenset({"event_summary"}),
-    "controller_reference_v2": frozenset({"reference_continuity"}),
+    "teacher_event": frozenset({"teacher_event"}),
+    "teacher_event_summary": frozenset({"event_summary"}),
+    "controller_reference": frozenset({"reference_continuity"}),
     "collection_boundary_v1": frozenset({"collection_boundary"}),
 }
 _EVENT_STRINGS = {"phase": "phase", "reason": "reason", "owner": "dispatch", "permit_id": "accept",
@@ -558,7 +558,7 @@ def _payload_typed(payload) -> bool:
             except (KeyError, TypeError, ValueError):
                 return False
         elif key == "teacher_event":
-            from .teacher_collection_v2 import RETAINED_TYPES, validate_teacher_event
+            from .teacher_collection import RETAINED_TYPES, validate_teacher_event
             try:
                 validate_teacher_event(value)
                 if value["type"] not in RETAINED_TYPES:
@@ -566,13 +566,13 @@ def _payload_typed(payload) -> bool:
             except (KeyError, TypeError, ValueError):
                 return False
         elif key == "event_summary":
-            from .teacher_collection_v2 import validate_event_summary
+            from .teacher_collection import validate_event_summary
             try:
                 validate_event_summary(value)
             except (KeyError, TypeError, ValueError):
                 return False
         elif key == "reference_continuity":
-            from .teacher_collection_v2 import validate_reference_continuity
+            from .teacher_collection import validate_reference_continuity
             try:
                 validate_reference_continuity(value)
             except (KeyError, TypeError, ValueError):
@@ -1014,7 +1014,7 @@ class EpisodeAuditWriter:
             "payload": {"world_source": document}})
 
     def append_teacher_event(self, document):
-        """Retain one accepted `SO101_TEACHER_EVENT_V2` event verbatim, in strictly increasing `seq` order.
+        """Retain one accepted `SO101_TEACHER_EVENT` event verbatim, in strictly increasing `seq` order.
 
         Scene operations take sequence numbers without being retained here, so a skip is allowed; the sealed summary
         (`append_teacher_event_summary`) is what proves that nothing else was lost.
@@ -1023,7 +1023,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity['release_epoch'] = self._event_release_epoch
-        self.append_source('events', dict(kind='teacher_event_v2', identity=identity,
+        self.append_source('events', dict(kind='teacher_event', identity=identity,
             sim_time_s=document['sim_time_ns'] / 1e9, monotonic_ns=time.monotonic_ns(),
             payload={'teacher_event': document}))
 
@@ -1033,7 +1033,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity['release_epoch'] = self._event_release_epoch
-        self.append_source('events', dict(kind='teacher_event_summary_v2', identity=identity, sim_time_s=None,
+        self.append_source('events', dict(kind='teacher_event_summary', identity=identity, sim_time_s=None,
             monotonic_ns=time.monotonic_ns(), payload={'event_summary': summary}))
 
     def append_reference_continuity(self, report):
@@ -1042,7 +1042,7 @@ class EpisodeAuditWriter:
         identity = dict(self.identity)
         if self._event_release_epoch is not None:
             identity['release_epoch'] = self._event_release_epoch
-        self.append_source('events', dict(kind='controller_reference_v2', identity=identity, sim_time_s=None,
+        self.append_source('events', dict(kind='controller_reference', identity=identity, sim_time_s=None,
             monotonic_ns=time.monotonic_ns(), payload={'reference_continuity': report}))
 
     def append_collection_boundary(self, stage, value):
@@ -1081,8 +1081,8 @@ class EpisodeAuditWriter:
             if not _payload_typed(item["payload"]):
                 # every value must be the type its key declares, per kind
                 raise ValueError("AUDIT_SCHEMA_INVALID")
-            if item['kind']=='teacher_event_v2':
-                from .teacher_collection_v2 import first_command_clock, validate_teacher_event
+            if item['kind']=='teacher_event':
+                from .teacher_collection import first_command_clock, validate_teacher_event
                 document=item['payload']['teacher_event']
                 validate_teacher_event(document, identity=self.identity)
                 if (document['seq'] <= self._teacher_event_last_seq
@@ -1248,7 +1248,7 @@ class EpisodeAuditWriter:
                 raise ValueError("AUDIT_BINDING_REVOKED")
         if not isinstance(window, dict) or not window:
             raise ValueError("AUDIT_WINDOW_INVALID")
-        from .teacher_collection_v2 import validate_first_command_window, validate_normal_end_window
+        from .teacher_collection import validate_first_command_window, validate_normal_end_window
         validate_first_command_window(self._native_first_dispatch_clock,window)
         validate_normal_end_window(self._native_normal_end_clock,window)
         if (self.scope.get("mode") == "formal" or set(window) == _WINDOW_FIELDS) and not _window_ok(
@@ -1388,10 +1388,10 @@ def verify_audit_manifest(path: Path) -> dict:
         # the manifest names the scope it was collected under, and the payload must agree with it
         raise ValueError("AUDIT_MANIFEST_INVALID")
     _verify_streams(audit, manifest["identity"])
-    from .teacher_collection_v2 import first_command_clock, validate_first_command_window, validate_normal_end_window
+    from .teacher_collection import first_command_clock, validate_first_command_window, validate_normal_end_window
     first_commands=[clock for clock in (first_command_clock(row['payload']['teacher_event'])
                     for row in _records(audit/'events.jsonl',_EVENT_FIELDS,'AUDIT_EVENT_INVALID')
-                    if row['kind']=='teacher_event_v2') if clock is not None]
+                    if row['kind']=='teacher_event') if clock is not None]
     validate_first_command_window(None if not first_commands else first_commands[0], manifest['window'])
     normal_ends=[row['payload']['collection_boundary']['value']['source_clock']
         for row in _records(audit/'events.jsonl',_EVENT_FIELDS,'AUDIT_EVENT_INVALID')
@@ -1693,8 +1693,8 @@ def _verify_streams(audit: Path, identity: dict) -> None:
             raise ValueError("AUDIT_EVENT_INVALID")
         if not _payload_typed(payload):
             raise ValueError("AUDIT_EVENT_INVALID")
-        if row['kind']=='teacher_event_v2':
-            from .teacher_collection_v2 import validate_teacher_event
+        if row['kind']=='teacher_event':
+            from .teacher_collection import validate_teacher_event
             document = payload['teacher_event']
             validate_teacher_event(document, identity=identity)
             if (document['seq'] <= teacher_event_last_seq or row['monotonic_ns'] < document['monotonic_ns']

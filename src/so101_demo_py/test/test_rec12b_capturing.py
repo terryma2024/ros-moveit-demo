@@ -14,20 +14,20 @@ import time
 
 import pytest
 
-from b2_collection_fixtures import materials_v2
+from b2_collection_fixtures import collection_materials
 from so101_demo.act.offline.engine import RC_VALID
 from test_act_scene_association import frozen_scene  # noqa: F401  (fixture)
 from test_act_episode_recorder import NOT_EXHAUSTED, readback, result_of, teacher_script
 from test_rec2_stall_replay import RealTimeSources, run_replay
 
 
-from test_b2_collection_v2 import verify
+from test_teacher_collection import verify
 
 
 # ---- the order, in the sealed originals ----------------------------------------------------------------------------------
 
 def test_the_order_reset_then_capture_start_then_teacher_start_then_first_command_is_what_the_qc_reads(frozen_scene):
-    events, identity, window, boundaries, _s, _x, teacher = materials_v2(frozen_scene)
+    events, identity, window, boundaries, _s, _x, teacher = collection_materials(frozen_scene)
     reset = boundaries["verified_reset"]["source_clock"]
     start = boundaries["capture_start"]
     initial = boundaries["initial_capture"]["source_clock"]
@@ -39,8 +39,8 @@ def test_the_order_reset_then_capture_start_then_teacher_start_then_first_comman
 
 
 def test_a_teacher_that_started_before_the_capture_was_running_is_invalid(frozen_scene):
-    events, identity, window, boundaries, _s, _x, teacher = materials_v2(frozen_scene)
-    row = next(item for item in events if item["kind"] == "teacher_event_v2"
+    events, identity, window, boundaries, _s, _x, teacher = collection_materials(frozen_scene)
+    row = next(item for item in events if item["kind"] == "teacher_event"
                and item["payload"]["teacher_event"]["type"] == "reset_complete")
     document = row["payload"]["teacher_event"]
     document["monotonic_ns"] = boundaries["capture_start"]["begin_monotonic_ns"] - 1       # before the capture start
@@ -50,7 +50,7 @@ def test_a_teacher_that_started_before_the_capture_was_running_is_invalid(frozen
 
 
 def test_a_verified_reset_after_the_capture_start_is_invalid_the_old_order_is_gone(frozen_scene):
-    events, identity, window, boundaries, _s, _x, _t = materials_v2(frozen_scene)
+    events, identity, window, boundaries, _s, _x, _t = collection_materials(frozen_scene)
     boundary = next(item for item in events if item["kind"] == "collection_boundary_v1"
                     and item["payload"]["collection_boundary"]["stage"] == "verified_reset")
     clock = boundary["payload"]["collection_boundary"]["value"]["source_clock"]
@@ -62,7 +62,7 @@ def test_a_verified_reset_after_the_capture_start_is_invalid_the_old_order_is_go
 
 
 def test_a_missing_world_sync_before_the_first_command_makes_the_data_invalid(frozen_scene):
-    events, identity, window, _b, _s, _x, _t = materials_v2(frozen_scene)
+    events, identity, window, _b, _s, _x, _t = collection_materials(frozen_scene)
     kept = [item for item in events if not (item["kind"] == "source_alignment_v1"
                                             and item["payload"]["association"]["operation"] == "world_sync")]
     with pytest.raises(ValueError, match="NATIVE_QC_WORLD_SYNC_REQUIRED"):
@@ -70,7 +70,7 @@ def test_a_missing_world_sync_before_the_first_command_makes_the_data_invalid(fr
 
 
 def test_a_world_sync_whose_readback_came_after_the_first_command_does_not_count(frozen_scene):
-    events, identity, window, _b, _s, _x, _t = materials_v2(frozen_scene)
+    events, identity, window, _b, _s, _x, _t = collection_materials(frozen_scene)
     sync = next(item for item in events if item["kind"] == "source_alignment_v1"
                 and item["payload"]["association"]["operation"] == "world_sync")
     sync["payload"]["association"]["query"]["record"]["response_ros_clock"]["sim_time_ns"] = 9_000_000
@@ -80,7 +80,7 @@ def test_a_world_sync_whose_readback_came_after_the_first_command_does_not_count
 
 @pytest.mark.parametrize("change", ["missing", "twice", "old_schema", "after_start"])
 def test_exactly_one_pre_setup_initial_alignment_of_the_current_schema_before_the_capture_start(frozen_scene, change):
-    events, identity, window, boundaries, _s, _x, _t = materials_v2(frozen_scene)
+    events, identity, window, boundaries, _s, _x, _t = collection_materials(frozen_scene)
     initial = next(item for item in events if item["kind"] == "source_alignment_v1"
                    and item["payload"]["association"]["operation"] == "initial")
     if change == "missing":
@@ -121,7 +121,7 @@ def test_the_verified_reset_is_taken_from_the_producers_clock_of_the_first_world
 
 
 def test_the_teachers_reset_complete_cannot_name_evidence_older_than_the_recorders_own():
-    from so101_demo.act.teacher_collection_v2 import validate_reset_complete_matches
+    from so101_demo.act.teacher_collection import validate_reset_complete_matches
     from b2_collection_fixtures import envelope
     identity = dict(session_id="s", attempt_id="a", reset_epoch=2)
     boundary = dict(kind="ACT_VERIFIED_RESET_BOUNDARY", schema_version=3, session_id="s", attempt_id="a", reset_epoch=2,

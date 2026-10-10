@@ -124,7 +124,7 @@ def _verify_audit_lease(audit_manifest: Path | None, lease: LeaseIdentity) -> No
 
 
 def _current_qc_required(audit_manifest):
-    from .teacher_collection_v2 import is_current_episode
+    from .teacher_collection import is_current_episode
     return audit_manifest is not None and is_current_episode(json.loads(
         _read_regular(audit_manifest.parent/'inputs.json')))
 

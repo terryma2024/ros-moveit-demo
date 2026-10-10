@@ -1,4 +1,4 @@
-"""Collection facts derived from `SO101_TEACHER_EVENT_V2` events (plan R9.9): no dispatch receipt, no broker stop proof.
+"""Collection facts derived from `SO101_TEACHER_EVENT` events (plan R9.9): no dispatch receipt, no broker stop proof.
 
 * the verified reset is the `reset_complete` event: the first `SimulationEvidence` of the session and new reset epoch
   that the Teacher's own observer received;
@@ -14,7 +14,7 @@ from __future__ import annotations
 from .contracts import fields, identifier, integer
 from .native_endpoints import validate_source_clock
 
-SCHEMA = "SO101_TEACHER_EVENT_V2"
+SCHEMA = "SO101_TEACHER_EVENT"
 EVENT_TYPES = frozenset({
     "reset_complete", "teacher_start_observation", "phase_begin", "phase_finish", "normal_stop",
     "teacher_end_observation", "terminal", "scene_operation"})
@@ -175,10 +175,10 @@ def validate_normal_end_window(stop_clock, window):
 
 
 def is_current_episode(inputs, events=()) -> bool:
-    """A current (V2) episode: its frozen inputs are manifest schema 2, or it carries a `teacher_event_v2` row.
+    """A current (V2) episode: its frozen inputs are manifest schema 2, or it carries a `teacher_event` row.
 
     The frozen manifest is digest-bound, so stripping every event from a current episode cannot select an older reader.
     """
     from .first_episode_inputs import MANIFEST_SCHEMA_VERSION
     return (isinstance(inputs, dict) and inputs.get("schema_version") == MANIFEST_SCHEMA_VERSION) or any(
-        event.get("kind") == "teacher_event_v2" for event in events)
+        event.get("kind") == "teacher_event" for event in events)

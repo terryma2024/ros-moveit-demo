@@ -56,7 +56,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     """Recompute complete collection boundaries from originals, without live ports.
 
     The enclosing episode reader still authenticates the seal, scope, rows, references and lease. This readback
-    supplies the cross-boundary causality, from `SO101_TEACHER_EVENT_V2` events: `reset_complete` is the Teacher's start (after the
+    supplies the cross-boundary causality, from `SO101_TEACHER_EVENT` events: `reset_complete` is the Teacher's start (after the
     capture is running), the verified reset is the Recorder's own first evidence of the epoch,
     the first command is the first goal-sending `phase_begin`, the normal end is `normal_stop` then `terminal`. It also
     requires the event sequence to be whole and the `controller_state` label stream to have no gap in its window.
@@ -73,7 +73,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     from .native_endpoints import first_world_after_start, first_world_after_stop, verify_world_source
     from .raw_physics_chunks import verify_raw_chunk
     from .scene_association import canonical
-    from .teacher_collection_v2 import (
+    from .teacher_collection import (
         SCHEMA as EVENT_SCHEMA, first_command_clock, validate_event_summary, validate_first_command_window,
         validate_normal_end_window, validate_reset_complete_matches, validate_teacher_event)
 
@@ -104,7 +104,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             if sequence in world_hashes:
                 raise ValueError('NATIVE_QC_WORLD_REPEATED')
             world_hashes[sequence] = world_source_digest(source)
-        elif event['kind'] == 'teacher_event_v2':
+        elif event['kind'] == 'teacher_event':
             document = event['payload']['teacher_event']
             if document.get('schema') != EVENT_SCHEMA:
                 raise ValueError('NATIVE_QC_EVENT_SCHEMA_INVALID')
@@ -113,9 +113,9 @@ def verify_native_collection_events(events, *, identity, window, inputs):
             except ValueError as error:
                 raise ValueError('NATIVE_QC_EVENT_IDENTITY_INVALID') from error
             teacher.append((event, document))
-        elif event['kind'] == 'teacher_event_summary_v2':
+        elif event['kind'] == 'teacher_event_summary':
             summaries.append(validate_event_summary(event['payload']['event_summary']))
-        elif event['kind'] == 'controller_reference_v2':
+        elif event['kind'] == 'controller_reference':
             continuity.append(event['payload']['reference_continuity'])
         elif event['kind'] == 'collection_boundary_v1':
             document = claim_collection_boundary(event, identity=identity,
@@ -276,7 +276,7 @@ def verify_reference_continuity(report, *, identity, window):
     list cannot prove the labels clean. (The earlier rule, zero gaps anywhere in the window, was one that a producer
     dropping one realtime publication per ~30 s per controller can never meet although no label is affected.)
     """
-    from .teacher_collection_v2 import CONTINUITY_PERIOD_NS, validate_reference_continuity
+    from .teacher_collection import CONTINUITY_PERIOD_NS, validate_reference_continuity
 
     if report is None:
         raise ValueError('REFERENCE_CONTINUITY_MISSING')
@@ -320,7 +320,7 @@ def verify_reference_epoch(rows, *, reset_sim_time_ns):
 def _requires_native_collection(inputs, events):
     # The frozen input digest (manifest schema 2) and the external scope bind this marker. Removing all
     # Teacher events from a current episode therefore cannot select an old reader.
-    from .teacher_collection_v2 import is_current_episode
+    from .teacher_collection import is_current_episode
     return is_current_episode(inputs, events)
 
 

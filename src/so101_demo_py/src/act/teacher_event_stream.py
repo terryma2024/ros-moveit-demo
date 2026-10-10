@@ -1,4 +1,4 @@
-"""The Teacher event stream on `/so101/teacher/events` (JSON schema `SO101_TEACHER_EVENT_V2`).
+"""The Teacher event stream on `/so101/teacher/events` (JSON schema `SO101_TEACHER_EVENT`).
 
 The Teacher publishes execution facts for an independent Recorder process to consume. The stream is one-way and the
 Teacher side is non-blocking by construction:
@@ -39,7 +39,7 @@ _POLL_S = 0.02
 
 
 class TeacherEventError(ValueError):
-    """A stream event that is not a legal `SO101_TEACHER_EVENT_V2` document, or breaks the stream's ordering."""
+    """A stream event that is not a legal `SO101_TEACHER_EVENT` document, or breaks the stream's ordering."""
 
 
 def _is_int(value) -> bool:

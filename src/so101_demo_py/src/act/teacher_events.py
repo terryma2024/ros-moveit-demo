@@ -1,4 +1,4 @@
-"""Bounded, non-blocking, in-process Teacher event stream (SO101_TEACHER_EVENT_V2).
+"""Bounded, non-blocking, in-process Teacher event stream (SO101_TEACHER_EVENT).
 
 The Teacher publishes execution facts (phase boundaries with their sim stamps, the normal-stop proof, the terminal
 result) for the data side to consume. There are no dispatch receipts: the first goal-sending `phase_begin` is the first
@@ -16,7 +16,7 @@ import threading
 import time
 from collections import deque
 
-SCHEMA = "SO101_TEACHER_EVENT_V2"
+SCHEMA = "SO101_TEACHER_EVENT"
 DEFAULT_DEPTH = 64
 KINDS = frozenset({"phase_begin", "phase_finish", "normal_stop"})
 

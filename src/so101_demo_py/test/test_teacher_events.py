@@ -1,4 +1,4 @@
-"""B2 (plan R3 + R9.9): the Teacher publishes `SO101_TEACHER_EVENT_V2`; V1 is refused; control never waits or raises."""
+"""B2 (plan R3 + R9.9): the Teacher publishes `SO101_TEACHER_EVENT`; a retired schema is refused; control never waits or raises."""
 import json
 import time
 
@@ -8,22 +8,22 @@ import b1_pick_place_driver as driver
 from so101_demo.act import teacher_event_stream as stream_module
 from so101_demo.core.domain import State
 
-V1 = "SO101_TEACHER_EVENT_V1"
-V2 = "SO101_TEACHER_EVENT_V2"
+RETIRED_SCHEMA = "SO101_TEACHER_EVENT_V1"
+TEACHER_EVENT_SCHEMA = "SO101_TEACHER_EVENT"
 MOTION_STATES = ("MOVE_ABOVE_OBJECT", "DESCEND", "MICRO_LIFT", "LIFT", "MOVE_ABOVE_PLACE", "DESCEND_TO_PLACE", "RETREAT")
 GOAL_STATES = ("PREPARE_OPEN_GRIPPER", *MOTION_STATES[:1], "DESCEND", "CLOSE_GRIPPER", "MICRO_LIFT", "LIFT",
                "MOVE_ABOVE_PLACE", "DESCEND_TO_PLACE", "OPEN_GRIPPER", "RETREAT")
 
 
-def document(schema=V2, **changes):
+def document(schema=TEACHER_EVENT_SCHEMA, **changes):
     value = {"schema": schema, "seq": 1, "type": "phase_begin", "session_id": "s", "reset_epoch": 1,
              "attempt_id": "a", "sim_time_ns": 10, "monotonic_ns": 20, "payload": {}}
     value.update(changes)
     return json.dumps(value)
 
 
-def test_the_stream_schema_is_v2_and_native_receipt_types_are_gone():
-    assert stream_module.STREAM_SCHEMA == V2
+def test_the_stream_schema_is_current_and_native_receipt_types_are_gone():
+    assert stream_module.STREAM_SCHEMA == TEACHER_EVENT_SCHEMA
     for gone in ("native_start", "native_dispatch", "sequence_complete"):
         assert gone not in stream_module.EVENT_TYPES
     for kept in ("reset_complete", "teacher_start_observation", "phase_begin", "phase_finish", "normal_stop",
@@ -31,21 +31,21 @@ def test_the_stream_schema_is_v2_and_native_receipt_types_are_gone():
         assert kept in stream_module.EVENT_TYPES
 
 
-def test_a_v2_event_decodes_and_a_v1_event_is_rejected():
-    assert stream_module.decode_event(document())["schema"] == V2
+def test_an_event_decodes_and_a_retired_schema_event_is_rejected():
+    assert stream_module.decode_event(document())["schema"] == TEACHER_EVENT_SCHEMA
     with pytest.raises(stream_module.TeacherEventError, match="TEACHER_EVENT_SCHEMA_UNKNOWN"):
-        stream_module.decode_event(document(V1))
+        stream_module.decode_event(document(RETIRED_SCHEMA))
 
 
-def test_the_consumer_monitor_rejects_a_v1_event():
+def test_the_consumer_monitor_rejects_a_retired_schema_event():
     identity = stream_module.StreamIdentity("s", 1, "a")
     monitor = stream_module.EventStreamMonitor(identity)
     with pytest.raises(stream_module.TeacherEventError, match="TEACHER_EVENT_SCHEMA_UNKNOWN"):
-        monitor.accept(document(V1))
+        monitor.accept(document(RETIRED_SCHEMA))
     assert monitor.accept(document()) is not None
 
 
-def test_a_removed_v1_event_type_is_rejected_even_in_a_v2_envelope():
+def test_a_removed_event_type_is_rejected_in_the_current_envelope():
     for removed in ("native_dispatch", "native_start", "sequence_complete"):
         with pytest.raises(stream_module.TeacherEventError, match="TEACHER_EVENT_TYPE_UNKNOWN"):
             stream_module.decode_event(document(type=removed))
@@ -68,7 +68,7 @@ def test_the_queue_depth_is_64_and_an_overflow_counts_drops_without_blocking_or_
     assert time.monotonic() - began < 1.0 and blocked == []  # the Teacher thread never waited for the publisher
     assert results.count(False) == 36
     snapshot = stream.snapshot()
-    assert snapshot["offered"] == 100 and snapshot["dropped"] == 36 and snapshot["schema"] == V2
+    assert snapshot["offered"] == 100 and snapshot["dropped"] == 36 and snapshot["schema"] == TEACHER_EVENT_SCHEMA
 
 
 def test_offer_never_raises_even_when_the_clock_or_the_payload_is_broken():
@@ -95,7 +95,7 @@ def test_a_failing_publish_is_counted_and_the_next_event_still_goes_out():
     stream.offer("phase_finish", {"state": "IDLE"})
     stream.pump()
     assert stream.snapshot()["publish_failures"] == 1 and stream.snapshot()["published"] == 1
-    assert json.loads(sent[1])["schema"] == V2
+    assert json.loads(sent[1])["schema"] == TEACHER_EVENT_SCHEMA
 
 
 # ---- what the Teacher publishes ---------------------------------------------------------------------------------

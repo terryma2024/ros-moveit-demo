@@ -48,13 +48,13 @@ class RecorderDataSide:
         return self._drain_collection_callable()
 
     def _consume_teacher_event(self, episode, event) -> None:
-        """Validate and retain one `SO101_TEACHER_EVENT_V2` event. Any problem is a data problem and raises only to the
+        """Validate and retain one `SO101_TEACHER_EVENT` event. Any problem is a data problem and raises only to the
         data caller. Scene operations never arrive here (the sources route them to the scene tracker).
 
         `seq` contiguity across all events is the engine's `EventStreamMonitor` and the sealed summary; here the retained
         events only have to be strictly ordered, because scene operations take numbers this side never sees.
         """
-        from ..act.teacher_collection_v2 import (
+        from ..act.teacher_collection import (
             SCHEMA, first_command_clock, normal_stop_boundary_from_event,
             validate_teacher_event)
 
@@ -91,7 +91,7 @@ class RecorderDataSide:
 
     def _data_check_reset_event(self, event) -> None:
         """The Teacher's `reset_complete` must be consistent with the retained boundary (it can only come after it)."""
-        from ..act.teacher_collection_v2 import validate_reset_complete_matches, validate_reset_complete_payload
+        from ..act.teacher_collection import validate_reset_complete_matches, validate_reset_complete_payload
 
         validate_reset_complete_payload(event)          # a malformed payload is the Teacher's defect: ValueError as ever
         if getattr(self, "_data_verified_reset", None) is None:
@@ -116,7 +116,7 @@ class RecorderDataSide:
         return getattr(self, "_data_normal_stop", None)
 
     def _data_retain_normal_stop(self, episode, boundary) -> None:
-        from ..act.native_endpoints import validate_normal_stop_boundary_v2
+        from ..act.native_endpoints import validate_normal_stop_boundary
 
         if getattr(self, "_data_skip_normal_stop_boundary", False):
             # the offline processor knows from the whole bag that this stop is not the Teacher's final one (CP-3440): the event
@@ -125,7 +125,7 @@ class RecorderDataSide:
             return
         if getattr(self, "_data_normal_stop", None) is not None:
             raise RuntimeError("TEACHER_NORMAL_STOP_REPEATED")
-        validate_normal_stop_boundary_v2(boundary, identity=episode.identity)
+        validate_normal_stop_boundary(boundary, identity=episode.identity)
         self._data_normal_stop = copy.deepcopy(boundary)
         # The stop is the end of the motion the moment it is known: rows after it must not be labelled. (Applied at the tail only,
         # the capture kept minting rows through the Teacher's end observation, 0.5 s on the pilot bag, and then revoked them.)

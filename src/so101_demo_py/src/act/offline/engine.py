@@ -254,7 +254,7 @@ class OfflineEngine:
 
     def event_summary(self) -> dict:
         """Every V2 event this engine accepted, in order and without a gap (retained or not): sealed for QC."""
-        return {"schema": "SO101_TEACHER_EVENT_V2", "accepted": sum(self._event_types.values()),
+        return {"schema": "SO101_TEACHER_EVENT", "accepted": sum(self._event_types.values()),
                 "last_seq": self._last_seq, "types": dict(self._event_types)}
 
     def require_teacher_events(self) -> None:
