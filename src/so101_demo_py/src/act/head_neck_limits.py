@@ -47,3 +47,10 @@ STOP_WINDOW_QOS_DEPTH = 64
 STOP_WINDOW_DEADLINE_S = 0.5
 #: startup shadow bound: shadow complete <= native PREARM READY sim stamp + this
 STOP_WINDOW_STARTUP_SLACK_NS = 102_000_000
+
+# ---- dead-man (design section 1.4) ---------------------------------------------------------------------
+#: the helper sends one byte every period; the controller latches after the timeout without a byte
+DEADMAN_PERIOD_S = 0.02
+DEADMAN_TIMEOUT_S = 0.2
+#: the helper stops sending when no liveness tick arrived from the runtime for this long
+DEADMAN_LIVENESS_S = 0.15

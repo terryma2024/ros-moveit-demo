@@ -218,3 +218,74 @@ def test_default_one_second_policy_binds_controller_without_relaxing_feedback():
         HeadSearchController(dict(values, max_age_s=.15), simulation_policy=parsed)
     assert parsed.feedback_values()['joint_max_receipt_age_s'] == .25
     assert parsed.feedback_values()['camera_interarrival_deadline_s'] == .5
+
+
+# ---- schema v3: the stop-window and dead-man budgets (CP-3537 ruling 3) ------------------------------
+
+def document_v3(**change):
+    value = dict(document(), schema_version=3, head_stop_window_deadline_s=.5,
+                 head_deadman_period_s=.02, head_deadman_timeout_s=.2, head_deadman_liveness_s=.15)
+    value.update(change)
+    return value
+
+
+def test_v3_adds_exactly_the_four_head_fields_and_reads_back_the_whole_document():
+    cls = policy_type()
+    parsed = cls.parse(document_v3())
+    assert parsed.schema_version == 3
+    assert parsed.readback() == document_v3()
+    assert parsed.head_stop_window_deadline_s == .5 and parsed.head_deadman_liveness_s == .15
+    assert cls.default_document_v3() == dict(cls.default_document(), schema_version=3,
+        head_stop_window_deadline_s=.5, head_deadman_period_s=.02, head_deadman_timeout_s=.2,
+        head_deadman_liveness_s=.15)
+    cls.parse(cls.default_document_v3())
+
+
+def test_v2_policies_stay_readable_and_keep_their_exact_document_and_hash():
+    from so101_demo.act.head_evidence_identity import digest
+    cls = policy_type()
+    parsed = cls.parse(document())
+    assert parsed.schema_version == 2
+    assert parsed.readback() == document(), 'a v2 policy reads back as exactly the v2 document'
+    assert digest(parsed.readback()) == digest(document())
+    # the v3-only budgets of a v2 policy are the design defaults, so a v2 run still has a stop window
+    assert (parsed.head_stop_window_deadline_s, parsed.head_deadman_timeout_s) == (.5, .2)
+    with pytest.raises(ValueError):
+        cls.parse(dict(document(), head_stop_window_deadline_s=.5))
+
+
+@pytest.mark.parametrize('document_change', [
+    dict(head_stop_window_deadline_s=None), dict(head_deadman_period_s=None),
+    dict(head_deadman_timeout_s=None), dict(head_deadman_liveness_s=None),
+])
+def test_v3_requires_every_new_field(document_change):
+    candidate = document_v3()
+    for name in document_change:
+        del candidate[name]
+    with pytest.raises(ValueError):
+        policy_type().parse(candidate)
+
+
+@pytest.mark.parametrize('change', [
+    dict(head_stop_window_deadline_s=.1),          # cannot hold 51 samples plus latency
+    dict(head_stop_window_deadline_s=1.01),        # above the stop confirmation budget
+    dict(head_deadman_period_s=.15),               # period must be shorter than the liveness bound
+    dict(head_deadman_liveness_s=.2),              # liveness must be shorter than the timeout
+    dict(head_deadman_timeout_s=.5),               # above the finite ceiling
+    dict(head_deadman_timeout_s=0.),
+    dict(head_deadman_period_s=float('nan')),
+    dict(head_stop_window_deadline_s=True),
+    dict(unknown=1),
+])
+def test_v3_budgets_are_bounded_and_ordered(change):
+    with pytest.raises(ValueError):
+        policy_type().parse(document_v3(**change))
+
+
+def test_the_default_v3_budgets_equal_the_limits_module():
+    from so101_demo.act import head_neck_limits as limits
+    parsed = policy_type().parse(document_v3())
+    assert parsed.head_stop_window_deadline_s == limits.STOP_WINDOW_DEADLINE_S
+    assert parsed.head_deadman_period_s == limits.DEADMAN_PERIOD_S
+    assert parsed.head_deadman_timeout_s == limits.DEADMAN_TIMEOUT_S
+    assert parsed.head_deadman_liveness_s == limits.DEADMAN_LIVENESS_S

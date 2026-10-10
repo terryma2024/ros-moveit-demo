@@ -1,10 +1,15 @@
 """Explicit finite MuJoCo Head policy; parsing never grants motion authority."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 import math
 import re
 
+from . import head_neck_limits as limits
 from .head_feedback import nanoseconds
+
+#: the v3 fields (CP-3537 ruling 3); a v2 policy stays readable and reads back without them
+V3_FIELDS = ('head_stop_window_deadline_s', 'head_deadman_period_s', 'head_deadman_timeout_s',
+             'head_deadman_liveness_s')
 
 
 @dataclass(frozen=True)
@@ -24,9 +29,15 @@ class HeadSimulationPolicy:
     search_timeout_s: float
     max_reobservations_per_stop: int
     max_reobservations_total: int
+    # schema v3: the stop-window deadline and the dead-man budgets. A v2 policy carries the design
+    # defaults here (it has a stop window too) but never reads them back.
+    head_stop_window_deadline_s: float = limits.STOP_WINDOW_DEADLINE_S
+    head_deadman_period_s: float = limits.DEADMAN_PERIOD_S
+    head_deadman_timeout_s: float = limits.DEADMAN_TIMEOUT_S
+    head_deadman_liveness_s: float = limits.DEADMAN_LIVENESS_S
 
     def __post_init__(self):
-        if (type(self.schema_version) is not int or self.schema_version != 2
+        if (type(self.schema_version) is not int or self.schema_version not in (2, 3)
                 or type(self.mode) is not str or self.mode != 'mujoco_bounded_stop_search_file_v1'):
             raise ValueError('HEAD_SIMULATION_POLICY_SCOPE_INVALID')
         ceilings = dict(watchdog_period_s=.1, fault_reaction_limit_s=.5, native_close_timeout_s=.25,
@@ -38,6 +49,20 @@ class HeadSimulationPolicy:
             value = getattr(self, name)
             if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= ceiling:
                 raise ValueError('HEAD_SIMULATION_POLICY_BUDGET_INVALID')
+        if self.schema_version == 3:
+            v3 = dict(head_stop_window_deadline_s=1., head_deadman_period_s=.1,
+                      head_deadman_timeout_s=.25, head_deadman_liveness_s=.2)
+            for name, ceiling in v3.items():
+                value = getattr(self, name)
+                if type(value) not in (int, float) or not math.isfinite(value) or not 0 < value <= ceiling:
+                    raise ValueError('HEAD_SIMULATION_POLICY_BUDGET_INVALID')
+            # 51 samples are 100 ms of sim time: the window needs more than that plus latency
+            if not (.15 <= self.head_stop_window_deadline_s <= self.stop_confirmation_timeout_s
+                    and self.head_deadman_period_s < self.head_deadman_liveness_s
+                    < self.head_deadman_timeout_s):
+                raise ValueError('HEAD_SIMULATION_POLICY_RELATION_INVALID')
+        elif any(getattr(self, name) != self.__dataclass_fields__[name].default for name in V3_FIELDS):
+            raise ValueError('HEAD_SIMULATION_POLICY_DOCUMENT_INVALID')
         for name, ceiling in (('max_reobservations_per_stop', 10), ('max_reobservations_total', 40)):
             value = getattr(self, name)
             if type(value) is not int or not 0 < value <= ceiling:
@@ -55,8 +80,15 @@ class HeadSimulationPolicy:
             raise ValueError('HEAD_SIMULATION_POLICY_RELATION_INVALID')
 
     @classmethod
+    def document_fields(cls, schema_version):
+        names = [item.name for item in fields(cls)]
+        return set(names) if schema_version == 3 else set(names) - set(V3_FIELDS)
+
+    @classmethod
     def parse(cls, document):
-        if type(document) is not dict or set(document) != set(cls.__dataclass_fields__):
+        if (type(document) is not dict or type(document.get('schema_version')) is not int
+                or document['schema_version'] not in (2, 3)
+                or set(document) != cls.document_fields(document['schema_version'])):
             raise ValueError('HEAD_SIMULATION_POLICY_DOCUMENT_INVALID')
         return cls(**document)
 
@@ -72,8 +104,19 @@ class HeadSimulationPolicy:
             camera_source_age_s=.2, search_timeout_s=30.,
             max_reobservations_per_stop=3, max_reobservations_total=12)
 
+    @staticmethod
+    def default_document_v3():
+        """The v3 candidate: the v2 candidate plus the design's stop-window and dead-man budgets."""
+        return dict(HeadSimulationPolicy.default_document(), schema_version=3,
+            head_stop_window_deadline_s=limits.STOP_WINDOW_DEADLINE_S,
+            head_deadman_period_s=limits.DEADMAN_PERIOD_S,
+            head_deadman_timeout_s=limits.DEADMAN_TIMEOUT_S,
+            head_deadman_liveness_s=limits.DEADMAN_LIVENESS_S)
+
     def readback(self):
-        return asdict(self)
+        """The exact document: a v2 policy reads back as the v2 document (its hash is unchanged)."""
+        names = self.document_fields(self.schema_version)
+        return {item.name: getattr(self, item.name) for item in fields(self) if item.name in names}
 
     def feedback_values(self):
         return dict(joint_max_receipt_age_s=self.feedback_receipt_timeout_s,
