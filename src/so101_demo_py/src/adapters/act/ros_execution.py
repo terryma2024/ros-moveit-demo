@@ -630,13 +630,15 @@ class RosControllerPort:
             return stopped
 
     def raw_stop_confirmation(self):
-        """The sim stamp of the decision that confirmed the raw stop, or None until it is confirmed."""
+        """The raw-stop confirmation: its decision sim stamp, the confirming samples and the terminal results."""
         with self._lock:
             proof=self._head_stop_proof
             if proof is None or proof.confirmed_at is None:return None
             samples=proof.confirming_samples
+            terminal={gid:getattr(record.get('result'),'status',None) for gid,record in self._goals.items()}
             return dict(sim_ns=proof.confirmed_at['sim_ns'],wall_s=proof.confirmed_at['wall_after_s'],
-                        last_sample_source_ns=samples[-1].get('source_ns') if samples else None)
+                        last_sample_source_ns=samples[-1].get('source_ns') if samples else None,
+                        samples=[sample.get('source_ns') for sample in samples],terminal=terminal)
 
     def result(self,gid):
         with self._lock:return self._goals[gid]['result']

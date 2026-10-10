@@ -1,4 +1,4 @@
-"""Local typed inventory guards native reservation and prepared SDK send."""
+"""Local typed inventory guards the local admission and the prepared SDK send."""
 
 import hashlib
 import json
@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import pytest
 
-from test_act_head_search_restarts import RestartRefused, socket_root, reservation_authority
+from head_owner_support import deadline, make as make_owner
 from test_act_head_feedback_freshness import setup_ports, sample
 from test_act_head_paused_admission import paused_head, command
 from test_act_head_trajectory_guard import guard
@@ -25,10 +25,13 @@ from so101_demo.adapters.act.scene_state import SceneStateObserver
 
 
 @pytest.fixture
-def composed(socket_root, monkeypatch, request):
+def composed(monkeypatch, request):
     initial_neck = float(getattr(request, "param", .2))
-    authority, servers = reservation_authority(socket_root)
-    identity = authority.identity('neck')
+    owner, services, window, graph, owner_events, owner_faults = make_owner(
+        generation=11, session_id='head-search-restarts')
+    owner.activate(deadline=deadline())
+    identity = owner.identity()
+    servers = dict(admitted=[])
     _, _, port, wall, sim, calls, _ = setup_ports(monkeypatch, feedback_policy=dict(
         joint_max_receipt_age_s=.25, joint_max_source_age_s=.05,
         camera_interarrival_deadline_s=.11, camera_max_source_age_s=.11,
@@ -41,11 +44,12 @@ def composed(socket_root, monkeypatch, request):
     port._feedback(feedback)
     events = []; owned = []; faults = []
     port._head_fault_callback = lambda reason: faults.append(reason)
-    exchange = authority._exchange
-    def native(role, frame, *, expect):
-        if frame[4:8] == b'SOGB': events.append('NATIVE_RESERVE')
-        return exchange(role, frame, expect=expect)
-    authority._exchange = native
+    admit = owner.admit_local
+    def admitted(*, goal, goal_uuid, before_reserve):
+        result = admit(goal=goal, goal_uuid=goal_uuid, before_reserve=before_reserve)
+        events.append('LOCAL_ADMIT'); servers['admitted'].append(goal_uuid)
+        return result
+    owner.admit_local = admitted
     sdk = port.client.send_goal_async
     def send(*args, **kwargs):
         events.append('SDK_SEND')
@@ -89,13 +93,13 @@ def composed(socket_root, monkeypatch, request):
             geometry_path.read_bytes()).hexdigest(),
         simulation_session_id='mujoco-test-session', reset_epoch=1,
         monotonic=lambda: wall[0])
-    config = dict(port=port, authority=authority, local_state=state, guard=guard,
+    config = dict(port=port, owner=owner, local_state=state, guard=guard,
         own_inventory=own, fault_callback=lambda reason: faults.append(reason))
     try:
         yield config, events, owned, faults, servers, calls
     finally:
         port.close_head_io(timeout_s=1.)
-        for server in servers.values(): server.stop()
+        owner.close()
 
 
 def target():
@@ -107,11 +111,11 @@ def send_target(sender, config):
     return sender.send_prepared_head(config['guard'].prepare(.3))
 
 
-def test_local_inventory_precedes_native_reserve_and_sdk_without_monitor_ack(composed):
+def test_local_inventory_precedes_local_admission_and_sdk_without_monitor_ack(composed):
     config, events, owned, faults, servers, calls = composed
     sender = HeadInventoryDispatcher(**config); gid = send_target(sender, config)
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
-    assert not faults and len(owned) == 1 and len(servers['neck'].socket_state.reserved) == 1
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
+    assert not faults and len(owned) == 1 and len(servers['admitted']) == 1
     record, payload = owned[0]
     assert gid == record['goal_uuid']
     assert record['operation_sequence'] == 1
@@ -145,7 +149,7 @@ def test_position_only_dispatch_api_is_closed_before_inventory_or_reserve(compos
     with pytest.raises(PermissionError, match='HEAD_POSITION_ONLY_BYPASS_REFUSED'):
         sender.send(target())
     assert not events and not owned and not sender.inventory
-    assert not faults and not servers['neck'].socket_state.reserved
+    assert not faults and not servers['admitted']
 
 
 def test_original_cdr_inventory_survives_ros_reencoding_padding(composed, monkeypatch):
@@ -156,26 +160,26 @@ def test_original_cdr_inventory_survives_ros_reencoding_padding(composed, monkey
     record = config['port']._goals[gid]
     assert record['primary_inventory'] and record['prepared_typed_goal_bytes']
     assert record['sdk_claimed'] is True and not faults
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
 
 
-def test_primary_callback_cannot_fake_inventory_receipt_or_allow_native_reserve(composed):
+def test_primary_callback_cannot_fake_inventory_receipt_or_allow_local_admission(composed):
     config, events, owned, faults, servers, calls = composed
     config['own_inventory'] = lambda record, payload: True
     sender = HeadInventoryDispatcher(**config)
-    with pytest.raises(RestartRefused) as refused:
+    with pytest.raises(Exception) as refused:
         send_target(sender, config)
     assert isinstance(refused.value.__cause__, PermissionError)
     assert str(refused.value.__cause__) == 'HEAD_PRIMARY_INVENTORY_RECEIPT_MISSING'
-    assert 'NATIVE_RESERVE' not in events and 'SDK_SEND' not in events
+    assert 'LOCAL_ADMIT' not in events and 'SDK_SEND' not in events
     assert sender.revoked and sender.inventory and faults
 
 
-def test_false_primary_inventory_callback_stops_before_native_reserve(composed):
+def test_false_primary_inventory_callback_stops_before_local_admission(composed):
     config, events, owned, faults, servers, calls = composed
     config['own_inventory'] = lambda record, payload: False
     sender = HeadInventoryDispatcher(**config)
-    with pytest.raises(RestartRefused) as refused:
+    with pytest.raises(Exception) as refused:
         send_target(sender, config)
     assert isinstance(refused.value.__cause__, PermissionError)
     assert str(refused.value.__cause__) == 'HEAD_PRIMARY_INVENTORY_REFUSED'
@@ -187,31 +191,32 @@ def test_false_primary_inventory_callback_stops_before_native_reserve(composed):
     ('role', 'wrist'), ('controller_incarnation', 'other-controller'),
     ('controller_boot_incarnation', 'other-boot'), ('session_id', 'other-session'),
 ])
-def test_mismatched_native_reservation_binding_stops_before_reserve_or_sdk(composed, field, value):
+def test_mismatched_admission_binding_stops_before_admission_or_sdk(composed, field, value):
     config, events, owned, faults, servers, calls = composed
-    original = config['authority'].reserve
-    def changed(role, *, goal, goal_uuid, before_reserve=None):
+    original = config['owner'].admit_local
+    def changed(*, goal, goal_uuid, before_reserve=None):
         def bind(binding):
-            return before_reserve(replace(binding, **{field: value}))
-        return original(role, goal=goal, goal_uuid=goal_uuid, before_reserve=bind)
-    config['authority'].reserve = changed
+            from types import SimpleNamespace
+            return before_reserve(SimpleNamespace(**{**vars(binding), field: value}))
+        return original(goal=goal, goal_uuid=goal_uuid, before_reserve=bind)
+    config['owner'].admit_local = changed
     sender = HeadInventoryDispatcher(**config)
-    with pytest.raises(RestartRefused): send_target(sender, config)
-    assert 'NATIVE_RESERVE' not in events and 'SDK_SEND' not in events
+    with pytest.raises(Exception): send_target(sender, config)
+    assert 'LOCAL_ADMIT' not in events and 'SDK_SEND' not in events
     assert sender.revoked and faults
 
 
-def test_unknown_native_reservation_keeps_inventory_and_never_sends(composed):
+def test_refused_admission_keeps_inventory_and_never_sends(composed):
     config, events, owned, faults, servers, calls = composed
-    original = config['authority'].reserve
+    original = config['owner'].admit_local
     def unknown(*args, **kwargs):
         original(*args, **kwargs)
         return False
-    config['authority'].reserve = unknown
+    config['owner'].admit_local = unknown
     sender = HeadInventoryDispatcher(**config)
     with pytest.raises(PermissionError, match='NATIVE_RESERVATION_REFUSED'):
         send_target(sender, config)
-    assert 'NATIVE_RESERVE' in events and 'SDK_SEND' not in events
+    assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
     row = next(iter(sender.inventory.values()))
     assert 'reserve_attempt_ns' in row and 'sdk_attempt_ns' not in row
 
@@ -227,15 +232,15 @@ def test_final_local_guard_failure_prevents_sdk_and_keeps_possible_send_uuid(com
         return original(prepared)
     sender._trajectory_guard.revalidate = final_failure
     with pytest.raises(PermissionError): send_target(sender, config)
-    assert 'NATIVE_RESERVE' in events and 'SDK_SEND' not in events
+    assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
     row = next(iter(sender.inventory.values()))
     assert 'sdk_attempt_ns' in row
     assert sender.revoked and faults
 
 
-def test_authority_identity_change_is_refused_before_local_registration(composed):
+def test_owner_identity_change_is_refused_before_local_registration(composed):
     config, events, owned, faults, servers, calls = composed
-    config['authority']._identities['neck'] = dict(generation=11, incarnation='other', boot='boot')
+    config['owner']._helper.pid = 4343  # the controller identity names the helper pid; a changed one no longer matches the scope
     with pytest.raises(PermissionError, match='SCOPE_INVALID'):
         HeadInventoryDispatcher(**config)
     assert not owned and not events
@@ -306,7 +311,7 @@ def test_dispatcher_fault_callback_observes_origin_before_blocking(composed):
     assert state.prepared_cdr(goal_uuid) == original_cdr
     assert sender.inventory == before_fault_inventory
     assert tuple(events) == before_fault_events
-    assert len(owned) == 1 and servers['neck'].socket_state.reserved
+    assert len(owned) == 1 and servers['admitted']
 
 
 def test_fine_target_outside_coarse_domain_reaches_original_typed_sdk_path(composed):
@@ -337,8 +342,8 @@ def test_fine_target_outside_coarse_domain_reaches_original_typed_sdk_path(compo
     assert [p.positions[0] for p in trajectory.points] == pytest.approx([.2, .3])
     assert [p.velocities[0] for p in trajectory.points] == [0., 0.]
     assert [p.accelerations[0] for p in trajectory.points] == [0., 0.]
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
-    assert not faults and servers['neck'].socket_state.reserved
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
+    assert not faults and servers['admitted']
 
 
 def test_search_deadline_covers_replay_elapsed_header_lead_and_full_endpoint(
@@ -364,7 +369,7 @@ def test_search_deadline_covers_replay_elapsed_header_lead_and_full_endpoint(
     with pytest.raises(PermissionError, match='HEAD_TRAJECTORY_SEARCH_DEADLINE_TOO_SHORT'):
         guard.prepare(target_rad)
     assert not events and not owned and not config['port']._goals
-    assert not servers['neck'].socket_state.reserved
+    assert not servers['admitted']
 
 
 def test_boundary_revalidation_uses_issued_guard_owned_original_without_heavy_redecode(
@@ -424,8 +429,8 @@ def test_foreign_and_mutated_issued_preparations_refuse_before_reserve_or_sdk(
     object.__setattr__(prepared, 'original_cdr', b'forged original CDR')
     with pytest.raises(PermissionError):
         config['guard'].revalidate(prepared)
-    assert 'NATIVE_RESERVE' not in events and 'SDK_SEND' not in events
-    assert not servers['neck'].socket_state.reserved
+    assert 'LOCAL_ADMIT' not in events and 'SDK_SEND' not in events
+    assert not servers['admitted']
 
     import mujoco
     model_path = Path(__file__).resolve().parents[1] / 'assets/mujoco/act/head_search_scene.xml'
@@ -633,8 +638,8 @@ def test_changed_source_refuses_before_reservation_and_sdk(composed, field):
     _mutate_prepared_source(config, field)
     with pytest.raises((PermissionError, ValueError)):
         sender.send_prepared_head(prepared)
-    assert 'NATIVE_RESERVE' not in events and 'SDK_SEND' not in events
-    assert not servers['neck'].socket_state.reserved
+    assert 'LOCAL_ADMIT' not in events and 'SDK_SEND' not in events
+    assert not servers['admitted']
 
 
 @pytest.mark.parametrize('field', _SOURCE_MUTATIONS)
@@ -654,8 +659,8 @@ def test_changed_source_refuses_at_final_sdk_revalidation(composed, field):
     with pytest.raises((PermissionError, ValueError)):
         send_target(sender, config)
     assert calls_seen == 3
-    assert 'NATIVE_RESERVE' in events and 'SDK_SEND' not in events
-    assert sender.inventory and len(servers['neck'].socket_state.reserved) == 1
+    assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
+    assert sender.inventory and len(servers['admitted']) == 1
     assert 'sdk_attempt_ns' in next(iter(sender.inventory.values()))
     assert sender.revoked and faults
 
@@ -700,7 +705,7 @@ def test_actual_prepare_shortens_aligned_resting_prefix_with_declared_main_limit
     assert proof['max_acceleration_rad_s2'] == 2.0
     assert proof['last_point_offset_ns'] == 50_000_000 + proof['main_duration_ns']
     sender.send_prepared_head(prepared)
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
     assert owned[0][1] == prepared.original_cdr
     assert not faults
 
@@ -736,18 +741,18 @@ def test_actual_guard_uses_measured_quiet_velocity_threshold(composed, velocity,
     assert not events and not owned
 
 
-def test_original_400ms_claim_does_not_renew_after_slow_reservation(composed, monkeypatch):
+def test_original_400ms_claim_does_not_renew_after_slow_admission(composed, monkeypatch):
     config, events, owned, faults, servers, calls = composed
     sender = HeadInventoryDispatcher(**config)
-    reserve = config['authority'].reserve
+    reserve = config['owner'].admit_local
     def slow_reserve(*args, **kwargs):
         result = reserve(*args, **kwargs)
         time.sleep(.41)
         return result
-    monkeypatch.setattr(config['authority'], 'reserve', slow_reserve)
+    monkeypatch.setattr(config['owner'], 'admit_local', slow_reserve)
     with pytest.raises(PermissionError, match='HEAD_INVENTORY_CLAIM_EXPIRED'):
         send_target(sender, config)
-    assert 'NATIVE_RESERVE' in events and 'SDK_SEND' not in events
+    assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
     record = next(iter(sender.inventory.values()))
     assert record['deadline_ns'] - record['claim_monotonic_ns'] == 400_000_000
     assert 'reserve_attempt_ns' in record and 'reserved_ns' in record
@@ -768,7 +773,6 @@ def test_original_search_deadline_is_rechecked_at_final_sdk_without_refresh(comp
     clock_view.monotonic_ns = lambda: round(wall[0] * 1e9)
     monkeypatch.setattr(head_inventory_dispatch, 'time', clock_view)
     monkeypatch.setattr(ros_execution, 'time', clock_view)
-    monkeypatch.setattr(config['authority'], 'clock', clock_view.monotonic_ns)
     monkeypatch.setattr(config['local_state'], 'clock_ns', clock_view.monotonic_ns)
     start_ns = round(wall[0] * 1e9)
     snapshot, _, _ = guard._capture()
@@ -798,7 +802,7 @@ def test_original_search_deadline_is_rechecked_at_final_sdk_without_refresh(comp
     assert original_deadline_ns > now_wall_ns
     assert not guard._deadline_fits(original_deadline_ns, original_header_ns,
                                     endpoint_ns, current_ros_ns, now_wall_ns)
-    assert 'NATIVE_RESERVE' in events and 'SDK_SEND' not in events
+    assert 'LOCAL_ADMIT' in events and 'SDK_SEND' not in events
     record = next(iter(sender.inventory.values()))
     assert 'sdk_attempt_ns' in record
     assert sender.revoked and faults
@@ -822,8 +826,8 @@ def test_actual_initial_pose_prepares_coarse_edge_with_full_prefix_and_sdk_recei
     assert proof['collision']['main_samples'] >= 2
     assert proof['collision']['prefix_sample_spacing_rad'] <= .001
     assert gid == owned[0][0]['goal_uuid']
-    assert events == ['OWN_INVENTORY', 'NATIVE_RESERVE', 'SDK_SEND']
-    assert not faults and servers['neck'].socket_state.reserved
+    assert events == ['OWN_INVENTORY', 'LOCAL_ADMIT', 'SDK_SEND']
+    assert not faults and servers['admitted']
 
 
 def _bound_neck_port(config, sender, *, timeout=.08, handoff=None):

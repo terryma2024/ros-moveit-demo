@@ -6,10 +6,11 @@ one `HeadLocalObserver`, and it never allocates a motion client, controller
 stack, model or monitor process.
 
 Three threads are started explicitly by :meth:`start` and never by a
-constructor: a genuine watchdog and two independent stop workers (native close,
-cancel/raw-stop). Constructors do not arm or grant motion; :meth:`arm` performs
-the real pre-arm checks and binds the authenticated main/primary-fault identity
-against the local scope.
+constructor: a genuine watchdog and two independent stop workers (the fault
+latch of the neck dead-man, and cancel/raw-stop/stop-window with the planned
+dead-man close). Constructors do not arm or grant motion; :meth:`arm` performs
+the real pre-arm checks and binds the neck owner's controller identity against
+the local scope.
 
 A refusal during pre-arm is not a fault: no motion authority exists yet, so the
 attempt stays open for a corrected pre-arm. Every other boundary failure
@@ -34,7 +35,14 @@ from .ros_execution import RosControllerPort
 
 STOP_ORIGINS = ('success', 'not_found', 'budget', 'camera', 'feedback', 'writer', 'unknown',
                 'sigterm', 'signal', 'fault')
+#: the case ended on its own terms: the dead-man closes as planned after the stop proof
+PLANNED_ORIGINS = ('success', 'not_found')
+_OWNER_API = ('readback', 'deadman_armed', 'graph_proof', 'startup_stop_window', 'identity',
+              'begin_end_window', 'end_stop_window', 'close_planned', 'close_fault', 'start_monitor',
+              'bind_liveness', 'bind_fault')
 _WATCHDOG_GAP_HISTORY = 64
+#: time for the planned dead-man close (helper exit) after the stop window
+_CLOSE_ALLOWANCE_S = 0.25
 
 
 class HeadStartupCancelled(RuntimeError):
@@ -92,7 +100,7 @@ class LocalHeadScope:
 class HeadLocalRuntime:
     """Local admission and stop ownership for one file-protocol Head attempt."""
 
-    def __init__(self, *, node, port, local_state, revoker, observer, policy, authority=None,
+    def __init__(self, *, node, port, local_state, owner, observer, policy,
                  sink=None, emit=None, monotonic=None, clock_ns=None):
         if (type(port) is not RosControllerPort or port.node is not node
                 or type(local_state) is not HeadLocalState
@@ -103,15 +111,11 @@ class HeadLocalRuntime:
             raise ValueError('HEAD_LOCAL_RUNTIME_CONFIG_INVALID')
         if port.feedback_policy is None or port._head_policy_binding_failed:
             raise PermissionError('HEAD_LOCAL_RUNTIME_POLICY_REQUIRED')
-        if any(not callable(getattr(revoker, name, None)) for name in ('close_scoped_strict', 'bootstrap_identity', 'identity')):
-            raise ValueError('HEAD_LOCAL_RUNTIME_REVOKER_INVALID')
-        if (type(getattr(revoker, 'generation', None)) is not int
-                or not 0 < revoker.generation < 2 ** 64
-                or type(getattr(revoker, 'native_owner', None)) is not dict
-                or set(revoker.native_owner) != {'uid', 'pid', 'start_ticks'}
-                or any(type(value) is not int for value in revoker.native_owner.values())
-                or type(getattr(revoker, 'transport_origin', None)) is not dict):
-            raise ValueError('HEAD_LOCAL_RUNTIME_REVOKER_SCOPE_INVALID')
+        if any(not callable(getattr(owner, name, None)) for name in _OWNER_API):
+            raise ValueError('HEAD_LOCAL_RUNTIME_OWNER_INVALID')
+        if (getattr(owner, 'generation', None) != local_state.scope['generation']
+                or getattr(owner, 'session_id', None) != local_state.scope['session_id']):
+            raise ValueError('HEAD_LOCAL_RUNTIME_OWNER_SCOPE_INVALID')
         if sink is not None and not callable(sink):
             raise ValueError('HEAD_LOCAL_RUNTIME_SINK_INVALID')
         if emit is not None and not callable(emit):
@@ -125,7 +129,7 @@ class HeadLocalRuntime:
         self.node = node
         self.port = port
         self.local_state = local_state
-        self.revoker = revoker
+        self.owner = owner
         self.observer = observer
         self.policy = policy
         # Consumers that used to read a monitor-owned policy read this exact
@@ -150,9 +154,6 @@ class HeadLocalRuntime:
         self._fault_occurred_ns = None
         self._refused_reason = None
         self._armed_identity = None
-        self._bootstrap_identity = None
-        self._native_policy_receipt = None
-        self._authority = None
         self._threads = {}
         self._watchdog_wall = None
         self._executor_wall = None
@@ -166,21 +167,20 @@ class HeadLocalRuntime:
         self._stop_deadline_wall_s = None
         self._stop_request_wall_s = None
         self._stop_request_sim_s = None
-        self._native_close = dict(requested_wall_s=None, finished=False, ack=False,
-                                  error=None, receipt=None)
+        self._deadman_close = dict(requested_wall_s=None, finished=False, ack=False, planned=False,
+                                   error=None, receipt=None)
         self._cancel_stop = dict(started_wall_s=None, finished=False, cancel_error=None,
                                  raw_stop_confirmed=False, raw_stop_observations=(),
-                                 deadline_wall_s=None, abandoned_on_retirement=False)
-        self._stop_window_observer = None
+                                 deadline_wall_s=None, abandoned_on_retirement=False,
+                                 end_window=None, window_error=None)
         if observer._fault_callback is None:
             observer.bind_fault_callback(self.fault)
         elif observer._fault_callback != self.fault:
             raise PermissionError('HEAD_LOCAL_RUNTIME_OBSERVER_FAULT_OWNER_EXISTS')
         port._head_fault_callback = self.fault
+        owner.bind_fault(self.fault)
         if sink is not None:
             port.bind_head_action_sink(self.record)
-        if authority is not None:
-            self.bind_authority(authority)
 
     # ---- ownership ---------------------------------------------------------
 
@@ -234,36 +234,6 @@ class HeadLocalRuntime:
     def stop_requested(self):
         return self._stop_event.is_set()
 
-    def bind_authority(self, authority):
-        """Bind the authenticated main authority and its exact local scope once."""
-        if any(not callable(getattr(authority, name, None))
-               for name in ('arm', 'prearm_status', 'identity', 'close')):
-            raise ValueError('HEAD_LOCAL_RUNTIME_AUTHORITY_INVALID')
-        scope = self.local_state.scope
-        if (getattr(authority, 'generation', None) != scope['generation']
-                or getattr(authority, 'session_id', None) != scope['session_id']
-                or getattr(authority, 'native_owner', None) != self.revoker.native_owner
-                or getattr(authority, 'arm_guard', None) != self.prearm_guard
-                or getattr(authority, 'fault_callback', None) != self.fault):
-            raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_SCOPE_INVALID')
-        with self._lock:
-            if self._closed:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_CLOSED')
-            if self._authority is not None:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_REBOUND')
-            self._authority = authority
-        return True
-
-    def bind_stop_window_observer(self, observer):
-        """Notify ``observer(sim_ns)`` once when the raw stop is confirmed (shadow stop window)."""
-        if not callable(observer):
-            raise ValueError('STOP_WINDOW_OBSERVER_INVALID')
-        with self._lock:
-            if self._stop_window_observer is not None:
-                raise PermissionError('STOP_WINDOW_OBSERVER_REBOUND')
-            self._stop_window_observer = observer
-        return True
-
     def start(self):
         """Start the watchdog and the two independent stop workers exactly once."""
         with self._lock:
@@ -278,17 +248,24 @@ class HeadLocalRuntime:
             threads = {
                 'watchdog': threading.Thread(target=self._watchdog_loop, daemon=True,
                                              name='head-local-watchdog'),
-                'native_close': threading.Thread(target=self._native_close_loop, daemon=True,
-                                                 name='head-local-native-close'),
+                'deadman_latch': threading.Thread(target=self._deadman_latch_loop, daemon=True,
+                                                  name='head-local-deadman-latch'),
                 'cancel_stop': threading.Thread(target=self._cancel_stop_loop, daemon=True,
                                                 name='head-local-cancel-stop'),
             }
             self._threads = dict(threads)
+        # the owner keeps ticking the dead-man helper only while this watchdog keeps ticking
+        self.owner.bind_liveness(self._watchdog_age)
         for thread in threads.values():
             thread.start()
         return dict(watchdog_started=threads['watchdog'].is_alive(),
-                    workers=['native_close', 'cancel_stop'],
+                    workers=['deadman_latch', 'cancel_stop'],
                     threads={name: thread.ident for name, thread in threads.items()})
+
+    def _watchdog_age(self):
+        with self._lock:
+            tick = self._watchdog_wall
+        return None if tick is None else max(0., self.monotonic() - tick)
 
     # ---- local admission ---------------------------------------------------
 
@@ -309,32 +286,11 @@ class HeadLocalRuntime:
         with self._lock:
             state_open = (self._started and self._admission_open and not self._faulted
                           and not self._closed)
-            native_policy_bound = self._native_policy_receipt is not None
         if not state_open:
             self._refuse('HEAD_LOCAL_RUNTIME_PREARM_STATE_INVALID', faults=False)
-        if not native_policy_bound:
-            self._refuse('HEAD_LOCAL_RUNTIME_NATIVE_POLICY_REQUIRED', faults=False)
         feedback = self._current(require_armed=False, refusal_faults=False)
         if any(abs(value) > self._port_stop_velocity() for value in feedback['velocities']):
             self._refuse('HEAD_LOCAL_RUNTIME_PREARM_NOT_QUIET', faults=False)
-        return True
-
-    def bind_native_policy_readback(self, receipt):
-        """Validate one immutable readonly query before granting native ARM."""
-        from .head_native_policy_readback import validate_native_policy_receipt
-        import json
-        body = canonical_bytes(receipt)
-        owned = json.loads(body)
-        validate_native_policy_receipt(owned, self.policy,
-                                       reader_node=self.node.get_fully_qualified_name())
-        with self._lock:
-            if self._closed or self._faulted or self._armed_identity is not None:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_STATE_INVALID')
-            if self._native_policy_receipt is not None:
-                raise PermissionError('HEAD_LOCAL_RUNTIME_NATIVE_POLICY_REBOUND')
-            self._native_policy_receipt = body
-        if self._sink is not None:
-            self.record('NATIVE_POLICY_VERIFIED', owned)
         return True
 
     def _port_stop_velocity(self):
@@ -363,86 +319,54 @@ class HeadLocalRuntime:
             raise TimeoutError('PREARM_READY_DEADLINE' if ready_wait else 'HEAD_STARTUP_DEADLINE_EXPIRED')
 
     def _arm_once(self, cancel_event):
-        deadline=self.clock_ns()+2_000_000_000
+        deadline = self.clock_ns() + 2_000_000_000
         with self._lock:
-            authority=self._authority
             if self._closed:raise PermissionError('HEAD_LOCAL_RUNTIME_CLOSED')
             if self._armed_identity is not None:raise PermissionError('HEAD_LOCAL_RUNTIME_ALREADY_ARMED')
             if self._faulted or not self._admission_open:
                 raise PermissionError('HEAD_LOCAL_RUNTIME_STATE_INVALID')
-        if authority is None:raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_UNBOUND')
-        # A local precondition refusal remains correctable before native startup.
+        # A local precondition refusal remains correctable before the owner is consulted.
         self.prearm_guard()
-        def check(*,ready_wait=False):
-            self._startup_check(cancel_event,deadline,ready_wait=ready_wait)
+        expected = self.local_state.scope['controller_identity']
+
+        def check(*, window_wait=False):
+            self._startup_check(cancel_event, deadline, ready_wait=window_wait)
             self.prearm_guard()
-            self._startup_check(cancel_event,deadline,ready_wait=ready_wait)
+            self._startup_check(cancel_event, deadline, ready_wait=window_wait)
+
+        def owner_deadline():
+            return self.monotonic() + max(0., (deadline - self.clock_ns()) * 1e-9)
         try:
-            from .head_control_protocol import identity_fields
             check()
-            bootstrap=self.revoker.bootstrap_identity(overall_deadline_ns=deadline)
-            pinned=identity_fields(bootstrap,self.local_state.scope['generation'])
-            expected=self.local_state.scope['controller_identity']
-            if bootstrap.get('ack_validated') is not True or bootstrap.get('status')!='AVAILABLE' or (
-                    expected is not None and _identity_triple(pinned)!=expected):
-                raise PermissionError('HEAD_LOCAL_RUNTIME_BOOTSTRAP_IDENTITY_MISMATCH')
-            if self.clock_ns()>=deadline:raise TimeoutError('HEAD_STARTUP_DEADLINE_EXPIRED')
-            with self._lock:
-                self._bootstrap_identity=dict(pinned)
-            if self._sink is not None:self.record('BOOTSTRAP_IDENTITY',dict(bootstrap))
+            readback = self.owner.readback(deadline=owner_deadline())
+            if self._sink is not None:self.record('CONTROLLER_READBACK', dict(readback))
             check()
-            for attempt in range(16):
-                check(ready_wait=True)
-                status=authority.prearm_status('neck',overall_deadline_ns=deadline,expected_identity=dict(pinned))
-                self._startup_check(cancel_event,deadline,ready_wait=True)
-                if identity_fields(status,self.local_state.scope['generation'])!=pinned:
-                    raise PermissionError('HEAD_LOCAL_RUNTIME_PREARM_IDENTITY_MISMATCH')
-                if self._sink is not None:self.record('PREARM_STATUS',dict(status))
-                check(ready_wait=True)
-                if status['status']=='READY':break
-                if status['status']!='NOT_READY':raise PermissionError('HEAD_LOCAL_RUNTIME_PREARM_SCOPE_REFUSED')
-                if status['proof']['wrapper_reason']==8:
-                    raise PermissionError('HEAD_LOCAL_RUNTIME_SNAPSHOT_UNAVAILABLE')
-                remaining=(deadline-self.clock_ns())*1e-9
-                if remaining<=.125 or attempt==15:raise TimeoutError('PREARM_READY_DEADLINE')
-                if cancel_event.wait(.125):raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED')
-                self._startup_check(cancel_event,deadline,ready_wait=True)
+            armed = self.owner.deadman_armed()
+            if self._sink is not None:self.record('DEADMAN_ARMED', dict(armed))
             check()
+            graph = self.owner.graph_proof()
+            if self._sink is not None:self.record('GRAPH_PROOF', dict(graph))
+            check(window_wait=True)
             try:
-                authority.arm('neck',overall_deadline_ns=deadline)
-            except Exception as error:
-                if cancel_event.is_set():
-                    if self._sink is not None:
-                        self.record('ARM_RESULT',getattr(error,'record',None) or dict(
-                            status='UNKNOWN',reason=getattr(error,'code',str(error)[:256])))
-                    raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED') from error
-                self.fault('HEAD_LOCAL_RUNTIME_NATIVE_STARTUP_FAILED',
-                    {'error_type':type(error).__name__,'reason':str(error)[:256]})
-                if self._sink is not None:
-                    self.record('ARM_RESULT',getattr(error,'record',None) or dict(
-                        status='UNKNOWN',reason=getattr(error,'code',str(error)[:256])))
+                window = self.owner.startup_stop_window(deadline=owner_deadline(), cancel_event=cancel_event)
+            except TimeoutError:
+                if cancel_event.is_set():raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED') from None
                 raise
-            if self._sink is not None:
-                result=getattr(authority,'last_arm_result',None)
-                if result is not None:self.record('ARM_RESULT',dict(result))
+            if self._sink is not None:self.record('STARTUP_STOP_WINDOW', dict(window))
             check()
-            main=_identity_triple(authority.identity('neck',overall_deadline_ns=deadline))
-            check()
-            primary=_identity_triple(self.revoker.identity(overall_deadline_ns=deadline))
-            check()
-            if main!=primary or main!=_identity_triple(pinned):
-                raise PermissionError('HEAD_LOCAL_RUNTIME_NATIVE_IDENTITY_MISMATCH')
-            # This records the native ARM identity; publish runtime readiness
-            # only after diagnostics return and the startup fence still holds.
-            if self._sink is not None:self.record('ARMED',dict(identity=dict(main)))
+            identity = _identity_triple(self.owner.identity())
+            if expected is not None and identity != expected:
+                raise PermissionError('HEAD_LOCAL_RUNTIME_OWNER_IDENTITY_MISMATCH')
+            if self._sink is not None:self.record('ARMED', dict(identity=dict(identity)))
             with self._lock:
-                self._startup_check(cancel_event,deadline)
+                self._startup_check(cancel_event, deadline)
                 if self._closed or self._faulted or not self._admission_open:
                     raise PermissionError('HEAD_LOCAL_RUNTIME_STATE_INVALID')
-                if expected is None:self.local_state.bind_controller_identity(main,primary)
+                if expected is None:self.local_state.bind_controller_identity(identity, identity)
                 if self.local_state.faulted:raise PermissionError('HEAD_LOCAL_STATE_FAULTED')
-                self._startup_check(cancel_event,deadline)
-                self._armed_identity=dict(main)
+                self._startup_check(cancel_event, deadline)
+                self._armed_identity = dict(identity)
+            self.owner.start_monitor()
         except HeadStartupCancelled:
             self.stop('sigterm',dict(startup_cancelled=True))
             raise
@@ -451,10 +375,10 @@ class HeadLocalRuntime:
                 self.stop('sigterm',dict(startup_cancelled=True,error_type=type(error).__name__,
                                         reason=str(error)[:256]))
                 raise HeadStartupCancelled('HEAD_STARTUP_CANCELLED') from error
-            self.fault('HEAD_LOCAL_RUNTIME_NATIVE_STARTUP_FAILED',
+            self.fault('HEAD_LOCAL_RUNTIME_STARTUP_FAILED',
                        {'error_type':type(error).__name__,'reason':str(error)[:256]})
             raise
-        return dict(main)
+        return dict(identity)
 
     def _current(self, *, require_armed=True, refusal_faults=True):
         with self._lock:
@@ -727,11 +651,16 @@ class HeadLocalRuntime:
                         request_wall_s=self._stop_request_wall_s,
                         request_sim_s=self._stop_request_sim_s,
                         cancel_stop=dict(self._cancel_stop),
-                        native_close=dict(self._native_close))
+                        deadman_close=dict(self._deadman_close))
+
+    @staticmethod
+    def _physical_stop_confirmed(cancel_stop):
+        """All three: the raw stop, the post-stop controller_state window (the terminal result is in the raw stop)."""
+        return cancel_stop['raw_stop_confirmed'] is True and cancel_stop.get('end_window') is not None
 
     def stop_receipt(self):
         receipt = self._stop_snapshot()
-        receipt['physical_stop_confirmed'] = receipt['cancel_stop']['raw_stop_confirmed'] is True
+        receipt['physical_stop_confirmed'] = self._physical_stop_confirmed(receipt['cancel_stop'])
         receipt['faulted'] = self._faulted
         return receipt
 
@@ -740,7 +669,7 @@ class HeadLocalRuntime:
             return dict(reason=self._fault_reason, occurred_ns=self._fault_occurred_ns,
                         faulted=self._faulted, refused_reason=self._refused_reason,
                         stop_origin_wall_s=self._stop_origin_wall_s,
-                        native_close=dict(self._native_close),
+                        deadman_close=dict(self._deadman_close),
                         cancel_stop=dict(self._cancel_stop))
 
     def retirement_snapshot(self):
@@ -749,7 +678,7 @@ class HeadLocalRuntime:
                         fault_occurred_ns=self._fault_occurred_ns,
                         armed=self._armed_identity is not None, started=self._started,
                         closed=self._closed, refused_reason=self._refused_reason,
-                        native_close=dict(self._native_close),
+                        deadman_close=dict(self._deadman_close),
                         cancel_stop=dict(self._cancel_stop),
                         stop_origin_kind=self._stop_origin_kind,
                         stop_origin_wall_s=self._stop_origin_wall_s,
@@ -770,42 +699,55 @@ class HeadLocalRuntime:
                 return self._stop_event.is_set()
         return True
 
-    def _native_close_loop(self):
+    def _deadman_latch_loop(self):
+        """A stop that is not the case ending on its own latches the controller at once.
+
+        Aborting the active goal and holding is the controller's own reaction to the closed dead-man, so it
+        does not wait for the cancel service or the raw-stop proof. A planned end (success / not found) is
+        closed by the cancel worker after the stop proof instead.
+        """
         if not self._await_stop():
             return
-        started = self.monotonic()
-        # Publish the request time before the blocking authenticated exchange,
-        # so a transport that never returns is still visible as in-progress.
         with self._lock:
-            self._native_close = dict(self._native_close, requested_wall_s=started,
-                                      finished=False)
+            origin = self._stop_origin_kind
+        if origin in PLANNED_ORIGINS:
+            return
+        self._close_deadman(planned=False, reason=origin or 'fault')
+
+    def _close_deadman(self, *, planned, reason=None):
+        started = self.monotonic()
+        with self._lock:
+            if self._deadman_close['finished'] or self._deadman_close['requested_wall_s'] is not None:
+                return
+            self._deadman_close = dict(requested_wall_s=started, finished=False, ack=False,
+                                       planned=planned, error=None, receipt=None)
         receipt, error_type = None, None
         try:
-            with self._lock:
-                pinned=None if self._bootstrap_identity is None else dict(self._bootstrap_identity)
-            if pinned is None:raise RuntimeError('HEAD_NATIVE_CLOSE_IDENTITY_UNPROVEN')
-            candidate=self.revoker.close_scoped_strict(expected_identity=pinned)
-            from .head_control_protocol import identity_fields
-            if type(candidate) is not dict or candidate.get('ack_validated') is not True or (
-                    identity_fields(candidate,pinned['generation'])!=pinned or
-                    candidate.get('status') not in ('ARMED_CLOSED','NOT_ARMED_CLOSED') or
-                    type(candidate.get('stored_generation')) is not int or
-                    candidate['stored_generation']!=(pinned['generation'] if candidate['status']=='ARMED_CLOSED' else 0)):
-                raise RuntimeError('HEAD_NATIVE_CLOSE_RECEIPT_INVALID')
-            receipt=dict(candidate)
+            if planned:
+                if self._sink is not None:
+                    self.record('DEADMAN_CLOSED_PLANNED', dict(activation_id=self._armed_activation_id()))
+                receipt = self.owner.close_planned()
+            else:
+                receipt = self.owner.close_fault(reason)
         except Exception as error:
             error_type = type(error).__name__
+        acknowledged = receipt is not None and receipt.get('helper_closed') is True
         with self._lock:
-            self._native_close = dict(requested_wall_s=started, finished=True,
-                                      ack=receipt is not None, error=error_type,
-                                      receipt=None if receipt is None else dict(receipt))
+            self._deadman_close = dict(requested_wall_s=started, finished=True, ack=acknowledged,
+                                       planned=planned, error=error_type,
+                                       receipt=None if receipt is None else dict(receipt))
         try:
-            if self._sink is not None:
-                self.record('NATIVE_CLOSE', dict(ack=receipt is not None, error=error_type,
-                                                 requested_wall_s=started,
-                                                 receipt=None if receipt is None else dict(receipt)))
+            if self._sink is not None and not planned:
+                self.record('DEADMAN_CLOSED_FAULT', dict(reason=reason, ack=acknowledged, error=error_type,
+                                                         requested_wall_s=started, receipt=receipt))
         except Exception:
             pass
+
+    def _armed_activation_id(self):
+        try:
+            return self.owner.deadman_armed()['activation_id']
+        except Exception:
+            return None
 
     def _cancel_stop_loop(self):
         if not self._await_stop():
@@ -872,13 +814,6 @@ class HeadLocalRuntime:
                 confirmation = self.port.raw_stop_confirmation()
             except Exception:
                 confirmation = None
-        with self._lock:
-            observer = self._stop_window_observer
-        if confirmation is not None and observer is not None:
-            try:
-                observer(confirmation['sim_ns'])
-            except Exception:
-                pass
         try:
             if self._sink is not None:
                 self.record('CANCEL_STOP', dict(raw_stop_confirmed=confirmed,
@@ -892,6 +827,41 @@ class HeadLocalRuntime:
                                                     else confirmation['last_sample_source_ns'])))
         except Exception:
             pass
+        self._finish_closure(confirmed, confirmation)
+
+    def _finish_closure(self, confirmed, confirmation):
+        """After the raw stop: the controller_state window, then the stop proof, then the dead-man close.
+
+        The window counts only samples stamped after the raw-stop confirmation. The stop proof needs the
+        terminal result, the raw stop and the window; only a proven stop of a case that ended on its own
+        terms closes the dead-man as planned. Anything else latches the controller.
+        """
+        window, window_error = None, None
+        if confirmed and confirmation is not None and not self._shutdown.is_set():
+            try:
+                self.owner.begin_end_window(raw_stop_sim_ns=confirmation['sim_ns'])
+                window = self.owner.end_stop_window(timeout_s=self.policy.head_stop_window_deadline_s)
+            except Exception as error:
+                window_error = type(error).__name__ + ': ' + str(error)[:120]
+        with self._lock:
+            self._cancel_stop = dict(self._cancel_stop, end_window=window, window_error=window_error)
+            faulted, origin = self._faulted, self._stop_origin_kind
+        proven = confirmed and window is not None
+        planned = proven and not faulted and origin in PLANNED_ORIGINS
+        if proven and self._sink is not None:
+            try:
+                self.record('STOCK_STOP_PROOF', dict(
+                    terminal=confirmation['terminal'], raw_stop_samples=confirmation['samples'],
+                    raw_stop_confirmed_sim_ns=confirmation['sim_ns'], window=dict(window),
+                    deadman_closed_planned=planned))
+            except Exception:
+                pass
+        if planned:
+            self._close_deadman(planned=True)
+        elif origin in PLANNED_ORIGINS:
+            # a case that ended on its own terms but whose proof failed, or that faulted meanwhile: latch it.
+            # (Every other origin was latched at once by the fault-latch worker.)
+            self._close_deadman(planned=False, reason='STOP_PROOF_UNCONFIRMED' if not proven else 'fault')
 
     def _watchdog_loop(self):
         period = self.policy.watchdog_period_s
@@ -974,11 +944,13 @@ class HeadLocalRuntime:
             requested = self._stop_event.is_set()
             threads = dict(self._threads)
         if requested and deadline is not None:
-            for name in ('native_close', 'cancel_stop'):
+            # the raw-stop budget, then the controller_state window and the planned close that follow it
+            closure_deadline = deadline + self.policy.head_stop_window_deadline_s + _CLOSE_ALLOWANCE_S
+            for name in ('deadman_latch', 'cancel_stop'):
                 thread = threads.get(name)
                 if (thread is not None and thread is not threading.current_thread()
                         and thread.is_alive()):
-                    thread.join(max(0., deadline - self.monotonic()))
+                    thread.join(max(0., closure_deadline - self.monotonic()))
         return self.stop_receipt()
 
     def retire_originals(self, *, timeout_s=1.):
@@ -1007,7 +979,7 @@ class HeadLocalRuntime:
         self._shutdown.set()
         deadline = time.monotonic() + timeout_s
         unquiesced = []
-        for name in ('cancel_stop', 'native_close', 'watchdog'):
+        for name in ('cancel_stop', 'deadman_latch', 'watchdog'):
             thread = threads.get(name)
             if thread is None or thread is threading.current_thread():
                 continue
@@ -1019,8 +991,8 @@ class HeadLocalRuntime:
         snapshot = self.retirement_snapshot()
         receipt = dict(retired=not unquiesced, unquiesced=unquiesced,
                     stop_requested=stop_requested,
-                    confirmed_stop=snapshot['cancel_stop']['raw_stop_confirmed'] is True,
-                    native_close=snapshot['native_close'], cancel_stop=snapshot['cancel_stop'],
+                    confirmed_stop=self._physical_stop_confirmed(snapshot['cancel_stop']),
+                    deadman_close=snapshot['deadman_close'], cancel_stop=snapshot['cancel_stop'],
                     **originals, stop=self.stop_receipt(),
                     original_retirement=('CLOSED' if retire_originals else 'DEFERRED_TO_PROVIDER'),
                     closed_wall_s=self.monotonic())

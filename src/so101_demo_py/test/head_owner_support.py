@@ -107,7 +107,9 @@ class FakeHelper:
 
 
 class FakeWindow:
-    def __init__(self):
+    def __init__(self, auto=False):
+        # auto: a rearm is answered by a completed window a few ms later (samples flowing)
+        self.auto = auto
         self.started = self.stopped = False
         self._completed, self.rearms, self.voids = None, [], []
         self.resets_total, self._latest = 0, None
@@ -139,6 +141,9 @@ class FakeWindow:
     def rearm(self, floor_sim_ns=None):
         self.rearms.append(floor_sim_ns)
         self._completed = None
+        if self.auto:
+            first = (1_000_000_000 if floor_sim_ns is None else floor_sim_ns + 2_000_000)
+            threading.Timer(.005, lambda: self.complete(first=first)).start()
 
     def void(self, reason):
         self.voids.append(reason)
@@ -168,7 +173,8 @@ class FakeGraph:
 def make(tmp_path=None, **override):
     FakeHelper.instances.clear()
     events, faults = [], []
-    services, window, graph = FakeServices(), FakeWindow(), FakeGraph()
+    services, window, graph = FakeServices(), FakeWindow(auto=override.pop('auto_window', False)), FakeGraph()
+    identity = override.pop('identity', None)
     import tempfile
     directory = tempfile.mkdtemp(prefix='dmo')
     import os
@@ -180,6 +186,8 @@ def make(tmp_path=None, **override):
                     fault_callback=lambda code, evidence: faults.append((code, evidence)))
     keywords.update(override)
     owner = HeadNeckOwner(**keywords)
+    if identity is not None:
+        owner.identity = lambda: dict(identity)
     return owner, services, window, graph, events, faults
 
 

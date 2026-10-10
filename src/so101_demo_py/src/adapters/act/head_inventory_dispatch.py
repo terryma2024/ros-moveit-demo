@@ -1,4 +1,4 @@
-"""Synchronous local inventory gate before native reserve and prepared SDK send."""
+"""Synchronous local inventory gate before the local admission and the prepared SDK send."""
 
 import copy
 import hashlib
@@ -24,7 +24,7 @@ class HeadInventoryDispatcher:
     must then establish the matching port inventory before it returns True.
     """
 
-    def __init__(self, port, authority, local_state, *, guard, own_inventory,
+    def __init__(self, port, owner, local_state, *, guard, own_inventory,
                  fault_callback, emit=lambda *args, **kwargs: None):
         from so101_demo.act.head_local_state import HeadLocalState
 
@@ -35,7 +35,7 @@ class HeadInventoryDispatcher:
                 or port.feedback_policy is None or port.names != ('neck_yaw_joint',)):
             raise ValueError('HEAD_INVENTORY_DISPATCH_CONFIG_INVALID')
         self.port = port
-        self.authority = authority
+        self.owner = owner
         self.local_state = local_state
         self._trajectory_guard = guard
         self._guard = guard.is_current
@@ -77,20 +77,19 @@ class HeadInventoryDispatcher:
     @property
     def inventory(self): return self.local_state.inventory
 
-    def _authority_scope(self):
-        return dict(epoch=self.epoch, generation=self.authority.generation,
-            session_id=self.authority.session_id, policy_sha256=self.local_state.scope['policy_sha256'],
-            controller_identity=self.authority._identities.get('neck'))
+    def _owner_scope(self):
+        return dict(epoch=self.epoch, generation=self.owner.generation,
+            session_id=self.owner.session_id, policy_sha256=self.local_state.scope['policy_sha256'],
+            controller_identity=self.owner.identity())
 
     def _check_scope(self):
         scope = self.local_state.scope
         if (self._failed or self.local_state.faulted
                 or scope['controller_identity'] is None or canonical_bytes(scope) != self._scope
                 or self.port._head_policy_binding_failed
-                or self.authority.generation != scope['generation']
-                or self.authority.session_id != scope['session_id']
-                or 'neck' not in self.authority._armed
-                or self.authority._identities.get('neck') != scope['controller_identity']):
+                or self.owner.generation != scope['generation']
+                or self.owner.session_id != scope['session_id']
+                or self.owner.identity() != scope['controller_identity']):
             raise PermissionError('HEAD_INVENTORY_DISPATCH_SCOPE_INVALID')
 
     def _current(self, goal_uuid=None):
@@ -102,7 +101,7 @@ class HeadInventoryDispatcher:
         self._check_scope()
         if goal_uuid is not None:
             if not self.local_state.validate_current(goal_uuid, now_ns=time.monotonic_ns(),
-                    authority_scope=self._authority_scope()):
+                    authority_scope=self._owner_scope()):
                 raise PermissionError('HEAD_INVENTORY_CLAIM_EXPIRED')
 
     def stop_admission(self):
@@ -183,7 +182,7 @@ class HeadInventoryDispatcher:
                         or binding.controller_boot_incarnation != identity['boot']
                         or binding.deadline_ns - binding.claim_monotonic_ns != 400_000_000
                         or not binding.claim_monotonic_ns <= time.monotonic_ns() < binding.deadline_ns):
-                    raise PermissionError('HEAD_INVENTORY_NATIVE_BINDING_INVALID')
+                    raise PermissionError('HEAD_INVENTORY_BINDING_INVALID')
                 record = dict(goal_uuid=gid, typed_goal=typed,
                     payload_sha256=hashlib.sha256(payload).hexdigest(), generation=self.generation,
                     controller_identity=identity, attempt_epoch=self.epoch,
@@ -213,16 +212,16 @@ class HeadInventoryDispatcher:
                 self._current(gid)
                 self.local_state.mark_reserve_attempt(gid, time.monotonic_ns())
                 if trace is not None:
-                    mark('native_reserve_ready')
+                    mark('admission_ready')
                 return True
 
-            reserved = self.authority.reserve('neck', goal=payload, goal_uuid=parsed.bytes,
+            reserved = self.owner.admit_local(goal=payload, goal_uuid=parsed.bytes,
                 before_reserve=register)
             if reserved is not True:
-                raise PermissionError('HEAD_INVENTORY_NATIVE_RESERVATION_REFUSED')
+                raise PermissionError('HEAD_INVENTORY_ADMISSION_REFUSED')
             self.local_state.mark_reserved(gid, time.monotonic_ns())
             if trace is not None:
-                mark('native_reserved')
+                mark('admitted')
             self._current(gid)
             self.local_state.mark_sdk_attempt(gid, time.monotonic_ns())
             if trace is not None:

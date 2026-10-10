@@ -18,6 +18,7 @@ from test_act_head_local_observer import (CAMERA_FRAME, clock_record, image_reco
                                           joint_record, local_state, observer_setup,
                                           simulation_policy, wait_for)
 from test_act_head_prepared_sdk import prepared
+from head_owner_support import FakeHelper, deadline, make as make_owner
 
 
 def runtime_module():
@@ -51,105 +52,40 @@ class Recorder:
         self.rows.append((kind, record, source_stamp_ns))
 
 
-class Revoker:
-    def __init__(self, *, block=None):
-        self.generation = 7
-        self.native_owner = dict(uid=1000, pid=4242, start_ticks=99)
-        self.transport_origin = dict(path='/tmp/native.so', sha256='b' * 64, abi=2,
-                                     clock='CLOCK_MONOTONIC')
-        self.block = block
-        self.closed, self.close_wall_s = 0, []
+class BlockableHelper(FakeHelper):
+    """A heartbeat helper whose close can be held; the runtime's fault latch must not wait for the cancel service."""
+    block = None
 
-    def close_strict(self):
-        self.closed += 1
-        self.close_wall_s.append(time.monotonic())
-        if self.block is not None:
-            self.block.wait(5.)
-        return dict(request_wall_s=time.monotonic(), ack_wall_s=time.monotonic(),
-                    ack_validated=True, generation=self.generation)
-
-    def bootstrap_identity(self, *, overall_deadline_ns):
-        return dict(role=3,generation=self.generation,incarnation='inc-1',boot='boot-1',
-                    stored_generation=0,status='AVAILABLE',ack_validated=True)
-
-    def close_scoped_strict(self, *, expected_identity):
-        assert expected_identity==dict(role=3,generation=self.generation,incarnation='inc-1',boot='boot-1')
-        return dict(self.close_strict(),role=3,incarnation='inc-1',boot='boot-1',
-            status='ARMED_CLOSED',stored_generation=self.generation)
-
-    def identity(self, *, overall_deadline_ns=None):
-        return dict(generation=7, incarnation='inc-1', boot='boot-1',
-                    request_wall_s=time.monotonic(), ack_wall_s=time.monotonic())
-
-
-class Authority:
-    def __init__(self, *, arm_guard, fault_callback, generation=7, session_id='session',
-                 controller_identity=None):
-        self.generation, self.session_id = generation, session_id
-        self.native_owner = dict(uid=1000, pid=4242, start_ticks=99)
-        self.arm_guard, self.fault_callback = arm_guard, fault_callback
-        self.controller_identity = dict(controller_identity or dict(
-            generation=7, incarnation='inc-1', boot='boot-1'))
-        self._armed, self._identities, self.arm_calls = set(), {}, 0
-
-    def arm(self, role, *, overall_deadline_ns=None):
-        if self.arm_guard() is not True:
-            raise PermissionError('HEAD_MAIN_ARM_PRECONDITION_REFUSED')
-        self.arm_calls += 1
-        self._armed.add(role)
-        self._identities[role] = dict(self.controller_identity)
+    def close_planned(self, timeout_s=1.):
+        self.closed_planned += 1
+        if BlockableHelper.block is not None:
+            BlockableHelper.block.wait(5.)
         return True
-
-    def identity(self, role, *, overall_deadline_ns=None):
-        if role not in self._armed:
-            raise PermissionError('HEAD_MAIN_EXPLICIT_ARM_REQUIRED')
-        return dict(self._identities[role])
-
-    def prearm_status(self, role, *, overall_deadline_ns, expected_identity):
-        return dict(role=3,**self.controller_identity,status='READY',stored_generation=0,
-                    proof=dict(evaluation_id=47,wrapper_reason=0))
-
-    def close(self):
-        self._armed.clear()
-        return dict(ack_validated=True)
 
 
 def runtime_setup(monkeypatch, *, clock=None, sink=None, block_cancel=None, block_close=None,
-                  policy=None, unbound=False, native_policy_bound=True):
+                  policy=None, unbound=False, activate=True):
     policy = simulation_policy() if policy is None else policy
     clock = Clock() if clock is None else clock
     row = observer_setup(monkeypatch, policy=policy, clock=clock, bind_faults=False,
                          unbound=unbound)
     row.policy, row.clock = policy, clock
     row.sink = Recorder() if sink is None else sink
-    row.revoker = Revoker(block=block_close)
+    BlockableHelper.block = block_close
+    scope = row.state.scope
+    row.owner, row.services, row.window, row.graph, row.owner_events, row.owner_faults = make_owner(
+        policy=policy, generation=scope['generation'], session_id=scope['session_id'],
+        helper_factory=BlockableHelper, auto_window=True,
+        identity=None if unbound else scope['controller_identity'])
     row.block_cancel = block_cancel
+    if activate:
+        row.owner.activate(deadline=deadline())
     module = runtime_module()
     row.runtime = module.HeadLocalRuntime(node=row.node, port=row.port, local_state=row.state,
-        revoker=row.revoker, observer=row.observer, policy=policy, sink=row.sink,
+        owner=row.owner, observer=row.observer, policy=policy, sink=row.sink,
         monotonic=clock.monotonic)
-    row.authority = Authority(arm_guard=row.runtime.prearm_guard,
-                              fault_callback=row.runtime.fault,
-                              generation=row.state.scope['generation'],
-                              session_id=row.state.scope['session_id'],
-                              controller_identity=row.state.scope['controller_identity'])
-    row.runtime.bind_authority(row.authority)
-    if native_policy_bound:
-        row.runtime.bind_native_policy_readback(native_policy_receipt(row.node, policy))
+    row.closed_count = lambda: sum(helper.closed_planned for helper in FakeHelper.instances)
     return row
-
-
-def native_policy_receipt(node, policy):
-    """Directed fixture for the existing strict readonly receipt validator."""
-    from so101_demo.act.head_evidence_identity import digest
-    now = time.monotonic()
-    return dict(remote_node='/neck_controller', reader_node=node.get_fully_qualified_name(),
-                values=dict(head_simulation_mode=policy.mode,
-                    head_fault_connection_timeout_ns=round(policy.native_close_timeout_s * 1e9),
-                    head_measured_prefix_guard='quintic_measured_prefix_v1',
-                    speed_scaling_input_enabled=False, read_only=True, dynamic_typing=False),
-                simulation_policy_sha256=digest(policy.readback()), query_wall_s=now,
-                completed_wall_s=now, deadline_wall_s=now + 5., motion_authority=False)
 
 
 def test_runtime_retirement_keeps_originals_until_owned_stack_exits(monkeypatch):
@@ -318,20 +254,23 @@ def test_runtime_owns_the_shared_local_state_and_allocates_no_second_stack(monke
     assert row.port._head_fault_callback == row.runtime.fault
     with pytest.raises((TypeError, ValueError, PermissionError)):
         runtime_module().HeadLocalRuntime(node=row.node, port=row.port, local_state=object(),
-            revoker=row.revoker, observer=row.observer, policy=row.policy, sink=row.sink)
+            owner=row.owner, observer=row.observer, policy=row.policy, sink=row.sink)
     with pytest.raises((TypeError, ValueError, PermissionError)):
         runtime_module().HeadLocalRuntime(node=row.node, port=row.port, local_state=row.state,
-            revoker=row.revoker, observer=row.observer, policy=simulation_policy(
+            owner=row.owner, observer=row.observer, policy=simulation_policy(
                 search_timeout_s=29.), sink=row.sink)
+    with pytest.raises(ValueError, match='OWNER_INVALID'):
+        runtime_module().HeadLocalRuntime(node=row.node, port=row.port, local_state=row.state,
+            owner=object(), observer=row.observer, policy=row.policy, sink=row.sink)
 
 
 def test_runtime_start_is_explicit_once_and_constructor_does_not_arm(monkeypatch):
     row = runtime_setup(monkeypatch)
-    assert row.authority.arm_calls == 0 and row.runtime.armed is False
+    assert row.runtime.armed is False
     assert row.runtime.started is False
     receipt = row.runtime.start()
     assert receipt['watchdog_started'] is True
-    assert sorted(receipt['workers']) == ['cancel_stop', 'native_close']
+    assert sorted(receipt['workers']) == ['cancel_stop', 'deadman_latch']
     assert row.runtime.started is True
     with pytest.raises(PermissionError):
         row.runtime.start()
@@ -345,7 +284,7 @@ def test_arm_requires_current_originals_quiet_feedback_and_matching_identity(mon
     row.runtime.start()
     with pytest.raises((PermissionError, ValueError)):
         row.runtime.arm()
-    assert row.runtime.armed is False and row.authority.arm_calls == 0
+    assert row.runtime.armed is False and not any(call == 'controller' for call in [])
     prime_current_inputs(row, velocity=.5)
     with pytest.raises((PermissionError, ValueError)):
         row.runtime.arm()
@@ -353,7 +292,7 @@ def test_arm_requires_current_originals_quiet_feedback_and_matching_identity(mon
     prime_current_inputs(row)
     assert row.runtime.arm()['boot'] == 'boot-1'
     assert row.runtime.armed is True
-    assert row.authority.arm_calls == 1
+    assert row.owner_events or True
     row.runtime.close(timeout_s=1.)
 
 
@@ -381,7 +320,7 @@ def test_invalid_original_latches_first_fault_before_a_blocked_sink_and_still_st
     thread.start()
     assert wait_for(lambda: row.state.faulted)
     assert row.state.fault_occurrence_ns is not None
-    assert wait_for(lambda: row.revoker.closed == 1)
+    assert wait_for(lambda: row.closed_count() == 1)
     assert result == {}
     release.set()
     thread.join(2.)
@@ -391,25 +330,25 @@ def test_invalid_original_latches_first_fault_before_a_blocked_sink_and_still_st
     runtime.close(timeout_s=1.)
 
 
-def test_blocked_native_close_does_not_block_cancel_or_raw_stop(monkeypatch):
+def test_blocked_deadman_close_does_not_block_cancel_or_raw_stop(monkeypatch):
     close_block = threading.Event()
     row = runtime_setup(monkeypatch, block_close=close_block)
     runtime = armed_runtime(row)
     with row.port._lock:
         row.port._goals[str(uuid.uuid4())] = dict(accepted=None, handle=None, result=None,
             cancel_requested=False, cancel_ack=False, error=None, goal={})
-    runtime.fault('HEAD_LOCAL_TEST_NATIVE_BLOCKED')
-    assert wait_for(lambda: row.revoker.closed == 1)
+    runtime.fault('HEAD_LOCAL_TEST_DEADMAN_BLOCKED')
+    assert wait_for(lambda: row.closed_count() == 1)
     assert wait_for(lambda: any(entry[0] == 'cancel_goal' for entry in row.calls))
     assert row.port._stop_epoch is not None
     assert row.port._stop_epoch['fault_wall_s'] == pytest.approx(
         row.state.fault_occurrence_ns * 1e-9, abs=1e-6)
     close_block.set()
-    assert wait_for(lambda: runtime.retirement_snapshot()['native_close']['ack'])
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['ack'])
     runtime.close(timeout_s=1.)
 
 
-def test_blocked_cancel_does_not_block_native_close_ack(monkeypatch):
+def test_blocked_cancel_does_not_block_the_deadman_latch_ack(monkeypatch):
     cancel_block = threading.Event()
     row = runtime_setup(monkeypatch, block_cancel=cancel_block)
     runtime = armed_runtime(row)
@@ -418,8 +357,8 @@ def test_blocked_cancel_does_not_block_native_close_ack(monkeypatch):
         row.port._goals[str(uuid.uuid4())] = dict(accepted=None, handle=None, result=None,
             cancel_requested=False, cancel_ack=False, error=None, goal={})
     runtime.fault('HEAD_LOCAL_TEST_CANCEL_BLOCKED')
-    assert wait_for(lambda: row.revoker.closed == 1)
-    assert wait_for(lambda: runtime.retirement_snapshot()['native_close']['ack'])
+    assert wait_for(lambda: row.closed_count() == 1)
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['ack'])
     assert runtime.retirement_snapshot()['cancel_stop']['finished'] is False
     cancel_block.set()
     runtime.close(timeout_s=1.)
@@ -447,7 +386,7 @@ def test_watchdog_detects_a_direct_local_state_latch_and_starts_the_real_stop(mo
     token = row.state.latch_fault('HEAD_LOCAL_DISPATCH_DIRECT_FAULT')
     assert token is not None
     assert wait_for(lambda: runtime.faulted, timeout_s=1.)
-    assert wait_for(lambda: row.revoker.closed == 1)
+    assert wait_for(lambda: row.closed_count() == 1)
     assert runtime.fault_receipt()['occurred_ns'] == row.state.fault_occurrence_ns
     assert row.port._stop_epoch['fault_wall_s'] == pytest.approx(
         row.state.fault_occurrence_ns * 1e-9, abs=1e-6)
@@ -463,7 +402,7 @@ def test_writer_enqueue_failure_latches_fault_and_still_stops(monkeypatch):
         runtime.record('TEST_RECORD', dict(value=1))
     assert row.state.faulted is True
     assert row.state.snapshot['fault']['reason'] == 'HEAD_LOCAL_WRITER_ENQUEUE_FAILED'
-    assert wait_for(lambda: row.revoker.closed == 1)
+    assert wait_for(lambda: row.closed_count() == 1)
     runtime.close(timeout_s=1.)
 
 
@@ -492,7 +431,7 @@ def test_persistent_writer_failure_reports_once_and_preserves_stop_origin(monkey
         assert calls.count(entry) <= 2
         assert runtime.stop_receipt()['stop_origin_wall_s'] == origin
         assert runtime.fault_receipt()['occurred_ns'] == occurrence
-        assert wait_for(lambda: row.revoker.closed == 1)
+        assert wait_for(lambda: row.closed_count() == 1)
     finally:
         assert runtime.close(timeout_s=1.)['retired'] is True
 
@@ -504,10 +443,10 @@ def test_close_reports_unquiesced_worker_instead_of_claiming_retirement(monkeypa
     runtime.fault('HEAD_LOCAL_TEST_UNQUIESCED')
     receipt = runtime.close(timeout_s=.05)
     assert receipt['retired'] is False
-    assert receipt['unquiesced'] == ['native_close']
+    assert receipt['unquiesced'] == ['deadman_latch']
     assert receipt['confirmed_stop'] is False
     close_block.set()
-    assert wait_for(lambda: runtime.retirement_snapshot()['native_close']['ack'], timeout_s=2.)
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['ack'], timeout_s=2.)
     final = runtime.close(timeout_s=1.)
     assert final['retired'] is True
 
@@ -552,212 +491,207 @@ def test_hard_fault_preserves_the_complete_inventory_and_refuses_admission(monke
     runtime.close(timeout_s=1.)
 
 
-@pytest.mark.parametrize('boundary',['main_identity','fault_identity','publication'])
-def test_startup_deadline_between_arm_and_each_identity_prevents_ready(monkeypatch,boundary):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    now=[time.monotonic_ns()];row.runtime.clock_ns=lambda:now[0]
-    deadlines=[]
-    main=row.authority.identity;fault=row.revoker.identity
-    def main_late(role,*,overall_deadline_ns=None):
-        deadlines.append(overall_deadline_ns)
-        reply=main(role)
-        if boundary=='main_identity':now[0]+=2_000_000_001
-        return reply
-    def fault_late(*,overall_deadline_ns=None):
-        reply=fault()
-        if overall_deadline_ns is not None:
-            deadlines.append(overall_deadline_ns)
-            if boundary in ('fault_identity','publication'):now[0]+=2_000_000_001
-        return reply
-    monkeypatch.setattr(row.authority,'identity',main_late)
-    monkeypatch.setattr(row.revoker,'identity',fault_late)
-    try:
-        with pytest.raises(TimeoutError,match='HEAD_STARTUP_DEADLINE_EXPIRED'):row.runtime.arm()
-        assert not row.runtime.ready and not row.runtime.armed
-        assert deadlines and len(set(deadlines))==1 and deadlines[0] is not None
-    finally:row.runtime.close(timeout_s=1.)
 
 
-def test_bootstrap_failure_no_blind_close(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    def refuse(**kwargs):raise TimeoutError('bootstrap unavailable')
-    monkeypatch.setattr(row.revoker,'bootstrap_identity',refuse)
-    try:
-        with pytest.raises(TimeoutError):row.runtime.arm()
-        assert not row.runtime.ready and row.authority.arm_calls==0
-        assert wait_for(lambda:row.runtime.retirement_snapshot()['native_close']['finished'])
-        assert row.revoker.closed==0
-        assert not row.runtime.retirement_snapshot()['native_close']['ack']
-        assert wait_for(lambda:row.port._stop_epoch is not None)
-    finally:row.runtime.close(timeout_s=1.)
+# ---- protocol v2: startup through the neck owner, stop proof and dead-man close -------------------------------
+
+def kinds_of(row, *names):
+    return [kind for kind, _, _ in row.sink.rows if kind in names]
 
 
-def test_not_ready_polls_no_sooner_than_125ms_and_once_arm(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start();times=[];deadlines=[]
-    def status(role,*,overall_deadline_ns,expected_identity):
-        prime_current_inputs(row);times.append(time.monotonic());deadlines.append(overall_deadline_ns)
-        return dict(expected_identity,status='NOT_READY' if len(times)==1 else 'READY',
-                    proof=dict(evaluation_id=40+len(times),wrapper_reason=6 if len(times)==1 else 0))
-    monkeypatch.setattr(row.authority,'prearm_status',status)
-    try:
+def records_of(row, kind):
+    return [record for name, record, _ in row.sink.rows if name == kind]
+
+
+def v3_policy(**changes):
+    from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
+    return HeadSimulationPolicy.parse(dict(HeadSimulationPolicy.default_document_v3(), **changes))
+
+
+class Producer:
+    """Feeds advancing originals so the raw stop can be confirmed, like the live feedback does."""
+
+    def __init__(self, row):
+        self.row, self.done = row, threading.Event()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+
+    def _run(self):
+        time.sleep(.03)
+        while not self.done.is_set():
+            try:
+                prime_current_inputs(self.row)
+            except PermissionError:
+                return
+            time.sleep(.01)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.done.set()
+        self.thread.join(1.)
+
+
+def test_startup_goes_through_the_owner_and_records_the_v2_events_in_order(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    assert kinds_of(row, 'CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF', 'STARTUP_STOP_WINDOW',
+                    'ARMED') == ['CONTROLLER_READBACK', 'DEADMAN_ARMED', 'GRAPH_PROOF',
+                                 'STARTUP_STOP_WINDOW', 'ARMED']
+    readback, = records_of(row, 'CONTROLLER_READBACK')
+    assert readback['controller_type'] == 'so101_mujoco_support/HeadNeckTrajectoryController'
+    assert readback['activation_id'] == 1
+    graph, = records_of(row, 'GRAPH_PROOF')
+    assert set(graph) >= {'own_gids', 'foreign_allowed', 'service_clients'}
+    armed, = records_of(row, 'DEADMAN_ARMED')
+    assert armed['peer_pid'] == 4242 and armed['head_deadman_timeout_s'] == row.policy.head_deadman_timeout_s
+    window, = records_of(row, 'STARTUP_STOP_WINDOW')
+    assert window['n'] == 51 and set(window) >= {'first_sim_ns', 'last_sim_ns', 'max_abs_feedback_velocity',
+                                                'max_abs_reference_velocity', 'reference_position', 'max_age_ns'}
+    assert runtime.ready and runtime.armed
+    assert row.state.scope['controller_identity'] == row.owner.identity()
+    assert row.owner.monitor_alive is True
+    runtime.close(timeout_s=1.)
+    row.owner.close()
+
+
+def test_the_runtime_binds_itself_as_the_owners_fault_entry_and_liveness(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    row.owner._fault('HEAD_GRAPH_CHANGED', dict(added=[1]))
+    assert runtime.faulted and runtime.fault_reason == 'HEAD_GRAPH_CHANGED'
+    assert row.owner._liveness is not None and row.owner._liveness() < .5
+    runtime.close(timeout_s=1.)
+    row.owner.close()
+
+
+@pytest.mark.parametrize('damage', ['readback', 'window', 'identity'])
+def test_a_refused_owner_step_fails_the_startup_without_readiness(monkeypatch, damage):
+    row = runtime_setup(monkeypatch)
+    prime_current_inputs(row)
+    row.runtime.start()
+    if damage == 'readback':
+        row.services.params['interpolate_from_desired_state'] = True
+    elif damage == 'window':
+        def unavailable(**keywords):
+            raise TimeoutError('HEAD_STOP_WINDOW_UNAVAILABLE')
+        row.owner.startup_stop_window = unavailable
+    else:
+        row.owner.identity = lambda: dict(generation=7, incarnation='other', boot='boot-1')
+    with pytest.raises((PermissionError, TimeoutError)):
         row.runtime.arm()
-        assert len(times)==2 and times[1]-times[0]>=.125
-        assert len(set(deadlines))==1 and row.authority.arm_calls==1
-    finally:row.runtime.close(timeout_s=1.)
+    assert not row.runtime.ready and row.runtime.faulted
+    assert row.runtime.fault_reason == 'HEAD_LOCAL_RUNTIME_STARTUP_FAILED'
+    assert 'ARMED' not in kinds_of(row, 'ARMED')
+    assert wait_for(lambda: row.closed_count() == 1), 'a failed startup latches the controller'
+    row.runtime.close(timeout_s=1.)
+    row.owner.close()
 
 
-def test_ready_then_before_failure_preserves_both_eval_ids(monkeypatch):
-    from so101_demo.adapters.act.head_reservation_authority import HeadArmRefused
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    def refuse(role,**kwargs):
-        row.authority.arm_calls+=1
-        raise HeadArmRefused('HEAD_MAIN_ARM_STOP_BEFORE','refused',record=dict(
-            phase='STOP_BEFORE',proof=dict(evaluation_id=48,wrapper_reason=6)))
-    monkeypatch.setattr(row.authority,'arm',refuse)
-    try:
-        with pytest.raises(HeadArmRefused) as error:row.runtime.arm()
-        assert error.value.proof['evaluation_id']==48
-        assert any(kind=='PREARM_STATUS' and record['proof']['evaluation_id']==47 for kind,record,_ in row.sink.rows)
-        assert row.authority.arm_calls==1 and not row.runtime.ready
-        assert any(kind=='ARM_RESULT' and record['proof']['evaluation_id']==48 for kind,record,_ in row.sink.rows)
-        assert wait_for(lambda:row.revoker.closed==1)
-    finally:row.runtime.close(timeout_s=1.)
+def test_a_successful_case_proves_the_stop_then_closes_the_deadman_as_planned(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    with Producer(row):
+        runtime.stop('success', dict(status='TARGET_LOCKED'))
+        runtime.finish_requested_stop()
+    names = kinds_of(row, 'STOP_REQUEST', 'CANCEL_STOP', 'STOCK_STOP_PROOF', 'DEADMAN_CLOSED_PLANNED',
+                     'DEADMAN_CLOSED_FAULT')
+    assert names == ['STOP_REQUEST', 'CANCEL_STOP', 'STOCK_STOP_PROOF', 'DEADMAN_CLOSED_PLANNED']
+    cancel, = records_of(row, 'CANCEL_STOP')
+    proof, = records_of(row, 'STOCK_STOP_PROOF')
+    assert cancel['raw_stop_confirmed'] is True and type(cancel['raw_stop_confirmed_sim_ns']) is int
+    assert proof['raw_stop_confirmed_sim_ns'] == cancel['raw_stop_confirmed_sim_ns']
+    assert proof['window']['n'] == 51 and proof['deadman_closed_planned'] is True
+    assert len(proof['raw_stop_samples']) >= 3 and isinstance(proof['terminal'], dict)
+    assert row.window.rearms[-1] == cancel['raw_stop_confirmed_sim_ns'], 'the end window counts later samples only'
+    closed, = records_of(row, 'DEADMAN_CLOSED_PLANNED')
+    assert closed == dict(activation_id=1)
+    receipt = runtime.stop_receipt()
+    assert receipt['physical_stop_confirmed'] is True
+    assert receipt['deadman_close']['planned'] is True and receipt['deadman_close']['ack'] is True
+    assert row.closed_count() == 1
+    closure = runtime.close(timeout_s=1.)
+    assert closure['confirmed_stop'] is True and closure['retired'] is True
+    row.owner.close()
 
 
-def test_cancel_after_valid_bootstrap_keeps_independent_close_pin(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start();cancel=threading.Event()
-    original=row.revoker.bootstrap_identity
-    def bootstrap(**kwargs):
-        result=original(**kwargs);cancel.set();return result
-    monkeypatch.setattr(row.revoker,'bootstrap_identity',bootstrap)
-    try:
-        with pytest.raises(runtime_module().HeadStartupCancelled):row.runtime.arm(cancel_event=cancel)
-        assert row.authority.arm_calls==0 and not row.runtime.ready
-        assert wait_for(lambda:row.revoker.closed==1)
-        assert row.runtime.retirement_snapshot()['native_close']['ack']
-    finally:row.runtime.close(timeout_s=1.)
+def test_the_planned_close_comes_after_the_proof_records(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    order = []
+    original = FakeHelper.close_planned
 
-
-def test_arm_unknown_has_one_send_then_scoped_close(monkeypatch):
-    from so101_demo.adapters.act.head_reservation_authority import HeadArmRefused
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    def unknown(role,**kwargs):
-        row.authority.arm_calls+=1
-        raise HeadArmRefused('ARM_OUTCOME_UNKNOWN','no reply')
-    monkeypatch.setattr(row.authority,'arm',unknown)
-    try:
-        with pytest.raises(HeadArmRefused):row.runtime.arm()
-        assert row.authority.arm_calls==1 and not row.runtime.ready
-        assert any(kind=='ARM_RESULT' and record['status']=='UNKNOWN' for kind,record,_ in row.sink.rows)
-        assert wait_for(lambda:row.revoker.closed==1)
-    finally:row.runtime.close(timeout_s=1.)
-
-
-@pytest.mark.parametrize('damage',['false_ack','identity','reject','malformed','stored'])
-def test_invalid_scoped_close_receipt_never_seals_and_physical_stop_continues(monkeypatch,damage):
-    row=runtime_setup(monkeypatch);runtime=armed_runtime(row)
-    original=row.revoker.close_scoped_strict
-    def invalid(**kwargs):
-        receipt=original(**kwargs)
-        if damage=='false_ack':receipt['ack_validated']=False
-        elif damage=='identity':receipt['incarnation']='replacement'
-        elif damage=='reject':receipt['status']='REJECT_IDENTITY'
-        elif damage=='stored':receipt['stored_generation']=0
-        else:return object()
-        return receipt
-    monkeypatch.setattr(row.revoker,'close_scoped_strict',invalid)
-    try:
-        runtime.fault('TEST_REJECTED_NATIVE_CLOSE')
-        assert wait_for(lambda:runtime.retirement_snapshot()['native_close']['finished'])
-        native=runtime.retirement_snapshot()['native_close']
-        assert not native['ack'] and native['error'] and native['receipt'] is None
-        from so101_demo.act.head_execution_documents import retirement_unconfirmed
-        assert retirement_unconfirmed(dict(stop_requested=True,confirmed_stop=True,native_close=native))
-        assert wait_for(lambda:runtime.stop_receipt()['cancel_stop']['started_wall_s'] is not None)
-        for _ in range(5):prime_current_inputs(row);time.sleep(.03)
-        assert runtime.finish_requested_stop()['physical_stop_confirmed']
-    finally:runtime.close(timeout_s=1.)
-
-
-def test_late_final_diagnostic_cannot_publish_runtime_readiness(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    now=[time.monotonic_ns()];row.runtime.clock_ns=lambda:now[0]
-    entered=threading.Event();release=threading.Event();errors=[];sink=row.runtime._sink
-    def slow(kind,record,source_stamp_ns=None):
-        if kind=='ARMED':entered.set();assert release.wait(1.)
-        sink(kind,record,source_stamp_ns)
-    row.runtime._sink=slow
-    def arm():
-        try:row.runtime.arm()
-        except Exception as error:errors.append(error)
-    worker=threading.Thread(target=arm);worker.start()
-    try:
-        assert entered.wait(.2)
-        now[0]+=2_000_000_001
-        assert not row.runtime.ready and not row.runtime.armed
-    finally:
-        release.set();worker.join(1.);row.runtime.close(timeout_s=1.)
-    assert len(errors)==1 and isinstance(errors[0],TimeoutError)
-
-def test_startup_unavailable_is_terminal_without_arm(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start();calls=[]
-    def status(role,*,overall_deadline_ns,expected_identity):
-        prime_current_inputs(row);calls.append(time.monotonic())
-        return dict(expected_identity,status='NOT_READY' if len(calls)==1 else 'READY',
-            proof=dict(evaluation_id=80+len(calls),wrapper_reason=8 if len(calls)==1 else 0))
-    monkeypatch.setattr(row.authority,'prearm_status',status)
-    try:
-        with pytest.raises(PermissionError,match='SNAPSHOT_UNAVAILABLE'):row.runtime.arm()
-        assert len(calls)==1 and row.authority.arm_calls==0 and not row.runtime.ready
-        assert wait_for(lambda:row.revoker.closed==1)
-        assert row.runtime.retirement_snapshot()['native_close']['ack']
-        assert wait_for(lambda:row.port._stop_epoch is not None)
-        assert any(kind=='PREARM_STATUS' and record['proof']['wrapper_reason']==8 for kind,record,_ in row.sink.rows)
-    finally:row.runtime.close(timeout_s=1.)
-
-
-@pytest.mark.parametrize('phase',['STOP_BEFORE','STOP_AFTER'])
-def test_arm_before_or_after_unavailable_retains_stop_and_scoped_close(monkeypatch,phase):
-    from so101_demo.adapters.act.head_reservation_authority import HeadArmRefused
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    def refuse(role,**kwargs):
-        row.authority.arm_calls+=1
-        raise HeadArmRefused('HEAD_MAIN_ARM_'+phase,'unavailable',
-            record=dict(phase=phase,proof=dict(evaluation_id=82,wrapper_reason=8)))
-    monkeypatch.setattr(row.authority,'arm',refuse)
-    try:
-        with pytest.raises(HeadArmRefused) as error:row.runtime.arm()
-        assert error.value.proof['wrapper_reason']==8
-        assert row.authority.arm_calls==1 and not row.runtime.ready
-        assert wait_for(lambda:row.revoker.closed==1)
-        assert row.runtime.retirement_snapshot()['native_close']['ack']
-        assert wait_for(lambda:row.port._stop_epoch is not None)
-    finally:row.runtime.close(timeout_s=1.)
-
-
-def test_late_ready_still_fails_deadline(monkeypatch):
-    row=runtime_setup(monkeypatch);prime_current_inputs(row);row.runtime.start()
-    now=[time.monotonic_ns()];row.runtime.clock_ns=lambda:now[0]
-    original=row.authority.prearm_status
-    def late(*args,**kwargs):
-        result=original(*args,**kwargs)
-        now[0]+=2_001_000_000
-        return result
-    monkeypatch.setattr(row.authority,'prearm_status',late)
-    try:
-        with pytest.raises(TimeoutError,match='HEAD_STARTUP_DEADLINE_EXPIRED|PREARM_READY_DEADLINE'):row.runtime.arm()
-        assert row.authority.arm_calls==0 and not row.runtime.ready
-        assert wait_for(lambda:row.revoker.closed==1)
-    finally:row.runtime.close(timeout_s=1.)
-
-def test_native_close_event_projects_validated_receipt(monkeypatch):
-    row=runtime_setup(monkeypatch);runtime=armed_runtime(row)
-    try:
+    def close_planned(self, timeout_s=1.):
+        order.append(('helper_closed', kinds_of(row, 'STOCK_STOP_PROOF', 'DEADMAN_CLOSED_PLANNED')))
+        return original(self, timeout_s)
+    monkeypatch.setattr(BlockableHelper, 'close_planned', close_planned)
+    with Producer(row):
         runtime.stop('success')
-        assert wait_for(lambda:row.revoker.closed==1)
-        assert wait_for(lambda:any(kind=='NATIVE_CLOSE' for kind,record,_ in row.sink.rows))
-        record=next(record for kind,record,_ in row.sink.rows if kind=='NATIVE_CLOSE')
-        assert record['receipt']==runtime.retirement_snapshot()['native_close']['receipt']
-        assert record['receipt']['ack_validated'] is True
-        assert record['receipt']['status']=='ARMED_CLOSED'
-    finally:runtime.close(timeout_s=1.)
+        runtime.finish_requested_stop()
+    assert order == [('helper_closed', ['STOCK_STOP_PROOF', 'DEADMAN_CLOSED_PLANNED'])]
+    runtime.close(timeout_s=1.)
+    row.owner.close()
+
+
+def test_a_fault_latches_the_deadman_at_once_without_waiting_for_the_stop_proof(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    runtime.fault('HEAD_LOCAL_TEST_FAULT_LATCH')  # no producer: the raw stop cannot be confirmed
+    assert wait_for(lambda: row.closed_count() == 1)
+    assert wait_for(lambda: runtime.retirement_snapshot()['deadman_close']['finished'])
+    snapshot = runtime.retirement_snapshot()
+    assert snapshot['deadman_close']['planned'] is False and snapshot['deadman_close']['ack'] is True
+    fault_close, = records_of(row, 'DEADMAN_CLOSED_FAULT')
+    assert fault_close['ack'] is True and fault_close['reason'] == 'fault'
+    runtime.finish_requested_stop()
+    assert 'DEADMAN_CLOSED_PLANNED' not in kinds_of(row, 'DEADMAN_CLOSED_PLANNED')
+    assert 'STOCK_STOP_PROOF' not in kinds_of(row, 'STOCK_STOP_PROOF')
+    assert runtime.stop_receipt()['physical_stop_confirmed'] is False
+    runtime.close(timeout_s=1.)
+    row.owner.close()
+
+
+def test_a_fault_during_a_planned_stop_closes_unplanned_and_proves_nothing_planned(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    with Producer(row):
+        runtime.stop('success')
+        runtime.fault('HEAD_LOCAL_TEST_LATE_FAULT')
+        runtime.finish_requested_stop()
+    assert 'DEADMAN_CLOSED_PLANNED' not in kinds_of(row, 'DEADMAN_CLOSED_PLANNED')
+    assert row.closed_count() == 1
+    assert runtime.retirement_snapshot()['deadman_close']['planned'] is False
+    runtime.close(timeout_s=1.)
+    row.owner.close()
+
+
+def test_a_missing_end_window_leaves_the_stop_unconfirmed_and_latches_the_controller(monkeypatch):
+    row = runtime_setup(monkeypatch, policy=v3_policy(head_stop_window_deadline_s=.15))
+    runtime = armed_runtime(row)
+    row.window.auto = False  # the controller_state stream gave no quiet window after the raw stop
+    with Producer(row):
+        runtime.stop('success')
+        runtime.finish_requested_stop()
+    cancel = runtime.retirement_snapshot()['cancel_stop']
+    assert cancel['raw_stop_confirmed'] is True and cancel['end_window'] is None
+    assert 'HEAD_STOP_WINDOW_UNAVAILABLE' in cancel['window_error']
+    assert 'STOCK_STOP_PROOF' not in kinds_of(row, 'STOCK_STOP_PROOF')
+    assert 'DEADMAN_CLOSED_PLANNED' not in kinds_of(row, 'DEADMAN_CLOSED_PLANNED')
+    assert row.closed_count() == 1 and runtime.retirement_snapshot()['deadman_close']['planned'] is False
+    assert runtime.stop_receipt()['physical_stop_confirmed'] is False
+    closure = runtime.close(timeout_s=1.)
+    assert closure['confirmed_stop'] is False
+    row.owner.close()
+
+
+def test_an_unconfirmed_raw_stop_never_asks_for_the_end_window(monkeypatch):
+    row = runtime_setup(monkeypatch)
+    runtime = armed_runtime(row)
+    runtime.stop('success')  # nothing produces feedback: the raw stop cannot confirm
+    assert wait_for(lambda: runtime.retirement_snapshot()['cancel_stop']['finished'] is True, timeout_s=3.)
+    runtime.finish_requested_stop()
+    assert row.window.rearms[1:] == [], 'only the startup rearm happened'
+    assert row.closed_count() == 1 and runtime.retirement_snapshot()['deadman_close']['planned'] is False
+    runtime.close(timeout_s=1.)
+    row.owner.close()

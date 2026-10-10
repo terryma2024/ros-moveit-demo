@@ -73,6 +73,7 @@ class HeadNeckOwner:
         self._monitor = None
         self._stop_monitor = threading.Event()
         self._faulted = None
+        self._fault_bound = False
         self._close_receipt = None
 
     @staticmethod
@@ -281,6 +282,15 @@ class HeadNeckOwner:
         return self._close_deadman(reason)
 
     # ---- monitor -----------------------------------------------------------------------------------------------------
+
+    def bind_fault(self, callback):
+        """The runtime's fault entry; bound once, after the owner and before it is monitored."""
+        if not callable(callback):
+            raise ValueError('HEAD_NECK_FAULT_CALLBACK_INVALID')
+        with self._lock:
+            if self._fault_callback is not None and self._fault_bound:
+                raise PermissionError('HEAD_NECK_FAULT_CALLBACK_REBOUND')
+            self._fault_callback, self._fault_bound = callback, True
 
     def _fault(self, code, evidence):
         with self._lock:
