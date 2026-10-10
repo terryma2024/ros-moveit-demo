@@ -245,8 +245,15 @@ private:
 
 std::filesystem::path private_socket_directory()
 {
-  const auto * base = std::getenv("SO101_IPC_SOCKET_BASE");
-  if (!base) {throw std::runtime_error("TEST_IPC_BASE_REQUIRED");}
+  // AF_UNIX paths cap at 107 bytes, so the base is short. SO101_IPC_SOCKET_BASE names it when set; otherwise the test makes
+  // its own private base (it must not depend on the caller's environment).
+  const auto * configured = std::getenv("SO101_IPC_SOCKET_BASE");
+  static const std::string own_base = []() {
+    char pattern[] = "/tmp/so101-bo-XXXXXX";
+    if (mkdtemp(pattern) == nullptr) {throw std::runtime_error("TEST_IPC_BASE_FAILED");}
+    return std::string(pattern);
+  }();
+  const char * base = configured ? configured : own_base.c_str();
   const auto suffix = std::chrono::steady_clock::now().time_since_epoch().count();
   const auto directory = std::filesystem::path(base) /
     ("p" + std::to_string(getpid()) + "-" + std::to_string(suffix));

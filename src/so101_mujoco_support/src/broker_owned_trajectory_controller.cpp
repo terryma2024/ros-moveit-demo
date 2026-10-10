@@ -673,6 +673,25 @@ void BrokerOwnedTrajectoryController::retire_head_goal_for_lifecycle()
   }
 }
 
+namespace
+{
+// The stock JTC keeps its ~/speed_scaling_input subscription in a private member. The Head policy needs that endpoint absent
+// when speed_scaling_input_enabled is false, so the member is reached through the standard explicit-instantiation access
+// idiom (no header edit, no ODR violation); nothing else of the base class is touched.
+using ScalingSubscription = rclcpp::Subscription<control_msgs::msg::SpeedScalingFactor>::SharedPtr;
+struct ScalingSubscriptionTag
+{
+  using type = ScalingSubscription joint_trajectory_controller::JointTrajectoryController::*;
+  friend type get(ScalingSubscriptionTag);
+};
+template<typename Tag, typename Tag::type Member>
+struct MemberAccess
+{
+  friend typename Tag::type get(Tag) {return Member;}
+};
+}  // namespace
+template struct MemberAccess<ScalingSubscriptionTag, &joint_trajectory_controller::JointTrajectoryController::scaling_factor_sub_>;
+
 controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configure(
   const rclcpp_lifecycle::State & previous_state)
 {
@@ -708,10 +727,38 @@ controller_interface::CallbackReturn BrokerOwnedTrajectoryController::on_configu
     RCLCPP_ERROR(get_node()->get_logger(), "Head parameter binding refused: %s", failure.what());
     return controller_interface::CallbackReturn::ERROR;
   }
+  {
+    // The stock Jazzy joint_trajectory_controller (4.42.1) always creates ~/speed_scaling_input. The Head design needs a
+    // startup-only switch for it (the Head line's vendored JTC extension declared it). Provide the same contract here:
+    // a read-only bool, default true, declared before the base configure; an already declared (mutable) switch is left for
+    // the head-mode check below to refuse.
+    constexpr char kName[] = "speed_scaling_input_enabled";
+    const auto node = get_node();
+    try {
+      if (!node->has_parameter(kName)) {
+        rcl_interfaces::msg::ParameterDescriptor descriptor;
+        descriptor.read_only = true;
+        node->declare_parameter(kName, true, descriptor);
+      }
+    } catch (const std::exception & error) {
+      RCLCPP_ERROR(node->get_logger(), "speed_scaling_input_enabled refused: %s", error.what());
+      return controller_interface::CallbackReturn::ERROR;
+    }
+  }
   const auto result = joint_trajectory_controller::JointTrajectoryController::on_configure(
     previous_state);
   if (result != controller_interface::CallbackReturn::SUCCESS) {
     return result;
+  }
+  {
+    const auto node = get_node();
+    constexpr char kSwitch[] = "speed_scaling_input_enabled";
+    if (node->has_parameter(kSwitch)) {
+      const auto switch_value = node->get_parameter(kSwitch);
+      if (switch_value.get_type() == rclcpp::ParameterType::PARAMETER_BOOL && !switch_value.as_bool()) {
+        (this->*get(ScalingSubscriptionTag{})).reset();
+      }
+    }
   }
   if (head_simulation_mode_) {
     const auto node = get_node();
