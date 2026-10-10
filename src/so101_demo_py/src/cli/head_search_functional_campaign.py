@@ -219,13 +219,16 @@ def prepare_attempt(case, baseline, output, *, identity, domain, interrupt=False
         inputs['fault_stop_probes'] = ['CAMERA_LOSS_AFTER_FIRST_SDK_RETURN']
     environment = inputs['ros']['environment']
     session = identity['session_id']
-    ipc_base = Path('/tmp/so101-debug-head-file-protocol-1003/ipc')
-    ipc = ipc_base/hashlib.sha256(session.encode()).hexdigest()[:16]
+    # The private reservation scope lives under the root the baseline declares; no host constant.
+    reservation_root = environment.get('SO101_ACT_RESERVATION_ROOT')
+    if type(reservation_root) is not str or not Path(reservation_root).is_absolute():
+        raise ValueError('HEAD_FUNCTIONAL_RESERVATION_ROOT_REQUIRED')
+    ipc = Path(reservation_root)/'ipc'/hashlib.sha256(session.encode()).hexdigest()[:16]
     assert not ipc.exists()
     environment.update(ROS_DOMAIN_ID=str(domain), GZ_PARTITION=session,
         SO101_SIMULATION_SESSION_ID=session, ROS_HOME=str(output/'ros-home'),
         ROS_LOG_DIR=str(output/'ros-log'),
-        ROS_WORKSPACE=str(Path('/tmp/so101-debug-head-file-protocol-1003')/session),
+        ROS_WORKSPACE=str(Path(reservation_root)/session),
         SO101_ACT_CONTROLLER_RESERVATION_DIR=str(ipc))
     inputs['ros']['domain_id'] = domain
     # Native identity is provisioned by the existing authority from run fields

@@ -1,4 +1,6 @@
 """Campaign evidence must refer to the terminal input and owned OS lifecycle."""
+import json
+
 import pytest
 
 
@@ -45,6 +47,7 @@ def test_prepared_attempt_passes_real_closed_input_parser(tmp_path):
     from so101_demo.act.head_execution_inputs import HeadExecutionInputs
     from test_act_head_search_campaign_scene import _baseline, _case
     baseline = _baseline(tmp_path)
+    baseline['ros']['environment']['SO101_ACT_RESERVATION_ROOT'] = str(tmp_path/'reservations')
     baseline.update(fault_stop_probes=[],
         stop_declaration=dict(trigger='OPERATOR_STOP', teardown_timeout_s=1.),
         seal_expectation=dict(completion=True, artifacts=['seal.json']),
@@ -57,6 +60,29 @@ def test_prepared_attempt_passes_real_closed_input_parser(tmp_path):
     assert Path(inputs.document['snapshot_root']).is_dir()
     assert inputs.run == identity and inputs.save_all_rgb_frames is False
     assert inputs.document['campaign_truth_enabled'] is False
+
+
+def test_prepared_attempt_reservation_scope_follows_declared_root_not_a_host_constant(tmp_path):
+    import hashlib
+    from pathlib import Path
+    from so101_demo.cli.head_search_functional_campaign import prepare_attempt
+    from test_act_head_search_campaign_scene import _baseline, _case
+    baseline = _baseline(tmp_path)
+    root = tmp_path/'reservation-root'
+    baseline['ros']['environment']['SO101_ACT_RESERVATION_ROOT'] = str(root)
+    baseline.update(fault_stop_probes=[],
+        stop_declaration=dict(trigger='OPERATOR_STOP', teardown_timeout_s=1.),
+        seal_expectation=dict(completion=True, artifacts=['seal.json']),
+        log_capture=dict(stdout='stdout.log', stderr='stderr.log'))
+    token = 'scope-root-1'
+    identity = dict(run_id=token, session_id=token, epoch=token+'-epoch', generation=124)
+    path = prepare_attempt(_case(0), baseline, tmp_path/'prepared', identity=identity, domain=224)
+    environment = json.loads(Path(path).read_text())['ros']['environment']
+    assert environment['SO101_ACT_RESERVATION_ROOT'] == str(root)
+    assert environment['SO101_ACT_CONTROLLER_RESERVATION_DIR'] == str(
+        root/'ipc'/hashlib.sha256(token.encode()).hexdigest()[:16])
+    assert Path(environment['ROS_WORKSPACE']) == root/token
+    assert 'head-file-protocol-1003' not in json.dumps(environment)
 
 
 def test_extractor_reads_sealed_detector_records_and_actual_rgb_payload(tmp_path,monkeypatch):
