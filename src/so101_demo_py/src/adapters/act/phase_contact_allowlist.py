@@ -184,6 +184,4 @@ def load_installed_phase_contact_allowlist(
         raise ValueError("TASK8_CONTACT_POLICY_INVALID") from error
 
 
-# Legacy API for existing source-bound artifacts and callers.
-Task8ContactPairs = PhaseContactAllowlist
 load_installed_act_contact_pairs = load_installed_phase_contact_allowlist

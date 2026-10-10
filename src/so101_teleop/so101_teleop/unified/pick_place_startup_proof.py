@@ -172,7 +172,3 @@ class PickPlaceStartupProofConsumer:
         except (AttributeError, KeyError, OSError, TypeError, ValueError,
                 UnicodeDecodeError, json.JSONDecodeError) as error:
             raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
-
-
-# Legacy Python API for version-one pick-place callers.
-Task8StartupProofConsumer = PickPlaceStartupProofConsumer

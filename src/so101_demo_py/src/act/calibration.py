@@ -211,7 +211,3 @@ def require_gate(report: dict, gate: str) -> None:
     for check in PICK_PLACE_READY_CHECKS:
         if not CHECK_MEASUREMENTS[check] <= set(report["measurements"]):
             raise ValueError("CALIBRATION_CHECK_EVIDENCE_MISSING")
-
-
-# Legacy Python API and gate label for version-one calibration reports.
-TASK8_READY_CHECKS = PICK_PLACE_READY_CHECKS

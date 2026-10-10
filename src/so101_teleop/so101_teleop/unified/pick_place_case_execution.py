@@ -199,7 +199,3 @@ async def run_pick_place_case(spec, case_id: str, owner, journal_path: Path) -> 
     }
     _publish_new(journal_path, row)
     return row
-
-
-# Legacy Python API for version-one pick-place callers.
-run_task8_case = run_pick_place_case

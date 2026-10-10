@@ -78,7 +78,3 @@ def consume_child_pick_place_startup(request, child_owner: OwnerKey, environment
     return PickPlaceStartupProofConsumer(
         context, child, stack_owner=owner, child_owner=child_owner, **options,
     ).consume()
-
-
-# Legacy Python API for version-one pick-place callers.
-consume_child_task8_startup = consume_child_pick_place_startup

@@ -1018,10 +1018,6 @@ class TwoWorkerHeadroomVerifier:
             raise ValueError('Task14 current provenance mismatch')
 
 
-# Legacy Python API for version-one sealed headroom evidence.
-Task14AcceptanceProvider = ParallelExecutionAcceptanceProvider
-Task14LiveHeadroomVerifier = TwoWorkerHeadroomVerifier
-
 
 class WorkerResourceAllocator:
     """Allocate one private resource set for every requested stable slot."""

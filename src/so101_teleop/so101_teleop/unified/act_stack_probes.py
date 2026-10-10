@@ -103,7 +103,3 @@ def make_pick_place_act_stack(context, child: ActChildLaunch, *,
         )
     except (AttributeError, OSError, TypeError, ValueError) as error:
         raise ValueError("ACT_STACK_FACTORY_SCOPE_INVALID") from error
-
-
-# Legacy API for version-one stack ownership.
-make_task8_act_stack = make_pick_place_act_stack

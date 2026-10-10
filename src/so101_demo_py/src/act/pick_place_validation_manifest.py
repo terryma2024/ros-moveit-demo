@@ -151,8 +151,3 @@ def write_new_manifest(path: Path, document: dict) -> Path:
     finally:
         os.unlink(staging_name)
     return path
-
-
-# Legacy API for validated version-one manifests.
-build_task8_live_manifest = build_pick_place_validation_manifest
-require_task8_live_manifest = require_pick_place_validation_manifest

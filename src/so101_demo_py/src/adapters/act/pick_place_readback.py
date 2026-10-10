@@ -468,10 +468,3 @@ def capture_evidence_fields(captured, *, support_distance_max_m, raw_records,
             "source_stamps_s": stamps,
             "source_received_monotonic_s": received,
             "raw_records": dict(raw_records)}
-
-
-
-
-# Legacy Python API for version-one pick-place callers.
-Task8ReadbackError = PickPlaceReadbackError
-Task8PhysicalReadback = PickPlacePhysicalReadback

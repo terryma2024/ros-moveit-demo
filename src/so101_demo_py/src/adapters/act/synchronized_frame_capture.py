@@ -256,7 +256,3 @@ class SynchronizedFrameRecorder:
                 os.close(directory)
             self._closed = True
             return summary
-
-
-# Legacy API for source-bound capture evidence.
-Task6FrameRecorder = SynchronizedFrameRecorder

@@ -188,24 +188,6 @@ def test_validate_cli_reports_the_bundle_and_refuses_a_bare_directory(tmp_path):
         validate_cli.main(["--preparation-receipt", str(tmp_path / "bundle-cli" / "missing.json")])
 
 
-def test_legacy_live_entry_points_are_thin_forwarders():
-    """The two legacy modules must not carry a second implementation."""
-
-    here = Path(__file__).resolve()
-    # the CLI package lives at src/cli in the repository and at so101_demo/cli in a test mirror
-    candidates = [base / relative for base in here.parents
-                  for relative in ("src/cli", "cli", "so101_demo/cli")]
-    package = next((candidate for candidate in candidates
-                    if (candidate / "act_prepare_task8_live.py").is_file()), None)
-    assert package is not None, "the CLI package could not be located"
-    for name, target in (("act_prepare_task8_live.py", "act_prepare_pick_place_validation"),
-                         ("act_task8_live.py", "act_run_pick_place_validation")):
-        source = (package / name).read_text()
-        assert "sys.modules[__name__] = importlib.import_module(" in source
-        assert f"so101_demo.cli.{target}" in source
-        assert "def main" not in source
-
-
 def test_bundle_payload_carries_the_verified_receipt_and_its_raw_digest(tmp_path):
     from so101_demo.act.task8_artifact_bundle import (
         prepare_task8_bundle, task8_bundle_payload,

@@ -113,15 +113,11 @@ setup(
             "act_preflight = so101_demo.cli.act_preflight:main",
             "act_resolve_training_requirements = so101_demo.cli.act_resolve_training_requirements:main",
             "act_capture_synchronized_rgb = so101_demo.cli.act_capture_synchronized_rgb:main",
-            "act_capture_task6 = so101_demo.cli.act_capture_task6:main",
             "act_analyze_contact_calibration = so101_demo.cli.act_analyze_contact_calibration:main",
             "act_collect_contact_calibration = so101_demo.cli.act_collect_contact_calibration:main",
             "act_activate_contact_policy = so101_demo.cli.act_activate_contact_policy:main",
             "act_prepare_pick_place_validation = so101_demo.cli.act_prepare_pick_place_validation:main",
             "act_run_pick_place_validation = so101_demo.cli.act_run_pick_place_validation:main",
-            "act_prepare_task8_live = so101_demo.cli.act_prepare_task8_live:main",
-            "act_prepare_task8_live_artifacts = "
-            "so101_demo.cli.act_prepare_task8_live_artifacts:main",
             "act_build_task8_source_provenance = "
             "so101_demo.cli.act_build_task8_source_provenance:main",
             "act_measure_task8_calibration = "
@@ -140,7 +136,6 @@ setup(
             "act_inference_worker = so101_demo.cli.act_inference_worker:main",
             "act_session = so101_demo.cli.act_session:main",
             "act_evaluate = so101_demo.cli.act_evaluate:main",
-            "act_task8_live = so101_demo.cli.act_task8_live:main",
             "so101_parallel_batch = so101_demo.cli.mujoco_parallel_batch:main",
             # The macOS counterpart of the fixed coordinator: the entry point the unified service
             # launches on this platform, because so101_parallel_batch refuses it outright.

@@ -27,8 +27,8 @@ _ROLE_SPECS = (
     # the provenance describes what the runtime actually loads. A `dependency` role is produced by its own package
     # in the dependency overlay and keeps that package's own lib directory; nothing is relocated between packages.
     ("task8_runner", "verbatim_install",
-     "src/so101_demo_py/src/act/task8.py",
-     "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/task8.py", "worktree"),
+     "src/so101_demo_py/src/act/pick_place_runner.py",
+     "so101_demo_py/lib/python3.12/site-packages/so101_demo/act/pick_place_runner.py", "worktree"),
     ("teleop_child", "verbatim_install",
      "src/so101_teleop/so101_teleop/unified/ros_child.py",
      "so101_teleop/lib/python3.12/site-packages/so101_teleop/unified/ros_child.py", "worktree"),

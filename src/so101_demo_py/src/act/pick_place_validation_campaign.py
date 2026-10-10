@@ -98,8 +98,3 @@ class PickPlaceValidationCampaign:
     async def run(self, *, deadline_ns: int) -> dict:
         self.planned_cases(deadline_ns=deadline_ns)
         self.require_full_restart_lifecycle()
-
-
-# Legacy API for validated version-one campaigns.
-Task8LiveError = PickPlaceValidationError
-Task8LiveCampaign = PickPlaceValidationCampaign

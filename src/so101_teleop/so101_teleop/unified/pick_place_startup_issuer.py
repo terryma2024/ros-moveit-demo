@@ -167,7 +167,3 @@ class PickPlaceStartupProofIssuer:
             return receipt
         except (AttributeError, KeyError, OSError, TypeError, ValueError) as error:
             raise MutationError("TASK8_STARTUP_PROOF_INVALID") from error
-
-
-# Legacy Python API for version-one pick-place callers.
-Task8StartupProofIssuer = PickPlaceStartupProofIssuer

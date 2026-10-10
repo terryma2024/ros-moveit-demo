@@ -420,9 +420,3 @@ class PickPlaceRunner:
                 self._stop("TASK8_ABORT", request)
                 self._event("run_aborted", "TASK8_ABORT", latest_step)
             raise
-
-
-# Legacy Python API for version-one pick-place callers.
-Task8Error = PickPlaceError
-Task8Port = PickPlaceExecutionPort
-Task8Runner = PickPlaceRunner

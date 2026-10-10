@@ -233,7 +233,3 @@ class PickPlaceCaseOwner:
         self.workload_service.finish(self.context, cleanup_confirmed=True)
         self.context = None
         self._ready = False
-
-
-# Legacy Python API for version-one pick-place callers.
-Task8CaseOwner = PickPlaceCaseOwner
