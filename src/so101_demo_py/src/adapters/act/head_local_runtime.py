@@ -171,6 +171,7 @@ class HeadLocalRuntime:
         self._cancel_stop = dict(started_wall_s=None, finished=False, cancel_error=None,
                                  raw_stop_confirmed=False, raw_stop_observations=(),
                                  deadline_wall_s=None, abandoned_on_retirement=False)
+        self._stop_window_observer = None
         if observer._fault_callback is None:
             observer.bind_fault_callback(self.fault)
         elif observer._fault_callback != self.fault:
@@ -251,6 +252,16 @@ class HeadLocalRuntime:
             if self._authority is not None:
                 raise PermissionError('HEAD_LOCAL_RUNTIME_AUTHORITY_REBOUND')
             self._authority = authority
+        return True
+
+    def bind_stop_window_observer(self, observer):
+        """Notify ``observer(sim_ns)`` once when the raw stop is confirmed (shadow stop window)."""
+        if not callable(observer):
+            raise ValueError('STOP_WINDOW_OBSERVER_INVALID')
+        with self._lock:
+            if self._stop_window_observer is not None:
+                raise PermissionError('STOP_WINDOW_OBSERVER_REBOUND')
+            self._stop_window_observer = observer
         return True
 
     def start(self):
@@ -855,12 +866,30 @@ class HeadLocalRuntime:
                                      deadline_wall_s=deadline,
                                      abandoned_on_retirement=(self._shutdown.is_set()
                                                               and not confirmed))
+        confirmation = None
+        if confirmed:
+            try:
+                confirmation = self.port.raw_stop_confirmation()
+            except Exception:
+                confirmation = None
+        with self._lock:
+            observer = self._stop_window_observer
+        if confirmation is not None and observer is not None:
+            try:
+                observer(confirmation['sim_ns'])
+            except Exception:
+                pass
         try:
             if self._sink is not None:
                 self.record('CANCEL_STOP', dict(raw_stop_confirmed=confirmed,
                                                 cancel_error=cancel_error,
                                                 result_error=result_error,
-                                                observation_count=len(observations)))
+                                                observation_count=len(observations),
+                                                raw_stop_confirmed_sim_ns=(
+                                                    None if confirmation is None else confirmation['sim_ns']),
+                                                raw_stop_last_sample_source_ns=(
+                                                    None if confirmation is None
+                                                    else confirmation['last_sample_source_ns'])))
         except Exception:
             pass
 

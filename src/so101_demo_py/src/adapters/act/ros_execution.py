@@ -629,5 +629,14 @@ class RosControllerPort:
                 confirming_samples=() if proof is None else tuple(proof.confirming_samples)))
             return stopped
 
+    def raw_stop_confirmation(self):
+        """The sim stamp of the decision that confirmed the raw stop, or None until it is confirmed."""
+        with self._lock:
+            proof=self._head_stop_proof
+            if proof is None or proof.confirmed_at is None:return None
+            samples=proof.confirming_samples
+            return dict(sim_ns=proof.confirmed_at['sim_ns'],wall_s=proof.confirmed_at['wall_after_s'],
+                        last_sample_source_ns=samples[-1].get('source_ns') if samples else None)
+
     def result(self,gid):
         with self._lock:return self._goals[gid]['result']
