@@ -69,11 +69,31 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3544
+latest_checkpoint: CP-3545
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3545 — refactor phase A done (HEAD 12657279a), gates 0/0; phase B dispatched
+
+- Commits:
+  - 36ef808f2: decided targets written to the TSV (133 rows `decided`); map tables regenerated; the classifier refuses to re-seed. task11-remediation → post-report-remediation is proposed (it is only a run_order label in benchmark.yaml), for the phase-D report.
+  - 48a84bc26: test importers migrated to the canonical names.
+  - 12657279a: deletions:
+    - 14 shims (8 demo, 6 teleop unified/task8_*);
+    - the 8 named aliases plus 12 more shim-delete aliases (TASK8_READY_CHECKS, build_/require_task8_live_manifest, Task6FrameRecorder, Task14AcceptanceProvider, Task14LiveHeadroomVerifier, make_task8_act_stack, run_task8_case, Task8CaseOwner, consume_child_task8_startup, Task8StartupProofIssuer/Consumer);
+    - 4 console scripts;
+    - the shim-only tests.
+  - The provenance role task8_runner now points at pick_place_runner.py; the role name is renamed in phase D.
+- Allowlist: process 344 → 305 (38 shim-delete rows plus 1 deleted test file); versioned 509 and wire 358 unchanged; the unused-entry check enforced the delta.
+- Gates (gate-a):
+  - fresh build rc 0;
+  - demo 11318 pass, 0 fail, 165 skip (collection 11483 = 11487 − 4 shim-only tests);
+  - colcon on 9 packages: 1918 tests, 0/0;
+  - scripts: 10 pass.
+- External-caller grep: zero hits for the console scripts, shim paths and aliases across scripts/, .agents/, tools/, web/, CMake, setup.py, launch/, src, tests, AGENTS.md and guides. Evidence-tree tooling was not reread; it is covered at the phase-B live checks.
+- Phase B dispatched to a fresh Sonnet executor (one commit per family; live checks at the end).
 
 ## CP-3544 — refactor step 0 done (HEAD 47ad1a4c4), gates 0/0; rename map decided; phase A dispatched
 
