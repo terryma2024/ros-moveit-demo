@@ -159,10 +159,10 @@ def test_the_manifest_fields_name_the_v3_schema_the_failure_class_and_the_summar
 # ---- failure boundary without recovery ------------------------------------------------------------------------------------
 
 def test_the_failure_boundary_of_a_v3_trace_is_the_state_before_error():
-    from so101_demo.core.workflow import SO101_WORKFLOW_V3
+    from so101_demo.core.workflow import TEACHER_WORKFLOW
     trace = (State.IDLE, State.PREPARE_OPEN_GRIPPER, State.MOVE_ABOVE_OBJECT, State.ERROR)
     failure = SimpleNamespace(code="MOVEIT_EXECUTION_FAILED")
-    assert RosDynamicMujocoExecution._failure_boundary(trace, failure, SO101_WORKFLOW_V3) is State.MOVE_ABOVE_OBJECT
+    assert RosDynamicMujocoExecution._failure_boundary(trace, failure, TEACHER_WORKFLOW) is State.MOVE_ABOVE_OBJECT
     # the v1/v2 route of the same non-terminal failure is a RECOVER_* state, so the same trace has no boundary there
     assert RosDynamicMujocoExecution._failure_boundary(trace, failure) is None
 

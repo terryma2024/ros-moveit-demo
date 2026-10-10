@@ -38,7 +38,7 @@ def build_dynamic_actions(
     targets: MotionTargetProvider | ResolvedMotionTargets,
     workflow: WorkflowDefinition = SO101_WORKFLOW,
 ) -> dict[State, StateAction]:
-    """Bind dynamic targets to a workflow definition (v1/v2 `SO101_WORKFLOW`, v3 `SO101_WORKFLOW_V3`)."""
+    """Bind dynamic targets to a workflow definition (general `SO101_WORKFLOW`, Teacher `TEACHER_WORKFLOW`)."""
 
     return {
         state: DynamicStateAction(state, execution, targets)

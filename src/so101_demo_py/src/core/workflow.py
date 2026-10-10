@@ -15,7 +15,7 @@ class WorkflowDefinition:
     terminal_states: frozenset[State]
     force_continue_states: frozenset[State]
     plan_only_states: frozenset[State]
-    #: failure codes that go straight to ERROR from any state (v1/v2: `TERMINAL_STOP_CODES`; v3: `TERMINAL_STOP_CODES_V3`)
+    #: failure codes that go straight to ERROR from any state (general workflow: `TERMINAL_STOP_CODES`; Teacher workflow: `TERMINAL_STOP_CODES_TEACHER`)
     terminal_stop_codes: frozenset[str] = frozenset()
 
 
@@ -153,17 +153,17 @@ def _validate(definition: WorkflowDefinition) -> None:
 
 _validate(SO101_WORKFLOW)
 
-# ---- workflow v3 (Teacher execution policy v3, design 2026-10-10-so101-teacher-minimal-runtime-gates) ---------------------------
-# The same forward states in the same order, so the success trace is identical to v1/v2, but: no RECOVER_* state and no
+# ---- Teacher workflow (Teacher execution policy, design 2026-10-10-so101-teacher-minimal-runtime-gates) -------------------------
+# The same forward states in the same order, so the success trace is identical to the general workflow, but: no RECOVER_* state and no
 # VALIDATION_FAILED (VERIFY_PHYSICAL_GRASP and VALIDATE_FINAL_PLACEMENT are record-only pass-throughs), and every failure of
 # every state goes straight to ERROR.
-_V3_FORWARD = tuple(state for state in _FORWARD_STATES if state is not State.VALIDATION_FAILED)
-_TRANSITIONS_V3 = {
+_TEACHER_FORWARD = tuple(state for state in _FORWARD_STATES if state is not State.VALIDATION_FAILED)
+_TRANSITIONS_TEACHER = {
     state: (following, State.ERROR)
-    for state, following in zip(_V3_FORWARD, (*_V3_FORWARD[1:], State.DONE))
+    for state, following in zip(_TEACHER_FORWARD, (*_TEACHER_FORWARD[1:], State.DONE))
 }
 
-#: the only codes that are terminal stops in v3: the operator and watchdog, the unavailable joint state (the arm cannot be
+#: the only codes that are terminal stops in the Teacher workflow: the operator and watchdog, the unavailable joint state (the arm cannot be
 #: commanded blind) and the simulation-integrity codes. Every other failure is non-terminal and also goes to ERROR.
 SIM_INTEGRITY_CODES = frozenset({
     "SIM_INTEGRITY_SESSION_MISMATCH",
@@ -171,7 +171,7 @@ SIM_INTEGRITY_CODES = frozenset({
     "SIM_INTEGRITY_NON_FINITE_STATE",
     "SIM_INTEGRITY_EVIDENCE_UNAVAILABLE",
 })
-TERMINAL_STOP_CODES_V3 = frozenset({
+TERMINAL_STOP_CODES_TEACHER = frozenset({
     "TEACHER_DEADLINE",
     "TEACHER_USER_STOP",
     "TEACHER_PARENT_DIED",
@@ -179,31 +179,31 @@ TERMINAL_STOP_CODES_V3 = frozenset({
     "TEACHER_JOINT_STATE_UNAVAILABLE",
 }) | SIM_INTEGRITY_CODES
 
-SO101_WORKFLOW_V3 = WorkflowDefinition(
-    transitions=MappingProxyType(_TRANSITIONS_V3),
-    action_states=frozenset(_TRANSITIONS_V3) - {State.IDLE},
-    forward_states=_V3_FORWARD,
+TEACHER_WORKFLOW = WorkflowDefinition(
+    transitions=MappingProxyType(_TRANSITIONS_TEACHER),
+    action_states=frozenset(_TRANSITIONS_TEACHER) - {State.IDLE},
+    forward_states=_TEACHER_FORWARD,
     terminal_states=_TERMINAL_STATES,
     force_continue_states=frozenset(),
     plan_only_states=_PLAN_ONLY_STATES,
-    terminal_stop_codes=TERMINAL_STOP_CODES_V3,
+    terminal_stop_codes=TERMINAL_STOP_CODES_TEACHER,
 )
 
 
-def _validate_v3(definition: WorkflowDefinition) -> None:
+def _validate_teacher(definition: WorkflowDefinition) -> None:
     states = set(definition.transitions)
     if states != set(definition.forward_states):
         raise ValueError("every forward state must have a transition and no other state may")
     if any(state.name.startswith("RECOVER_") or state is State.VALIDATION_FAILED for state in states):
-        raise ValueError("workflow v3 has no recovery or validation-failed state")
+        raise ValueError("the Teacher workflow has no recovery or validation-failed state")
     for state, (success, failure) in definition.transitions.items():
         if failure is not State.ERROR or (success not in states and success is not State.DONE):
-            raise ValueError("workflow v3 transitions must go forward or to ERROR")
+            raise ValueError("Teacher workflow transitions must go forward or to ERROR")
     if not definition.plan_only_states <= definition.action_states or State.IDLE in definition.action_states:
         raise ValueError("plan-only states must own actions")
 
 
-_validate_v3(SO101_WORKFLOW_V3)
+_validate_teacher(TEACHER_WORKFLOW)
 
 
 def resolve_transition(

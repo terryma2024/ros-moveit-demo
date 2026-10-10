@@ -8,7 +8,7 @@ from collections.abc import Mapping
 
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
-from ..core.workflow import SIM_INTEGRITY_CODES, SO101_WORKFLOW, SO101_WORKFLOW_V3, TERMINAL_STOP_CODES
+from ..core.workflow import SIM_INTEGRITY_CODES, SO101_WORKFLOW, TEACHER_WORKFLOW, TERMINAL_STOP_CODES
 from .contracts import AttemptStatus
 
 SCHEMA_V1 = "so101-dynamic-mujoco-execute-v1"
@@ -489,7 +489,7 @@ def validate_dynamic_manifest_semantics(
         _fail("SCHEMA")
     if frozen_execution_policy is not None and (frozen_execution_policy.get("schema_version") == 3) != (schema == SCHEMA_V3):
         _fail("SCHEMA")      # the manifest schema follows the frozen Teacher execution policy version
-    workflow = SO101_WORKFLOW_V3 if schema == SCHEMA_V3 else SO101_WORKFLOW
+    workflow = TEACHER_WORKFLOW if schema == SCHEMA_V3 else SO101_WORKFLOW
     states, boundaries = _trace_contract(document, expected_status, workflow)
     boundary = boundaries[0] if boundaries else None
     events = _event_contract(document, states, boundary, workflow)

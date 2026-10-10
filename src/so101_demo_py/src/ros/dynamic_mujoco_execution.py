@@ -40,7 +40,7 @@ from ..control.trajectory.executor import (
 from ..application.staged_approach import maximum_joint_error
 from ..core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from ..core.place_height import PlaceHeightRefused
-from ..core.workflow import SIM_INTEGRITY_CODES, TERMINAL_STOP_CODES, TERMINAL_STOP_CODES_V3
+from ..core.workflow import SIM_INTEGRITY_CODES, TERMINAL_STOP_CODES, TERMINAL_STOP_CODES_TEACHER
 from ..core.dynamic_pick import (
     DynamicPickTemplate,
     ResolvedMotionTargets,
@@ -915,8 +915,8 @@ class RosDynamicMujocoExecution:
 
     def _capture_failure_evidence(self, result) -> dict[str, object]:
         if self._v3():
-            from ..core.workflow import SO101_WORKFLOW_V3
-            boundary = self._failure_boundary(result.state_trace, result.failure, SO101_WORKFLOW_V3)
+            from ..core.workflow import TEACHER_WORKFLOW
+            boundary = self._failure_boundary(result.state_trace, result.failure, TEACHER_WORKFLOW)
         else:
             boundary = self._failure_boundary(result.state_trace, result.failure)
         no_action = (
@@ -2580,7 +2580,7 @@ class RosDynamicMujocoExecution:
             document = ph.plan_place_height_v3(theta, k, old_target, geometry, height_policy)
         except Exception as error:
             code, _ = self._failure_code(error)
-            if isinstance(error, TeacherStop) or code in TERMINAL_STOP_CODES_V3:
+            if isinstance(error, TeacherStop) or code in TERMINAL_STOP_CODES_TEACHER:
                 raise
             if isinstance(error, _JointStateStale):
                 reason = ph.FB_JOINT_STATE_STALE

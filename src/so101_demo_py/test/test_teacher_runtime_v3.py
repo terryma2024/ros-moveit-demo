@@ -124,9 +124,9 @@ def test_a_v3_run_does_not_refuse_a_perceived_pose_far_from_truth_and_records_th
 
 
 def test_a_v3_run_builds_actions_and_runner_with_the_v3_workflow(tmp_path, monkeypatch):
-    from so101_demo.core.workflow import SO101_WORKFLOW_V3
+    from so101_demo.core.workflow import TEACHER_WORKFLOW
     v3_run(tmp_path, monkeypatch)
-    assert run.workflows == (SO101_WORKFLOW_V3, SO101_WORKFLOW_V3)
+    assert run.workflows == (TEACHER_WORKFLOW, TEACHER_WORKFLOW)
     v3_run(tmp_path, monkeypatch, name="teacher_execution_policy_v2", simulator_x=-0.03)
     assert run.workflows == (None, None)
 

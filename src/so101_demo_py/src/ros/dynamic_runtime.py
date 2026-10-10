@@ -973,8 +973,8 @@ def run_dynamic_execute(
         # Policy v3 (the minimal runtime gates) runs its own workflow definition: the same forward states, no RECOVER_* chain.
         workflow_options = {}
         if (getattr(execution, "_teacher_execution_policy", None) or {}).get("schema_version") == 3:
-            from ..core.workflow import SO101_WORKFLOW_V3
-            workflow_options = {"workflow": SO101_WORKFLOW_V3}
+            from ..core.workflow import TEACHER_WORKFLOW
+            workflow_options = {"workflow": TEACHER_WORKFLOW}
         mark("build_actions.begin")
         actions = profile_actions(
             runtime.build_actions(execution, targets, **workflow_options),

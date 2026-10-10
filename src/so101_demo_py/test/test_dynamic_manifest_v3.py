@@ -12,7 +12,7 @@ from so101_demo.act.teacher_endpoint import load_teacher_execution_policy
 from so101_demo.core import place_height as ph
 from so101_demo.core.domain import State
 from so101_demo.core.process_summary import ProcessSummary
-from so101_demo.core.workflow import SO101_WORKFLOW_V3
+from so101_demo.core.workflow import TEACHER_WORKFLOW
 from test_dynamic_manifest_semantics import (
     DONE_TRACE, MOTION_STATES, TRUSTED_FINAL, event, manifest, sample, teacher_fields, teacher_result)
 from paths import PACKAGE_ROOT
@@ -58,9 +58,9 @@ def validate(document, status="DONE", *, frozen=FROZEN, trusted=None):
 
 def v3_error(state: str, *, failure="MOVEIT_EXECUTION_FAILED: x", attached=False, execution="FAILED", failure_class=None):
     """An attempt that failed in `state`: v3 goes straight to ERROR from there, no RECOVER_* state."""
-    forward = list(SO101_WORKFLOW_V3.forward_states)
+    forward = list(TEACHER_WORKFLOW.forward_states)
     trace = [item.value for item in forward[:forward.index(State(state)) + 1]] + ["ERROR"]
-    done = [item for item in trace[:-1] if State(item) in SO101_WORKFLOW_V3.action_states]
+    done = [item for item in trace[:-1] if State(item) in TEACHER_WORKFLOW.action_states]
     done = done[:-1] if done and done[-1] == state else done
     events = [event(item, 100 + index * 2) for index, item in enumerate(done)]
     scene = ({"attached_object_ids": ["plastic_cup"], "world_primitive_counts": {"table": 1}} if attached
@@ -149,7 +149,7 @@ def test_a_v2_manifest_keeps_its_recovery_states_and_does_not_need_v3_records():
 
 # ---- an attempt that failed: ERROR from any state, attached or detached ---------------------------------------------------
 
-@pytest.mark.parametrize("state", [item.value for item in SO101_WORKFLOW_V3.forward_states
+@pytest.mark.parametrize("state", [item.value for item in TEACHER_WORKFLOW.forward_states
                                    if item not in (State.IDLE, State.DONE, State.ERROR)])
 @pytest.mark.parametrize("attached", [False, True])
 def test_a_v3_failure_in_any_state_ends_in_error_without_recovery_and_validates(state, attached):
