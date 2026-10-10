@@ -14,7 +14,7 @@ CONTROLLER_TYPE = 'so101_mujoco_support/HeadNeckTrajectoryController'
 
 
 def policy():
-    return HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document_v3())
+    return HeadSimulationPolicy.parse(HeadSimulationPolicy.default_document())
 
 
 class FakeServices:

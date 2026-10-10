@@ -503,9 +503,9 @@ def records_of(row, kind):
     return [record for name, record, _ in row.sink.rows if name == kind]
 
 
-def v3_policy(**changes):
+def head_simulation_policy(**changes):
     from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
-    return HeadSimulationPolicy.parse(dict(HeadSimulationPolicy.default_document_v3(), **changes))
+    return HeadSimulationPolicy.parse(dict(HeadSimulationPolicy.default_document(), **changes))
 
 
 class Producer:
@@ -667,7 +667,7 @@ def test_a_fault_during_a_planned_stop_closes_unplanned_and_proves_nothing_plann
 
 
 def test_a_missing_end_window_leaves_the_stop_unconfirmed_and_latches_the_controller(monkeypatch):
-    row = runtime_setup(monkeypatch, policy=v3_policy(head_stop_window_deadline_s=.15))
+    row = runtime_setup(monkeypatch, policy=head_simulation_policy(head_stop_window_deadline_s=.15))
     runtime = armed_runtime(row)
     row.window.auto = False  # the controller_state stream gave no quiet window after the raw stop
     with Producer(row):

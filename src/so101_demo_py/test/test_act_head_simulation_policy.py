@@ -12,14 +12,18 @@ def policy_type():
     return importlib.import_module('so101_demo.act.head_simulation_policy').HeadSimulationPolicy
 
 
-def document():
-    return dict(schema_version=2, mode='mujoco_bounded_stop_search_file_v1',
+def document(**change):
+    value = dict(schema_version=3, mode='mujoco_bounded_stop_search_file_v1',
         watchdog_period_s=.02, fault_reaction_limit_s=.25, native_close_timeout_s=.05,
         stop_confirmation_timeout_s=1., perception_max_age_s=.15,
         perception_job_timeout_s=1., camera_loss_timeout_s=.5,
         feedback_receipt_timeout_s=.25, joint_source_age_s=.05,
         camera_source_age_s=.2, search_timeout_s=30.,
-        max_reobservations_per_stop=3, max_reobservations_total=12)
+        max_reobservations_per_stop=3, max_reobservations_total=12,
+        head_stop_window_deadline_s=.5, head_deadman_period_s=.02, head_deadman_timeout_s=.2,
+        head_deadman_liveness_s=.15)
+    value.update(change)
+    return value
 
 
 def test_file_policy_has_no_online_budgets_and_maps_local_feedback_exactly():
@@ -27,7 +31,7 @@ def test_file_policy_has_no_online_budgets_and_maps_local_feedback_exactly():
     candidate = cls.default_document()
     assert candidate == dict(document(), perception_max_age_s=1.)
     encoded = (json.dumps(candidate, sort_keys=True, indent=2) + '\n').encode('utf-8')
-    assert hashlib.sha256(encoded).hexdigest() == '5e19873303640edc5e323721e2861de3745741edad188f47cb8d4f6a4248520d'
+    assert hashlib.sha256(encoded).hexdigest() == 'b15a4f132e0044c7c8425b13dc04bb90cc44a890da0f4ae3fd38eb5555e31eef'    # the frozen schema 3 candidate of the live Head cases
     parsed = cls.parse(document())
     assert parsed.feedback_values() == dict(joint_max_receipt_age_s=.25,
         joint_max_source_age_s=.05, camera_interarrival_deadline_s=.5,
@@ -41,7 +45,7 @@ def test_file_policy_has_no_online_budgets_and_maps_local_feedback_exactly():
 
 
 @pytest.mark.parametrize('change', [
-    dict(schema_version=1), dict(schema_version=True), dict(mode='mujoco_bounded_stop_search'),
+    dict(schema_version=1), dict(schema_version=2), dict(schema_version=True), dict(mode='mujoco_bounded_stop_search'),
     dict(mode='hardware'), dict(unknown=1), dict(heartbeat_rpc_timeout_s=.25),
     dict(supervision_stale_s=.5),
 ])
@@ -220,46 +224,35 @@ def test_default_one_second_policy_binds_controller_without_relaxing_feedback():
     assert parsed.feedback_values()['camera_interarrival_deadline_s'] == .5
 
 
-# ---- schema v3: the stop-window and dead-man budgets (CP-3537 ruling 3) ------------------------------
+# ---- the stop-window and dead-man budgets (CP-3537 ruling 3) ------------------------------
 
-def document_v3(**change):
-    value = dict(document(), schema_version=3, head_stop_window_deadline_s=.5,
-                 head_deadman_period_s=.02, head_deadman_timeout_s=.2, head_deadman_liveness_s=.15)
-    value.update(change)
-    return value
-
-
-def test_v3_adds_exactly_the_four_head_fields_and_reads_back_the_whole_document():
-    cls = policy_type()
-    parsed = cls.parse(document_v3())
-    assert parsed.schema_version == 3
-    assert parsed.readback() == document_v3()
-    assert parsed.head_stop_window_deadline_s == .5 and parsed.head_deadman_liveness_s == .15
-    assert cls.default_document_v3() == dict(cls.default_document(), schema_version=3,
-        head_stop_window_deadline_s=.5, head_deadman_period_s=.02, head_deadman_timeout_s=.2,
-        head_deadman_liveness_s=.15)
-    cls.parse(cls.default_document_v3())
-
-
-def test_v2_policies_stay_readable_and_keep_their_exact_document_and_hash():
-    from so101_demo.act.head_evidence_identity import digest
+def test_the_policy_has_the_four_head_stop_fields_and_reads_back_the_whole_document():
     cls = policy_type()
     parsed = cls.parse(document())
-    assert parsed.schema_version == 2
-    assert parsed.readback() == document(), 'a v2 policy reads back as exactly the v2 document'
-    assert digest(parsed.readback()) == digest(document())
-    # the v3-only budgets of a v2 policy are the design defaults, so a v2 run still has a stop window
-    assert (parsed.head_stop_window_deadline_s, parsed.head_deadman_timeout_s) == (.5, .2)
+    assert parsed.schema_version == 3
+    assert parsed.readback() == document()
+    assert parsed.head_stop_window_deadline_s == .5 and parsed.head_deadman_liveness_s == .15
+    assert cls.default_document() == dict(document(), perception_max_age_s=1.)
+    cls.parse(cls.default_document())
+
+
+def test_a_policy_without_the_head_stop_fields_is_refused():
+    legacy = document()
+    for name in ('head_stop_window_deadline_s', 'head_deadman_period_s', 'head_deadman_timeout_s',
+                 'head_deadman_liveness_s'):
+        del legacy[name]
     with pytest.raises(ValueError):
-        cls.parse(dict(document(), head_stop_window_deadline_s=.5))
+        policy_type().parse(dict(legacy, schema_version=2))
+    with pytest.raises(ValueError):
+        policy_type().parse(legacy)
 
 
 @pytest.mark.parametrize('document_change', [
     dict(head_stop_window_deadline_s=None), dict(head_deadman_period_s=None),
     dict(head_deadman_timeout_s=None), dict(head_deadman_liveness_s=None),
 ])
-def test_v3_requires_every_new_field(document_change):
-    candidate = document_v3()
+def test_the_policy_requires_every_head_stop_field(document_change):
+    candidate = document()
     for name in document_change:
         del candidate[name]
     with pytest.raises(ValueError):
@@ -277,14 +270,14 @@ def test_v3_requires_every_new_field(document_change):
     dict(head_stop_window_deadline_s=True),
     dict(unknown=1),
 ])
-def test_v3_budgets_are_bounded_and_ordered(change):
+def test_the_head_stop_budgets_are_bounded_and_ordered(change):
     with pytest.raises(ValueError):
-        policy_type().parse(document_v3(**change))
+        policy_type().parse(document(**change))
 
 
-def test_the_default_v3_budgets_equal_the_limits_module():
+def test_the_default_budgets_equal_the_limits_module():
     from so101_demo.act import head_neck_limits as limits
-    parsed = policy_type().parse(document_v3())
+    parsed = policy_type().parse(document())
     assert parsed.head_stop_window_deadline_s == limits.STOP_WINDOW_DEADLINE_S
     assert parsed.head_deadman_period_s == limits.DEADMAN_PERIOD_S
     assert parsed.head_deadman_timeout_s == limits.DEADMAN_TIMEOUT_S
