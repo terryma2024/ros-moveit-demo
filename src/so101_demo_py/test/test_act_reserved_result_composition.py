@@ -26,7 +26,7 @@ def _teacher_decision(workspace, outcome, status, *, data="PENDING_QC"):
         act_data_status=fields["data_status"], act_data_reason=None)
 
 
-def test_reserved_producer_binds_original_inputs_and_publishes_qc_v2(tmp_path, monkeypatch):
+def test_reserved_producer_binds_original_inputs_and_publishes_qc(tmp_path, monkeypatch):
     from so101_demo.act import episode_qc
     from test_act_qc_report_publication import fail_teacher_reference, report
     current=lease(); worker=tmp_path/current.worker_id

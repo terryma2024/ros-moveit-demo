@@ -4,13 +4,11 @@ Data QC answers one question: is the recording itself valid training data? It re
 was pointed at, exactly as ``verify_audit_manifest`` listed it, and keeps every data check (lossless rows, causal
 labels, real camera acquisition, t+0.1 s references, seal and readback, native collection boundaries).
 
-It does **not** judge the task. Task success is the Teacher's ``teacher_endpoint`` result; the old
-``endpoint_pose_v1`` rule and the episode seal's ``task8_success`` are no longer QC criteria (design D2, "Old QC path").
+It does **not** judge the task. Task success is the Teacher's ``teacher_endpoint`` result; the episode seal's
+``task8_success`` is not a QC criterion (design D2, "Old QC path").
 Instead ``verify_teacher_references`` cross-checks that the recording is consistent with the start and end source
 references the Teacher manifest recorded: that is data integrity, and it never reads the Teacher's PASS/FAIL.
 
-Schema 2 reports (``endpoint_pose_v1``) stay readable for audit of legacy results through ``read_qc_report(legacy=True)``
-and ``recompute_legacy_native_qc_v2``; nothing writes them any more.
 """
 
 from __future__ import annotations
@@ -25,7 +23,6 @@ import uuid
 from pathlib import Path
 
 from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
-from so101_demo.act.endpoint_pose_acceptance import RULE_VERSION, THRESHOLD_UNITS, evaluate_endpoint_pose  # legacy v2 only
 from so101_demo.act.episode_audit import verify_audit_manifest
 from so101_demo.act.qc_session import active, cached_lines, file_signature, load_model, session_memo
 
@@ -324,43 +321,6 @@ def _requires_native_collection(inputs, events):
     return is_current_episode(inputs, events)
 
 
-def native_endpoint_records(events, *, identity, window, inputs, endpoint_inputs=None):
-    """LEGACY (schema 2 reports only): evaluate the two original FIRST sources with the retired endpoint_pose_v1 rule.
-
-    Current QC does not call this; it remains so that legacy results can still be re-read for audit.
-    """
-    from .contracts import fields, sha256
-    from .endpoint_pose_acceptance import POLICY_KIND, POLICY_SCHEMA_VERSION, validate_endpoint_policy
-    from .execution_snapshot import verify_execution_snapshot
-    from .scene_association import canonical
-
-    evidence = verify_native_collection_events(events, identity=identity, window=window, inputs=inputs)
-    binding = inputs['endpoint_policy']
-    fields(binding, {'rule_version', 'thresholds', 'sha256'})
-    sha256(binding['sha256'])
-    policy = validate_endpoint_policy(dict(kind=POLICY_KIND, schema_version=POLICY_SCHEMA_VERSION,
-        rule_version=binding['rule_version'], thresholds=binding['thresholds']))
-    if hashlib.sha256(canonical(policy)).hexdigest() != binding['sha256']:
-        raise ValueError('NATIVE_QC_ENDPOINT_POLICY_HASH_INVALID')
-    snapshot = verify_execution_snapshot(evidence['initial_source']['execution_root'],
-        expected_sha256=inputs['execution_snapshot']['sha256'])
-    targets = snapshot['targets']
-    expected = dict(endpoint_policy=binding, initial_target=targets['initial_target'],
-                    final_target=targets['final_target'], endpoint_targets=targets)
-    if endpoint_inputs is not None and canonical(endpoint_inputs) != canonical(expected):
-        raise ValueError('NATIVE_QC_ENDPOINT_INPUTS_UNBOUND')
-    def pose(source):
-        state = source['physics']['object_state']
-        return [*state['position_world'], *state['orientation_xyzw']]
-    initial, final = evidence['initial_source'], evidence['final_source']
-    verdict = evaluate_endpoint_pose(pose(initial), pose(final), targets['initial_target'],
-                                    targets['final_target'], policy)
-    return dict(status=verdict['status'], errors=verdict['errors'], passed=verdict['passed'],
-        endpoint_passed=all(verdict['passed'].values()), source='verified-native-FIRST',
-        initial_sequence=initial['physics']['publisher_sequence'], final_sequence=final['physics']['publisher_sequence'],
-        initial_pose=pose(initial), final_pose=pose(final), initial_target=targets['initial_target'],
-        final_target=targets['final_target'], policy_sha256=binding['sha256'])
-
 
 def _physical_audit_key(episode_root, audit_manifest, scope):
     from .qc_session import file_signature, tree_signature
@@ -430,12 +390,10 @@ QC_REPORT_FIELDS = frozenset({"kind", "schema_version", "status", "rule_version"
     "checks", "reason"})
 QC_COUNT_FIELDS = frozenset({"records", "head_acquisitions", "wrist_acquisitions", "references",
                             "events", "physics", "native_steps"})
-ENDPOINT_CHECK_FIELDS = frozenset({"status", "policy_sha256", "initial_sequence", "final_sequence",
-    "initial_pose", "final_pose", "initial_target", "final_target", "errors", "passed"})
 
 
 QC_SCHEMA_VERSION = 3
-QC_RULE_VERSION = "act_data_qc_v4"   # v4 (phase C): + the topic_loss_gate check; v3 reports and memos are refused
+QC_RULE_VERSION = "act_data_qc"   # the data check, the Teacher-reference check and the topic_loss_gate check; any other rule is refused
 REFERENCE_CHECK = "teacher_reference_consistency"
 TOPIC_LOSS_CHECK = "topic_loss_gate"
 #: the closed set of reasons data QC gives when the recording disagrees with the Teacher's recorded references
@@ -555,17 +513,14 @@ def _validate_reference_check(check):
         raise ValueError("reference pass")
 
 
-def validate_qc_report(report, *, legacy=False):
+def validate_qc_report(report):
     """Validate the closed report shape; this does not authenticate a QC verdict.
 
-    Current reports are schema 3 (``act_data_qc_v3``): the data check and the Teacher-reference consistency check, no task
-    success and no endpoint rule. ``legacy=True`` additionally accepts a schema 2 ``endpoint_pose_v1`` report, which only
-    legacy result verification reads.
+    Reports are schema 3 (rule ``act_data_qc``): the data check, the Teacher-reference consistency check and the topic-loss
+    gate; no task success and no endpoint rule.
     """
     from .contracts import sha256
     from .episode_audit import _identity_ok
-    if legacy and type(report) is dict and type(report.get("schema_version")) is int and report["schema_version"] == 2:
-        return _validate_qc_report_v2(report)
     try:
         if (type(report) is not dict or set(report) != QC_REPORT_FIELDS
                 or report["kind"] != "ACT_EPISODE_QC" or type(report["schema_version"]) is not int
@@ -594,71 +549,6 @@ def validate_qc_report(report, *, legacy=False):
                    if item["status"] == "FAIL"]
         success = not failing
         if ((report["status"] == "PASS") != success or report["reason"] != (failing[0] if failing else "")
-                or success and any(counts[name] == 0 for name in QC_COUNT_FIELDS)):
-            raise ValueError("verdict")
-        return json.loads(json.dumps(report, allow_nan=False))
-    except (ValueError, TypeError, KeyError, OverflowError) as error:
-        raise ValueError("QC_REPORT_INVALID") from error
-
-
-def _validate_qc_report_v2(report):
-    """LEGACY: validate the schema 2 (endpoint_pose_v1) report shape, for read-only audit of old results."""
-    from .contracts import sha256
-    from .endpoint_pose_acceptance import _pose
-    from .episode_audit import _identity_ok
-    try:
-        if (type(report) is not dict or set(report) != QC_REPORT_FIELDS
-                or report["kind"] != "ACT_EPISODE_QC" or type(report["schema_version"]) is not int
-                or report["schema_version"] != 2 or report["rule_version"] != RULE_VERSION
-                or report["status"] not in ("PASS", "FAIL") or type(report["reason"]) is not str
-                or not _identity_ok(report["identity"], formal=True)):
-            raise ValueError("schema")
-        for name in ("episode_seal_sha256", "audit_manifest_sha256", "inputs_sha256", "scope_sha256"):
-            sha256(report[name])
-        counts = report["counts"]
-        if (type(counts) is not dict or set(counts) != QC_COUNT_FIELDS
-                or any(type(value) is not int or value < 0 for value in counts.values())):
-            raise ValueError("counts")
-        checks = report["checks"]
-        if type(checks) is not dict or set(checks) != {"episode_data", "execution_safety", "endpoint_pose"}:
-            raise ValueError("checks")
-        for name in ("episode_data", "execution_safety"):
-            check = checks[name]
-            if (type(check) is not dict or set(check) != {"status", "reason"}
-                    or check["status"] not in ("PASS", "FAIL") or type(check["reason"]) is not str
-                    or bool(check["reason"]) != (check["status"] == "FAIL")):
-                raise ValueError("check")
-        endpoint = checks["endpoint_pose"]
-        if (type(endpoint) is not dict or set(endpoint) != ENDPOINT_CHECK_FIELDS
-                or endpoint["status"] not in ("PASS", "FAIL")):
-            raise ValueError("endpoint")
-        sha256(endpoint["policy_sha256"])
-        for name in ("initial_target", "final_target"):
-            _pose(endpoint[name], name)
-        for name in ("initial_pose", "final_pose"):
-            if endpoint[name] is not None:
-                _pose(endpoint[name], name)
-        for name in ("initial_sequence", "final_sequence"):
-            if endpoint[name] is not None and (type(endpoint[name]) is not int or endpoint[name] < 1):
-                raise ValueError("sequence")
-        errors, passed = endpoint["errors"], endpoint["passed"]
-        if (type(errors) is not dict or type(passed) is not dict
-                or set(errors) != set(THRESHOLD_UNITS) or set(passed) != set(THRESHOLD_UNITS)
-                or any(type(value) is not bool for value in passed.values())
-                or any(value is not None and (type(value) not in (int, float)
-                    or not math.isfinite(value) or value < 0) for value in errors.values())):
-            raise ValueError("endpoint measurements")
-        available = all(endpoint[name] is not None for name in
-                        ("initial_pose", "final_pose", "initial_sequence", "final_sequence"))
-        if endpoint["status"] == "PASS" and (not available or not all(passed.values())
-                or any(value is None for value in errors.values())
-                or endpoint["final_sequence"] <= endpoint["initial_sequence"]):
-            raise ValueError("endpoint pass")
-        if endpoint["status"] == "FAIL" and all(passed.values()):
-            raise ValueError("endpoint fail")
-        success = all(check["status"] == "PASS" for check in checks.values())
-        if ((report["status"] == "PASS") != success
-                or bool(report["reason"]) != (not success)
                 or success and any(counts[name] == 0 for name in QC_COUNT_FIELDS)):
             raise ValueError("verdict")
         return json.loads(json.dumps(report, allow_nan=False))
@@ -712,10 +602,8 @@ def write_qc_report(report, output: Path) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def read_qc_report(path: Path, *, legacy: bool = False):
-    """Read the canonical complete report; callers must independently recompute it.
-
-    `legacy=True` also admits a schema 2 report, for read-only audit of old results."""
+def read_qc_report(path: Path):
+    """Read the canonical complete report; callers must independently recompute it."""
     path = _report_path(path)
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
@@ -723,7 +611,7 @@ def read_qc_report(path: Path, *, legacy: bool = False):
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise ValueError("QC_REPORT_INVALID")
             payload = stream.read()
-        document = validate_qc_report(json.loads(payload), legacy=legacy)
+        document = validate_qc_report(json.loads(payload))
         if payload != _report_canonical(document):
             raise ValueError("QC_REPORT_INVALID")
         return document
@@ -862,59 +750,6 @@ def _recompute_native_qc(episode_root, *, scope, inputs_manifest, teacher_manife
             references=len(read_verified_rows(audit_root, REFERENCE_STREAM)), events=len(events),
             physics=physics_chunk_count(events), native_steps=summary['native_steps']), checks=checks)
     return validate_qc_report(document)
-
-
-def recompute_legacy_native_qc_v2(episode_root, *, scope, inputs_manifest):
-    """LEGACY (schema 2, endpoint_pose_v1): re-read a retired report for audit of legacy results. Nothing writes these.
-
-    Read-only diagnostic QC, suitable for an installed fresh process.
-
-    The caller supplies the original run scope and original frozen input set.
-    Episode-local copies cannot substitute for either external binding. A legal
-    report remains separate from the Coordinator's durable commit authority.
-    """
-    from .first_episode_inputs import verify_frozen_inputs
-    from .recorder import verify_episode_seal
-    from .scene_association import canonical
-
-    root = _report_path(episode_root)
-    scope_path, frozen_path = _report_path(scope), _report_path(inputs_manifest)
-    frozen = verify_frozen_inputs(frozen_path)
-    if (frozen.get('mode') not in ('preselected_target_diagnostic','formal')
-            or not {'endpoint_policy','runtime_policy','execution_snapshot'} <= set(frozen)):
-        raise ValueError('NATIVE_QC_CURRENT_INPUTS_REQUIRED')
-    audit_root = root/'audit'
-    manifest_path = audit_root/'audit-manifest.json'
-    local_inputs = json.loads(_report_path(audit_root/'inputs.json').read_bytes())
-    if canonical(frozen) != canonical(local_inputs):
-        raise ValueError('NATIVE_QC_ORIGINAL_INPUTS_MISMATCH')
-    scope_document = json.loads(scope_path.read_bytes())
-    if (scope_document.get('mode') != frozen['mode']
-            or scope_document.get('inputs_sha256') != frozen['inputs_sha256']):
-        raise ValueError('NATIVE_QC_ORIGINAL_SCOPE_MISMATCH')
-    summary = verify_episode_physical_audit(root, manifest_path, scope_path)
-    episode = verify_episode_seal(root/'seal.json', audit_manifest=manifest_path, scope=scope_path)
-    manifest = verify_audit_manifest(manifest_path)
-    events = read_verified_rows(audit_root, 'events.jsonl')
-    endpoint = native_endpoint_records(events, identity=manifest['identity'], window=manifest['window'], inputs=frozen)
-    acquisitions = read_verified_rows(audit_root, 'acquisitions.jsonl')
-    safety_reason = '' if (episode['status'] == 'PASSED' and episode['stopped_confirmed'] is True
-                          and episode['task8_success'] is True) else 'EPISODE_NOT_SUCCESSFUL'
-    checks = dict(episode_data=dict(status='PASS', reason=''),
-        execution_safety=dict(status='FAIL' if safety_reason else 'PASS', reason=safety_reason),
-        endpoint_pose={key: endpoint[key] for key in ENDPOINT_CHECK_FIELDS})
-    reasons = [safety_reason] if safety_reason else []
-    if endpoint['status'] != 'PASS':
-        reasons.append('ENDPOINT_POSE_FAILED')
-    document = dict(kind='ACT_EPISODE_QC', schema_version=2, rule_version=RULE_VERSION,
-        status='FAIL' if reasons else 'PASS', identity=manifest['identity'], reason=','.join(reasons),
-        episode_seal_sha256=_manifest_digest(root/'seal.json'), audit_manifest_sha256=_manifest_digest(manifest_path),
-        inputs_sha256=frozen['inputs_sha256'], scope_sha256=_manifest_digest(scope_path),
-        counts=dict(records=episode['record_count'], head_acquisitions=sum(row['camera']=='head' for row in acquisitions),
-            wrist_acquisitions=sum(row['camera']=='wrist' for row in acquisitions),
-            references=len(read_verified_rows(audit_root, REFERENCE_STREAM)), events=len(events),
-            physics=len(read_verified_rows(audit_root, PHYSICS_STREAM)), native_steps=summary['native_steps']), checks=checks)
-    return validate_qc_report(document, legacy=True)
 
 
 def read_verified_rows(root: Path, stream: str) -> list[dict]:

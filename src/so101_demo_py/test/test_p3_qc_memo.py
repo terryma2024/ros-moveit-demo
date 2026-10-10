@@ -76,7 +76,7 @@ def test_any_other_content_recomputes_in_full(tmp_path, change):
     if change == "report_status":
         asked["status"] = "FAIL"
     if change == "rule_version":
-        asked["rule_version"] = "act_data_qc_v2"
+        asked["rule_version"] = "act_data_qc_retired"
     if change == "memo_missing":
         memo.unlink()
     if change == "memo_garbage":
@@ -197,7 +197,7 @@ def _tripwires(monkeypatch, *, memo_covers):
 def test_the_coordinators_gate_skips_the_covered_verifications_only_when_it_trusts_a_covering_memo(tmp_path, monkeypatch):
     from test_act_result_schema3 import _verifier, sealed_teacher, setup_result
     from so101_demo.parallel_batch.contracts import RunMode
-    from test_act_result_qc_v2 import lease
+    from test_act_result_qc import lease
 
     store, seal, document, inputs = setup_result(tmp_path, monkeypatch)
     location = store.seal(seal, teacher=sealed_teacher(store, "PASSED"))

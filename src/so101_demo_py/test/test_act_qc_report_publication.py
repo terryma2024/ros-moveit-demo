@@ -12,7 +12,6 @@ import sys
 import pytest
 
 from so101_demo.act import episode_qc
-from so101_demo.act.endpoint_pose_acceptance import THRESHOLD_UNITS
 from test_act_seal_and_downgrade import IDENTITY, lease
 
 
@@ -27,9 +26,9 @@ TEACHER_REFERENCE = {
 
 
 def report():
-    """A current (schema 3) data QC report: data integrity only, no task success and no endpoint_pose_v1."""
+    """A schema 3 data QC report: data integrity only, no task success and no endpoint rule."""
     return {"kind": "ACT_EPISODE_QC", "schema_version": 3, "status": "PASS",
-        "rule_version": "act_data_qc_v4", "identity": {**IDENTITY, "lease": asdict(lease())},
+        "rule_version": "act_data_qc", "identity": {**IDENTITY, "lease": asdict(lease())},
         "episode_seal_sha256": "a" * 64, "audit_manifest_sha256": "b" * 64,
         "inputs_sha256": "c" * 64, "scope_sha256": "d" * 64,
         "counts": {"records": 2, "head_acquisitions": 4, "wrist_acquisitions": 4,
@@ -46,24 +45,6 @@ def fail_teacher_reference(document, code="TEACHER_REFERENCE_END_AFTER_RECORDING
     document["checks"]["teacher_reference_consistency"]["status"] = "FAIL"
     document["checks"]["teacher_reference_consistency"]["reason"] = code
     return document
-
-
-def legacy_v2_report():
-    """A schema 2 report as the endpoint_pose_v1 era wrote it. Legacy results are read for audit only."""
-    pose = [0., 0., 0., 0., 0., 0., 1.]
-    return {"kind": "ACT_EPISODE_QC", "schema_version": 2, "status": "PASS",
-        "rule_version": "endpoint_pose_v1", "identity": {**IDENTITY, "lease": asdict(lease())},
-        "episode_seal_sha256": "a" * 64, "audit_manifest_sha256": "b" * 64,
-        "inputs_sha256": "c" * 64, "scope_sha256": "d" * 64,
-        "counts": {"records": 2, "head_acquisitions": 4, "wrist_acquisitions": 4,
-                   "references": 4, "events": 1, "physics": 2, "native_steps": 51},
-        "checks": {"episode_data": {"status": "PASS", "reason": ""},
-                   "execution_safety": {"status": "PASS", "reason": ""},
-                   "endpoint_pose": {"status": "PASS", "policy_sha256": "e" * 64,
-                       "initial_sequence": 1, "final_sequence": 2, "initial_pose": pose,
-                       "final_pose": pose[:], "initial_target": pose[:], "final_target": pose[:],
-                       "errors": {name: 0. for name in THRESHOLD_UNITS},
-                       "passed": {name: True for name in THRESHOLD_UNITS}}}, "reason": ""}
 
 
 def writer():
@@ -90,7 +71,7 @@ def test_report_publish_readback_is_exact_and_cannot_overwrite(tmp_path):
 
 
 @pytest.mark.parametrize("change", ["unknown", "version", "rule", "boolean_count", "bad_digest",
-    "missing_lease", "unknown_check", "missing_reference_check", "legacy_safety_check", "legacy_endpoint_check",
+    "missing_lease", "unknown_check", "missing_reference_check", "retired_safety_check", "retired_endpoint_check",
     "pass_with_failed_reference", "fail_without_reason", "bad_reference_code", "bad_manifest_digest",
     "bad_step", "failed_check", "pass_with_reason"])
 def test_closed_report_refuses_inconsistent_pass_before_creating_files(tmp_path, change):
@@ -112,11 +93,11 @@ def test_closed_report_refuses_inconsistent_pass_before_creating_files(tmp_path,
         document["checks"]["worker_pass"] = {"status": "PASS", "reason": ""}
     elif change == "missing_reference_check":
         del document["checks"]["teacher_reference_consistency"]
-    elif change == "legacy_safety_check":
+    elif change == "retired_safety_check":
         # task success is no longer a QC criterion: the old execution_safety entry may not come back
         document["checks"]["execution_safety"] = {"status": "PASS", "reason": ""}
-    elif change == "legacy_endpoint_check":
-        document["checks"]["endpoint_pose"] = legacy_v2_report()["checks"]["endpoint_pose"]
+    elif change == "retired_endpoint_check":
+        document["checks"]["endpoint_pose"] = {"status": "PASS", "policy_sha256": "e" * 64}
     elif change == "pass_with_failed_reference":
         check["status"], check["reason"] = "FAIL", "TEACHER_REFERENCE_END_AFTER_RECORDING"
     elif change == "fail_without_reason":
@@ -203,13 +184,12 @@ def test_failed_report_keeps_the_specific_reference_code_and_absent_references_e
     assert episode_qc.read_qc_report(target) == document
 
 
-def test_a_legacy_schema_2_report_is_readable_for_audit_but_never_written_again(tmp_path):
-    legacy = legacy_v2_report()
+def test_a_schema_2_report_is_neither_written_nor_read(tmp_path):
+    retired = {**report(), "schema_version": 2, "rule_version": "endpoint_pose_v1"}
     with pytest.raises(ValueError, match="QC_REPORT_INVALID"):
-        writer()(legacy, tmp_path / "qc-report.json")
+        writer()(retired, tmp_path / "qc-report.json")
     assert list(tmp_path.iterdir()) == []
-    target = tmp_path / "legacy-qc-report.json"
-    target.write_bytes((json.dumps(legacy, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode())
-    assert episode_qc.read_qc_report(target, legacy=True) == legacy
+    target = tmp_path / "retired-qc-report.json"
+    target.write_bytes((json.dumps(retired, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode())
     with pytest.raises(ValueError, match="QC_REPORT_INVALID"):
         episode_qc.read_qc_report(target)

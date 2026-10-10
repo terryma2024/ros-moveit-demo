@@ -74,7 +74,7 @@ def test_verify_commit_command_reads_actual_journal_and_publishes_new_durable_pr
     import os
     from so101_demo.act import result_store
     from so101_demo.cli import act_first_episode
-    from test_act_result_qc_v2 import controlled_committed_result,copied_commit_fixture
+    from test_act_result_qc import controlled_committed_result,copied_commit_fixture
     run,location,scope,inputs,receipt=controlled_committed_result(tmp_path,monkeypatch)
     if fault=='missing_commit':
         copied=tmp_path/'uncommitted'
@@ -103,7 +103,7 @@ def test_check_export_uses_both_common_boundaries_and_preserves_actual_originals
     import os
     from so101_demo.act import result_store
     from so101_demo.cli import act_first_episode
-    from test_act_result_qc_v2 import controlled_committed_result,copied_commit_fixture
+    from test_act_result_qc import controlled_committed_result,copied_commit_fixture
     run,location,scope,inputs,_=controlled_committed_result(tmp_path,monkeypatch)
     originals={path:hashlib.sha256(path.read_bytes()).hexdigest() for path in run.rglob('*') if path.is_file()}
     if fault=='missing_commit':

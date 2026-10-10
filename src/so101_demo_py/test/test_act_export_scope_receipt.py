@@ -9,7 +9,7 @@ import pytest
 
 
 def committed_diagnostic(tmp_path,monkeypatch):
-    from test_act_result_qc_v2 import controlled_committed_result
+    from test_act_result_qc import controlled_committed_result
     from so101_demo.act.result_store import verify_coordinator_commit
     run,location,scope,inputs,receipt=controlled_committed_result(tmp_path,monkeypatch)
     proof=verify_coordinator_commit(run/'coordinator',location=location,scope=scope,inputs_manifest=inputs)

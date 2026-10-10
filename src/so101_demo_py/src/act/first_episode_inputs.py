@@ -57,11 +57,11 @@ _REGISTRY_FIELDS = frozenset({"kind", "schema_version", "source_root", "source_c
 #: every manifest carries these
 _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source_commit",
                                 "config_sha256", "evidence_root", "roles", "inputs_sha256"})
-#: the amendment's freezer binds the collection mode, the endpoint policy and the development runtime too, but a call
-#: that predates the amendment keeps its contract and writes none of them (CP-2440) - so they are allowed, not required
-_MANIFEST_OPTIONAL = frozenset({"mode", "endpoint_policy", "runtime_policy", "execution_snapshot",
+#: the freezer binds the collection mode, the policies and the development runtime too, but a call that writes none of them
+#: keeps its contract (CP-2440) - so they are allowed, not required
+_MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
                                 "teacher_endpoint", "teacher_execution_policy", "episode_recorder_v1"})
-#: The three policy bindings that replaced the endpoint_pose_v1 `endpoint_policy` (Phase A4c): binding name -> the file
+#: The policy bindings (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
 POLICY_BINDINGS = {
     "teacher_endpoint": ("teacher_endpoint.yaml", "config/act/teacher_endpoint.yaml"),
@@ -412,16 +412,7 @@ def verify_frozen_inputs(manifest_path: Path) -> dict:
     manifest_path = Path(manifest_path)
     document = read_inputs_manifest(manifest_path)
     root = manifest_path.parent.resolve()
-    from .endpoint_pose_acceptance import validate_endpoint_policy, validate_development_runtime
-    if "endpoint_policy" in document:
-        binding = document["endpoint_policy"]
-        if not isinstance(binding, dict) or set(binding) != {"sha256", "rule_version", "thresholds"}:
-            raise ValueError("INPUTS_ENDPOINT_POLICY_INVALID")
-        policy = validate_endpoint_policy({"kind": "ACT_ENDPOINT_POSE_POLICY", "schema_version": 1,
-                                            "rule_version": binding["rule_version"],
-                                            "thresholds": binding["thresholds"]})
-        if hashlib.sha256(_canonical(policy)).hexdigest() != binding["sha256"]:
-            raise ValueError("INPUTS_ENDPOINT_POLICY_INVALID")
+    from .endpoint_pose_acceptance import validate_development_runtime
     if "runtime_policy" in document:
         binding = document["runtime_policy"]
         if not isinstance(binding, dict) or set(binding) != {"sha256", "path_policy", "rgb_sync", "safety_release", "hard_stops"}:

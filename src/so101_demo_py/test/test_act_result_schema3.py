@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from act_result_teacher import OUTCOMES, sealed_teacher, teacher, write_manifest
-from test_act_result_qc_v2 import controlled_committed_result, lease, setup_result
+from test_act_result_qc import controlled_committed_result, lease, setup_result
 from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
 
 
@@ -118,7 +118,7 @@ def _rewrite(location, change):
 
 @pytest.mark.parametrize("fault", [
     "unknown_version", "extra_key", "missing_key", "status_not_from_teacher", "export_flag_flipped",
-    "qc_pass_on_invalid_data", "teacher_pass_without_completion", "unknown_enum", "legacy_flag_back"])
+    "qc_pass_on_invalid_data", "teacher_pass_without_completion", "unknown_enum", "retired_version"])
 def test_the_verifier_rejects_each_schema_3_inconsistency(tmp_path, monkeypatch, fault):
     location, verifier = _positive(tmp_path, monkeypatch)
 
@@ -139,10 +139,10 @@ def test_the_verifier_rejects_each_schema_3_inconsistency(tmp_path, monkeypatch,
             document["teacher_execution_status"] = "FAILED"
         if fault == "unknown_enum":
             document["teacher_task_result"] = "MAYBE"
-        if fault == "legacy_flag_back":
+        if fault == "retired_version":
             document["schema_version"] = 2
     _rewrite(location, change)
-    with pytest.raises(ValueError, match="RESULT_SCHEMA_INVALID|RESULT_TEACHER_|RESULT_DATA_|RESULT_SCHEMA_LEGACY"):
+    with pytest.raises(ValueError, match="RESULT_SCHEMA_INVALID|RESULT_TEACHER_|RESULT_DATA_"):
         verifier.verify(lease(), str(location), RunMode.EXECUTE)
 
 
@@ -212,60 +212,10 @@ def test_an_indeterminate_teacher_result_is_sealable_without_any_episode(tmp_pat
     assert verdict["status"] == "INDETERMINATE" and verdict["export_eligible"] is False
 
 
-def _as_legacy(location, version):
-    """Rewrite a schema 3 result into the shape the old coupled contract produced (read-only legacy)."""
-    episode = json.loads((location / "episode/seal.json").read_bytes())
-    result = json.loads((location / "result.json").read_bytes())
-    old = None
-    legacy = dict(kind=result["kind"], schema_version=version, lease_identity=result["lease_identity"],
-        status=episode["status"], qc_passed=episode["qc_passed"],
-        episode_seal_sha256=result["episode_seal_sha256"], completed_monotonic_s=result["completed_monotonic_s"])
-    if version == 2:
-        # the report a schema 2 result names is a schema 2 (endpoint_pose_v1) report, bound by its own hash
-        from test_act_qc_report_publication import legacy_v2_report
-        from so101_demo.act import episode_qc
-        current = json.loads((location / "qc-report.json").read_bytes())
-        old = legacy_v2_report()
-        for key in ("identity", "episode_seal_sha256", "audit_manifest_sha256", "inputs_sha256", "scope_sha256",
-                    "counts", "status", "reason"):
-            old[key] = current[key]
-        (location / "qc-report.json").write_bytes(episode_qc._report_canonical(old))
-        result["qc_report_sha256"] = hashlib.sha256((location / "qc-report.json").read_bytes()).hexdigest()
-        legacy.update({key: result[key] for key in ("qc_report_path", "qc_report_sha256", "inputs_sha256",
-            "scope_sha256", "audit_manifest_sha256", "collection_mode")})
-    (location / "result.json").write_text(json.dumps(legacy, sort_keys=True, separators=(",", ":")) + "\n")
-    return old if version == 2 else None
-
-
-@pytest.mark.parametrize("version", [1, 2])
-def test_schema_1_and_2_records_are_read_only_legacy_and_never_exportable(tmp_path, monkeypatch, version):
-    location, verifier = _positive(tmp_path, monkeypatch)
-    legacy_report = _as_legacy(location, version)
-    if version == 2:
-        # legacy schema 2 reports are recomputed by the retained legacy reader, never by the current schema 3 one
-        from so101_demo.act import episode_qc
-        monkeypatch.setattr(episode_qc, "recompute_native_qc",
-                            lambda *args, **kwargs: pytest.fail("the current QC reader graded a legacy result"))
-        monkeypatch.setattr(episode_qc, "recompute_legacy_native_qc_v2",
-                            lambda *args, **kwargs: copy.deepcopy(legacy_report))
-    if version == 1:
-        # a verifier that holds the frozen QC inputs still refuses a v1 record (it carries no QC report)
-        with pytest.raises(ValueError, match="RESULT_QC_CURRENT_REPORT_REQUIRED"):
-            verifier.verify(lease(), str(location), RunMode.EXECUTE, allow_legacy=True)
-        from so101_demo.act.result_store import ActCollectionResultVerifier
-        verifier = ActCollectionResultVerifier({"w00": tmp_path / "w00"}, scope=location / "episode/audit/source.json")
-    with pytest.raises(ValueError, match="RESULT_SCHEMA_LEGACY_READ_ONLY"):
-        verifier.verify(lease(), str(location), RunMode.EXECUTE)
-    assert verifier.discover(lease(), location.parent) is None
-    legacy = verifier.verify(lease(), str(location), RunMode.EXECUTE, allow_legacy=True)
-    assert legacy["legacy_schema_version"] == version and legacy["export_eligible"] is False
-    assert legacy["status"] == "PASSED" and "teacher_execution_status" not in legacy
-
-
-def test_the_store_never_writes_a_legacy_schema(tmp_path, monkeypatch):
+def test_the_store_requires_the_teacher_result(tmp_path, monkeypatch):
     store, seal, document, inputs = setup_result(tmp_path, monkeypatch)
     with pytest.raises(TypeError):
-        store.seal(seal)          # the Teacher result is required: there is no schema 1/2 path left
+        store.seal(seal)          # the Teacher result is required: there is no other path
 
 
 def test_the_coordinator_commit_journal_and_index_record_both_results(tmp_path, monkeypatch):
@@ -289,10 +239,10 @@ def test_the_coordinator_commit_journal_and_index_record_both_results(tmp_path, 
     assert proof["teacher_task_result"] == "PASS" and proof["result_schema_version"] == 3
 
 
-def test_a_legacy_result_cannot_be_committed_by_the_coordinator(tmp_path, monkeypatch):
+def test_a_result_of_another_schema_version_cannot_be_committed_by_the_coordinator(tmp_path, monkeypatch):
     run, location, scope, inputs, commit = controlled_committed_result(tmp_path, monkeypatch, commit=False)
-    _as_legacy(location, 2)
-    with pytest.raises(ValueError, match="RESULT_SCHEMA_LEGACY_READ_ONLY"):
+    _rewrite(location, lambda document: document.update(schema_version=2))
+    with pytest.raises(ValueError, match="RESULT_SCHEMA_INVALID"):
         commit()
 
 

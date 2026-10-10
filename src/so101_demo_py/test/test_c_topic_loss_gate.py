@@ -3,7 +3,7 @@
 A message lost inside the episode window on a topic the episode uses makes the data INVALID (`OFFLINE_TOPIC_LOSS:<topic>`). A loss
 outside the window, or on a topic the episode does not use, is recorded and never fatal. The recorder's aggregate "messages lost on
 the transport layer" must be accounted for by what the topics show (otherwise it fails closed), and the gate result is part of the QC
-verdict (rule version `act_data_qc_v4`, check `topic_loss_gate`).
+verdict (rule `act_data_qc`, check `topic_loss_gate`).
 
 The synthetic bag has its Teacher timeline at 1.05 s (first command) to 1.5 s (terminal), the verified reset at 1.0 s, and every topic
 from 0.9 s to 1.75 s: a message lost before 1.0 s is outside the window.
@@ -489,13 +489,13 @@ def test_a_failed_document_fails_the_check_with_its_first_reason(tmp_path):
 
 
 def test_the_qc_rule_version_changed_so_older_reports_and_memos_are_refused():
-    assert episode_qc.QC_RULE_VERSION == "act_data_qc_v4" and episode_qc.TOPIC_LOSS_CHECK == "topic_loss_gate"
+    assert episode_qc.QC_RULE_VERSION == "act_data_qc" and episode_qc.TOPIC_LOSS_CHECK == "topic_loss_gate"
     from test_act_qc_report_publication import report
 
     document = report()
     assert episode_qc.validate_qc_report(document) == document
     old = copy.deepcopy(document)
-    old["rule_version"] = "act_data_qc_v3"
+    old["rule_version"] = "act_data_qc_retired"
     del old["checks"]["topic_loss_gate"]
     with pytest.raises(ValueError, match="QC_REPORT_INVALID"):
         episode_qc.validate_qc_report(old)

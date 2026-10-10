@@ -56,8 +56,8 @@ def _verified_collection(episode):
     if scope['mode']!='formal':
         raise ValueError('EPISODE_COLLECTION_IDENTITY_INVALID')
     if proof['status']!='PASS' or proof.get('result_schema_version')!=3:
-        # schema 1/2 results are read-only legacy of the coupled contract and are never exportable
-        raise ValueError('EXPORT_EPISODE_LEGACY_RESULT')
+        # only a verified schema 3 result commit is exportable
+        raise ValueError('EXPORT_EPISODE_RESULT_SCHEMA_INVALID')
     if proof['result_status']!='PASSED':
         raise ValueError('EXPORT_EPISODE_NOT_PASSED')
     if proof.get('act_data_qc')!='PASS' or proof.get('export_eligible') is not True:

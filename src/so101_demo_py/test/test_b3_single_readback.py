@@ -239,8 +239,8 @@ def formal_episode(tmp_path):
     ({"result_status": "FAILED"}, "EXPORT_EPISODE_NOT_PASSED"),
     ({"act_data_qc": "FAIL"}, "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
     ({"export_eligible": False}, "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
-    ({"result_schema_version": 2}, "EXPORT_EPISODE_LEGACY_RESULT"),
-    ({"status": "FAIL"}, "EXPORT_EPISODE_LEGACY_RESULT")])
+    ({"result_schema_version": 2}, "EXPORT_EPISODE_RESULT_SCHEMA_INVALID"),
+    ({"status": "FAIL"}, "EXPORT_EPISODE_RESULT_SCHEMA_INVALID")])
 def test_a_formal_export_inside_an_entry_session_still_decides_status_qc_and_eligibility_afresh(tmp_path, monkeypatch, change, code):
     from so101_demo.act import bundle, collection_scope, result_store
 
@@ -264,7 +264,7 @@ def committed_run(tmp_path, monkeypatch, fault=None):
     """The controlled committed result of the existing tests, with the QC double moved to the inner function so the real public wrapper
     (and with it the reuse) is exercised. Returns (run, context, counter)."""
     from so101_demo.act import result_store
-    from test_act_result_qc_v2 import controlled_committed_result, copied_commit_fixture
+    from test_act_result_qc import controlled_committed_result, copied_commit_fixture
 
     public = episode_qc.recompute_native_qc
     run, location, scope, inputs, receipt = controlled_committed_result(tmp_path, monkeypatch)
@@ -398,7 +398,7 @@ def test_the_run_command_writes_the_commit_proof_only(tmp_path, monkeypatch):
     """The run process builds memo-trusting gates (the Coordinator's), so it is not an independent readback: no receipt, no export check."""
     from so101_demo.act import result_store
     from so101_demo.cli import act_first_episode
-    from test_act_result_qc_v2 import controlled_committed_result
+    from test_act_result_qc import controlled_committed_result
 
     run, location, scope, inputs, _ = controlled_committed_result(tmp_path, monkeypatch, completed=True, teacher_outcome="PASSED")
     context = dict(episode=location / "episode", location=location, scope=scope, inputs_manifest=inputs,
@@ -473,7 +473,7 @@ def test_a_committed_invalid_without_a_qc_report_reads_back_clean_with_no_recomp
 
 
 def test_the_commit_is_still_verified_for_an_invalid_result_and_a_missing_commit_still_fails(tmp_path, monkeypatch):
-    from test_act_result_qc_v2 import copied_commit_fixture
+    from test_act_result_qc import copied_commit_fixture
 
     run, context, calls = committed_run(tmp_path, monkeypatch, "missing_commit")
     rc, receipt = readback(run, tmp_path / "readback")

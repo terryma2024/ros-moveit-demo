@@ -40,17 +40,12 @@ def export_eligible(status, qc, collection_mode) -> bool:
     return status in ("PASSED", AttemptStatus.PASSED) and qc == "PASS" and collection_mode in TRAINABLE_COLLECTION_MODES
 
 
-#: schema 1 and 2 are the read-only legacy of the coupled contract (a QC verdict decided the attempt status)
-_LEGACY_MANIFEST_KEYS = frozenset({
-    "kind", "schema_version", "lease_identity", "status", "qc_passed",
-    "episode_seal_sha256", "completed_monotonic_s",
-})
 _QC_MANIFEST_KEYS = frozenset({'qc_report_path','qc_report_sha256','inputs_sha256',
     'scope_sha256','audit_manifest_sha256','collection_mode'})
-#: schema 3: the attempt status is the Teacher's, the data verdict is separate, export needs both
+#: the attempt status is the Teacher's, the data verdict is separate, export needs both
 _DATA_FIELDS = ("teacher_execution_status", "teacher_task_result", "act_data_status", "act_data_reason",
                 "act_data_qc", "export_eligible")
-_RESULT_V3_KEYS = frozenset({
+_RESULT_KEYS = frozenset({
     "kind", "schema_version", "lease_identity", "status", "episode_seal_sha256", "completed_monotonic_s",
     *_DATA_FIELDS, *_QC_MANIFEST_KEYS})
 _ACT_DATA_QC = ("PASS", "FAIL", "NOT_RUN")
@@ -203,20 +198,19 @@ def _recomputed_or_memoised(report_path, report, *, episode_root, scope, inputs_
 
 
 def _verify_result_qc(report_path, *, episode_root, audit_manifest, scope, inputs_manifest, execution_lease,
-                      legacy=False, trust_memo=False):
+                      trust_memo=False):
     """Authenticate the report and independently recompute its complete verdict.
 
-    Current (schema 3) results are graded by the data QC alone: the episode seal's task outcome is not a criterion, so a
-    Teacher FAIL with valid data can carry a QC PASS. `legacy=True` is the read-only audit of a schema 2 result, whose
-    report is the retired endpoint_pose_v1 one and is recomputed by the retained legacy reader.
+    Results are graded by the data QC alone: the episode seal's task outcome is not a criterion, so a
+    Teacher FAIL with valid data can carry a QC PASS.
     """
     from . import episode_qc
     from .episode_qc import read_qc_report,_report_canonical
     try:
         if any(value is None for value in (audit_manifest,scope,inputs_manifest)):
             raise ValueError('original binding absent')
-        report=read_qc_report(report_path,legacy=legacy)
-        if report['schema_version']!=(2 if legacy else 3):
+        report=read_qc_report(report_path)
+        if report['schema_version']!=3:
             raise ValueError('report schema does not match the result schema')
         scope_document=json.loads(_read_regular(scope))
         frozen=json.loads(_read_regular(inputs_manifest))
@@ -231,12 +225,10 @@ def _verify_result_qc(report_path, *, episode_root, audit_manifest, scope, input
                 or report['audit_manifest_sha256']!=hashlib.sha256(_read_regular(audit_manifest)).hexdigest()
                 or report['episode_seal_sha256']!=hashlib.sha256(_read_regular(episode_root/'seal.json')).hexdigest()
                 or report['identity'].get('mode')!=scope_document['mode']
-                or frozen['mode']!=scope_document['mode']
-                or (legacy and report['status']=='PASS' and seal['status']!='PASSED')):
+                or frozen['mode']!=scope_document['mode']):
             raise ValueError('identity/hash/status mismatch')
-        reader=episode_qc.recompute_legacy_native_qc_v2 if legacy else episode_qc.recompute_native_qc
         recomputed=_recomputed_or_memoised(report_path,report,episode_root=episode_root,scope=scope,
-            inputs_manifest=inputs_manifest,trust_memo=trust_memo and not legacy,reader=reader)
+            inputs_manifest=inputs_manifest,trust_memo=trust_memo,reader=episode_qc.recompute_native_qc)
         if _report_canonical(report)!=_report_canonical(recomputed):
             raise ValueError('recomputed verdict differs')
         return report,hashlib.sha256(_read_regular(report_path)).hexdigest(),scope_document['mode']
@@ -712,7 +704,7 @@ class ActCollectionResultVerifier:
         except (OSError, ValueError, TypeError):
             return None
 
-    def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode, *, allow_legacy: bool = False) -> dict:
+    def verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict:
         """Verify one sealed result without modifying it; see `_verify`. The verifiers a result check repeats (the seal, the physical
         audit and the QC recomputation read the same files) run once per session."""
         import contextlib
@@ -723,14 +715,12 @@ class ActCollectionResultVerifier:
         if self.TRUST_FRESH_QC_MEMO and qc_memo.strict_active():
             raise qc_memo.ReadbackMemoForbidden("READBACK_MEMO_TRUST_FORBIDDEN")
         with contextlib.nullcontext() if active() is not None else qc_session():
-            return self._verify(lease, location, run_mode, allow_legacy=allow_legacy)
+            return self._verify(lease, location, run_mode)
 
-    def _verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode, *, allow_legacy: bool = False) -> dict:
+    def _verify(self, lease: LeaseIdentity, location: str, run_mode: RunMode) -> dict:
         """Verify one sealed result without modifying it.
 
-        Schema 3 is the only schema the Coordinator may commit. Schema 1 and 2 are the read-only legacy of the coupled
-        contract: they are verified only for audit (`allow_legacy`), are never exportable, and are never committed.
-        Any other version is rejected.
+        Schema 3 is the only result schema. Any other version is rejected.
         """
         if run_mode is not RunMode.EXECUTE:
             raise ValueError("WRONG_RUN_MODE")
@@ -743,14 +733,10 @@ class ActCollectionResultVerifier:
         data = _read_regular(sealed / "result.json")
         document = json.loads(data)
         version = document.get('schema_version') if type(document) is dict else None
-        if type(version) is not int or version not in (1, 2, 3):
+        if type(version) is not int or version != 3:
             raise ValueError("RESULT_SCHEMA_INVALID")
         if document.get("kind") != "ACT_COLLECTION_RESULT":
             raise ValueError("RESULT_SCHEMA_INVALID")
-        if version < 3:
-            if not allow_legacy:
-                raise ValueError("RESULT_SCHEMA_LEGACY_READ_ONLY")
-            return self._verify_legacy(lease, sealed, data, document, version)
         return self._verify_current(lease, sealed, data, document)
 
     def _common_checks(self, lease: LeaseIdentity, sealed: Path, document: dict):
@@ -769,14 +755,14 @@ class ActCollectionResultVerifier:
             audit_manifest = _safe(episode_path.parent / "audit" / "audit-manifest.json")
         return episode_path, audit_manifest
 
-    def _qc_binding(self, lease, sealed, document, episode_path, audit_manifest, legacy=False):
+    def _qc_binding(self, lease, sealed, document, episode_path, audit_manifest):
         """Re-read the QC report and recompute its verdict; returns (report, binding)."""
         execution_lease = self._original_execution_lease(audit_manifest, lease)
         if document['qc_report_path'] != 'qc-report.json':
             raise ValueError('RESULT_QC_CURRENT_REPORT_REQUIRED')
         report, digest, mode = _verify_result_qc(sealed / 'qc-report.json', episode_root=episode_path.parent,
             audit_manifest=audit_manifest, scope=self.scope, inputs_manifest=self.inputs_manifest,
-            execution_lease=execution_lease, legacy=legacy, trust_memo=self.TRUST_FRESH_QC_MEMO)
+            execution_lease=execution_lease, trust_memo=self.TRUST_FRESH_QC_MEMO)
         binding = dict(qc_report_sha256=digest, inputs_sha256=report['inputs_sha256'],
             scope_sha256=report['scope_sha256'], audit_manifest_sha256=report['audit_manifest_sha256'],
             collection_mode=mode, episode_seal_sha256=report['episode_seal_sha256'])
@@ -785,7 +771,7 @@ class ActCollectionResultVerifier:
         return report, binding
 
     def _verify_current(self, lease: LeaseIdentity, sealed: Path, data: bytes, document: dict) -> dict:
-        if set(document) != _RESULT_V3_KEYS:
+        if set(document) != _RESULT_KEYS:
             raise ValueError("RESULT_SCHEMA_INVALID")
         execution, task = document["teacher_execution_status"], document["teacher_task_result"]
         data_status, qc = document["act_data_status"], document["act_data_qc"]
@@ -837,37 +823,6 @@ class ActCollectionResultVerifier:
             report, _ = self._qc_binding(lease, sealed, document, episode_path, audit_manifest)
             if (qc == "PASS") != (report["status"] == "PASS"):
                 raise ValueError("RESULT_QC_MANIFEST_MISMATCH")
-        return verdict
-
-    def _verify_legacy(self, lease: LeaseIdentity, sealed: Path, data: bytes, document: dict, version: int) -> dict:
-        """Read-only audit of a schema 1/2 result, whose status was gated by the episode and QC verdicts."""
-        if set(document) != (_LEGACY_MANIFEST_KEYS | _QC_MANIFEST_KEYS if version == 2 else _LEGACY_MANIFEST_KEYS):
-            raise ValueError("RESULT_SCHEMA_INVALID")
-        if self.inputs_manifest is not None and version != 2:
-            raise ValueError('RESULT_QC_CURRENT_REPORT_REQUIRED')
-        episode_path, audit_manifest = self._common_checks(lease, sealed, document)
-        if hashlib.sha256(_read_regular(episode_path)).hexdigest() != document["episode_seal_sha256"]:
-            raise ValueError("EPISODE_SEAL_HASH_MISMATCH")
-        episode = verify_episode_seal(episode_path, audit_manifest=audit_manifest, scope=self.scope)
-        execution_lease = self._original_execution_lease(audit_manifest, lease)
-        _verify_audit_lease(audit_manifest, execution_lease)
-        if (episode["attempt_id"] != lease.attempt_id
-                or (version == 1 and (document["status"] != episode["status"]
-                    or document["qc_passed"] is not episode["qc_passed"]))):
-            raise ValueError("RESULT_EPISODE_MISMATCH")
-        if self._execution_journal_binding is not None and document["status"] == "PASSED":
-            from .episode_qc import verify_episode_physical_audit
-            verify_episode_physical_audit(episode_path.parent, audit_manifest, self.scope)
-        verdict = {"status": document["status"], "sha256": hashlib.sha256(data).hexdigest(),
-                   "legacy_schema_version": version, "export_eligible": False}
-        if version == 2 or _current_qc_required(audit_manifest):
-            if version != 2:
-                raise ValueError('RESULT_QC_CURRENT_REPORT_REQUIRED')
-            report, binding = self._qc_binding(lease, sealed, document, episode_path, audit_manifest, legacy=True)
-            if (document['status'] != ('PASSED' if report['status'] == 'PASS' else 'FAILED')
-                    or document['qc_passed'] is not (report['status'] == 'PASS')):
-                raise ValueError('RESULT_QC_MANIFEST_MISMATCH')
-            verdict.update(binding)
         return verdict
 
     def discover(self, lease: LeaseIdentity, workspace: Path) -> str | None:
@@ -970,14 +925,12 @@ def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manif
             raise ValueError('COMMIT_LOCATION_MISMATCH')
         verifier=ActCollectionResultVerifier({worker_id:worker_root},scope=scope,inputs_manifest=inputs_manifest)
         verifier.bind_read_only_execution_journal(root,batch_id,commit.coordinator_epoch)
-        # a read-only audit may replay a legacy (schema 1/2) commit; it is never reported as exportable
-        result=verifier.verify(final_lease,str(location),RunMode.EXECUTE,allow_legacy=True)
+        result=verifier.verify(final_lease,str(location),RunMode.EXECUTE)
         receipt=commit.payload['response']
         binding={key:result[key] for key in ('qc_report_sha256','episode_seal_sha256','inputs_sha256','scope_sha256',
             'audit_manifest_sha256','collection_mode')}
-        current='legacy_schema_version' not in result
-        data={key:result[key] for key in _DATA_FIELDS} if current else {}
-        point_record={key:result[key] for key in ACT_POINT_RESULT_KEYS} if current else None
+        data={key:result[key] for key in _DATA_FIELDS}
+        point_record={key:result[key] for key in ACT_POINT_RESULT_KEYS}
         if (set(receipt)!={'status','sha256','location','recovery_deadline_monotonic_s',*binding,*data}
                 or receipt['location']!=str(location) or receipt['status']!=result['status']
                 or receipt['sha256']!=result['sha256'] or any(receipt[key]!=value for key,value in binding.items())
@@ -1001,10 +954,10 @@ def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manif
             raise ValueError('COMMIT_INDEX_MISMATCH')
         return dict(kind='ACT_COORDINATOR_COMMIT_PROOF',schema_version=1,status='PASS',
             result_status=result['status'],
-            result_schema_version=3 if current else result['legacy_schema_version'],
+            result_schema_version=3,
             export_eligible=result['export_eligible'],
-            **({key:result[key] for key in ('teacher_execution_status','teacher_task_result','act_data_status',
-                'act_data_qc')} if current else {}),
+            **{key:result[key] for key in ('teacher_execution_status','teacher_task_result','act_data_status',
+                'act_data_qc')},
             identity=identity,receipt=receipt,**binding,
             result_sha256=result['sha256'],commit_sequence=commit.sequence,commit_frame_sha256=commit.frame_sha256,
             journal_terminal_sha256=replay.events[-1].frame_sha256,

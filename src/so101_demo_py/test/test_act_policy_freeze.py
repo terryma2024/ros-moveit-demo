@@ -1,5 +1,5 @@
-"""The frozen policy set (A4c): `teacher_endpoint` + `teacher_execution_policy` + `episode_recorder_v1` replace the
-endpoint_pose_v1 `endpoint_policy`, each frozen with its full effective values and its sha256.
+"""The frozen policy set (A4c): `teacher_endpoint` + `teacher_execution_policy` + `episode_recorder_v1`, each frozen with its
+full effective values and its sha256.
 
 The Teacher and the Recorder load their policies from the frozen manifest at runtime and refuse a mismatch: the Teacher
 before any motion, the Recorder before it listens, `act_first_episode run` before it creates its run root.
@@ -45,7 +45,7 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
 
     manifest_path = freeze(tmp_path)
     document = json.loads(manifest_path.read_bytes())
-    assert "endpoint_policy" not in document, "the endpoint_pose_v1 binding is replaced, not carried"
+    assert "endpoint_policy" not in document, "the retired endpoint pose binding is not carried"
     loaders = {"teacher_endpoint": load_teacher_endpoint_policy, "teacher_execution_policy": load_teacher_execution_policy,
                "episode_recorder_v1": load_recorder_policy}
     sources = {"teacher_endpoint": POLICY_FILES["teacher_endpoint"],
@@ -79,7 +79,7 @@ def test_each_policy_value_enters_the_inputs_hash_chain(tmp_path):
     assert other["inputs_sha256"] != baseline and other["episode_recorder_v1"]["values"]["ready_timeout_s"] == 7.0
 
 
-def test_the_freezer_and_prepare_no_longer_take_the_endpoint_policy_v1():
+def test_the_freezer_and_prepare_no_longer_take_the_retired_endpoint_policy():
     from so101_demo.cli import act_first_episode
     assert "endpoint_policy" not in inspect.signature(freeze_inputs).parameters
     for name in ("teacher_endpoint", "teacher_execution_policy", "episode_recorder_policy"):
@@ -144,22 +144,6 @@ def test_a_changed_or_inconsistent_policy_binding_is_refused(tmp_path, fault):
         policy_file.symlink_to(elsewhere)
     with pytest.raises(ValueError, match="INPUTS_POLICY_BINDING_INVALID: teacher_endpoint"):
         verify_frozen_inputs(manifest_path)
-
-
-def test_a_manifest_from_before_the_replacement_still_reads_and_carries_no_new_binding(tmp_path):
-    """An old frozen set (its `endpoint_policy` v1 binding, none of the three) stays readable for audit."""
-    from so101_demo.act.endpoint_pose_acceptance import load_endpoint_policy
-    from so101_demo.act.first_episode_inputs import _canonical
-    manifest_path = freeze(tmp_path)
-    document = json.loads(manifest_path.read_bytes())
-    for name in POLICY_BINDINGS:
-        document.pop(name, None)
-    policy = load_endpoint_policy(CONFIG / "endpoint_pose_acceptance_v1.yaml")
-    document["endpoint_policy"] = {"rule_version": policy["rule_version"], "thresholds": policy["thresholds"],
-                                   "sha256": hashlib.sha256(_canonical(policy)).hexdigest()}
-    rehash(manifest_path, document)
-    legacy = verify_frozen_inputs(manifest_path)
-    assert "endpoint_policy" in legacy and not set(POLICY_BINDINGS) & set(legacy)
 
 
 # ---- the snapshot cross-check: the Teacher reads the snapshot's copy, so the bound bytes must be the same bytes --------

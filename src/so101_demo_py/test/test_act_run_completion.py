@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from test_act_result_qc_v2 import controlled_committed_result,copied_commit_fixture
+from test_act_result_qc import controlled_committed_result,copied_commit_fixture
 
 
 @pytest.mark.parametrize('fault',[None,'missing_cleanup','false_action','foreign_batch',

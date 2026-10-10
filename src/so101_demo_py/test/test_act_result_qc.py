@@ -209,7 +209,7 @@ def setup_result(tmp_path, monkeypatch, seal_outcome='PASSED'):
     return store, seal, document, inputs
 
 
-def test_default_result_v2_publishes_owned_durable_qc_and_verifies_same_originals(tmp_path, monkeypatch):
+def test_default_result_publishes_owned_durable_qc_and_verifies_same_originals(tmp_path, monkeypatch):
     from so101_demo.act import episode_qc
     from so101_demo.act.result_store import ActCollectionResultVerifier
     from so101_demo.parallel_batch.contracts import RunMode
@@ -269,7 +269,7 @@ def test_a_teacher_fail_with_valid_data_gets_data_qc_pass_and_still_cannot_expor
 
 
 @pytest.mark.parametrize('fault',['foreign_identity','changed_count','changed_reference','failed_report','wrong_location'])
-def test_result_v2_refuses_wrong_supplied_report_without_publishing_success(tmp_path,monkeypatch,fault):
+def test_result_refuses_wrong_supplied_report_without_publishing_success(tmp_path,monkeypatch,fault):
     from so101_demo.act.episode_qc import write_qc_report
     store,seal,original,_=setup_result(tmp_path,monkeypatch)
     changed=copy.deepcopy(original)
@@ -288,7 +288,7 @@ def test_result_v2_refuses_wrong_supplied_report_without_publishing_success(tmp_
 
 
 @pytest.mark.parametrize('fault',['missing_report','resigned_report','missing_v2','manifest_hash','mode'])
-def test_independent_result_v2_reader_rejects_report_and_manifest_tamper_after_positive(tmp_path,monkeypatch,fault):
+def test_independent_result_reader_rejects_report_and_manifest_tamper_after_positive(tmp_path,monkeypatch,fault):
     from so101_demo.act import episode_qc
     from so101_demo.act.result_store import ActCollectionResultVerifier
     from so101_demo.parallel_batch.contracts import RunMode
@@ -313,13 +313,13 @@ def test_independent_result_v2_reader_rejects_report_and_manifest_tamper_after_p
         qc_path.write_bytes(episode_qc._report_canonical(qc))
         result['qc_report_sha256']=hashlib.sha256(qc_path.read_bytes()).hexdigest()
     if fault=='missing_v2':
-        # a schema 1 record presented to a verifier that holds the frozen QC inputs is refused as read-only legacy
+        # a schema 1 record presented to a verifier that holds the frozen QC inputs is refused
         result={key:value for key,value in result.items() if key in {
             'kind','schema_version','lease_identity','status','qc_passed','episode_seal_sha256','completed_monotonic_s'}}
         result['schema_version']=1
     if fault=='manifest_hash':result['audit_manifest_sha256']='b'*64
     if fault=='mode':result['collection_mode']='formal'
     result_path.write_text(json.dumps(result,sort_keys=True,separators=(',',':'))+'\n')
-    with pytest.raises((ValueError,OSError),match='RESULT_QC_|RESULT_SCHEMA_LEGACY_READ_ONLY|RESULT_DATA_INCONSISTENT'):
+    with pytest.raises((ValueError,OSError),match='RESULT_QC_|RESULT_SCHEMA_INVALID|RESULT_DATA_INCONSISTENT'):
         verifier.verify(lease(),str(location),RunMode.EXECUTE)
     assert all(hashlib.sha256(path.read_bytes()).hexdigest()==digest for path,digest in originals.items())

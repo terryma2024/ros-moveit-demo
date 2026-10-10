@@ -211,8 +211,8 @@ def test_the_export_refuses_what_must_not_enter_training(tmp_path,monkeypatch):
     (dict(act_data_qc="FAIL", export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),       # Teacher PASS, data FAIL
     (dict(act_data_qc="NOT_RUN", export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
     (dict(export_eligible=False), "EXPORT_EPISODE_DATA_QC_NOT_PASSED"),
-    (dict(result_schema_version=2), "EXPORT_EPISODE_LEGACY_RESULT"),                              # read-only legacy
-    (dict(result_schema_version=None), "EXPORT_EPISODE_LEGACY_RESULT")])
+    (dict(result_schema_version=2), "EXPORT_EPISODE_RESULT_SCHEMA_INVALID"),                              # read-only legacy
+    (dict(result_schema_version=None), "EXPORT_EPISODE_RESULT_SCHEMA_INVALID")])
 def test_export_needs_a_teacher_pass_and_a_passing_data_qc_on_a_schema_3_result(tmp_path, monkeypatch, override, code):
     from act_export_fixture import complete_export_entries
     scene = "001"
