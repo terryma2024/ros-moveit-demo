@@ -1,4 +1,11 @@
 from pathlib import Path
+import sys
+
+from paths import TEST_DIRECTORIES
+
+for _directory in reversed(TEST_DIRECTORIES):
+    if str(_directory) not in sys.path:
+        sys.path.insert(0, str(_directory))
 
 
 def pytest_configure(config) -> None:

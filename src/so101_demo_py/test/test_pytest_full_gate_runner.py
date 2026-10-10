@@ -90,6 +90,25 @@ def test_historical_junit_durations_are_summed_by_whole_module(tmp_path: Path) -
     }
 
 
+def test_historical_junit_durations_follow_modules_into_test_subdirectories(tmp_path: Path) -> None:
+    junit = tmp_path / "history.xml"
+    junit.write_text(
+        "<testsuites><testsuite>\n"
+        '<testcase classname="test.act.offline.test_a" name="one" time="1.5"/>\n'
+        '<testcase classname="test.act.offline.test_a" name="two" time="0.5"/>\n'
+        '<testcase classname="src.so101_demo_py.test.cli.test_b.Case" name="three" time="3.0"/>\n'
+        '<testcase classname="test.test_c" name="four" time="1.0"/>\n'
+        "</testsuite></testsuites>\n",
+        encoding="utf-8",
+    )
+
+    assert load_module_durations(junit, Path("pkg/test")) == {
+        Path("pkg/test/act/offline/test_a.py"): 2.0,
+        Path("pkg/test/cli/test_b.py"): 3.0,
+        Path("pkg/test/test_c.py"): 1.0,
+    }
+
+
 def test_serial_lane_is_ordered_and_excluded_from_parallel_shards() -> None:
     # Derived from the single source of truth so adding a serial module cannot make this
     # fixture silently incomplete (it did when the start-guard launch test was registered).

@@ -168,19 +168,26 @@ def load_module_durations(
     root = ET.parse(junit_path).getroot()
     for case in root.iter("testcase"):
         classname = case.attrib.get("classname", "")
-        module_name = next(
-            (part for part in classname.split(".") if part.startswith("test_")),
+        parts = classname.split(".")
+        module_index = next(
+            (index for index, part in enumerate(parts) if part.startswith("test_")),
             None,
         )
-        if module_name is None:
+        if module_index is None:
             continue
+        module_name = parts[module_index]
+        # The directories between the test root and the module are part of the module's identity: the
+        # classname is dotted from the rootdir, so keep what follows the last root-named component.
+        directories = parts[:module_index]
+        if test_root.name in directories:
+            directories = directories[len(directories) - directories[::-1].index(test_root.name):]
         try:
             duration = float(case.attrib.get("time", "0"))
         except ValueError:
             continue
         if not math.isfinite(duration) or duration < 0:
             continue
-        path = test_root / f"{module_name}.py"
+        path = test_root.joinpath(*directories, f"{module_name}.py")
         durations[path] = durations.get(path, 0.0) + duration
     return durations
 
