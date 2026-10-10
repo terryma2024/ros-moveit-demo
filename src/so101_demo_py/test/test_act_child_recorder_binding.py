@@ -46,7 +46,7 @@ def frozen_child_inputs(tmp_path):
                                  mode="preselected_target_diagnostic",
                                  teacher_endpoint=config / "teacher_endpoint.yaml",
         teacher_execution_policy=config / "teacher_execution_policy.yaml",
-        episode_recorder_policy=config / "episode_recorder_v1.yaml",
+        episode_recorder_policy=config / "episode_recorder.yaml",
                                  runtime_policy=config / "endpoint_pose_development_runtime_v1.yaml")
     root = manifest_path.parent
     snapshot = freeze_execution_snapshot(REPOSITORY, root / "execution")
@@ -76,7 +76,7 @@ def frozen_child_inputs(tmp_path):
     document["execution_snapshot"] = execution_snapshot_binding(snapshot, root / "execution")
     bindings = {**document["roles"], **{key: document[key] for key in
                 ("mode", "teacher_endpoint", "teacher_execution_policy",
-                 "episode_recorder_v1", "runtime_policy", "execution_snapshot") if key in document}}
+                 "episode_recorder", "runtime_policy", "execution_snapshot") if key in document}}
     document["inputs_sha256"] = hashlib.sha256(json.dumps(bindings, sort_keys=True,
                                                            separators=(",", ":")).encode()).hexdigest()
     manifest_path.write_text(json.dumps(document))

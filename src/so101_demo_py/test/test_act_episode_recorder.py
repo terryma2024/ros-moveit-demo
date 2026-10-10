@@ -29,7 +29,7 @@ from test_act_seal_and_downgrade import IDENTITY, SCOPE, recorder_physical_audit
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
-POLICY_FILE = PACKAGE / "config/act/episode_recorder_v1.yaml"
+POLICY_FILE = PACKAGE / "config/act/episode_recorder.yaml"
 STREAM_IDENTITY = StreamIdentity(IDENTITY["session_id"], IDENTITY["reset_epoch"], IDENTITY["attempt_id"])
 FRAME = np.zeros((480, 640, 3), dtype=np.uint8)
 STAMPS = (1.0, 1.1, 1.2, 1.3, 1.4, 1.5)
@@ -371,7 +371,7 @@ def test_setup_py_no_longer_declares_the_live_recorder_entry_and_still_installs_
     assert "act_offline_episode = so101_demo.cli.act_offline_episode:main" in scripts
     # the frozen policy file is still installed with the other config files: frozen manifests are built from it
     installed = [path for _, paths in captured["data_files"] for path in paths]
-    assert "config/act/episode_recorder_v1.yaml" in installed
+    assert "config/act/episode_recorder.yaml" in installed
 
 
 # ---- a normal run seals VALID ------------------------------------------------------------------------------------

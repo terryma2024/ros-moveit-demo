@@ -1,4 +1,4 @@
-"""The frozen policy set (A4c): `teacher_endpoint` + `teacher_execution_policy` + `episode_recorder_v1`, each frozen with its
+"""The frozen policy set (A4c): `teacher_endpoint` + `teacher_execution_policy` + `episode_recorder`, each frozen with its
 full effective values and its sha256.
 
 The Teacher and the Recorder load their policies from the frozen manifest at runtime and refuse a mismatch: the Teacher
@@ -21,7 +21,7 @@ from paths import PACKAGE_ROOT
 CONFIG = PACKAGE_ROOT / "config/act"
 POLICY_FILES = {"teacher_endpoint": CONFIG / "teacher_endpoint.yaml",
                 "teacher_execution_policy": CONFIG / "teacher_execution_policy.yaml",
-                "episode_recorder_policy": CONFIG / "episode_recorder_v1.yaml"}
+                "episode_recorder_policy": CONFIG / "episode_recorder.yaml"}
 
 
 def freeze(tmp_path, **overrides):
@@ -47,10 +47,10 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
     document = json.loads(manifest_path.read_bytes())
     assert "endpoint_policy" not in document, "the retired endpoint pose binding is not carried"
     loaders = {"teacher_endpoint": load_teacher_endpoint_policy, "teacher_execution_policy": load_teacher_execution_policy,
-               "episode_recorder_v1": load_recorder_policy}
+               "episode_recorder": load_recorder_policy}
     sources = {"teacher_endpoint": POLICY_FILES["teacher_endpoint"],
                "teacher_execution_policy": POLICY_FILES["teacher_execution_policy"],
-               "episode_recorder_v1": POLICY_FILES["episode_recorder_policy"]}
+               "episode_recorder": POLICY_FILES["episode_recorder_policy"]}
     assert set(POLICY_BINDINGS) == set(loaders)
     for name, loader in loaders.items():
         binding, payload = document[name], sources[name].read_bytes()
@@ -64,7 +64,7 @@ def test_the_freezer_binds_the_three_policies_with_full_values_and_both_digests(
     # the full effective values are readable without the YAML: the tolerances, the deadlines and the Recorder bounds
     assert document["teacher_endpoint"]["values"]["tolerances"]["final_xy_m"] == 0.020
     assert document["teacher_execution_policy"]["values"]["execution_deadline_s"] == 180.0
-    assert document["episode_recorder_v1"]["values"]["ready_timeout_s"] > 0
+    assert document["episode_recorder"]["values"]["ready_timeout_s"] > 0
 
 
 def test_each_policy_value_enters_the_inputs_hash_chain(tmp_path):
@@ -76,7 +76,7 @@ def test_each_policy_value_enters_the_inputs_hash_chain(tmp_path):
     document["ready_timeout_s"] = 7.0
     changed.write_text(yaml.safe_dump(document))
     other = json.loads(freeze(tmp_path / "b", episode_recorder_policy=changed).read_bytes())
-    assert other["inputs_sha256"] != baseline and other["episode_recorder_v1"]["values"]["ready_timeout_s"] == 7.0
+    assert other["inputs_sha256"] != baseline and other["episode_recorder"]["values"]["ready_timeout_s"] == 7.0
 
 
 def test_the_freezer_and_prepare_no_longer_take_the_retired_endpoint_policy():
@@ -178,7 +178,7 @@ def test_the_teacher_loads_its_snapshot_and_policies_from_the_frozen_manifest(tm
 @pytest.mark.parametrize("name, change", [
     ("teacher_endpoint", lambda values: values["tolerances"].update(final_xy_m=0.5)),
     ("teacher_execution_policy", lambda values: values.update(execution_deadline_s=999.0)),
-    ("episode_recorder_v1", lambda values: values.update(ready_timeout_s=3.0))])
+    ("episode_recorder", lambda values: values.update(ready_timeout_s=3.0))])
 def test_a_consistently_forged_policy_that_differs_from_the_execution_snapshot_is_refused_everywhere(
         tmp_path, name, change):
     from so101_demo.act.offline.policy import RecorderConfigRefused
@@ -211,10 +211,10 @@ def test_the_recorder_loads_its_policy_only_from_the_frozen_manifest(tmp_path):
     from so101_demo.act.offline.policy import RecorderConfigRefused
     manifest_path = freeze(tmp_path)
     policy = load_recorder_frozen_policy(manifest_path)
-    bound = json.loads(manifest_path.read_bytes())["episode_recorder_v1"]
+    bound = json.loads(manifest_path.read_bytes())["episode_recorder"]
     assert policy["policy_sha256"] == bound["policy_sha256"] and policy["ready_timeout_s"] == bound["values"]["ready_timeout_s"]
     document = json.loads(manifest_path.read_bytes())
-    document.pop("episode_recorder_v1")
+    document.pop("episode_recorder")
     rehash(manifest_path, document)
     with pytest.raises(RecorderConfigRefused, match="RECORDER_POLICY_NOT_FROZEN"):
         load_recorder_frozen_policy(manifest_path)

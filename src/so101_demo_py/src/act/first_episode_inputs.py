@@ -60,13 +60,13 @@ _MANIFEST_REQUIRED = frozenset({"kind", "schema_version", "source_root", "source
 #: the freezer binds the collection mode, the policies and the development runtime too, but a call that writes none of them
 #: keeps its contract (CP-2440) - so they are allowed, not required
 _MANIFEST_OPTIONAL = frozenset({"mode", "runtime_policy", "execution_snapshot",
-                                "teacher_endpoint", "teacher_execution_policy", "episode_recorder_v1"})
+                                "teacher_endpoint", "teacher_execution_policy", "episode_recorder"})
 #: The policy bindings (Phase A4c): binding name -> the file
 #: name frozen under `policies/` and the package-relative config path the execution snapshot also carries.
 POLICY_BINDINGS = {
     "teacher_endpoint": ("teacher_endpoint.yaml", "config/act/teacher_endpoint.yaml"),
     "teacher_execution_policy": ("teacher_execution_policy.yaml", "config/act/teacher_execution_policy.yaml"),
-    "episode_recorder_v1": ("episode_recorder_v1.yaml", "config/act/episode_recorder_v1.yaml"),
+    "episode_recorder": ("episode_recorder.yaml", "config/act/episode_recorder.yaml"),
 }
 #: the execution policy binding frozen with an attempt
 EXECUTION_POLICY_BINDING = "teacher_execution_policy"
@@ -605,7 +605,7 @@ def freeze_inputs(candidates_path: Path, output: Path, *, mode: str | None = Non
     policy_payloads = {}
     for name, source in (("teacher_endpoint", teacher_endpoint),
                          (EXECUTION_POLICY_BINDING, teacher_execution_policy),
-                         ("episode_recorder_v1", episode_recorder_policy)):
+                         ("episode_recorder", episode_recorder_policy)):
         if source is None:
             continue
         path = Path(source)

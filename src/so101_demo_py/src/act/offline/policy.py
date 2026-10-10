@@ -1,4 +1,4 @@
-"""The frozen Recorder policy document (`episode_recorder_v1`), loaded and validated.
+"""The frozen Recorder policy document (`episode_recorder`), loaded and validated.
 
 The policy is baked into every frozen inputs manifest (`frozen_runtime_inputs`, `first_episode_inputs`), so its closed schema is
 unchanged by the removal of the live Recorder: keys only the live Recorder read (`ready_timeout_s`, `capturing_timeout_s`,

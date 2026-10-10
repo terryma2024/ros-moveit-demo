@@ -1,4 +1,4 @@
-"""CP-3410: the backlog and receiver-lag bounds are frozen policy (episode_recorder_v1), strictly loaded; the lag bound reaches the adapter.
+"""CP-3410: the backlog and receiver-lag bounds are frozen policy (episode_recorder), strictly loaded; the lag bound reaches the adapter.
 
 The backlog bound belonged to the retired chunk spool: it stays in the closed document (frozen manifests carry it) and nothing reads it."""
 import math
@@ -11,7 +11,7 @@ from so101_demo.act.offline.policy import RecorderConfigRefused, load_recorder_p
 from test_act_episode_recorder_sources import RecordingNode, _binding, _engine, _episode, _options
 from paths import PACKAGE_ROOT
 
-POLICY_FILE = PACKAGE_ROOT / "config/act/episode_recorder_v1.yaml"
+POLICY_FILE = PACKAGE_ROOT / "config/act/episode_recorder.yaml"
 
 
 def document():

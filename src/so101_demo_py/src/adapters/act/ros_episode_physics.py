@@ -53,7 +53,7 @@ class RosEpisodePhysicsAdapter:
         # Callback admission cannot publish a source until the sole writer appends it.
         self._history = deque(maxlen=history_capacity)
         self._previous = None
-        # CP-3410 policy (frozen in episode_recorder_v1): the data fails on a receiver lag, not on a late chunk.
+        # CP-3410 policy (frozen in episode_recorder): the data fails on a receiver lag, not on a late chunk.
         self._lag_max_ns = None if receiver_lag_max_s is None else round(receiver_lag_max_s * 1e9)
         self._lag_check_ended = False
         self._latency = {leg: deque(maxlen=_LATENCY_WINDOW) for leg in _LATENCY_LEGS}

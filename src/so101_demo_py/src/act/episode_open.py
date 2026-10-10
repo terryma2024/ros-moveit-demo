@@ -40,7 +40,7 @@ def open_recorder_episode(options, *, offline: bool = False):
     manifest_path = Path(manifest_path)
     frozen = verify_frozen_inputs(manifest_path)
     binding = frozen.get("execution_snapshot")
-    if binding is None or "runtime_policy" not in frozen or "episode_recorder_v1" not in frozen:
+    if binding is None or "runtime_policy" not in frozen or "episode_recorder" not in frozen:
         raise ValueError("EPISODE_EXECUTION_INPUTS_REQUIRED")
     validate_execution_snapshot_binding(binding)
     snapshot = verify_execution_snapshot(manifest_path.parent / binding["path"],

@@ -135,7 +135,7 @@ class OfflineRosSources:
     def __init__(self, node: ReplayNode, episode, options, *, bind=None, world_observer_factory=None,
                  reference_port_factory=None, physical_provider=None, policy=None, final_normal_stop_seq=None) -> None:
         self.node, self.episode, self.options = node, episode, options
-        #: the frozen Recorder policy (episode_recorder_v1): its receiver-lag bound goes to the physics adapter
+        #: the frozen Recorder policy (episode_recorder): its receiver-lag bound goes to the physics adapter
         self._policy = {} if policy is None else dict(policy)
         #: how long a source may wait for its raw chunk: the receiver-lag policy (the adapter fails the data beyond it)
         self._chunk_wait_s = float(self._policy.get("physics_receiver_lag_max_s", 0.1))

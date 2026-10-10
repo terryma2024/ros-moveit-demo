@@ -919,7 +919,7 @@ class ParallelWorkerRuntime:
         # record is still a valid runtime, which is why this is not among REQUIRED.
         self._open_episode = open_episode
         # Collection (Phase A4c): `collection` is a CollectionOptions. Enabled, every attempt records a raw bag
-        # before its Teacher and is processed offline afterwards, with the bounds frozen in episode_recorder_v1.
+        # before its Teacher and is processed offline afterwards, with the bounds frozen in episode_recorder.
         self._collection = collection
         self._recorders: dict[tuple[object, ...], Any] = {}
         #: lease key -> whether the recorder was proven stopped when the attempt was retired (design 2026-10-10 section 1.2)

@@ -42,7 +42,7 @@ def load_teacher_frozen_inputs(manifest_path: Path):
 
 
 def load_recorder_frozen_policy(manifest_path: Path) -> dict:
-    """The frozen `episode_recorder_v1` policy (values and policy_sha256), or a refusal when it was not frozen."""
+    """The frozen `episode_recorder` policy (values and policy_sha256), or a refusal when it was not frozen."""
     from .first_episode_inputs import verify_frozen_inputs
     from .offline.policy import RecorderConfigRefused
 
@@ -50,7 +50,7 @@ def load_recorder_frozen_policy(manifest_path: Path) -> dict:
         frozen = verify_frozen_inputs(Path(manifest_path))
     except (ValueError, OSError) as error:
         raise RecorderConfigRefused(f"RECORDER_FROZEN_INPUTS_INVALID: {error}") from error
-    binding = frozen.get("episode_recorder_v1")
+    binding = frozen.get("episode_recorder")
     if binding is None:
         raise RecorderConfigRefused("RECORDER_POLICY_NOT_FROZEN")
     return {**binding["values"], "policy_sha256": binding["policy_sha256"]}
