@@ -12,7 +12,7 @@ from paths import PACKAGE_ROOT
 def scene():
     import mujoco
 
-    path = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/multi_object_scene.xml"
     model = mujoco.MjModel.from_xml_path(str(path))
     return mujoco, path, model, mujoco.MjData(model)
 

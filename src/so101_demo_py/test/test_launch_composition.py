@@ -377,8 +377,8 @@ def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
     assert '<param name="initial_keyframe">cup_test_left_5cm</param>' in rendered
 
 
-def test_mujoco_launch_accepts_v5_multi_object_acceptance_keyframes() -> None:
-    scene = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
+def test_mujoco_launch_accepts_multi_object_acceptance_keyframes() -> None:
+    scene = PACKAGE_ROOT / "assets/mujoco/multi_object_scene.xml"
 
     for keyframe in ("v5_no_cup", "v5_two_cups", "v5_cup_near_bottle"):
         rendered = launch_composition._render_mujoco_robot_description(

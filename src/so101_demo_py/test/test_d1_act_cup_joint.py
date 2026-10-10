@@ -16,7 +16,7 @@ MOTION = PACKAGE / "config/policies/light_cup_wall_pick/v1/mujoco.yaml"
 UNCHANGED = {
     "assets/mujoco/act/so101.xml": "264dd124c27d06a14a96baf2cc8bf7789c407a81a9ca648159957bf7713eebfe",
     "assets/mujoco/scene.xml": "fec97df90ada01bed12e09110986caac52881312360c5549763dcb2a02d99d9c",
-    "assets/mujoco/v5_multi_object_scene.xml": "dbe85e6cd3e2a3cefaf6e2a1621f449cf1a29e87680e00d4b26f53d3fdae0237",
+    "assets/mujoco/multi_object_scene.xml": "dbe85e6cd3e2a3cefaf6e2a1621f449cf1a29e87680e00d4b26f53d3fdae0237",
     "assets/mujoco/so101.xml": "f87a033fab8cf7291e737519290a639e0310e703f8169288f075f3fe0c8b5aca",
 }
 

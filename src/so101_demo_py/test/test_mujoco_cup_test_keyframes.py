@@ -4,7 +4,7 @@ from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT
 SCENE = PACKAGE / "assets/mujoco/scene.xml"
-MULTI_OBJECT_SCENE = PACKAGE / "assets/mujoco/v5_multi_object_scene.xml"
+MULTI_OBJECT_SCENE = PACKAGE / "assets/mujoco/multi_object_scene.xml"
 
 
 def test_cup_test_keyframes_move_only_the_cup_free_joint() -> None:

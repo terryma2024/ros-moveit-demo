@@ -324,7 +324,7 @@ def test_generate_dataset_refuses_existing_output_root(tmp_path: Path) -> None:
 
 
 def test_repository_fixture_exposes_camera_targets_distractors_and_scenarios() -> None:
-    fixture = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
+    fixture = PACKAGE_ROOT / "assets/mujoco/multi_object_scene.xml"
     root = ET.parse(fixture).getroot()
     names = {element.attrib["name"] for element in root.iter() if "name" in element.attrib}
 

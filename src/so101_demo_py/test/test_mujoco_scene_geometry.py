@@ -11,7 +11,7 @@ from paths import PACKAGE_ROOT
 def scene():
     import mujoco
 
-    path = PACKAGE_ROOT / "assets/mujoco/v5_multi_object_scene.xml"
+    path = PACKAGE_ROOT / "assets/mujoco/multi_object_scene.xml"
     model = mujoco.MjModel.from_xml_path(str(path))
     data = mujoco.MjData(model)
     return mujoco, model, data
@@ -30,7 +30,7 @@ def mutated_task_scene(tmp_path, old, new):
     source = PACKAGE_ROOT / "assets/mujoco"
     copied = tmp_path / "mujoco"
     shutil.copytree(source, copied)
-    scene_path = copied / "v5_multi_object_scene.xml"
+    scene_path = copied / "multi_object_scene.xml"
     xml = scene_path.read_text()
     assert xml.count(old) == 1
     scene_path.write_text(xml.replace(old, new, 1))
