@@ -1,0 +1,927 @@
+{
+  "files": [
+    {
+      "path": "controller_manager/CHANGELOG.rst",
+      "sha256": "f25aebb7df21e0e635561a2e58c814ed7d64e7b43aa69e2c05c88eb5c3df0681",
+      "bytes": 75317
+    },
+    {
+      "path": "controller_manager/CMakeLists.txt",
+      "sha256": "ee1a39a82619ea6d13753f9a513b336bec77072f845f8a57b4567011de6ce287",
+      "bytes": 9638
+    },
+    {
+      "path": "controller_manager/controller_manager/__init__.py",
+      "sha256": "a5874b7a102d45e6313bd5dd51194d2ad5dfa3d07359a91a9a9018d7cc66c35b",
+      "bytes": 1520
+    },
+    {
+      "path": "controller_manager/controller_manager/controller_manager_services.py",
+      "sha256": "801b304e9a8738c2ded25c7c247817db8fbac4f42853290e481fd9513987eb7a",
+      "bytes": 17777
+    },
+    {
+      "path": "controller_manager/controller_manager/hardware_spawner.py",
+      "sha256": "c628a74a988b02e96d6bac19cb63aebda0e1ad71dddd3ae45b1a6182ea53b847",
+      "bytes": 6974
+    },
+    {
+      "path": "controller_manager/controller_manager/launch_utils.py",
+      "sha256": "c6cbba1c8a14307c3f9bf91c3c0024246292bd67f18ec9ac70f561effbf6621b",
+      "bytes": 9849
+    },
+    {
+      "path": "controller_manager/controller_manager/spawner.py",
+      "sha256": "5316c804327f975d99be13afa69aa89cc28e7a8bc34a46cf9fe426e3b9de5764",
+      "bytes": 24686
+    },
+    {
+      "path": "controller_manager/controller_manager/test_utils.py",
+      "sha256": "4a396b35f3d1b31edf9c7768065aff93eda251581ed66d4b74fe28a1970a99f0",
+      "bytes": 6229
+    },
+    {
+      "path": "controller_manager/controller_manager/unspawner.py",
+      "sha256": "a68dfa61602f5fe20de97ae86729de459e7329e20b7c3c4233f6a1750bd64e29",
+      "bytes": 3039
+    },
+    {
+      "path": "controller_manager/doc/controller_chaining.rst",
+      "sha256": "0a8c459d2315ffb27961355866c187d6676d8b56522d495b0eabd7053594b42d",
+      "bytes": 11519
+    },
+    {
+      "path": "controller_manager/doc/images/chaining_example2.png",
+      "sha256": "be77ebba10426bdb6eafc2334ca5b93023f044f86b1988cdc6d3a92c663af493",
+      "bytes": 89572
+    },
+    {
+      "path": "controller_manager/doc/images/global_general_remap.png",
+      "sha256": "393d1638e2a6bcd86a139eb1abe1bf63535abb083f03b2c5aca761401fb07213",
+      "bytes": 40923
+    },
+    {
+      "path": "controller_manager/doc/images/global_specific_remap.png",
+      "sha256": "07fb76522c9592d00b271a627aaf8280a0be2e43fe404efdbe2c6d3e9d3e9465",
+      "bytes": 36592
+    },
+    {
+      "path": "controller_manager/doc/images/rqt_controller_manager.png",
+      "sha256": "68c4fca822188129ae5b0bb05ca86ba7b92d7678c367fcd6d5d80c653d2c1420",
+      "bytes": 90357
+    },
+    {
+      "path": "controller_manager/doc/parameters_context.yaml",
+      "sha256": "b1211e05f4f6c995de7e3f1f3015719a263c5733456c636de30fe29843226414",
+      "bytes": 2428
+    },
+    {
+      "path": "controller_manager/doc/running_controllers_asynchronously.rst",
+      "sha256": "79eceaf9a52f8f1096b10207628d80f05503ff815e7e0fe6c3eecdfb992a263c",
+      "bytes": 6121
+    },
+    {
+      "path": "controller_manager/doc/userdoc.rst",
+      "sha256": "50c633d8afc826e248fab9b999f817ab402ade75ffdd17d720b5346a10aaf301",
+      "bytes": 26208
+    },
+    {
+      "path": "controller_manager/include/controller_manager/controller_manager.hpp",
+      "sha256": "28fac36b33f898ec3af9cec5eed99b10ef4998741d7230c3528f50637a4cdefa",
+      "bytes": 33684
+    },
+    {
+      "path": "controller_manager/include/controller_manager/controller_spec.hpp",
+      "sha256": "79135ea5032af895e9d696cb839d7bb6de1d41c38ee4686d550dac3b712a40ad",
+      "bytes": 2113
+    },
+    {
+      "path": "controller_manager/package.xml",
+      "sha256": "4b76543163da4e617d5a7dd6b3c0f2bbf5fcc7961059ff21af1f1d08645d917b",
+      "bytes": 2278
+    },
+    {
+      "path": "controller_manager/setup.cfg",
+      "sha256": "a8fab740448acb03e285b0b0cee94013435e133fd4ee08de48ee966329e8af21",
+      "bytes": 201
+    },
+    {
+      "path": "controller_manager/src/controller_manager.cpp",
+      "sha256": "8c3fe498a2879fc84e596c445c0d95759051f5e4cf53fa81158380a7f86a0311",
+      "bytes": 204343
+    },
+    {
+      "path": "controller_manager/src/controller_manager_parameters.yaml",
+      "sha256": "5bc709f724c9e95388401f5872cf38b2d8a1ff3dbf2b07b57c92f36b1d8ec738",
+      "bytes": 12102
+    },
+    {
+      "path": "controller_manager/src/ros2_control_node.cpp",
+      "sha256": "81615aad93e5e061a4388c692f1793cc8ecd6a3b76d03873ba7a0a99aad62a7d",
+      "bytes": 7184
+    },
+    {
+      "path": "controller_manager/test/__pycache__/test_ros2_control_node_launch.cpython-312-pytest-7.4.4.pyc",
+      "sha256": "78853a827d8ec86171a70a7fa7307c226d7359a1a8bf65ee9b6794197d01d6af",
+      "bytes": 4745
+    },
+    {
+      "path": "controller_manager/test/__pycache__/test_test_utils.cpython-312-pytest-7.4.4.pyc",
+      "sha256": "4904833e783e07011e2bcb71c559bda3df7713f561f788ed20e4bd51f0ddef7c",
+      "bytes": 3059
+    },
+    {
+      "path": "controller_manager/test/controller_manager_test_common.hpp",
+      "sha256": "cf0feaaebfec3aae64668efc04e95957b387d0d4da82a2697fe4d7a10fb1e131",
+      "bytes": 8777
+    },
+    {
+      "path": "controller_manager/test/test_advanced_spawner.cpp",
+      "sha256": "9480b56f0d46bce283382cddec404cea2239b7e101e8ca6d4e4bd1c1fc8719be",
+      "bytes": 39558
+    },
+    {
+      "path": "controller_manager/test/test_chainable_controller/test_chainable_controller.cpp",
+      "sha256": "0f226a26b33e58cf3ffa71f2a9964e3ee4e851088bef13e93632c917e24e2352",
+      "bytes": 10757
+    },
+    {
+      "path": "controller_manager/test/test_chainable_controller/test_chainable_controller.hpp",
+      "sha256": "b54bab185ab007129ff4617de9a2441912dffced16accb7187c1140e36934738",
+      "bytes": 4066
+    },
+    {
+      "path": "controller_manager/test/test_chainable_controller/test_chainable_controller.xml",
+      "sha256": "b356c786fc8fa8c57d46dc9a805040fa2408a9566909788d5364ee43d01a087f",
+      "bytes": 345
+    },
+    {
+      "path": "controller_manager/test/test_cleanup_controller.cpp",
+      "sha256": "d621619ebc5b8e73f8711739edb6ee8519b44eca84908bf1addc190a6934cf87",
+      "bytes": 4251
+    },
+    {
+      "path": "controller_manager/test/test_controller/test_controller.cpp",
+      "sha256": "16d9f1ab1621087b421862e308d7f49bff989c3307b2d48f23132ed189bdc040",
+      "bytes": 9059
+    },
+    {
+      "path": "controller_manager/test/test_controller/test_controller.hpp",
+      "sha256": "3ecdbe412cc36ccb90bcd188f4a652c81f19179ffc3b4392c1307482fb376b5a",
+      "bytes": 3671
+    },
+    {
+      "path": "controller_manager/test/test_controller/test_controller.xml",
+      "sha256": "33af05bd71f853fbb8b3f91e6bbf38e94879e8983375f6c5879b46309fc00302",
+      "bytes": 279
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.cpp",
+      "sha256": "8dfbe484fdc29e664fd18ff42695333d1d0ec9fa5c2ea7de334768fea5f6777e",
+      "bytes": 2403
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.hpp",
+      "sha256": "ee6a87d1eeac38114cdd92c581aa57e945102dc840190e1732c402f4c1a5a6e3",
+      "bytes": 2703
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_activate/test_controller_failed_activate.xml",
+      "sha256": "4b5e53bbd08f161938043e7544e00d0c0cf70e6d152dff371796c215b4a22a20",
+      "bytes": 341
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.cpp",
+      "sha256": "64aa8f53d0b76bd3ad280a880941df65e81276e9fe0c8b587b72b10aebd0d39e",
+      "bytes": 1407
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.hpp",
+      "sha256": "0372514a8396346cd5bf56aabd91557f841c74292552a387f0411b3bd1812272",
+      "bytes": 2344
+    },
+    {
+      "path": "controller_manager/test/test_controller_failed_init/test_controller_failed_init.xml",
+      "sha256": "0bb3c028a6cf7569d7659d8298bb1769799e53ca05e6515e44502814a0b5118d",
+      "bytes": 325
+    },
+    {
+      "path": "controller_manager/test/test_controller_manager.cpp",
+      "sha256": "e076d03c0045064922c04293a53387c205fa1b02da8cd319639b02f8b1345894",
+      "bytes": 156848
+    },
+    {
+      "path": "controller_manager/test/test_controller_manager_hardware_error_handling.cpp",
+      "sha256": "419211a25fc2a7eb6e0397ba1e6fdc69082cb63941835f87ee446bbed500bd53",
+      "bytes": 49643
+    },
+    {
+      "path": "controller_manager/test/test_controller_manager_srvs.cpp",
+      "sha256": "849f06ed93db78fd7c5887df76f07da0fef2e8b7790d5803ad4d2d02c60d0641",
+      "bytes": 160037
+    },
+    {
+      "path": "controller_manager/test/test_controller_manager_urdf_passing.cpp",
+      "sha256": "9b8cfb18597422a4f8fc0effeae840d6ef38f30539026b65d68d36f8335dd635",
+      "bytes": 9020
+    },
+    {
+      "path": "controller_manager/test/test_controller_manager_with_namespace.cpp",
+      "sha256": "2998babe0a47ab076db3d645693130791e69ae458f64cf230d24ff9ce1e6b146",
+      "bytes": 5229
+    },
+    {
+      "path": "controller_manager/test/test_controller_overriding_parameters.yaml",
+      "sha256": "a29c1174b4edf30de357b7c57255d4b219d7cec88f800461e15e90487d2bef29",
+      "bytes": 133
+    },
+    {
+      "path": "controller_manager/test/test_controller_spawner_wildcard_entries.yaml",
+      "sha256": "f6f105cb2551a52e6561a655a77a7cb00cd9892573fb0cdc78a78f80d67718ed",
+      "bytes": 184
+    },
+    {
+      "path": "controller_manager/test/test_controller_spawner_wildcard_entries_global.yaml",
+      "sha256": "1d4c80039253041bafa053213e0d7fde84a2dd2bee5ebd5dfc38e1a758b10f80",
+      "bytes": 182
+    },
+    {
+      "path": "controller_manager/test/test_controller_spawner_with_fallback_controllers.yaml",
+      "sha256": "dbca24c1f2be929111e32e5a19dd585dd6cf907276c36c75d60dc0a200df0cc0",
+      "bytes": 261
+    },
+    {
+      "path": "controller_manager/test/test_controller_spawner_with_interfaces.yaml",
+      "sha256": "9b1a7db7553ccbaae238d232ce71f28d009801ebdcc96d5304d825e0dc0baacf",
+      "bytes": 665
+    },
+    {
+      "path": "controller_manager/test/test_controller_spawner_with_type.yaml",
+      "sha256": "fca47e50008058c457061c0ea1e96606b65da6b0ef90fb3aeb235bd8621d5e39",
+      "bytes": 1202
+    },
+    {
+      "path": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.cpp",
+      "sha256": "2a1394ad9915f34f4d18cc7c8b7361f779029c6112cb344f1861a0eb05487d71",
+      "bytes": 2393
+    },
+    {
+      "path": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.hpp",
+      "sha256": "be17b733327a478554a41648f6780577f0c50d8098c183e03c9ff1fb2c37897d",
+      "bytes": 2670
+    },
+    {
+      "path": "controller_manager/test/test_controller_with_interfaces/test_controller_with_interfaces.xml",
+      "sha256": "3ff7f1602c6bd8a5f611ea47556268bc91729aa447754d900fa331d0f788b978",
+      "bytes": 341
+    },
+    {
+      "path": "controller_manager/test/test_controllers_chaining_with_controller_manager.cpp",
+      "sha256": "ed4d9bca429cd904bb49b4841266e71bf3f9ff800f7b2425100b5b0dec75dac0",
+      "bytes": 105830
+    },
+    {
+      "path": "controller_manager/test/test_hardware_management_srvs.cpp",
+      "sha256": "086251074cefec24012d1a285d85f8f8c5c4145435c655bd2fb9b3ad652aed1b",
+      "bytes": 18381
+    },
+    {
+      "path": "controller_manager/test/test_hardware_spawner.cpp",
+      "sha256": "d04443f737ccd52ed1bbdd966924a4b88a06546bd6b2122f9a32554a2f931bf2",
+      "bytes": 9999
+    },
+    {
+      "path": "controller_manager/test/test_load_controller.cpp",
+      "sha256": "5218bd1f23300fb609d660fef2cabc5a1e883decc63b838310013d0c89c1ce31",
+      "bytes": 19575
+    },
+    {
+      "path": "controller_manager/test/test_release_interfaces.cpp",
+      "sha256": "17465e2118fab836c16d721f1c76abd745be3a06ad2fea005dd66b8ad9ad266e",
+      "bytes": 21698
+    },
+    {
+      "path": "controller_manager/test/test_ros2_control_node.yaml",
+      "sha256": "4d0a6db934ced6d3dc1523d30a65f92d98e1412cb9be3f2b83492b4a9c14948d",
+      "bytes": 192
+    },
+    {
+      "path": "controller_manager/test/test_ros2_control_node_launch.py",
+      "sha256": "b5523bc5009806a83d7b61809550fb10a365ce228d71c536a1393fdcc347c5eb",
+      "bytes": 4389
+    },
+    {
+      "path": "controller_manager/test/test_spawner_unspawner.cpp",
+      "sha256": "9b7273bfac7ab73425cb444d553ee6ece4167e8d506016d5261776d070bec357",
+      "bytes": 63412
+    },
+    {
+      "path": "controller_manager/test/test_test_utils.py",
+      "sha256": "e850779840f8fb65cb676f9aa2e1f82a7e1c97324a5226914a4183f20a61e15e",
+      "bytes": 2978
+    },
+    {
+      "path": "hardware_interface_testing/CHANGELOG.rst",
+      "sha256": "40b5c3da663d250e745f5b44ac328e992c3411c43ca1dd297552bb8813505210",
+      "bytes": 11209
+    },
+    {
+      "path": "hardware_interface_testing/CMakeLists.txt",
+      "sha256": "cdc15359c044813b7ad004a65e0d437bbf7d5b77ac87deaa917e93ca1902bef2",
+      "bytes": 2132
+    },
+    {
+      "path": "hardware_interface_testing/README.md",
+      "sha256": "919851bd3c029d08cb745650c2fa50409ac70795b33a9f8a32c5ec0aab491bbc",
+      "bytes": 162
+    },
+    {
+      "path": "hardware_interface_testing/package.xml",
+      "sha256": "776ba778a3bbc3feea1f02845d13bfb0bbdd69b45e20c9e34604f6e9aedc5f09",
+      "bytes": 1024
+    },
+    {
+      "path": "hardware_interface_testing/test/test_components/test_actuator.cpp",
+      "sha256": "c905c46c013381e6a2eb34c8fdb38183959a8dd074d903eddb31536417532fcd",
+      "bytes": 7640
+    },
+    {
+      "path": "hardware_interface_testing/test/test_components/test_actuator_exclusive_interfaces.cpp",
+      "sha256": "bedc86a20e6f92c895f37c10bfc5bec681661f9c8eea1ef23ecf4a14a49d19a7",
+      "bytes": 7573
+    },
+    {
+      "path": "hardware_interface_testing/test/test_components/test_components.xml",
+      "sha256": "f49e7bb084789a8dc3a64b6e62063aef7fc5c9d3eb7f8f8fceb15be21e2d51f7",
+      "bytes": 1667
+    },
+    {
+      "path": "hardware_interface_testing/test/test_components/test_sensor.cpp",
+      "sha256": "704895ca5e1a3c71bb2f994f2015a81173958be11e8c9fe1faf7302dd3942439",
+      "bytes": 2633
+    },
+    {
+      "path": "hardware_interface_testing/test/test_components/test_system.cpp",
+      "sha256": "4d067641565d8c1edad563a466047e6a76daeda3abcf399cd71fd9ce1999495e",
+      "bytes": 7664
+    },
+    {
+      "path": "hardware_interface_testing/test/test_resource_manager.cpp",
+      "sha256": "cc95c666070fa504734dd7ff33320ad4ba272f96c055fcace85de2a641b108a4",
+      "bytes": 121611
+    },
+    {
+      "path": "hardware_interface_testing/test/test_resource_manager.hpp",
+      "sha256": "b8c4fa8490bbb3fa3c345a5910ce613f61afac08dc751da3ad95a2d5e1b20a74",
+      "bytes": 3040
+    },
+    {
+      "path": "hardware_interface_testing/test/test_resource_manager_prepare_perform_switch.cpp",
+      "sha256": "f47d6ec95224d8a068578f2acfcea11908d6bd514414cf2e6b0737f86215b61f",
+      "bytes": 48911
+    },
+    {
+      "path": "mujoco_ros2_control/CHANGELOG.rst",
+      "sha256": "093211812570d23f412f9a30e16dc322c57d9e4448bbd0d8b5c7ac282c979d35",
+      "bytes": 11514
+    },
+    {
+      "path": "mujoco_ros2_control/CMakeLists.txt",
+      "sha256": "d21dee6010759cd13084802d7f2fa01c58747b63335abfa9c0f3fc8af09d3c2c",
+      "bytes": 13736
+    },
+    {
+      "path": "mujoco_ros2_control/README.md",
+      "sha256": "79cc9b504cecaebfacb66182ab18cc21983adcbfe83333af1c51dab60a5fc039",
+      "bytes": 3052
+    },
+    {
+      "path": "mujoco_ros2_control/docs/hardware_interface.rst",
+      "sha256": "a17144cbf93423ddc8961be52556a860252db7740df1b31dac8d2eba5aec69b6",
+      "bytes": 21572
+    },
+    {
+      "path": "mujoco_ros2_control/docs/images/habitat-convex-hull-bad.png",
+      "sha256": "96167c5a07eb36324fdc6aba22adebb2076c0e7fabf0214a1c88291ed72a5bb0",
+      "bytes": 298651
+    },
+    {
+      "path": "mujoco_ros2_control/docs/images/habitat-convex-hull.png",
+      "sha256": "294236b5315119dcf09f06028f9cb291c9c3a2b2b488a42f1a59878646dc910e",
+      "bytes": 365363
+    },
+    {
+      "path": "mujoco_ros2_control/docs/images/habitat.png",
+      "sha256": "cc3ba3b34497c2336375a665fe4b289662db5e3e268505e83366d3216e602786",
+      "bytes": 663921
+    },
+    {
+      "path": "mujoco_ros2_control/docs/modeling_tips.rst",
+      "sha256": "0758b2482f312bdefd185f41f2c6e540090f60880a17983941c8fa114496507d",
+      "bytes": 4936
+    },
+    {
+      "path": "mujoco_ros2_control/docs/tools.rst",
+      "sha256": "1a843816aa366d1011e0b76e67126045b46153b1834c754ac4b168e5c0adf29b",
+      "bytes": 17270
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/clock_advance_probe.hpp",
+      "sha256": "44fad651c503786563af71aa5617094ec12e92326b1c3d9402a09a56790d9668",
+      "bytes": 4373
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/clock_trace.hpp",
+      "sha256": "2c5793f74c18e6616fc571949375d4a53c807dbf9e85a3db1ee51434f97d48a3",
+      "bytes": 1359
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/control_cycle.hpp",
+      "sha256": "edbd3271596c40d514b3cf7803ccd577e57970ebc6bcbefab9ccc929096f4ad9",
+      "bytes": 1367
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/data.hpp",
+      "sha256": "8a67cfb16f318d80642addc4a09ec6b75e597a83b753f3e42ec926baad876db8",
+      "bytes": 8333
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/exit_phase.hpp",
+      "sha256": "9fb716012f0fcb11f9e190d04eaaab9a58bc77e5949d3d7de59db730c27f5188",
+      "bytes": 1701
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/macos_ui_dispatcher.hpp",
+      "sha256": "ccc8ab8bd6200c73c04cb1ea50417abd4d2623c295aad512200095354ebc6bfb",
+      "bytes": 1501
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/mujoco_simulation.hpp",
+      "sha256": "bf8914eae2f0d8a97d8ee400e1a4a227e3b24b9651385090825d5440ab0a3f21",
+      "bytes": 32568
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/mujoco_system_interface.hpp",
+      "sha256": "c6bd8f49e6ff87ae4f35979b77a4c9493d487ee71d89dd7d9b19dca6a27d6da9",
+      "bytes": 16108
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/sim_display_text.hpp",
+      "sha256": "c7f4ac162f3c2aeb51b5d0f8b6013352e0ce1eb69e8423eef0f16de4987168d6",
+      "bytes": 3011
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/simulation_observer_dispatcher.hpp",
+      "sha256": "88374e397234662c4f9a33e9096c0069567ca0024c09aef5395e27a3ce7475f8",
+      "bytes": 1880
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/utils.hpp",
+      "sha256": "7896099b520c86363b332d0d39ecd14fff5de3cd7bc22795337e5a56e21f765b",
+      "bytes": 1428
+    },
+    {
+      "path": "mujoco_ros2_control/include/mujoco_ros2_control/viewer_camera.hpp",
+      "sha256": "488364d11a6d591438bda116831e111b9fdb7934146117af2a8106120efae6ed",
+      "bytes": 1410
+    },
+    {
+      "path": "mujoco_ros2_control/mujoco_ros2_control/__init__.py",
+      "sha256": "991a4807c640b736d7257c2b8190beac89f6bfe6ec32a1dbea1fa38fe0c6e8b3",
+      "bytes": 2117
+    },
+    {
+      "path": "mujoco_ros2_control/mujoco_ros2_control/urdf_to_mujoco_utils.py",
+      "sha256": "5b51d046cc22793fb9ad3e2c97fc5c7895e51f4486b0566c38c4d9878004935d",
+      "bytes": 54949
+    },
+    {
+      "path": "mujoco_ros2_control/mujoco_system_interface_plugin.xml",
+      "sha256": "5551a0ef903ee1be54e988e5ce8966b6aeed17d3b151f3ee4b89c77717a7a296",
+      "bytes": 394
+    },
+    {
+      "path": "mujoco_ros2_control/package.xml",
+      "sha256": "a14aaaa35b8fd90723b9beee950110132e7629dcf044f1a96af83baaf91bc317",
+      "bytes": 2272
+    },
+    {
+      "path": "mujoco_ros2_control/resources/mujoco_logo.png",
+      "sha256": "8f880f914ee51d50c01ab5b87f301ddf55127f802c1dc65c4f379fde2c6ccf6c",
+      "bytes": 15124
+    },
+    {
+      "path": "mujoco_ros2_control/resources/scene.xml",
+      "sha256": "8487e629c0b68ea6975efbc7e92f4941d480ad3d0243883a45edff488cefc72f",
+      "bytes": 787
+    },
+    {
+      "path": "mujoco_ros2_control/scripts/find_missing_inertias.py",
+      "sha256": "f83e9de0950178f9b411991ca8ed514e870e800553592d2dfaf7390aa3f3d76f",
+      "bytes": 4664
+    },
+    {
+      "path": "mujoco_ros2_control/scripts/make_mjcf_from_robot_description.py",
+      "sha256": "5c440b7f5e8872f09d26759e2ca67958efa02a15688c17ec36c1a38e9cc38e6a",
+      "bytes": 22492
+    },
+    {
+      "path": "mujoco_ros2_control/scripts/requirements.txt",
+      "sha256": "207e94a80c020409f26451f3759aab6f0666b56fcdc882e4f8a43cf5d2cfcf68",
+      "bytes": 425
+    },
+    {
+      "path": "mujoco_ros2_control/scripts/robot_description_to_mjcf.sh",
+      "sha256": "5b91adce04169412229f40b4f26b98ff7e7c8ccac7249bcee7e1fb752e04f3f3",
+      "bytes": 4084
+    },
+    {
+      "path": "mujoco_ros2_control/src/clock_trace.cpp",
+      "sha256": "4ea1eca9ea336fc27248e01994bcb89609b0ec6eaf0d8525b68aaefa7d2a688a",
+      "bytes": 9651
+    },
+    {
+      "path": "mujoco_ros2_control/src/exit_phase.c",
+      "sha256": "7527e2696dd4f1aae26f1f86ca80a5dbc6294edfedf5f82bd75777c44e4fcaaf",
+      "bytes": 6004
+    },
+    {
+      "path": "mujoco_ros2_control/src/macos_ui_dispatcher.cpp",
+      "sha256": "6e21dd43ad3ae0d7bfc3724372c2a2dae66d573a72991dfea8748e5733c67717",
+      "bytes": 6804
+    },
+    {
+      "path": "mujoco_ros2_control/src/mujoco_ros2_control_node.cpp",
+      "sha256": "95b42665072b0f531b025318eef64d219608149a3844aed3cd30189c932e34f8",
+      "bytes": 17155
+    },
+    {
+      "path": "mujoco_ros2_control/src/mujoco_simulation.cpp",
+      "sha256": "7bfb997a09633ba6cfb39a91a0ea31c61e2d3f87bba4ff1c375fd995562192bd",
+      "bytes": 86465
+    },
+    {
+      "path": "mujoco_ros2_control/src/mujoco_system_interface.cpp",
+      "sha256": "1b55359af0bdf308dc9a101ab5cbe312b171a75839d55d58b0867a94888ca251",
+      "bytes": 111267
+    },
+    {
+      "path": "mujoco_ros2_control/src/simulation_observer_dispatcher.cpp",
+      "sha256": "73a4ebc62445d8ad428e445e92000ba4ba615dd56a2d0416fe6c5f14b049b23a",
+      "bytes": 2532
+    },
+    {
+      "path": "mujoco_ros2_control/src/viewer_camera.cpp",
+      "sha256": "85b60ca7dc259036676ec0d70e0a26705761ebd32ad04606d2a58aad556ed258",
+      "bytes": 4778
+    },
+    {
+      "path": "mujoco_ros2_control/tests/CMakeLists.txt",
+      "sha256": "5a28969ba2474127f14c38ddbf070942f89f31ed665fbbad39ac62d6b9199719",
+      "bytes": 2367
+    },
+    {
+      "path": "mujoco_ros2_control/tests/__pycache__/test_platform_render_context_contract.cpython-312-pytest-9.1.1.pyc",
+      "sha256": "b75e66aebb83da850642c3bc2ba769a77c4267e8c27cd70721a7c9eaa3328d72",
+      "bytes": 7033
+    },
+    {
+      "path": "mujoco_ros2_control/tests/__pycache__/test_primary_monitor_guard.cpython-312-pytest-9.1.1.pyc",
+      "sha256": "c7d5c07f64dfa58a109e982d62e9869fe1075058e9f7768a621b18decf0df6a4",
+      "bytes": 51144
+    },
+    {
+      "path": "mujoco_ros2_control/tests/__pycache__/test_simulate_reset_adapter_contract.cpython-312-pytest-9.1.1.pyc",
+      "sha256": "7530c40571df135b55a1e19fb85f9f93944d5fa64db769f333d9d7d8c825dd86",
+      "bytes": 4110
+    },
+    {
+      "path": "mujoco_ros2_control/tests/__pycache__/test_urdf_to_mujoco_utils.cpython-312-pytest-9.1.1.pyc",
+      "sha256": "2e3e675f2ee4524d5374c2f1152047e1388f6af0a52d1e1562edc8c138593c69",
+      "bytes": 171720
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_clock_advance_probe.cpp",
+      "sha256": "41b68ef32ea6a376b19b0bcd658e72d95f27ccd1874afa1e23b5188dcf4d3ddb",
+      "bytes": 10820
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_clock_trace.cpp",
+      "sha256": "759ee44d6f974277348c1d837a545aba33ab5296040c864e88cc76ca96fa201a",
+      "bytes": 5015
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_headless_init.cpp",
+      "sha256": "2ffcbed481c18edda62bdccf57df79cd2d04c0c3febc884df4c141dfcb5e394f",
+      "bytes": 9780
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_mujoco_simulation.cpp",
+      "sha256": "fb53affed68cbabca9bb7889d755676efcd52b6d5bdf56ab1e80eeb7def7fd47",
+      "bytes": 98285
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_mujoco_system_interface.cpp",
+      "sha256": "12e849b97209e5eb8b2b3623d61b320115fd40e88f46dbab33ca789ec6b29421",
+      "bytes": 19312
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_platform_render_context_contract.py",
+      "sha256": "e7e7fdd3a24755de84acb8813387ba5dd63098ff72552c10c5693329afdac40b",
+      "bytes": 1901
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_plugin.cpp",
+      "sha256": "af242032431d4388786ddb827b82b871dab3f08a210b7313fbebcc9e83115db5",
+      "bytes": 2129
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_primary_monitor_guard.py",
+      "sha256": "ceb678aa77dc3171103e76a4d688d4b698a7a7fd9aa766271ac232a56b1cae5a",
+      "bytes": 14917
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_simulate_reset_adapter_contract.py",
+      "sha256": "c9dd04544bef7c3b9089cf0fae1e4774fcbbc81c7bda0064403402dc0c3ad59f",
+      "bytes": 780
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_simulation_observer_dispatcher.cpp",
+      "sha256": "619660cd524ed359e61e2effe51ae2e43246d0767ecf6d72e63261a0cc88f9c0",
+      "bytes": 6551
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_urdf_to_mujoco_utils.py",
+      "sha256": "c42aab1096ceef6adbb6d8e760c216d05ad835cb79051b63cdd19a9c929af0bd",
+      "bytes": 86212
+    },
+    {
+      "path": "mujoco_ros2_control/tests/test_viewer_camera.cpp",
+      "sha256": "09415fbbe1110caf9a51c34a5ee8b3a09d2e3cc2bafd51c7959d0de7ee98d4b4",
+      "bytes": 7498
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/CHANGELOG.rst",
+      "sha256": "9fc7bc0aac18368539fd0ef8084f0f9b544ae664e324401bbf854824fb0d0229",
+      "bytes": 2861
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/CMakeLists.txt",
+      "sha256": "82fd94bfb16f8f527dac9978b68bd3faebffc73ceb1dffeb1445bd635ad6c4ea",
+      "bytes": 8599
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/README.md",
+      "sha256": "d52455766c3162d74539e74ed2d3d9783356313ea23930efa39ec226c44a0f6c",
+      "bytes": 1727
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/doc/plugins.rst",
+      "sha256": "b4895d9e784dfb4135a0da58ce94693f9bc5fcddd7d10c74b8600d550b7b830f",
+      "bytes": 24417
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugin_capabilities.hpp",
+      "sha256": "3014522a86580b31c58c47b7079a958ba2c28fb208b1c98a5d5d08d944a29ad8",
+      "bytes": 1502
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/include/mujoco_ros2_control_plugins/mujoco_ros2_control_plugins_base.hpp",
+      "sha256": "e4bb0f69a48fd9686a1cd50e7e064cae0bdfc011b09576b91d6945b8f5d8b5ee",
+      "bytes": 3321
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/mujoco_ros2_control_plugins.xml",
+      "sha256": "14a5712f8c88b5edaf4c8089a693453ccda26cdb51ff768163db87ae130b1f37",
+      "bytes": 4053
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/package.xml",
+      "sha256": "31c9ff8e62d001b0481bdfce15932f9517613684b198c16461567c1d950f94bf",
+      "bytes": 1603
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/base_velocity_plugin.cpp",
+      "sha256": "2f685846d761090b96af7ef09e8a9ef8b90a4e722b2e64404f73c643c5938e79",
+      "bytes": 6774
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/base_velocity_plugin.hpp",
+      "sha256": "78680b9d044a7ddf37ec7e06b11ec3b7042908718401d431532a4911115dcdf3",
+      "bytes": 5181
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/camera_plugin.cpp",
+      "sha256": "64e9e23c21b649918fa1c94def4c8bc6ebcd414dc8dc614bb61b0c1b39f6778b",
+      "bytes": 50227
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/camera_plugin.hpp",
+      "sha256": "4cf6ba9d9c670e9fc4949a0246bda60450aa9df1e99948b9d8418ee1a025caec",
+      "bytes": 12420
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/camera_truth.hpp",
+      "sha256": "0dd9a6bfe02fa9768bca01193036793dcab93dd7dd5762f6b0ffd9b6b2b937c5",
+      "bytes": 4815
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/camera_truth_reference.hpp",
+      "sha256": "d949f14c880324224c5d7b71a26db0e62d49ec52c00e5d7caafae845c167d921",
+      "bytes": 6486
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/external_wrench_plugin.cpp",
+      "sha256": "42f2fa6dfa72d6be8933d88a8906ee92101c299ca8fcb5509aacb0037410e122",
+      "bytes": 14514
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/external_wrench_plugin.hpp",
+      "sha256": "ae43e3cbdd4ef3c580c27f44dcd4bd99470fd3debf55829989cb8a492e4ff1b1",
+      "bytes": 7240
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/free_joint_state_publisher_plugin.cpp",
+      "sha256": "9ff2998a6d4fc623b15bb17f923b39aa6b809333a46f9e74f8d61cfe57254bb3",
+      "bytes": 7802
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/free_joint_state_publisher_plugin.hpp",
+      "sha256": "3336f750e2f143fe855024dee63d979121810d270cae67e1460da5e2a3bfe5f9",
+      "bytes": 4028
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.cpp",
+      "sha256": "c683245ae4642c7c6b2d799279194b4a12abe7e008aa28ea2fb85c30898b5c30",
+      "bytes": 2523
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/heartbeat_publisher_plugin.hpp",
+      "sha256": "a30bfffe6bf92428583140dcf40954a55cca69b4d013b7e8e14df1cffcf584e8",
+      "bytes": 1957
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/mujoco_3d_lidar_plugin.cpp",
+      "sha256": "7ac1552bba540c5978f0ca2a9e3600f5799e4f6041de46d9afd2816b6d4dc37d",
+      "bytes": 14695
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/mujoco_3d_lidar_plugin.hpp",
+      "sha256": "590543e043dd26e55fbefc672ead03f92fc80ce90f841bc3fe7f22cfbfdbe3a9",
+      "bytes": 4401
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/rangefinder_lidar_plugin.cpp",
+      "sha256": "ea73a8ee25403fc5e972eb6a7beae536f3baf0fa4102ff85ea416009bcf16a66",
+      "bytes": 11356
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/src/rangefinder_lidar_plugin.hpp",
+      "sha256": "0d304f4510fb4d21d8e74f31628167423b1b4f1ade1fcbef34ec8a4086a2735a",
+      "bytes": 4556
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_3d_lidar_plugin.cpp",
+      "sha256": "f310090d7d89efe3eda3916ec59c073edd2936ce3f6847212e5ef4e270eba97f",
+      "bytes": 8719
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_base_velocity_plugin.cpp",
+      "sha256": "d323967d2e8d616ff4c023903a024394416ee7a18060f900931f3591be6a432a",
+      "bytes": 11179
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_camera_plugin.cpp",
+      "sha256": "605673f36db6d38d228f1ee0608d3579b376e412a858e236d02e7fd42e6e38f0",
+      "bytes": 53604
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_camera_plugin_macos_lifecycle.cpp",
+      "sha256": "94a4885d8819b933ecb50d97ad48b3c4049010d45672019cd3cc9a4b465028b4",
+      "bytes": 21943
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_camera_truth.cpp",
+      "sha256": "c169396999b6b2fae0fc1053a9c4d14cae6134695a646bfb08745c9358631197",
+      "bytes": 2740
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_camera_truth_reference.cpp",
+      "sha256": "58fff724f99f50c850b5f86af14c7bd7104b7a6ec150d585281ea16061e1b50a",
+      "bytes": 4725
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_external_wrench_plugin.cpp",
+      "sha256": "29ab9743dc7d092edaa17488659a8d7ceee8472e84e1e00743f138aab598092e",
+      "bytes": 17609
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_free_joint_state_publisher_plugin.cpp",
+      "sha256": "332773516fcb4f1635effcf3b987549850f626c229d15b245363fa322e7f3043",
+      "bytes": 12916
+    },
+    {
+      "path": "mujoco_ros2_control_plugins/test/test_rangefinder_lidar_plugin.cpp",
+      "sha256": "48dc424dcfb49672a167ea21cbd4449ac9205f1815a60d1014224daf0e167f5a",
+      "bytes": 5180
+    },
+    {
+      "path": "mujoco_ros2_control_tests/CHANGELOG.rst",
+      "sha256": "dfe81955c49f0aaeeda4d9853648177ab45890463acf36f42a01cea3fc09cdf5",
+      "bytes": 4243
+    },
+    {
+      "path": "mujoco_ros2_control_tests/CMakeLists.txt",
+      "sha256": "69a0cc62df2e55e5a55c0568fbf88d1d6ae749a6c540c7539b205ec4c1124379",
+      "bytes": 2649
+    },
+    {
+      "path": "mujoco_ros2_control_tests/config/site_velocity_controllers.yaml",
+      "sha256": "32f159f068ec23b744af7049c82fae1573c8ebdcdd4e18ea2ea14858d8b898f4",
+      "bytes": 351
+    },
+    {
+      "path": "mujoco_ros2_control_tests/launch/site_velocity_test_launch.py",
+      "sha256": "87e655f89cb19e1f5e67e67bcf2a7590689bb688694282bb119bc0cfeadec5d8",
+      "bytes": 2881
+    },
+    {
+      "path": "mujoco_ros2_control_tests/launch/test_launch.py",
+      "sha256": "784574d226717e3bc6d77f87a87b7f8abac6ec7bc99b6f43e17b70b421ca3ed3",
+      "bytes": 2834
+    },
+    {
+      "path": "mujoco_ros2_control_tests/package.xml",
+      "sha256": "112da2c9eec51b4de22572d0e91b497435a01fe77e301aa31cffeacbe99e979e",
+      "bytes": 2288
+    },
+    {
+      "path": "mujoco_ros2_control_tests/src/test_plugin.cpp",
+      "sha256": "c0fa74489d91a5779469fa516bfc513a588b9889bd078c531050783e9f75c138",
+      "bytes": 590
+    },
+    {
+      "path": "mujoco_ros2_control_tests/src/test_plugin.xml",
+      "sha256": "cbbbcc2406d3ac5d4deb43f5a6522255e39f8c9ceb8d400ce0d0053fdde0596c",
+      "bytes": 365
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/__pycache__/robot_launch_test.cpython-312.pyc",
+      "sha256": "c2da3cf128a7bafec77055bcb32915964a8c868acde15a14b7b2e41860aaa4c3",
+      "bytes": 43229
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_mjcf_generation_from_robot_description_test.py",
+      "sha256": "9c08b03c082c701470fb9422a587f628bfc79a9c9f0eda64b857d7c12adfc133",
+      "bytes": 1101
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_mjcf_generation_test.py",
+      "sha256": "265b478bb64ba8dfdeefba7f87b2ae35dc8cb8e4a488d839ce38dcf2175f8b9f",
+      "bytes": 1147
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_pid_test.py",
+      "sha256": "ffa2f1929da7c921f2d230acd84f741727240de401a3f95334b60718df488a21",
+      "bytes": 4602
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_test.py",
+      "sha256": "0f8bc703cb3cd9bd99f4f461986bc0c8ef02f686167cf3ddbc0395a8b491abfc",
+      "bytes": 33071
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_transmission_pid_test.py",
+      "sha256": "c67ba57ff265283029319b398f537ff5ac4f415be947d0f74bae06c06d0a7d33",
+      "bytes": 1129
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/robot_launch_transmission_test.py",
+      "sha256": "6cecacabf53635629b9733254da4b01c91d01204d35d6e2bfc17b9fa8d76678a",
+      "bytes": 1175
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test/site_velocity_launch_test.py",
+      "sha256": "eb78c7729014615aad07dd07718e384a409c5acb09f6eeee09609ca8d449b4fb",
+      "bytes": 6924
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test_resources/robot/site_velocity_robot.urdf",
+      "sha256": "8eef6d8fa24a27673893cf95457007a9b61e123a5e378501ad13db306227fa66",
+      "bytes": 1552
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test_resources/robot/site_velocity_robot.xml",
+      "sha256": "3514986eeae3ed6a6903e9db7e61594fd3dfacc6aecbe0d0766914e73478585b",
+      "bytes": 600
+    },
+    {
+      "path": "mujoco_ros2_control_tests/test_resources/scenes/site_velocity_scene.xml",
+      "sha256": "2017d49d987781172b05cb4f034c229bcf560a3b08ba71670b5cdcd648cf43e6",
+      "bytes": 331
+    }
+  ],
+  "root": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/overlay-source",
+  "source_head": "de70d83ed1e599c5dbb26843e06bd1af574f0a93",
+  "scope": "task copied complete overlay, coherent source002"
+}

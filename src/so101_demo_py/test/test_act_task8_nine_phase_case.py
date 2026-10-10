@@ -171,6 +171,8 @@ class _Route(VisibleApproachExpertRoute):
 
     def __init__(self, prefix):
         self._prefix = prefix
+        # The widened fixture spans 50 bridge steps, 26 lead steps and 599 target steps.
+        self.manifest = {**type(self).manifest, "expected_samples": 676}
 
     def prepare(self, observed, *, selected_source, owner_ticket, active_policy_fingerprint,
                     require_fresh: bool = True):
@@ -338,7 +340,7 @@ def _full_case_port(tmp_path):
     # P1-4 piece 4: ONE construction site for the plan. The executor (which reports the path's time axis), the route
     # (which executes it) and the readback (which refreshes it) must all hold the SAME object - building it twice left
     # the executor on a copy that the refresh never reached, which is how a shared quantity turns into two.
-    wide_prefix = _wide_prefix(prefix)
+    wide_prefix = {**_wide_prefix(prefix), "session_id": SESSION, "attempt_id": ATTEMPT}
     _reset_case_clock()          # this case gets its own sequence, not the previous test's
     # and the boundary's own prefix IS that object: a consumer building anything from `boundary.prefix` otherwise
     # gets a FRESH copy (the runner test's injected route did), whose window the refresh can never reach - the same
@@ -409,7 +411,8 @@ def _full_case_port(tmp_path):
                 "world": dataclasses.replace(raw["world"], simulation_time_s=moment),
                 "scene": {**raw["scene"], "simulation_time_s": moment},
                 "contact": {**raw["contact"], "simulation_time_s": moment},
-                "observation": {**raw["observation"], "sim_time_s": moment},
+                "observation": {**raw["observation"], "sim_time_s": moment,
+                            "session_id": SESSION, "attempt_id": ATTEMPT},
                 "reference": {**raw["reference"], "requested_sim_time_s": moment},
                 "source_stamps_s": stamps, "source_received_wall_s": dict(stamps)}
 
@@ -597,7 +600,8 @@ def _case_capture(sources, prefix, boundary):
                       "simulation_session_id": SESSION, "reset_epoch": 2},
             "contact": {**raw["contact"], "physics_step": step, "simulation_time_s": moment,
                         "simulation_session_id": SESSION, "reset_epoch": 2},
-            "observation": {**raw["observation"], "sim_time_s": moment},
+            "observation": {**raw["observation"], "sim_time_s": moment,
+                            "session_id": SESSION, "attempt_id": ATTEMPT},
             "reference": {**raw["reference"], "requested_sim_time_s": moment}}
 
 

@@ -13,6 +13,7 @@
 
 #include "so101_mujoco_support/controller_ingress_witness.hpp"
 #include "so101_mujoco_support/controller_reservation_protocol.hpp"
+#include "so101_mujoco_support/controller_stop_evaluation.hpp"
 
 namespace so101_mujoco_support
 {
@@ -21,7 +22,8 @@ class ControllerReservationSocket final
 {
 public:
   enum class Authority {PRIMARY, REVOKER, PRIMARY_FAULT};
-  using StopProof = std::function<bool()>;
+  using StopProof = std::function<ControllerStopEvaluation()>;
+  using StopRefusalDiagnostic = std::function<void()>;
   using IngressSnapshot =
     std::function<std::optional<ControllerIngressWitness::Snapshot>()>;
 
@@ -37,7 +39,8 @@ public:
     ControllerReservationCapability capability, ExpectedPeer expected_peer,
     std::chrono::milliseconds deadline, StopProof stop_proof = {},
     ControllerReservationRole role = ControllerReservationRole::ARM,
-    IngressSnapshot ingress_snapshot = {}, Authority authority = Authority::PRIMARY);
+    IngressSnapshot ingress_snapshot = {}, Authority authority = Authority::PRIMARY,
+    StopRefusalDiagnostic stop_refusal_diagnostic = {});
   ~ControllerReservationSocket();
 
   // Explicit Head simulation overload. Legacy millisecond callers retain their
@@ -47,7 +50,8 @@ public:
     ControllerReservationCapability capability, ExpectedPeer expected_peer,
     std::chrono::nanoseconds deadline, StopProof stop_proof,
     ControllerReservationRole role, IngressSnapshot ingress_snapshot,
-    Authority authority, bool precise_deadline);
+    Authority authority, bool precise_deadline,
+    StopRefusalDiagnostic stop_refusal_diagnostic = {});
 
   ControllerReservationSocket(const ControllerReservationSocket &) = delete;
   ControllerReservationSocket & operator=(const ControllerReservationSocket &) = delete;
@@ -59,6 +63,8 @@ public:
 private:
   bool peer_matches(int connection) const;
   void close_gate();
+  void diagnose_stop_refusal() noexcept;
+  DiagnosticArmReply arm_once(uint64_t generation);
 
   std::filesystem::path path_;
   std::shared_ptr<ControllerGoalAdmission> gate_;
@@ -67,6 +73,7 @@ private:
   std::chrono::nanoseconds deadline_;
   bool precise_deadline_{false};
   StopProof stop_proof_;
+  StopRefusalDiagnostic stop_refusal_diagnostic_;
   ControllerReservationRole role_;
   IngressSnapshot ingress_snapshot_;
   Authority authority_;
@@ -88,7 +95,8 @@ public:
     ControllerReservationSocket::StopProof stop_proof = {},
     ControllerReservationRole role = ControllerReservationRole::ARM,
     ControllerReservationSocket::IngressSnapshot ingress_snapshot = {},
-    Authority authority = Authority::PRIMARY);
+    Authority authority = Authority::PRIMARY,
+    ControllerReservationSocket::StopRefusalDiagnostic stop_refusal_diagnostic = {});
   ~ControllerReservationService();
 
   ControllerReservationService(
@@ -99,7 +107,8 @@ public:
     ControllerReservationSocket::StopProof stop_proof,
     ControllerReservationRole role,
     ControllerReservationSocket::IngressSnapshot ingress_snapshot,
-    Authority authority, bool precise_deadline);
+    Authority authority, bool precise_deadline,
+    ControllerReservationSocket::StopRefusalDiagnostic stop_refusal_diagnostic = {});
 
   ControllerReservationService(const ControllerReservationService &) = delete;
   ControllerReservationService & operator=(const ControllerReservationService &) = delete;

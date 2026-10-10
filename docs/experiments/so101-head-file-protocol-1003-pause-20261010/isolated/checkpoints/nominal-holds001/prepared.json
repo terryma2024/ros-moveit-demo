@@ -1,0 +1,28 @@
+{
+  "schema": "NOMINAL_PREPARATION_001",
+  "rows": [
+    {
+      "index": 1,
+      "session": "hfp1010-nominal-001",
+      "generation": 109960001,
+      "status": "NOT_RUN"
+    },
+    {
+      "index": 2,
+      "session": "hfp1010-nominal-002",
+      "generation": 109960002,
+      "status": "NOT_RUN"
+    },
+    {
+      "index": 3,
+      "session": "hfp1010-nominal-003",
+      "generation": 109960003,
+      "status": "NOT_RUN"
+    }
+  ],
+  "runtime_started": false,
+  "plan": {
+    "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal-hold-plan001.json",
+    "sha256": "91b91213c6b1218b74d02566c85d1e7823fe0aed6c271eba10bef24a905a67b5"
+  }
+}

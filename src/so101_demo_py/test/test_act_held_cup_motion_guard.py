@@ -85,10 +85,23 @@ def test_held_motion_config_replays_source_and_keeps_phase_pairs(tmp_path, monke
 
 def test_guard_arms_lossless_holding_before_first_lift_goal(tmp_path, monkeypatch):
     from so101_demo.act import held_cup_micro_lift_diagnostic as source
+    from so101_demo.adapters.act import physics
     value = manifest(tmp_path)
     monkeypatch.setattr(source, "require_held_cup_diagnostic_sources",
                         lambda item: require_held_cup_diagnostic_sources(
                             item, pairs_factory=Pairs))
+
+    def local_path_peer(*, check_timeout_s, start_timeout_s, **configuration):
+        # This ordering regression supplies path verdicts below. Preserve the
+        # real local model and margins without starting an unused IPC worker;
+        # worker startup/handshake has separate process integration tests.
+        assert check_timeout_s == value['submit_lead_s']
+        assert start_timeout_s == 2.
+        checker = physics.MujocoPathChecker(**configuration)
+        checker.close = lambda: None
+        return checker
+
+    monkeypatch.setattr(physics, 'MujocoPathProcess', local_path_peer)
 
     class Node:
         def create_subscription(self, *args):

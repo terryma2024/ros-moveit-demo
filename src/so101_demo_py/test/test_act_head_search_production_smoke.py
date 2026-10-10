@@ -794,63 +794,46 @@ def test_the_producer_refuses_a_seal_that_declares_no_coarse_step(tmp_path) -> N
     assert module.SMOKE_COVERAGE_UNPROVEN in str(refusal.value)
 
 
-def test_the_flight_forwards_the_producer_call_to_the_restart_module(tmp_path, monkeypatch) -> None:
-    """The one seam the synthetic flights never exercise: the call ``run_smoke_flight`` really makes.
-
-    The real run found this the hard way - the producer hands ``declared`` and the run root down, while
-    ``run_anchor_restart`` declares ``anchor``, ``anchor_root`` and ``anchors`` itself - so the forwarding
-    is pinned here, without a stack, by recording the call the restart module would have received.
-    """
-
+def test_legacy_flight_refuses_before_calling_restart(tmp_path, monkeypatch) -> None:
     from so101_demo.act import head_search_production_smoke as module
     from so101_demo.act import head_search_restarts as restarts
 
-    seen: dict = {}
+    def forbidden_restart(**kwargs):
+        pytest.fail('legacy smoke attempted to enter restart execution')
 
-    def fake(**kwargs):
-        # the real signature is bound here, so a missing or extra keyword fails at this seam and not
-        # only in a live run
-        inspect.signature(restarts.run_anchor_restart).bind(**kwargs)
-        seen.update(kwargs)
-        return {"anchor": kwargs["anchor"]}
+    monkeypatch.setattr(restarts, 'run_anchor_restart', forbidden_restart)
+    with pytest.raises(module.SmokeRefused, match='HEAD_LEGACY_EXECUTION_REMOVED'):
+        module.run_smoke_flight(anchor='default', root=tmp_path / 'unclaimed',
+                               declared={'anchor': 'default'})
+    assert not (tmp_path / 'unclaimed').exists()
 
-    monkeypatch.setattr(restarts, "run_anchor_restart", fake)
-    declared = {"anchor": "default", "neck_start_rad": 0.1, "cup_point_m": [0.02, -0.28, 0.165]}
-    result = module.run_smoke_flight(
-        anchor="default",
-        root=tmp_path,
-        anchor_root=tmp_path / "default",
-        declared=declared,
-        runtime=RUNTIME,
-        ownership={"status": "EXCLUSIVE_OWNERSHIP_OK"},
-        run_root=tmp_path,
-        producer={"entry": "so101_head_search_smoke"},
-        values=VALUES,
-        seal=_seal(),
-        stdout=None,
-        stderr=None,
-        approved_bundle_sha256="e" * 64,
-        urdf_path=tmp_path / "so101.urdf",
-        scene_path=tmp_path / "scene.xml",
-        plugin_config_path=tmp_path / "plugins.yaml",
-        controller_config_path=tmp_path / "controllers.yaml",
-        production_config_path=tmp_path / "head_search_v2.json",
-        weights_path=tmp_path / "best.pt",
-        frozen_candidate_path=tmp_path / "frozen-c.json",
-        reservation_root=tmp_path / "ipc",
-        production={"values": VALUES},
-        device="cuda",
-        excluded_pids=(1, 2),
-    )
 
-    assert result == {"anchor": "default"}
-    assert seen["anchor"] == "default"
-    assert seen["anchor_root"] == tmp_path / "default"
-    assert seen["declared"] == declared
-    assert seen["anchors"] == [declared]
-    assert seen["run_root"] == tmp_path
-    assert seen["approved_bundle_sha256"] == "e" * 64
-    assert seen["device"] == "cuda"
-    assert seen["excluded_pids"] == (1, 2)
-    assert seen["reservation_root"] == tmp_path / "ipc"
-    assert "root" not in seen
+@pytest.mark.parametrize('business_return_code', [0, 1])
+def test_development_smoke_uses_the_formal_provider_and_one_composition(
+        tmp_path, monkeypatch, business_return_code):
+    from test_head_execution_run_cli import build_inputs, fake_provider
+    from so101_demo.cli import head_execution_run
+    from so101_demo.act.head_search_production_smoke import run_smoke_flight
+    inputs, _ = build_inputs(tmp_path)
+    calls = []
+    provider = fake_provider(monkeypatch, calls, outcome=business_return_code)
+    monkeypatch.setattr(head_execution_run, 'resolve_provider', lambda supplied=None: provider)
+    result = run_smoke_flight(execution_inputs=inputs.document_path)
+    assert result['operation'] == 'HEAD_FILE_STAGE1_DEVELOPMENT'
+    assert result['qualification_status'] == 'NOT_QUALIFIED'
+    assert result['business_return_code'] == business_return_code
+    assert [name for name, _ in calls] == ['provide']
+    assert result['run_root'] == str(inputs.run_root)
+    completion = json.loads((inputs.run_root/'completion.json').read_text())
+    assert completion['execution'] == ('SUCCEEDED' if business_return_code == 0 else 'FAILED')
+    assert (inputs.run_root/'seal.json').is_file()
+
+
+def test_development_smoke_refuses_mixed_qualification_arguments_before_provider(tmp_path, monkeypatch):
+    from so101_demo.cli import head_execution_run
+    from so101_demo.act.head_search_production_smoke import run_smoke_flight, SmokeRefused
+    calls = []
+    monkeypatch.setattr(head_execution_run, 'resolve_provider', lambda supplied=None: calls.append('resolve'))
+    with pytest.raises(SmokeRefused, match='SMOKE_EXECUTION_INPUTS_MIXED'):
+        run_smoke_flight(execution_inputs=tmp_path/'inputs.json', anchor='default')
+    assert calls == []

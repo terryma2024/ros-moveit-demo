@@ -47,6 +47,63 @@ public:
 
   enum class Result {ALLOW, DENY_CLOSED, DENY_FAULT};
 
+  enum class GateReason : uint16_t {
+    NONE = 0, CLOCK_INVALID = 1, ZERO_GENERATION = 2, NONINCREASING_GENERATION = 3,
+    CLOCK_FAULT = 4, REVOCATION_LATCHED = 5, SERVICE_IDENTITY_UNAVAILABLE = 6
+  };
+  enum class ScopedCloseStatus : uint8_t {
+    ARMED_CLOSED = 0, NOT_ARMED_CLOSED = 1, REJECT_GENERATION = 2, REJECT_IDENTITY = 3
+  };
+  struct PrearmScope {
+    uint64_t stored_generation{0};
+    std::optional<ServiceControllerIdentity> identity;
+    GateReason reason{GateReason::SERVICE_IDENTITY_UNAVAILABLE};
+    bool eligible() const {return reason == GateReason::NONE;}
+  };
+  struct ScopedCloseResult {
+    ScopedCloseStatus status{ScopedCloseStatus::REJECT_IDENTITY};
+    uint64_t stored_generation{0};
+    std::optional<ServiceControllerIdentity> identity;
+  };
+  struct ArmResult {
+    bool allowed{false};
+    GateReason reason{GateReason::SERVICE_IDENTITY_UNAVAILABLE};
+  };
+
+  PrearmScope prearm_scope(uint64_t desired_generation) const
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    GateReason reason = GateReason::NONE;
+    if (desired_generation == 0) {reason = GateReason::ZERO_GENERATION;}
+    else if (desired_generation <= generation_) {reason = GateReason::NONINCREASING_GENERATION;}
+    else if (clock_bad_) {reason = GateReason::CLOCK_FAULT;}
+    else if (revocation_latch_->load()) {reason = GateReason::REVOCATION_LATCHED;}
+    else if (!service_identity_) {reason = GateReason::SERVICE_IDENTITY_UNAVAILABLE;}
+    return {generation_, service_identity_, reason};
+  }
+
+  ScopedCloseResult close_scoped(
+    uint64_t desired_generation, ControllerReservationRole expected_role,
+    const std::string & expected_incarnation, const std::string & expected_boot)
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ScopedCloseResult result{ScopedCloseStatus::REJECT_IDENTITY, generation_, service_identity_};
+    if (!service_identity_ || expected_role != service_identity_->role ||
+      expected_incarnation != service_identity_->incarnation || expected_boot != service_identity_->boot)
+    {
+      return result;
+    }
+    if (desired_generation == 0 || (generation_ != 0 && generation_ != desired_generation)) {
+      result.status = ScopedCloseStatus::REJECT_GENERATION;
+      return result;
+    }
+    result.status = generation_ == 0 ? ScopedCloseStatus::NOT_ARMED_CLOSED :
+      ScopedCloseStatus::ARMED_CLOSED;
+    revocation_latch_->store(true);
+    fault_close();
+    return result;
+  }
+
   explicit ControllerGoalAdmission(
     Clock clock = steady_now_ns, int64_t validity_ns = 250000000,
     size_t max_goal_bytes = 1048576, size_t max_goals_per_generation = 2048,
@@ -247,15 +304,17 @@ public:
     return true;
   }
 
-  bool arm(uint64_t generation)
+  bool arm(uint64_t generation) {return arm_detailed(generation).allowed;}
+
+  ArmResult arm_detailed(uint64_t generation)
   {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto now = read_clock();
-    if (!now || generation == 0 || generation <= generation_ || clock_bad_ ||
-      revocation_latch_->load())
-    {
-      return false;
-    }
+    if (!now) {return {false, GateReason::CLOCK_INVALID};}
+    if (generation == 0) {return {false, GateReason::ZERO_GENERATION};}
+    if (generation <= generation_) {return {false, GateReason::NONINCREASING_GENERATION};}
+    if (clock_bad_) {return {false, GateReason::CLOCK_FAULT};}
+    if (revocation_latch_->load()) {return {false, GateReason::REVOCATION_LATCHED};}
     generation_ = generation;
     reservation_.reset();
     used_uuids_.clear();
@@ -271,7 +330,7 @@ public:
     // new generation; clock_bad_ stays unrecoverable
     closed_ = false;
     mode_ = Mode::EXCLUSIVE;
-    return true;
+    return {true, GateReason::NONE};
   }
 
   void close()

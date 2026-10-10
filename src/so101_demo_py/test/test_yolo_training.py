@@ -582,6 +582,8 @@ def test_prepared_runtime_config_carries_only_trainer_arguments(tmp_path: Path) 
 def test_prepared_runtime_config_is_accepted_by_the_installed_ultralytics(tmp_path: Path) -> None:
     """The reviewers' finding: a project-metadata key makes Ultralytics refuse the whole run."""
 
+    from so101_demo.adapters.perception.yolo_training import prepare_candidate_run
+
     ultralytics_cfg = pytest.importorskip("ultralytics.cfg")
     head_manifest = _sealed_manifest(tmp_path, camera="head_camera", train=32, val=8)
     task_manifest = _sealed_manifest(tmp_path, camera="task_camera", train=32, val=8)

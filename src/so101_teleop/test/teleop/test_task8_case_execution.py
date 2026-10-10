@@ -130,9 +130,11 @@ def test_case_result_is_written_only_after_own_stack_and_child_retire(tmp_path):
 
 
 def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
+    from test_task8_live_evidence_production_chain import _sealed_chain, _identity
+    recorder, window = _sealed_chain(tmp_path)
+    artifact = recorder.seal(_identity())
     full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
-            "live_evidence_artifact": {"path": str(tmp_path / "live.json"), "sha256": "a" * 64,
-                                       "schema_version": 1},
+            "live_evidence_artifact": artifact,
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
     row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))

@@ -48,9 +48,7 @@ class _Service:
         self.thread.start()
 
     def _serve(self):
-        for _ in range(6):
-            if self._stop.is_set():
-                return
+        while not self._stop.is_set():
             try:
                 connection, _ = self.socket.accept()
             except (socket.timeout, TimeoutError):
@@ -351,6 +349,19 @@ def test_a_successful_confirm_consumes_the_session():
             session.confirm()
         with pytest.raises(RuntimeError, match="SESSION_CONSUMED"):
             session.arm(ticket)
+    finally:
+        for service in services.values():
+            service.close()
+
+
+def test_identity_peer_remains_available_across_idle_accept_timeouts():
+    services = _services(('arm', 'gripper'))
+    try:
+        # Six 50 ms idle polls must not retire a still-owned authority peer.
+        threading.Event().wait(.4)
+        client, session, _ = _session(services)
+        assert session.arm((4, 'session', 'broker', 'permit', 1)) == 4
+        assert set(session.confirm()) == {'arm', 'gripper'}
     finally:
         for service in services.values():
             service.close()

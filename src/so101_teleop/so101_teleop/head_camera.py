@@ -100,6 +100,9 @@ class HeadCameraBackend:
     def qualified(self) -> bool:
         """True only when the descriptor carries the closed head-only report the plan requires."""
 
+        if (self.descriptor.get('execution_scope') == 'MUJOCO_DEVELOPMENT_UNQUALIFIED'
+                or self.descriptor.get('operation') == 'HEAD_FILE_STAGE1_DEVELOPMENT'):
+            return False
         report = self.descriptor.get("qualification_report")
         return bool(isinstance(report, Mapping) and report.get("status") == "HEAD_SEARCH_QUALIFIED")
 
@@ -207,7 +210,53 @@ def load_descriptor(environment: Mapping[str, str] | None = None) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def compose_head_camera(environment: Mapping[str, str] | None = None, *, detector_factory=None):
+@dataclass
+class HeadExecutionCameraBackend:
+    """Development controls over the formal run's existing same-process owner."""
+
+    execution_owner: object
+
+    @property
+    def descriptor(self):
+        return self.execution_owner.descriptor()
+
+    def qualified(self):
+        return False
+
+    def safe_interval_rad(self):
+        return list(self.descriptor['safe_interval_rad'])
+
+    def status(self):
+        descriptor = self.descriptor
+        receipt = self.execution_owner.stop_status()
+        return dict(available=True, operation=descriptor['operation'],
+                    runtime_id=descriptor['run']['run_id'],
+                    model_id=self.execution_owner.search.controller.config.get('runtime_id'),
+                    state=receipt['state'], detector_constructed=0,
+                    safe_interval_rad=descriptor['safe_interval_rad'], qualified=False,
+                    authority=self.execution_owner.runtime.ready)
+
+    def submit_target(self, *, target_rad, safe_interval_rad):
+        if list(safe_interval_rad) != self.safe_interval_rad():
+            raise ValueError('HEAD_TARGET_INTERVAL_SEALED')
+        return self.execution_owner.submit_target(target_rad)
+
+    def stop(self, *, raw_sample=None):
+        # A request payload cannot contribute samples to the owner's Stop proof.
+        return self.execution_owner.stop()
+
+    def stop_state(self):
+        return self.execution_owner.stop_status()['state']
+
+    def publish_once(self, **kwargs):
+        raise HeadCameraUnavailable('HEAD_CAMERA_OWNER_STREAM_NOT_BOUND')
+
+    def capture(self, **kwargs):
+        raise ValueError('HEAD_CAPTURE_OWNER_FRAME_NOT_BOUND')
+
+
+def compose_head_camera(environment: Mapping[str, str] | None = None, *, detector_factory=None,
+                        execution_owner=None):
     """Compose the backend, refusing any drift between the environment and the descriptor.
 
     The detector is never constructed here: the factory, when one is supplied, is recorded and called only
@@ -216,6 +265,14 @@ def compose_head_camera(environment: Mapping[str, str] | None = None, *, detecto
 
     env = dict(os.environ if environment is None else environment)
     descriptor = load_descriptor(env)
+    if descriptor.get('kind') == 'head_execution_owner':
+        from so101_demo.adapters.act.head_execution_owner_bridge import HeadExecutionOwnerBridge
+        if type(execution_owner) is not HeadExecutionOwnerBridge:
+            raise CompositionBlocked('HEAD_CAMERA_OWNER_REQUIRED')
+        if descriptor != execution_owner.descriptor():
+            raise CompositionBlocked('HEAD_CAMERA_CONNECTION_MISMATCH: owner descriptor drift')
+        verify_owner(descriptor['owner'], expected_owner=env.get(OWNER_PID_ENV))
+        return HeadExecutionCameraBackend(execution_owner)
     socket_dir = env.get(SOCKET_DIR_ENV)
     runtime_id = env.get(RUNTIME_ID_ENV)
     if not socket_dir or Path(socket_dir).resolve() != Path(str(descriptor["bridge_socket_root"])).resolve():
@@ -272,6 +329,9 @@ def head_camera_router(services) -> object:
                         "bundle_sha256": envelope.bundle_sha256,
                     }
                 )
+        except HeadCameraUnavailable as error:
+            await websocket.send_json({'code': str(error), 'status': 503})
+            await websocket.close(code=1013)
         except WebSocketDisconnect:
             return
 
@@ -290,6 +350,8 @@ def head_camera_router(services) -> object:
                     status_code=409, detail={"code": "HEAD_TARGET_OUT_OF_RANGE"}
                 ) from error
             raise
+        except PermissionError as error:
+            raise HTTPException(status_code=409, detail={'code': str(error)}) from error
 
     @router.post("/teleop/head-camera/stop")
     def stop(payload: dict | None = None) -> dict:

@@ -1,0 +1,25 @@
+{
+  "argv": [
+    "/usr/bin/colcon",
+    "--log-base",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/log/package-tests003",
+    "test",
+    "--base-paths",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/overlay-source",
+    "--build-base",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/build",
+    "--install-base",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install",
+    "--packages-select",
+    "hardware_interface_testing",
+    "controller_manager",
+    "mujoco_ros2_control_plugins",
+    "mujoco_ros2_control",
+    "--return-code-on-test-failure",
+    "--executor",
+    "sequential"
+  ],
+  "rc": 0,
+  "elapsed_s": 398.3025589790195,
+  "scratch": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/scratch/package-tests003/tmp"
+}

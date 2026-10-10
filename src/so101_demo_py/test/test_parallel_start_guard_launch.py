@@ -57,7 +57,20 @@ def _v3_config(tmp_path: Path, workers: int) -> Path:
 
 
 def _isolated_allocator_argv(tmp_path: Path) -> list[str]:
-    """Call the installed allocator composition with test-owned domain claims."""
+    """Call the installed composition with owned process inventory and claims."""
+
+    if sys.platform == 'linux':
+        proc_root = tmp_path / 'proc'
+        proc_root.mkdir(exist_ok=True)
+        (proc_root / 'meminfo').write_bytes(Path('/proc/meminfo').read_bytes())
+        script = (
+            "import sys; from pathlib import Path; from functools import partial; "
+            "from so101_demo.parallel_batch import resources; "
+            "probe=resources.SystemResourceProbe(proc_root=Path(sys.argv[2])); "
+            "resources.WorkerResourceAllocator=partial(resources.WorkerResourceAllocator, probe=probe); "
+            "raise SystemExit(resources.main(sys.argv[3:], claim_root=Path(sys.argv[1])))"
+        )
+        return [sys.executable, '-c', script, str(tmp_path / 'domain-claims'), str(proc_root)]
 
     script = (
         "import sys; from pathlib import Path; "
@@ -264,3 +277,21 @@ def test_installed_text_agent_launch_resource_is_discoverable(tmp_path) -> None:
     assert "instruction" in completed.stdout
     assert (prefix / "share/so101_demo_py/launch"
             / "so101_mujoco_text_pick_agent.launch.py").exists()
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='requires procfs fixture semantics')
+def test_isolated_allocator_still_refuses_a_test_owned_domain_claim(tmp_path):
+    from test_parallel_resource_probe_races import _proc_process
+
+    proc_root = tmp_path/'proc'
+    proc_root.mkdir()
+    process = _proc_process(proc_root, 4249)
+    (process/'environ').write_bytes(b'ROS_DOMAIN_ID=181\0')
+    config = _v3_config(tmp_path, 1)
+    completed = subprocess.run(
+        [*_isolated_allocator_argv(tmp_path), '--config', str(config),
+         '--worker-count', '1', '--evidence-root', str(tmp_path/'claimed'), '--dry-run'],
+        capture_output=True, text=True, timeout=180,
+        env=_entry_environment(_installed_prefix(), tmp_path/'task-root'))
+    assert completed.returncode == 2, completed.stdout + completed.stderr
+    assert 'ROS_DOMAIN' in completed.stderr

@@ -1,0 +1,274 @@
+{
+  "schema": "NOMINAL_WORKER_001",
+  "status": "FAIL",
+  "rc": 1,
+  "elapsed_s": 126.56085827108473,
+  "report": {
+    "qualified": false,
+    "problem": {
+      "type": "TimingPeriod",
+      "message": "HEAD_TIMING_PERIOD"
+    },
+    "receipts": {
+      "startup_ns": 131146228,
+      "native_child": {
+        "owner": {
+          "uid": 1000,
+          "pid": 2082114,
+          "start_ticks": 100311967
+        },
+        "executable": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node"
+      },
+      "hold_started_ns": 1003121004293525,
+      "hold_ended_ns": 1003241004358548,
+      "retirement_started_ns": 1003241004367696,
+      "runtime": {
+        "retired": true,
+        "unquiesced": [],
+        "stop_requested": true,
+        "confirmed_stop": true,
+        "native_close": {
+          "requested_wall_s": 1003241.01198581,
+          "finished": true,
+          "ack": true,
+          "error": null,
+          "receipt": {
+            "request_wall_s": 1003241.012049815,
+            "ack_wall_s": 1003241.0121510931,
+            "native_owner": {
+              "uid": 1000,
+              "pid": 2082114,
+              "start_ticks": 100311967
+            },
+            "generation": 109960001,
+            "native_transport": {
+              "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/stop-witness-isolation-fpfvhl3p/install/so101_mujoco_support/lib/libso101_head_revocation_transport.so",
+              "sha256": "25b4573f6b926684fa0219aa278eb3a706508b4deba226d60df9dbb3f2ef8265",
+              "abi": 2,
+              "clock": "CLOCK_MONOTONIC",
+              "mode": "mujoco_bounded_stop_search_file_v1",
+              "maximum_budget_ns": 250000000,
+              "simulation_policy_sha256": "154b24f286bbfb648a468b192a3430fafd524024eb27e6e2e2c28dc9ee9b1ddf"
+            },
+            "caller_return_wall_s": 1003241.012155415,
+            "incarnation": "inc-ee2ef014e69dcf7c7185ca0637829272",
+            "boot": "boot-96fffbad58ef88f47cd93483eb2f4007",
+            "role": 3,
+            "stored_generation": 109960001,
+            "native_status": 0,
+            "status": "ARMED_CLOSED",
+            "ack_validated": true
+          }
+        },
+        "cancel_stop": {
+          "started_wall_s": 1003241.0059828,
+          "finished": true,
+          "cancel_error": null,
+          "raw_stop_confirmed": true,
+          "raw_stop_observations": [
+            {
+              "wall_s": 1003241.006058538,
+              "stopped": false
+            },
+            {
+              "wall_s": 1003241.026157376,
+              "stopped": false
+            },
+            {
+              "wall_s": 1003241.046289553,
+              "stopped": true
+            }
+          ],
+          "deadline_wall_s": 1003242.004398591,
+          "abandoned_on_retirement": false,
+          "result_error": null,
+          "observation_count": 3
+        },
+        "stop": {
+          "stop_origin_kind": "success",
+          "stop_origin_wall_s": 1003241.004398591,
+          "stop_deadline_wall_s": 1003242.004398591,
+          "request_wall_s": 1003241.004398591,
+          "request_sim_s": 120.73400000000001,
+          "cancel_stop": {
+            "started_wall_s": 1003241.0059828,
+            "finished": true,
+            "cancel_error": null,
+            "raw_stop_confirmed": true,
+            "raw_stop_observations": [
+              {
+                "wall_s": 1003241.006058538,
+                "stopped": false
+              },
+              {
+                "wall_s": 1003241.026157376,
+                "stopped": false
+              },
+              {
+                "wall_s": 1003241.046289553,
+                "stopped": true
+              }
+            ],
+            "deadline_wall_s": 1003242.004398591,
+            "abandoned_on_retirement": false,
+            "result_error": null,
+            "observation_count": 3
+          },
+          "native_close": {
+            "requested_wall_s": 1003241.01198581,
+            "finished": true,
+            "ack": true,
+            "error": null,
+            "receipt": {
+              "request_wall_s": 1003241.012049815,
+              "ack_wall_s": 1003241.0121510931,
+              "native_owner": {
+                "uid": 1000,
+                "pid": 2082114,
+                "start_ticks": 100311967
+              },
+              "generation": 109960001,
+              "native_transport": {
+                "path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/stop-witness-isolation-fpfvhl3p/install/so101_mujoco_support/lib/libso101_head_revocation_transport.so",
+                "sha256": "25b4573f6b926684fa0219aa278eb3a706508b4deba226d60df9dbb3f2ef8265",
+                "abi": 2,
+                "clock": "CLOCK_MONOTONIC",
+                "mode": "mujoco_bounded_stop_search_file_v1",
+                "maximum_budget_ns": 250000000,
+                "simulation_policy_sha256": "154b24f286bbfb648a468b192a3430fafd524024eb27e6e2e2c28dc9ee9b1ddf"
+              },
+              "caller_return_wall_s": 1003241.012155415,
+              "incarnation": "inc-ee2ef014e69dcf7c7185ca0637829272",
+              "boot": "boot-96fffbad58ef88f47cd93483eb2f4007",
+              "role": 3,
+              "stored_generation": 109960001,
+              "native_status": 0,
+              "status": "ARMED_CLOSED",
+              "ack_validated": true
+            }
+          },
+          "physical_stop_confirmed": true,
+          "faulted": false
+        },
+        "original_retirement": "DEFERRED_TO_PROVIDER",
+        "closed_wall_s": 1003241.046417967
+      },
+      "retirement_ended_ns": 1003242034476331,
+      "children": [
+        {
+          "pid": 2082114,
+          "rc": 0,
+          "argv": [
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install/mujoco_ros2_control/lib/mujoco_ros2_control/ros2_control_node",
+            "--ros-args",
+            "--params-file",
+            "/tmp/so101-debug-head-file-protocol-1003/hfp1010-nominal-001/ros2-control-node.params.yaml",
+            "--params-file",
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/search-round1-freeze/inputs/ros2-controllers-file-v1.yaml",
+            "--params-file",
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-sampling-20261009-001/install/so101_demo_py/share/so101_demo_py/config/mujoco/act/mujoco_plugins.yaml"
+          ]
+        },
+        {
+          "pid": 2082115,
+          "rc": 0,
+          "argv": [
+            "/opt/ros/jazzy/lib/robot_state_publisher/robot_state_publisher",
+            "--ros-args",
+            "--params-file",
+            "/tmp/so101-debug-head-file-protocol-1003/hfp1010-nominal-001/ros2-control-node.params.yaml",
+            "--params-file",
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/search-round1-freeze/inputs/ros2-controllers-file-v1.yaml",
+            "--params-file",
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-sampling-20261009-001/install/so101_demo_py/share/so101_demo_py/config/mujoco/act/mujoco_plugins.yaml",
+            "-p",
+            "publish_frequency:=100.0"
+          ]
+        },
+        {
+          "pid": 2082116,
+          "rc": 0,
+          "argv": [
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/install/controller_manager/lib/controller_manager/spawner",
+            "joint_state_broadcaster",
+            "arm_controller",
+            "gripper_controller",
+            "neck_controller",
+            "--controller-manager-timeout",
+            "90.0",
+            "--param-file",
+            "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/search-round1-freeze/inputs/ros2-controllers-file-v1.yaml"
+          ]
+        }
+      ],
+      "graph_empty": false,
+      "children_absent": true,
+      "seal_verified": true,
+      "main_exchange_ns": [
+        422182.95857310295,
+        486730.0158366561,
+        721581.9787234068
+      ],
+      "collector_status": {
+        "records_reserved": 120441,
+        "records_written": 120441,
+        "overflow": false,
+        "io_failed": false
+      },
+      "startup_simulation_discontinuities": [
+        {
+          "before_update": 75,
+          "after_update": 76,
+          "before_sim_ns": 404000000,
+          "after_sim_ns": 504000000,
+          "after_started_ns": 1003120768350559
+        }
+      ],
+      "holding_update_count": 59999,
+      "scheduling_jitter_max_ns": 124970131,
+      "independent_postflight_pending": true
+    },
+    "timing": {
+      "update": {
+        "count": 60211,
+        "max_ns": 231452,
+        "overruns": 0
+      },
+      "publication": {
+        "count": 60226,
+        "max_ns": 224740,
+        "overruns": 0
+      },
+      "proof": {
+        "count": 4,
+        "max_ns": 3230,
+        "overruns": 0
+      }
+    },
+    "scope": 1,
+    "search_executed": false,
+    "detector_executed": false,
+    "ordinary_package_green": false,
+    "production_qualified": false
+  },
+  "strict_startup_stop_close": true,
+  "maps_verified": true,
+  "holding_complete": true,
+  "cleanup_within15": true,
+  "postflight_empty": true,
+  "owner_absent": true,
+  "children_absent": true,
+  "seal_verified": true,
+  "all_child_rc0": true,
+  "native_all_valid": false,
+  "cancel_sent": false,
+  "fallback_used": false,
+  "original_timing_qualified": false,
+  "original_problem": {
+    "type": "TimingPeriod",
+    "message": "HEAD_TIMING_PERIOD"
+  },
+  "production_qualified": false,
+  "live20_allowed": false,
+  "fresh40_allowed": false
+}

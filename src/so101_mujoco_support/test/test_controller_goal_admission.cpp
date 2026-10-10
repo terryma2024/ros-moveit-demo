@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <thread>
 
 #include "control_msgs/action/follow_joint_trajectory.hpp"
 #include "rclcpp/serialization.hpp"
@@ -73,6 +74,104 @@ std::vector<uint8_t> python_fixture()
   return bytes;
 }
 }  // namespace
+
+namespace
+{
+using GateReason = ControllerGoalAdmission::GateReason;
+using CloseStatus = ControllerGoalAdmission::ScopedCloseStatus;
+using Role = so101_mujoco_support::ControllerReservationRole;
+so101_mujoco_support::ServiceControllerIdentity startup_identity()
+{return {Role::NECK, "startup-inc", "startup-boot"};}
+}
+
+TEST(ControllerGoalAdmission, prearm_scope_reads_configured_identity_without_opening_gate)
+{
+  ControllerGoalAdmission gate([] {return 1000;}, 100, 1024, 2048, startup_identity());
+  const auto scope = gate.prearm_scope(17);
+  ASSERT_TRUE(scope.identity);
+  EXPECT_EQ(scope.identity->incarnation, "startup-inc");
+  EXPECT_EQ(scope.stored_generation, 0u);
+  EXPECT_TRUE(scope.eligible());
+  EXPECT_EQ(gate.generation(), 0u);
+  EXPECT_FALSE(gate.service_identity());
+  EXPECT_EQ(gate.prearm_scope(0).reason, GateReason::ZERO_GENERATION);
+  ASSERT_TRUE(gate.arm(17));
+  EXPECT_EQ(gate.prearm_scope(17).reason, GateReason::NONINCREASING_GENERATION);
+  EXPECT_EQ(gate.generation(), 17u);
+}
+
+TEST(ControllerGoalAdmission, close_scoped_zero_latches_and_returns_not_armed)
+{
+  auto latch = std::make_shared<std::atomic<bool>>(false);
+  ControllerGoalAdmission gate([] {return 1000;}, 100, 1024, 2048, startup_identity(), latch);
+  const auto result = gate.close_scoped(17, Role::NECK, "startup-inc", "startup-boot");
+  EXPECT_EQ(result.status, CloseStatus::NOT_ARMED_CLOSED);
+  EXPECT_EQ(result.stored_generation, 0u);
+  EXPECT_TRUE(latch->load());
+  EXPECT_FALSE(gate.arm(17));
+  ControllerGoalAdmission replacement([] {return 1000;}, 100, 1024, 2048, startup_identity(), latch);
+  EXPECT_FALSE(replacement.arm(18));
+}
+
+TEST(ControllerGoalAdmission, close_scoped_matching_after_fail_closes_armed)
+{
+  ControllerGoalAdmission gate([] {return 1000;}, 100, 1024, 2048, startup_identity());
+  ASSERT_TRUE(gate.arm(17));
+  gate.close();
+  EXPECT_EQ(gate.generation(), 0u);
+  const auto result = gate.close_scoped(17, Role::NECK, "startup-inc", "startup-boot");
+  EXPECT_EQ(result.status, CloseStatus::ARMED_CLOSED);
+  EXPECT_EQ(result.stored_generation, 17u);
+  EXPECT_FALSE(gate.arm(18));
+}
+
+TEST(ControllerGoalAdmission, close_scoped_different_generation_or_identity_preserves_gate)
+{
+  ControllerGoalAdmission gate([] {return 1000;}, 100, 1024, 2048, startup_identity());
+  ASSERT_TRUE(gate.arm(17));
+  EXPECT_EQ(gate.close_scoped(18, Role::NECK, "startup-inc", "startup-boot").status,
+    CloseStatus::REJECT_GENERATION);
+  EXPECT_EQ(gate.close_scoped(17, Role::NECK, "old-inc", "startup-boot").status,
+    CloseStatus::REJECT_IDENTITY);
+  EXPECT_EQ(gate.close_scoped(17, Role::ARM, "startup-inc", "startup-boot").status,
+    CloseStatus::REJECT_IDENTITY);
+  EXPECT_EQ(gate.close_scoped(0, Role::NECK, "startup-inc", "startup-boot").status,
+    CloseStatus::REJECT_GENERATION);
+  EXPECT_EQ(gate.generation(), 17u);
+  EXPECT_TRUE(gate.arm(18));
+}
+
+TEST(ControllerGoalAdmission, concurrent_arm_and_scoped_close_linearize)
+{
+  for (int i = 0; i < 50; ++i) {
+    ControllerGoalAdmission gate([] {return 1000;}, 100, 1024, 2048, startup_identity());
+    std::atomic<bool> start{false};
+    bool armed = false;
+    ControllerGoalAdmission::ScopedCloseResult closed;
+    std::thread arm([&] {while (!start.load()) {} armed = gate.arm(17);});
+    std::thread close([&] {while (!start.load()) {}
+        closed = gate.close_scoped(17, Role::NECK, "startup-inc", "startup-boot");});
+    start.store(true);
+    arm.join(); close.join();
+    EXPECT_EQ(closed.status, armed ? CloseStatus::ARMED_CLOSED : CloseStatus::NOT_ARMED_CLOSED);
+    EXPECT_EQ(closed.stored_generation, armed ? 17u : 0u);
+    EXPECT_EQ(gate.generation(), 0u);
+    EXPECT_FALSE(gate.arm(18));
+  }
+}
+
+TEST(ControllerGoalAdmission, detailed_arm_reports_first_legacy_branch)
+{
+  int64_t now = -1;
+  ControllerGoalAdmission gate([&] {return now;});
+  EXPECT_EQ(gate.arm_detailed(0).reason, GateReason::CLOCK_INVALID);
+  now = 1000;
+  EXPECT_EQ(gate.arm_detailed(0).reason, GateReason::ZERO_GENERATION);
+  EXPECT_EQ(gate.arm_detailed(17).reason, GateReason::CLOCK_FAULT);
+  ControllerGoalAdmission clean([] {return 1000;});
+  EXPECT_TRUE(clean.arm_detailed(17).allowed);
+  EXPECT_EQ(clean.arm_detailed(17).reason, GateReason::NONINCREASING_GENERATION);
+}
 
 TEST(ControllerGoalAdmission, PythonCdrDecodesToEveryExpectedTypedField)
 {

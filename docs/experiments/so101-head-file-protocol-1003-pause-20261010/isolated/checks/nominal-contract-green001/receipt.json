@@ -1,0 +1,21 @@
+{
+  "rc": 0,
+  "elapsed_s": 0.8159173410385847,
+  "argv": [
+    "/usr/bin/python3",
+    "-m",
+    "pytest",
+    "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/test_nominal_contract.py",
+    "-p",
+    "xdist.plugin",
+    "-n",
+    "8",
+    "--junitxml=/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checks/nominal-contract-green001/junit.xml"
+  ],
+  "scratch": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/scratch/nominal-contract-green001/tmp",
+  "logical_cpus": 24,
+  "workers": 8,
+  "scope": "Complete new task-owned nominal contract test module",
+  "legacy_test_adapter": false,
+  "runtime_evidence": false
+}

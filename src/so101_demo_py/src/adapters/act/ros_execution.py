@@ -74,6 +74,7 @@ class RosControllerPort:
             raise ValueError('HEAD_CALLBACK_FAULT_HANDLER_INVALID')
         self._head_fault_callback=head_fault_callback
         self._head_original_sink=None
+        self._head_action_sink=None
         self._head_fault_handler_error=None
         self._head_io=None if feedback_policy is None and not head_bootstrap else {
             'result':HeadCallbackIO('head-result-rpc'),
@@ -114,6 +115,51 @@ class RosControllerPort:
                 self._head_policy_binding_failed=True
                 raise PermissionError('HEAD_FEEDBACK_POLICY_BINDING_REFUSED')
             self._feedback_policy=parsed
+
+    def bind_head_action_sink(self,sink):
+        if not callable(sink):raise ValueError('HEAD_ACTION_SINK_INVALID')
+        with self._lock:
+            if self._head_action_sink is not None or self.feedback_policy is None:
+                raise PermissionError('HEAD_ACTION_SINK_REBOUND')
+            self._head_action_sink=sink
+
+    def record_head_action(self,kind,gid,original,*,callback_wall_s):
+        """Record the actual reply outside the cache lock; failure closes admission."""
+        if self._head_action_sink is None:return
+        try:
+            from rosidl_runtime_py.convert import message_to_ordereddict
+            reply=original() if callable(original) else original
+            if hasattr(reply,'get_fields_and_field_types'):
+                reply=message_to_ordereddict(reply)
+            record=dict(schema_version=1,goal_uuid=gid,callback_wall_ns=round(callback_wall_s*1e9),
+                callback_sim_ns=self.node.get_clock().now().nanoseconds,original=reply)
+            self._head_action_sink(kind,record,None)
+        except Exception as error:
+            self._head_io_failed(gid,error)
+            # Logging failure has already latched admission closure. Completion
+            # delivery must continue so independent cancellation/Stop can still
+            # reconcile the real UUID, even with a permanently broken writer.
+            return False
+        return True
+
+    @staticmethod
+    def _head_result_reply(response):
+        return dict(status=response.status,result=dict(error_code=response.result.error_code,
+            error_string=getattr(response.result,'error_string',None)))
+
+    @staticmethod
+    def _head_cancel_reply(response):
+        from rosidl_runtime_py.convert import message_to_ordereddict
+        goals=getattr(response,'goals_canceling',None)
+        return dict(return_code=response.return_code,goals_canceling=None if goals is None else
+            [message_to_ordereddict(goal) for goal in goals])
+
+    @staticmethod
+    def _head_acceptance_reply(handle):
+        from rosidl_runtime_py.convert import message_to_ordereddict
+        stamp=getattr(handle,'stamp',None);goal_id=getattr(handle,'goal_id',None)
+        return dict(accepted=handle.accepted,stamp=None if stamp is None else message_to_ordereddict(stamp),
+            goal_id=None if goal_id is None else message_to_ordereddict(goal_id))
 
     def begin_stop(self,epoch):
         if self.feedback_policy is None:raise ValueError('HEAD_FEEDBACK_POLICY_REQUIRED')
@@ -239,13 +285,13 @@ class RosControllerPort:
         """Own an unknown UUID before native reservation, without sending it.
 
         This local inventory grants no native or CPU authority. The dispatcher
-        separately freezes scope and requires the authenticated monitor ACK.
+        separately freezes scope and requires local state admission.
         """
         import json
         import re
         import uuid
-        from so101_demo.act.head_monitor import canonical_bytes
-        from .head_monitor_goal_binding import validate_goal_inventory
+        from so101_demo.act.head_evidence_identity import canonical_bytes
+        from .head_goal_binding import validate_goal_inventory
         try:
             if (self.feedback_policy is None or self.names!=('neck_yaw_joint',)
                     or self._head_policy_binding_failed or self._head_fault_callback is None):
@@ -285,7 +331,7 @@ class RosControllerPort:
                 if (self._head_policy_binding_failed or gid in self._goals or len(self._goals)>=128
                         or sequence!=self._head_inventory_sequence+1
                         or (self._head_inventory_scope is not None and self._head_inventory_scope!=scope)
-                        or not claim<=time.monotonic_ns()<=deadline):
+                        or not claim<=time.monotonic_ns()<deadline):
                     raise PermissionError('HEAD_PRIMARY_INVENTORY_REFUSED')
                 self._goals[gid]=pending
                 self._head_inventory_scope=scope;self._head_inventory_sequence=sequence
@@ -332,7 +378,7 @@ class RosControllerPort:
             record=dict(accepted=None,handle=None,result=None,cancel_requested=False,
                 cancel_ack=False,error=None,goal=message_to_ordereddict(message),
                 prepared_cdr_sha256=hashlib.sha256(expected_cdr).hexdigest())
-            from so101_demo.act.head_monitor import canonical_bytes
+            from so101_demo.act.head_evidence_identity import canonical_bytes
             typed=canonical_bytes(record['goal'])
             with self._lock:
                 if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
@@ -355,11 +401,19 @@ class RosControllerPort:
             self.feedback_snapshot()
             if self._head_policy_binding_failed:raise PermissionError('HEAD_PREPARED_REVOKED')
             claim=record.get('primary_claim_window_ns')
-            if claim is not None and not claim[0]<=time.monotonic_ns()<=claim[1]:
+            if claim is not None and not claim[0]<=time.monotonic_ns()<claim[1]:
                 raise PermissionError('HEAD_PREPARED_CLAIM_EXPIRED')
-            record['sdk_dispatch_wall_s']=self.monotonic()
+            if self._head_action_sink is not None:
+                record['sdk_dispatch_wall_s']=self.monotonic()
             response=self.client.send_goal_async(message,goal_uuid=owned_uuid)
-            record['sdk_returned_wall_s']=self.monotonic()
+            if self._head_action_sink is not None:
+                record['sdk_returned_wall_s']=self.monotonic()
+                self.record_head_action('HEAD_ACTION_SDK_RETURNED',gid,
+                    lambda:dict(future_done=response.done(),accepted=record['accepted'],
+                        sdk_dispatch_wall_s=record['sdk_dispatch_wall_s'],
+                        sdk_returned_wall_s=record['sdk_returned_wall_s'],
+                        prepared_cdr_sha256=record['prepared_cdr_sha256']),
+                    callback_wall_s=record['sdk_returned_wall_s'])
             response.add_done_callback(lambda future:self._accepted(gid,future))
             return gid
         except Exception as error:
@@ -377,6 +431,7 @@ class RosControllerPort:
 
     def _accepted(self,gid,future):
         if self._head_io is not None:
+            callback_wall=self.monotonic()
             try:handle=future.result();accepted=bool(handle.accepted)
             except Exception as error:
                 self._head_io_failed(gid,error)
@@ -385,6 +440,9 @@ class RosControllerPort:
                 record=self._goals[gid]
                 record['handle']=handle;record['accepted']=accepted
                 cancel=record['cancel_requested']
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_ACCEPTANCE',gid,
+                    lambda:self._head_acceptance_reply(handle),callback_wall_s=callback_wall)
             if accepted:
                 if cancel:self._cancel_handle(gid)
                 self._head_dispatch_io(gid,'result',lambda:
@@ -401,11 +459,15 @@ class RosControllerPort:
 
     def _result(self,gid,future):
         if self._head_io is not None:
+            callback_wall=self.monotonic()
             try:result=future.result()
             except Exception as error:
                 self._head_io_failed(gid,error)
                 return
             with self._lock:self._goals[gid]['result']=result
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_RESULT',gid,
+                    lambda:self._head_result_reply(result),callback_wall_s=callback_wall)
             return
         with self._lock:
             try:self._goals[gid]['result']=future.result()
@@ -430,11 +492,15 @@ class RosControllerPort:
 
     def _cancel_ack(self,gid,future):
         if self._head_io is not None:
-            try:ack=future.result().return_code==0
+            callback_wall=self.monotonic()
+            try:response=future.result();ack=response.return_code==0
             except Exception as error:
                 self._head_io_failed(gid,error)
                 return
             with self._lock:self._goals[gid]['cancel_ack']=ack
+            if self._head_action_sink is not None:
+                self.record_head_action('HEAD_ACTION_SDK_CANCEL',gid,
+                    lambda:self._head_cancel_reply(response),callback_wall_s=callback_wall)
             return
         with self._lock:
             try:

@@ -1622,14 +1622,15 @@ def generate_dataset(
                     "label": label_relative.as_posix(),
                     "truth": truth_relative.as_posix(),
                 }
-                for key, relative in (
-                    ("image", image_relative),
-                    ("label", label_relative),
-                    ("truth", truth_relative),
-                ):
-                    contents = (root / relative).read_bytes()
-                    sample_record[f"{key}_sha256"] = hashlib.sha256(contents).hexdigest()
-                    sample_record[f"{key}_bytes"] = len(contents)
+                if head_context is not None:
+                    for key, relative in (
+                        ("image", image_relative),
+                        ("label", label_relative),
+                        ("truth", truth_relative),
+                    ):
+                        contents = (root / relative).read_bytes()
+                        sample_record[f"{key}_sha256"] = hashlib.sha256(contents).hexdigest()
+                        sample_record[f"{key}_bytes"] = len(contents)
                 if scene_group_id is not None:
                     sample_record["scene_group_id"] = scene_group_id
                     sample_record["camera"] = camera_document

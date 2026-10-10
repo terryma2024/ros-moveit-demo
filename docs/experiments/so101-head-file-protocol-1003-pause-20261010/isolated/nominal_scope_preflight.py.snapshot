@@ -1,0 +1,21 @@
+"""Readonly original provider/child environment gate; no resources constructed."""
+import json
+import os
+import sys
+from nominal_contract import require_observers_off
+from native_scope_preflight import check_document
+
+if __name__ == '__main__':
+    from so101_demo.act.head_execution_inputs import HeadExecutionInputs
+    from so101_demo.adapters.act.head_execution_provider import resource_plan
+    require_observers_off(os.environ)
+    inputs = HeadExecutionInputs.parse(sys.argv[1])
+    require_observers_off(inputs.document['ros']['environment'])
+    plan = resource_plan(inputs)
+    environment = plan['constructors']['stack']['keywords']['environment']
+    require_observers_off(environment)
+    row = check_document(inputs.document, environment)
+    row['optional_observers_off'] = True
+    row['effective_environment_keys'] = sorted(environment)
+    row['runtime_started'] = False
+    print(json.dumps(row))

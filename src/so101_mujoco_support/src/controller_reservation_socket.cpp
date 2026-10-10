@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <limits>
@@ -181,10 +182,11 @@ ControllerReservationSocket::ControllerReservationSocket(
   std::filesystem::path path, std::shared_ptr<ControllerGoalAdmission> gate,
   ControllerReservationCapability capability, ExpectedPeer expected_peer,
   std::chrono::milliseconds deadline, StopProof stop_proof,
-  ControllerReservationRole role, IngressSnapshot ingress_snapshot, Authority authority)
+  ControllerReservationRole role, IngressSnapshot ingress_snapshot, Authority authority,
+  StopRefusalDiagnostic stop_refusal_diagnostic)
 : ControllerReservationSocket(std::move(path), std::move(gate), capability, expected_peer,
     std::chrono::duration_cast<std::chrono::nanoseconds>(deadline), std::move(stop_proof),
-    role, std::move(ingress_snapshot), authority, false)
+    role, std::move(ingress_snapshot), authority, false, std::move(stop_refusal_diagnostic))
 {}
 
 ControllerReservationSocket::ControllerReservationSocket(
@@ -192,11 +194,12 @@ ControllerReservationSocket::ControllerReservationSocket(
   ControllerReservationCapability capability, ExpectedPeer expected_peer,
   std::chrono::nanoseconds deadline, StopProof stop_proof,
   ControllerReservationRole role, IngressSnapshot ingress_snapshot, Authority authority,
-  bool precise_deadline)
+  bool precise_deadline, StopRefusalDiagnostic stop_refusal_diagnostic)
 : path_(std::move(path)), gate_(std::move(gate)), capability_(capability),
   expected_peer_(expected_peer),
   deadline_(deadline), precise_deadline_(precise_deadline),
-  stop_proof_(std::move(stop_proof)), role_(role),
+  stop_proof_(std::move(stop_proof)),
+  stop_refusal_diagnostic_(std::move(stop_refusal_diagnostic)), role_(role),
   ingress_snapshot_(std::move(ingress_snapshot)), authority_(authority)
 {
   if (!gate_) {throw std::invalid_argument("CONTROLLER_RESERVATION_GATE_REQUIRED");}
@@ -301,6 +304,36 @@ void ControllerReservationSocket::close_gate()
   if (authority_ != Authority::PRIMARY) {gate_->fault_revoke();} else {gate_->close();}
 }
 
+void ControllerReservationSocket::diagnose_stop_refusal() noexcept
+{
+  // Call only after fail-closed state and the REJECT write attempt. Diagnostics
+  // cannot change the reply, reopen admission, or escape the service worker.
+  try {
+    if (stop_refusal_diagnostic_) {stop_refusal_diagnostic_();}
+  } catch (...) {
+  }
+}
+
+DiagnosticArmReply ControllerReservationSocket::arm_once(uint64_t generation)
+{
+  DiagnosticArmReply outcome;
+  outcome.role = role_; outcome.generation = generation;
+  const auto before = stop_proof_ ? stop_proof_() : ControllerStopEvaluation{};
+  outcome.proof = before.record;
+  outcome.phase = ArmPhase::STOP_BEFORE;
+  if (!before.allowed) {return outcome;}
+  const auto armed = gate_->arm_detailed(generation);
+  outcome.phase = ArmPhase::GATE_ARM; outcome.gate_reason = armed.reason;
+  if (!armed.allowed) {return outcome;}
+  const auto after = stop_proof_();
+  outcome.proof = after.record;
+  outcome.phase = ArmPhase::STOP_AFTER;
+  if (!after.allowed) {return outcome;}
+  outcome.status = ReservationReplyStatus::ACK;
+  outcome.phase = ArmPhase::NONE;
+  return outcome;
+}
+
 bool ControllerReservationSocket::serve_one()
 {
 #ifndef __linux__
@@ -337,17 +370,64 @@ bool ControllerReservationSocket::serve_one()
     (static_cast<uint32_t>(frame[2]) << 8) |
     static_cast<uint32_t>(frame[3]);
   if (body_size == 0 || body_size > max_body_size ||
-    (authority_ != Authority::PRIMARY && body_size > 62))
+    (authority_ == Authority::REVOKER && body_size > 62) ||
+    (authority_ == Authority::PRIMARY_FAULT && body_size > 177))
   {
     close_gate();
     return false;
   }
   frame.resize(4 + body_size);
-  if (!read_exact(connection.get(), frame.data() + 4, body_size, deadline, precise)) {
+  size_t consumed = 0;
+  if (authority_ == Authority::PRIMARY_FAULT && body_size > 62) {
+    // Larger fault frames are reserved solely for the new exact SOPC header.
+    if (!read_exact(connection.get(), frame.data() + 4, 6, deadline, precise) ||
+      std::memcmp(frame.data() + 4, "SOPC", 4) != 0 || frame[8] != 1 || frame[9] != 1)
+    {close_gate(); return false;}
+    consumed = 6;
+  }
+  if (!read_exact(connection.get(), frame.data() + 4 + consumed, body_size - consumed, deadline, precise)) {
     close_gate();
     return false;
   }
   try {
+    if (frame.size() >= 10 && std::memcmp(frame.data() + 4, "SOPC", 4) == 0 &&
+      authority_ == Authority::PRIMARY_FAULT)
+    {
+      // Parse syntax before granting nonmutating scope rejection. Invalid peers
+      // were already refused above; malformed frames retain old fail-closed behavior.
+      const auto request = parse_scoped_close_frame(frame);
+      if (role_ != ControllerReservationRole::NECK) {close_gate(); return false;}
+      if (request.capability != capability_) {return false;}
+      try {
+        const auto result = gate_->close_scoped(request.generation,
+          request.expected_identity.role, request.expected_identity.incarnation,
+          request.expected_identity.boot);
+        if (!result.identity) {return false;}
+        const IdentityScopeReply reply{static_cast<uint8_t>(result.status),request.generation,
+          result.stored_generation,*result.identity};
+        const auto body = encode_identity_scope_reply(reply, true);
+        std::vector<uint8_t> framed{0,0,0,static_cast<uint8_t>(body.size())};
+        framed.insert(framed.end(),body.begin(),body.end());
+        const bool written = write_exact(connection.get(),framed.data(),framed.size(),deadline,precise);
+        return written && (result.status == ScopedCloseStatus::ARMED_CLOSED ||
+          result.status == ScopedCloseStatus::NOT_ARMED_CLOSED);
+      } catch (...) {return false;} // no fallback revocation after a valid scoped request
+    }
+    if (frame.size() >= 10 && std::memcmp(frame.data() + 4, "SOPQ", 4) == 0 &&
+      authority_ == Authority::PRIMARY_FAULT)
+    {
+      const auto generation = parse_bootstrap_identity_frame(frame, capability_);
+      if (role_ != ControllerReservationRole::NECK) {close_gate(); return false;}
+      try {
+        const auto scope = gate_->prearm_scope(generation);
+        if (!scope.identity || scope.identity->role != role_) {return false;}
+        const IdentityScopeReply reply{0,generation,scope.stored_generation,*scope.identity};
+        const auto body = encode_identity_scope_reply(reply,false);
+        std::vector<uint8_t> framed{0,0,0,static_cast<uint8_t>(body.size())};
+        framed.insert(framed.end(),body.begin(),body.end());
+        return write_exact(connection.get(),framed.data(),framed.size(),deadline,precise);
+      } catch (...) {return false;} // authenticated bootstrap stays read only
+    }
     // SOIA identity query: the service reports only its own active role/generation
     if (frame.size() > 9 && std::memcmp(frame.data() + 4, "SOIA", 4) == 0) {
       const auto reject = [&connection, deadline, precise]() {
@@ -412,20 +492,68 @@ bool ControllerReservationSocket::serve_one()
         closed ? ReservationReplyStatus::ACK : ReservationReplyStatus::REJECT, generation);
       return write_exact(connection.get(), reply.data(), reply.size(), deadline, precise) && closed;
     }
-    if (frame.size() > 9 && frame[9] == 3) {
-      const auto generation = parse_controller_reservation_arm_frame(frame, capability_);
-      if (!stop_proof_ || !stop_proof_() || !gate_->arm(generation) || !stop_proof_()) {
-        close_gate();
-        const auto reply = encode_controller_reservation_reply(
-          ReservationReplyStatus::REJECT, generation);
-        write_exact(connection.get(), reply.data(), reply.size(), deadline, precise);
+    if (frame.size() > 9 && frame[9] == 5) {
+      const auto generation = parse_prearm_query_frame(frame, capability_);
+      if (role_ != ControllerReservationRole::NECK) {close_gate(); return false;}
+      // Once authenticated and syntactically valid, a status query is read only,
+      // including encoder/write failures. Never fall through to close_gate().
+      try {
+        const auto scope = gate_->prearm_scope(generation);
+        if (!scope.identity || scope.identity->role != role_) {return false;}
+        PrearmReply reply;
+        reply.generation = generation; reply.stored_generation = scope.stored_generation;
+        reply.identity = *scope.identity; reply.gate_reason = scope.reason;
+        if (scope.eligible()) {
+          if (!stop_proof_) {return false;}
+          const auto evaluation = stop_proof_();
+          reply.proof = evaluation.record;
+          reply.status = evaluation.allowed ? PrearmStatus::READY : PrearmStatus::NOT_READY;
+        }
+        const auto body = encode_prearm_reply(reply);
+        std::vector<uint8_t> framed{0, 0, 0, static_cast<uint8_t>(body.size())};
+        framed.insert(framed.end(), body.begin(), body.end());
+        return write_exact(connection.get(), framed.data(), framed.size(), deadline, precise);
+      } catch (...) {return false;}
+    }
+    if (frame.size() > 9 && (frame[9] == 3 || frame[9] == 6)) {
+      const bool diagnostic = frame[9] == 6;
+      const auto generation = diagnostic ? parse_diagnostic_arm_frame(frame, capability_) :
+        parse_controller_reservation_arm_frame(frame, capability_);
+      if (diagnostic && role_ != ControllerReservationRole::NECK) {close_gate(); return false;}
+      const auto outcome = arm_once(generation);
+      const bool accepted = outcome.status == ReservationReplyStatus::ACK;
+      if (!accepted) {close_gate();}
+      bool written;
+      if (diagnostic) {
+        const auto reply = encode_diagnostic_arm_reply(outcome);
+        written = write_exact(connection.get(), reply.data(), reply.size(), deadline, precise);
+      } else {
+        const auto reply = encode_controller_reservation_reply(outcome.status, generation);
+        written = write_exact(connection.get(), reply.data(), reply.size(), deadline, precise);
+      }
+      if (!accepted) {
+        const bool stop_refused = stop_proof_ && (outcome.phase == ArmPhase::STOP_BEFORE ||
+          outcome.phase == ArmPhase::STOP_AFTER);
+        if (stop_refused) {diagnose_stop_refusal();}
+        const char * phase = outcome.phase == ArmPhase::GATE_ARM ? "GENERATION" :
+          outcome.phase == ArmPhase::STOP_AFTER ? "STOP_PROOF_AFTER" :
+          stop_proof_ ? "STOP_PROOF_BEFORE" : "STOP_PROOF_UNBOUND";
+        const auto & p = outcome.proof;
+        std::fprintf(stderr,
+          "CONTROLLER_ARM_REJECT role=%u generation=%llu phase=%s gate_reason=%u "
+          "evaluation_id=%llu wrapper=%u rejection=%u reset=%u flags=%u count=%u losses=%u "
+          "first_seq=%llu last_seq=%llu first_received=%lld last_received=%lld evaluated=%lld\n",
+          static_cast<unsigned>(role_), static_cast<unsigned long long>(generation), phase,
+          static_cast<unsigned>(outcome.gate_reason), static_cast<unsigned long long>(p.evaluation_id),
+          static_cast<unsigned>(p.wrapper_reason), p.witness_rejection, p.last_reset_reason,
+          p.flags, p.sample_count, p.cumulative_observation_lock_losses,
+          static_cast<unsigned long long>(p.first_sequence), static_cast<unsigned long long>(p.last_sequence),
+          static_cast<long long>(p.first_received_ns), static_cast<long long>(p.last_received_ns),
+          static_cast<long long>(p.evaluated_ns));
         return false;
       }
-      const auto reply = encode_controller_reservation_reply(
-        ReservationReplyStatus::ACK, generation);
-      if (write_exact(connection.get(), reply.data(), reply.size(), deadline, precise)) {return true;}
-      close_gate();
-      return false;
+      if (written) {return true;}
+      close_gate(); return false;
     }
     if (frame.size() > 9 && frame[9] == 4) {
       const auto generation = parse_controller_ingress_query_frame(
@@ -461,6 +589,7 @@ bool ControllerReservationSocket::serve_one()
       const auto reply = encode_controller_reservation_reply(
         ReservationReplyStatus::REJECT, request.generation);
       write_exact(connection.get(), reply.data(), reply.size(), deadline, precise);
+      diagnose_stop_refusal();
       return false;
     }
     if (!gate_->reserve(request.uuid, request.goal, request.generation)) {
@@ -486,10 +615,12 @@ ControllerReservationService::ControllerReservationService(
   ControllerReservationSocket::StopProof stop_proof,
   ControllerReservationRole role,
   ControllerReservationSocket::IngressSnapshot ingress_snapshot,
-  ControllerReservationSocket::Authority authority)
+  ControllerReservationSocket::Authority authority,
+  ControllerReservationSocket::StopRefusalDiagnostic stop_refusal_diagnostic)
 : ControllerReservationService(std::move(path), std::move(gate), capability, expected_peer,
     std::chrono::duration_cast<std::chrono::nanoseconds>(bounded_service_deadline(deadline)),
-    std::move(stop_proof), role, std::move(ingress_snapshot), authority, false)
+    std::move(stop_proof), role, std::move(ingress_snapshot), authority, false,
+    std::move(stop_refusal_diagnostic))
 {}
 
 ControllerReservationService::ControllerReservationService(
@@ -500,10 +631,11 @@ ControllerReservationService::ControllerReservationService(
   ControllerReservationSocket::StopProof stop_proof,
   ControllerReservationRole role,
   ControllerReservationSocket::IngressSnapshot ingress_snapshot,
-  ControllerReservationSocket::Authority authority, bool precise_deadline)
+  ControllerReservationSocket::Authority authority, bool precise_deadline,
+  ControllerReservationSocket::StopRefusalDiagnostic stop_refusal_diagnostic)
 : gate_(gate), socket_(std::move(path), std::move(gate), capability, expected_peer,
     deadline, std::move(stop_proof), role,
-    std::move(ingress_snapshot), authority, precise_deadline)
+    std::move(ingress_snapshot), authority, precise_deadline, std::move(stop_refusal_diagnostic))
 {   // a service without an active gate is misconfigured, not merely idle
   if (!gate_) {throw std::invalid_argument("CONTROLLER_RESERVATION_GATE_REQUIRED");}
   if (deadline.count() <= 0 || deadline > (precise_deadline ?

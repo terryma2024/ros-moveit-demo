@@ -14,7 +14,7 @@ import time
 
 from . import head_feedback_measurement
 from .head_feedback_measurement import evaluate_feedback_window
-from .head_monitor import digest
+from .head_evidence_identity import digest
 
 _SHA = re.compile(r'[0-9a-f]{64}\Z')
 _CONTEXT = {'epoch', 'generation', 'session_id', 'dependencies'}

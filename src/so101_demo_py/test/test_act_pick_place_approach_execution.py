@@ -37,9 +37,9 @@ def _case(tmp_path, calls, *, with_screen=True, with_executor=True, with_wait=Tr
     # report into the test's own call list, which is exactly why it is worth using
     real_inspect = screen.inspect
 
-    def _recording_inspect(goals_, prefix_):
+    def _recording_inspect(goals_, prefix_, *, snapshot):
         calls.append(("inspect", len(goals_)))
-        return real_inspect(goals_, prefix_)
+        return real_inspect(goals_, prefix_, snapshot=snapshot)
 
     screen.inspect = _recording_inspect
 

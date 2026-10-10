@@ -9,6 +9,8 @@ import time
 import numpy as np
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, ReliabilityPolicy
 
+# a RELIABLE subscription matches no best-effort publisher, and the camera plugin publishes best effort,
+# so the image and info subscriptions use the sensor-data profile (CP-HFP-642)
 RGB_QOS=QoSProfile(depth=32,reliability=ReliabilityPolicy.RELIABLE)
 from rclpy.time import Time
 from sensor_msgs.msg import Image, CameraInfo, JointState

@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <future>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -75,8 +76,9 @@ public:
       close(to_child[1]);
       close(from_child[0]);
       close(from_child[1]);
-      const auto script = std::filesystem::path(__FILE__).parent_path() /
-        "controller_reservation_client.py";
+      const auto * configured_script = std::getenv("SO101_CONTROLLER_RESERVATION_CLIENT");
+      const auto script = configured_script ? std::filesystem::path(configured_script) :
+        std::filesystem::path(__FILE__).parent_path() / "controller_reservation_client.py";
       if (second_path.empty()) {
         execl("/usr/bin/python3", "python3", script.c_str(), path.c_str(),
           static_cast<char *>(nullptr));
@@ -407,6 +409,25 @@ TEST(ControllerReservationSocket, DeadRegisteredPeerRevokesOwnerLeaseOnIdle)
   ControllerGoalAdmission::GoalUUID id{};
   id.fill(0x11);
   EXPECT_EQ(gate->admit(id, goal(), 5), ControllerGoalAdmission::Result::DENY_CLOSED);
+}
+
+TEST(ControllerReservationSocket, DeadPrimaryFaultPeerPermanentlyRevokesOwnerLease)
+{
+  const auto path = socket_path("dead-primary-fault-peer.sock");
+  const auto key = capability();
+  ClientProcess primary(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path, gate, key, primary.peer(),
+    std::chrono::milliseconds(50), {}, ControllerReservationRole::NECK, {},
+    ControllerReservationSocket::Authority::PRIMARY_FAULT);
+
+  ASSERT_EQ(kill(primary.pid(), SIGTERM), 0);
+  int child_status = 0;
+  ASSERT_EQ(waitpid(primary.pid(), &child_status, 0), primary.pid());
+  EXPECT_FALSE(server.serve_one());
+  EXPECT_EQ(gate->generation(), 0u);
+  EXPECT_FALSE(gate->arm(6));
 }
 
 TEST(ControllerReservationSocket, UnreapedRegisteredPeerRevokesOwnerLeaseOnIdle)
@@ -969,4 +990,310 @@ TEST(ControllerReservationSocket, InFlightCallbackOrMissingStopCannotProduceIngr
     id.fill(0x11);
     EXPECT_TRUE(gate->reserve(id, goal(), 5));
   }
+}
+
+namespace
+{
+std::unique_ptr<ControllerReservationSocket> diagnostic_socket(
+  const std::filesystem::path & path, std::shared_ptr<ControllerGoalAdmission> gate,
+  ControllerReservationCapability key, ControllerReservationSocket::ExpectedPeer peer,
+  std::function<bool()> proof, std::function<void()> sink)
+{
+  return std::make_unique<ControllerReservationSocket>(path, std::move(gate), key, peer,
+    std::chrono::milliseconds(1000), std::move(proof), ControllerReservationRole::ARM,
+    ControllerReservationSocket::IngressSnapshot{}, ControllerReservationSocket::Authority::PRIMARY,
+    std::move(sink));
+}
+}
+
+TEST(ControllerReservationSocket, StopRefusalClosesAndRepliesBeforeBlockingDiagnostics)
+{
+  for (const bool fail_after : {false, true}) {
+    const auto path = socket_path(fail_after ? "diag-after.sock" : "diag-before.sock");
+    const auto key = capability();
+    ClientProcess client(path, key);
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(1));
+    int reads = 0;
+    std::promise<void> sink_entered;
+    auto entered = sink_entered.get_future();
+    std::promise<void> release_sink;
+    auto release = release_sink.get_future().share();
+    auto server = diagnostic_socket(path, gate, key, client.peer(),
+        [&reads, fail_after] {return fail_after && ++reads == 1;},
+        [&sink_entered, release] {
+          sink_entered.set_value();
+          release.wait();
+      });
+    client.start("arm_generation");
+    auto serving = std::async(std::launch::async, [&server] {return server->serve_one();});
+    EXPECT_EQ(entered.wait_for(std::chrono::seconds(2)), std::future_status::ready);
+    auto result = std::async(std::launch::async, [&client] {return client.result();});
+    auto closed = std::async(std::launch::async, [&gate] {return gate->generation();});
+    const auto closed_status = closed.wait_for(std::chrono::milliseconds(500));
+    const auto reply_status = result.wait_for(std::chrono::milliseconds(500));
+    EXPECT_EQ(closed_status, std::future_status::ready);
+    if (closed_status == std::future_status::ready) {EXPECT_EQ(closed.get(), 0u);}
+    EXPECT_EQ(reply_status, std::future_status::ready);
+    EXPECT_EQ(serving.wait_for(std::chrono::milliseconds(0)), std::future_status::timeout);
+    release_sink.set_value();
+    EXPECT_FALSE(serving.get());
+    EXPECT_EQ(result.get(), "REJECT");
+    EXPECT_EQ(gate->generation(), 0u);
+  }
+}
+
+TEST(ControllerReservationSocket, ThrowingStopDiagnosticsCannotChangeFailClosedReply)
+{
+  for (const bool fail_after : {false, true}) {
+    const auto path = socket_path(fail_after ? "diag-throw-after.sock" : "diag-throw-before.sock");
+    const auto key = capability();
+    ClientProcess client(path, key);
+    auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+    ASSERT_TRUE(gate->arm(1));
+    int reads = 0;
+    int diagnostics = 0;
+    auto server = diagnostic_socket(path, gate, key, client.peer(),
+        [&reads, fail_after] {return fail_after && ++reads == 1;},
+        [&diagnostics] {
+          ++diagnostics;
+          throw std::runtime_error("DIAGNOSTIC_SINK_FAILED");
+      });
+    client.start("arm_generation");
+    EXPECT_FALSE(server->serve_one());
+    EXPECT_EQ(client.result(), "REJECT");
+    EXPECT_EQ(diagnostics, 1);
+    EXPECT_EQ(gate->generation(), 0u);
+  }
+}
+
+TEST(ControllerReservationSocket, SuccessfulStopProofDoesNotInvokeDiagnostics)
+{
+  const auto path = socket_path("diag-quiet.sock");
+  const auto key = capability();
+  ClientProcess client(path, key);
+  auto gate = std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;}, 2000000000);
+  int diagnostics = 0;
+  auto server = diagnostic_socket(path, gate, key, client.peer(), [] {return true;},
+      [&diagnostics] {++diagnostics;});
+  client.start("arm_generation");
+  EXPECT_TRUE(server->serve_one());
+  EXPECT_EQ(client.result(), "ACK");
+  EXPECT_EQ(diagnostics, 0);
+}
+
+namespace
+{
+using namespace so101_mujoco_support;
+std::vector<uint8_t> startup_body(const std::string & line)
+{
+  if(line.rfind("WIRE ",0)!=0) {throw std::runtime_error("STARTUP_RESPONSE_MISSING: "+line);}
+  const auto hex=line.substr(5); std::vector<uint8_t> body;
+  for(size_t i=0;i+1<hex.size();i+=2) {body.push_back(std::stoul(hex.substr(i,2),nullptr,16));}
+  return body;
+}
+void fill_socket_window(ControllerStopWitness & witness)
+{
+  const auto now=std::chrono::duration_cast<std::chrono::nanoseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+  for(uint64_t seq=1;seq<=51;++seq) {
+    ControllerStopWitness::Observation sample;
+    sample.sequence=seq; sample.sim_time_ns=seq*2000000;
+    sample.received_monotonic_ns=now-102000000+seq*2000000;
+    sample.joint_count=1; sample.holding=true; witness.observe(sample);
+  }
+}
+std::shared_ptr<ControllerGoalAdmission> startup_gate()
+{
+  return std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;},2000000000,1048576,2048,
+    ServiceControllerIdentity{ControllerReservationRole::NECK,"startup-inc","startup-boot"});
+}
+}
+TEST(ControllerReservationSocket, prearm_ready_and_not_ready_never_open_ingress)
+{
+  const auto path=socket_path("prearm.sock");
+  ClientProcess client(path,capability()); auto gate=startup_gate();
+  ControllerStopWitness witness(1); uint64_t calls=0;
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),
+    [&] {return evaluate_controller_stop(++calls,[] {return true;},[&] {return &witness;},[] {return false;});},
+    ControllerReservationRole::NECK);
+  client.start("prearm_status"); server.serve_one();
+  const auto not_ready=parse_prearm_reply(startup_body(client.result()));
+  EXPECT_EQ(not_ready.status,PrearmStatus::NOT_READY); EXPECT_EQ(not_ready.proof.evaluation_id,1u);
+  EXPECT_EQ(not_ready.proof.witness_rejection,2); EXPECT_EQ(gate->generation(),0u);
+  fill_socket_window(witness);
+  client.start("prearm_status"); server.serve_one();
+  const auto ready=parse_prearm_reply(startup_body(client.result()));
+  EXPECT_EQ(ready.status,PrearmStatus::READY); EXPECT_EQ(ready.proof.evaluation_id,2u);
+  EXPECT_EQ(gate->generation(),0u); EXPECT_FALSE(gate->service_identity());
+  EXPECT_EQ(gate->admit({},goal(),5),ControllerGoalAdmission::Result::DENY_CLOSED);
+  EXPECT_EQ(calls,2u);
+}
+TEST(ControllerReservationSocket, proof_ready_invalidated_before_arm_rejects_before)
+{
+  const auto path=socket_path("prearm-race.sock");
+  ClientProcess client(path,capability()); auto gate=startup_gate();
+  ControllerStopWitness witness(1); fill_socket_window(witness); uint64_t calls=0;
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),
+    [&] {return evaluate_controller_stop(++calls,[] {return true;},[&] {return &witness;},[] {return false;});},
+    ControllerReservationRole::NECK);
+  client.start("prearm_status"); server.serve_one();
+  EXPECT_EQ(parse_prearm_reply(startup_body(client.result())).status,PrearmStatus::READY);
+  witness.invalidate_nonblocking();
+  client.start("diagnostic_arm"); EXPECT_FALSE(server.serve_one());
+  const auto refused=parse_diagnostic_arm_reply(startup_body(client.result()));
+  EXPECT_EQ(refused.phase,ArmPhase::STOP_BEFORE); EXPECT_EQ(refused.proof.evaluation_id,2u);
+  EXPECT_EQ(refused.proof.witness_rejection,1); EXPECT_EQ(calls,2u);
+  EXPECT_EQ(gate->prearm_scope(5).stored_generation,0u);
+}
+TEST(ControllerReservationSocket, arm_after_failure_keeps_matching_stored_generation)
+{
+  const auto path=socket_path("arm-after.sock");
+  ClientProcess client(path,capability()); auto gate=startup_gate();
+  ControllerStopWitness witness(1); fill_socket_window(witness); uint64_t calls=0;
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),
+    [&] {++calls; if(calls==2) {witness.invalidate_nonblocking();}
+      return evaluate_controller_stop(calls,[] {return true;},[&] {return &witness;},[] {return false;});},
+    ControllerReservationRole::NECK);
+  client.start("diagnostic_arm"); EXPECT_FALSE(server.serve_one());
+  const auto refused=parse_diagnostic_arm_reply(startup_body(client.result()));
+  EXPECT_EQ(refused.phase,ArmPhase::STOP_AFTER); EXPECT_EQ(refused.proof.evaluation_id,2u);
+  EXPECT_EQ(calls,2u); EXPECT_EQ(gate->generation(),0u);
+  EXPECT_EQ(gate->prearm_scope(6).stored_generation,5u);
+}
+TEST(ControllerReservationSocket, diagnostic_and_legacy_arm_share_before_gate_after_order)
+{
+  const auto path=socket_path("arm-shared.sock");
+  ClientProcess client(path,capability()); auto gate=startup_gate();
+  ControllerStopWitness witness(1); fill_socket_window(witness); uint64_t calls=0;
+  std::vector<uint64_t> generations;
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),
+    [&] {generations.push_back(gate->prearm_scope(10).stored_generation);
+      return evaluate_controller_stop(++calls,[] {return true;},[&] {return &witness;},[] {return false;});},
+    ControllerReservationRole::NECK);
+  client.start("diagnostic_arm"); EXPECT_TRUE(server.serve_one());
+  const auto ack=parse_diagnostic_arm_reply(startup_body(client.result()));
+  EXPECT_EQ(ack.status,ReservationReplyStatus::ACK); EXPECT_EQ(ack.proof.evaluation_id,2u);
+  EXPECT_EQ(generations,(std::vector<uint64_t>{0,5}));
+  client.start("arm_next"); EXPECT_TRUE(server.serve_one()); EXPECT_EQ(client.result(),"ACK");
+  EXPECT_EQ(generations,(std::vector<uint64_t>{0,5,5,6})); EXPECT_EQ(calls,4u);
+  client.start("diagnostic_arm"); EXPECT_FALSE(server.serve_one());
+  const auto stale=parse_diagnostic_arm_reply(startup_body(client.result()));
+  EXPECT_EQ(stale.phase,ArmPhase::GATE_ARM); EXPECT_EQ(stale.gate_reason,GateReason::NONINCREASING_GENERATION);
+  EXPECT_EQ(stale.proof.evaluation_id,5u); EXPECT_EQ(calls,5u); EXPECT_EQ(gate->generation(),0u);
+}
+TEST(ControllerReservationSocket, main_peer_cap_role_and_frame_refuse)
+{
+  for(const std::string damage: {"prearm_wrong_cap","prearm_bad_reserved","peer","role"}) {
+    const auto path=socket_path(damage+".sock"); ClientProcess owner(path,capability()),foreign(path,capability());
+    auto gate=startup_gate(); ASSERT_TRUE(gate->arm(5));
+    ControllerReservationSocket server(path,gate,capability(),owner.peer(),std::chrono::milliseconds(1000),
+      [] {return true;},damage=="role"?ControllerReservationRole::ARM:ControllerReservationRole::NECK);
+    auto & client=damage=="peer"?foreign:owner;
+    client.start(damage=="peer" || damage=="role"?"prearm_status":damage);
+    EXPECT_FALSE(server.serve_one()); EXPECT_EQ(client.result(),"EOF");
+    EXPECT_EQ(gate->generation(),0u);
+  }
+}
+TEST(ControllerReservationSocket, blocked_failure_sink_cannot_delay_gate_close_or_reply)
+{
+  const auto path=socket_path("new-arm-block.sock"); ClientProcess client(path,capability());
+  auto gate=startup_gate(); ControllerStopWitness witness(1); fill_socket_window(witness); uint64_t calls=0;
+  std::promise<void> entered,release; auto entered_future=entered.get_future();
+  auto release_future=release.get_future().share();
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),
+    [&] {if(++calls==2) {witness.invalidate_nonblocking();}
+      return evaluate_controller_stop(calls,[] {return true;},[&] {return &witness;},[] {return false;});},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY,
+    [&] {entered.set_value();release_future.wait();});
+  client.start("diagnostic_arm");
+  auto serve=std::async(std::launch::async,[&] {return server.serve_one();});
+  EXPECT_EQ(entered_future.wait_for(std::chrono::seconds(2)),std::future_status::ready);
+  auto reply=std::async(std::launch::async,[&] {return client.result();});
+  EXPECT_EQ(reply.wait_for(std::chrono::milliseconds(100)),std::future_status::ready);
+  EXPECT_EQ(gate->generation(),0u);
+  release.set_value(); EXPECT_FALSE(serve.get());
+  const auto decoded=parse_diagnostic_arm_reply(startup_body(reply.get()));
+  EXPECT_EQ(decoded.phase,ArmPhase::STOP_AFTER); EXPECT_EQ(decoded.proof.evaluation_id,2u);
+}
+TEST(ControllerReservationSocket, bootstrap_reads_identity_at_stored_zero)
+{
+  const auto path=socket_path("bootstrap.sock"); ClientProcess client(path,capability()); auto gate=startup_gate();
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  client.start("bootstrap_query"); EXPECT_TRUE(server.serve_one());
+  const auto body=parse_identity_scope_reply(startup_body(client.result()),false);
+  EXPECT_EQ(body.status,0); EXPECT_EQ(body.stored_generation,0u);
+  EXPECT_EQ(body.generation,5u); EXPECT_EQ(body.identity.incarnation,"startup-inc");
+  EXPECT_TRUE(gate->arm(5)); // no latch or gate mutation from bootstrap
+}
+TEST(ControllerReservationSocket, stale_same_pid_same_cap_rejects_identity_without_mutation)
+{
+  const auto path=socket_path("recreated-scope.sock"); ClientProcess client(path,capability());
+  auto first=startup_gate();
+  {
+    ControllerReservationSocket server(path,first,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+      ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    client.start("bootstrap_query"); server.serve_one();
+    EXPECT_EQ(parse_identity_scope_reply(startup_body(client.result()),false).identity.incarnation,"startup-inc");
+  }
+  auto next=std::make_shared<ControllerGoalAdmission>([] {return 1000000000LL;},2000000000,1048576,2048,
+    ServiceControllerIdentity{ControllerReservationRole::NECK,"replacement-inc","replacement-boot"});
+  ASSERT_TRUE(next->arm(5));
+  ControllerReservationSocket replacement(path,next,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  client.start("scoped_close"); EXPECT_FALSE(replacement.serve_one());
+  const auto body=parse_identity_scope_reply(startup_body(client.result()),true);
+  EXPECT_EQ(body.status,3); EXPECT_EQ(body.identity.incarnation,"replacement-inc");
+  EXPECT_EQ(next->generation(),5u); EXPECT_TRUE(next->arm(6));
+}
+TEST(ControllerReservationSocket, stale_rotated_cap_valid_sopc_is_nonmutating_without_success_receipt)
+{
+  const auto path=socket_path("rotated-scope.sock"); ClientProcess client(path,capability());
+  auto first=startup_gate();
+  {
+    ControllerReservationSocket server(path,first,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+      ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    client.start("bootstrap_query"); server.serve_one();
+    EXPECT_EQ(parse_identity_scope_reply(startup_body(client.result()),false).status,0);
+  }
+  auto rotated=capability(); rotated[0]^=1;
+  auto next=startup_gate(); ASSERT_TRUE(next->arm(5));
+  ControllerReservationSocket replacement(path,next,rotated,client.peer(),std::chrono::milliseconds(1000),{},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  client.start("scoped_close"); EXPECT_FALSE(replacement.serve_one()); EXPECT_EQ(client.result(),"EOF");
+  EXPECT_EQ(next->generation(),5u); EXPECT_TRUE(next->arm(6));
+}
+TEST(ControllerReservationSocket, nonmatching_generation_reply_write_failure_does_not_fault_revoke)
+{
+  const auto path=socket_path("wrong-generation-drop.sock"); ClientProcess client(path,capability());
+  auto gate=startup_gate(); ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  client.start("scoped_other_generation_drop_reply");
+  EXPECT_FALSE(server.serve_one()); EXPECT_EQ(client.result(),"DROPPED");
+  EXPECT_EQ(gate->generation(),5u); EXPECT_TRUE(gate->arm(6));
+}
+TEST(ControllerReservationSocket, scoped_close_zero_and_matching_generation_receipts)
+{
+  for(bool armed:{false,true}) {
+    const auto path=socket_path(armed?"scoped-armed.sock":"scoped-zero.sock");
+    ClientProcess client(path,capability()); auto gate=startup_gate();
+    if(armed) {ASSERT_TRUE(gate->arm(5));gate->close();}
+    ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+      ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+    client.start("scoped_close"); EXPECT_TRUE(server.serve_one());
+    const auto reply=parse_identity_scope_reply(startup_body(client.result()),true);
+    EXPECT_EQ(reply.status,armed?0:1); EXPECT_EQ(reply.stored_generation,armed?5u:0u);
+    EXPECT_FALSE(gate->arm(6));
+  }
+}
+TEST(ControllerReservationSocket, malformed_scoped_role_keeps_old_fault_security_behavior)
+{
+  const auto path=socket_path("scoped-bad-role.sock"); ClientProcess client(path,capability());auto gate=startup_gate();
+  ASSERT_TRUE(gate->arm(5));
+  ControllerReservationSocket server(path,gate,capability(),client.peer(),std::chrono::milliseconds(1000),{},
+    ControllerReservationRole::NECK,{},ControllerReservationSocket::Authority::PRIMARY_FAULT);
+  client.start("scoped_bad_role"); EXPECT_FALSE(server.serve_one());EXPECT_EQ(client.result(),"EOF");
+  EXPECT_FALSE(gate->arm(6));
 }

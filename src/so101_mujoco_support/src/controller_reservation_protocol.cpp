@@ -464,3 +464,268 @@ BoundReserveStatus handle_bound_reservation_frame(
   return gate.reserve_bound(request);
 }
 }  // namespace so101_mujoco_support
+
+namespace so101_mujoco_support
+{
+namespace
+{
+void require_wire(bool valid)
+{
+  if (!valid) {throw std::invalid_argument("CONTROLLER_STARTUP_FRAME_INVALID");}
+}
+void append_integer(std::vector<uint8_t> & out, uint64_t value, size_t bytes)
+{
+  for (size_t i = bytes; i > 0; --i) {out.push_back(static_cast<uint8_t>(value >> (8 * (i - 1))));}
+}
+uint64_t take_integer(const std::vector<uint8_t> & in, size_t & offset, size_t bytes)
+{
+  require_wire(offset + bytes <= in.size());
+  uint64_t value = 0;
+  for (size_t i = 0; i < bytes; ++i) {value = (value << 8) | in[offset++];}
+  return value;
+}
+int64_t signed_integer(uint64_t value)
+{
+  int64_t result;
+  std::memcpy(&result, &value, sizeof(result));
+  return result;
+}
+void append_identity(std::vector<uint8_t> & out, const ServiceControllerIdentity & identity)
+{
+  for (const auto * value : {&identity.incarnation, &identity.boot}) {
+    require_wire(!value->empty() && value->size() <= 64);
+    for (unsigned char c : *value) {require_wire(c >= 0x20 && c <= 0x7e);}
+    out.push_back(static_cast<uint8_t>(value->size()));
+    out.insert(out.end(), value->begin(), value->end());
+  }
+}
+ServiceControllerIdentity take_identity(
+  const std::vector<uint8_t> & in, size_t & offset, uint8_t role)
+{
+  require_wire(role == 3);
+  ServiceControllerIdentity identity{ControllerReservationRole::NECK, "", ""};
+  for (auto * value : {&identity.incarnation, &identity.boot}) {
+    const size_t size = take_integer(in, offset, 1);
+    require_wire(size >= 1 && size <= 64 && offset + size <= in.size());
+    value->assign(in.begin() + offset, in.begin() + offset + size);
+    offset += size;
+    for (unsigned char c : *value) {require_wire(c >= 0x20 && c <= 0x7e);}
+  }
+  return identity;
+}
+void validate_record(const StopProofRecord & p)
+{
+  const auto wrapper = static_cast<uint8_t>(p.wrapper_reason);
+  require_wire(wrapper <= 8 && p.witness_rejection <= 7 && p.last_reset_reason <= 19 &&
+    (p.flags & ~7u) == 0 && p.sample_count <= 64);
+  require_wire(p.failing_sample_index >= -1 && p.failing_sample_index < 51 &&
+    p.failing_joint_index >= -1 && p.failing_joint_index < 5 &&
+    p.last_reset_joint_index >= -1 && p.last_reset_joint_index < 5);
+  const bool snapshot = (p.flags & 1) != 0, samples = (p.flags & 4) != 0;
+  if (!snapshot) {
+    require_wire(p.flags == 0 && p.witness_rejection == 0 && p.last_reset_reason == 0 &&
+      p.sample_count == 0 && p.failing_sample_index == -1 && p.failing_joint_index == -1 &&
+      p.last_reset_joint_index == -1 && p.first_sequence == 0 && p.last_sequence == 0 &&
+      p.first_sim_time_ns == 0 && p.last_sim_time_ns == 0 && p.first_received_ns == 0 &&
+      p.last_received_ns == 0 && p.evaluated_ns == 0);
+  }
+  require_wire(samples == (p.sample_count != 0));
+  if (!samples) {
+    require_wire(p.first_sequence == 0 && p.last_sequence == 0 && p.first_sim_time_ns == 0 &&
+      p.last_sim_time_ns == 0 && p.first_received_ns == 0 && p.last_received_ns == 0);
+  } else {
+    require_wire(p.first_sequence != 0 && p.last_sequence != 0 && p.first_sim_time_ns > 0 &&
+      p.last_sim_time_ns > 0 && p.first_received_ns > 0 && p.last_received_ns > 0);
+  }
+  if (wrapper == 7) {
+    require_wire(p.evaluation_id == 0 && !snapshot && p.cumulative_observation_lock_losses == 0);
+  } else {
+    require_wire(p.evaluation_id != 0);
+  }
+  if (wrapper == 8) {require_wire(!snapshot && p.cumulative_observation_lock_losses == 0);}
+  if (wrapper >= 1 && wrapper <= 3) {require_wire(!snapshot);}
+  if (wrapper == 6) {require_wire(snapshot && p.witness_rejection != 0);}
+  if (wrapper == 0) {
+    require_wire(p.flags == 5 && p.witness_rejection == 0 && p.sample_count >= 51 &&
+      p.failing_sample_index == -1 && p.failing_joint_index == -1 &&
+      p.last_sequence >= p.first_sequence && p.last_sequence - p.first_sequence == 50 &&
+      p.last_sim_time_ns >= p.first_sim_time_ns &&
+      p.last_sim_time_ns - p.first_sim_time_ns == 100000000 &&
+      p.last_received_ns >= p.first_received_ns && p.evaluated_ns >= p.last_received_ns &&
+      p.evaluated_ns - p.first_received_ns <= 200000000);
+  }
+}
+void validate_scope(const IdentityScopeReply & p, bool close)
+{
+  require_wire(p.identity.role == ControllerReservationRole::NECK && p.generation != 0 &&
+    p.status <= (close ? 3 : 1));
+  if (close && p.status == 0) {require_wire(p.stored_generation == p.generation);}
+  if (close && p.status == 1) {require_wire(p.stored_generation == 0);}
+  if (close && p.status == 2) {
+    require_wire(p.stored_generation != 0 && p.stored_generation != p.generation);
+  }
+}
+void validate_prearm(const PrearmReply & p)
+{
+  validate_record(p.proof);
+  const auto status = static_cast<uint8_t>(p.status);
+  const auto reason = static_cast<uint16_t>(p.gate_reason);
+  require_wire(p.identity.role == ControllerReservationRole::NECK && p.generation != 0 &&
+    status <= 2 && reason <= 6);
+  if (status < 2) {
+    require_wire(reason == 0 && p.generation > p.stored_generation &&
+      p.proof.evaluation_id != 0 &&
+      p.proof.wrapper_reason != StopWrapperReason::NOT_EVALUATED);
+    require_wire((status == 0) == p.proof.allowed());
+  } else {
+    require_wire(reason != 0 && p.proof.wrapper_reason == StopWrapperReason::NOT_EVALUATED);
+  }
+}
+void validate_arm(const DiagnosticArmReply & p)
+{
+  validate_record(p.proof);
+  const auto status = static_cast<uint8_t>(p.status), phase = static_cast<uint8_t>(p.phase);
+  const auto reason = static_cast<uint16_t>(p.gate_reason);
+  require_wire(p.role == ControllerReservationRole::NECK && p.generation != 0 &&
+    status <= 1 && phase <= 3 && reason <= 6 && p.proof.evaluation_id != 0);
+  if (status == 0) {require_wire(phase == 0 && reason == 0 && p.proof.allowed());}
+  else if (phase == 2) {require_wire(reason != 0 && p.proof.allowed());}
+  else {require_wire((phase == 1 || phase == 3) && reason == 0 && !p.proof.allowed() &&
+    p.proof.wrapper_reason != StopWrapperReason::NOT_EVALUATED);}
+}
+}
+uint64_t parse_prearm_query_frame(
+  const std::vector<uint8_t> & frame, const ControllerReservationCapability & cap)
+{
+  return parse_generation_control_frame(frame, cap, 5, "PREARM_FRAME_INVALID");
+}
+uint64_t parse_diagnostic_arm_frame(
+  const std::vector<uint8_t> & frame, const ControllerReservationCapability & cap)
+{
+  return parse_generation_control_frame(frame, cap, 6, "DIAGNOSTIC_ARM_FRAME_INVALID");
+}
+uint64_t parse_bootstrap_identity_frame(
+  const std::vector<uint8_t> & frame, const ControllerReservationCapability & cap)
+{
+  require_wire(frame.size() == 66 && std::memcmp(frame.data() + 4, "SOPQ", 4) == 0);
+  auto primary = frame;
+  std::copy_n("SOGR", 4, primary.begin() + 4);
+  return parse_generation_control_frame(primary, cap, 2, "BOOTSTRAP_FRAME_INVALID");
+}
+ScopedCloseRequest parse_scoped_close_frame(const std::vector<uint8_t> & frame)
+{
+  require_wire(frame.size() >= 55 && frame.size() <= 181 &&
+    read_u32_be(frame.data()) == frame.size() - 4 &&
+    std::memcmp(frame.data() + 4, "SOPC", 4) == 0 && frame[8] == 1 && frame[9] == 1);
+  ScopedCloseRequest p;
+  std::copy_n(frame.begin() + 10, 32, p.capability.begin());
+  p.generation = read_u64(frame.data() + 42);
+  require_wire(p.generation != 0);
+  size_t offset = 51;
+  p.expected_identity = take_identity(frame, offset, frame[50]);
+  require_wire(offset == frame.size());
+  return p;
+}
+std::array<uint8_t, 80> encode_stop_proof_record(const StopProofRecord & p)
+{
+  validate_record(p);
+  std::vector<uint8_t> out;
+  out.reserve(80);
+  append_integer(out, p.evaluation_id, 8);
+  out.insert(out.end(), {static_cast<uint8_t>(p.wrapper_reason), p.witness_rejection,
+    p.last_reset_reason, p.flags});
+  append_integer(out, p.sample_count, 2);
+  out.insert(out.end(), {static_cast<uint8_t>(p.failing_sample_index),
+    static_cast<uint8_t>(p.failing_joint_index), static_cast<uint8_t>(p.last_reset_joint_index), 0});
+  append_integer(out, p.cumulative_observation_lock_losses, 4);
+  append_integer(out, 0, 2);
+  for (const auto value : {p.first_sequence, p.last_sequence,
+    static_cast<uint64_t>(p.first_sim_time_ns), static_cast<uint64_t>(p.last_sim_time_ns),
+    static_cast<uint64_t>(p.first_received_ns), static_cast<uint64_t>(p.last_received_ns),
+    static_cast<uint64_t>(p.evaluated_ns)}) {append_integer(out, value, 8);}
+  std::array<uint8_t, 80> result{};
+  std::copy(out.begin(), out.end(), result.begin());
+  return result;
+}
+StopProofRecord parse_stop_proof_record(const std::vector<uint8_t> & in)
+{
+  require_wire(in.size() == 80);
+  size_t n = 0;
+  StopProofRecord p;
+  p.evaluation_id = take_integer(in, n, 8);
+  p.wrapper_reason = static_cast<StopWrapperReason>(take_integer(in, n, 1));
+  p.witness_rejection = take_integer(in, n, 1); p.last_reset_reason = take_integer(in, n, 1);
+  p.flags = take_integer(in, n, 1); p.sample_count = take_integer(in, n, 2);
+  const auto index = [&]() {const auto b = take_integer(in, n, 1);
+      return static_cast<int8_t>(b < 128 ? b : static_cast<int>(b) - 256);};
+  p.failing_sample_index = index(); p.failing_joint_index = index(); p.last_reset_joint_index = index();
+  require_wire(take_integer(in, n, 1) == 0);
+  p.cumulative_observation_lock_losses = take_integer(in, n, 4);
+  require_wire(take_integer(in, n, 2) == 0);
+  p.first_sequence = take_integer(in, n, 8); p.last_sequence = take_integer(in, n, 8);
+  p.first_sim_time_ns = signed_integer(take_integer(in, n, 8));
+  p.last_sim_time_ns = signed_integer(take_integer(in, n, 8));
+  p.first_received_ns = signed_integer(take_integer(in, n, 8));
+  p.last_received_ns = signed_integer(take_integer(in, n, 8));
+  p.evaluated_ns = signed_integer(take_integer(in, n, 8));
+  validate_record(p); return p;
+}
+std::vector<uint8_t> encode_identity_scope_reply(const IdentityScopeReply & p, bool close)
+{
+  validate_scope(p, close);
+  std::vector<uint8_t> out{'S','O','P',static_cast<uint8_t>(close ? 'D' : 'I'),1,p.status,3,0};
+  append_integer(out, p.generation, 8); append_integer(out, p.stored_generation, 8);
+  append_identity(out, p.identity);
+  return out;
+}
+IdentityScopeReply parse_identity_scope_reply(const std::vector<uint8_t> & in, bool close)
+{
+  require_wire(in.size() >= 28 && in.size() <= 154 &&
+    std::memcmp(in.data(), close ? "SOPD" : "SOPI", 4) == 0 && in[4] == 1 && in[7] == 0);
+  IdentityScopeReply p; p.status = in[5]; size_t n = 8;
+  p.generation = take_integer(in, n, 8); p.stored_generation = take_integer(in, n, 8);
+  p.identity = take_identity(in, n, in[6]); require_wire(n == in.size());
+  validate_scope(p, close); return p;
+}
+std::vector<uint8_t> encode_prearm_reply(const PrearmReply & p)
+{
+  validate_prearm(p);
+  std::vector<uint8_t> out{'S','O','P','R',1,static_cast<uint8_t>(p.status),3,0};
+  append_integer(out, p.generation, 8); append_integer(out, p.stored_generation, 8);
+  append_integer(out, static_cast<uint16_t>(p.gate_reason), 2); append_identity(out, p.identity);
+  const auto proof = encode_stop_proof_record(p.proof); out.insert(out.end(), proof.begin(), proof.end());
+  return out;
+}
+PrearmReply parse_prearm_reply(const std::vector<uint8_t> & in)
+{
+  require_wire(in.size() >= 110 && in.size() <= 236 &&
+    std::memcmp(in.data(), "SOPR", 4) == 0 && in[4] == 1 && in[7] == 0);
+  PrearmReply p; p.status = static_cast<PrearmStatus>(in[5]); size_t n = 8;
+  p.generation = take_integer(in, n, 8); p.stored_generation = take_integer(in, n, 8);
+  p.gate_reason = static_cast<GateReason>(take_integer(in, n, 2));
+  p.identity = take_identity(in, n, in[6]); require_wire(n + 80 == in.size());
+  p.proof = parse_stop_proof_record(std::vector<uint8_t>(in.begin() + n, in.end()));
+  validate_prearm(p); return p;
+}
+std::array<uint8_t, 104> encode_diagnostic_arm_reply(const DiagnosticArmReply & p)
+{
+  validate_arm(p);
+  std::vector<uint8_t> out{'S','O','A','R',1,static_cast<uint8_t>(p.status),
+    static_cast<uint8_t>(p.role),static_cast<uint8_t>(p.phase)};
+  append_integer(out, p.generation, 8); append_integer(out, static_cast<uint16_t>(p.gate_reason), 2);
+  out.insert(out.end(), 6, 0);
+  const auto proof = encode_stop_proof_record(p.proof); out.insert(out.end(), proof.begin(), proof.end());
+  std::array<uint8_t, 104> result{}; std::copy(out.begin(), out.end(), result.begin()); return result;
+}
+DiagnosticArmReply parse_diagnostic_arm_reply(const std::vector<uint8_t> & in)
+{
+  require_wire(in.size() == 104 && std::memcmp(in.data(), "SOAR", 4) == 0 && in[4] == 1 &&
+    std::all_of(in.begin() + 18, in.begin() + 24, [](uint8_t c) {return c == 0;}));
+  DiagnosticArmReply p; p.status = static_cast<ReservationReplyStatus>(in[5]);
+  p.role = static_cast<ControllerReservationRole>(in[6]); p.phase = static_cast<ArmPhase>(in[7]);
+  size_t n = 8; p.generation = take_integer(in, n, 8);
+  p.gate_reason = static_cast<GateReason>(take_integer(in, n, 2));
+  p.proof = parse_stop_proof_record(std::vector<uint8_t>(in.begin() + 24, in.end()));
+  validate_arm(p); return p;
+}
+}  // namespace so101_mujoco_support

@@ -13,7 +13,7 @@ import time
 
 from .head_callback_io import exception_metadata
 from so101_demo.act.head_feedback import nanoseconds
-from so101_demo.act.head_monitor import canonical_bytes
+from so101_demo.act.head_evidence_identity import canonical_bytes
 from so101_demo.act.head_simulation_policy import HeadSimulationPolicy, validate_stopped_observation_request
 
 
@@ -31,6 +31,7 @@ class HeadInferenceOwner:
         self._live_retirement=None;self._owner=None;self._metadata=None;self._operation_error=None
         self._quiescence=None
         self._observation=None;self._last_observation=None;self._not_ready_since=None
+        self._completed_observation_sequence=0
         self._thread=threading.Thread(target=self._run,name='head-owned-inference',daemon=False)
         try:self._thread.start()
         except BaseException:
@@ -84,7 +85,7 @@ class HeadInferenceOwner:
                             if self._not_ready_since is None:self._not_ready_since=now
                             if (nanoseconds(now)<nanoseconds(self._not_ready_since)
                                     or nanoseconds(now)-nanoseconds(self._not_ready_since)
-                                        >=nanoseconds(self._simulation_policy.supervision_stale_s)):
+                                        >=nanoseconds(self._simulation_policy.fault_reaction_limit_s)):
                                 raise PermissionError('HEAD_INFERENCE_LIVE_PRIMARY_NOT_READY')
                             self._retiring.wait(self._simulation_policy.watchdog_period_s)
                             continue
@@ -101,6 +102,10 @@ class HeadInferenceOwner:
                                     if self._observation is not request:
                                         raise PermissionError('HEAD_INFERENCE_STOPPED_REQUEST_CHANGED')
                                     self._observation=None
+                                    # Publication by the live channel precedes
+                                    # infer's return. Release this request and
+                                    # expose its completion in one owner commit.
+                                    self._completed_observation_sequence=request['observation_sequence']
                         self._retiring.wait(self._simulation_policy.watchdog_period_s)
                     else:
                         self._live.infer()
@@ -151,6 +156,11 @@ class HeadInferenceOwner:
                 except queue.Empty:break
                 queued[2].set_exception(PermissionError('HEAD_INFERENCE_OWNER_CLOSED'));self._jobs.task_done()
             with self._lock:self._stage='EXITED'
+
+    @property
+    def runtime_device(self):
+        with self._lock:
+            return None if self._metadata is None else self._metadata.get('runtime_device')
 
     def configuration(self,*,timeout_s):
         if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<timeout_s<=90:
@@ -285,6 +295,23 @@ class HeadInferenceOwner:
         live=self._live
         if live is None:raise PermissionError('HEAD_INFERENCE_LIVE_NOT_BOUND')
         return live.next_completed_exposure(after_sequence)
+
+    def next_completed_observation(self,after_sequence):
+        """Completed stopped-observation row from the bound live channel.
+
+        The local stopped-demand path uses this channel; a live object without
+        it is refused rather than served a fabricated row.
+        """
+        self.infer()  # Status only; never wait for the CUDA worker.
+        live=self._live
+        if live is None:raise PermissionError('HEAD_INFERENCE_LIVE_NOT_BOUND')
+        reader=getattr(live,'next_completed_observation',None)
+        if not callable(reader):raise PermissionError('HEAD_INFERENCE_OBSERVATION_CHANNEL_ABSENT')
+        with self._lock:completed_sequence=self._completed_observation_sequence
+        row=reader(after_sequence)
+        if row is not None and row['observation_sequence']>completed_sequence:
+            return None
+        return row
 
     def close(self,*,timeout_s=1.):
         if type(timeout_s) not in (int,float) or not math.isfinite(timeout_s) or not 0<=timeout_s<=10:

@@ -143,16 +143,16 @@ def test_native_inventory_failure_cannot_erase_pre_sdk_uuid_from_stop_proof(monk
 
 
 def test_sdk_adoption_never_serializes_inventory_under_feedback_cache(monkeypatch):
-    from so101_demo.act import head_monitor
+    from so101_demo.act import head_evidence_identity
     _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
     message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr);port._head_fault_callback=lambda reason:None
     try:
         port.inventory_prepared(record,cdr)
-        original=head_monitor.canonical_bytes
+        original=head_evidence_identity.canonical_bytes
         def without_cache(value):
             assert not port._lock._is_owned(),'inventory serialization held original feedback cache'
             return original(value)
-        monkeypatch.setattr(head_monitor,'canonical_bytes',without_cache)
+        monkeypatch.setattr(head_evidence_identity,'canonical_bytes',without_cache)
         port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr,dispatch_guard=lambda:True)
         assert len([row for row in calls if row[0]=='send'])==1
     finally:port.close_head_io(timeout_s=1.)
@@ -169,6 +169,36 @@ def test_inventory_claim_expiring_after_monitor_guard_prevents_sdk(monkeypatch):
         with pytest.raises(PermissionError):port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr,dispatch_guard=guard)
         assert not [row for row in calls if row[0]=='send']
         assert port.accepted(record['goal_uuid']) is None and port.result(record['goal_uuid']) is None
+    finally:port.close_head_io(timeout_s=1.)
+
+
+def test_exact_deadline_after_final_guard_refuses_sdk(monkeypatch):
+    _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
+    message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr)
+    port._head_fault_callback=lambda reason:None
+    try:
+        port.inventory_prepared(record,cdr)
+        def guard():
+            monkeypatch.setattr(time,'monotonic_ns',lambda:record['deadline_ns'])
+            return True
+        with pytest.raises(PermissionError,match='CLAIM_EXPIRED'):
+            port.send_prepared(message,goal_uuid=goal_uuid,expected_cdr=cdr,dispatch_guard=guard)
+        assert not [row for row in calls if row[0]=='send']
+        assert port.accepted(record['goal_uuid']) is None
+    finally:port.close_head_io(timeout_s=1.)
+
+
+def test_primary_inventory_exact_deadline_is_not_admitted(monkeypatch):
+    _,_,port,_,_,calls,_=setup_ports(monkeypatch);port._feedback(sample())
+    message,goal_uuid,cdr=prepared();record=inventory(message,goal_uuid,cdr)
+    faults=[];port._head_fault_callback=faults.append
+    monkeypatch.setattr(time,'monotonic_ns',lambda:record['deadline_ns'])
+    try:
+        with pytest.raises(PermissionError,match='INVENTORY_REFUSED'):
+            port.inventory_prepared(record,cdr)
+        assert faults and port._head_policy_binding_failed
+        assert record['goal_uuid'] not in port._goals
+        assert not [row for row in calls if row[0]=='send']
     finally:port.close_head_io(timeout_s=1.)
 
 

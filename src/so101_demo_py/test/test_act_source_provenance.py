@@ -36,13 +36,19 @@ def _receipt(installed: Path, source_rel: str, source_root: Path) -> dict:
 
 
 @pytest.fixture
-def provenance_env(tmp_path):
+def provenance_env(tmp_path, monkeypatch):
     """A real git tree plus an overlay carrying every registered runtime role."""
 
     source_root = tmp_path / "repo"
     overlay = tmp_path / "install"
     source_root.mkdir()
     dependency = tmp_path / "dependency"
+    from so101_demo.act import source_provenance
+    external = {}
+    for name, (_path, version) in source_provenance._EXTERNAL_RUNTIMES.items():
+        path = _write(tmp_path / "external" / name, f"fixture {name}\n".encode())
+        external[name] = (str(path), version)
+    monkeypatch.setattr(source_provenance, "_EXTERNAL_RUNTIMES", external)
     for logical_name, kind, source_rel, install_rel, owning_overlay in runtime_role_specs():
         if kind == "external_runtime":
             continue

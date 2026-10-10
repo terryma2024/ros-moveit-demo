@@ -117,15 +117,9 @@ def _publish_private_provision(destination,body,parent):
         os.close(directory)
 
 
-def write_head_revocation_provision(path,*,session_id,native_owner,socket_path):
-    """The independent monitor publishes SOPRv2 for its own exact process."""
-    return _write_head_close_only_provision(path,session_id=session_id,
-        native_owner=native_owner,socket_path=socket_path,primary=False)
-
-
-def _write_head_close_only_provision(path,*,session_id,native_owner,socket_path,primary):
-    stem='neck-primary-revoke' if primary else 'neck-revoke'
-    authority=4 if primary else 3
+def _write_head_close_only_provision(path,*,session_id,native_owner,socket_path):
+    stem='neck-primary-revoke'
+    authority=4
     destination=Path(path);endpoint=Path(socket_path)
     parent=_private_parent(destination)
     if (not isinstance(session_id,str) or not _SESSION.fullmatch(session_id)
@@ -158,7 +152,7 @@ def _write_head_close_only_provision(path,*,session_id,native_owner,socket_path,
 def write_head_primary_fault_provision(path,*,session_id,native_owner,socket_path):
     """The primary publishes its separate fault-close authority for its own PID."""
     return _write_head_close_only_provision(path,session_id=session_id,
-        native_owner=native_owner,socket_path=socket_path,primary=True)
+        native_owner=native_owner,socket_path=socket_path)
 
 
 def _remove_owned_provisions(directory: Path, identities: dict[str, tuple[int, int]]) -> None:

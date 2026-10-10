@@ -1,0 +1,7 @@
+{
+  "result": null,
+  "error": {
+    "type": "ValueError",
+    "message": "NOMINAL_NATIVE_PERIOD:arm"
+  }
+}

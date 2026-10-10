@@ -1,0 +1,76 @@
+"""Fixed sequential batch. Only verified guardian completion can promote PASS."""
+from pathlib import Path
+import hashlib, json, os, subprocess, sys, time
+from nominal_contract import require_observers_off, worker_valid, guardian_valid, can_start
+
+C = Path(__file__).parent
+ROOT = C / 'checkpoints/nominal-holds001'
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def write(path, value):
+    with Path(path).open('w') as f:
+        json.dump(value, f, indent=2, allow_nan=False)
+        f.write('\n'); f.flush(); os.fsync(f.fileno())
+
+def check(ref):
+    assert sha(ref['path']) == ref['sha256'], ref['path']
+
+def main():
+    require_observers_off(os.environ)
+    assert os.access('/usr/bin/python3', os.X_OK)
+    assert not (ROOT/'batch-started.json').exists()
+    admission = json.loads((ROOT/'launch-admission.json').read_text())
+    assert admission['allowed'] is True
+    for row in admission['refs'].values():
+        check(row)
+    rows = json.loads((ROOT/'prepared.json').read_text())['rows']
+    assert len(rows) == 3 and all(row['status'] == 'NOT_RUN' for row in rows)
+    write(ROOT/'batch-started.json', dict(monotonic_ns=time.monotonic_ns(), count=3))
+    write(ROOT/'batch-progress.json', dict(rows=rows, production_qualified=False))
+    for index, row in enumerate(rows):
+        assert can_start([r['status'] for r in rows], index)
+        G = ROOT / f'{index+1:03d}'
+        for ref in json.loads((G/'launch-admission.json').read_text())['refs'].values():
+            check(ref)
+        argv = ['/usr/bin/python3', str(C/'bounded_guardian.py'), str(G/'guard-config.json')]
+        write(G/'guardian-command.json', dict(argv=argv))
+        row['status'] = 'RUNNING'
+        write(ROOT/'batch-progress.json', dict(rows=rows, production_qualified=False))
+        started = time.monotonic()
+        # The guardian owns the wall bound and all descendants. A tool interruption
+        # must be inspected; this batch is deliberately non-resumable/no retry.
+        result = subprocess.run(argv, text=True, capture_output=True)
+        (G/'guardian-tool.stdout').write_text(result.stdout)
+        (G/'guardian-tool.stderr').write_text(result.stderr)
+        write(G/'guardian-tool-result.json', dict(actual_rc=result.returncode,
+            elapsed_s=time.monotonic()-started, argv=argv))
+        problem = None
+        guardian = worker = None
+        try:
+            guardian = json.loads(result.stdout)
+            write(G/'guardian-result.json', dict(actual_rc=result.returncode, result=guardian))
+            worker = json.loads((G/'receipt.json').read_text())
+            accepted = guardian_valid(guardian, result.returncode) and worker_valid(worker)
+        except (OSError, ValueError) as error:
+            problem = dict(type=type(error).__name__, message=str(error))
+            accepted = False
+        row.update(status='PASS' if accepted else 'FAIL', guardian_actual_rc=result.returncode,
+                   worker_rc=(guardian or {}).get('worker_rc'), error=problem)
+        write(G/'promotion.json', dict(status=row['status'], actual_guardian_rc=result.returncode,
+            guardian_sha256=sha(G/'guardian-tool.stdout'),
+            worker_receipt_sha256=sha(G/'receipt.json') if (G/'receipt.json').is_file() else None,
+            promoted_only_after_authoritative_guardian=True, production_qualified=False))
+        write(ROOT/'batch-progress.json', dict(rows=rows, production_qualified=False))
+        print(json.dumps(row), flush=True)
+        if not accepted:
+            break
+    passed = all(row['status'] == 'PASS' for row in rows)
+    write(ROOT/'batch-result.json', dict(rows=rows, nominal_holds_pass=passed,
+        count=3, duration_s=120, stop_on_first_failure=True, production_qualified=False,
+        live20_pass=False, fresh40_pass=False, visual_pass=False))
+    return 0 if passed else 1
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -1,0 +1,213 @@
+{
+  "schema": "HEAD_STABILITY_PAUSE_SNAPSHOT_001",
+  "goal_status": "paused",
+  "pause_requested_by_user": true,
+  "source_head_before_pause": "de70d83ed1e599c5dbb26843e06bd1af574f0a93",
+  "source_submodule_before_pause": "495c3d6f512b5301405fc0955576bc231e344a7f",
+  "files": [
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/coherent-cycle002.patch",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/coherent-cycle002.patch",
+      "sha256": "fe64d6f6ab477b6d10b99d572ce4a0f54deb76ae581514d8468d20a268978375",
+      "bytes": 7132
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal-hold-plan001.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/nominal-hold-plan001.json",
+      "sha256": "91b91213c6b1218b74d02566c85d1e7823fe0aed6c271eba10bef24a905a67b5",
+      "bytes": 8111
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal_contract.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/nominal_contract.py.snapshot",
+      "sha256": "2c32e752d51470d38d1610b8beab8e5c5b878a2ffb85bd0cfbdfe639ef6a9c85",
+      "bytes": 5573
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/test_nominal_contract.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/test_nominal_contract.py.snapshot",
+      "sha256": "c24ab6907078c60ff3c580a3be9344ef3cdec6ab8f2408452912c25099a8b73d",
+      "bytes": 7802
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/legacy_nominal_test_adapter.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/legacy_nominal_test_adapter.py.snapshot",
+      "sha256": "5f1dfc611545b3fc22ba4f8ee68ffc5cefbd8f0e6c8da638336aa5c666523e3d",
+      "bytes": 2442
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/run_nominal_gate.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/run_nominal_gate.py.snapshot",
+      "sha256": "065dfaa2cb0d8fa4d65318001314ebb714f61a7eff7f9f28d946f08bbf694ef0",
+      "bytes": 1907
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal_worker.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/nominal_worker.py.snapshot",
+      "sha256": "3c7a706a49a18902483e8426d4bae638e298c96fa26be57d2295faa29ef8a3d6",
+      "bytes": 14499
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal_scope_preflight.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/nominal_scope_preflight.py.snapshot",
+      "sha256": "f2cfd73ab394d7e0e6a6d336b243429f02fde320efab527517bca94c47ae327c",
+      "bytes": 916
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/prepare_nominal.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/prepare_nominal.py.snapshot",
+      "sha256": "b032048a6cf308cb775bf1099a56c0015a283c9171036ec55ceba5c40109b56c",
+      "bytes": 4756
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/nominal_batch.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/nominal_batch.py.snapshot",
+      "sha256": "d88af767a948473da41b0171a3ca2860a888385e9355615475c506e1e3ab65f0",
+      "bytes": 3926
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/bounded_guardian.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/bounded_guardian.py.snapshot",
+      "sha256": "0789d7c4e972c4a2c67552c2783e0bad85318dd5600db0faa34ada70178c1f0b",
+      "bytes": 5945
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/process_provenance.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/process_provenance.py.snapshot",
+      "sha256": "260f19f1f0cbd596c50f3f23e9c8c814e089c3dc2cfedea6e1518f1483ae8d15",
+      "bytes": 1464
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/map_evidence.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/map_evidence.py.snapshot",
+      "sha256": "ae68715ad2a8f25d85ff01d06ca3bb7203c42c31dbc813584a6e80cd2b79c2e9",
+      "bytes": 2710
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/receipt_facts.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/receipt_facts.py.snapshot",
+      "sha256": "0f8240ce4fe2080865ad39dff39be511c3d4f3166b4aafe9da99da6c642c8686",
+      "bytes": 1206
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/native_scope_preflight.py",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/native_scope_preflight.py.snapshot",
+      "sha256": "a74274a7dd3c28f45666ccacce639426b4fb49e2d757a680d7105b8a1f227d26",
+      "bytes": 2095
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/runtime-source-manifest.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/runtime-source-manifest.json",
+      "sha256": "41034c093338854381da79e4ef33489e6de49425e84ae73678bd15d82019700d",
+      "bytes": 36172
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/runtime-install-inventory.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/runtime-install-inventory.json",
+      "sha256": "bcb5d23bea3c30faaf5c12969e603f108209da20c5137695de8fecdc2a8c457a",
+      "bytes": 49568
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/package-tests003-result.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/package-tests003-result.json",
+      "sha256": "107b957907f469bb424732dc8b0363133c630a04f77b4fa24cf391459f4755d9",
+      "bytes": 1867
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checks/nominal-contract-red001/receipt.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checks/nominal-contract-red001/receipt.json",
+      "sha256": "a332b50a84082753e7a82bfcd9237c41e6c66b427d5565c45ff0314c7d006e68",
+      "bytes": 1277
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checks/nominal-contract-green001/receipt.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checks/nominal-contract-green001/receipt.json",
+      "sha256": "6ae6e5c9a6437e86b3767b1b8ae1e7542355e6d78a538ff316d6a1b3e1cd1087",
+      "bytes": 1282
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/review/coherent-nominal-design001/astra-review.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/reviews/coherent-nominal-design001/astra-review.json",
+      "sha256": "e6db615f74401b811766d480c79be09a6581acaf376a6b1458be14002b13e8c0",
+      "bytes": 7176
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/review/coherent-nominal-launch001/astra-review.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/reviews/coherent-nominal-launch001/astra-review.json",
+      "sha256": "622ff65781748a101f64c87979f46b4b4d5fb2228a4ee5f4681f9943fe4b75e7",
+      "bytes": 8080
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/review/coherent-actual-result001/astra-review.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/reviews/coherent-actual-result001/astra-review.json",
+      "sha256": "663ff7eee14bb2efaf0d5a4976555da93aed9fa1e0f62acf6582041886a8d088",
+      "bytes": 10277
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/batch-result.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/batch-result.json",
+      "sha256": "30fc3e280988315ddc97e9d2ee1c4bf82ae760f25a81b98200c7e352fd0feb84",
+      "bytes": 679
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/batch-tool-result.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/batch-tool-result.json",
+      "sha256": "2e60621bf0e407ab9cb1ed072374398169953fb6defbe0460f0a5ef222b56350",
+      "bytes": 143
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/prepared.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/prepared.json",
+      "sha256": "4d3281a35d60e52dcc2179a90e7c861b49119bfd3e29b3f55a1001d93f968f8c",
+      "bytes": 878
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/guardian-tool-result.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/guardian-tool-result.json",
+      "sha256": "ab25784f99639f37a2cf9eb52b2808d97357f5755c4ebfe81606543b9016737b",
+      "bytes": 719
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/guardian-result.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/guardian-result.json",
+      "sha256": "0598fad6f4d10b59f9ab2e896b8a51256b6f2a2a5c09a0f1e595464e0be2a522",
+      "bytes": 268
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/receipt.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/receipt.json",
+      "sha256": "0be92e32cefdd70234687a047eb7432be78f0470553d14f3bb0baf92899c4f4f",
+      "bytes": 10881
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/native-failure-summary.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/native-failure-summary.json",
+      "sha256": "4e33b8e84f2bf1ecca49d9b5e3736d584fa91518505db84695a071b31a3f873e",
+      "bytes": 7862
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/independent-root-os.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/independent-root-os.json",
+      "sha256": "a6087f09539e6b5ae273f525405e31150c05f52334159ddd30fb9ebd3c8b1551",
+      "bytes": 835
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/native-readback.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/native-readback.json",
+      "sha256": "d1289b7f5453ce2345ccb72ed0fccffecbe6f147f5deafd443b6f0af34d3d1de",
+      "bytes": 108
+    },
+    {
+      "original_path": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m/head-file-protocol-1003/head-camera-yolo-optimization-20261009-001/optimization-fix-20261009-001/protocol-implementation-ivicy38d/clock-diagnostic-yrcfff3b/probe001/exit-probe001/coherent-repair001/checkpoints/nominal-holds001/001/postflight-graph.json",
+      "snapshot_path": "docs/experiments/so101-head-file-protocol-1003-pause-20261010/isolated/checkpoints/nominal-holds001/001/postflight-graph.json",
+      "sha256": "be219e7dfbd5721832ee3fed59ee439e86c2ac06fb5aece23bba3ea43ecf44ce",
+      "bytes": 46
+    }
+  ],
+  "scope": "Byte-identical preservation of isolated repair and nominal acceptance helpers/evidence; not integrated into repository production code",
+  "runtime_safe_to_restart": false,
+  "restart_note": "Do not rerun nominal-holds001 or execute archived absolute-path helpers directly. Read handoff and ledger first; existing batch is terminal and non-resumable.",
+  "evidence_root": "/data/work/so101-evidence/act-data/20260930-antzb-head-search-krIv681m",
+  "archived_runs": [],
+  "deleted_runs": []
+}

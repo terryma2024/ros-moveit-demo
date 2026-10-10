@@ -54,6 +54,29 @@ def start_ticks() -> int:
 
 def frame_for(mode: str) -> bytes:
     key = capability
+    if mode.startswith("bootstrap_") or mode.startswith("scoped_"):
+        generation = 6 if "other_generation" in mode else 5
+        if mode.startswith("bootstrap_"):
+            body = b"SOPQ\x01\x02" + key + generation.to_bytes(8, "big") + bytes(16)
+        else:
+            inc, boot = b"startup-inc", b"startup-boot"
+            if mode == "scoped_stale_identity":
+                inc = b"old-inc"
+            if mode == "scoped_wrong_cap":
+                key = bytes([key[0] ^ 1]) + key[1:]
+            role = 1 if mode == "scoped_bad_role" else 3
+            body = (b"SOPC\x01\x01" + key + generation.to_bytes(8, "big") + bytes([role, len(inc)])
+                    + inc + bytes([len(boot)]) + boot)
+        return len(body).to_bytes(4, "big") + body
+    if mode.startswith("prearm_") or mode.startswith("diagnostic_arm"):
+        if mode == "prearm_wrong_cap":
+            key = bytes([key[0] ^ 1]) + key[1:]
+        operation = 5 if mode.startswith("prearm_") else 6
+        generation = 6 if mode == "diagnostic_arm_next" else 5
+        body = b"SOGR\x01" + bytes([operation]) + key + generation.to_bytes(8, "big") + bytes(16)
+        if mode == "prearm_bad_reserved":
+            body = body[:-1] + b"\x01"
+        return len(body).to_bytes(4, "big") + body
     if mode in ("identity_neck", "identity_wrong_role"):
         role = 3 if mode == "identity_neck" else 1
         body = b"SOIA\x01\x01" + key + bytes([role])
@@ -176,6 +199,29 @@ def request(mode: str) -> str:
         if mode == "close_drop_reply":
             conn.shutdown(socket.SHUT_RDWR)
             return "CLOSE_SENT_WITHOUT_ACK"
+        if mode.startswith(("bootstrap_", "scoped_", "prearm_", "diagnostic_arm")):
+            if mode == "prearm_drop_reply" or "drop_reply" in mode:
+                conn.shutdown(socket.SHUT_RDWR)
+                return "DROPPED"
+            def exact(size):
+                reply = bytearray()
+                while len(reply) < size:
+                    chunk = conn.recv(size - len(reply))
+                    if not chunk:
+                        return None
+                    reply.extend(chunk)
+                return bytes(reply)
+            if mode.startswith(("bootstrap_", "scoped_", "prearm_")):
+                prefix = exact(4)
+                if prefix is None:
+                    return "EOF"
+                size = int.from_bytes(prefix, "big")
+                if size > 236:
+                    return "EOF"
+            else:
+                size = 104
+            reply = exact(size)
+            return "WIRE " + reply.hex() if reply is not None else "EOF"
         if mode.startswith("identity_"):
             prefix = conn.recv(4)
             if len(prefix) != 4:

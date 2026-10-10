@@ -36,7 +36,8 @@ def stopped_window_boundary(receipts,*,now_ns,processing_margin_s=0.):
 
 
 class StoppedHeadCapture:
-    def __init__(self,node,port,*,frame_id,monotonic=time.monotonic,strict=True,emit=None):
+    def __init__(self,node,port,*,frame_id,monotonic=time.monotonic,strict=True,emit=None,
+                 camera_relay=None):
         self.node,self.port,self.frame_id,self.monotonic=node,port,frame_id,monotonic
         self.strict=strict;self.emit=emit;self._started=False;self._failure=None
         self.camera_messages=deque(maxlen=40000);self.info_messages=deque(maxlen=40000)
@@ -44,13 +45,14 @@ class StoppedHeadCapture:
         self._pending=None;self._last={};self._last_camera=None
         self._original_sink=None;self._window=None;self._window_finished=False
         self._live_sink=None;self._live_floor=None
-        self._measurement_monitor=None;self._measurement_scope=None
-        self._measurement_attempts=[]
-        self._measurement_pending=None;self._measurement_handoff=None
-        self._measurement_consumed=threading.Event()
+        self._live_mode=False
+        image_callback = self._image if camera_relay is None else (
+            lambda message: camera_relay.deliver(message, self._image))
+        info_callback = self._info if camera_relay is None else (
+            lambda message: camera_relay.deliver(message, self._info))
         self.subscriptions=[
-            node.create_subscription(Image,'/head_camera/color',self._image,RGB_QOS),
-            node.create_subscription(CameraInfo,'/head_camera/camera_info',self._info,RGB_QOS),
+            node.create_subscription(Image,'/head_camera/color',image_callback,RGB_QOS),
+            node.create_subscription(CameraInfo,'/head_camera/camera_info',info_callback,RGB_QOS),
             bind_head_clock(node,self._clock,monotonic=self.monotonic)]
 
     def begin_capture(self):
@@ -74,78 +76,23 @@ class StoppedHeadCapture:
                 raise PermissionError('HEAD_STOPPED_ORIGINAL_SINK_REBOUND')
             self._original_sink=sink
 
-    def bind_measurement_monitor(self,monitor,*,epoch,generation,session_id):
-        if (not callable(getattr(monitor,'request_runtime',None))
-                or type(epoch) is not str or not epoch or type(session_id) is not str or not session_id
-                or type(generation) is not int or not 0<generation<2**64):
-            raise ValueError('HEAD_STOPPED_MEASUREMENT_BINDING_INVALID')
+    def begin_live_capture(self):
+        """Start execution originals without a calibration measurement window.
+
+        The original sink must already own delivery. This grants no motion or
+        inference permission; the live exposure is bound and activated later.
+        """
         with self.port._lock:
-            if self._measurement_monitor is not None or self._started or self._failure is not None:
-                raise PermissionError('HEAD_STOPPED_MEASUREMENT_REBOUND')
-            self._measurement_monitor=monitor
-            self._measurement_scope=dict(epoch=epoch,generation=generation,session_id=session_id,
-                monitor_peer=dict(monitor.identity))
-
-    def _measurement_request(self,operation,value):
-        attempt=None
-        try:
             self.check()
-            if len(self._measurement_attempts)>=40000:
-                raise PermissionError('HEAD_STOPPED_MEASUREMENT_HISTORY_OVERFLOW')
-            claim=value if operation=='CALIBRATION_FRAME_INPUTS' else value['claim']
-            attempt=dict(operation=operation,root_claim=deepcopy(claim),channel_trace={},
-                outcome='PENDING',error_type=None,ack_wall_s=None,inputs_ready=None)
-            attempt['started_wall_s']=self.monotonic()
-            reply=self._read_measurement_request(operation,value,
-                started=attempt['started_wall_s'],trace=attempt['channel_trace'])
-            attempt.update(outcome='ACK',ack_wall_s=reply['ack_wall_s'],inputs_ready=reply['inputs_ready'],
-                ended_wall_s=self.monotonic())
-            self._measurement_attempts.append(attempt)
-            return reply
-        except Exception as error:
-            self._failure='HEAD_STOPPED_MEASUREMENT_REFUSED'
-            self.port._head_policy_binding_failed=True
-            if attempt is not None:
-                attempt.update(outcome='REFUSED',error_type=type(error).__name__,ended_wall_s=self.monotonic())
-                self._measurement_attempts.append(attempt)
-            callback=getattr(self.port,'_head_fault_callback',None)
-            if callable(callback):callback(self._failure)
-            raise
+            if (self._started or self._window is not None
+                    or self._original_sink is None):
+                raise PermissionError('HEAD_STOPPED_LIVE_START_REFUSED')
+            self._started=True;self.strict=True;self._live_mode=True;self._pending=None
+            for name in ('camera_messages','info_messages','clock_messages','events'):
+                setattr(self,name,deque(getattr(self,name),maxlen=32))
 
-    def _read_measurement_request(self,operation,value,*,started,trace):
-        field='exposure' if operation=='CALIBRATION_FRAME_INPUTS' else 'completion'
-        claim=value if field=='exposure' else value['claim']
-        reply=deepcopy(self._measurement_monitor.request_runtime(
-            dict(operation=operation,**{field:value}),trace=trace))
-        received=self.monotonic()
-        if (type(reply) is not dict or reply.get('request')!=operation or reply.get('stage')!='CONFIGURED'
-                or reply.get('purpose')!='calibration' or reply.get('calibration_measurement') is not True
-                or reply.get('motion_authority') is not False or reply.get('root_claim')!=claim
-                or type(reply.get('inputs_ready')) is not bool
-                or type(reply.get('generation')) is not int
-                or any(reply.get(key)!=val for key,val in self._measurement_scope.items())
-                or not 0<=received-started<=.010
-                or type(reply.get('ack_wall_s')) not in (int,float)
-                or not math.isfinite(reply['ack_wall_s']) or not started<=reply['ack_wall_s']<=received):
-            raise PermissionError('HEAD_STOPPED_MEASUREMENT_ACK_INVALID')
-        snapshot=reply['original_snapshot'];decision=snapshot['decision']
-        if (not started<=decision['wall_before_s']<=decision['wall_after_s']<=reply['ack_wall_s']
-                or type(decision['sim_ns']) is not int or decision['sim_ns']<claim['image_source_ns']):
-            raise PermissionError('HEAD_STOPPED_MEASUREMENT_CLOCK_INVALID')
-        if reply['inputs_ready']:
-            for kind in ('image','info'):
-                row=snapshot[kind]
-                if (type(row) is not dict or row.get('valid') is not True
-                        or row['source_ns']!=claim['image_source_ns']
-                        or row['frame_id']!=claim['image_frame_id']
-                        or type(row['wall_s']) not in (int,float) or not math.isfinite(row['wall_s'])
-                        or not 0<=row['wall_s']<=decision['wall_before_s']
-                        or kind=='image' and row['payload_sha256']!=claim['payload_sha256']):
-                    raise PermissionError('HEAD_STOPPED_MEASUREMENT_ORIGINAL_INVALID')
-        if field=='completion' and (reply.get('measurement_complete') is not True
-                or reply.get('completion')!=value or reply['inputs_ready'] is not True):
-            raise PermissionError('HEAD_STOPPED_MEASUREMENT_COMPLETION_INVALID')
-        return reply
+
+
 
     def bind_live_sink(self,sink):
         """Delegate future originals once; the finished calibration stays sealed.
@@ -156,7 +103,7 @@ class StoppedHeadCapture:
         if not callable(sink):raise ValueError('HEAD_STOPPED_LIVE_SINK_INVALID')
         with self.port._lock:
             self.check()
-            if (not self._started or not self._window_finished or self._pending is not None
+            if (not self._started or not (self._window_finished or self._live_mode) or self._pending is not None
                     or self._original_sink is None or self._live_sink is not None):
                 raise PermissionError('HEAD_STOPPED_LIVE_HANDOFF_REFUSED')
             # A callback already copied before this boundary is not a new live
@@ -212,7 +159,7 @@ class StoppedHeadCapture:
 
     def _record(self,rows,record):
         if self._live_sink is not None:return
-        if self.strict and len(rows)==rows.maxlen:self._failure='HEAD_STOPPED_HISTORY_OVERFLOW'
+        if self.strict and not self._live_mode and len(rows)==rows.maxlen:self._failure='HEAD_STOPPED_HISTORY_OVERFLOW'
         rows.append(record)
 
     def _validate_source(self,kind,record):
@@ -233,7 +180,7 @@ class StoppedHeadCapture:
         if not valid:record['error']='HEAD_STOPPED_IMAGE_INVALID'
         with self.port._lock:
             self._validate_source('image',record);self._record(self.camera_messages,record)
-            if self._live_sink is None:
+            if self._live_sink is None and not self._live_mode:
                 unadmitted=self._window is not None and nanoseconds(received)>self._window[1]
                 if unadmitted:
                     self._record(self.events,dict(event='IMAGE_UNADMITTED_PRESENCE',
@@ -276,13 +223,11 @@ class StoppedHeadCapture:
     def check(self):
         if self._failure is not None:raise ValueError(self._failure)
 
-    def snapshot(self,*,consume_measurement=False):
+    def snapshot(self):
         self.check()
         with self.port._lock:
             joint_candidates=_copy_current_original_candidates(self.port._head_feedback,self.port._head_samples)
             camera_candidates=_copy_current_original_candidates(self._last_camera,self.camera_messages)
-            pending=self._measurement_pending if consume_measurement else None
-            completed=None if pending is None else deepcopy(pending)
         clocks=decision_clocks(self.node,self.monotonic)
         joint=_causal_current_original(joint_candidates,clocks['sim_ns'])
         camera=_causal_current_original(camera_candidates,clocks['sim_ns'])
@@ -291,39 +236,8 @@ class StoppedHeadCapture:
             current_original_selection=dict(
                 joint_candidate_sources_ns=[row['source_ns'] for row in joint_candidates],
                 camera_candidate_sources_ns=[row['source_ns'] for row in camera_candidates]))
-        if completed is not None:
-            snapshot.update(calibration_consumed_source_ns=completed['root_claim']['image_source_ns'],
-                calibration_completion_ack_wall_s=completed['ack_wall_s'],
-                consumer_thread_native_id=threading.get_native_id())
-            with self.port._lock:
-                self.check()
-                if self._measurement_pending is not pending:
-                    raise PermissionError('HEAD_STOPPED_MAIN_HANDOFF_CHANGED')
-                self._measurement_handoff=snapshot;self._measurement_pending=None
-                self._measurement_consumed.set()
         return snapshot
 
-    def _main_measurement_handoff(self,completion):
-        if not self._started:return self.snapshot()
-        with self.port._lock:
-            self.check()
-            if self._measurement_pending is not None:
-                raise PermissionError('HEAD_STOPPED_MAIN_HANDOFF_BUSY')
-            self._measurement_handoff=None;self._measurement_consumed.clear()
-            started=self.monotonic()
-            self._measurement_pending=completion
-        # The existing 5ms decision worker consumes the fixed original. The
-        # unchanged 10ms progress limit bounds waiting; no cache lock is held.
-        consumed=self._measurement_consumed.wait(.010)
-        if (not consumed or self._measurement_handoff is None
-                or not 0<=self._measurement_handoff['clocks']['wall_after_s']-started<=.010):
-            self._failure='HEAD_STOPPED_MAIN_PROGRESS_DEADLINE'
-            self.port._head_policy_binding_failed=True
-            callback=getattr(self.port,'_head_fault_callback',None)
-            if callable(callback):callback(self._failure)
-            self.check()
-        self.check()
-        return self._measurement_handoff
 
     def take_image(self):
         with self.port._lock:
@@ -361,17 +275,6 @@ class StoppedHeadCapture:
         if (tf_source<=0 or tf_source>record['source_ns']
                 or any(not math.isfinite(getattr(translation,key)) for key in ('x','y','z'))):
             raise ValueError('HEAD_STOPPED_TF_INVALID')
-        cpu_inputs=claim=None
-        if self._measurement_monitor is not None:
-            if session_id!=self._measurement_scope['session_id']:
-                raise PermissionError('HEAD_STOPPED_MEASUREMENT_SESSION_CHANGED')
-            claim={key:self._measurement_scope[key] for key in ('epoch','generation','session_id')}
-            claim.update(image_source_ns=record['source_ns'],info_source_ns=info['source_ns'],
-                joint_source_ns=joint['source_ns'],tf_source_ns=tf_source,image_frame_id=self.frame_id,
-                payload_sha256=record['payload_sha256'],image_received_wall_s=record['wall_s'],
-                info_received_wall_s=info['wall_s'])
-            cpu_inputs=self._measurement_request('CALIBRATION_FRAME_INPUTS',claim)
-            if not cpu_inputs['inputs_ready']:return None
         with self.port._lock:
             self.check()
             if self._pending is not pending:raise ValueError('HEAD_STOPPED_IMAGE_DROPPED')
@@ -390,23 +293,6 @@ class StoppedHeadCapture:
             source_skew_s=(max(sources)-min(sources))*1e-9,detections=result,
             tf_translation=[getattr(translation,key) for key in ('x','y','z')],
             tf_rotation=[getattr(transform.transform.rotation,key) for key in ('x','y','z','w')])
-        if cpu_inputs is not None:
-            from so101_demo.act.head_monitor import digest
-            cpu_completion=self._measurement_request('CALIBRATION_FRAME_COMPLETION',dict(
-                claim=claim,completion_wall_s=completion,result_sha256=digest(result)))
-            if any(cpu_completion['original_snapshot'][key]!=cpu_inputs['original_snapshot'][key]
-                    for key in ('image','info')):
-                raise PermissionError('HEAD_STOPPED_MEASUREMENT_ORIGINAL_CHANGED')
-            # Consume the copied CPU completion before reading Main clocks.
-            handoff=self._main_measurement_handoff(cpu_completion)
-            row.update(cpu_measurement_inputs=cpu_inputs,cpu_measurement_completion=cpu_completion,
-                root_handoff=handoff,matched_consumer_measurement=dict(motion_authority=False,
-                    image_source_ns=record['source_ns'],
-                    cpu_image_received_wall_s=cpu_inputs['original_snapshot']['image']['wall_s'],
-                    cpu_info_received_wall_s=cpu_inputs['original_snapshot']['info']['wall_s'],
-                    cpu_inputs_decision_wall_s=cpu_inputs['original_snapshot']['decision']['wall_after_s'],
-                    cpu_completion_decision_wall_s=cpu_completion['original_snapshot']['decision']['wall_after_s'],
-                    root_handoff_decision_wall_s=handoff['clocks']['wall_after_s']))
         return row
 
     def window(self,*,start_ns,end_ns,decisions,polls,inferences):
@@ -443,9 +329,6 @@ class StoppedHeadCapture:
             inferences=[row for row in paced(inferences) if inside(row['image_received_wall_s'])],
             clock_resolution_s=min((right['source_ns']-left['source_ns'])*1e-9
                 for left,right in paced(zip(clock,clock[1:]))))
-        if self._measurement_monitor is not None:
-            window['consumer_measurement']='MATCHED_CPU_CUDA_MAIN'
-            window['root_handoff_schedule']='EXISTING_5MS_DECISION_WORKER'
         self.check()
         return window
 
@@ -473,7 +356,7 @@ def measure_stopped_workload(capture,detector,tf_buffer,*,session_id,stop_veloci
                 if delay<0:due=time.monotonic();delay=0
                 stop.wait(delay)
         except BaseException as error:errors.append(error);stop.set()
-    def decision():decisions.append(capture.snapshot(consume_measurement=True))
+    def decision():decisions.append(capture.snapshot())
     def watchdog():capture.check();polls.append(time.monotonic())
     threads=[threading.Thread(target=worker,args=(.005,decision),name='head-bootstrap-decisions'),
              threading.Thread(target=worker,args=(.002,watchdog),name='head-bootstrap-watchdog')]

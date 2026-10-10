@@ -1,0 +1,83 @@
+"""Create three fresh input sets for the approved nominal batch; never launch."""
+from pathlib import Path
+import hashlib, json, os, shutil
+from nominal_contract import require_observers_off
+
+C = Path(__file__).parent
+OLD = C / 'checkpoints/holding001'
+ROOT = C / 'checkpoints/nominal-holds001'
+
+def sha(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def ref(path):
+    return dict(path=str(path), sha256=sha(path))
+
+def write(path, value):
+    with Path(path).open('x') as f:
+        json.dump(value, f, indent=2, allow_nan=False)
+        f.write('\n'); f.flush(); os.fsync(f.fileno())
+
+if __name__ == '__main__':
+    require_observers_off(os.environ)
+    approved = json.loads((C / 'nominal-hold-plan001.json').read_text())
+    assert approved['count'] == 3 and approved['stop_on_first_failure'] is True
+    assert sha(approved['runtime']['original_helper']) == approved['original_helper_sha256']
+    ROOT.mkdir(mode=0o700, exist_ok=False)
+    rows = []
+    for index, (session, generation) in enumerate(zip(
+            approved['runtime']['sessions'], approved['runtime']['generations']), 1):
+        G = ROOT / f'{index:03d}'
+        G.mkdir(mode=0o700)
+        doc = json.loads((OLD / 'inputs.json').read_text())
+        doc['run'] = dict(run_id=session, session_id=session,
+                          epoch=session+'-epoch', generation=generation)
+        doc['run_root'] = str(G / 'runtime')
+        doc['snapshot_root'] = str(G / 'snapshots')
+        env = doc['ros']['environment']
+        for key in list(env):
+            if key.startswith(('SO101_CLOCK_', 'SO101_EXIT_PHASE_', 'SO101_DIAGNOSTIC_')):
+                del env[key]
+        env.update(GZ_PARTITION=session, SO101_SIMULATION_SESSION_ID=session,
+            ROS_DOMAIN_ID='228', ROS_HOME=str(G/'ros-home'), ROS_LOG_DIR=str(G/'ros-log'),
+            ROS_WORKSPACE='/tmp/so101-debug-head-file-protocol-1003/'+session,
+            SO101_STOP_TIMING_OUTPUT_DIR=str(G/'output/controller-records'))
+        canonical = Path('/tmp/so101-debug-head-file-protocol-1003/ipc') / hashlib.sha256(session.encode()).hexdigest()[:16]
+        assert not canonical.exists() and not canonical.is_symlink()
+        canonical.mkdir(mode=0o700, exist_ok=False)
+        env['SO101_ACT_CONTROLLER_RESERVATION_DIR'] = str(canonical)
+        env['SO101_IPC_SOCKET_BASE'] = str(canonical)
+        require_observers_off(env)
+        for relative in ('ros-home', 'ros-log', 'snapshots'):
+            (G / relative).mkdir(mode=0o700)
+        freeze = json.loads((OLD / 'freeze.json').read_text())
+        freeze['nominal_hold_plan'] = ref(C/'nominal-hold-plan001.json')
+        freeze['nominal_observers_enabled'] = False
+        freeze['nominal_lifecycle'] = 'FULL_RESTART'
+        write(G/'freeze.json', freeze)
+        doc['freeze_receipt'] = ref(G/'freeze.json')
+        write(G/'inputs.json', doc)
+        shutil.copyfile(approved['runtime']['original_helper'], G/'head_neck_timing_probe.py')
+        assert sha(G/'head_neck_timing_probe.py') == approved['original_helper_sha256']
+        source = json.loads((C/'runtime-source-manifest.json').read_text())
+        source_refs = [dict(path=str(Path(source['root'])/row['path']), sha256=row['sha256'])
+                       for row in source['files']]
+        planned = dict(state='PREPARED', count=1, duration_s=120, lifecycle='FULL_RESTART',
+            input=ref(G/'inputs.json'), helper=ref(G/'head_neck_timing_probe.py'),
+            freeze=ref(G/'freeze.json'), nominal_plan=ref(C/'nominal-hold-plan001.json'),
+            source_manifest=ref(C/'runtime-source-manifest.json'),
+            install_inventory=ref(C/'runtime-install-inventory.json'), source_refs=source_refs,
+            normal_cancel_s=240, total_s=300, retry=False, qualification=False,
+            ROS_DOMAIN_ID=228, GZ_PARTITION=session)
+        write(G/'planned.json', planned)
+        config = dict(command=['/usr/bin/python3', str(C/'nominal_worker.py'), f'{index:03d}'],
+            owner_marker='head_neck_timing_probe.py', cancel_s=240, cleanup_s=255,
+            kill_s=256, owner_kill_s=285, total_s=300,
+            stdout=str(G/'supervisor.stdout.log'), stderr=str(G/'supervisor.stderr.log'),
+            environment=dict(SO101_BOUNDED_GUARD='CLOCK_GUARD_001',
+                             SO101_GUARD_CONFIG=str(G/'guard-config.json')))
+        write(G/'guard-config.json', config)
+        rows.append(dict(index=index, session=session, generation=generation, status='NOT_RUN'))
+    write(ROOT/'prepared.json', dict(schema='NOMINAL_PREPARATION_001', rows=rows,
+                                   runtime_started=False, plan=ref(C/'nominal-hold-plan001.json')))
+    print(json.dumps(dict(prepared=len(rows), root=str(ROOT), runtime_started=False)))

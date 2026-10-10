@@ -174,9 +174,10 @@ class PickPlaceSearchBoundary:
 
         # the held row is the robot's own state at execution time, and the header stamp is the capture's sim time: the
         # builder refuses a stamp outside the prefix's window, so a stale prefix cannot be executed and called evidence
-        goals = build_approach_goals(prefix, tuple(observation["state"][:6]),
-                                     header_stamp_s=finite(observation["sim_time_s"]))
-        inspected = screen.inspect(goals, prefix)
+        goals = build_approach_goals(
+            prefix, proof_snapshot["controller_start_positions"],
+            header_stamp_s=finite(proof_snapshot["controller_start_time_s"]))
+        inspected = screen.inspect(goals, prefix, snapshot=proof_snapshot)
         if not isinstance(inspected, dict) or not inspected:
             raise PickPlaceSearchBoundaryError("TASK8_PHASE_EVIDENCE_INVALID: APPROACH: inspection")
 

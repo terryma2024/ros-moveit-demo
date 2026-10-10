@@ -6,9 +6,10 @@ from rcl_interfaces.msg import ParameterType
 from rcl_interfaces.srv import DescribeParameters,GetParameters
 
 from so101_demo.act.head_simulation_policy import HeadSimulationPolicy
-from so101_demo.act.head_monitor import digest
+from so101_demo.act.head_evidence_identity import digest
 
-_NAMES=('head_simulation_mode','head_fault_connection_timeout_ns')
+_NAMES=('head_simulation_mode','head_fault_connection_timeout_ns','head_measured_prefix_guard',
+    'speed_scaling_input_enabled')
 
 
 def validate_native_policy_receipt(receipt,policy,*,reader_node):
@@ -16,6 +17,8 @@ def validate_native_policy_receipt(receipt,policy,*,reader_node):
         'query_wall_s','completed_wall_s','deadline_wall_s','motion_authority'}
     expected=dict(head_simulation_mode=policy.mode,
         head_fault_connection_timeout_ns=round(policy.native_close_timeout_s*1e9),
+        head_measured_prefix_guard='quintic_measured_prefix_v1',
+        speed_scaling_input_enabled=False,
         read_only=True,dynamic_typing=False)
     if (type(receipt) is not dict or set(receipt)!=fields or type(reader_node) is not str
             or not reader_node.startswith('/') or receipt['remote_node']!='/neck_controller'
@@ -34,17 +37,22 @@ def validate_native_policy_readback(values,descriptors,policy):
     if (not isinstance(policy,HeadSimulationPolicy)
             or type(values) is not GetParameters.Response
             or type(descriptors) is not DescribeParameters.Response
-            or len(values.values)!=2 or len(descriptors.descriptors)!=2):
+            or len(values.values)!=4 or len(descriptors.descriptors)!=4):
         raise PermissionError('HEAD_NATIVE_POLICY_READBACK_INVALID')
-    expected_types=(ParameterType.PARAMETER_STRING,ParameterType.PARAMETER_INTEGER)
+    expected_types=(ParameterType.PARAMETER_STRING,ParameterType.PARAMETER_INTEGER,
+        ParameterType.PARAMETER_STRING,ParameterType.PARAMETER_BOOL)
     for name,kind,value,descriptor in zip(_NAMES,expected_types,values.values,descriptors.descriptors):
         if (value.type!=kind or descriptor.name!=name or descriptor.type!=kind
                 or descriptor.read_only is not True or descriptor.dynamic_typing is not False):
             raise PermissionError('HEAD_NATIVE_POLICY_READBACK_INVALID')
     mode,budget=values.values[0].string_value,values.values[1].integer_value
-    if mode!=policy.mode or budget!=round(policy.native_close_timeout_s*1e9):
+    if (mode!=policy.mode or budget!=round(policy.native_close_timeout_s*1e9)
+            or values.values[2].string_value!='quintic_measured_prefix_v1'
+            or values.values[3].bool_value is not False):
         raise PermissionError('HEAD_NATIVE_POLICY_READBACK_INVALID')
     return dict(head_simulation_mode=mode,head_fault_connection_timeout_ns=budget,
+        head_measured_prefix_guard=values.values[2].string_value,
+        speed_scaling_input_enabled=values.values[3].bool_value,
         read_only=True,dynamic_typing=False)
 
 

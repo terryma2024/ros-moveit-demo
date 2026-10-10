@@ -1,0 +1,13 @@
+{
+  "actual_rc": 1,
+  "result": {
+    "schema": "CLOCK_GUARD_001",
+    "worker_rc": 1,
+    "elapsed_s": 127.96395356801804,
+    "cancel_sent": false,
+    "forced_cleanup": false,
+    "error": null,
+    "all_owned_absent": true,
+    "production_qualified": false
+  }
+}
