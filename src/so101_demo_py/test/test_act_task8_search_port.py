@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner
+from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.core.simulation.types import ObjectState, SimulationEvidence
 from so101_demo.ports.planning_scene import SceneCommandReceipt
 

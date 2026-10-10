@@ -324,7 +324,7 @@ def test_qualified_report_validates_only_with_its_campaign_block(tmp_path):
 
 
 def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path):
-    """Producer path: real Task8Runner -> port -> CaseEvidenceDriver -> sealed artifact (no fakes)."""
+    """Producer path: real PickPlaceRunner -> port -> CaseEvidenceDriver -> sealed artifact (no fakes)."""
 
     import hashlib as _hashlib
     from pathlib import Path as _Path
@@ -332,7 +332,7 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
     from test_act_task8 import FakePort, request as runner_request
     from test_act_task8_live_evidence import _Contact, _Evidence   # the physics-evidence doubles
 
-    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.task8_live_evidence import (
         CaseEvidenceDriver, LiveEvidenceWindow, derive_frame_aggregates,
     )
@@ -418,7 +418,7 @@ def test_real_runner_full_case_seals_evidence_through_an_evidence_port(tmp_path)
 
     port = _EvidencePort()
     # a full case carries no stop_after: the runner refuses that combination (FULL_RESTART_REQUIRED)
-    result = Task8Runner(port).run(runner_request(mode="full", stop_after=None))
+    result = PickPlaceRunner(port).run(runner_request(mode="full", stop_after=None))
     assert result["status"] == "PASSED"
     artifact = result["live_evidence_artifact"]
     assert set(artifact) == {"path", "sha256", "schema_version"}
@@ -522,7 +522,7 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
 
     from test_act_task8 import request as runner_request
 
-    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.task8_live_evidence import CaseEvidenceDriver
 
     case_root = tmp_path / "staging"
@@ -531,7 +531,7 @@ def test_evidence_port_factory_seals_through_its_driver(tmp_path):
                                 attempt_id="attempt-3", reset_epoch=4)
     driver.bind_reset_epoch(4)
     port = _evidence_port(driver)
-    result = Task8Runner(port).run(runner_request(mode="full", stop_after=None))
+    result = PickPlaceRunner(port).run(runner_request(mode="full", stop_after=None))
     assert result["status"] == "PASSED"
     artifact = result["live_evidence_artifact"]
     sealed = _Path(artifact["path"])
@@ -548,7 +548,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
 
     from test_act_task8 import request as runner_request
 
-    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.task8_live_evidence import (
         CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
     )
@@ -559,7 +559,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
     driver = CaseEvidenceDriver(case_id="full-01", staging_root=staging, session_id="session-1",
                                 attempt_id="full-01", reset_epoch=4)
     driver.bind_reset_epoch(4)
-    result = Task8Runner(_evidence_port(driver)).run(runner_request(mode="full", stop_after=None))
+    result = PickPlaceRunner(_evidence_port(driver)).run(runner_request(mode="full", stop_after=None))
     artifact = result["live_evidence_artifact"]
     assert _Path(artifact["path"]).is_file()
 
@@ -588,7 +588,7 @@ def test_chain_reaches_a_validated_journal_row_from_real_evidence(tmp_path):
 
 
 def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
-    """The teleop case path publishes a journal whose result came from the real Task8Runner."""
+    """The teleop case path publishes a journal whose result came from the real PickPlaceRunner."""
 
     import asyncio
     import hashlib as _hashlib
@@ -605,7 +605,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
     from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
 
     from so101_demo.act.pick_place_validation_manifest import write_new_manifest
-    from so101_demo.act.task8 import Task8Runner
+    from so101_demo.act.pick_place_runner import PickPlaceRunner
     from so101_demo.act.task8_live_evidence import (
         CaseEvidenceDriver, case_row_to_journal_row, require_case_row_matches_bundle,
     )
@@ -670,7 +670,7 @@ def test_run_pick_place_case_publishes_a_journal_from_the_real_runner(tmp_path):
                 "session_id": request["session_id"], "attempt_id": request["attempt_id"],
                 "deadline_ns": request["deadline_ns"],
             }
-            return Task8Runner(_evidence_port(driver)).run(runner_request_document)
+            return PickPlaceRunner(_evidence_port(driver)).run(runner_request_document)
 
     class Owner:
         def __init__(self):

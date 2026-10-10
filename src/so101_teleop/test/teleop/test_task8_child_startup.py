@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from so101_teleop.unified.contracts import MutationError, OwnerKey
-from so101_teleop.unified.task8_child_startup import consume_child_task8_startup
-from so101_teleop.unified.task8_startup_issuer import Task8StartupProofIssuer
+from so101_teleop.unified.pick_place_child_startup import consume_child_pick_place_startup
+from so101_teleop.unified.pick_place_startup_issuer import PickPlaceStartupProofIssuer
 
 
 NOW_NS = 1_000_000_000_000
@@ -40,7 +40,7 @@ def prepared(tmp_path):
         "captured_monotonic_ns": NOW_NS - 1_000_000_000,
         "checks": {name: True for name in CHECKS},
     }).encode()
-    receipt = Task8StartupProofIssuer(
+    receipt = PickPlaceStartupProofIssuer(
         context, child, STACK, CHILD_OWNER,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     ).issue(readiness)
@@ -70,7 +70,7 @@ def prepared(tmp_path):
 
 def test_child_consumes_exact_issued_proof_once(tmp_path):
     request, environment, receipt, root = prepared(tmp_path)
-    consume = lambda: consume_child_task8_startup(
+    consume = lambda: consume_child_pick_place_startup(
         request, CHILD_OWNER, environment,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
@@ -85,7 +85,7 @@ def test_child_rejects_wrong_owner_and_scope_before_consumption(tmp_path):
     wrong_owner = {**request.payload["stack_owner"], "pid": 99999, "pgid": 99999}
     request.payload["stack_owner"] = wrong_owner
     with pytest.raises(MutationError, match="TASK8_STARTUP_PROOF_INVALID"):
-        consume_child_task8_startup(
+        consume_child_pick_place_startup(
             request, CHILD_OWNER, environment,
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
         )
@@ -96,7 +96,7 @@ def test_child_rejects_cross_worker_scope_without_claim(tmp_path):
     request, environment, _, root = prepared(tmp_path)
     request.worker_id = "w01"
     with pytest.raises(MutationError, match="TASK8_STARTUP_SCOPE_INVALID"):
-        consume_child_task8_startup(
+        consume_child_pick_place_startup(
             request, CHILD_OWNER, environment,
             live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
         )

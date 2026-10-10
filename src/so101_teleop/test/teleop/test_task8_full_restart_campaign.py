@@ -9,10 +9,10 @@ import time
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner
-from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
+from so101_demo.act.pick_place_runner import PickPlaceRunner
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest, write_new_manifest
 from so101_teleop.unified.contracts import Domain, OperationSpec
-from so101_teleop.unified.task8_full_restart_campaign import run_full_restart_campaign
+from so101_teleop.unified.pick_place_full_restart_campaign import run_full_restart_campaign
 
 
 def _h(value):
@@ -23,7 +23,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
            runtime_drift_at=None):
     anchors = {name: {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.0}
                for name in ("default", "left", "forward")}
-    manifest = build_task8_live_manifest(
+    manifest = build_pick_place_validation_manifest(
         anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
         calibration_report_path="calibration-report.json",
@@ -59,7 +59,7 @@ def _setup(tmp_path, *, duplicate_at=None, fail_at=None, existing_at=None,
         calls.append(case_id)
         if case_id == fail_at:
             raise RuntimeError("retirement failed")
-        phases = list(Task8Runner.PHASES)
+        phases = list(PickPlaceRunner.PHASES)
         if case_id.startswith("prefix"):
             phase = next(item["stop_after"] for item in manifest["prefix_cases"]
                          if item["case_id"] == case_id)

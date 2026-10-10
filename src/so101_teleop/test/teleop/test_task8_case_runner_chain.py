@@ -13,7 +13,7 @@ from test_task8_live_evidence_production_chain import (PERIOD_S, READBACK_SOURCE
 from so101_demo.act.task8_live_evidence import build_live_evidence_sample      # noqa: E402
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
-from so101_demo.act.task8 import Task8Runner
+from so101_demo.act.pick_place_runner import PickPlaceRunner
 
 
 class FakePort:
@@ -179,7 +179,7 @@ def _request():
 
 
 def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
-    """The phase set is `Task8Runner.PHASES`, so a missing or reordered phase fails here rather than downstream."""
+    """The phase set is `PickPlaceRunner.PHASES`, so a missing or reordered phase fails here rather than downstream."""
 
     from so101_demo.act.task8_live_evidence import LiveEvidenceWindow, Task8LiveEvidenceRecorder
     from test_task8_live_evidence_production_chain import _identity
@@ -206,8 +206,8 @@ def test_the_runner_sequences_a_case_through_every_phase_in_order(tmp_path):
     for call in port.calls:
         if call == "run_retreat_segment":
             covered.append("RADIAL_RETREAT")
-    order = [phase for phase in Task8Runner.PHASES if phase in covered]
-    assert order == [phase for phase in Task8Runner.PHASES], f"every phase, in order, saw {covered}"
+    order = [phase for phase in PickPlaceRunner.PHASES if phase in covered]
+    assert order == [phase for phase in PickPlaceRunner.PHASES], f"every phase, in order, saw {covered}"
 
     # the sealed artifact reads back from disk, its digest matches, and it covers the case's own phases
     import json as _json

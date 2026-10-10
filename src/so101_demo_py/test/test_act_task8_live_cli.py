@@ -10,8 +10,8 @@ import time
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner
-from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
+from so101_demo.act.pick_place_runner import PickPlaceRunner
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest, write_new_manifest
 from so101_demo.cli.act_run_pick_place_validation import load_spec_file, run_admitted_campaign
 from so101_teleop.unified.contracts import Domain, OperationSpec
 
@@ -45,7 +45,7 @@ class Worker:
 
     async def task8(self, request):
         self.requests.append(request)
-        phases = list(Task8Runner.PHASES)
+        phases = list(PickPlaceRunner.PHASES)
         if request["mode"] == "phase_prefix":
             phases = phases[:phases.index(request["stop_after"]) + 1]
         if self.bad:
@@ -75,7 +75,7 @@ class Lifecycle:
 
 
 def prepared(tmp_path):
-    manifest = build_task8_live_manifest(
+    manifest = build_pick_place_validation_manifest(
         ANCHORS, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64, contact_policy_fingerprint="d" * 64,
         calibration_report_path="calibration-report.json",

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from so101_teleop.unified.contracts import MutationError, OwnerKey
-from so101_teleop.unified.task8_startup_proof import Task8StartupProofConsumer
+from so101_teleop.unified.pick_place_startup_proof import PickPlaceStartupProofConsumer
 
 
 NOW_NS = 1_000_000_000_000
@@ -56,7 +56,7 @@ def prepared(tmp_path):
         "issued_monotonic_ns": NOW_NS - 5_000_000_000,
     }
     (root / "startup-receipt.json").write_text(json.dumps(receipt))
-    consumer = Task8StartupProofConsumer(
+    consumer = PickPlaceStartupProofConsumer(
         context, child, stack_owner=stack, child_owner=child_owner,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )

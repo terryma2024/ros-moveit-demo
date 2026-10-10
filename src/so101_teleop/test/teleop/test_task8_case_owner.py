@@ -16,11 +16,11 @@ import pytest
 from so101_teleop.unified.act_stack import ActStackLaunch
 from so101_teleop.unified.bridge import ActChildLaunch
 from so101_teleop.unified.contracts import MutationError, OwnerKey
-from so101_teleop.unified.task8_case_owner import Task8CaseOwner
-from so101_teleop.unified.task8_startup_issuer import (
-    InstalledActStackReadinessProbe, Task8StartupProofIssuer,
+from so101_teleop.unified.pick_place_case_owner import PickPlaceCaseOwner
+from so101_teleop.unified.pick_place_startup_issuer import (
+    InstalledActStackReadinessProbe, PickPlaceStartupProofIssuer,
 )
-from so101_teleop.unified.task8_startup_proof import Task8StartupProofConsumer
+from so101_teleop.unified.pick_place_startup_proof import PickPlaceStartupProofConsumer
 
 
 OWNER = OwnerKey(12345, 12345, 101, "a" * 64, "b" * 64)
@@ -150,7 +150,7 @@ def prepared(tmp_path, *, fail=None):
         events.append("final.clear")
         return fail != "final.clear"
 
-    owner = Task8CaseOwner(
+    owner = PickPlaceCaseOwner(
         Workload(), child_owner, stack_factory=stack_factory,
         final_clear_probe=final_clear,
         artifact_binding=lambda _payload, _context: "bound-artifacts",
@@ -336,13 +336,13 @@ def test_case_owner_issues_bound_proof_before_returning_ready(tmp_path):
 
     owner.stack_factory = factory
     owner.require_startup_proof = True
-    owner.startup_proof_issuer = lambda *args: Task8StartupProofIssuer(
+    owner.startup_proof_issuer = lambda *args: PickPlaceStartupProofIssuer(
         *args, live_probe=lambda _owner: True,
     )
 
     async def run():
         await owner.start(spec)
-        receipt = Task8StartupProofConsumer(
+        receipt = PickPlaceStartupProofConsumer(
             context, child, stack_owner=OWNER, child_owner=CHILD_OWNER,
             live_probe=lambda _owner: True,
         ).consume()

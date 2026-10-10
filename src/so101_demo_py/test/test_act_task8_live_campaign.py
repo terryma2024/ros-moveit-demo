@@ -9,7 +9,7 @@ import time
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner
+from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest, write_new_manifest
 from so101_demo.act.pick_place_validation_campaign import PickPlaceValidationCampaign, PickPlaceValidationError
 
@@ -62,7 +62,7 @@ def test_closed_manifest_previews_exact_nine_prefix_and_five_full_cases(tmp_path
     worker = Worker(context)
     campaign = PickPlaceValidationCampaign(manifest_path, context, worker, tmp_path / "cases.jsonl")
     cases = campaign.planned_cases(deadline_ns=time.monotonic_ns() + 60_000_000_000)
-    assert [case["stop_after"] for case in cases[:9]] == list(Task8Runner.PHASES)
+    assert [case["stop_after"] for case in cases[:9]] == list(PickPlaceRunner.PHASES)
     assert [case["anchor"] for case in cases[9:]] == [
         "default", "left", "forward", "default", "left",
     ]

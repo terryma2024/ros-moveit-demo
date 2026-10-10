@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-from so101_demo.act.task8 import Task8Runner
-from so101_demo.act.task8_manifest import build_task8_live_manifest, write_new_manifest
+from so101_demo.act.pick_place_runner import PickPlaceRunner
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest, write_new_manifest
 from so101_teleop.unified.contracts import OwnerKey
 from so101_teleop.unified.pick_place_case_execution import run_pick_place_case
 
@@ -25,7 +25,7 @@ def _prepared(tmp_path, *, case_id="prefix-01", result=None, cleanup_fails=False
         name: {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.0}
         for name in ("default", "left", "forward")
     }
-    manifest = build_task8_live_manifest(
+    manifest = build_pick_place_validation_manifest(
         anchors, source_sha256="a" * 64, runtime_config_sha256="b" * 64,
         collection_config_sha256="c" * 64,
         contact_policy_fingerprint="d" * 64,
@@ -141,13 +141,13 @@ def test_full_case_stays_ineligible_for_formal_collection(tmp_path):
     artifact = tmp_path / "live.json"
     artifact.write_bytes(payload)
     digest = hashlib.sha256(payload).hexdigest()
-    full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
+    full = {"status": "PASSED", "completed_phases": list(PickPlaceRunner.PHASES),
             "live_evidence_artifact": {"path": str(artifact), "sha256": digest, "schema_version": 1},
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)
     row = asyncio.run(run_pick_place_case(spec, "full-01", owner, journal))
     assert events == ["start", "execute", "finish"]
-    assert row["completed_phases"] == list(Task8Runner.PHASES)
+    assert row["completed_phases"] == list(PickPlaceRunner.PHASES)
     assert row["eligible_for_formal_collection"] is False
 
 
@@ -156,7 +156,7 @@ def test_a_full_case_whose_artifact_does_not_read_back_is_refused(tmp_path):
 
     artifact = tmp_path / "live.json"
     artifact.write_bytes(b'{"case": "full-01"}')
-    full = {"status": "PASSED", "completed_phases": list(Task8Runner.PHASES),
+    full = {"status": "PASSED", "completed_phases": list(PickPlaceRunner.PHASES),
             "live_evidence_artifact": {"path": str(artifact), "sha256": "b" * 64, "schema_version": 1},
             "stopped_confirmed": True, "formal_episode_eligible": True}
     spec, owner, journal, events = _prepared(tmp_path, case_id="full-01", result=full)

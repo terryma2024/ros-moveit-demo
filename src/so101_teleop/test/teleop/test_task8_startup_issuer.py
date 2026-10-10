@@ -11,10 +11,10 @@ import pytest
 
 from so101_teleop.unified.act_stack import ActStackLaunch
 from so101_teleop.unified.contracts import MutationError, OwnerKey
-from so101_teleop.unified.task8_startup_issuer import (
-    InstalledActStackReadinessProbe, Task8StartupProofIssuer,
+from so101_teleop.unified.pick_place_startup_issuer import (
+    InstalledActStackReadinessProbe, PickPlaceStartupProofIssuer,
 )
-from so101_teleop.unified.task8_startup_proof import Task8StartupProofConsumer
+from so101_teleop.unified.pick_place_startup_proof import PickPlaceStartupProofConsumer
 
 
 NOW_NS = 1_000_000_000_000
@@ -80,7 +80,7 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
     assert argv[:3] == [str(tmp_path / "act_stack_ready"), "--session-id", "session-289"]
     assert kwargs["env"]["ROS_DOMAIN_ID"] == "179"
     assert kwargs["env"]["GZ_PARTITION"] == "act-data-exp289-179"
-    issuer = Task8StartupProofIssuer(
+    issuer = PickPlaceStartupProofIssuer(
         context, child, STACK_OWNER, CHILD_OWNER,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
@@ -89,7 +89,7 @@ def test_installed_probe_and_owner_issuer_are_consumed_once(tmp_path):
     assert receipt["child_owner"] == asdict(CHILD_OWNER)
     assert receipt["readiness_sha256"] == hashlib.sha256(probe.readiness_bytes).hexdigest()
     assert (root / "readiness.json").read_bytes() == probe.readiness_bytes
-    consumer = Task8StartupProofConsumer(
+    consumer = PickPlaceStartupProofConsumer(
         context, child, stack_owner=STACK_OWNER, child_owner=CHILD_OWNER,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )
@@ -125,7 +125,7 @@ def test_failed_observer_and_retired_owner_cannot_issue(tmp_path):
     with pytest.raises(ValueError, match="ACT_STACK_READINESS_COMMAND_FAILED"):
         probe()
     raw = (json.dumps(artifact) + "\n").encode()
-    issuer = Task8StartupProofIssuer(
+    issuer = PickPlaceStartupProofIssuer(
         context, child, STACK_OWNER, CHILD_OWNER,
         live_probe=lambda owner: owner != STACK_OWNER, clock_ns=lambda: NOW_NS,
     )
@@ -138,7 +138,7 @@ def test_issuer_rejects_scope_mismatch_before_writing(tmp_path):
     context, child, _, root, artifact = prepared(tmp_path)
     child.mujoco_session_id = "other"
     raw = (json.dumps(artifact) + "\n").encode()
-    issuer = Task8StartupProofIssuer(
+    issuer = PickPlaceStartupProofIssuer(
         context, child, STACK_OWNER, CHILD_OWNER,
         live_probe=lambda _owner: True, clock_ns=lambda: NOW_NS,
     )

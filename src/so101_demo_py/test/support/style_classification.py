@@ -378,8 +378,8 @@ SHIM_FILES = {
 }
 SHIM_SCRIPTS = {"act_task8_live", "act_prepare_task8_live", "act_prepare_task8_live_artifacts", "act_capture_task6"}
 SHIM_ALIASES = {
-    "Task8Runner", "Task8Error", "Task8Port", "Task8LiveError", "Task8LiveCampaign", "Task8ReadbackError",
-    "Task8PhysicalReadback", "Task8ContactPairs",
+    "PickPlaceRunner", "PickPlaceError", "PickPlaceExecutionPort", "PickPlaceValidationError", "PickPlaceValidationCampaign", "PickPlaceReadbackError",
+    "PickPlacePhysicalReadback", "PhaseContactAllowlist",
 }
 
 PROCESS_FILES = {

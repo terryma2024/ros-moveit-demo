@@ -22,7 +22,7 @@ from so101_teleop.unified.contracts import Domain, OperationSpec
 from so101_teleop.unified.gpu_workload import ActGpuWorkloadArbiter
 from so101_teleop.unified.intent_store import IntentStore
 from so101_demo.act.calibration import REQUIRED_MEASUREMENTS
-from so101_demo.act.task8_manifest import build_task8_live_manifest
+from so101_demo.act.pick_place_validation_manifest import build_pick_place_validation_manifest
 from teleop_paths import SOURCE_ROOT
 
 
@@ -179,7 +179,7 @@ def _start_spec(tmp_path, fingerprint, proposal_path, receipt_path, *, backend="
         artifacts[f"{name}_sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     manifest_path = tmp_path / "manifest.json"
     if not manifest_path.exists():
-        manifest = build_task8_live_manifest(
+        manifest = build_pick_place_validation_manifest(
             {
                 "default": {"cup_start_m": [0.02, -0.28, 0.165], "neck_start_rad": 0.1},
                 "left": {"cup_start_m": [-0.08, -0.28, 0.165], "neck_start_rad": 0.0},
