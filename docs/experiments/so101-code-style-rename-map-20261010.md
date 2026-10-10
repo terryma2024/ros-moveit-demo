@@ -58,6 +58,70 @@ Design: `docs/superpowers/specs/2026-10-10-so101-code-style-refactor-design.md` 
 | wire | wire-rename | 290 |
 | **total** |  | **1211** |
 
+## Root decisions on the 128 uncertain rows (2026-10-10, CP-3544)
+
+The root decided these rows under CP-3394. Phase A's first commit writes these targets into `style_allowlist.tsv` and regenerates this map's tables. The decision text below stays as it is.
+
+1. **parallel_batch profiles and files.** The proposed names are accepted:
+   - `parallel_batch_linux_cuda.yaml`
+   - `parallel_batch_act_offline.yaml`
+   - `parallel_batch_macos_mps_two_worker.yaml`
+   - `parallel_batch_macos_mps_single_worker_retry.yaml`
+   - `parallel_batch_macos_mps_single_worker_first_pass.yaml`
+
+   The CLI module names are also accepted:
+   - `so101_macos_single_worker_first_pass`, `so101_macos_single_worker_retry`
+   - `macos_mps_single_worker_first_pass.py`, `macos_mps_single_worker_retry.py`
+   - `macos_two_worker_process.py`
+2. **Eight-worker qualification.** `_W8_SCENES` becomes `_EIGHT_WORKER_SCENES`. `verify_w8_qualification` becomes `verify_eight_worker_qualification`, in module `parallel_qualification_verifier`.
+3. **TASK14 (two-worker live headroom).** The domain prefix is `HEADROOM`:
+   - `_TASK14_ARTIFACT_NAMES` → `_HEADROOM_ARTIFACT_NAMES`
+   - `TASK14_*` → `HEADROOM_*`
+   - `task14_headroom_manifest.json` → `headroom_manifest.json`
+   - `task14_two_worker_live_headroom` → `two_worker_live_headroom`
+   - `task14_controller_acceptance_v1` → `headroom_controller_acceptance`, with the version moved into a `schema_version` field
+4. **TASK6 (synchronized RGB capture).**
+   - The domain prefix is `SYNCHRONIZED_CAPTURE_`; the proposals are accepted.
+   - `task6_route_plugins.yaml` → `act_camera_plugins.yaml`. It holds camera plugin parameters, not routes.
+   - The kept measurement contract (old v2) references `config/mujoco/act/task6_visible_approach_v1.json`, which was retired at CP-3531. The reference goes in phase B, with the contract's own test proving it still validates. Neither the reference nor the file is renamed.
+5. **Other TASK prefixes.**
+   - `TASK10_INPUTS_UNAVAILABLE` → `SAMPLE_MANIFEST_INPUTS_UNAVAILABLE`
+   - `TASK1_RECORD_CONTRACT_INVALID` → `CALIBRATION_RECORD_CONTRACT_INVALID`, and `TASK1_TRUTH_CONTRACT_INVALID` → `CALIBRATION_TRUTH_CONTRACT_INVALID`. Both are perception-benchmark calibration codes.
+   - `task12_safe` (a safe pose in `headless_execution.yaml`) → `headless_safe`.
+   - `task11-remediation` (an entry in the `benchmark.yaml` list): the executor reads what consumes the entry and names it by that function. The result is listed in the phase-D report for root review, and is not decided here.
+6. **Test identifiers.** These targets are accepted:
+   - `HS278_PARAMETERS` → `CALIBRATION_BUNDLE_PARAMETERS`
+   - `_r580_fixture` → `_qualified_report_fixture`
+   - `TASK11_IDS` → `DRAIN_POINT_IDS`
+   - `_r6` → `_ring_candidate_localizer`
+   - `D8F` → `PRE_MOTION_REFUSAL_FIELDS`
+
+   Every `(needs a name)` or generic `V2`/`V3`/`document`/`policy`/`run` test identifier is named by what it holds when phase C touches it. Examples: `TEACHER_EVENT_SCHEMA`, `TEACHER_POLICY_PATH`, `teacher_policy_document`. Bare generic names (`run`, `policy`, `FIELDS`) are not allowed.
+7. **Scene file.** `v5_multi_object_scene.xml` → `multi_object_scene.xml`. No v1–v4 scenes exist.
+8. **Adaptive pool file.** `parallel_adaptive_workers_v1.yaml` → `adaptive_worker_pool.yaml`. It stays a separate file, because the adaptive policy is orthogonal to the execution profile (§9 N4).
+9. **Perception `*_v1` configs are PERMANENT.** This covers `grounded_sam_nonpenetrating_candidate_v1.json` and the `plastic_cup_grounding_dino_nonpenetrating_{test,train_val}_v1.yaml` files. They are dataset and candidate identities bound into trained artifacts and benchmark evidence, not format versions. Each stays allowlisted with that reason.
+10. **Policy directories.** `config/policies/{dynamic_cup_pick,light_cup_wall_pick}/v1` are flattened into their policy directory. They are the only version, and the registry path changes in the same commit.
+11. **Name collisions after a family loses its older members.** The latest member takes the plain name, and the older definition is deleted first. Where a plain name would be generic, it is qualified. For example:
+    - `V3_FIELDS` → `TEACHER_SIMULATION_FIELDS` is wrong; HeadSimulationPolicy's field set → `HEAD_SIMULATION_POLICY_FIELDS`
+    - `IDENTITIES_V2` → `MEASUREMENT_IDENTITIES`
+    - `V3_PROVENANCE` → `TEACHER_POLICY_PROVENANCE`
+    - `EXECUTION_FIELDS_V3` → `TEACHER_EXECUTION_FIELDS`
+    - `_CONFIG_KEYS_V2` → `_CONFIG_KEYS`
+    - `plan_place_height_v3` → `plan_place_height`
+12. **CORRECTION, e2e_acceptance manifest versions.** `e2e_acceptance` reads the dynamic manifests. Manifest v2 is the general profile and is kept (§9 N4), so only v1 is history:
+    - `SCHEMA_V1` → deleted
+    - `SCHEMA_V2` → `SCHEMA_GENERAL` (`so101-dynamic-execute`)
+    - `SCHEMA_V3` → `SCHEMA_TEACHER` (`so101-teacher-execute`)
+    - Only the v1 tests (`legacy_v1_document`, the `manifest_v1` tests, `cli_rejects_a_legacy_v1_manifest`) are deleted.
+    - `test_a_v2_manifest_without_a_usable_teacher_result_is_rejected` is renamed to describe the general manifest. It is not deleted.
+
+    `dynamic_manifest` follows the same rule (`SCHEMA_GENERAL` / `SCHEMA_TEACHER`, accepted).
+13. **Kind literals carrying a version.** The proposals are accepted: strip the version and put it in a `schema_version` field. Before stripping, phase D confirms each kind with its reader. `head-search-v2` → `head-search-runtime`.
+14. **Guard gaps.**
+    - The wire guard is extended in phase D to embedded `[-_]v\d+` segments inside kind-like literals, which catches `paired_camera_truth_v2_original`.
+    - `SCHEMA_VERSION_<n>`-style names are handled by reading the code in phase B.
+    - Docstring Task, CP and EXP mentions are rewritten in phase C.
+
 ## Rows the root should decide (128)
 
 Every `uncertain` row, with the reason for the doubt. Name proposals follow the design where it speaks; these are the
