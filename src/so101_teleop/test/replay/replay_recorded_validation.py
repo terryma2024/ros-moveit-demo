@@ -11,7 +11,7 @@ synthetic fixture can prove: that the installed reader accepts the raw recording
 recorded store carries is the frame of that batch's own committed cleanup event, and that the
 per-point documents match the results the journal committed. The ordinary gate asserts the same
 behaviour over deterministic bytes in
-``test/teleop/test_expert_validation_campaign_layout_projection.py``; this module is the historical
+``test/expert_validation/test_expert_validation_campaign_layout_projection.py``; this module is the historical
 counterpart, never the only test of any behaviour.
 
 Each recording root is read from the environment, with the recorded default path as the fallback:

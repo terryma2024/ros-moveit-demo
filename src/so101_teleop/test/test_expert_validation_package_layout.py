@@ -41,7 +41,7 @@ def test_generated_cmake_registry_includes_backend_result_gate(tmp_path):
         r'^add_test\(.*? "-m" "pytest" "([^"]+)"', generated, re.MULTILINE,
     ))
 
-    assert str(TELEOP / "test/teleop/test_backend_result.py") in pytest_paths
+    assert str(TELEOP / "test/api/test_backend_result.py") in pytest_paths
 
 
 def test_teleop_install_contract_contains_validation_server_fixture_and_spa():

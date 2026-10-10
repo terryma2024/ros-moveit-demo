@@ -27,7 +27,7 @@ ALLOWED = {
     "src/so101_demo_py/test/act/test_act_task8_formal_context_fields.py": "document field string, never opened",
     "src/so101_demo_py/test/act/test_act_task8_measurement_driver.py": "document field string, never opened",
     "src/so101_demo_py/test/act/test_act_task8_validation_campaign.py": "document field string, never opened",
-    "src/so101_teleop/test/teleop/test_act_campaign_admission.py": "document field string, never opened",
+    "src/so101_teleop/test/unified/test_act_campaign_admission.py": "document field string, never opened",
     # the AF_UNIX 107-byte boundary is a property of the path string length; nothing is created
     "src/so101_demo_py/test/parallel_batch/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
     "src/so101_demo_py/test/repo/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
@@ -41,7 +41,7 @@ ALLOWED = {
     "src/so101_teleop/test/test_tile_ai_station_guis.py": "window title string for a classifier",
     "src/so101_teleop/test/test_so101_stack_inventory.py": "process command line for a parser",
     "src/so101_teleop/test/test_unified_gate.py": "durable-root rule inputs (platform, path) for a pure predicate",
-    "src/so101_teleop/test/teleop/test_unified_live_fixture.py": "asserts the literal appears in a tracked TypeScript rule file",
+    "src/so101_teleop/test/unified/test_unified_live_fixture.py": "asserts the literal appears in a tracked TypeScript rule file",
     # not collected by pytest: the recorded-gate helper keeps the registered-host policy constant
     "src/so101_teleop/test/e2e/record_gate.py": "registered-host policy constant for a pure predicate",
 }

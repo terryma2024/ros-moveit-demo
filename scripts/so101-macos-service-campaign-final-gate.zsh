@@ -169,7 +169,7 @@ record_step() {
 # The full static gate, in the order the plan fixes.
 record_step demo-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[demo-pytest]" src/so101_demo_py/test -q \
   --junitxml="$run_root/demo-pytest.xml"
-record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/teleop -q \
+record_step teleop-pytest "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[teleop-pytest]" src/so101_teleop/test/api src/so101_teleop/test/expert_validation src/so101_teleop/test/unified src/so101_teleop/test/pick_place_validation -q \
   --junitxml="$run_root/teleop-pytest.xml"
 record_step copied-install "$worktree" "$python" -m pytest -p no:cacheprovider --basetemp "$pytest_bases[copied-install]" -q \
   src/so101_demo_py/test/packaging/test_copied_installed_entrypoint.py \
