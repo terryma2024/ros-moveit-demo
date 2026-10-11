@@ -9,7 +9,11 @@ import pytest
 from launch import LaunchContext
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.utilities import perform_substitutions
-from so101_demo.runtime import launch_composition
+from so101_demo.runtime.launch_composition import mujoco_actions as launch_composition_mujoco_actions
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
+from so101_demo.runtime.launch_composition import task_station as launch_composition_task_station
+from so101_demo.runtime.launch_composition import text_pick_agent as launch_composition_text_pick_agent
 from so101_demo.runtime.provenance import InstalledExecutionIdentity
 from paths import PACKAGE_ROOT
 
@@ -31,11 +35,11 @@ def _default(argument):
 
 def _materialize(monkeypatch, tmp_path: Path, **overrides):
     monkeypatch.setattr(
-        launch_composition,
+        launch_composition_text_pick_agent,
         "resolve_installed_execution_identity",
         lambda: InstalledExecutionIdentity("a" * 40, "/tmp/e2e-install"),
     )
-    description = launch_composition.build_text_pick_agent_e2e_launch_description()
+    description = launch_composition_text_pick_agent.build_text_pick_agent_e2e_launch_description()
     context = LaunchContext()
     for name, argument in _declared(description).items():
         if argument.default_value is not None:
@@ -79,7 +83,7 @@ def _record(workflow_id, sequence, component, event, *, status="OK", failure=Non
 
 
 def test_public_contract_and_thin_wrapper() -> None:
-    description = launch_composition.build_text_pick_agent_e2e_launch_description()
+    description = launch_composition_text_pick_agent.build_text_pick_agent_e2e_launch_description()
     declared = _declared(description)
     assert {
         "instruction", "run_mode", "execute", "skip_confirmation", "headless",
@@ -123,7 +127,10 @@ def test_public_contract_and_thin_wrapper() -> None:
 )
 def test_invalid_preflight_creates_no_stack_or_evidence(monkeypatch, tmp_path, override, pattern):
     calls = []
-    monkeypatch.setattr(launch_composition, "_mujoco_stack_actions", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(launch_composition_perception, "_mujoco_stack_actions", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(launch_composition_task_station, "_mujoco_stack_actions", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(launch_composition_text_pick_agent, "_mujoco_stack_actions", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(launch_composition_mujoco_actions, "_mujoco_stack_actions", lambda *a, **k: calls.append(1))
     with pytest.raises(RuntimeError, match=pattern):
         _materialize(monkeypatch, tmp_path, **override)
     assert calls == []
@@ -161,7 +168,10 @@ def test_model_perception_stays_alive_after_one_inference(monkeypatch, tmp_path)
         return ExecuteProcess(cmd=["perception"])
 
     monkeypatch.setattr(
-        launch_composition, "build_perception_action", build_perception_action
+        launch_composition_text_pick_agent, "build_perception_action", build_perception_action
+    )
+    monkeypatch.setattr(
+        launch_composition_perception, "build_perception_action", build_perception_action
     )
     _materialize(
         monkeypatch,
@@ -177,7 +187,7 @@ def _supervisor(tmp_path: Path, backend="yolo_seg"):
     text = ExecuteProcess(cmd=["text"])
     perception = ExecuteProcess(cmd=["perception"])
     validator = ExecuteProcess(cmd=["validator"])
-    supervisor = launch_composition.E2ESupervisor(
+    supervisor = launch_composition_supervisor.E2ESupervisor(
         workflow_id="workflow-1",
         request_id="request-1",
         session_id="session-1",

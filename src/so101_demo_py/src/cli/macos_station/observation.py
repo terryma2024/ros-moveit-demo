@@ -142,7 +142,9 @@ def station_robot_description(
 ) -> str:
     """Render the same robot description the task station uses (no second code path)."""
 
-    from so101_demo.runtime.launch_composition import _render_mujoco_robot_description
+    from so101_demo.runtime.launch_composition.mujoco_actions import (
+        _render_mujoco_robot_description,
+    )
 
     share = Path(share_root)
     resolved_scene = (

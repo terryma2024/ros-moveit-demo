@@ -12,8 +12,11 @@ from launch.event_handlers import OnProcessExit
 from launch.events.process import ProcessExited
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
-from so101_demo.runtime import launch_composition
-from so101_demo.runtime.launch_composition import COMMON_ARGUMENTS, build_launch_description
+from so101_demo.runtime.launch_composition import mujoco_actions as launch_composition_mujoco_actions
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import task_station as launch_composition_task_station
+from so101_demo.runtime.launch_composition.common import COMMON_ARGUMENTS
+from so101_demo.runtime.launch_composition.descriptions import build_launch_description
 
 from launch import LaunchContext
 from paths import PACKAGE_ROOT
@@ -152,7 +155,7 @@ def test_mujoco_scene_setup_receives_the_launch_readiness_budget() -> None:
             "readiness_timeout_s": "123.0",
         }
     )
-    stack = launch_composition._mujoco_stack_actions(context, PACKAGE_ROOT, "readiness-session")
+    stack = launch_composition_mujoco_actions._mujoco_stack_actions(context, PACKAGE_ROOT, "readiness-session")
     scene_setup = stack.scene_setup
 
     assert evaluate_parameters(context, scene_setup._Node__parameters) == (
@@ -243,28 +246,28 @@ def test_gazebo_stack_without_pick_place_installs_no_workflow_gate() -> None:
 def test_mujoco_sensor_rendering_is_independent_from_headless_viewer() -> None:
     share = PACKAGE_ROOT
 
-    headless_rgbd = launch_composition._render_mujoco_robot_description(
+    headless_rgbd = launch_composition_mujoco_actions._render_mujoco_robot_description(
         share,
         "scene.xml",
         headless=True,
         sensor_rendering=True,
         platform_name="darwin",
     )
-    headless_physics_only = launch_composition._render_mujoco_robot_description(
+    headless_physics_only = launch_composition_mujoco_actions._render_mujoco_robot_description(
         share,
         "scene.xml",
         headless=True,
         sensor_rendering=False,
         platform_name="darwin",
     )
-    linux_interactive = launch_composition._render_mujoco_robot_description(
+    linux_interactive = launch_composition_mujoco_actions._render_mujoco_robot_description(
         share,
         "scene.xml",
         headless=False,
         sensor_rendering=True,
         platform_name="linux",
     )
-    macos_interactive = launch_composition._render_mujoco_robot_description(
+    macos_interactive = launch_composition_mujoco_actions._render_mujoco_robot_description(
         share,
         "scene.xml",
         headless=False,
@@ -280,7 +283,7 @@ def test_mujoco_sensor_rendering_is_independent_from_headless_viewer() -> None:
 
 
 def test_mujoco_robot_description_renders_explicit_simulation_speed_factor() -> None:
-    rendered = launch_composition._render_mujoco_robot_description(
+    rendered = launch_composition_mujoco_actions._render_mujoco_robot_description(
         PACKAGE_ROOT,
         "scene.xml",
         headless=True,
@@ -292,7 +295,7 @@ def test_mujoco_robot_description_renders_explicit_simulation_speed_factor() -> 
 
 
 def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> None:
-    description = launch_composition.build_perception_pick_place_launch_description()
+    description = launch_composition_perception.build_perception_pick_place_launch_description()
     sensor_rendering = next(
         action
         for action in description.entities
@@ -303,7 +306,7 @@ def test_perception_launch_defaults_sensor_rendering_on_for_headless_rgbd() -> N
 
 
 def test_task_station_declares_both_headless_profiles_but_keeps_visible_default() -> None:
-    description = launch_composition.build_task_station_launch_description()
+    description = launch_composition_task_station.build_task_station_launch_description()
     arguments = {
         action.name: action
         for action in description.entities
@@ -316,7 +319,7 @@ def test_task_station_declares_both_headless_profiles_but_keeps_visible_default(
 
 
 def test_perception_launch_declares_the_grounded_sam_backend_contract() -> None:
-    description = launch_composition.build_perception_pick_place_launch_description()
+    description = launch_composition_perception.build_perception_pick_place_launch_description()
     arguments = {
         action.name: action
         for action in description.entities
@@ -368,7 +371,7 @@ def test_mujoco_launch_declares_and_renders_selected_initial_keyframe() -> None:
     declared = _declared(description)
     assert "mujoco_initial_keyframe" in declared
 
-    rendered = launch_composition._render_mujoco_robot_description(
+    rendered = launch_composition_mujoco_actions._render_mujoco_robot_description(
         PACKAGE_ROOT,
         str(PACKAGE_ROOT / "assets/mujoco/scene.xml"),
         headless=False,
@@ -381,7 +384,7 @@ def test_mujoco_launch_accepts_multi_object_acceptance_keyframes() -> None:
     scene = PACKAGE_ROOT / "assets/mujoco/multi_object_scene.xml"
 
     for keyframe in ("no_cup", "two_cups", "cup_near_bottle"):
-        rendered = launch_composition._render_mujoco_robot_description(
+        rendered = launch_composition_mujoco_actions._render_mujoco_robot_description(
             PACKAGE_ROOT,
             str(scene),
             headless=True,
@@ -403,7 +406,7 @@ def test_fixed_mujoco_composition_still_selects_only_the_fixed_workflow() -> Non
         }
     )
 
-    actions = launch_composition._mujoco_execute_actions(
+    actions = launch_composition_mujoco_actions._mujoco_execute_actions(
         context,
         PACKAGE_ROOT,
         SimpleNamespace(path=PACKAGE_ROOT / "config/motion_policy.yaml"),
@@ -447,7 +450,7 @@ def test_fixed_mujoco_composition_preserves_simulator_exit_shutdown() -> None:
             "evidence_file": "/tmp/fixed-simulator-shutdown.json",
         }
     )
-    actions = launch_composition._mujoco_execute_actions(
+    actions = launch_composition_mujoco_actions._mujoco_execute_actions(
         context,
         PACKAGE_ROOT,
         SimpleNamespace(path=PACKAGE_ROOT / "config/motion_policy.yaml"),

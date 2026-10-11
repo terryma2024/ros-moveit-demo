@@ -94,9 +94,12 @@ def test_act_station_pins_realtime_simulation_speed(monkeypatch):
     from launch import LaunchContext
     from launch.utilities import perform_substitutions
     from launch.actions import DeclareLaunchArgument, OpaqueFunction
-    from so101_demo.runtime import launch_composition as launch
+    from so101_demo.runtime.launch_composition import mujoco_actions as launch_mujoco_actions
+    from so101_demo.runtime.launch_composition import perception as launch_perception
+    from so101_demo.runtime.launch_composition import task_station as launch_task_station
+    from so101_demo.runtime.launch_composition import text_pick_agent as launch_text_pick_agent
 
-    description = launch.build_task_station_launch_description(act_profile=True)
+    description = launch_task_station.build_task_station_launch_description(act_profile=True)
     context = LaunchContext()
     for argument in description.entities:
         if isinstance(argument, DeclareLaunchArgument):
@@ -106,13 +109,16 @@ def test_act_station_pins_realtime_simulation_speed(monkeypatch):
         act_stop_velocity_rad_s='.002', act_max_age_s='1.5',
         act_broker_socket='/run/user/1000/act-test/a')
     captured = []
-    original = launch._mujoco_stack_actions
+    original = launch_mujoco_actions._mujoco_stack_actions
 
     def stack(*args, **kwargs):
         captured.append(kwargs.get('sim_speed_factor'))
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(launch, '_mujoco_stack_actions', stack)
+    monkeypatch.setattr(launch_perception, '_mujoco_stack_actions', stack)
+    monkeypatch.setattr(launch_task_station, '_mujoco_stack_actions', stack)
+    monkeypatch.setattr(launch_text_pick_agent, '_mujoco_stack_actions', stack)
+    monkeypatch.setattr(launch_mujoco_actions, '_mujoco_stack_actions', stack)
     opaque = next(action for action in description.entities if isinstance(action, OpaqueFunction))
     opaque.execute(context)
     assert captured == [1.0]

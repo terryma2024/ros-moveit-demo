@@ -10,7 +10,10 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 
-from so101_demo.runtime import launch_composition as launch
+from so101_demo.runtime.launch_composition import mujoco_actions as launch_mujoco_actions
+from so101_demo.runtime.launch_composition import perception as launch_perception
+from so101_demo.runtime.launch_composition import task_station as launch_task_station
+from so101_demo.runtime.launch_composition import text_pick_agent as launch_text_pick_agent
 from paths import PACKAGE_ROOT
 
 
@@ -21,7 +24,7 @@ def isolated_launch_environment(monkeypatch):
 
 
 def configured(tmp_path, *, overrides=None):
-    description = launch.build_act_execution_stack_launch_description()
+    description = launch_task_station.build_act_execution_stack_launch_description()
     context = LaunchContext()
     for action in description.entities:
         if isinstance(action, DeclareLaunchArgument) and action.default_value is not None:
@@ -45,7 +48,10 @@ def configured(tmp_path, *, overrides=None):
 def test_invalid_act_stack_request_refuses_before_graph_construction(tmp_path, monkeypatch, overrides, reason):
     _, context, opaque = configured(tmp_path, overrides=overrides)
     made = []
-    monkeypatch.setattr(launch, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
+    monkeypatch.setattr(launch_perception, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
+    monkeypatch.setattr(launch_task_station, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
+    monkeypatch.setattr(launch_text_pick_agent, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
+    monkeypatch.setattr(launch_mujoco_actions, "_mujoco_stack_actions", lambda *args, **kwargs: made.append(True))
     with pytest.raises(RuntimeError, match=reason):
         opaque.execute(context)
     assert made == []

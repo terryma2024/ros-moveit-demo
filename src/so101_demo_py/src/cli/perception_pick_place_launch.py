@@ -10,10 +10,10 @@ from ros2launch.api.api import parse_launch_arguments
 
 from launch import LaunchDescription, LaunchService
 
-from ..runtime.launch_composition import (
-    PerceptionLaunchExitStatus,
+from so101_demo.runtime.launch_composition.perception import (
     build_perception_pick_place_launch_description,
 )
+from so101_demo.runtime.launch_composition.supervisor import PerceptionLaunchExitStatus
 
 
 def run_launch_description(

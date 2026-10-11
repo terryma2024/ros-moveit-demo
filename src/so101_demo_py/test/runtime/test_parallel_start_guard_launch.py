@@ -116,7 +116,7 @@ def _entry_environment(prefix: Path, task_root: Path | None = None) -> dict[str,
 def test_installed_parallel_entry_is_functionally_discovered() -> None:
     """Discovery is functional (ament/share/PATH); a missing entry is a normal error."""
 
-    from so101_demo.runtime.launch_composition import installed_executable
+    from so101_demo.runtime.launch_composition.common import installed_executable
 
     located = installed_executable("so101_parallel_batch")
     assert located.is_file() and os.access(located, os.X_OK), located

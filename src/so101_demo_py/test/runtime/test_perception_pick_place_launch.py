@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import platform
 import importlib.util
 import hashlib
 import math
@@ -21,6 +22,9 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
 
 from launch import LaunchContext
 from paths import PACKAGE_ROOT
@@ -29,10 +33,10 @@ LAUNCH_PATH = PACKAGE_ROOT / "launch/so101_mujoco_perception_pick_place.launch.p
 
 
 def _builder():
-    assert hasattr(launch_composition, "build_perception_pick_place_launch_description"), (
+    assert hasattr(launch_composition_perception, "build_perception_pick_place_launch_description"), (
         "dedicated perception launch builder is missing"
     )
-    return launch_composition.build_perception_pick_place_launch_description
+    return launch_composition_perception.build_perception_pick_place_launch_description
 
 
 def _declared(description) -> dict[str, DeclareLaunchArgument]:
@@ -48,7 +52,7 @@ def _default(argument: DeclareLaunchArgument) -> str:
 
 
 def _materialize(*, evidence_file=None, **overrides):
-    exit_status = launch_composition.PerceptionLaunchExitStatus()
+    exit_status = launch_composition_supervisor.PerceptionLaunchExitStatus()
     description = _builder()(exit_status)
     declared = _declared(description)
     context = LaunchContext()
@@ -620,7 +624,7 @@ def test_enabled_trace_profiles_perception_and_dynamic_runtime_with_one_session(
 def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
     monkeypatch.setenv("ROS_DOMAIN_ID", "191")
     monkeypatch.setenv("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
     weights = tmp_path / "best.pt"
@@ -697,7 +701,7 @@ def test_linux_auto_yolo_backend_starts_cuda_container_with_ros_and_owned_mounts
 def test_linux_yolo_profiling_mounts_the_correlated_root_into_the_container(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"weights-v1")
     context, actions, _exit_status = _materialize(
@@ -771,7 +775,7 @@ def test_yolo_docker_forwards_workflow_and_unbuffered_event_stream(
 def test_linux_docker_dev_mounts_only_the_explicit_python_source(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
     source_root = tmp_path / "python-source"
     (source_root / "runtime").mkdir(parents=True)
     (source_root / "__init__.py").write_text("", encoding="utf-8")
@@ -801,7 +805,7 @@ def test_linux_docker_dev_mounts_only_the_explicit_python_source(
 def test_linux_docker_dev_rejects_missing_or_relative_source(
     tmp_path: Path, monkeypatch, source_root: str
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"weights-v1")
 
@@ -819,7 +823,7 @@ def test_linux_docker_dev_rejects_missing_or_relative_source(
 def test_macos_auto_yolo_backend_keeps_host_process_and_resolves_mps(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"weights-v1")
     digest = hashlib.sha256(b"weights-v1").hexdigest()
@@ -851,7 +855,7 @@ def test_macos_auto_yolo_backend_keeps_host_process_and_resolves_mps(
 def test_macos_rejects_explicit_docker_yolo_runtime_before_processes(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(launch_composition.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"weights-v1")
 

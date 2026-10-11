@@ -17,8 +17,8 @@ from launch_ros.actions import Node
 
 from launch import LaunchContext
 from launch.utilities import perform_substitutions
-import so101_demo.runtime.launch_composition as launch_composition
-from so101_demo.runtime.launch_composition import build_task_station_launch_description
+from so101_demo.runtime.launch_composition import task_station as launch_composition_task_station
+from so101_demo.runtime.launch_composition.task_station import build_task_station_launch_description
 from paths import PACKAGE_ROOT
 
 
@@ -72,7 +72,7 @@ def test_task_station_starts_teleop_with_exact_mujoco_process_pid() -> None:
     context = LaunchContext()
     context.launch_configurations["teleop_port"] = "8080"
 
-    actions = launch_composition._task_station_teleop_actions(
+    actions = launch_composition_task_station._task_station_teleop_actions(
         SimpleNamespace(pid=53900),
         context,
         teleop_share=Path("/installed/share/so101_teleop"),

@@ -17,7 +17,12 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 
 from so101_demo.parallel_batch.contracts import RunMode
-from so101_demo.runtime import launch_composition as launch
+from so101_demo.runtime.launch_composition import common as launch_common
+from so101_demo.runtime.launch_composition import descriptions as launch_descriptions
+from so101_demo.runtime.launch_composition import gazebo_actions as launch_gazebo_actions
+from so101_demo.runtime.launch_composition import perception as launch_perception
+from so101_demo.runtime.launch_composition import task_station as launch_task_station
+from so101_demo.runtime.launch_composition import text_pick_agent as launch_text_pick_agent
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from test_act_child_recorder_binding import frozen_child_inputs
 from test_parallel_worker_runtime import _ProcessGroup, _resources
@@ -73,7 +78,17 @@ def evaluated_nodes(argv):
 @pytest.fixture(autouse=True)
 def source_share(monkeypatch):
     # the launch reads config/ and assets/ from the package share; the source tree is the same layout
-    monkeypatch.setattr(launch, "get_package_share_directory",
+    monkeypatch.setattr(launch_descriptions, "get_package_share_directory",
+                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
+    monkeypatch.setattr(launch_gazebo_actions, "get_package_share_directory",
+                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
+    monkeypatch.setattr(launch_perception, "get_package_share_directory",
+                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
+    monkeypatch.setattr(launch_task_station, "get_package_share_directory",
+                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
+    monkeypatch.setattr(launch_text_pick_agent, "get_package_share_directory",
+                        lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
+    monkeypatch.setattr(launch_common, "get_package_share_directory",
                         lambda name: str(PACKAGE) if name == "so101_demo_py" else "/opt/ros/jazzy/share/" + name)
     monkeypatch.setattr(os, "environ", os.environ.copy())
 

@@ -18,6 +18,9 @@ from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 from launch_ros.utilities import evaluate_parameters
 from so101_demo.runtime import launch_composition
+from so101_demo.runtime.launch_composition import text_pick_agent as launch_composition_text_pick_agent
+from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
+from so101_demo.runtime.launch_composition import text_pick_agent as launch_composition_text_pick_agent
 from so101_demo.profiling import launch_support as profiling_launch_support
 from so101_demo.profiling.system_trace import (
     RequiredSystemTraceUnavailable,
@@ -34,10 +37,10 @@ INSTRUCTION = "Pick the plastic cup. Apply no constraints."
 
 
 def _builder():
-    assert hasattr(launch_composition, "build_text_pick_agent_launch_description"), (
+    assert hasattr(launch_composition_text_pick_agent, "build_text_pick_agent_launch_description"), (
         "dedicated text-agent launch builder is missing"
     )
-    return launch_composition.build_text_pick_agent_launch_description
+    return launch_composition_text_pick_agent.build_text_pick_agent_launch_description
 
 
 def _declared(description) -> dict[str, DeclareLaunchArgument]:
@@ -54,7 +57,7 @@ def _default(argument: DeclareLaunchArgument) -> str:
 
 def _materialize(monkeypatch, tmp_path: Path, **overrides):
     monkeypatch.setattr(
-        launch_composition,
+        launch_composition_text_pick_agent,
         "resolve_installed_execution_identity",
         lambda: InstalledExecutionIdentity(
             source_commit="a" * 40,
@@ -64,11 +67,11 @@ def _materialize(monkeypatch, tmp_path: Path, **overrides):
     # The executable is resolved functionally at use time; this test owns launch argv
     # composition, so it pins the resolved path (discovery has its own coverage).
     monkeypatch.setattr(
-        launch_composition,
+        launch_composition_text_pick_agent,
         "installed_executable",
         lambda name: Path("/tmp/so101-text-agent-install/lib/so101_demo_py") / name,
     )
-    exit_status = launch_composition.PerceptionLaunchExitStatus()
+    exit_status = launch_composition_supervisor.PerceptionLaunchExitStatus()
     description = _builder()(exit_status)
     declared = _declared(description)
     context = LaunchContext()

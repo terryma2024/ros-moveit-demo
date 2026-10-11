@@ -6,6 +6,10 @@ import sys
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from so101_demo.runtime import launch_composition
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
+from so101_demo.runtime.launch_composition import perception as launch_composition_perception
+from so101_demo.runtime.launch_composition import supervisor as launch_composition_supervisor
 
 from launch import LaunchDescription
 
@@ -15,8 +19,8 @@ def _runner_module():
 
 
 def _exit_status():
-    assert hasattr(launch_composition, "PerceptionLaunchExitStatus")
-    return launch_composition.PerceptionLaunchExitStatus()
+    assert hasattr(launch_composition_supervisor, "PerceptionLaunchExitStatus")
+    return launch_composition_supervisor.PerceptionLaunchExitStatus()
 
 
 def _process(command: str) -> ExecuteProcess:
@@ -31,8 +35,8 @@ def _description(
     *,
     successful_one_shots=(),
 ) -> LaunchDescription:
-    assert hasattr(launch_composition, "perception_pick_place_exit_handlers")
-    handlers = launch_composition.perception_pick_place_exit_handlers(
+    assert hasattr(launch_composition_perception, "perception_pick_place_exit_handlers")
+    handlers = launch_composition_perception.perception_pick_place_exit_handlers(
         scene,
         perception,
         workflow,

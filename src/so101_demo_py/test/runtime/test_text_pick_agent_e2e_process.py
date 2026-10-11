@@ -7,10 +7,8 @@ import sys
 from launch import LaunchDescription, LaunchService
 from launch.actions import ExecuteProcess
 import pytest
-from so101_demo.runtime.launch_composition import (
-    E2ESupervisor,
-    _e2e_process_handlers,
-)
+from so101_demo.runtime.launch_composition.supervisor import E2ESupervisor
+from so101_demo.runtime.launch_composition.text_pick_agent import _e2e_process_handlers
 
 
 def _event(

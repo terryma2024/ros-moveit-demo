@@ -168,19 +168,30 @@ def test_copied_install_accepts_arbitrary_prefix_metadata(tmp_path: Path) -> Non
 def test_functional_executable_discovery_is_preserved(tmp_path: Path, monkeypatch) -> None:
     """Removing metadata admission must not remove real resource discovery."""
 
-    from so101_demo.runtime.launch_composition import installed_executable
+    from so101_demo.runtime.launch_composition.common import installed_executable
 
     found = installed_executable("text_pick_agent")
     assert found.is_file()
 
-    import so101_demo.runtime.launch_composition as module
+    from so101_demo.runtime.launch_composition import common as module_common
+    from so101_demo.runtime.launch_composition import descriptions as module_descriptions
+    from so101_demo.runtime.launch_composition import gazebo_actions as module_gazebo_actions
+    from so101_demo.runtime.launch_composition import perception as module_perception
+    from so101_demo.runtime.launch_composition import task_station as module_task_station
+    from so101_demo.runtime.launch_composition import text_pick_agent as module_text_pick_agent
 
     def unavailable(*_args, **_kwargs):
         raise LookupError("no ament index")
 
-    monkeypatch.setattr(module, "get_package_prefix", unavailable)
-    monkeypatch.setattr(module, "get_package_share_directory", unavailable)
-    monkeypatch.setattr(module.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(module_descriptions, "get_package_prefix", unavailable)
+    monkeypatch.setattr(module_common, "get_package_prefix", unavailable)
+    monkeypatch.setattr(module_descriptions, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module_gazebo_actions, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module_perception, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module_task_station, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module_text_pick_agent, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(module_common, "get_package_share_directory", unavailable)
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
     with pytest.raises(RuntimeError, match="installed executable is unavailable"):
         installed_executable("text_pick_agent")
 
