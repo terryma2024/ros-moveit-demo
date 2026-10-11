@@ -90,7 +90,7 @@ next_experiment: review the minimal-runtime-gates design; implement Teacher poli
   - the latest gate install needed by the next runs.
   - Every deletion recorded in a new cleanup-20261011/deleted.tsv.
 - Dispatched to a fresh Sonnet executor, in order: cleanup → Head 40 → pick-place 20 (one stack at a time).
-- CORRECTION (user, 2026-10-11): "20点pickplace 不是 T01–T20（相同点），而是20个不同位置". Asked (AskUserQuestion), the user chose the GENERAL path through the teleop service. Step 3 is therefore all 20 points of config/mujoco/moveit_expert_validation_points.yaml (4 anchors + samples 01–16) as one PARALLEL batch with 2 workers on parallel_batch_linux_cuda.yaml. No Teacher freeze. The executor has been informed.
+- CORRECTION (user, 2026-10-11): "20点pickplace 不是 T01–T20（相同点），而是20个不同位置". Asked (AskUserQuestion), the user chose the GENERAL path through the teleop service. Step 3 is therefore all 20 points of config/mujoco/moveit_expert_validation_points.yaml (4 anchors + samples 01–16) as one PARALLEL batch with 2 workers on parallel_batch_linux_cuda.yaml. No Teacher freeze. The executor has been informed. Follow-up (user, 2026-10-11): "20 pickplace with 4 worker". Step 3 runs PARALLEL with 4 workers, verified against the linux_cuda frozen max of 8 and domains 181–188, with a start-guard headroom check. If 4 workers are refused, the run stops and reports instead of falling back.
 
 ## CP-3557 — post-refactor live checks on the clock-fixed stack: 5/5 PASS (HEAD 436ec72fa); refactor complete
 
