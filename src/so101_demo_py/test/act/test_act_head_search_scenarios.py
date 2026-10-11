@@ -14,8 +14,11 @@ import json
 import math
 
 import pytest
-from so101_demo.act import head_search_scenarios as module
-from so101_demo.act.head_search_scenarios import (
+from so101_demo.act.head_search_scenarios import contracts as module_contracts
+from so101_demo.act.head_search_scenarios import journal as module_journal
+from so101_demo.act.head_search_scenarios import plan as module_plan
+from so101_demo.act.head_search_scenarios import writer as module_writer
+from so101_demo.act.head_search_scenarios.contracts import (
     CAL_SCENARIO_BUDGET_EXHAUSTED,
     CAL_SCENARIO_COVERAGE_INCOMPLETE,
     CAL_SCENARIO_CUP_NOT_FOUND,
@@ -24,28 +27,31 @@ from so101_demo.act.head_search_scenarios import (
     CAL_SCENARIO_INTERRUPTION_UNPROVEN,
     CAL_SCENARIO_NO_VERDICT,
     CAL_SCENARIO_OUT_OF_CORRIDOR,
+    CAL_SCENARIO_OWNERSHIP_REFUSED,
+    CAL_SCENARIO_RUN_ROOT_EXISTS,
+    CAL_SCENARIO_RUNTIME_UNVERIFIED,
     CAL_SCENARIO_SPLIT_LEAK,
     CAL_SCENARIO_STOP_UNPROVEN,
     CAL_SCENARIO_UNEXPECTED_LOCK,
-    CAL_SCENARIO_OWNERSHIP_REFUSED,
-    CAL_SCENARIO_RUNTIME_UNVERIFIED,
-    CAL_SCENARIO_RUN_ROOT_EXISTS,
-    EVIDENCE_DIR,
-    JOURNAL_KEYS,
-    QUALIFICATION_FIT_WARNING,
     CalibrationScenarioRefused,
+    QUALIFICATION_FIT_WARNING,
+)
+from so101_demo.act.head_search_scenarios.journal import (
     aggregate_scenarios,
+    JOURNAL_KEYS,
+    scenario_journal_entry,
+)
+from so101_demo.act.head_search_scenarios.plan import (
     check_frame_cadence,
-    classify_scenario,
     expected_terminals,
     qualification_scenarios,
-    run_scenario,
-    hold_stop_samples,
-    scenario_journal_entry,
-    settle_proof,
-    stop_proof,
-    write_head_search_scenarios,
 )
+from so101_demo.act.head_search_scenarios.scenario_run import (
+    classify_scenario,
+    hold_stop_samples,
+    run_scenario,
+)
+from so101_demo.act.head_search_scenarios.stop_proof import settle_proof, stop_proof
 from so101_demo.act.head_search_timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
@@ -385,9 +391,9 @@ def test_a_condition_class_the_partition_does_not_declare_is_refused():
 
 
 def test_the_interruption_classes_declare_a_second_attempt_and_the_others_do_not():
-    assert module.requires_interruption("fast_interruption") is True
-    assert module.requires_interruption("reacquire_after_stop") is True
-    assert module.requires_interruption("nominal") is False
+    assert module_plan.requires_interruption("fast_interruption") is True
+    assert module_plan.requires_interruption("reacquire_after_stop") is True
+    assert module_plan.requires_interruption("nominal") is False
 
 
 # --- the 10 Hz frame cadence ---------------------------------------------------------------------
@@ -1199,13 +1205,13 @@ def _class_aware_detector(plant, request, *, blind=()):
 
     if int(request["seed"]) in blind:
         return FakeDetector(plant, cups=0)
-    return FakeDetector(plant, cups=module.declared_cup_count(str(request["scenario"])))
+    return FakeDetector(plant, cups=module_plan.declared_cup_count(str(request["scenario"])))
 
 
 def _patch_flight(monkeypatch, *, ownership_status="EXCLUSIVE_OWNERSHIP_OK", cuda=True):
     """Stub the four heavy seams: the ownership gate, CUDA, the scene preparation and the plant."""
 
-    from so101_demo.act import head_search_scenarios as scenarios_module
+    from so101_demo.act.head_search_scenarios import writer as scenarios_module
 
     monkeypatch.setattr(scenarios_module, "_cuda_available", lambda: cuda)
     monkeypatch.setattr(
@@ -1359,7 +1365,7 @@ def test_the_producer_writes_the_document_the_journal_and_the_receipt_with_prove
         if line.strip()
     ]
 
-    assert document["kind"] == module.KIND
+    assert document["kind"] == module_contracts.KIND
     assert document["phase"] == "scenarios"
     assert document["scenario_count"] == 10
     assert document["passed_count"] == 10
@@ -1376,13 +1382,13 @@ def test_the_producer_writes_the_document_the_journal_and_the_receipt_with_prove
     assert document["values_sha256"]
     assert document["runtime_identity"]
     assert document["ownership_receipt"]["status"] == "EXCLUSIVE_OWNERSHIP_OK"
-    assert document["sha256"] == module.canonical_sha256(
+    assert document["sha256"] == module_writer.canonical_sha256(
         {key: value for key, value in document.items() if key != "sha256"}
     )
     assert len(journal) == 10
     assert [row["seed"] for row in journal] == list(range(900000, 900010))
-    assert all(set(row) == set(module.JOURNAL_KEYS) for row in journal)
-    assert receipt["kind"] == module.RECEIPT_KIND
+    assert all(set(row) == set(module_journal.JOURNAL_KEYS) for row in journal)
+    assert receipt["kind"] == module_contracts.RECEIPT_KIND
     assert receipt["scenario_count"] == 10
     assert receipt["document_sha256"] == document["sha256"]
     assert state["closed"] == 10, "every scenario's plant is closed"
@@ -1390,7 +1396,7 @@ def test_the_producer_writes_the_document_the_journal_and_the_receipt_with_prove
 
 def test_every_scenario_gets_its_own_evidence_document(tmp_path, monkeypatch):
     _result, _calls, _state, _inputs, output = _produce(tmp_path, monkeypatch)
-    directory = output / module.EVIDENCE_DIR
+    directory = output / module_contracts.EVIDENCE_DIR
     files = sorted(path.name for path in directory.glob("*.json"))
 
     assert len(files) == 10

@@ -57,12 +57,9 @@ from so101_demo.act.head_search_restarts import (
     read_ownership_receipt,
     require_runtime_of_record,
 )
-from so101_demo.act.head_search_scenarios import (
-    check_frame_cadence,
-    classify_scenario,
-    expected_terminals,
-    stop_proof,
-)
+from so101_demo.act.head_search_scenarios.plan import check_frame_cadence, expected_terminals
+from so101_demo.act.head_search_scenarios.scenario_run import classify_scenario
+from so101_demo.act.head_search_scenarios.stop_proof import stop_proof
 from so101_demo.act.head_search_timing_measurement.contracts import (
     DEFAULT_MAX_SETTLE_S,
     FRAME_PERIOD_S,

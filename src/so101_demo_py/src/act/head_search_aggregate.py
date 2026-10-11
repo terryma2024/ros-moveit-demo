@@ -68,7 +68,7 @@ from so101_demo.act.head_search_ownership import (
     default_production_config,
     read_runtime_identity,
 )
-from so101_demo.act.head_search_scenarios import (
+from so101_demo.act.head_search_scenarios.contracts import (
     ARTIFACT as SCENARIOS_ARTIFACT,
     EVIDENCE_DIR as SCENARIOS_EVIDENCE_DIR,
     JOURNAL_ARTIFACT as SCENARIOS_JOURNAL_ARTIFACT,
@@ -77,11 +77,12 @@ from so101_demo.act.head_search_scenarios import (
     NOT_FOUND_WITHIN_BOUND_STATUSES,
     PHASE as SCENARIOS_PHASE,
     QUALIFICATION_SPLIT,
-    JOURNAL_KEYS,
+)
+from so101_demo.act.head_search_scenarios.journal import JOURNAL_KEYS, scenario_journal_entry
+from so101_demo.act.head_search_scenarios.plan import (
     expected_terminals,
     qualification_items,
     requires_interruption,
-    scenario_journal_entry,
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 

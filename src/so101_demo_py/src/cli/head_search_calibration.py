@@ -1248,11 +1248,9 @@ def _measure_scenarios(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_scenarios import (
-        DEFAULT_MAX_FRAMES,
-        SETTLE_CONSECUTIVE_STEPS,
-        write_head_search_scenarios,
-    )
+    from so101_demo.act.head_search_scenarios.contracts import DEFAULT_MAX_FRAMES
+    from so101_demo.act.head_search_scenarios.writer import write_head_search_scenarios
+    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional: dict = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
     for key in ("max_settle_s", "settle_consecutive_steps", "max_frames", "interruption_frame"):

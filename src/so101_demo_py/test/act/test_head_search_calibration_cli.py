@@ -3086,7 +3086,7 @@ def _scenario_arguments(inputs: dict, output: Path, *extra: str) -> list:
 def _patch_scenario_flight(monkeypatch, *, status="PASSED"):
     """Stub the flight's heavy seams, so the CLI case needs no MuJoCo, detector, GPU or gate."""
 
-    from so101_demo.act import head_search_scenarios as scenarios
+    from so101_demo.act.head_search_scenarios import writer as scenarios_writer
 
     seen: dict = {}
 
@@ -3121,7 +3121,7 @@ def _patch_scenario_flight(monkeypatch, *, status="PASSED"):
             "output_dir": kwargs["output_dir"],
         }
 
-    monkeypatch.setattr(scenarios, "write_head_search_scenarios", fake)
+    monkeypatch.setattr(scenarios_writer, "write_head_search_scenarios", fake)
     return seen
 
 
@@ -3165,20 +3165,21 @@ def test_measure_scenarios_hands_the_flight_to_the_library(tmp_path: Path, monke
 def test_measure_scenarios_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_scenarios as scenarios
+    from so101_demo.act.head_search_scenarios import contracts as scenarios_contracts
+    from so101_demo.act.head_search_scenarios import writer as scenarios_writer
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 
     inputs = _scenario_inputs(tmp_path)
 
     def refuse(**kwargs):
         raise CalibrationInputsRefused(
-            scenarios.CAL_SCENARIO_OWNERSHIP_REFUSED,
+            scenarios_contracts.CAL_SCENARIO_OWNERSHIP_REFUSED,
             "the exclusive-ownership gate refused the run with DETECTOR_OWNER_ACTIVE",
         )
 
-    monkeypatch.setattr(scenarios, "write_head_search_scenarios", refuse)
+    monkeypatch.setattr(scenarios_writer, "write_head_search_scenarios", refuse)
     assert main(_scenario_arguments(inputs, tmp_path / "run-root")) == 2
-    assert scenarios.CAL_SCENARIO_OWNERSHIP_REFUSED in capsys.readouterr().err
+    assert scenarios_contracts.CAL_SCENARIO_OWNERSHIP_REFUSED in capsys.readouterr().err
 
 
 def test_measure_scenarios_prints_every_failed_and_refused_scenario(
