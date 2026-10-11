@@ -375,7 +375,7 @@ def test_failed_broker_recovery_waits_for_active_physical_stage_before_shutdown(
 
 
 def test_pre_pose_broker_outage_seals_invalid_and_runs_worker_recovery():
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
 
     from so101_demo.cli.mujoco_batch.common import CliError
     from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
@@ -394,7 +394,7 @@ def test_pre_pose_broker_outage_seals_invalid_and_runs_worker_recovery():
 
 
 def test_pose_accepted_before_broker_outage_can_complete_without_another_request():
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
 
     from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
     from so101_demo.parallel_batch.worker import ParallelWorker
@@ -423,7 +423,7 @@ def test_pose_accepted_before_broker_outage_can_complete_without_another_request
 
 
 def test_worker_stays_alive_across_a_paused_grant_and_resumes_remaining_work():
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
 
     from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
     from so101_demo.parallel_batch.worker import ParallelWorker

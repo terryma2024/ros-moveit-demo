@@ -25,7 +25,7 @@ from so101_demo.runtime.launch_composition import task_station as launch_task_st
 from so101_demo.runtime.launch_composition import text_pick_agent as launch_text_pick_agent
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from test_act_child_recorder_binding import frozen_child_inputs
-from test_parallel_worker_runtime import _ProcessGroup, _resources
+from parallel_worker_runtime_support import _ProcessGroup, _resources
 from paths import PACKAGE_ROOT
 
 PACKAGE = PACKAGE_ROOT

@@ -28,7 +28,8 @@ def _fresh_fake_pilots():
 # ---- the Teacher's window closes when the Teacher exits ---------------------------------------------------------------------
 
 def test_the_teacher_window_is_closed_before_the_data_work_and_the_deadline_guard_no_longer_applies(monkeypatch):
-    from test_parallel_batch_worker import Fake, _wait_for_watchdog_fault
+    from parallel_batch_worker_support import Fake
+    from test_parallel_batch_worker_gate_watchdog import _wait_for_watchdog_fault
     from so101_demo.parallel_batch.worker import ParallelWorker
 
     fake = Fake(RunMode.EXECUTE)
@@ -68,7 +69,7 @@ def test_the_teacher_window_is_closed_before_the_data_work_and_the_deadline_guar
 
 def test_the_worker_runtime_tells_the_worker_the_teacher_exited_before_it_finishes_the_collection(tmp_path, monkeypatch):
     """The order inside `execute_expert`: Teacher receipt, exit callback, terminal capture, then the collection."""
-    from test_parallel_worker_runtime import _write_numeric
+    from parallel_worker_runtime_support import _write_numeric
     from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
@@ -86,7 +87,7 @@ def test_the_worker_runtime_tells_the_worker_the_teacher_exited_before_it_finish
     real_finish = runtime._finish_collection
     runtime._finish_collection = lambda lease, decision: order.append("collection") or real_finish(lease, decision)
     runtime.start_physical_runtime()
-    from test_parallel_worker_runtime import _lease
+    from parallel_worker_runtime_support import _lease
 
     lease = _lease()
     runtime.reset_and_validate_point(lease)
@@ -140,7 +141,7 @@ def test_the_teacher_pass_survives_the_seal_when_the_budget_is_exhausted(tmp_pat
     """Data INVALID because of the budget; the real store seals the Teacher's PASS (never RESULT_AFTER_LEASE_DEADLINE)."""
     from act_result_teacher import sealed_teacher
     from test_act_result_schema3 import setup_result
-    from test_parallel_worker_runtime import _lease
+    from parallel_worker_runtime_support import _lease
 
     from so101_demo.act.collection_orchestration import CollectionOptions
 
@@ -172,7 +173,7 @@ def test_the_teacher_pass_survives_the_seal_when_the_budget_is_exhausted(tmp_pat
 
 
 def test_the_runtime_passes_the_lease_deadline_to_the_collection(tmp_path, monkeypatch):
-    from test_parallel_worker_runtime import _lease
+    from parallel_worker_runtime_support import _lease
 
     from so101_demo.act.collection_orchestration import CollectionOptions
 
@@ -192,7 +193,7 @@ def test_the_runtime_passes_the_lease_deadline_to_the_collection(tmp_path, monke
 # ---- the Teacher has exited only when the child really exited -----------------------------------------------------
 
 def _expert_runtime(tmp_path, monkeypatch, *, child_exited, cancel_result):
-    from test_parallel_worker_runtime import _lease, _write_numeric
+    from parallel_worker_runtime_support import _lease, _write_numeric
 
     from so101_demo.act.collection_orchestration import CollectionOptions
     from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt

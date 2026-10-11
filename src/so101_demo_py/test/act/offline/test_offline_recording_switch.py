@@ -21,7 +21,7 @@ from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
 from so101_demo.runtime.task_stack import StackProcessSpec
-from test_parallel_worker_runtime import _ProcessGroup, _lease, _resources, _write_capture
+from parallel_worker_runtime_support import _lease, _ProcessGroup, _resources, _write_capture
 from paths import PACKAGE_ROOT
 
 POLICY = {"ready_timeout_s": 10.0, "policy_sha256": "p" * 64}
@@ -793,7 +793,7 @@ def test_the_teachers_argv_is_identical_for_every_fault_and_differs_from_off_by_
 
 def test_execute_expert_replaces_only_the_data_fields_with_the_processors_verdict(tmp_path, monkeypatch):
     """The Teacher's receipt passes through `execute_expert`; the data verdict is added beside it, never over it."""
-    from test_parallel_worker_runtime import _write_numeric
+    from parallel_worker_runtime_support import _write_numeric
 
     from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 

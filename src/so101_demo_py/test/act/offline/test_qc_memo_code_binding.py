@@ -88,7 +88,7 @@ def test_a_processor_verdict_without_a_covering_memo_is_invalid_data_not_valid_d
 def test_a_missing_or_stale_memo_keeps_the_teacher_pass_sealed_instead_of_losing_it_to_the_lease_deadline(tmp_path, monkeypatch, memo):
     from act_result_teacher import sealed_teacher
     from test_act_result_schema3 import setup_result
-    from test_parallel_worker_runtime import _lease
+    from parallel_worker_runtime_support import _lease
 
     from so101_demo.act.collection_orchestration import CollectionOptions
 

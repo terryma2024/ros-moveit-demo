@@ -87,7 +87,7 @@ def test_a_teacher_that_runs_past_240_s_is_still_waited_for_only_240_s_under_the
 
 
 def _worker_with(config):
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
 
     fake = Fake(RunMode.EXECUTE)
     ports = fake.ports()
@@ -96,8 +96,11 @@ def _worker_with(config):
 
 
 def test_the_workers_teacher_deadline_guard_still_fires_at_240_s_under_the_act_config(monkeypatch):
-    from test_parallel_batch_worker import _expert_blocked_with_a_lost_coordinator, _wait_for_watchdog_fault
-    from test_parallel_batch_worker import Fake
+    from test_parallel_batch_worker_gate_watchdog import (
+        _expert_blocked_with_a_lost_coordinator,
+        _wait_for_watchdog_fault,
+    )
+    from parallel_batch_worker_support import Fake
 
     act = contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(ACT_FILE)
     real_ports = Fake.ports

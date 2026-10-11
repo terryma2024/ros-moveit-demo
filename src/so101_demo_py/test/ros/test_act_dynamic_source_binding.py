@@ -170,8 +170,9 @@ def test_the_teacher_control_files_hold_no_control_request_from_the_data_side():
     import pathlib
     import so101_demo.ros.dynamic_mujoco_execution as execution
     import so101_demo.ros.dynamic_runtime as runtime
-    for module in (execution, runtime):
-        text = pathlib.Path(module.__file__).read_text()
+    execution_files = [pathlib.Path(execution.__file__), *sorted(pathlib.Path(execution.__file__).with_name("dynamic_execution").glob("*.py"))]
+    for module, files in ((execution, execution_files), (runtime, [pathlib.Path(runtime.__file__)])):
+        text = "".join(path.read_text() for path in files)
         for needle in ('request("revoke"', "request('revoke'", "connection_for", "drain_hazards",
                        "_abort_collection_source", "collection_source_hazard"):
             assert needle not in text, (module.__name__, needle)

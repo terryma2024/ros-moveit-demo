@@ -13,7 +13,8 @@ from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.parallel_batch.perception import PerceptionError, PoseAdmissionCommitError
 from so101_demo.parallel_batch.worker import ParallelWorker
 
-from test_parallel_batch_worker import Fake, _capture_sealed_decisions, event_names
+from parallel_batch_worker_support import event_names, Fake
+from test_parallel_batch_worker_diagnostics import _capture_sealed_decisions
 
 PREFIX = "TEACHER_FENCED_BEFORE_MOTION:INPUT_UNAVAILABLE request_model "
 STALE = "STALE_RGBD: FUTURE_STAMP now=7.7 rgb=7.8 depth=7.8 reset=3.24 max_age=5.0 max_skew=0.0"

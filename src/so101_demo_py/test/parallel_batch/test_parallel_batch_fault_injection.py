@@ -315,7 +315,7 @@ def test_broker_restart_hook_interrupts_the_selected_generation_boundary(
 
 def test_worker_fault_hook_is_optional_and_brackets_seal_and_recovery_receipt():
     """Tests may stop at a boundary without adding a production CLI switch."""
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
     from so101_demo.parallel_batch.worker import ParallelWorker
 
     observed = []
@@ -337,7 +337,7 @@ def test_worker_fault_hook_is_optional_and_brackets_seal_and_recovery_receipt():
 
 def test_worker_fault_after_local_seal_never_sends_terminal_commit():
     """A crash hook after publication cannot fabricate a coordinator ACK."""
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
     from so101_demo.parallel_batch.worker import ParallelWorker
 
     fake = Fake(RunMode.EXECUTE)
@@ -357,7 +357,7 @@ def test_worker_fault_after_local_seal_never_sends_terminal_commit():
 def test_worker_receipt_crash_uses_real_durable_receipt_without_false_recovery_ack(
         tmp_path, phase, receipt_visible):
     """A fault boundary terminates flow instead of journaling contradictory recovery."""
-    from test_parallel_batch_worker import Fake
+    from parallel_batch_worker_support import Fake
     from so101_demo.parallel_batch import artifacts
     from so101_demo.parallel_batch.worker import ParallelWorker
 
