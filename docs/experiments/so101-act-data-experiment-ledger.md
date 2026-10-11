@@ -69,11 +69,35 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3562
+latest_checkpoint: CP-3563
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3563 — containment dedup implemented (e64aac849, 2352c716e); 900027 now locks; two_cups stay ambiguous; gates 0/0
+
+- User chose option A (2026-10-12: "A").
+- Fix e64aac849 (adapters/act/detector.py):
+  - New constants NESTED_MIN_MASK_CONTAINMENT 0.95, NESTED_MIN_BBOX_CONTAINMENT 0.95 and NESTED_MAX_AREA_RATIO 0.8, all inclusive, and the predicate is_nested_in().
+  - The mask-IoU ≥ 0.7 duplicate rule is kept.
+  - The old four-guard fragment rule is removed as subsumed: everything it dropped had containment ≥ 0.95 and area ≤ 0.5, and it never handled partial containment.
+  - Fixture test/data/head_900027_nested_children.{npz,json} (about 6 KB). 2352c716e strips absolute evidence paths from the fixture JSON; the no-host-paths guard caught them.
+- RED red2.log: 24 failed (the 900027 head40 and rerun2 frames kept 2; nested thresholds; boundary and constant tests) → GREEN: 55 passed. Offline replay with the real weights on every saved frame: 900027 → 1 (both frames); 900017 → 1; single-cup seeds unchanged; all four two_cups → 2.
+- Spec deviations (root accepts both):
+  - Test (f), "front mask fully covering a comparable second candidate stays 2", is impossible. For a fully contained pair the mask IoU equals the area ratio, so containment ≥ 0.95 with ratio > 0.8 gives IoU > 0.73, and the retained IoU ≥ 0.7 rule already merges it. This predates the change. Tested instead: an 83% cover stays 2; full cover is removed by the IoU rule only.
+  - The 0.8 area cap is therefore unreachable through detect(); it is pinned by direct is_nested_in() tests.
+  - Consequence: the two-real-cups-fully-overlapping risk is a property of the existing IoU rule, not of option A.
+- Event-log candidate record (raw and post-dedup counts): NOT done. `detections` is hash-bound and checked by the HFA-006 audit, so a new field would cross detect_head, ros_search, head_stopped_capture, the schema and the audit. Follow-up.
+- Gates (occlusion-dedup-20261012/gates/final, 14-package fresh build at e64aac849): demo 11361 pass, 0 fail (re-run after the fixture-path fix, on the same install, since only a test data file changed); colcon 2233 tests, 0/0; scripts 12 pass.
+- Live (prefix oc2, one serial campaign; every image opened):
+  - 900000 control: TARGET_LOCKED, 0.67°.
+  - partial_occlusion: 900007 LOCKED 0.025°; 900017 LOCKED 3.80° (unchanged; the cup is mostly hidden); 900027 LOCKED 0.37° (was TARGET_AMBIGUOUS); 900037 LOCKED 0.26°.
+  - two_cups 900004/14/24/34: all TARGET_AMBIGUOUS, as required.
+  - 9/9 PASS; stop_confirmed and children exited on all; HFA-009 integrity and stop PASS on all 9; teardown clean.
+  - The first attempt (prefix oc1) was invalid from an environment PYTHONPATH mistake and is not counted.
+- Functional-40 standing: every class now passes: 31 (CP-3559) + 8 interruption (CP-3561) + 900027 (this entry). This is a combined count across three campaigns; a single uninterrupted 40-case run on the final code has not been done.
+- Not pushed: 2 commits plus the ledger. Deletion candidates: occlusion-dedup-20261012/scratch and live/campaign-oc1.
 
 ## CP-3562 — pushed 6baf54e63..43a483a13; 900027 occlusion ambiguity diagnosed (read-only, offline detector re-run)
 
