@@ -1066,12 +1066,14 @@ def _measure_fine_correction_episodes(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_fine_correction_episodes import (
+    from so101_demo.act.head_search_fine_correction_episodes.contracts import (
         DEFAULT_MAX_FRAMES,
         DEFAULT_MEASUREMENT_BUDGET,
-        SETTLE_CONSECUTIVE_STEPS,
+    )
+    from so101_demo.act.head_search_fine_correction_episodes.writer import (
         write_head_search_fine_correction_episodes,
     )
+    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional = {"max_frames": DEFAULT_MAX_FRAMES, "settle_consecutive_steps": SETTLE_CONSECUTIVE_STEPS}
     for key in ("max_settle_s", "settle_consecutive_steps", "max_frames"):

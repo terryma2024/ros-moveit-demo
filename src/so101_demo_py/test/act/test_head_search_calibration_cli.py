@@ -1360,7 +1360,7 @@ def test_the_real_episode_plant_captures_the_prepared_cup_after_it_enters_the_sc
     """
 
     import mujoco
-    from so101_demo.act.head_search_fine_correction_episodes import MujocoEpisodePlant
+    from so101_demo.act.head_search_fine_correction_episodes.scene import MujocoEpisodePlant
 
     inputs = _fine_correction_inputs(tmp_path)
     request = {
@@ -2332,6 +2332,7 @@ def _patch_fine_correction_flight(monkeypatch, *, blind_seeds=()):
     """
 
     from so101_demo.act import head_search_fine_correction_episodes as measurement
+    from so101_demo.act.head_search_fine_correction_episodes import writer as measurement_writer
 
     state = {"plant": None}
 
@@ -2368,9 +2369,9 @@ def _patch_fine_correction_flight(monkeypatch, *, blind_seeds=()):
                 }
             ]
 
-    monkeypatch.setattr(measurement, "prepare_episode_scene", lambda **request: {"prepared": True})
-    monkeypatch.setattr(measurement, "MujocoEpisodePlant", Plant)
-    monkeypatch.setattr(measurement, "build_production_head_detector", lambda **kwargs: Detector())
+    monkeypatch.setattr(measurement_writer, "prepare_episode_scene", lambda **request: {"prepared": True})
+    monkeypatch.setattr(measurement_writer, "MujocoEpisodePlant", Plant)
+    monkeypatch.setattr(measurement_writer, "build_production_head_detector", lambda **kwargs: Detector())
     return measurement
 
 
@@ -2458,21 +2459,22 @@ def test_measure_fine_correction_episodes_refuses_a_calibration_seed(tmp_path: P
 def test_measure_fine_correction_episodes_prints_the_librarys_refusal_and_returns_two(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act import head_search_fine_correction_episodes as measurement
+    from so101_demo.act.head_search_fine_correction_episodes import contracts as measurement_contracts
+    from so101_demo.act.head_search_fine_correction_episodes import writer as measurement_writer
 
     inputs = _fine_correction_inputs(tmp_path)
     output = tmp_path / "episodes"
     _patch_fine_correction_flight(monkeypatch)
 
     def refuse(**request):
-        raise measurement.CalibrationFineCorrectionRefused(
-            measurement.CAL_FINE_EPISODE_OUT_OF_CORRIDOR, "the loop left the declared corridor"
+        raise measurement_contracts.CalibrationFineCorrectionRefused(
+            measurement_contracts.CAL_FINE_EPISODE_OUT_OF_CORRIDOR, "the loop left the declared corridor"
         )
 
-    monkeypatch.setattr(measurement, "prepare_episode_scene", refuse)
+    monkeypatch.setattr(measurement_writer, "prepare_episode_scene", refuse)
 
     assert main(_fine_correction_arguments(inputs, output)) == 2
-    assert measurement.CAL_FINE_EPISODE_OUT_OF_CORRIDOR in capsys.readouterr().err
+    assert measurement_contracts.CAL_FINE_EPISODE_OUT_OF_CORRIDOR in capsys.readouterr().err
 
 
 # --- measure-frame-contract and measure-skew --------------------------------------------------------

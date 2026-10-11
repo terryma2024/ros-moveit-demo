@@ -84,24 +84,25 @@ from so101_demo.act.head_search_deadband_measurement.plant import (
     _anchor_requests,
     _plant_request,
     build_production_head_detector,
-    MujocoClosedLoopPlant,
 )
-from so101_demo.act.head_search_fine_correction_episodes import (
+from so101_demo.act.head_search_fine_correction_episodes.contracts import (
     CAL_FINE_EPISODE_BUDGET_EXHAUSTED,
     CAL_FINE_EPISODE_NO_VERDICT,
     CAL_FINE_EPISODE_NOT_CENTERED,
     CAL_FINE_EPISODE_SCENE_CONTRADICTORY,
-    CAL_FINE_EPISODE_SPLIT_LEAK,
-    MujocoEpisodePlant,
+)
+from so101_demo.act.head_search_fine_correction_episodes.episode import (
     _budget_binding,
-    _cup_drift_m,
     cup_count_for_condition_class,
     fine_corridor_rad,
-    prepare_episode_scene,
     required_domain_excursion_rad,
+    verify_correction_consistency,
+)
+from so101_demo.act.head_search_fine_correction_episodes.scene import (
+    MujocoEpisodePlant,
+    prepare_episode_scene,
     scenario_name_for_cup_count,
     scene_preparation_request,
-    verify_correction_consistency,
 )
 from so101_demo.act.head_search_mujoco_measurements import read_mujoco_timestep
 from so101_demo.act.head_search_search_params import LOCK_FRAMES

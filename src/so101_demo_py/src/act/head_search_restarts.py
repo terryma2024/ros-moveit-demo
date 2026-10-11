@@ -74,7 +74,6 @@ from so101_demo.act.head_search_timing_measurement.contracts import (
     FRAME_PERIOD_S,
     FRAME_RATE_HZ,
 )
-from so101_demo.act.head_search_transport_measurement import MujocoRosTransport
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
@@ -1511,7 +1510,7 @@ def measure_and_search(
 
         from so101_demo.act.head_search_deadband_measurement.lock_trial import motion_corridor_rad
         from so101_demo.act.head_search_deadband_measurement.plant import _anchor_requests
-        from so101_demo.act.head_search_fine_correction_episodes import fine_corridor_rad
+        from so101_demo.act.head_search_fine_correction_episodes.episode import fine_corridor_rad
 
         attempt_id = f"{session_id}-attempt-1"
         request = _anchor_requests(

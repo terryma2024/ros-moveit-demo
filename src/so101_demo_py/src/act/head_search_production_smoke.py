@@ -1102,7 +1102,7 @@ def write_head_search_production_smoke(
         )
     declared = declared[0]
     from so101_demo.act.head_search_deadband_measurement.lock_trial import motion_corridor_rad
-    from so101_demo.act.head_search_fine_correction_episodes import fine_corridor_rad
+    from so101_demo.act.head_search_fine_correction_episodes.episode import fine_corridor_rad
 
     corridors = {
         "lock_valid_neck_rad": list(fine_corridor_rad(geometry_seal=seal)),

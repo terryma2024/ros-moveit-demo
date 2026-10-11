@@ -14,7 +14,10 @@ import math
 
 import pytest
 from so101_demo.act import head_search_fine_correction_episodes as module
-from so101_demo.act.head_search_fine_correction_episodes import (
+from so101_demo.act.head_search_fine_correction_episodes import contracts as module_contracts
+from so101_demo.act.head_search_fine_correction_episodes import scene as module_scene
+from so101_demo.act.head_search_fine_correction_episodes import writer as module_writer
+from so101_demo.act.head_search_fine_correction_episodes.contracts import (
     CAL_FINE_EPISODE_BUDGET_EXHAUSTED,
     CAL_FINE_EPISODE_CORRECTION_MISMATCH,
     CAL_FINE_EPISODE_CUP_NOT_FOUND,
@@ -26,11 +29,13 @@ from so101_demo.act.head_search_fine_correction_episodes import (
     CAL_FINE_EPISODE_SCENE_CONTRADICTORY,
     CAL_FINE_EPISODE_SPLIT_LEAK,
     CAL_FINE_EPISODE_TARGET_AMBIGUOUS,
+    CalibrationFineCorrectionRefused,
     HELD_OUT_SPLIT,
     KIND,
     RECORD_KEYS,
     REFUSAL_CODES,
-    CalibrationFineCorrectionRefused,
+)
+from so101_demo.act.head_search_fine_correction_episodes.episode import (
     build_fine_correction_episodes,
     condition_class_for_index,
     cup_count_for_condition_class,
@@ -40,6 +45,8 @@ from so101_demo.act.head_search_fine_correction_episodes import (
     required_domain_excursion_rad,
     run_fine_correction_episode,
     verify_correction_consistency,
+)
+from so101_demo.act.head_search_fine_correction_episodes.writer import (
     write_head_search_fine_correction_episodes,
 )
 from so101_demo.act.head_search_timing_measurement.contracts import (
@@ -660,7 +667,7 @@ def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames(
     assert warmup["performed"] is True
     assert warmup["detections"] == 1  # a real frame with a box, not the constructor's zeros
     assert warmup["wall_s"] >= FIRST_DETECTION_COST_S
-    assert warmup["declared_because"] == module.WARMUP_POLICY
+    assert warmup["declared_because"] == module_contracts.WARMUP_POLICY
     # the warm-up is the detection-bearing call before the first measured frame, and it is not measured
     assert detector.detection_calls == len(result["frames"]) + 1
     assert result["detection_frames"] == len(result["frames"])
@@ -876,7 +883,7 @@ def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
     assert set(document["warmup"]) == {"performed", "detections", "wall_s", "declared_because"}
     assert document["warmup"]["performed"] is True
     assert document["warmup"]["detections"] == 1
-    assert document["warmup"]["declared_because"] == module.WARMUP_POLICY
+    assert document["warmup"]["declared_because"] == module_contracts.WARMUP_POLICY
     assert document["warmup_samples_excluded"] is True
     # the block is the first flight's own warm-up, and every flight declares the one it performed
     assert document["warmup"] == document["episodes"][0]["warmup"]
@@ -971,17 +978,17 @@ def _sealed_inputs(tmp_path):
     weights_path.write_bytes(b"weights")
     frozen = {
         "candidate_id": "C",
-        "weight_sha256": module._digest(weights_path),
+        "weight_sha256": module_writer._digest(weights_path),
         "operating_points": {"head": {"min_confidence": 0.25, "tracker": {"iou": 0.5}}},
     }
     scene = tmp_path / "head_search_scene.xml"
     scene.write_text("<mujoco/>\n", encoding="utf-8")
     # the fixture pins itself: the sealed geometry records the scene it was measured against and the
     # production configuration the weights it declares, so a test that tampers with either still refuses
-    seal["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal["source_digests"]["scene_sha256"] = module_writer._digest(scene)
     seal_path = tmp_path / "head-camera-geometry.json"
     seal_path.write_text(json.dumps(seal), encoding="utf-8")
-    production["weight_sha256"] = module._digest(weights_path)
+    production["weight_sha256"] = module_writer._digest(weights_path)
     production_path = tmp_path / "head_search_runtime.json"
     production_path.write_text(json.dumps(production), encoding="utf-8")
     frozen_path = tmp_path / "frozen-c.json"
@@ -1014,9 +1021,9 @@ def _patch_scene_declaration(monkeypatch):
     """The sealed scene is a stub here: the declaration reader is the MuJoCo module's own."""
 
     monkeypatch.setattr(
-        module,
+        module_writer,
         "read_mujoco_timestep",
-        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module._digest(path)},
+        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module_writer._digest(path)},
     )
 
 
@@ -1127,7 +1134,7 @@ def test_the_producer_refuses_a_calibration_seed_offered_as_a_held_out_episode(t
 
 
 def test_the_producer_refuses_a_declared_cuda_device_without_one(tmp_path, monkeypatch):
-    monkeypatch.setattr(module, "_cuda_available", lambda: False)
+    monkeypatch.setattr(module_writer, "_cuda_available", lambda: False)
 
     with pytest.raises(CalibrationFineCorrectionRefused) as refused:
         _producer(tmp_path, monkeypatch, device="cuda")
@@ -1168,7 +1175,7 @@ def test_the_producer_declares_what_it_prepared_and_what_it_never_started(tmp_pa
 def test_a_lock_that_needed_no_correction_is_refused_rather_than_written_as_a_zero():
     """Phase 6 refuses a successful episode whose count is not positive, so this producer refuses first."""
 
-    from so101_demo.act.head_search_fine_correction_episodes import (
+    from so101_demo.act.head_search_fine_correction_episodes.contracts import (
         CAL_FINE_EPISODE_NO_CORRECTION_NEEDED,
     )
 
@@ -1192,7 +1199,7 @@ def test_the_scene_preparer_signature_accepts_every_key_the_producer_passes():
 
     import inspect
 
-    request = module.scene_preparation_request(
+    request = module_scene.scene_preparation_request(
         dataset_config_path="profile.yaml",
         generator_commit="0" * 40,
         seed=800000,
@@ -1202,7 +1209,7 @@ def test_the_scene_preparer_signature_accepts_every_key_the_producer_passes():
         split=HELD_OUT_SPLIT,
     )
 
-    parameters = inspect.signature(module.prepare_episode_scene).parameters
+    parameters = inspect.signature(module_scene.prepare_episode_scene).parameters
     assert set(request) <= set(parameters), sorted(set(request) - set(parameters))
     assert parameters["seed"].kind is inspect.Parameter.KEYWORD_ONLY
     assert request["cup_count"] == 1
