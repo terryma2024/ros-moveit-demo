@@ -1925,7 +1925,7 @@ def test_measure_controller_stop_config_refuses_a_header_without_the_tolerance(
         STOP_DECLARATION.replace("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002\n", ""),
         encoding="utf-8",
     )
-    from so101_demo.act.head_search_stop_measurement import (
+    from so101_demo.act.head_search_stop_measurement.contracts import (
         CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED,
     )
 
@@ -1952,7 +1952,9 @@ def test_measure_feedback_refuses_an_undeclared_quantisation_and_accepts_a_decla
     tmp_path: Path, capsys
 ) -> None:
     inputs = _stop_inputs(tmp_path)
-    from so101_demo.act.head_search_stop_measurement import CAL_FEEDBACK_QUANTISATION_UNDECLARED
+    from so101_demo.act.head_search_stop_measurement.contracts import (
+        CAL_FEEDBACK_QUANTISATION_UNDECLARED,
+    )
 
     output = tmp_path / "feedback"
     assert (
@@ -2001,9 +2003,10 @@ def test_measure_feedback_refuses_an_undeclared_quantisation_and_accepts_a_decla
 def test_measure_stationary_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "stationary"
-    from so101_demo.act import head_search_stop_measurement as measurement
+    from so101_demo.act.head_search_stop_measurement import contracts as measurement_contracts
+    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
 
-    monkeypatch.setattr(measurement, "MujocoStopFlight", _StopPlant)
+    monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
     assert (
         main(_stop_flight_arguments("measure-stationary", inputs, output) + ["--samples-per-pose", "3"])
@@ -2015,7 +2018,7 @@ def test_measure_stationary_hands_the_flight_to_the_library(tmp_path: Path, caps
     assert document["samples_per_pose"] == 3
     assert document["pose_count"] == 3
     assert len(document["samples"]) == 9
-    assert document["monitored_joints"] == list(measurement.MONITORED_JOINTS)
+    assert document["monitored_joints"] == list(measurement_contracts.MONITORED_JOINTS)
     assert document["samples"][0]["velocity_rad_s"][-1] == 0.001
     assert document["path"] == str(output / "stationary-measurements.json")
     receipt = json.loads((output / "measurement-receipt.json").read_text(encoding="utf-8"))
@@ -2029,9 +2032,9 @@ def test_measure_controller_submissions_hands_the_flight_to_the_library(
 ) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "submissions"
-    from so101_demo.act import head_search_stop_measurement as measurement
+    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
 
-    monkeypatch.setattr(measurement, "MujocoStopFlight", _StopPlant)
+    monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
     assert main(_stop_flight_arguments("measure-controller-submissions", inputs, output)) == 0
     assert "CONTROLLER_SUBMISSIONS_MEASURED" in capsys.readouterr().out
@@ -2048,9 +2051,9 @@ def test_measure_controller_submissions_hands_the_flight_to_the_library(
 def test_measure_stop_proofs_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _stop_inputs(tmp_path)
     output = tmp_path / "stop-proofs"
-    from so101_demo.act import head_search_stop_measurement as measurement
+    from so101_demo.act.head_search_stop_measurement import flights as measurement_flights
 
-    monkeypatch.setattr(measurement, "MujocoStopFlight", _StopPlant)
+    monkeypatch.setattr(measurement_flights, "MujocoStopFlight", _StopPlant)
 
     assert (
         main(

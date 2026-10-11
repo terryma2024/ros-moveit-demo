@@ -263,7 +263,7 @@ def _build_neck_port(configuration, factory):
 def _default_stop_criterion(configuration):
     """The installed stop criterion, over the harness's own subscription stand-in."""
 
-    from so101_demo.act.head_search_stop_measurement import controller_stop_criterion
+    from so101_demo.act.head_search_stop_measurement.flights import controller_stop_criterion
 
     port, _transport, _clock = controller_stop_criterion(
         stop_velocity_rad_s=_required(configuration, "stop_velocity_rad_s"),

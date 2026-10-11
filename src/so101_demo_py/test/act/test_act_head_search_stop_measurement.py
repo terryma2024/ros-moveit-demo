@@ -14,7 +14,11 @@ import math
 from pathlib import Path
 
 import pytest
-from so101_demo.act import head_search_stop_measurement as stop
+from so101_demo.act.head_search_stop_measurement import contracts as stop_contracts
+from so101_demo.act.head_search_stop_measurement import declarations as stop_declarations
+from so101_demo.act.head_search_stop_measurement import documents as stop_documents
+from so101_demo.act.head_search_stop_measurement import flights as stop_flights
+from so101_demo.act.head_search_stop_measurement import writers as stop_writers
 from so101_demo.act.head_search_timing_params import (
     CAL_STOP_LATENCY_EXCEEDED,
     CAL_SUBMIT_LEAD_UNVERIFIED,
@@ -66,22 +70,22 @@ def _documents(tmp_path: Path):
 
     header = _header(tmp_path)
     controllers = _controllers(tmp_path)
-    tolerance = stop.declared_controller_stop_tolerance(
+    tolerance = stop_declarations.declared_controller_stop_tolerance(
         installed_declaration=header,
         source_declaration=header,
         controller_config_path=controllers,
     )
-    feedback = stop.build_feedback_measurements(
+    feedback = stop_documents.build_feedback_measurements(
         path=tmp_path / "feedback-measurements.json",
-        declaration=stop.read_feedback_declarations(controllers),
-        quantisation=stop.declared_quantisation(tmp_path / "absent-quantisation.json"),
+        declaration=stop_declarations.read_feedback_declarations(controllers),
+        quantisation=stop_declarations.declared_quantisation(tmp_path / "absent-quantisation.json"),
     )
     return {
         "header": header,
         "controllers": controllers,
         "tolerance": tolerance,
         "feedback": feedback,
-        "controller": stop.build_controller_stop_config(
+        "controller": stop_documents.build_controller_stop_config(
             path=tmp_path / "controller-stop-config.json",
             tolerance=tolerance,
             controller_config_path=controllers,
@@ -125,13 +129,13 @@ def test_the_stop_config_refuses_a_declaration_that_carries_no_tolerance(tmp_pat
     """A header that declares the window but no stopped tolerance declares nothing to write."""
 
     header = _header(tmp_path, STOP_HEADER.replace("STOP_WINDOW_MAX_VELOCITY_RAD_S = 0.002\n", ""))
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.declared_controller_stop_tolerance(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_declarations.declared_controller_stop_tolerance(
             installed_declaration=header,
             source_declaration=header,
             controller_config_path=_controllers(tmp_path),
         )
-    assert refused.value.code == stop.CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED
+    assert refused.value.code == stop_contracts.CAL_CONTROLLER_STOP_TOLERANCE_UNDECLARED
 
 
 def test_the_stop_config_refuses_two_disagreeing_declarations(tmp_path: Path) -> None:
@@ -139,13 +143,13 @@ def test_the_stop_config_refuses_two_disagreeing_declarations(tmp_path: Path) ->
 
     installed = _header(tmp_path, STOP_HEADER, name="installed.py")
     source = _header(tmp_path, STOP_HEADER.replace("0.002", "0.010"), name="source.py")
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.declared_controller_stop_tolerance(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_declarations.declared_controller_stop_tolerance(
             installed_declaration=installed,
             source_declaration=source,
             controller_config_path=_controllers(tmp_path),
         )
-    assert refused.value.code == stop.CAL_CONTROLLER_STOP_TOLERANCE_CONTRADICTORY
+    assert refused.value.code == stop_contracts.CAL_CONTROLLER_STOP_TOLERANCE_CONTRADICTORY
 
 
 def test_the_stop_config_refuses_a_window_step_that_contradicts_the_controller_period(
@@ -154,13 +158,13 @@ def test_the_stop_config_refuses_a_window_step_that_contradicts_the_controller_p
     """A window that does not step at the controller's own period is another controller's declaration."""
 
     header = _header(tmp_path, STOP_HEADER.replace("STOP_WINDOW_STEP_NS = 2_000_000", "STOP_WINDOW_STEP_NS = 1_000_000"))
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.declared_controller_stop_tolerance(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_declarations.declared_controller_stop_tolerance(
             installed_declaration=header,
             source_declaration=header,
             controller_config_path=_controllers(tmp_path),
         )
-    assert refused.value.code == stop.CAL_CONTROLLER_STOP_TOLERANCE_CONTRADICTORY
+    assert refused.value.code == stop_contracts.CAL_CONTROLLER_STOP_TOLERANCE_CONTRADICTORY
 
 
 # --- the feedback period and the quantisation resolution ---------------------------------------------
@@ -170,7 +174,7 @@ def test_the_feedback_document_declares_both_rates_and_refuses_the_quantisation(
     """`period_s` is the rate the stop path's feedback arrives at; no resolution is declared anywhere."""
 
     controllers = _controllers(tmp_path)
-    declaration = stop.read_feedback_declarations(controllers)
+    declaration = stop_declarations.read_feedback_declarations(controllers)
     assert declaration["period_s"] == 0.01
     assert declaration["feedback_rate_hz"] == 100.0
     assert declaration["controller_cycle_period_s"] == 0.002
@@ -178,10 +182,10 @@ def test_the_feedback_document_declares_both_rates_and_refuses_the_quantisation(
         "joint_state_broadcaster": "ros__parameters.update_rate"
     }
 
-    document = stop.build_feedback_measurements(
+    document = stop_documents.build_feedback_measurements(
         path=tmp_path / "feedback-measurements.json",
         declaration=declaration,
-        quantisation=stop.undeclared_quantisation(),
+        quantisation=stop_declarations.undeclared_quantisation(),
     )
     assert document["period_s"] == 0.01
     assert document["controller_cycle_period_s"] == 0.002
@@ -189,7 +193,7 @@ def test_the_feedback_document_declares_both_rates_and_refuses_the_quantisation(
     assert document["quantisation"]["measured_here"] is False
     assert document["quantisation"]["declared"] is False
     assert [refusal["code"] for refusal in document["refusals"]] == [
-        stop.CAL_FEEDBACK_QUANTISATION_UNDECLARED
+        stop_contracts.CAL_FEEDBACK_QUANTISATION_UNDECLARED
     ]
     # the undeclared field is `null` and the period is still usable, so the document is written
     assert document["path"] == str(tmp_path / "feedback-measurements.json")
@@ -203,7 +207,7 @@ def test_the_feedback_document_derives_a_declared_quantisation(tmp_path: Path) -
         json.dumps({"counts_per_revolution": 4096, "joint_travel_rad": 2 * math.pi}),
         encoding="utf-8",
     )
-    derived = stop.declared_quantisation(counts)
+    derived = stop_declarations.declared_quantisation(counts)
     assert derived["declared"] is True
     assert derived["measured_here"] is False
     assert derived["quantisation_rad"] == pytest.approx(2 * math.pi / 4096)
@@ -214,13 +218,13 @@ def test_the_feedback_document_derives_a_declared_quantisation(tmp_path: Path) -
 
     direct = tmp_path / "quantisation-declaration.json"
     direct.write_text(json.dumps({"quantisation_rad": 0.0001}), encoding="utf-8")
-    assert stop.declared_quantisation(direct)["quantisation_rad"] == 0.0001
+    assert stop_declarations.declared_quantisation(direct)["quantisation_rad"] == 0.0001
 
     controllers = _controllers(tmp_path)
-    document = stop.build_feedback_measurements(
+    document = stop_documents.build_feedback_measurements(
         path=tmp_path / "feedback-measurements.json",
-        declaration=stop.read_feedback_declarations(controllers),
-        quantisation=stop.declared_quantisation(direct),
+        declaration=stop_declarations.read_feedback_declarations(controllers),
+        quantisation=stop_declarations.declared_quantisation(direct),
     )
     assert document["measured_here"] is False
     assert document["quantisation_rad"] == 0.0001
@@ -252,7 +256,7 @@ def _zero_declaration(tmp_path: Path, **document) -> Path:
 def test_an_explicitly_zero_declared_quantisation_is_read_with_its_basis(tmp_path: Path) -> None:
     """Proposal B: the zero is a declaration the platform records, never a default for a missing value."""
 
-    declaration = stop.declared_quantisation(_zero_declaration(tmp_path))
+    declaration = stop_declarations.declared_quantisation(_zero_declaration(tmp_path))
 
     assert declaration["declared"] is True
     assert declaration["measured_here"] is False
@@ -271,18 +275,18 @@ def test_a_zero_without_its_basis_is_a_caller_error(tmp_path: Path) -> None:
     bare = tmp_path / "bare-zero.json"
     bare.write_text(json.dumps({"quantisation_rad": 0.0, "platform": "mujoco"}), encoding="utf-8")
     with pytest.raises(ValueError, match="basis"):
-        stop.declared_quantisation(bare)
+        stop_declarations.declared_quantisation(bare)
 
     for body in ({"basis": ""}, {"basis": None}, {"basis": ["qvel"]}):
         with pytest.raises(ValueError, match="basis"):
-            stop.declared_quantisation(_zero_declaration(tmp_path, **body))
+            stop_declarations.declared_quantisation(_zero_declaration(tmp_path, **body))
 
 
 def test_the_zero_declaration_survives_the_producer_and_leaves_no_refusal(tmp_path: Path) -> None:
     """The produced document carries `quantisation_rad: 0.0` and no refusal, so phase 7 accepts it."""
 
     controllers = _controllers(tmp_path)
-    written = stop.write_feedback_measurements(
+    written = stop_writers.write_feedback_measurements(
         controller_config_path=controllers,
         output_dir=tmp_path / "feedback-zero",
         quantisation_declaration_path=_zero_declaration(tmp_path),
@@ -302,32 +306,32 @@ def test_the_zero_declaration_survives_the_producer_and_leaves_no_refusal(tmp_pa
 def test_an_absent_resolution_is_still_refused_and_never_zero(tmp_path: Path) -> None:
     """A missing resolution alone does not justify zero: `None` and the refusal survive untouched."""
 
-    absent = stop.declared_quantisation(tmp_path / "absent.json")
+    absent = stop_declarations.declared_quantisation(tmp_path / "absent.json")
 
     assert absent["declared"] is False
     assert absent["quantisation_rad"] is None
     assert absent["path"] is None
 
     controllers = _controllers(tmp_path)
-    written = stop.write_feedback_measurements(
+    written = stop_writers.write_feedback_measurements(
         controller_config_path=controllers, output_dir=tmp_path / "feedback-absent"
     )
     assert written["document"]["quantisation_rad"] is None
     assert [record["code"] for record in written["refusals"]] == [
-        stop.CAL_FEEDBACK_QUANTISATION_UNDECLARED
+        stop_contracts.CAL_FEEDBACK_QUANTISATION_UNDECLARED
     ]
 
 
 def test_a_negative_declared_quantisation_is_still_a_caller_error(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="quantisation_rad"):
-        stop.declared_quantisation(_zero_declaration(tmp_path, quantisation_rad=-1e-6))
+        stop_declarations.declared_quantisation(_zero_declaration(tmp_path, quantisation_rad=-1e-6))
 
 
 def test_the_platform_declaration_in_the_config_tree_states_the_zero_and_its_basis() -> None:
     """The retained declaration the run passes to `measure-feedback` exists and declares the zero."""
 
     path = PACKAGE_ROOT / "config/act/feedback-quantisation-declaration.json"
-    declaration = stop.declared_quantisation(path)
+    declaration = stop_declarations.declared_quantisation(path)
 
     assert declaration["quantisation_rad"] == 0.0
     assert declaration["declared"] is True
@@ -342,9 +346,9 @@ def test_the_feedback_document_refuses_a_configuration_without_a_feedback_rate(t
         tmp_path,
         CONTROLLERS.replace("joint_state_broadcaster:\n  ros__parameters:\n    update_rate: 100\n", ""),
     )
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.read_feedback_declarations(controllers)
-    assert refused.value.code == stop.CAL_FEEDBACK_PERIOD_UNDECLARED
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_declarations.read_feedback_declarations(controllers)
+    assert refused.value.code == stop_contracts.CAL_FEEDBACK_PERIOD_UNDECLARED
 
 
 # --- the installed phase-7 consumers read exactly these shapes ---------------------------------------
@@ -354,10 +358,10 @@ def _stationary_document(tmp_path: Path, samples) -> dict:
     path = tmp_path / "stationary-measurements.json"
     body = {
         "schema_version": 1,
-        "kind": stop.STATIONARY_KIND,
-        "phase": stop.STATIONARY_PHASE,
+        "kind": stop_contracts.STATIONARY_KIND,
+        "phase": stop_contracts.STATIONARY_PHASE,
         "measured_here": True,
-        "monitored_joints": list(stop.MONITORED_JOINTS),
+        "monitored_joints": list(stop_contracts.MONITORED_JOINTS),
         "samples": list(samples),
         "path": str(path),
     }
@@ -378,10 +382,10 @@ def test_phase_seven_accepts_the_three_documents_and_computes_the_envelope(tmp_p
     (tmp_path / "quantisation.json").write_text(
         json.dumps({"quantisation_rad": 0.0001}), encoding="utf-8"
     )
-    feedback = stop.build_feedback_measurements(
+    feedback = stop_documents.build_feedback_measurements(
         path=tmp_path / "feedback-measurements.json",
-        declaration=stop.read_feedback_declarations(documents["controllers"]),
-        quantisation=stop.declared_quantisation(tmp_path / "quantisation.json"),
+        declaration=stop_declarations.read_feedback_declarations(documents["controllers"]),
+        quantisation=stop_declarations.declared_quantisation(tmp_path / "quantisation.json"),
     )
     block = compute_stop_velocity_rad_s(
         stationary=stationary, feedback=feedback, controller=documents["controller"]
@@ -420,8 +424,8 @@ def test_phase_seven_accepts_the_submission_document_and_refuses_a_wall_clock_on
     path = tmp_path / "controller-submissions.json"
     body = {
         "schema_version": 1,
-        "kind": stop.SUBMISSIONS_KIND,
-        "phase": stop.SUBMISSIONS_PHASE,
+        "kind": stop_contracts.SUBMISSIONS_KIND,
+        "phase": stop_contracts.SUBMISSIONS_PHASE,
         "time_base": "simulation",
         "simulation_timestep_s": 0.002,
         "path": str(path),
@@ -471,8 +475,8 @@ def test_phase_seven_accepts_the_stop_proof_document_and_fails_a_slow_sample(tmp
     ]
     body = {
         "schema_version": 1,
-        "kind": stop.STOP_PROOFS_KIND,
-        "phase": stop.STOP_PROOFS_PHASE,
+        "kind": stop_contracts.STOP_PROOFS_KIND,
+        "phase": stop_contracts.STOP_PROOFS_PHASE,
         "path": str(path),
         "samples": samples,
     }
@@ -506,7 +510,7 @@ def test_phase_seven_accepts_the_stop_proof_document_and_fails_a_slow_sample(tmp
 def test_the_submission_time_base_proof_accepts_the_step_grid(tmp_path: Path) -> None:
     """Every lead is proved to be the simulation clock's, against the sealed timestep and period."""
 
-    proof = stop.verify_submission_time_base(
+    proof = stop_documents.verify_submission_time_base(
         [
             {
                 "index": 0,
@@ -543,11 +547,11 @@ def test_the_submission_time_base_proof_accepts_the_step_grid(tmp_path: Path) ->
             "plant_consumed_sim_s": 0.05,
         }
     ]
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.verify_submission_time_base(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_documents.verify_submission_time_base(
             off_grid, simulation_timestep_s=0.002, control_period_s=0.002
         )
-    assert refused.value.code == stop.CAL_TIMING_TIME_BASE_UNVERIFIED
+    assert refused.value.code == stop_documents.CAL_TIMING_TIME_BASE_UNVERIFIED
 
 
 # --- the stop proof: three consecutive qualifying feedbacks ------------------------------------------
@@ -601,14 +605,14 @@ class _ScriptedPlant:
 
 
 def _port_and_clock(*, stop_velocity_rad_s: float = 0.05, max_age_s: float = 0.05):
-    clock = stop.MeasurementClock()
-    transport = stop.ControllerFeedbackTransport()
+    clock = stop_flights.MeasurementClock()
+    transport = stop_flights.ControllerFeedbackTransport()
     from so101_demo.adapters.act.ros_execution import RosControllerPort
 
     port = RosControllerPort(
         transport,
         None,
-        stop.MONITORED_JOINTS,
+        stop_contracts.MONITORED_JOINTS,
         stop_velocity_rad_s=stop_velocity_rad_s,
         max_age_s=max_age_s,
         monotonic=clock,
@@ -621,7 +625,7 @@ def test_confirm_stop_needs_three_consecutive_qualifying_feedback() -> None:
 
     plant = _ScriptedPlant([0.4, 0.01, 0.01, 0.01, 0.01])
     port, clock, transport = _port_and_clock()
-    proof = stop.confirm_stop(
+    proof = stop_flights.confirm_stop(
         plant=plant,
         port=port,
         transport=transport,
@@ -667,19 +671,19 @@ def test_a_stop_proof_window_that_ran_at_real_time_is_marked_faithful() -> None:
             self.monotonic += self.control_period_s
 
     plant = _PacedPlant()
-    clock = stop.MeasurementClock(monotonic=lambda: plant.monotonic)
-    transport = stop.ControllerFeedbackTransport()
+    clock = stop_flights.MeasurementClock(monotonic=lambda: plant.monotonic)
+    transport = stop_flights.ControllerFeedbackTransport()
     from so101_demo.adapters.act.ros_execution import RosControllerPort
 
     port = RosControllerPort(
         transport,
         None,
-        stop.MONITORED_JOINTS,
+        stop_contracts.MONITORED_JOINTS,
         stop_velocity_rad_s=0.05,
         max_age_s=0.05,
         monotonic=clock,
     )
-    proof = stop.confirm_stop(
+    proof = stop_flights.confirm_stop(
         plant=plant,
         port=port,
         transport=transport,
@@ -699,8 +703,8 @@ def test_confirm_stop_refuses_a_window_without_three_consecutive_qualifying_samp
 
     plant = _ScriptedPlant([0.01, 0.01, 0.4, 0.01, 0.4])
     port, clock, transport = _port_and_clock()
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.confirm_stop(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_flights.confirm_stop(
             plant=plant,
             port=port,
             transport=transport,
@@ -711,7 +715,7 @@ def test_confirm_stop_refuses_a_window_without_three_consecutive_qualifying_samp
             reason="controller_revoke",
             period_s=plant.feedback_period_s,
         )
-    assert refused.value.code == stop.CAL_STOP_PROOF_UNCONFIRMED
+    assert refused.value.code == stop_contracts.CAL_STOP_PROOF_UNCONFIRMED
 
 
 def test_the_stop_proof_flight_records_one_proof_per_declared_offset(tmp_path: Path) -> None:
@@ -746,7 +750,7 @@ def test_the_stop_proof_flight_records_one_proof_per_declared_offset(tmp_path: P
                 "quiet_steps": 5,
             }
 
-    result = stop.run_stop_proof_flight(
+    result = stop_flights.run_stop_proof_flight(
         request={
             "poses": [
                 {"anchor": "left", "pose_rad": 0.0, "pose_kind": "anchor"},
@@ -804,7 +808,7 @@ def test_the_stationary_flight_samples_every_pose_at_the_feedback_period() -> No
                 "quiet_steps": 5,
             }
 
-    result = stop.run_stationary_flight(
+    result = stop_flights.run_stationary_flight(
         request={
             "poses": [
                 {"anchor": "left", "pose_rad": 0.0, "pose_kind": "anchor"},
@@ -854,8 +858,8 @@ def test_the_stationary_flight_refuses_a_pose_that_never_settles() -> None:
                 "quiet_steps": 0,
             }
 
-    with pytest.raises(stop.CalibrationStopMeasurementRefused) as refused:
-        stop.run_stationary_flight(
+    with pytest.raises(stop_contracts.CalibrationStopMeasurementRefused) as refused:
+        stop_flights.run_stationary_flight(
             request={
                 "poses": [{"anchor": "left", "pose_rad": 0.0, "pose_kind": "anchor"}],
                 "samples_per_pose": 2,
@@ -865,7 +869,7 @@ def test_the_stationary_flight_refuses_a_pose_that_never_settles() -> None:
             },
             plant_factory=_UnsettledPlant,
         )
-    assert refused.value.code == stop.CAL_STATIONARY_UNSETTLED
+    assert refused.value.code == stop_contracts.CAL_STATIONARY_UNSETTLED
 
 
 # --- the real plant and the installed criterion, so a wrong MuJoCo call cannot hide -------------------
@@ -933,7 +937,7 @@ def test_the_real_mujoco_stop_flight_commands_through_admission_and_proves_a_sto
 
     scene = tmp_path / "stop_scene.xml"
     scene.write_text(STOP_SCENE, encoding="utf-8")
-    flight = stop.MujocoStopFlight(
+    flight = stop_flights.MujocoStopFlight(
         {
             "scene_path": str(scene),
             "camera_name": "head_camera",
@@ -967,10 +971,10 @@ def test_the_real_mujoco_stop_flight_commands_through_admission_and_proves_a_sto
         assert motion["first_target_sim_s"] == motion["plant_consumed_sim_s"]
         assert motion["settled"] is False
 
-        port, transport, clock = stop.controller_stop_criterion(
+        port, transport, clock = stop_flights.controller_stop_criterion(
             stop_velocity_rad_s=0.05, max_age_s=0.05
         )
-        proof = stop.confirm_stop(
+        proof = stop_flights.confirm_stop(
             plant=flight,
             port=port,
             transport=transport,
