@@ -1865,9 +1865,11 @@ def _measure_search_timing(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_timing_measurement import (
+    from so101_demo.act.head_search_timing_measurement.contracts import (
         DEFAULT_MAX_SETTLE_S,
         SETTLE_CONSECUTIVE_STEPS,
+    )
+    from so101_demo.act.head_search_timing_measurement.writer import (
         write_head_search_timing_measurement,
     )
 

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_timing_measurement import DEFAULT_MAX_SETTLE_S
+from so101_demo.act.head_search_timing_measurement.contracts import DEFAULT_MAX_SETTLE_S
 
 #: the seventeen approved values, as the promoted production configuration declares them
 VALUES = {

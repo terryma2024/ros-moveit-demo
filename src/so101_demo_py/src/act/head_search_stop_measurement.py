@@ -69,7 +69,10 @@ from so101_demo.act.head_search_deadband_measurement import (
     _plant_request,
     motion_corridor_rad,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
+    _digest,
+    _finite,
+    _number,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
     CAL_TIMING_TIME_BASE_UNVERIFIED,
@@ -77,12 +80,11 @@ from so101_demo.act.head_search_timing_measurement import (
     DIGEST_CONVENTION,
     SETTLE_CONSECUTIVE_STEPS,
     SIMULATION_TIME_BASE,
-    SettleTracker,
-    _digest,
-    _finite,
-    _number,
+)
+from so101_demo.act.head_search_timing_measurement.control import (
     planned_stops,
     read_control_period,
+    SettleTracker,
 )
 from so101_demo.act.head_search_timing_params import P99_9, p99_9
 from so101_demo.perception_benchmark.contracts import canonical_sha256
@@ -1875,7 +1877,7 @@ def _plant_request_for(*, inputs, request, realtime, settle_consecutive_steps, m
 
 
 def _flight_evidence(*, inputs, flight: Mapping, timestep: float) -> dict:
-    from so101_demo.act.head_search_timing_measurement import runtime_identity
+    from so101_demo.act.head_search_timing_measurement.documents import runtime_identity
 
     return {
         **flight,

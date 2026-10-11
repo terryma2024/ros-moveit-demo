@@ -24,7 +24,7 @@ from so101_demo.act import head_search_qualification_readback as readback
 from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_ownership import read_runtime_identity
-from so101_demo.act.head_search_timing_measurement import controller_config
+from so101_demo.act.head_search_timing_measurement.control import controller_config
 from so101_demo.cli.head_search_calibration import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
     main,

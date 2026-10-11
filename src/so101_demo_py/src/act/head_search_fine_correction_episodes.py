@@ -116,7 +116,9 @@ from so101_demo.act.head_search_deadband_measurement import (
 )
 from so101_demo.act.head_search_mujoco_measurements import read_mujoco_timestep
 from so101_demo.act.head_search_search_params import LOCK_FRAMES
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
+    _digest,
+    _finite,
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
@@ -129,14 +131,14 @@ from so101_demo.act.head_search_timing_measurement import (
     FRAME_RATE_HZ,
     SETTLE_CONSECUTIVE_STEPS,
     SIMULATION_TIME_BASE,
-    _declared_weights,
-    _digest,
-    _finite,
+)
+from so101_demo.act.head_search_timing_measurement.control import (
     classify_stop,
     read_control_period,
     verify_simulation_time_base,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.sweep_runner import _declared_weights
+from so101_demo.act.head_search_timing_measurement.documents import (
     runtime_identity as measurement_runtime_identity,
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256

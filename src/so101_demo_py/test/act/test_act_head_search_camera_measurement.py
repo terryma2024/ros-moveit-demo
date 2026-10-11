@@ -45,7 +45,7 @@ from so101_demo.act.head_search_search_params import (
     compute_center_deadband_px,
     compute_vertical_bounds_px,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
@@ -53,8 +53,8 @@ from so101_demo.act.head_search_timing_measurement import (
     CAL_TIMING_SWEEP_UNSETTLED,
     CAL_TIMING_TIME_BASE_UNVERIFIED,
     FRAME_PERIOD_S,
-    planned_stops,
 )
+from so101_demo.act.head_search_timing_measurement.control import planned_stops
 
 WIDTH_PX = 640
 HEIGHT_PX = 480

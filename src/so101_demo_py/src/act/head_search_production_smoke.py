@@ -63,7 +63,7 @@ from so101_demo.act.head_search_scenarios import (
     expected_terminals,
     stop_proof,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
     DEFAULT_MAX_SETTLE_S,
     FRAME_PERIOD_S,
     FRAME_RATE_HZ,

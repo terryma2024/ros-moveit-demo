@@ -69,7 +69,7 @@ from so101_demo.act.head_search_ownership import (
 )
 from so101_demo.act.head_search_qualification import _require_new_root
 from so101_demo.act.head_search_scenarios import check_frame_cadence, stop_proof
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
     DEFAULT_MAX_SETTLE_S,
     FRAME_PERIOD_S,
     FRAME_RATE_HZ,

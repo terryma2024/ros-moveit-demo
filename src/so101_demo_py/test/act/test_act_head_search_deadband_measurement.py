@@ -30,7 +30,7 @@ from so101_demo.act.head_search_deadband_measurement import (
     run_lock_trial,
     write_head_search_deadband_measurement,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
     CAL_TIMING_STOP_UNSETTLED,

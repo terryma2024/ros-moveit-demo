@@ -42,7 +42,7 @@ from so101_demo.act.head_search_fine_correction_episodes import (
     verify_correction_consistency,
     write_head_search_fine_correction_episodes,
 )
-from so101_demo.act.head_search_timing_measurement import (
+from so101_demo.act.head_search_timing_measurement.contracts import (
     CAL_TIMING_DEVICE_UNAVAILABLE,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
