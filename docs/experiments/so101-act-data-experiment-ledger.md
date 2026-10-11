@@ -69,11 +69,37 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3561
+latest_checkpoint: CP-3562
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3562 — pushed 6baf54e63..43a483a13; 900027 occlusion ambiguity diagnosed (read-only, offline detector re-run)
+
+- Push (user "push"): codex/so101-act-data-0917a 6baf54e63..43a483a13 to origin, fast-forward. github not pushed.
+- Method: the run events record no detections, so the detector was re-run offline with the real c2a weights (sha256 2afd5506…, imgsz 640, conf 0.25, YoloSegDetector) on the saved decision frames. Notes and overlays are in /tmp/so101-debug-act-data-66c42e4c/occlusion-900027/ (analysis.json, panels_900027_masks.png). Root viewed the panel image.
+- OBSERVED (head40 frame hf40s5-900027-1): three plastic_cup candidates, all on the ONE cup:
+  - #0 conf 0.734, 3792 px: the whole silhouette, bleeding onto the bottle cap (about 20.6% cyan pixels);
+  - #1 conf 0.672, 1272 px: the right lower wall strip;
+  - #2 conf 0.366, 2501 px: the right half.
+  - #1 and #2 are nested in #0 (containment 1.000 and 0.997). They are not the bottle, not a reflection, and not disjoint fragments.
+- OBSERVED, why nothing is removed (adapters/act/detector.py):
+  - the mask-IoU duplicate rule needs ≥ 0.7 (line 167); the pairs are 0.335, 0.657 and 0.509;
+  - the fragment rule (lines 170-186, constants 15-19) is blocked for #1 by the confidence guards (0.67 > 0.5 absolute, and 0.915 of the parent) and for #2 by the area-ratio guard (0.66 > 0.5);
+  - the search gate (act/search.py:250-258) counts candidates with conf ≥ 0.25 and area ≥ 64 px², and more than one gives TARGET_AMBIGUOUS, with no spatial reasoning.
+  - The rerun2 frame: #2 goes by IoU 0.760, #1 survives → still two candidates.
+- OBSERVED, the other seeds:
+  - 900007 and 900037 have a single candidate per frame (conf 0.82–0.95).
+  - 900017 passes narrowly: frames 2–4 have the same nested pattern, saved only by IoU 0.773 / 0.756 / 0.727 against the 0.7 threshold (margin 0.027); frames 0–1 are single candidates at conf 0.42 / 0.37 (gate 0.25).
+  - two_cups 900004/14/24/34: exactly 2 candidates, mask overlap 0 px, box IoU 0, centroid distance 94–114 px, conf 0.95–0.97.
+- Why the existing fixtures miss it: head_900027_duplicate_masks only exercises the IoU ≥ 0.7 branch (confs 0.939/0.281); head_900017_nested_fragment has a low-confidence, small child that the fragment guards accept. The live children are high-confidence and large.
+- Options:
+  - A (recommended): containment-only dedup. Drop a candidate whose mask is ≥ 95% inside a higher-confidence kept mask of the same class, whose bbox is ≥ 95% inside the kept bbox, and whose area is ≤ 0.8 of the kept area; no confidence guards for fully nested pairs. Offline: 900027 → 1 detection (both frames); 900007/17/37 unchanged; all four two_cups stay 2 (their containment is 0).
+  - B: widen the existing guards (fragile).
+  - C: merge disjoint fragments (not needed, highest risk).
+  - D: fine-tune on occlusion data (slow, needs re-qualification).
+- Risk of A: a front-cup mask bleeding fully over a rear cup would merge two real cups. The area cap and bbox containment limit this but do not remove it.
 
 ## CP-3561 — Head interruption defects fixed (HEAD e702ebc50); rerun 8/8 interruption cases PASS; 900027 occlusion still FAIL
 
