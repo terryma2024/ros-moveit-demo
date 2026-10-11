@@ -772,11 +772,11 @@ def test_fixed_projection_of_a_dead_coordinator_without_a_terminal_event_is_not_
 
 
 def test_fixed_projection_of_a_dead_coordinator_is_infra_failed_once_cleanup_is_verified(tmp_path, monkeypatch):
-    from so101_teleop.expert_validation import production
+    from so101_teleop.expert_validation.production_service import projection as production_projection
 
     request = _fixed_request(tmp_path)
     service = _service_with_owner(request, _ProcessOwnerDouble(request, running=False))
-    monkeypatch.setattr(production, "_verified_cleanup_receipt_sha256", lambda _batch: "c" * 64)
+    monkeypatch.setattr(production_projection, "_verified_cleanup_receipt_sha256", lambda _batch: "c" * 64)
     with _fixed_journal_without_terminal(tmp_path):
         projection = service._fixed_campaign_projection(request)
     assert projection["status"] == "INFRA_FAILED"

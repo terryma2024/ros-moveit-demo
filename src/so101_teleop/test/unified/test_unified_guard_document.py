@@ -19,7 +19,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from so101_teleop.expert_validation.production import _LazyStartGuard
+from so101_teleop.expert_validation.production_service.guard import _LazyStartGuard
 from teleop_paths import REPOSITORY
 
 REPO = REPOSITORY

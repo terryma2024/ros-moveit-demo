@@ -217,7 +217,7 @@ def test_eight_worker_resource_rejection_keeps_supported_count(tmp_path):
 def test_host_fixed_eight_without_a_guard_is_refused():
     """No composed guard means no admission; the probe never fabricates a pass."""
 
-    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
     admitted, reasons, observations = _HostResourceProbe().probe(
@@ -269,7 +269,7 @@ def test_every_declared_host_profile_admits_through_a_deterministic_guard(
         PASS, GuardCheck, GuardResult, StartGuardPolicy)
     from so101_demo.parallel_batch.start_guard_probe import (
         EpochStartGuard, ProbeCoordinator)
-    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
     class AdmittingCoordinator(ProbeCoordinator):
@@ -307,7 +307,7 @@ def test_the_native_host_admits_its_declared_profile(monkeypatch, tmp_path):
     from so101_demo.parallel_batch.start_guard import StartGuardPolicy
     from so101_demo.parallel_batch.start_guard_probe import (
         compose_darwin_start_guard, compose_default_start_guard)
-    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
     # Each host asks for the composition it really installs: Darwin runs the MPS guard, Linux keeps
@@ -361,7 +361,7 @@ def test_host_probe_reports_a_failing_guard_reason(monkeypatch, tmp_path):
         FAIL, GuardCheck, GuardResult, StartGuardPolicy)
     from so101_demo.parallel_batch.start_guard_probe import (
         EpochStartGuard, ProbeCoordinator)
-    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
     class RefusingCoordinator(ProbeCoordinator):
@@ -561,7 +561,7 @@ def test_a_macos_document_probes_with_the_mps_selector_and_a_fresh_epoch_per_req
     """One fresh StartGuard epoch per request; the composition is reused, the verdict is not."""
 
     from so101_demo.parallel_batch.start_guard import PASS, GuardCheck, GuardResult
-    from so101_teleop.expert_validation.production import _HostResourceProbe
+    from so101_teleop.expert_validation.production_service.guard import _HostResourceProbe
     from so101_teleop.expert_validation.preflight import FixedExecutionConfig
 
     scopes = []

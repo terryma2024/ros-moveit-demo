@@ -31,13 +31,15 @@ def test_validation_main_module_does_not_import_rclpy():
 
 def test_production_default_broker_image_matches_fixed_coordinator_contract():
     from so101_demo.cli.mujoco_batch.provenance import _BROKER_IMAGE as coordinator_image
-    from so101_teleop.expert_validation.production import _BROKER_IMAGE as production_image
+    from so101_teleop.expert_validation.production_service.layout import (
+        _BROKER_IMAGE as production_image,
+    )
 
     assert production_image == coordinator_image
 
 
 def test_source_identity_uses_binding_for_copied_installed_module(tmp_path):
-    from so101_teleop.expert_validation.production import _source_identity
+    from so101_teleop.expert_validation.production_service.layout import _source_identity
 
     source_root = (tmp_path / "checkout").resolve()
     source_root.mkdir()
@@ -116,10 +118,8 @@ def test_installed_entry_point_uses_production_factory_and_closes(monkeypatch, t
 def test_production_factory_wires_durable_authorities_and_releases_lock(
     monkeypatch, tmp_path
 ):
-    from so101_teleop.expert_validation.production import (
-        ProductionRuntimeLayout,
-        create_production_service,
-    )
+    from so101_teleop.expert_validation.production import create_production_service
+    from so101_teleop.expert_validation.production_service.layout import ProductionRuntimeLayout
     from so101_teleop.expert_validation.store import SupervisorStore
 
     runtime = tmp_path / "runtime"
@@ -194,7 +194,7 @@ OWNER_TREE_ENV_KEYS = (
 def _approved_layout(tmp_path, monkeypatch):
     """The resolved production layout the installed entry point would discover."""
 
-    from so101_teleop.expert_validation.production import ProductionRuntimeLayout
+    from so101_teleop.expert_validation.production_service.layout import ProductionRuntimeLayout
 
     runtime = tmp_path / "runtime"
     runtime.mkdir()

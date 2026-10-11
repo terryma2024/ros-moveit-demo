@@ -164,7 +164,7 @@ def test_a_genuinely_live_owner_is_never_retired(production_session):
     kernel), so this is the negative the fix must not lose.
     """
 
-    from so101_teleop.expert_validation.store import StoreConflict
+    from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
     session = production_session
     service, store = session.service, session.store
@@ -194,7 +194,7 @@ def test_an_owner_identity_the_platform_will_not_report_still_refuses(
     """Fail closed: a row whose identity cannot be read is never retired on assumption."""
 
     from so101_teleop import process_identity
-    from so101_teleop.expert_validation.store import StoreConflict
+    from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
     session = production_session
     service, store = session.service, session.store
@@ -223,7 +223,7 @@ def test_a_first_pass_that_never_committed_cleanup_still_refuses_the_retry(tmp_p
     transaction commits nothing at all - including the retirement of a row it never needed to read.
     """
 
-    from so101_teleop.expert_validation.store import StoreConflict
+    from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
     session = build_retry_session(
         tmp_path, cleanup_complete=None, session_id="retry-owner-no-cleanup"

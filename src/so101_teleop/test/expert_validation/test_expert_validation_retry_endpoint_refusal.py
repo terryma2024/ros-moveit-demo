@@ -381,9 +381,9 @@ def test_linux_retry_admission_binds_the_original_installed_linux_cuda_document(
     bytes the first pass executed, or it refuses.
     """
 
-    from so101_teleop.expert_validation import production
+    from so101_teleop.expert_validation.production_service import retry as production
     from so101_teleop.expert_validation.execution_context import LINUX_RETRY_PROFILE
-    from so101_teleop.expert_validation.production import _sha256
+    from so101_teleop.expert_validation.production_service.layout import _sha256
     from so101_teleop.expert_validation.service import ServiceConflict
 
     session = production_session
@@ -415,7 +415,9 @@ def test_macos_retry_admission_binds_its_installed_mps_document(
 ):
     """The macOS branch resolves its own v5 bytes beside the first pass's v3 document."""
 
-    from so101_teleop.expert_validation import preflight, production
+    from so101_teleop.expert_validation import preflight
+    from so101_teleop.expert_validation.production_service import retry as production
+    from so101_teleop.expert_validation.production_service import layout as production_layout
     from so101_teleop.expert_validation.execution_context import RETRY_PROFILE
 
     session = production_session
@@ -434,4 +436,4 @@ def test_macos_retry_admission_binds_its_installed_mps_document(
         RETRY_PROFILE, RETRY_PROFILE,
     )
     assert (request.schema_version, context.schema_version) == (5, 5)
-    assert request.config_sha256 == production._sha256(document)
+    assert request.config_sha256 == production_layout._sha256(document)

@@ -39,10 +39,8 @@ from so101_teleop.expert_validation.models import (
     CampaignBinding,
     PreflightReceipt,
 )
-from so101_teleop.expert_validation.production import (
-    ProductionRuntimeLayout,
-    create_production_service,
-)
+from so101_teleop.expert_validation.production import create_production_service
+from so101_teleop.expert_validation.production_service.layout import ProductionRuntimeLayout
 from so101_teleop.expert_validation.store import SupervisorStore
 from so101_teleop.process_identity import (
     IDENTITY_EXITED,

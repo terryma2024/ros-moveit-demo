@@ -34,7 +34,7 @@ from .execution_context import (
 )
 from .owner_tree import OwnerIntent
 from .process_owner import CoordinatorOwnershipError, ExecutionProcessOwner, OwnedCoordinator
-from .store import StoreConflict
+from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 from .models import (
     BatchBinding,
     CampaignBinding,

@@ -29,7 +29,10 @@ from .process_owner import CoordinatorOwnershipError
 from .reducer import ReducerError
 from .service import ServiceConflict
 from .statistics import StatisticsProjectionError
-from .store import CommandOutcomeUnknown, StoreConflict
+from so101_teleop.expert_validation.supervisor_store.schema import (
+    CommandOutcomeUnknown,
+    StoreConflict,
+)
 from so101_teleop.api import validate_bind_address
 from so101_teleop.task_artifacts import ArtifactAccessError
 

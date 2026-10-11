@@ -18,10 +18,10 @@ from so101_teleop.expert_validation.models import (
     PreflightReceipt,
     UpstreamCursor,
 )
-from so101_teleop.expert_validation.store import (
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import (
     CommandOutcomeUnknown,
     StoreConflict,
-    SupervisorStore,
 )
 from teleop_paths import TEST_ROOT
 

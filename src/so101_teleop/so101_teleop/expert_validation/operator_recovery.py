@@ -25,7 +25,8 @@ from .owner_tree import (
     OwnerTreeError,
     OwnerTreeRecovery,
 )
-from .store import StoreConflict, SupervisorStore, _json
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import _json, StoreConflict
 
 
 class RecoveryError(RuntimeError):

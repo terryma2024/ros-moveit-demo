@@ -22,10 +22,8 @@ import pytest
 from so101_demo.parallel_batch import start_guard as guard_module
 from so101_demo.parallel_batch.start_guard_probe import ProbeCoordinator
 from so101_teleop.expert_validation.api import create_expert_validation_app
-from so101_teleop.expert_validation.production import (
-    ProductionRuntimeLayout,
-    create_production_service,
-)
+from so101_teleop.expert_validation.production import create_production_service
+from so101_teleop.expert_validation.production_service.layout import ProductionRuntimeLayout
 from teleop_paths import REPOSITORY
 
 WORKTREE = REPOSITORY

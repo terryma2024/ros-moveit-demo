@@ -10,7 +10,8 @@ from so101_teleop.expert_validation.service import (
     ServiceConflict,
     StartCampaignCommand,
 )
-from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
 
 SHA = "a" * 64

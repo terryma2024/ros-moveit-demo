@@ -17,7 +17,8 @@ from so101_teleop.expert_validation.coordinator import (
 from so101_teleop.expert_validation.lease import ValidationLeaseService
 from so101_teleop.expert_validation.process_owner import ExecutionProcessOwner
 from so101_teleop.expert_validation.preflight import PreflightEngine, PreflightRejected
-from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor
 
 from test_expert_validation_preflight import Resources, _request

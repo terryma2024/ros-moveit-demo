@@ -58,7 +58,8 @@ from so101_teleop.expert_validation.models import (
 from so101_teleop.expert_validation.owner_tree import OwnerIntent
 from so101_teleop.expert_validation.production import ProductionExpertValidationService
 from so101_teleop.expert_validation.service import ServiceConflict
-from so101_teleop.expert_validation.store import StoreConflict, SupervisorStore
+from so101_teleop.expert_validation.store import SupervisorStore
+from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
 
 
 CAMPAIGN_ID = "cand-w2-20260922T011804Z"
