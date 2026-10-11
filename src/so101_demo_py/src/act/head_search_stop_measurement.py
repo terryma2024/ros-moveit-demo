@@ -60,7 +60,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_camera_measurement import (
+from so101_demo.act.head_search_camera_measurement.frames import (
     _anchor_pose_requests,
     _corridor_check,
 )

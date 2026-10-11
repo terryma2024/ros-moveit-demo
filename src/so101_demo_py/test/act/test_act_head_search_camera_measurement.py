@@ -18,25 +18,31 @@ import json
 import math
 
 import pytest
-from so101_demo.act import head_search_camera_measurement as module
-from so101_demo.act.head_search_camera_measurement import (
+from so101_demo.act.head_search_camera_measurement import declarations as module_declarations
+from so101_demo.act.head_search_camera_measurement import frames as module_frames
+from so101_demo.act.head_search_camera_measurement import writer as module_writer
+from so101_demo.act.head_search_camera_measurement.declarations import (
     CAL_CAMERA_CUP_LOST,
     CAL_CAMERA_POSE_OUT_OF_CORRIDOR,
     CAL_CAMERA_SAFETY_MARGIN_CONTRADICTORY,
     CAL_CAMERA_SAFETY_MARGIN_OUT_OF_RANGE,
     CAL_CAMERA_SAFETY_MARGIN_UNDECLARED,
+    CalibrationCameraMeasurementRefused,
+    declared_camera_geometry,
     DEFAULT_FRAMES_PER_POSE,
     KIND,
     MIN_FRAMES_PER_POSE,
-    REFUSAL_CODES,
-    CalibrationCameraMeasurementRefused,
-    build_camera_measurements,
-    declared_camera_geometry,
-    measure_anchor_frames,
     rad_per_px,
     read_declared_safety_margin,
+    REFUSAL_CODES,
     spread,
     undeclared_safety_margin,
+)
+from so101_demo.act.head_search_camera_measurement.frames import (
+    build_camera_measurements,
+    measure_anchor_frames,
+)
+from so101_demo.act.head_search_camera_measurement.writer import (
     write_head_search_camera_measurement,
 )
 from so101_demo.act.head_search_search_params import (
@@ -639,14 +645,14 @@ def test_declared_camera_geometry_renames_the_seals_own_keys_and_cites_it(tmp_pa
     }
 
     declaration = declared_camera_geometry(
-        geometry_seal=seal, seal_path=seal_path, seal_sha256=module._digest(seal_path)
+        geometry_seal=seal, seal_path=seal_path, seal_sha256=module_declarations._digest(seal_path)
     )
 
     assert declaration["horizontal_fov_rad"] == HORIZONTAL_FOV_RAD
     assert declaration["image_width_px"] == WIDTH_PX
     assert declaration["image_height_px"] == HEIGHT_PX
     assert declaration["measured_here"] is False
-    assert declaration["declared_by"]["sha256"] == module._digest(seal_path)
+    assert declaration["declared_by"]["sha256"] == module_declarations._digest(seal_path)
     assert declaration["declared_by"]["keys"] == {
         "horizontal_fov_rad": "horizontal_fov_rad",
         "image_width_px": "image_width",
@@ -865,7 +871,7 @@ def _sealed_inputs(tmp_path):
     weights_path.write_bytes(b"weights")
     frozen = {
         "candidate_id": "C",
-        "weight_sha256": module._digest(weights_path),
+        "weight_sha256": module_declarations._digest(weights_path),
         "operating_points": {"head": {"min_confidence": 0.25, "tracker": {"iou": 0.5}}},
     }
     scene = tmp_path / "head_search_scene.xml"
@@ -915,7 +921,7 @@ def _document(tmp_path, *, safety_margin=None, geometry=None):
                 "image_height": HEIGHT_PX,
             },
             seal_path=seal_path,
-            seal_sha256=module._digest(seal_path),
+            seal_sha256=module_declarations._digest(seal_path),
         ),
         safety_margin=undeclared_safety_margin() if safety_margin is None else safety_margin,
         frames_per_pose=4,
@@ -923,7 +929,7 @@ def _document(tmp_path, *, safety_margin=None, geometry=None):
         scene_path=tmp_path / "scene.xml",
         scene_sha256="a" * 64,
         geometry_seal_path=seal_path,
-        geometry_seal_sha256=module._digest(seal_path),
+        geometry_seal_sha256=module_declarations._digest(seal_path),
         production_search_config_path=tmp_path / "head_search_runtime.json",
         production_search_config_sha256="b" * 64,
         runtime_identity_document={"python_version": "3.12.3"},
@@ -1012,15 +1018,15 @@ def test_a_declared_safety_margin_is_carried_with_its_declaring_artefact(tmp_pat
     assert document["refusals"] == []
     assert document["safety_margin"]["measured_here"] is False
     assert document["safety_margin"]["declared_by"]["path"] == str(artefact)
-    assert document["safety_margin"]["declared_by"]["sha256"] == module._digest(artefact)
+    assert document["safety_margin"]["declared_by"]["sha256"] == module_declarations._digest(artefact)
 
 
 def test_the_document_digest_covers_every_field_but_itself(tmp_path):
     document = _document(tmp_path)
     body = {key: value for key, value in document.items() if key != "sha256"}
 
-    assert document["sha256"] == module.canonical_sha256(body)
-    assert document["digest_convention"] == module.DIGEST_CONVENTION
+    assert document["sha256"] == module_frames.canonical_sha256(body)
+    assert document["digest_convention"] == module_frames.DIGEST_CONVENTION
 
 
 def test_the_document_records_the_pose_set_the_frames_and_the_cadence(tmp_path):
@@ -1052,7 +1058,7 @@ def test_the_document_needs_at_least_one_measured_anchor(tmp_path):
                     "image_height": HEIGHT_PX,
                 },
                 seal_path=seal_path,
-                seal_sha256=module._digest(seal_path),
+                seal_sha256=module_declarations._digest(seal_path),
             ),
             safety_margin=undeclared_safety_margin(),
             frames_per_pose=4,
@@ -1060,7 +1066,7 @@ def test_the_document_needs_at_least_one_measured_anchor(tmp_path):
             scene_path="scene.xml",
             scene_sha256="a" * 64,
             geometry_seal_path=seal_path,
-            geometry_seal_sha256=module._digest(seal_path),
+            geometry_seal_sha256=module_declarations._digest(seal_path),
             production_search_config_path=None,
             production_search_config_sha256=None,
         )
@@ -1071,14 +1077,14 @@ def test_the_document_needs_at_least_one_measured_anchor(tmp_path):
 
 def _patch_scene_declaration(monkeypatch, *, scene_sha256=None):
     monkeypatch.setattr(
-        module,
+        module_writer,
         "read_mujoco_timestep",
         lambda path: {
             "simulation_timestep_s": TIMESTEP_S,
-            "scene_sha256": module._digest(path) if scene_sha256 is None else scene_sha256,
+            "scene_sha256": module_declarations._digest(path) if scene_sha256 is None else scene_sha256,
         },
     )
-    monkeypatch.setattr(module, "_cuda_available", lambda: True)
+    monkeypatch.setattr(module_writer, "_cuda_available", lambda: True)
 
 
 def _producer(
@@ -1093,11 +1099,11 @@ def _producer(
 ):
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_declarations._digest(scene)
     seal_document.update(seal_overrides or {})
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
     production_document = json.loads(production.read_text(encoding="utf-8"))
-    production_document["weight_sha256"] = module._digest(weights)
+    production_document["weight_sha256"] = module_declarations._digest(weights)
     production.write_text(json.dumps(production_document), encoding="utf-8")
 
     def default_plant(request):
@@ -1125,8 +1131,8 @@ def test_the_producer_writes_the_document_the_receipt_and_the_refused_field(tmp_
     _patch_scene_declaration(monkeypatch)
     result = _producer(tmp_path)
 
-    document = json.loads((tmp_path / "out" / module.ARTIFACT).read_text(encoding="utf-8"))
-    receipt = json.loads((tmp_path / "out" / module.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
+    document = json.loads((tmp_path / "out" / module_declarations.ARTIFACT).read_text(encoding="utf-8"))
+    receipt = json.loads((tmp_path / "out" / module_declarations.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
 
     assert document["sha256"] == result["document"]["sha256"]
     assert document["safety_margin_px"] is None
@@ -1135,9 +1141,9 @@ def test_the_producer_writes_the_document_the_receipt_and_the_refused_field(tmp_
     ]
     assert receipt["status"] == "MEASURED_WITH_REFUSED_FIELD"
     assert receipt["fields_refused"] == ["safety_margin_px"]
-    assert receipt["document_path"] == str(tmp_path / "out" / module.ARTIFACT)
+    assert receipt["document_path"] == str(tmp_path / "out" / module_declarations.ARTIFACT)
     assert receipt["frame_count"] == 4 * document["pose_count"]
-    assert receipt["weights_sha256"] == module._digest(tmp_path / "C.pt")
+    assert receipt["weights_sha256"] == module_declarations._digest(tmp_path / "C.pt")
     assert receipt["frames_per_pose"] == 4
     # the plant is injected here, so no runtime identity is claimed: the real flight records its own
     assert receipt["runtime_identity"] == {}
@@ -1190,7 +1196,7 @@ def test_the_producer_refuses_weights_the_sealed_configuration_does_not_declare(
     _patch_scene_declaration(monkeypatch)
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_declarations._digest(scene)
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
     production.write_text(
         json.dumps(
@@ -1254,7 +1260,7 @@ def test_the_producer_refuses_an_anchor_start_outside_the_motion_corridor(tmp_pa
 
 def test_the_producer_refuses_a_declared_cuda_device_without_one(tmp_path, monkeypatch):
     _patch_scene_declaration(monkeypatch)
-    monkeypatch.setattr(module, "_cuda_available", lambda: False)
+    monkeypatch.setattr(module_writer, "_cuda_available", lambda: False)
 
     with pytest.raises(CalibrationCameraMeasurementRefused) as refused:
         _producer(tmp_path, device="cuda")

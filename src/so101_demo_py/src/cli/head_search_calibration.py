@@ -1400,11 +1400,11 @@ def _measure_camera(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_camera_measurement import (
-        DEFAULT_FRAMES_PER_POSE,
-        SETTLE_CONSECUTIVE_STEPS,
+    from so101_demo.act.head_search_camera_measurement.declarations import DEFAULT_FRAMES_PER_POSE
+    from so101_demo.act.head_search_camera_measurement.writer import (
         write_head_search_camera_measurement,
     )
+    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
 
     optional = {
         "frames_per_pose": DEFAULT_FRAMES_PER_POSE,

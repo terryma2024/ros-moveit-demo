@@ -1673,16 +1673,18 @@ def test_measure_camera_hands_the_flight_to_the_library_and_refuses_an_undeclare
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
     from so101_demo.act import head_search_camera_measurement as measurement
+    from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
+    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
-    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", _CameraPlant)
+    monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", _CameraPlant)
     monkeypatch.setattr(
-        measurement, "build_production_head_detector", lambda **kwargs: _CameraDetector(None)
+        measurement_writer, "build_production_head_detector", lambda **kwargs: _CameraDetector(None)
     )
 
     assert main(_camera_arguments(inputs, output)) == 2
 
     captured = capsys.readouterr()
-    assert measurement.CAL_CAMERA_SAFETY_MARGIN_UNDECLARED in captured.err
+    assert measurement_declarations.CAL_CAMERA_SAFETY_MARGIN_UNDECLARED in captured.err
     assert "CAMERA_MEASUREMENTS_MEASURED" in captured.out
 
     document = json.loads((output / "camera-measurements.json").read_text(encoding="utf-8"))
@@ -1692,7 +1694,7 @@ def test_measure_camera_hands_the_flight_to_the_library_and_refuses_an_undeclare
     assert document["image_height_px"] == 480
     # twelve frames per pose is three whole periods of the wobble cycle
     assert document["centre_jitter_px"] == pytest.approx(
-        measurement.spread(_CameraDetector.OFFSETS_PX * 3)["std"]
+        measurement_declarations.spread(_CameraDetector.OFFSETS_PX * 3)["std"]
     )
     assert document["centre_jitter_rad"] == pytest.approx(
         document["centre_jitter_px"] * 1.3121067481206794 / 640
@@ -1715,17 +1717,19 @@ def test_measure_camera_accepts_a_declared_safety_margin_and_returns_zero(
     declaration = tmp_path / "camera-safety.json"
     declaration.write_text(json.dumps({"safety_margin_px": 4.0}), encoding="utf-8")
     from so101_demo.act import head_search_camera_measurement as measurement
+    from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
+    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
-    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", _CameraPlant)
+    monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", _CameraPlant)
     monkeypatch.setattr(
-        measurement, "build_production_head_detector", lambda **kwargs: _CameraDetector(None)
+        measurement_writer, "build_production_head_detector", lambda **kwargs: _CameraDetector(None)
     )
 
     assert main(_camera_arguments(inputs, output, safety_margin=declaration)) == 0
 
     captured = capsys.readouterr()
     assert "CAMERA_MEASUREMENTS_MEASURED" in captured.out
-    assert measurement.CAL_CAMERA_SAFETY_MARGIN_UNDECLARED not in captured.err
+    assert measurement_declarations.CAL_CAMERA_SAFETY_MARGIN_UNDECLARED not in captured.err
 
     document = json.loads((output / "camera-measurements.json").read_text(encoding="utf-8"))
     assert document["safety_margin_px"] == 4.0
@@ -1740,17 +1744,19 @@ def test_measure_camera_prints_the_librarys_refusal_and_returns_two(
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
     from so101_demo.act import head_search_camera_measurement as measurement
+    from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
+    from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
     def refuse(request):
-        raise measurement.CalibrationCameraMeasurementRefused(
-            measurement.CAL_CAMERA_CUP_LOST, "the detector found no cup in any frame"
+        raise measurement_declarations.CalibrationCameraMeasurementRefused(
+            measurement_declarations.CAL_CAMERA_CUP_LOST, "the detector found no cup in any frame"
         )
 
-    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", refuse)
-    monkeypatch.setattr(measurement, "build_production_head_detector", lambda **kwargs: None)
+    monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", refuse)
+    monkeypatch.setattr(measurement_writer, "build_production_head_detector", lambda **kwargs: None)
 
     assert main(_camera_arguments(inputs, output)) == 2
-    assert measurement.CAL_CAMERA_CUP_LOST in capsys.readouterr().err
+    assert measurement_declarations.CAL_CAMERA_CUP_LOST in capsys.readouterr().err
 
 
 # --- the stop, feedback, submission and stop-proof measurement entries --------------------------------
