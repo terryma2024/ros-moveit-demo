@@ -1037,6 +1037,7 @@ class RosDynamicMujocoExecution:
 
         teacher_run = self._teacher_run()
         deadline = time.monotonic() + (float(self._execution_policy["state_unavailable_stop_s"]) if teacher_run else 2.0)
+        held = None
         while time.monotonic() < deadline:
             self._wait_progress()
             try:
@@ -1045,12 +1046,32 @@ class RosDynamicMujocoExecution:
                 continue
             if value.simulation_session_id != self._session_id:
                 raise RuntimeError("DYNAMIC_SESSION_MISMATCH")
-            if value.reset_epoch != self._expected_reset_epoch or value.paused:
-                raise RuntimeError("DYNAMIC_RESET_EPOCH_MISMATCH")
+            if value.reset_epoch != self._expected_reset_epoch:
+                raise RuntimeError("DYNAMIC_RESET_EPOCH_MISMATCH: " + self._identity_detail(value))
+            if value.paused:
+                held = value                   # the parent's inference hold: wait, bounded by this deadline, for a running frame
+                continue
             if teacher_run and not _evidence_is_finite(value):
                 raise RuntimeError("SIM_INTEGRITY_NON_FINITE_STATE")
             return value
+        if held is not None:
+            raise RuntimeError("DYNAMIC_RESET_EPOCH_MISMATCH: " + self._identity_detail(held))
         raise RuntimeError("DYNAMIC_EVIDENCE_TIMEOUT")
+
+    def _identity_detail(self, value) -> str:
+        """What a world identity failure saw: the failing frame and the observer's last frames (observation only)."""
+        recent = []
+        recorder = getattr(self.observer, "recent_summaries", None)
+        if recorder is not None:
+            try:
+                recent = recorder(5)
+            except Exception:   # noqa: BLE001  (an observation can never replace the failure it explains)
+                recent = []
+        age = recent[-1].get("age_s") if recent else None
+        return json.dumps({
+            "paused": bool(value.paused), "reset_epoch": value.reset_epoch, "expected_reset_epoch": self._expected_reset_epoch,
+            "simulation_step": value.simulation_step, "publisher_sequence": value.publisher_sequence,
+            "receive_age_s": age, "recent": recent}, sort_keys=True)
 
     @staticmethod
     def _evidence(value) -> dict[str, object]:
@@ -1471,8 +1492,18 @@ class RosDynamicMujocoExecution:
         teacher_run = self._teacher_run()
         if value.simulation_session_id != self._session_id:
             raise TeacherStop("SIM_INTEGRITY_SESSION_MISMATCH" if teacher_run else "DYNAMIC_SESSION_MISMATCH")
-        if value.reset_epoch != self._expected_reset_epoch or value.paused:
-            raise TeacherStop("SIM_INTEGRITY_RESET_EPOCH_MISMATCH" if teacher_run else "DYNAMIC_RESET_EPOCH_MISMATCH")
+        mismatch = "SIM_INTEGRITY_RESET_EPOCH_MISMATCH" if teacher_run else "DYNAMIC_RESET_EPOCH_MISMATCH"
+        if value.reset_epoch != self._expected_reset_epoch:
+            raise TeacherStop(mismatch, self._identity_detail(value))
+        if value.paused:
+            # the parent's inference hold is an owned, short pause of the expected epoch: the sample is unavailable while it lasts
+            since = getattr(self, "_paused_since", None)
+            if since is None:
+                since = self._paused_since = now
+            if now - since > stop_after:
+                raise TeacherStop(mismatch, self._identity_detail(value))
+            return None
+        self._paused_since = None
         if teacher_run and not _evidence_is_finite(value):
             raise TeacherStop("SIM_INTEGRITY_NON_FINITE_STATE")
         return value

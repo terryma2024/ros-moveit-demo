@@ -167,7 +167,6 @@ def test_stale_joint_state_is_also_unavailable_state(tmp_path):
 
 @pytest.mark.parametrize("change,code", [
     ({"simulation_session_id": "other"}, "DYNAMIC_SESSION_MISMATCH"),
-    ({"paused": True}, "DYNAMIC_RESET_EPOCH_MISMATCH"),
     ({"reset_epoch": 2}, "DYNAMIC_RESET_EPOCH_MISMATCH"),
 ])
 def test_monitor_keeps_the_identity_checks_of_snapshot_on_the_latest_sample(tmp_path, change, code):

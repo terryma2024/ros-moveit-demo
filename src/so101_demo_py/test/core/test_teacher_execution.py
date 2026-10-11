@@ -73,12 +73,25 @@ def test_a_collision_or_hazard_latch_no_longer_stops_the_teacher(tmp_path):
 
 def test_session_epoch_and_non_finite_state_are_simulation_integrity_stops(tmp_path):
     for change, code in ((dict(simulation_session_id="other"), "SIM_INTEGRITY_SESSION_MISMATCH"),
-                         (dict(reset_epoch=2), "SIM_INTEGRITY_RESET_EPOCH_MISMATCH"), (dict(paused=True), "SIM_INTEGRITY_RESET_EPOCH_MISMATCH")):
+                         (dict(reset_epoch=2), "SIM_INTEGRITY_RESET_EPOCH_MISMATCH")):
         value = teacher_adapter(tmp_path)
         value.observer.put(replace(evidence(), **change))
         with pytest.raises(TeacherStop) as stop:
             run_monitor(value)
         assert stop.value.code == code
+    value = teacher_adapter(tmp_path)           # a hold of the expected epoch is tolerated for state_unavailable_stop_s, then a stop
+    value.observer.put(replace(evidence(), paused=True))
+    run_monitor(value)
+    value._now[0] += 0.9
+    value.observer.put(replace(evidence(), paused=True))
+    value._joint_state_received_monotonic_s = value._now[0]
+    run_monitor(value)
+    value._now[0] += 0.2
+    value.observer.put(replace(evidence(), paused=True))
+    value._joint_state_received_monotonic_s = value._now[0]
+    with pytest.raises(TeacherStop) as stop:
+        run_monitor(value)
+    assert stop.value.code == "SIM_INTEGRITY_RESET_EPOCH_MISMATCH"
     value = teacher_adapter(tmp_path)
     good = evidence()
     object.__setattr__(good.object_state, "position_world", (math.nan, 0.0, 0.0))     # the dataclass refuses it at construction

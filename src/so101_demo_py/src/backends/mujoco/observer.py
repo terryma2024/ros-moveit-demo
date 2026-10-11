@@ -290,6 +290,15 @@ class MujocoWorldObserver:
                 "publisher_sequence": evidence.publisher_sequence, "simulation_step": evidence.simulation_step,
                 "reset_epoch": evidence.reset_epoch, "age_s": round(self._monotonic() - received_at_s, 3)}
 
+    def recent_summaries(self, limit: int = 5) -> list[dict]:
+        """Observation only: the newest accepted messages (oldest first), whatever their age, for a failure to name."""
+        with self._lock:
+            frames = list(self._history)[-limit:]
+        now = self._monotonic()
+        return [{"paused": item.evidence.paused, "reset_epoch": item.evidence.reset_epoch,
+                 "simulation_step": item.evidence.simulation_step, "publisher_sequence": item.evidence.publisher_sequence,
+                 "age_s": round(now - item.received_monotonic_s, 3)} for item in frames]
+
     def snapshot(self) -> SimulationEvidence:
         return self.snapshot_with_receipt().evidence
 

@@ -189,3 +189,16 @@ def test_world_sequence_gap_is_still_a_hazard_without_the_audit_port(monkeypatch
     world.accept(skipped, received_at_s=10.)
     with pytest.raises(world_module.EvidenceRejected, match="sequence gap"):
         world.recent_with_receipts()
+
+
+def test_recent_summaries_name_the_newest_frames_whatever_their_age(monkeypatch):
+    from so101_demo.backends.mujoco import observer as world_module
+    world, first = _world_pair(world_module, monkeypatch)
+    for sequence in range(1, 8):
+        world.accept(replace(first, publisher_sequence=sequence, simulation_step=sequence, paused=sequence == 7,
+                             simulation_time_s=1. + sequence * .01), received_at_s=9. + sequence * .1)
+    recent = world.recent_summaries(3)
+    assert [item["publisher_sequence"] for item in recent] == [5, 6, 7]
+    assert recent[-1]["paused"] is True and recent[0]["paused"] is False
+    assert recent[-1]["age_s"] == pytest.approx(0.3, abs=1e-6)
+    assert set(recent[0]) == {"paused", "reset_epoch", "simulation_step", "publisher_sequence", "age_s"}
