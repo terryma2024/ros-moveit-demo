@@ -42,11 +42,17 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES geometry_msgs std_msgs)
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
 
-add_library(so101_simulation_evidence_plugin SHARED src/simulation_evidence_plugin.cpp)
+add_library(so101_simulation_evidence_plugin SHARED
+  src/simulation_evidence_plugin.cpp
+  src/scene_evidence.cpp
+  src/simulation_evidence_builder.cpp
+  src/physics_step_buffer.cpp
+  src/robot_contact_evidence.cpp)
 target_compile_features(so101_simulation_evidence_plugin PUBLIC cxx_std_17)
 target_include_directories(so101_simulation_evidence_plugin PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
+target_include_directories(so101_simulation_evidence_plugin PRIVATE src)
 target_link_libraries(so101_simulation_evidence_plugin PUBLIC
   mujoco::mujoco
   mujoco_ros2_control_plugins::mujoco_ros2_control_plugins
