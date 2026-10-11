@@ -73,7 +73,7 @@ trusted_full_restart_composition = PickPlaceValidationCampaign.trusted_full_rest
 def _readiness_executable(install_prefix: Path) -> Path:
     """Resolve the motion-stack readiness entry in either installed layout."""
 
-    from so101_demo.cli.diagnose_macos_station import READINESS_RELATIVE_PATH
+    from so101_demo.cli.macos_station.contracts import READINESS_RELATIVE_PATH
 
     candidates = (install_prefix / READINESS_RELATIVE_PATH,
                   install_prefix / "so101_demo_py" / READINESS_RELATIVE_PATH)

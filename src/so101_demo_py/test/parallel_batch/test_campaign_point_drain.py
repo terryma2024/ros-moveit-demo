@@ -43,6 +43,10 @@ from test_parallel_selection import (  # noqa: F401 - shared catalog fixtures
 from so101_demo.parallel_batch.single_worker_composition import exact_single_worker_slots
 from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
 from paths import PACKAGE_ROOT
+from so101_demo.cli.macos_campaign import admission as macos_campaign_admission
+from so101_demo.cli.macos_campaign import guard as macos_campaign_guard
+from so101_demo.cli.macos_campaign import journal as macos_campaign_journal
+from so101_demo.cli.macos_campaign import selection as macos_campaign_selection
 
 #: The Task 11 selection ids, plus the anchors the first-pass binding contract requires.
 DRAIN_POINT_IDS = ("cup_test_left_5cm", "sample_07_mid_center", "sample_12_far_left",
@@ -161,7 +165,7 @@ def test_campaign_lease_builder_leases_executable_points_from_the_queue(tmp_path
         "input_sha256": "a" * 64, "binding": binding, "queue": queue,
     }
 
-    leases = cli.build_worker_leases(**arguments)
+    leases = macos_campaign_journal.build_worker_leases(**arguments)
 
     assert sorted(leases) == ["worker-01", "worker-02"]
     snapshot = queue.snapshot()
@@ -183,7 +187,7 @@ def test_campaign_lease_builder_leases_executable_points_from_the_queue(tmp_path
 
     # Asking again for the same slots and generation returns the same lease: a Worker re-spawned
     # into the same generation can never execute a second, different point.
-    again = cli.build_worker_leases(**arguments)
+    again = macos_campaign_journal.build_worker_leases(**arguments)
     assert {document["point_id"] for document in again.values()} == {
         document["point_id"] for document in leases.values()}
     assert len(queue.snapshot().active_leases) == 2
@@ -199,7 +203,7 @@ def test_campaign_lease_builder_leases_executable_points_from_the_queue(tmp_path
             worker=_queue_module().WorkerIdentity(
                 worker_id=lease.worker_id, slot_id=lease.slot_id, generation=lease.generation))
         committed.add(lease.point_id)
-    third = cli.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
+    third = macos_campaign_journal.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
     assert third["worker-01"]["point_id"] not in committed
     assert third["worker-01"]["point_id"] in binding.selected_point_ids
 
@@ -308,7 +312,7 @@ def _drain(tmp_path: Path, *, point_ids=None, worker_ids=("worker-01", "worker-0
     report = drain.drain_point_queue(
         queue=queue, binding=binding, worker_ids=worker_ids, slot_ids=slot_ids,
         evidence_root=evidence_root, journal=journal, max_points=max_points,
-        lease_point=lambda worker_id, slot_id, generation: cli.lease_worker_execution(
+        lease_point=lambda worker_id, slot_id, generation: macos_campaign_journal.lease_worker_execution(
             queue=queue, binding=binding, worker_id=worker_id, slot_id=slot_id,
             generation=generation, evidence_root=evidence_root, input_sha256="a" * 64,
             lease_name=f"{worker_id}-lease-{int(generation):02d}.json"),
@@ -435,7 +439,7 @@ def test_drain_stops_when_a_worker_exits_without_a_result(tmp_path: Path) -> Non
     report = drain.drain_point_queue(
         queue=queue, binding=binding, worker_ids=("worker-01",), slot_ids=("slot-0",),
         evidence_root=evidence_root,
-        lease_point=lambda worker_id, slot_id, generation: cli.lease_worker_execution(
+        lease_point=lambda worker_id, slot_id, generation: macos_campaign_journal.lease_worker_execution(
             queue=queue, binding=binding, worker_id=worker_id, slot_id=slot_id,
             generation=generation, evidence_root=evidence_root, input_sha256="a" * 64),
         spawn_worker=_DeadSpawn(), release_worker=lambda worker_id, slot_id: "EXITED",
@@ -466,8 +470,8 @@ def test_a_second_lease_for_one_slot_never_replays_a_bound_request_id(tmp_path: 
     arguments = {"plan": _Plan(), "batch_id": binding.batch_id, "evidence_root": tmp_path,
                  "input_sha256": "a" * 64, "binding": binding, "queue": queue}
 
-    first = cli.build_worker_leases(**arguments)
-    second = cli.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
+    first = macos_campaign_journal.build_worker_leases(**arguments)
+    second = macos_campaign_journal.build_worker_leases(**{**arguments, "worker_ids": ("worker-01",), "generation": 2})
 
     first_ids = set(first["worker-01"]["attempt_ids"])
     second_ids = set(second["worker-01"]["attempt_ids"])
@@ -499,7 +503,7 @@ def test_a_station_that_outlived_its_worker_is_stopped_by_its_own_argv(tmp_path:
     def runner(_command):
         return _Completed()
 
-    matches = cli.station_processes(str(root), ps_runner=runner)
+    matches = macos_campaign_selection.station_processes(str(root), ps_runner=runner)
     # only the launch that declares *this* station root is a match; its child is not a launcher
     assert matches == [{"pid": 101, "pgid": 101, "command": matches[0]["command"]}]
     assert "task_evidence_root:=" + str(root) in matches[0]["command"]
@@ -518,7 +522,7 @@ def test_a_station_that_outlived_its_worker_is_stopped_by_its_own_argv(tmp_path:
             stdout = ""
         return _Empty()
 
-    stopped = cli.stop_station_residue(str(root), ps_runner=ps_runner, signal_sender=sender,
+    stopped = macos_campaign_selection.stop_station_residue(str(root), ps_runner=ps_runner, signal_sender=sender,
                                        sleep=lambda _seconds: None)
     assert stopped["clear"] is True
     assert stopped["stopped"] == [101]
@@ -560,19 +564,19 @@ def test_every_served_response_is_admitted_immediately_so_the_table_stays_bounde
     for index in range(6):
         request_id = f"worker-01-att-g{index:02d}-01-yolo"
         campaign.bind(request_id)
-        assert cli.serve_and_admit(campaign, request_id=request_id, candidates=1, device="mps",
+        assert macos_campaign_admission.serve_and_admit(campaign, request_id=request_id, candidates=1, device="mps",
                                    served=served, broker_pid=4242,
                                    broker_birth_identity=17) is None
-    admitted, refused = cli.served_admission_split(served)
+    admitted, refused = macos_campaign_admission.served_admission_split(served)
     assert len(admitted) == 6 and refused == []
 
     # a response the table will not admit is refused to the caller, never recorded as admitted
     campaign.bind("late-yolo")
     campaign.registry.consume_result("late-yolo", broker_pid=4242, broker_birth_identity=17)
-    refusal = cli.serve_and_admit(campaign, request_id="late-yolo", candidates=1, device="mps",
+    refusal = macos_campaign_admission.serve_and_admit(campaign, request_id="late-yolo", candidates=1, device="mps",
                                   served=served, broker_pid=4242, broker_birth_identity=17)
     assert refusal["error"]["code"] == "RESULT_NOT_ADMITTED"
-    admitted, refused = cli.served_admission_split(served)
+    admitted, refused = macos_campaign_admission.served_admission_split(served)
     assert [entry["request_id"] for entry in refused] == ["late-yolo"]
 
 
@@ -593,7 +597,7 @@ def test_the_per_slot_summary_reads_the_per_attempt_station_evidence(tmp_path: P
         (point_root / "point-result.json").write_text(json.dumps(
             {"id": point_id, "status": "SUCCEEDED", "failure_code": None}))
 
-    summary = cli.summarize_per_slot_pick_place(evidence_root=root, workers=("worker-01",))
+    summary = macos_campaign_journal.summarize_per_slot_pick_place(evidence_root=root, workers=("worker-01",))
 
     assert summary["worker-01"]["manifests"] == 2
     assert summary["worker-01"]["point_results"] == 2
@@ -693,10 +697,10 @@ def test_a_retry_selection_document_projects_the_original_chain(tmp_path: Path) 
     assert document["selected_point_ids"] == [point_id]
 
     # the campaign's own projection is the same shape, for either binding kind
-    projected = cli.selection_document(retry, catalog_path=catalog_path)
+    projected = macos_campaign_selection.selection_document(retry, catalog_path=catalog_path)
     assert projected["catalog_sha256"] == document["catalog_sha256"]
     assert projected["original_result_sha256"] == source["original_result_sha256"]
-    first_pass_projection = cli.selection_document(_binding, catalog_path=catalog_path)
+    first_pass_projection = macos_campaign_selection.selection_document(_binding, catalog_path=catalog_path)
     assert first_pass_projection["kind"] == "FIRST_PASS"
     assert first_pass_projection["selected_point_ids"] == list(_binding.selected_point_ids)
 
@@ -759,9 +763,9 @@ def test_the_single_worker_retry_cli_accepts_the_original_chain_from_its_command
         "--original-batch-id", prior_document["batch_id"]])
     assert arguments.original_result == result_document
 
-    selection, queue, resolved_catalog = cli.bind_campaign_selection(
+    selection, queue, resolved_catalog = macos_campaign_selection.bind_campaign_selection(
         arguments=arguments, plan=_retry_plan(tmp_path, point_id=point_id),
-        spec=cli.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY"))
+        spec=macos_campaign_guard.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY"))
 
     assert selection.selected_point_ids == (point_id,)
     assert selection.original_selection_sha256 == prior_document["selection_sha256"]
@@ -777,7 +781,7 @@ def test_the_single_worker_retry_cli_accepts_the_original_chain_from_its_command
     assert written["original_result_source"] == "document"
     assert written["original_batch_id"] == prior_document["batch_id"]
     # and the campaign's own projection of that document carries the same verification fact
-    projected = cli.selection_document(selection, catalog_path=catalog, extras={
+    projected = macos_campaign_selection.selection_document(selection, catalog_path=catalog, extras={
         "original_result_source": written["original_result_source"],
         "original_batch_id": written["original_batch_id"]})
     assert projected["original_result_source"] == "document"
@@ -797,13 +801,13 @@ def test_the_single_worker_retry_cli_refuses_a_retry_without_a_named_original_re
     result_sha = hashlib.sha256(result_document.read_bytes()).hexdigest()
     catalog = _catalog_copy(tmp_path)
     plan = _retry_plan(tmp_path, point_id=point_id)
-    spec = cli.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY")
+    spec = macos_campaign_guard.route_spec("MPS_SINGLE_WORKER_FULL_RESTART_RETRY")
 
     def refusal(extra) -> str:
         arguments = _retry_arguments(tmp_path, ["--catalog", str(catalog), "--point-id", point_id]
                                      + list(extra))
-        with pytest.raises(cli.RefusedRun) as refused:
-            cli.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+        with pytest.raises(macos_campaign_guard.RefusedRun) as refused:
+            macos_campaign_selection.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
         return refused.value.detail
 
     # no binding source at all, and only half of one
@@ -838,8 +842,8 @@ def test_the_single_worker_retry_cli_refuses_a_retry_without_a_named_original_re
         tmp_path, ["--catalog", str(catalog), "--point-id", point_id, "--point-id", "task_start",
                    "--original-selection-sha256", prior_document["selection_sha256"],
                    "--original-result-sha256", result_sha])
-    with pytest.raises(cli.RefusedRun) as several:
-        cli.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
+    with pytest.raises(macos_campaign_guard.RefusedRun) as several:
+        macos_campaign_selection.bind_campaign_selection(arguments=arguments, plan=plan, spec=spec)
     assert several.value.detail.startswith("RETRY_POINT_REQUIRED")
 
     # the prior-root form still works, and a declared digest may only confirm it. A retry belongs
@@ -851,15 +855,15 @@ def test_the_single_worker_retry_cli_refuses_a_retry_without_a_named_original_re
                    "--retry-root", str(prior_root),
                    "--original-result-sha256", "e" * 64],
         campaign_id=prior_campaign)
-    with pytest.raises(cli.RefusedRun) as divergent:
-        cli.bind_campaign_selection(arguments=arguments, plan=prior_plan, spec=spec)
+    with pytest.raises(macos_campaign_guard.RefusedRun) as divergent:
+        macos_campaign_selection.bind_campaign_selection(arguments=arguments, plan=prior_plan, spec=spec)
     assert divergent.value.detail.startswith("RETRY_SOURCE_MISMATCH")
     arguments = _retry_arguments(
         tmp_path, ["--catalog", str(catalog), "--point-id", point_id,
                    "--retry-root", str(prior_root),
                    "--original-result-sha256", result_sha],
         campaign_id=prior_campaign)
-    selection, _queue, _catalog = cli.bind_campaign_selection(
+    selection, _queue, _catalog = macos_campaign_selection.bind_campaign_selection(
         arguments=arguments, plan=prior_plan, spec=spec)
     assert selection.original_result_sha256 == result_sha
 

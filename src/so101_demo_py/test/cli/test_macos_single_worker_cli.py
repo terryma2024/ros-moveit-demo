@@ -20,12 +20,12 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.cli import macos_mps_single_worker_first_pass, macos_mps_single_worker_retry
-from so101_demo.cli.macos_two_worker_campaign import (
-    GUARD_RESULT_FD_VARIABLE,
-    campaign_guard_scope,
+from so101_demo.cli.macos_campaign.guard import (
     broker_phase_guard,
+    campaign_guard_scope,
     run_guard_phase,
 )
+from so101_demo.parallel_batch.start_guard_probe import GUARD_RESULT_FD_VARIABLE
 from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
 from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
 from so101_demo.parallel_batch.start_guard import FAIL, PASS, StartGuardPolicy
@@ -154,7 +154,7 @@ def test_the_single_worker_lease_names_the_profile_the_worker_executes(tmp_path,
 
     import json as _json
 
-    from so101_demo.cli.macos_two_worker_campaign import build_worker_leases
+    from so101_demo.cli.macos_campaign.journal import build_worker_leases
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
     from so101_demo.parallel_batch.queue import DurablePointQueue
     from so101_demo.parallel_batch.selection import build_first_pass_selection
@@ -385,8 +385,8 @@ def test_the_torch_import_of_the_guard_phase_does_not_cross_the_exec(tmp_path):
     marker = tmp_path / "torch-imported.txt"
     phase_two = (
         "import json, os, sys\n"
-        "from so101_demo.cli.macos_two_worker_campaign import (\n"
-        "    GUARD_RESULT_FD_VARIABLE, broker_phase_guard, campaign_guard_scope)\n"
+        "from so101_demo.cli.macos_campaign.guard import broker_phase_guard, campaign_guard_scope\n"
+        "from so101_demo.parallel_batch.start_guard_probe import GUARD_RESULT_FD_VARIABLE\n"
         "guard = broker_phase_guard(os.environ,\n"
         "                           scope=campaign_guard_scope(batch_id='b-n1', worker_count=1),\n"
         "                           max_age_s=30.0)\n"
@@ -402,9 +402,9 @@ def test_the_torch_import_of_the_guard_phase_does_not_cross_the_exec(tmp_path):
         from so101_demo.parallel_batch.start_guard import StartGuardPolicy
         from so101_demo.parallel_batch.start_guard_probe import (
             publish_guard_handover, run_campaign_start_guard)
-        from so101_demo.cli.macos_two_worker_campaign import (
-            GUARD_RESULT_FD_VARIABLE, GUARD_PHASE_VARIABLE, GUARD_PHASE, BROKER_PHASE,
-            campaign_guard_scope)
+        from so101_demo.cli.macos_campaign.guard import (
+            BROKER_PHASE, GUARD_PHASE, GUARD_PHASE_VARIABLE, campaign_guard_scope)
+        from so101_demo.parallel_batch.start_guard_probe import GUARD_RESULT_FD_VARIABLE
 
         def healthy(**_: object):
             return AcceleratorSnapshot(
@@ -454,19 +454,20 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
     """
 
     import so101_demo.cli.macos_two_worker_campaign as cli
+    from so101_demo.cli.macos_campaign import guard as cli_guard
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     class _ExecCalled(Exception):
         pass
 
-    real_guard_phase = cli.run_guard_phase
+    real_guard_phase = cli_guard.run_guard_phase
 
     def stubbed_guard_phase(arguments, **kwargs):
         kwargs.setdefault("probe", lambda **_: _healthy())
         return real_guard_phase(arguments, **kwargs)
 
-    monkeypatch.setattr(cli, "run_guard_phase", stubbed_guard_phase)
+    monkeypatch.setattr(cli_guard, "run_guard_phase", stubbed_guard_phase)
     captured = {}
 
     def fake_execve(executable, argv, environment):
@@ -483,12 +484,12 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
                                  evidence_root=tmp_path)
     document: dict = {}
     with pytest.raises(_ExecCalled):
-        cli._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                             cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
+        cli_guard._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
+                             cli_guard.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert captured["argv"][:3] == [sys.executable, "-m", "so101_demo.cli.macos_mps_single_worker_first_pass"]
     environment = captured["environment"]
-    assert environment[cli.GUARD_PHASE_VARIABLE] == cli.BROKER_PHASE
+    assert environment[cli_guard.GUARD_PHASE_VARIABLE] == cli_guard.BROKER_PHASE
     assert environment["PYTORCH_ENABLE_MPS_FALLBACK"] == "0"
     descriptor = int(environment[GUARD_RESULT_FD_VARIABLE])
     assert os.get_inheritable(descriptor) is True, "the broker phase inherits this pipe"
@@ -507,6 +508,7 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
     """A FAIL admission returns a refusal document and never reaches the exec."""
 
     import so101_demo.cli.macos_two_worker_campaign as cli
+    from so101_demo.cli.macos_campaign import guard as cli_guard
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
@@ -514,8 +516,8 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
                         lambda *_: pytest.fail("a refused admission must not exec"))
     # `probe=None` is the fail-closed Darwin composition: the policy carries the floor, so the
     # missing accelerator admission is a refusal rather than an unguarded start.
-    real_guard_phase = cli.run_guard_phase
-    monkeypatch.setattr(cli, "run_guard_phase",
+    real_guard_phase = cli_guard.run_guard_phase
+    monkeypatch.setattr(cli_guard, "run_guard_phase",
                         lambda arguments, **kwargs: real_guard_phase(
                             arguments, **{**kwargs, "probe": None}))
     arguments = SimpleNamespace(evidence_root=tmp_path, batch_id="b-n1", campaign_id="b-n1")
@@ -523,8 +525,8 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
                                  config_path=MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG, campaign_id="b-n1", batch_id="b-n1",
                                  selected_point_ids=("p1",), evidence_root=tmp_path)
     document: dict = {}
-    result = cli._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                                  cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
+    result = cli_guard._guard_admission(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
+                                  cli_guard.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert result is None
     assert document["status"] == "REFUSED" and document["stage"] == "start_guard"
@@ -540,7 +542,8 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
     built and no Worker exists.
     """
 
-    import so101_demo.cli.macos_two_worker_campaign as cli
+    from so101_demo.cli.macos_campaign import drive as cli_drive
+    from so101_demo.cli.macos_campaign import guard as cli_guard
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
@@ -548,9 +551,9 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
         result = run_campaign_start_guard(policy=kwargs["policy"], batch_id=kwargs["batch_id"],
                                           worker_count=kwargs["worker_count"], probe=None,
                                           state_root=_state_root(tmp_path))
-        return cli.guard_document(result), result
+        return cli_guard.guard_document(result), result
 
-    monkeypatch.setattr(cli, "run_guard_phase", refused_guard_phase)
+    monkeypatch.setattr(cli_guard, "run_guard_phase", refused_guard_phase)
 
     point_ids = ("task_start", "cup_test_forward_5cm", "cup_test_left_5cm",
                  "cup_test_right_5cm")
@@ -566,8 +569,8 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
                                  selected_point_ids=point_ids, evidence_root=tmp_path)
     document: dict = {"status": "PENDING"}
 
-    code = cli._drive_campaign(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
-                               cli.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
+    code = cli_drive._drive_campaign(arguments, ["--config", str(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG)], plan,
+                               cli_guard.route_spec("MPS_SINGLE_WORKER_FIRST_PASS"), document)
 
     assert code == 4
     assert document["status"] == "REFUSED" and document["stage"] == "start_guard"

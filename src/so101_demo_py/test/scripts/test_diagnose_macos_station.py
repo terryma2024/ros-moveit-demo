@@ -19,6 +19,11 @@ from types import SimpleNamespace
 
 import pytest
 from paths import REPOSITORY
+from so101_demo.cli.macos_station import contracts as macos_station_contracts
+from so101_demo.cli.macos_station import diagnostic_run as macos_station_diagnostic_run
+from so101_demo.cli.macos_station import farm_contract as macos_station_farm_contract
+from so101_demo.cli.macos_station import farm_run as macos_station_farm_run
+from so101_demo.cli.macos_station import observation as macos_station_observation
 
 
 def _diagnostic_module():
@@ -47,7 +52,7 @@ _ACTIONS = {
 
 
 def _observation(module, *, visible: bool, completed: bool, controllers=None):
-    return module.DirectControllerObservation(
+    return macos_station_contracts.DirectControllerObservation(
         service_visible=visible,
         call_completed=completed,
         controllers=controllers if controllers is not None else {},
@@ -63,7 +68,7 @@ def _observation(module, *, visible: bool, completed: bool, controllers=None):
 
 def test_station_phases_are_the_closed_design_set() -> None:
     module = _diagnostic_module()
-    assert [phase.value for phase in module.StationPhase] == [
+    assert [phase.value for phase in macos_station_contracts.StationPhase] == [
         "PLUGIN_RESOLVED",
         "SIMULATION_ENDPOINT_READY",
         "HARDWARE_INITIALIZING",
@@ -76,19 +81,19 @@ def test_station_phases_are_the_closed_design_set() -> None:
 def test_the_legacy_three_closed_modes_resolve() -> None:
     module = _diagnostic_module()
     assert (
-        module.resolve_mode("MINIMAL_CONTROLLER_MANAGER")
-        is module.StationMode.MINIMAL_CONTROLLER_MANAGER
+        macos_station_observation.resolve_mode("MINIMAL_CONTROLLER_MANAGER")
+        is macos_station_contracts.StationMode.MINIMAL_CONTROLLER_MANAGER
     )
     assert (
-        module.resolve_mode("ROBOT_SYSTEM_CONTROLLER_MANAGER")
-        is module.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER
+        macos_station_observation.resolve_mode("ROBOT_SYSTEM_CONTROLLER_MANAGER")
+        is macos_station_contracts.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER
     )
     assert (
-        module.resolve_mode("FULL_TASK_STATION")
-        is module.StationMode.FULL_TASK_STATION
+        macos_station_observation.resolve_mode("FULL_TASK_STATION")
+        is macos_station_contracts.StationMode.FULL_TASK_STATION
     )
-    with pytest.raises(module.StationDiagnosticError) as error:
-        module.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
+    with pytest.raises(macos_station_contracts.StationDiagnosticError) as error:
+        macos_station_observation.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
     assert error.value.code == "STATION_LAUNCH_MODE_UNSUPPORTED"
 
 
@@ -108,7 +113,7 @@ def test_full_station_readiness_uses_manifest_python_and_installed_entrypoint(
         semantic=SimpleNamespace(python_executable=Path("/venv/bin/python")),
     )
 
-    assert module._readiness_argv(manifest) == (
+    assert macos_station_diagnostic_run._readiness_argv(manifest) == (
         "/venv/bin/python",
         str(executable),
         "--timeout-s",
@@ -116,19 +121,19 @@ def test_full_station_readiness_uses_manifest_python_and_installed_entrypoint(
     )
 
     manifest.closure.inventory.clear()
-    with pytest.raises(module.StationDiagnosticError, match="READINESS_EXECUTABLE"):
-        module._readiness_argv(manifest)
+    with pytest.raises(macos_station_contracts.StationDiagnosticError, match="READINESS_EXECUTABLE"):
+        macos_station_diagnostic_run._readiness_argv(manifest)
 
 
 def test_minimal_mode_never_loads_the_robot_system(tmp_path: Path) -> None:
     module = _diagnostic_module()
-    minimal = module.station_argv(
-        module.StationMode.MINIMAL_CONTROLLER_MANAGER,
+    minimal = macos_station_observation.station_argv(
+        macos_station_contracts.StationMode.MINIMAL_CONTROLLER_MANAGER,
         share_root=tmp_path,
         session_id="session-a",
     )
-    robot_system = module.station_argv(
-        module.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER,
+    robot_system = macos_station_observation.station_argv(
+        macos_station_contracts.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER,
         share_root=tmp_path,
         session_id="session-a",
     )
@@ -152,7 +157,7 @@ def test_full_task_station_argv_is_fixed_and_uses_validated_binding_values(
     scene.write_text("<mujoco/>", encoding="utf-8")
     evidence = tmp_path / "run/evidence"
 
-    argv = module.full_task_station_argv(
+    argv = macos_station_observation.full_task_station_argv(
         session_id="gate-a-session-1",
         task_evidence_root=evidence,
         scene=scene,
@@ -203,7 +208,7 @@ def test_direct_observation_starts_as_soon_as_the_service_is_visible() -> None:
             return Future()
 
     invisible = Client(False)
-    observation = module.observe_direct_controllers(
+    observation = macos_station_observation.observe_direct_controllers(
         invisible,
         request_factory=object,
         spin_until_future_complete=lambda *args, **kwargs: None,
@@ -219,7 +224,7 @@ def test_direct_observation_starts_as_soon_as_the_service_is_visible() -> None:
     assert observation.observed_monotonic_ns == 1_000
 
     visible = Client(True)
-    observation = module.observe_direct_controllers(
+    observation = macos_station_observation.observe_direct_controllers(
         visible,
         request_factory=object,
         spin_until_future_complete=lambda *args, **kwargs: None,
@@ -273,7 +278,7 @@ def test_direct_observation_completes_with_the_controller_states() -> None:
     def spin(*args, **kwargs):
         spin_calls.append((args, kwargs))
 
-    pending = module.observe_direct_controllers(
+    pending = macos_station_observation.observe_direct_controllers(
         client,
         request_factory=object,
         spin_until_future_complete=spin,
@@ -285,7 +290,7 @@ def test_direct_observation_completes_with_the_controller_states() -> None:
     assert pending.controllers == {}
 
     client.future.complete = True
-    completed = module.observe_direct_controllers(
+    completed = macos_station_observation.observe_direct_controllers(
         client,
         request_factory=object,
         spin_until_future_complete=spin,
@@ -311,32 +316,32 @@ def test_direct_observation_completes_with_the_controller_states() -> None:
 def test_classification_separates_invisibility_timeout_and_moveit_gaps() -> None:
     module = _diagnostic_module()
 
-    invisible_phase, invisible_code = module.classify_observation(
+    invisible_phase, invisible_code = macos_station_observation.classify_observation(
         _observation(module, visible=False, completed=False),
         moveit_services=_SERVICES,
         moveit_actions=_ACTIONS,
     )
-    timeout_phase, timeout_code = module.classify_observation(
+    timeout_phase, timeout_code = macos_station_observation.classify_observation(
         _observation(module, visible=True, completed=False),
         moveit_services=_SERVICES,
         moveit_actions=_ACTIONS,
     )
-    inactive_phase, inactive_code = module.classify_observation(
+    inactive_phase, inactive_code = macos_station_observation.classify_observation(
         _observation(module, visible=True, completed=True, controllers={}),
         moveit_services=_SERVICES,
         moveit_actions=_ACTIONS,
     )
-    service_phase, service_code = module.classify_observation(
+    service_phase, service_code = macos_station_observation.classify_observation(
         _observation(module, visible=True, completed=True, controllers=_ACTIVE),
         moveit_services={"/apply_planning_scene": True, "/get_planning_scene": False},
         moveit_actions=_ACTIONS,
     )
-    action_phase, action_code = module.classify_observation(
+    action_phase, action_code = macos_station_observation.classify_observation(
         _observation(module, visible=True, completed=True, controllers=_ACTIVE),
         moveit_services=_SERVICES,
         moveit_actions={"/execute_trajectory": False},
     )
-    ready_phase, ready_code = module.classify_observation(
+    ready_phase, ready_code = macos_station_observation.classify_observation(
         _observation(module, visible=True, completed=True, controllers=_ACTIVE),
         moveit_services=_SERVICES,
         moveit_actions=_ACTIONS,
@@ -357,54 +362,54 @@ def test_classification_separates_invisibility_timeout_and_moveit_gaps() -> None
             action_code,
         }
     ) == 5
-    assert invisible_phase is module.StationPhase.HARDWARE_INITIALIZING
-    assert timeout_phase is module.StationPhase.CONTROLLER_MANAGER_SERVICES_READY
-    assert inactive_phase is module.StationPhase.CONTROLLER_MANAGER_SERVICES_READY
-    assert service_phase is module.StationPhase.CONTROLLERS_ACTIVE
-    assert action_phase is module.StationPhase.CONTROLLERS_ACTIVE
-    assert ready_phase is module.StationPhase.CONTROLLERS_ACTIVE
+    assert invisible_phase is macos_station_contracts.StationPhase.HARDWARE_INITIALIZING
+    assert timeout_phase is macos_station_contracts.StationPhase.CONTROLLER_MANAGER_SERVICES_READY
+    assert inactive_phase is macos_station_contracts.StationPhase.CONTROLLER_MANAGER_SERVICES_READY
+    assert service_phase is macos_station_contracts.StationPhase.CONTROLLERS_ACTIVE
+    assert action_phase is macos_station_contracts.StationPhase.CONTROLLERS_ACTIVE
+    assert ready_phase is macos_station_contracts.StationPhase.CONTROLLERS_ACTIVE
 
 
 def test_phase_deadlines_are_independent_and_expire_separately() -> None:
     module = _diagnostic_module()
     marks = {
-        module.StationPhase.PLUGIN_RESOLVED: 1_000,
-        module.StationPhase.SIMULATION_ENDPOINT_READY: 2_000,
-        module.StationPhase.HARDWARE_INITIALIZING: 3_000,
+        macos_station_contracts.StationPhase.PLUGIN_RESOLVED: 1_000,
+        macos_station_contracts.StationPhase.SIMULATION_ENDPOINT_READY: 2_000,
+        macos_station_contracts.StationPhase.HARDWARE_INITIALIZING: 3_000,
     }
-    deadlines = module.phase_deadlines(
+    deadlines = macos_station_observation.phase_deadlines(
         marks=marks,
         started_monotonic_ns=0,
-        now_monotonic_ns=module.HARDWARE_INITIALIZING_BUDGET_NS + 4_000,
+        now_monotonic_ns=macos_station_contracts.HARDWARE_INITIALIZING_BUDGET_NS + 4_000,
     )
     by_phase = {record.phase: record for record in deadlines}
-    assert [record.phase for record in deadlines] == list(module.StationPhase)
-    assert by_phase[module.StationPhase.PLUGIN_RESOLVED].observed_monotonic_ns == 1_000
-    assert by_phase[module.StationPhase.PLUGIN_RESOLVED].expired is False
-    assert by_phase[module.StationPhase.HARDWARE_INITIALIZING].observed_monotonic_ns == 3_000
-    assert by_phase[module.StationPhase.HARDWARE_INITIALIZING].expired is False
-    assert by_phase[module.StationPhase.HARDWARE_READY].observed_monotonic_ns is None
-    assert by_phase[module.StationPhase.HARDWARE_READY].expired is True
-    assert by_phase[module.StationPhase.HARDWARE_READY].deadline_monotonic_ns == (
-        3_000 + module.HARDWARE_READY_BUDGET_NS
+    assert [record.phase for record in deadlines] == list(macos_station_contracts.StationPhase)
+    assert by_phase[macos_station_contracts.StationPhase.PLUGIN_RESOLVED].observed_monotonic_ns == 1_000
+    assert by_phase[macos_station_contracts.StationPhase.PLUGIN_RESOLVED].expired is False
+    assert by_phase[macos_station_contracts.StationPhase.HARDWARE_INITIALIZING].observed_monotonic_ns == 3_000
+    assert by_phase[macos_station_contracts.StationPhase.HARDWARE_INITIALIZING].expired is False
+    assert by_phase[macos_station_contracts.StationPhase.HARDWARE_READY].observed_monotonic_ns is None
+    assert by_phase[macos_station_contracts.StationPhase.HARDWARE_READY].expired is True
+    assert by_phase[macos_station_contracts.StationPhase.HARDWARE_READY].deadline_monotonic_ns == (
+        3_000 + macos_station_contracts.HARDWARE_READY_BUDGET_NS
     )
 
 
 def test_report_is_json_safe_and_carries_the_observation_identity() -> None:
     module = _diagnostic_module()
-    observation = module.DirectControllerObservation(
+    observation = macos_station_contracts.DirectControllerObservation(
         service_visible=True,
         call_completed=True,
         controllers=_ACTIVE,
         ros_domain_id=41,
         observed_monotonic_ns=5_000,
     )
-    report = module.build_station_report(
-        mode=module.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER,
+    report = macos_station_observation.build_station_report(
+        mode=macos_station_contracts.StationMode.ROBOT_SYSTEM_CONTROLLER_MANAGER,
         ros_domain_id=41,
         observation=observation,
-        phases=module.phase_deadlines(
-            marks={module.StationPhase.PLUGIN_RESOLVED: 1_000},
+        phases=macos_station_observation.phase_deadlines(
+            marks={macos_station_contracts.StationPhase.PLUGIN_RESOLVED: 1_000},
             started_monotonic_ns=900,
             now_monotonic_ns=5_000,
         ),
@@ -427,7 +432,7 @@ def test_report_is_json_safe_and_carries_the_observation_identity() -> None:
     assert document["loaded_images"] == ["/prefix/lib/libmujoco_ros2_control.dylib"]
     assert document["failure_code"] is None
     assert [entry["phase"] for entry in document["phases"]] == [
-        phase.value for phase in module.StationPhase
+        phase.value for phase in macos_station_contracts.StationPhase
     ]
 
 
@@ -440,17 +445,17 @@ def test_cli_requires_a_closed_mode_and_rejects_arbitrary_launch_argv() -> None:
     module = _diagnostic_module()
 
     with pytest.raises(SystemExit):
-        module.parse_arguments([])
+        macos_station_diagnostic_run.parse_arguments([])
 
     with pytest.raises(SystemExit):
-        module.parse_arguments(
+        macos_station_diagnostic_run.parse_arguments(
             ["--mode", "MINIMAL_CONTROLLER_MANAGER", "--launch-argv", "rm -rf /"]
         )
 
-    options = module.parse_arguments(
+    options = macos_station_diagnostic_run.parse_arguments(
         ["--mode", "MINIMAL_CONTROLLER_MANAGER", "--timeout-s", "12.5"]
     )
-    assert options.mode is module.StationMode.MINIMAL_CONTROLLER_MANAGER
+    assert options.mode is macos_station_contracts.StationMode.MINIMAL_CONTROLLER_MANAGER
     assert options.timeout_s == 12.5
 
 
@@ -458,9 +463,9 @@ def test_full_task_station_cli_requires_manifest_binding_and_control() -> None:
     module = _diagnostic_module()
 
     with pytest.raises(SystemExit):
-        module.parse_arguments(["--mode", "FULL_TASK_STATION"])
+        macos_station_diagnostic_run.parse_arguments(["--mode", "FULL_TASK_STATION"])
 
-    options = module.parse_arguments(
+    options = macos_station_diagnostic_run.parse_arguments(
         [
             "--mode",
             "FULL_TASK_STATION",
@@ -478,7 +483,7 @@ def test_full_task_station_cli_requires_manifest_binding_and_control() -> None:
 def test_cli_rejects_a_negative_timeout() -> None:
     module = _diagnostic_module()
     with pytest.raises(SystemExit):
-        module.parse_arguments(["--mode", "MINIMAL_CONTROLLER_MANAGER", "--timeout-s", "0"])
+        macos_station_diagnostic_run.parse_arguments(["--mode", "MINIMAL_CONTROLLER_MANAGER", "--timeout-s", "0"])
 
 
 def test_station_robot_description_renders_the_shared_urdf(tmp_path: Path) -> None:
@@ -507,7 +512,7 @@ def test_station_robot_description_renders_the_shared_urdf(tmp_path: Path) -> No
     scene = assets / "scene.xml"
     scene.write_text("<mujoco/>", encoding="utf-8")
 
-    rendered = module.station_robot_description(share)
+    rendered = macos_station_observation.station_robot_description(share)
 
     assert "@SO101_" not in rendered
     assert str(scene) in rendered
@@ -547,7 +552,7 @@ def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
     (install / "opt/mujoco_vendor/lib").mkdir(parents=True)
     (install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib").write_bytes(b"vendor-bytes")
 
-    paths = module.FixedFarmRuntimePaths(
+    paths = macos_station_farm_contract.FixedFarmRuntimePaths(
         ros_root=filesystem_root / "opt/ros/jazzy",
         ros_install=filesystem_root / "opt/ros/jazzy/install",
         ros_dependency_overlay=filesystem_root / "opt/ros/jazzy/extra_ws/install",
@@ -562,7 +567,7 @@ def _farm_fixture(tmp_path: Path, *, project_install: Path | None = None):
         ros_home=filesystem_root / "opt/data/so101/ros-home",
         ros_log_dir=filesystem_root / "opt/data/so101/ros-logs",
     )
-    entries, manifest_sha256 = module._farm_library_inventory(paths.dylib_farm)
+    entries, manifest_sha256 = macos_station_farm_contract._farm_library_inventory(paths.dylib_farm)
     assert entries
     receipt = {
         "status": "PASS",
@@ -653,11 +658,11 @@ def _farm_kwargs(hooks):
 def test_each_closed_mode_resolves_and_arbitrary_modes_do_not() -> None:
     module = _diagnostic_module()
     assert (
-        module.resolve_mode("FIXED_DYLIB_FARM_FULL_TASK_STATION")
-        is module.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
+        macos_station_observation.resolve_mode("FIXED_DYLIB_FARM_FULL_TASK_STATION")
+        is macos_station_contracts.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
     )
-    with pytest.raises(module.StationDiagnosticError) as error:
-        module.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
+    with pytest.raises(macos_station_contracts.StationDiagnosticError) as error:
+        macos_station_observation.resolve_mode("ARBITRARY_CONTROLLER_MANAGER")
     assert error.value.code == "STATION_LAUNCH_MODE_UNSUPPORTED"
 
 
@@ -665,9 +670,9 @@ def test_farm_mode_requires_receipt_binding_and_output_and_refuses_legacy_argume
     module = _diagnostic_module()
 
     with pytest.raises(SystemExit):
-        module.parse_arguments(["--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION"])
+        macos_station_diagnostic_run.parse_arguments(["--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION"])
     with pytest.raises(SystemExit):
-        module.parse_arguments(
+        macos_station_diagnostic_run.parse_arguments(
             [
                 "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
                 "--farm-contract-receipt", "/tmp/doctor.json",
@@ -675,7 +680,7 @@ def test_farm_mode_requires_receipt_binding_and_output_and_refuses_legacy_argume
             ]
         )
     with pytest.raises(SystemExit):
-        module.parse_arguments(
+        macos_station_diagnostic_run.parse_arguments(
             [
                 "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
                 "--farm-contract-receipt", "/tmp/doctor.json",
@@ -684,7 +689,7 @@ def test_farm_mode_requires_receipt_binding_and_output_and_refuses_legacy_argume
                 "--control", "N",
             ]
         )
-    options = module.parse_arguments(
+    options = macos_station_diagnostic_run.parse_arguments(
         [
             "--mode", "FIXED_DYLIB_FARM_FULL_TASK_STATION",
             "--farm-contract-receipt", "/tmp/doctor.json",
@@ -693,7 +698,7 @@ def test_farm_mode_requires_receipt_binding_and_output_and_refuses_legacy_argume
             "--timeout-s", "180",
         ]
     )
-    assert options.mode is module.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
+    assert options.mode is macos_station_contracts.StationMode.FIXED_DYLIB_FARM_FULL_TASK_STATION
     assert options.output == "/tmp/report.json"
 
 
@@ -701,12 +706,12 @@ def test_farm_round_owns_one_station_tree_and_writes_its_report_before_returning
     tmp_path: Path,
 ) -> None:
     module, paths, receipt_path = _farm_fixture(tmp_path)
-    contract = module.load_fixed_dylib_farm_contract(receipt_path)
+    contract = macos_station_farm_contract.load_fixed_dylib_farm_contract(receipt_path)
     binding_path = _farm_binding(tmp_path, module, receipt_path, contract)
     hooks = _farm_round_hooks(module, paths.project_install)
     output = tmp_path / "station-report.json"
 
-    rc = module.run_fixed_dylib_farm_full_task_station(
+    rc = macos_station_farm_run.run_fixed_dylib_farm_full_task_station(
         farm_contract_receipt=receipt_path,
         run_binding_path=binding_path,
         output_path=output,
@@ -744,14 +749,14 @@ def test_farm_round_refuses_a_drifted_receipt_before_spawning(tmp_path: Path) ->
     output = tmp_path / "station-report.json"
     hooks = _farm_round_hooks(module, paths.project_install)
 
-    with pytest.raises(module.StationDiagnosticError) as error:
-        module.load_fixed_dylib_farm_contract(receipt_path)
+    with pytest.raises(macos_station_contracts.StationDiagnosticError) as error:
+        macos_station_farm_contract.load_fixed_dylib_farm_contract(receipt_path)
     assert error.value.code == "FARM_MANIFEST_DRIFT"
 
     # The runner itself reports the refusal instead of raising, with no spawn at all.
-    contract = module.load_fixed_dylib_farm_contract(
+    contract = macos_station_farm_contract.load_fixed_dylib_farm_contract(
         _farm_fixture(tmp_path / "second")[2])
-    rc = module.run_fixed_dylib_farm_full_task_station(
+    rc = macos_station_farm_run.run_fixed_dylib_farm_full_task_station(
         farm_contract_receipt=receipt_path,
         run_binding_path=_farm_binding(tmp_path, module, receipt_path, contract),
         output_path=output,
@@ -771,7 +776,7 @@ def test_farm_round_still_writes_a_report_and_cleans_up_when_it_is_not_ready(
     tmp_path: Path,
 ) -> None:
     module, paths, receipt_path = _farm_fixture(tmp_path)
-    contract = module.load_fixed_dylib_farm_contract(receipt_path)
+    contract = macos_station_farm_contract.load_fixed_dylib_farm_contract(receipt_path)
     binding_path = _farm_binding(tmp_path, module, receipt_path, contract)
     hooks = _farm_round_hooks(module, paths.project_install)
     readiness = paths.project_install / "lib/so101_demo_py/motion_stack_ready"
@@ -779,7 +784,7 @@ def test_farm_round_still_writes_a_report_and_cleans_up_when_it_is_not_ready(
     readiness.chmod(0o755)
     output = tmp_path / "station-report.json"
 
-    rc = module.run_fixed_dylib_farm_full_task_station(
+    rc = macos_station_farm_run.run_fixed_dylib_farm_full_task_station(
         farm_contract_receipt=receipt_path,
         run_binding_path=binding_path,
         output_path=output,
@@ -809,12 +814,12 @@ def test_farm_environment_is_the_same_builder_as_the_runtime_contract_tool() -> 
     sys.modules["so101_macos_runtime_contract"] = contract_tool
     spec.loader.exec_module(contract_tool)
 
-    ours = module.FixedFarmRuntimePaths.production().environment(7)
+    ours = macos_station_farm_contract.FixedFarmRuntimePaths.production().environment(7)
     theirs = contract_tool.build_runtime_environment(
         contract_tool.RuntimePaths.production(repository_root), ros_domain_id=7)
 
     assert ours == theirs
-    assert module.FARM_CLOSURE_PREFIXES == contract_tool.FIXED_CLOSURE_PREFIXES
+    assert macos_station_contracts.FARM_CLOSURE_PREFIXES == contract_tool.FIXED_CLOSURE_PREFIXES
     assert set(ours) == {
         "HOME", "PATH", "VIRTUAL_ENV", "PYTHONNOUSERSITE", "TMPDIR", "TMP", "TEMP",
         "ROS_HOME", "ROS_LOG_DIR", "ROS_DOMAIN_ID", "DYLD_LIBRARY_PATH",

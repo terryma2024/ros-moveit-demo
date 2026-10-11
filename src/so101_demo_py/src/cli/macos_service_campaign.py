@@ -537,7 +537,7 @@ def adapter_start_guard(route: AdapterRoute, arguments, *, guard=None,
     never reused - there is no cache here to reuse. The returned document is the audit record.
     """
 
-    from so101_demo.cli.macos_two_worker_campaign import guard_document
+    from so101_demo.cli.macos_campaign.guard import guard_document
 
     environment = os.environ if environment is None else environment
     runner = guard or run_campaign_start_guard

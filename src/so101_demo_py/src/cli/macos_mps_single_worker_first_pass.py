@@ -23,7 +23,13 @@ from ..parallel_batch.single_worker_composition import (
     MPS_SINGLE_WORKER_FIRST_PASS,
     SINGLE_WORKER_FIRST_PASS_BATCH_KIND,
 )
-from .macos_two_worker_campaign import build_single_worker_parser, campaign_verdict, main_single_worker, route_spec, run_single_worker
+from so101_demo.cli.macos_campaign.guard import route_spec
+from so101_demo.cli.macos_campaign.selection import campaign_verdict
+from so101_demo.cli.macos_two_worker_campaign import (
+    build_single_worker_parser,
+    main_single_worker,
+    run_single_worker,
+)
 
 #: The one route this entry point executes. Named so a caller can check it without parsing argv.
 EXECUTION_PROFILE = MPS_SINGLE_WORKER_FIRST_PASS

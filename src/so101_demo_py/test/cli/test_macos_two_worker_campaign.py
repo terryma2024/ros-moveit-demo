@@ -311,7 +311,7 @@ def test_worker_leases_and_bindings_use_the_ids_the_worker_derives(tmp_path: Pat
 
     import json
 
-    from so101_demo.cli.macos_two_worker_campaign import bind_worker_requests, build_worker_leases
+    from so101_demo.cli.macos_campaign.journal import bind_worker_requests, build_worker_leases
     from so101_demo.parallel_batch.queue import DurablePointQueue
     from so101_demo.parallel_batch.selection import build_first_pass_selection
     from so101_demo.parallel_batch.two_worker_composition import exact_two_worker_slots
@@ -396,7 +396,8 @@ def test_admission_rule_refuses_unknown_duplicate_and_tampered_requests() -> Non
 
     import json
 
-    from so101_demo.cli.macos_two_worker_campaign import IMPLEMENTED_OPERATIONS, admission_decision
+    from so101_demo.cli.macos_campaign.admission import admission_decision
+    from so101_demo.cli.macos_campaign.journal import IMPLEMENTED_OPERATIONS
 
     bound = "a" * 64
     good = json.dumps({"input_sha256": bound})
@@ -445,7 +446,7 @@ def test_per_slot_summary_reads_a_synthetic_evidence_tree(tmp_path: Path) -> Non
 
     import json
 
-    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_campaign.journal import summarize_per_slot_pick_place
 
     def write(path: Path, payload) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -497,7 +498,7 @@ def test_a_retry_batch_summary_reports_the_point_it_executed(tmp_path: Path) -> 
     The tree below is the recorded one, field for field.
     """
 
-    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_campaign.journal import summarize_per_slot_pick_place
 
     root = tmp_path
     batch = root / "worker-01-station/sample_05_near_center-attempt-1/pick/batches/retry-001"
@@ -545,7 +546,7 @@ def test_a_summary_lists_every_executed_point_and_nothing_for_an_unrun_batch(tmp
     terminal document is a station artefact, not an execution, and is not listed.
     """
 
-    from so101_demo.cli.macos_two_worker_campaign import summarize_per_slot_pick_place
+    from so101_demo.cli.macos_campaign.journal import summarize_per_slot_pick_place
 
     root = tmp_path
 
@@ -609,7 +610,7 @@ def test_campaign_verdict_requires_the_happy_path_and_no_refusals() -> None:
     unexecuted, duplicated, unselected or infrastructure-failed point, reads INCOMPLETE.
     """
 
-    from so101_demo.cli.macos_two_worker_campaign import campaign_status
+    from so101_demo.cli.macos_campaign.selection import campaign_status
 
     good = dict(cleanup_complete=True, results=[{}, {}],
                 workers=[{"worker_id": "worker-01", "status": "ACTIVE"},
@@ -647,7 +648,7 @@ def test_campaign_cli_exposes_the_fault_switches_with_safe_defaults() -> None:
     this session hit twice - so the names and the off-by-default values are pinned here.
     """
 
-    from so101_demo.cli.macos_two_worker_campaign import build_parser
+    from so101_demo.cli.macos_campaign.admission import build_parser
 
     parser = build_parser()
     options = parser.parse_args([
@@ -710,8 +711,10 @@ def test_campaign_binds_the_selection_and_queue_it_executes(tmp_path):
 def test_campaign_journal_publishes_committed_watermarks(tmp_path):
     """The macOS campaign's standard events are durable *and* watermarked before they are ACKed."""
 
-    from so101_demo.cli.macos_two_worker_campaign import (
-        commit_campaign_terminal, open_campaign_journal)
+    from so101_demo.cli.macos_campaign.journal import (
+        commit_campaign_terminal,
+        open_campaign_journal,
+    )
     from so101_demo.parallel_batch.journal import (
         CoordinatorJournal, JournalCorruption)
 
