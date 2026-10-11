@@ -1308,7 +1308,6 @@ def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path)
     commands the neck actuator, applies the declared settle rule and reads the camera's own geometry.
     """
 
-    from so101_demo.act import head_search_deadband_measurement as measurement
     from so101_demo.act.head_search_deadband_measurement import plant as measurement_plant
 
     inputs = _deadband_inputs(tmp_path)
@@ -1431,7 +1430,6 @@ def test_measure_deadband_candidates_refuses_a_missing_input_an_existing_output_
 def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: Path, capsys, monkeypatch) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
-    from so101_demo.act import head_search_deadband_measurement as measurement
     from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
 
     class Plant:
@@ -1502,7 +1500,7 @@ def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: P
 
     monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", Plant)
     monkeypatch.setattr(
-        measurement,
+        measurement_writer,
         "build_production_head_detector",
         lambda **kwargs: Detector(None),
     )
@@ -1530,7 +1528,6 @@ def test_measure_deadband_candidates_prints_the_librarys_refusal_and_returns_two
 ) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
-    from so101_demo.act import head_search_deadband_measurement as measurement
     from so101_demo.act.head_search_deadband_measurement import contracts as measurement_contracts
     from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
 

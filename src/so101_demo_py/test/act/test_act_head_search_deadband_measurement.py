@@ -12,7 +12,6 @@ import json
 import math
 
 import pytest
-from so101_demo.act import head_search_deadband_measurement as module
 from so101_demo.act.head_search_deadband_measurement import contracts as module_contracts
 from so101_demo.act.head_search_deadband_measurement import writer as module_writer
 from so101_demo.act.head_search_search_params import LOCK_FRAMES
@@ -37,6 +36,7 @@ from so101_demo.act.head_search_deadband_measurement.writer import (
     write_head_search_deadband_measurement,
 )
 from so101_demo.act.head_search_timing_measurement.contracts import (
+    FRAME_RATE_HZ,
     CAL_TIMING_EVIDENCE_CONTRADICTORY,
     CAL_TIMING_EVIDENCE_MISSING,
     CAL_TIMING_STOP_UNSETTLED,
@@ -875,7 +875,7 @@ def _sealed_inputs(tmp_path):
     weights_path.write_bytes(b"weights")
     frozen = {
         "candidate_id": "C",
-        "weight_sha256": module._digest(weights_path),
+        "weight_sha256": module_writer._digest(weights_path),
         "operating_points": {"head": {"min_confidence": 0.25, "tracker": {"iou": 0.5}}},
     }
     scene = tmp_path / "head_search_scene.xml"
@@ -896,10 +896,10 @@ def _sealed_inputs(tmp_path):
 def _producer(tmp_path, *, candidates=(18.0, 2.0), plant_factory=None, detector_factory=None, **kwargs):
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_writer._digest(scene)
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
     production_document = json.loads(production.read_text(encoding="utf-8"))
-    production_document["weight_sha256"] = module._digest(weights)
+    production_document["weight_sha256"] = module_writer._digest(weights)
     production.write_text(json.dumps(production_document), encoding="utf-8")
 
     def default_plant(request):
@@ -926,9 +926,9 @@ def _patch_scene_declaration(monkeypatch, tmp_path):
     """The sealed scene is a stub here: the declaration reader is the MuJoCo module's own."""
 
     monkeypatch.setattr(
-        module,
+        module_writer,
         "read_mujoco_timestep",
-        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module._digest(path)},
+        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module_writer._digest(path)},
     )
     monkeypatch.setattr(module_writer, "_cuda_available", lambda: True)
 
@@ -985,7 +985,7 @@ def test_the_producer_refuses_weights_the_sealed_configuration_does_not_declare(
     # the scene and the frozen candidate are pinned correctly, so the only thing left to disagree is
     # the weight the sealed production configuration declares
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_writer._digest(scene)
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
 
     with pytest.raises(CalibrationDeadbandMeasurementRefused) as refusal:
@@ -1007,7 +1007,7 @@ def test_the_producer_refuses_a_scene_the_sealed_geometry_does_not_pin(tmp_path,
     _patch_scene_declaration(monkeypatch, tmp_path)
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     production_document = json.loads(production.read_text(encoding="utf-8"))
-    production_document["weight_sha256"] = module._digest(weights)
+    production_document["weight_sha256"] = module_writer._digest(weights)
     production.write_text(json.dumps(production_document), encoding="utf-8")
 
     with pytest.raises(CalibrationDeadbandMeasurementRefused) as refusal:
@@ -1047,11 +1047,11 @@ def test_the_producer_refuses_an_anchor_whose_start_is_outside_the_motion_corrid
     _patch_scene_declaration(monkeypatch, tmp_path)
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_writer._digest(scene)
     seal_document["in_frame_matrix"]["left"]["neck_start_rad"] = 1.5
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
     production_document = json.loads(production.read_text(encoding="utf-8"))
-    production_document["weight_sha256"] = module._digest(weights)
+    production_document["weight_sha256"] = module_writer._digest(weights)
     production.write_text(json.dumps(production_document), encoding="utf-8")
 
     with pytest.raises(CalibrationDeadbandMeasurementRefused) as refusal:
@@ -1072,17 +1072,17 @@ def test_the_producer_refuses_an_anchor_whose_start_is_outside_the_motion_corrid
 
 def test_the_producer_refuses_a_declared_cuda_device_without_one(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        module,
+        module_writer,
         "read_mujoco_timestep",
-        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module._digest(path)},
+        lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module_writer._digest(path)},
     )
     monkeypatch.setattr(module_writer, "_cuda_available", lambda: False)
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
-    seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
+    seal_document["source_digests"]["scene_sha256"] = module_writer._digest(scene)
     seal.write_text(json.dumps(seal_document), encoding="utf-8")
     production_document = json.loads(production.read_text(encoding="utf-8"))
-    production_document["weight_sha256"] = module._digest(weights)
+    production_document["weight_sha256"] = module_writer._digest(weights)
     production.write_text(json.dumps(production_document), encoding="utf-8")
 
     with pytest.raises(CalibrationDeadbandMeasurementRefused) as refusal:
@@ -1115,4 +1115,4 @@ def test_the_lock_rule_is_declared_with_its_reversal_definition(tmp_path, monkey
     assert "three consecutive frames" in document["lock_rule"]
     assert "correction" in document["reversal_definition"]
     assert document["reversal_definition"] == module_contracts.REVERSAL_DEFINITION
-    assert document["frame_rate_hz"] == module.FRAME_RATE_HZ
+    assert document["frame_rate_hz"] == FRAME_RATE_HZ
