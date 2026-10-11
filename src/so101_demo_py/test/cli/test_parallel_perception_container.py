@@ -138,7 +138,7 @@ def test_batch_specific_mounts_identity_and_gpu_groups(tmp_path, name):
 
 def test_explicit_same_user_batch_ipc_root_can_host_broker_runtime(tmp_path):
     from so101_demo.cli.parallel_perception_broker import container_run_argv
-    from so101_demo.parallel_batch.resources import runtime_ipc_base
+    from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
 
     root = tmp_path / 'batch'
     root.mkdir(mode=0o700)
@@ -183,7 +183,7 @@ def test_external_broker_runtime_rejects_cross_batch_or_wrong_generation(
     tmp_path, runtime_ipc_root, runtime_root, generation
 ):
     from so101_demo.cli.parallel_perception_broker import container_run_argv
-    from so101_demo.parallel_batch.resources import runtime_ipc_base
+    from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
 
     root = tmp_path / 'batch'
     root.mkdir(mode=0o700)

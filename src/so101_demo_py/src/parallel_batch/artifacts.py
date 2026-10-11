@@ -18,9 +18,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import ClassVar, Mapping
 
-from .contracts import (
-    AttemptIdentity, AttemptStatus, LeaseIdentity, RunMode, ValidationIdentity,
-    ValidationStatus,
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode, ValidationStatus
+from so101_demo.parallel_batch.contracts.identity import (
+    AttemptIdentity,
+    LeaseIdentity,
+    ValidationIdentity,
 )
 from ..runtime.task_artifacts import atomic_json, fsync_directory
 

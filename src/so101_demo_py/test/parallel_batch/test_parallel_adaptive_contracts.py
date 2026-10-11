@@ -32,7 +32,7 @@ def test_initial_chunk_is_not_a_capacity_gate(tmp_path):
         AdaptiveBatchRequest,
         load_adaptive_worker_options,
     )
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
 
     request = AdaptiveBatchRequest(
         batch_id="at01",
@@ -204,7 +204,7 @@ def test_adaptive_request_rejects_relative_evidence_root(tmp_path):
         ContractError,
         load_adaptive_worker_options,
     )
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
 
     with pytest.raises(ContractError, match="ABSOLUTE_EVIDENCE_ROOT"):
         AdaptiveBatchRequest(
@@ -244,7 +244,7 @@ def test_adaptive_batch_id_is_a_short_ascii_identifier(tmp_path, batch_id, error
         ContractError,
         load_adaptive_worker_options,
     )
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
 
     with pytest.raises(ContractError, match=error):
         AdaptiveBatchRequest(
@@ -262,7 +262,7 @@ def test_pool_request_accepts_the_generation_scoped_internal_batch_id(tmp_path):
     from so101_demo.parallel_batch.adaptive_contracts import (
         _new_pool_request_for_production_factory,
     )
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
 
     request = _new_pool_request_for_production_factory(
         batch_id="abcde-g01-w08",
@@ -301,7 +301,7 @@ def test_pool_contract_has_no_lifetime_quota(tmp_path):
     from so101_demo.parallel_batch.adaptive_contracts import (
         _new_pool_request_for_production_factory,
     )
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     request = _new_pool_request_for_production_factory(
         batch_id='pool-a', run_mode=RunMode.EXECUTE, selected_point_ids=('p1', 'p2'),
         worker_count=2, evidence_root=tmp_path)

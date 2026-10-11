@@ -8,7 +8,7 @@ from typing import Any
 
 from so101_demo.core.domain import State
 from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
-from so101_demo.parallel_batch.contracts import AttemptStatus, ValidationStatus
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, ValidationStatus
 from so101_demo.runtime.parallel_worker_parts.process_tree import _finite_timestamp
 
 

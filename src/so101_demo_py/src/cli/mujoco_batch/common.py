@@ -11,11 +11,8 @@ from pathlib import Path
 import stat
 from typing import Mapping
 
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity,
-    RunMode,
-    ValidationIdentity,
-)
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity, ValidationIdentity
 
 
 class CliError(RuntimeError):

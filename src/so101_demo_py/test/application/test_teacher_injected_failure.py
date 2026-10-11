@@ -62,7 +62,7 @@ def test_the_injected_failure_ends_in_a_teacher_error_manifest_that_validates_wi
     """Pinned to the live verdict of p11 (injected case f6bc2e3d): validate -> FAILED, e2e -> UNCONFIRMED with exactly one failure."""
     from test_dynamic_manifest_teacher import teacher_error, validate
     from so101_demo.application import e2e_acceptance as e2e
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     document = teacher_error("LIFT", failure=f"{CODE}: diagnostic injection", attached=True)
     assert validate(document, "ERROR") is AttemptStatus.FAILED
     assert not any(item.startswith("RECOVER_") for item in document["state_trace"]) and document["state_trace"][-2:] == ["LIFT", "ERROR"]

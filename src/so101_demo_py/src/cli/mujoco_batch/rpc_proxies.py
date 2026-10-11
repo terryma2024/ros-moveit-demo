@@ -15,23 +15,19 @@ from so101_demo.parallel_batch.adaptive_pool import (
     WorkerReadinessReceipt,
 )
 from so101_demo.parallel_batch.broker import BrokerResponse
-from so101_demo.parallel_batch.contracts import (
-    ExecutionKind,
+from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, WorkerState
+from so101_demo.parallel_batch.contracts.identity import (
     InferenceRequest,
     LeaseIdentity,
-    ModelOutcome,
     NormalizedInferenceResponseIdentity,
-    WorkerState,
-    teacher_execution_bound_s,
 )
-from so101_demo.parallel_batch.resources import (
+from so101_demo.parallel_batch.contracts.linux_cuda import teacher_execution_bound_s
+from so101_demo.parallel_batch.resource_allocation.manifest import (
     ResourceManifest,
     StartGuardAdmission,
-    WorkerResources,
 )
-from so101_demo.parallel_batch.worker import (
-    LeaseGrantPaused,
-)
+from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
+from so101_demo.parallel_batch.worker_parts.contracts import LeaseGrantPaused
 from so101_demo.runtime.parallel_ipc import (
     BrokerTransport,
     UnixRpcClient,
@@ -230,7 +226,7 @@ class _CoordinatorRpcProxy:
         value = self._call(
             "commit_result", lease=lease, request_key=request_key, location=location
         )
-        from so101_demo.parallel_batch.contracts import AttemptStatus
+        from so101_demo.parallel_batch.contracts.common import AttemptStatus
         value["status"] = AttemptStatus(value["status"])
         return value
 
@@ -238,7 +234,7 @@ class _CoordinatorRpcProxy:
         value = self._call(
             "commit_validation", lease=lease, request_key=request_key, location=location
         )
-        from so101_demo.parallel_batch.contracts import ValidationStatus
+        from so101_demo.parallel_batch.contracts.common import ValidationStatus
         value["status"] = ValidationStatus(value["status"])
         return value
 

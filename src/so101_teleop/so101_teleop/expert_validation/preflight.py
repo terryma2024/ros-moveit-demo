@@ -86,7 +86,7 @@ def _execution_mode_for_worker_count(worker_count: int) -> str:
 def _approved_execution_routes() -> tuple:
     """The shared closed support matrix: the service does not keep a second copy of it."""
 
-    from so101_demo.parallel_batch.contracts import APPROVED_EXECUTION_ROUTES
+    from so101_demo.parallel_batch.contracts.routes import APPROVED_EXECUTION_ROUTES
 
     return APPROVED_EXECUTION_ROUTES
 
@@ -430,7 +430,8 @@ class PreflightEngine:
         them: the combination is not in the table.
         """
 
-        from so101_demo.parallel_batch.contracts import ContractError, resolve_execution_route
+        from so101_demo.parallel_batch.contracts.common import ContractError
+        from so101_demo.parallel_batch.contracts.routes import resolve_execution_route
 
         if request.execution_mode == "ADAPTIVE":
             return [UNSUPPORTED_ON_MACOS]

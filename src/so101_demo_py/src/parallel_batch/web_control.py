@@ -29,7 +29,7 @@ from so101_demo.runtime.unix_address import (
 #: disagree about where an endpoint may live. Mirrored by the teleop supervisor, which imports it.
 CANONICAL_CONTROL_SOCKET_ROOT = Path(f"/private/tmp/so101-control-{os.getuid()}")
 
-from .contracts import BatchKind, BatchRequest
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
 
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")

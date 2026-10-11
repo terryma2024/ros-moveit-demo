@@ -16,7 +16,7 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.utilities import perform_substitutions
 from launch_ros.actions import Node
 
-from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.runtime.launch_composition import common as launch_common
 from so101_demo.runtime.launch_composition import descriptions as launch_descriptions
 from so101_demo.runtime.launch_composition import gazebo_actions as launch_gazebo_actions

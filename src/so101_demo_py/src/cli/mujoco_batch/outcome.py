@@ -7,10 +7,8 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     AdaptiveBatchSummary,
     BatchTerminalStatus,
 )
-from so101_demo.parallel_batch.contracts import (
-    BatchSummary,
-    RunMode,
-)
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
 
 def outcome_document(summary: BatchSummary) -> tuple[int, dict[str, object]]:

@@ -11,13 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+)
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
     AcceleratorKind,
-    ContractError,
     IpcTransport,
     ParallelRuntimeConfigMacosMpsTwoWorker,
-    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
-    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
 )
 from so101_demo.parallel_batch.two_worker_composition import (
     CompositionError,
@@ -266,7 +268,9 @@ def load_single_worker_config_with_cuda(tmp_path):
 
     import yaml
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
+    )
 
     document = yaml.safe_load(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG.read_text())
     document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}

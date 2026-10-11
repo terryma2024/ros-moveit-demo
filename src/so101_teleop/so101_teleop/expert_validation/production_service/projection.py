@@ -7,7 +7,8 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from so101_demo.parallel_batch.contracts import BatchSummary, ContractError, PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import ContractError, PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
 from so101_teleop.expert_validation.adaptive_events import AdaptiveEventReader
 from so101_teleop.expert_validation.campaign_layout import (
     CampaignLayoutReader,

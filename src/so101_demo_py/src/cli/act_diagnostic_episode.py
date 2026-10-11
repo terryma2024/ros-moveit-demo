@@ -624,7 +624,8 @@ def _run(arguments) -> int:
         print(f"act_diagnostic_episode: {error}", file=sys.stderr)
         return 2
     from so101_demo.core.task_points import TaskPoint
-    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
 
     root = Path(arguments.root)
     if root.exists():
@@ -642,7 +643,9 @@ def _run(arguments) -> int:
                              worker_count=1, evidence_root=(root / "run").resolve(),
                              batch_kind=BatchKind.FIRST_PASS)
     # ProductionBatchComposition owns the run's journal and Coordinator.
-    from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_runtime_config_any_schema,
+    )
 
     config_path = inputs / manifest["roles"]["runtime_config"]["path"]
     config = load_runtime_config_any_schema(config_path)

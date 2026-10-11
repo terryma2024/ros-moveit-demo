@@ -971,7 +971,8 @@ class UnixRpcClient:
 
 
 def _inference_request(document):
-    from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
     if type(document) is not dict:
         raise IpcError("INFERENCE_REQUEST_TYPE")
@@ -985,10 +986,8 @@ def _inference_request(document):
 
 
 def _snapshot(document):
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind,
-        NormalizedInferenceResponseIdentity,
-    )
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import NormalizedInferenceResponseIdentity
     from so101_demo.runtime.parallel_perception_runtime import Snapshot
 
     required = {"shape", "source_stamp_ns", "source_frame_id", "query_class_id"}
@@ -1160,7 +1159,7 @@ class BrokerTransport:
 
     @staticmethod
     def serialize_request(request):
-        from so101_demo.parallel_batch.contracts import InferenceRequest
+        from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
         if type(request) is not InferenceRequest:
             raise IpcError("INFERENCE_REQUEST_REQUIRED")
@@ -1312,7 +1311,9 @@ class BrokerTransport:
 def build_broker_transport(runtime_spec):
     """Load the mounted stateless Broker runtime/config contract."""
 
-    from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_runtime_config_any_schema,
+    )
 
     runtime_spec = Path(runtime_spec)
     try:

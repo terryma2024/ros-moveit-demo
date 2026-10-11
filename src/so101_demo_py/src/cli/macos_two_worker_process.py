@@ -110,7 +110,7 @@ try:
         # by the one-time table instead of an IPC-shape probe.
         from types import SimpleNamespace
 
-        from so101_demo.parallel_batch.contracts import ExecutionKind
+        from so101_demo.parallel_batch.contracts.common import ExecutionKind
         from so101_demo.runtime.macos_two_worker_broker_port import BrokerAuthority, TwoWorkerBrokerPort
         from so101_demo.runtime.parallel_ipc_darwin import DarwinPermissionOnlyClient as _DarwinClient
 

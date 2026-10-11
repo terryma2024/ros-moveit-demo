@@ -13,7 +13,7 @@ from act_result_teacher import sealed_teacher
 from so101_demo.act.collection_scope import write_collection_scope
 from so101_demo.act.result_store import ActCollectionResultVerifier
 from so101_demo.cli.mujoco_batch.worker_process import _ArtifactResults
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
 from test_act_seal_and_downgrade import lease, sealed_episode, SCOPE
 

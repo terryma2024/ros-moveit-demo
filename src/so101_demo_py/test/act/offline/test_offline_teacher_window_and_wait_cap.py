@@ -10,7 +10,7 @@ import pytest
 
 from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import MIN_PROCESSING_S, SEAL_MARGIN_S, OfflineCollection
-from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
 
 from test_offline_recording_switch import (LEASE, FakePilot, FakeProcesses, ScriptedGroup, _decision, _exit_code,
                                     collection_for, pilot_factory, worker_runtime)

@@ -12,7 +12,7 @@ from so101_demo.cli.macos_campaign.journal import (
     TWO_WORKER_FIRST_PASS_BATCH_KIND,
 )
 from so101_demo.parallel_batch import point_drain
-from so101_demo.parallel_batch.contracts import (
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
     ParallelRuntimeConfigMacosMpsTwoWorker,
 )
 from so101_demo.parallel_batch.queue import DurablePointQueue

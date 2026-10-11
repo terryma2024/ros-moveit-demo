@@ -11,12 +11,8 @@ from so101_demo.cli.mujoco_batch.common import CliError
 from so101_demo.parallel_batch.adaptive_pool import (
     adaptive_socket_paths,
 )
-from so101_demo.parallel_batch.contracts import (
-    AttemptStatus,
-)
-from so101_demo.parallel_batch.resources import (
-    configured_runtime_ipc_root,
-)
+from so101_demo.parallel_batch.contracts.common import AttemptStatus
+from so101_demo.parallel_batch.resource_allocation.models import configured_runtime_ipc_root
 
 
 class AdaptiveResultCapture:

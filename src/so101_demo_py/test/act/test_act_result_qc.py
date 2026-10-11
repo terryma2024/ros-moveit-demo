@@ -30,7 +30,12 @@ def controlled_committed_result(tmp_path,monkeypatch,*,completed=False,teacher_o
     from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
     from so101_demo.act.recorder import EpisodeRecorder
     from so101_demo.act.result_store import ActCollectionResultStore,ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import BatchKind,BatchRequest,RunMode,load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        BatchKind,
+        BatchRequest,
+        load_parallel_runtime_config_linux_cuda,
+    )
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
     from test_act_seal_and_downgrade import SCOPE,IDENTITY,PROVENANCE
@@ -212,7 +217,7 @@ def setup_result(tmp_path, monkeypatch, seal_outcome='PASSED'):
 def test_default_result_publishes_owned_durable_qc_and_verifies_same_originals(tmp_path, monkeypatch):
     from so101_demo.act import episode_qc
     from so101_demo.act.result_store import ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     from act_result_teacher import sealed_teacher
     store, seal, expected, inputs = setup_result(tmp_path, monkeypatch)
     before = seal.read_bytes()
@@ -235,7 +240,7 @@ def test_default_result_publishes_owned_durable_qc_and_verifies_same_originals(t
 def test_recomputed_reference_fail_does_not_downgrade_a_teacher_pass(tmp_path, monkeypatch):
     from act_result_teacher import sealed_teacher
     from so101_demo.act.result_store import ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     store, seal, expected, inputs = setup_result(tmp_path, monkeypatch)
     fail_teacher_reference(expected, 'TEACHER_REFERENCE_PHYSICS_STEP_ABSENT')
     location = store.seal(seal, teacher=sealed_teacher(store, 'PASSED'))
@@ -254,7 +259,7 @@ def test_a_teacher_fail_with_valid_data_gets_data_qc_pass_and_still_cannot_expor
     """QC no longer judges task success: a FAILED episode seal with consistent, valid data is data QC PASS."""
     from act_result_teacher import sealed_teacher
     from so101_demo.act.result_store import ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     store, seal, expected, inputs = setup_result(tmp_path, monkeypatch, seal_outcome='FAILED')
     assert json.loads(seal.read_bytes())['status']=='FAILED'
     location = store.seal(seal, teacher=sealed_teacher(store, 'FAILED'))
@@ -291,7 +296,7 @@ def test_result_refuses_wrong_supplied_report_without_publishing_success(tmp_pat
 def test_independent_result_reader_rejects_report_and_manifest_tamper_after_positive(tmp_path,monkeypatch,fault):
     from so101_demo.act import episode_qc
     from so101_demo.act.result_store import ActCollectionResultVerifier
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     from act_result_teacher import sealed_teacher
     store,seal,_,inputs=setup_result(tmp_path,monkeypatch)
     location=store.seal(seal,teacher=sealed_teacher(store,'PASSED'))

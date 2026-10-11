@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
-from so101_demo.parallel_batch.contracts import AttemptIdentity
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_teleop.expert_validation.api import CampaignProjectionResponse, create_expert_validation_app
 from so101_teleop.expert_validation.artifacts import ValidationArtifactRegistry
@@ -102,7 +102,12 @@ def test_cancel_api_rejects_same_campaign_with_a_different_active_batch(tmp_path
 
 
 def _coordinator_for_control_projection(service, request):
-    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        BatchKind,
+        BatchRequest,
+        load_parallel_runtime_config_linux_cuda,
+    )
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
 
     journal = CoordinatorJournal.create(request.batch_root / "coordinator", request.batch_id)
@@ -183,7 +188,7 @@ def test_cancel_command_replays_durably_and_conflicting_target_never_contacts_ow
         config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
         program = '''
 import os, pathlib, time
-from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_linux_cuda
+from so101_demo.parallel_batch.contracts.common import RunMode; from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest, load_parallel_runtime_config_linux_cuda
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer

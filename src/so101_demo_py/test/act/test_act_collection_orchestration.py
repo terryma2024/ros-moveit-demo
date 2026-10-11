@@ -12,7 +12,7 @@ import pytest
 from so101_demo.act.collection_orchestration import (
     COLLECTION_FAULTS, CollectionOptions, CollectionRefused, collection_from_document, require_under_sandbox,
     validate_collection_request)
-from so101_demo.parallel_batch.contracts import AttemptStatus
+from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
 
 # ---- the request is validated before anything starts ---------------------------------------------------------------

@@ -162,7 +162,9 @@ def _model_factories(*, yolo_weights: Path, grounded_root: Path):
     )
     from so101_demo.adapters.perception.grounded_sam import GroundedSamThresholds
     from so101_demo.core.detection import DetectionQuery
-    from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigMacosMpsTwoWorker
+    from so101_demo.parallel_batch.contracts.macos_two_worker import (
+        ParallelRuntimeConfigMacosMpsTwoWorker,
+    )
 
     def build(model_id: str):
         def factory():

@@ -24,7 +24,7 @@ from so101_demo.runtime.parallel_perception_runtime import (
     ParallelPerceptionRuntime, canonical_json, checked_path, frozen_options,
     normalize_batch, write_receipt,
 )
-from so101_demo.parallel_batch.resources import runtime_ipc_base
+from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
 
 
 def broker_argv():

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Mapping
 
 from so101_demo.parallel_batch.artifacts import ArtifactError, verify_attempt
-from so101_demo.parallel_batch.contracts import AttemptIdentity, ContractError
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
 
 from .artifacts import (
     ArtifactAccessError, ArtifactManifestEntry, ArtifactView, CampaignBatchBinding,

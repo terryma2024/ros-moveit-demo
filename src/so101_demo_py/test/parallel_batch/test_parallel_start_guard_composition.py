@@ -14,11 +14,10 @@ import time
 import pytest
 
 from so101_demo.parallel_batch import start_guard_probe as probe_module
-from so101_demo.parallel_batch.contracts import (
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.linux_cuda import (
     BatchKind,
     BatchRequest,
-    ContractError,
-    RunMode,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.start_guard import FAIL, GuardScope, StartGuardPolicy
@@ -133,7 +132,7 @@ def test_budget_modules_are_absent_from_the_composition_import_graph():
     script = (
         "import json, sys\n"
         "from so101_demo.parallel_batch import start_guard_probe\n"
-        "from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda\n"
+        "from so101_demo.parallel_batch.contracts.linux_cuda import load_parallel_runtime_config_linux_cuda\n"
         "config = load_parallel_runtime_config_linux_cuda(__import__('pathlib').Path(%r))\n"
         "guard = start_guard_probe.compose_default_start_guard(config.start_guard)\n"
         "print(json.dumps(sorted(n for n in sys.modules if 'parallel_batch' in n)))\n"
@@ -183,9 +182,9 @@ def test_no_active_path_imports_the_retired_budget_chain():
         "import so101_demo.cli.mujoco_parallel_batch as cli\n"
         "import so101_demo.parallel_batch.resources as resources\n"
         "import so101_demo.parallel_batch.adaptive_pool as adaptive\n"
-        "import so101_demo.parallel_batch.contracts as contracts\n"
+        "from so101_demo.parallel_batch.contracts.linux_cuda import load_parallel_runtime_config_linux_cuda\n"
         "from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard\n"
-        "config = contracts.load_parallel_runtime_config_linux_cuda(__import__('pathlib').Path(%r))\n"
+        "config = load_parallel_runtime_config_linux_cuda(__import__('pathlib').Path(%r))\n"
         "guard = compose_default_start_guard(config.start_guard)\n"
         "print(json.dumps({'imported': sorted(n for n in sys.modules if 'parallel_batch' in n)}))\n"
     ) % str(LINUX_CUDA_CONFIG)
@@ -403,9 +402,9 @@ def test_the_spawn_scope_binds_the_owner_birth_and_the_mps_selector():
 def test_the_two_approved_single_worker_policies_demand_the_mps_probe(tmp_path, scope):
     """A v5/v6 policy carries the same floor, so the admission is mandatory there too."""
 
-    from so101_demo.parallel_batch.contracts import (
-        load_parallel_runtime_config_macos_mps_single_worker_retry,
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
         load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
     )
 
     package = PACKAGE_ROOT
@@ -432,7 +431,10 @@ def test_a_linux_cuda_document_can_never_carry_the_mps_headroom(tmp_path):
 
     import yaml
 
-    from so101_demo.parallel_batch.contracts import ContractError, parse_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        parse_parallel_runtime_config_linux_cuda,
+    )
 
     document = yaml.safe_load(LINUX_CUDA_CONFIG.read_text())
     document["start_guard"]["mps_minimum_headroom_bytes"] = 1 << 30

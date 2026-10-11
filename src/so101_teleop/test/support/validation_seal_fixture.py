@@ -7,7 +7,7 @@ from so101_demo.core.domain import State
 from so101_demo.core.dynamic_pick import DYNAMIC_MOTION_STATES
 from so101_demo.core.workflow import SO101_WORKFLOW
 from so101_demo.parallel_batch.artifacts import AttemptWorkspace
-from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.parallel_batch.dynamic_manifest import SCHEMA_GENERAL
 
 

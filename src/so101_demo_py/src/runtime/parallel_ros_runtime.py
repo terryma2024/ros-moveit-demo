@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable, Mapping
 
-from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.runtime.parallel_ros_ports.binding import RuntimeBinding
 from so101_demo.runtime.parallel_ros_ports.execution import ExecutionPorts
 from so101_demo.runtime.parallel_ros_ports.perception import PerceptionPorts

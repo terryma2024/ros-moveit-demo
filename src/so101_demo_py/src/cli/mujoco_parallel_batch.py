@@ -22,9 +22,7 @@ from so101_demo.parallel_batch.adaptive_runner import (
     AdaptiveBatchRunner,
     AdaptiveRunnerError,
 )
-from so101_demo.parallel_batch.contracts import (
-    ContractError,
-)
+from so101_demo.parallel_batch.contracts.common import ContractError
 
 
 def _run_with_shutdown_signals(call):

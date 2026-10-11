@@ -15,7 +15,7 @@ from so101_demo.application.object_pose import LocalizationError, RgbdLocalizer
 from so101_demo.core.detection import DetectionCandidate
 from so101_demo.core.task_geometry import Pose7
 from so101_demo.parallel_batch.broker import BrokerResponse
-from so101_demo.parallel_batch.contracts import ModelOutcome
+from so101_demo.parallel_batch.contracts.common import ModelOutcome
 from so101_demo.parallel_batch.perception import (
     LocalizedPose,
 )

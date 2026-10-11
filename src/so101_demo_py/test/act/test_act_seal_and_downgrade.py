@@ -18,14 +18,19 @@ from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act import episode_qc
 from act_result_teacher import sealed_teacher
 from so101_demo.act.result_store import ActCollectionResultStore, ActCollectionResultVerifier
-from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 from test_act_continuous_capture import (AcquisitionGuard, AcquisitionMinter, FakeSampler, feed,
                                          reference)
 from test_act_recorder import PROVENANCE
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.parallel_batch.contracts import (BatchKind, BatchRequest, RunMode,
-                                                 load_parallel_runtime_config_linux_cuda)
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
+    load_parallel_runtime_config_linux_cuda,
+)
 from paths import PACKAGE_ROOT
 
 

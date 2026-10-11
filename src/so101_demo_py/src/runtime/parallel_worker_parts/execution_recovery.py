@@ -10,8 +10,8 @@ import threading
 import time
 from typing import Any
 
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
-from so101_demo.parallel_batch.resources import WorkerResources
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
+from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
 from so101_demo.runtime.parallel_worker_parts.process_tree import _finite_timestamp
 from so101_demo.runtime.parallel_worker_parts.receipts import (
     ExecutionCompletionReceipt,

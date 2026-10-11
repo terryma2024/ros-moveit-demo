@@ -29,12 +29,9 @@ for _entry in os.environ.get("AMENT_PREFIX_PATH", "").split(os.pathsep):
         sys.path.insert(0, str(_site))
 
 from so101_demo.parallel_batch.artifacts import verify_attempt
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity,
-    BatchKind,
-    BatchRequest,
-    RunMode,
-)
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 

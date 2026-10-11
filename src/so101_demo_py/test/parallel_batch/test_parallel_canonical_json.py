@@ -10,7 +10,7 @@ def test_canonical_sha256_is_key_order_independent():
 @pytest.mark.parametrize("value", [float("nan"), float("inf")])
 def test_canonical_sha256_rejects_nonfinite_input(value):
     from so101_demo.parallel_batch.canonical_json import canonical_sha256
-    from so101_demo.parallel_batch.contracts import ContractError
+    from so101_demo.parallel_batch.contracts.common import ContractError
 
     with pytest.raises(ContractError):
         canonical_sha256({"a": value})
@@ -18,7 +18,7 @@ def test_canonical_sha256_rejects_nonfinite_input(value):
 
 def test_canonical_sha256_rejects_non_string_keys_and_foreign_types():
     from so101_demo.parallel_batch.canonical_json import canonical_sha256
-    from so101_demo.parallel_batch.contracts import ContractError
+    from so101_demo.parallel_batch.contracts.common import ContractError
 
     with pytest.raises(ContractError):
         canonical_sha256({1: "a"})

@@ -32,13 +32,9 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     PoolRequest,
     load_adaptive_worker_options,
 )
-from so101_demo.parallel_batch.contracts import (
-    BatchKind,
-    BatchRequest,
-    ContractError,
-    RunMode,
-    RuntimeConfig,
-)
+from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
+from so101_demo.parallel_batch.contracts.macos_single_worker import RuntimeConfig
 
 
 class _Parser(argparse.ArgumentParser):

@@ -5,6 +5,10 @@ from pathlib import Path
 import pytest
 import yaml
 from paths import PACKAGE_ROOT
+from so101_demo.parallel_batch.contracts import common as contracts_common
+from so101_demo.parallel_batch.contracts import macos_single_worker as contracts_macos_single_worker
+from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
+from so101_demo.parallel_batch.contracts import routes as contracts_routes
 
 
 PACKAGE = PACKAGE_ROOT
@@ -33,7 +37,9 @@ def test_frozen_points_catalog():
 def test_runtime_config_loads_the_frozen_values():
     """Changing closed runtime defaults must require a new configuration artifact."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     config = load_parallel_runtime_config_linux_cuda(CONFIG_PATH)
     assert config.backend == "mujoco"
@@ -60,7 +66,10 @@ def test_runtime_config_rejects_unknown_boolean_and_nonfinite_values(
 ):
     """Loose YAML parsing could silently admit an unsafe scheduler configuration."""
 
-    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     document = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     (document if section is None else document[section])[mutated_key] = mutated_value
@@ -74,7 +83,7 @@ def test_runtime_config_rejects_unknown_boolean_and_nonfinite_values(
 def test_closed_statuses_keep_candidates_distinct_from_accepted_poses():
     """A model candidate must not be mistaken for the Worker-local POSE_ACCEPTED latch."""
 
-    from so101_demo.parallel_batch.contracts import (
+    from so101_demo.parallel_batch.contracts.common import (
         AttemptStatus,
         ModelOutcome,
         PointStatus,
@@ -112,14 +121,9 @@ def test_closed_statuses_keep_candidates_distinct_from_accepted_poses():
 def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_ids():
     """A mixed attempt/validation identity could authorize the wrong sealed workspace."""
 
-    from so101_demo.parallel_batch.contracts import (
-        BatchKind,
-        BatchRequest,
-        ContractError,
-        ExecutionKind,
-        InferenceRequest,
-        RunMode,
-    )
+    from so101_demo.parallel_batch.contracts.common import ContractError, ExecutionKind, RunMode
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
 
     with pytest.raises(ContractError, match="ABSOLUTE_EVIDENCE_ROOT"):
         BatchRequest(
@@ -156,12 +160,8 @@ def test_batch_request_and_identities_reject_path_traversal_and_mixed_execution_
 def test_validation_summary_cannot_claim_execute_qualification():
     """Twenty passing validation records must never become a 20/20 execute qualification."""
 
-    from so101_demo.parallel_batch.contracts import (
-        BatchSummary,
-        PointStatus,
-        RunMode,
-        ValidationStatus,
-    )
+    from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode, ValidationStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
     point_ids = tuple(f"point-{index:02d}" for index in range(20))
     summary = BatchSummary(
@@ -184,12 +184,8 @@ def test_validation_summary_cannot_claim_execute_qualification():
 def test_all_passing_dry_run_validations_never_qualify_execute_coverage():
     """A complete dry-run projection must not become a physical 20/20 result."""
 
-    from so101_demo.parallel_batch.contracts import (
-        BatchSummary,
-        PointStatus,
-        RunMode,
-        ValidationStatus,
-    )
+    from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode, ValidationStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
     point_ids = tuple(f"point-{index:02d}" for index in range(20))
     summary = BatchSummary(
@@ -213,11 +209,8 @@ def test_all_passing_dry_run_validations_never_qualify_execute_coverage():
 def test_path_bearing_identifiers_reject_traversal_and_separators(identifier):
     """Path-like identities must not escape their coordinator-owned workspace."""
 
-    from so101_demo.parallel_batch.contracts import (
-        AttemptIdentity,
-        ContractError,
-        ValidationIdentity,
-    )
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.identity import AttemptIdentity, ValidationIdentity
 
     attempt = dict(
         batch_id="batch-1",
@@ -247,11 +240,8 @@ def test_path_bearing_identifiers_reject_traversal_and_separators(identifier):
 def test_relative_input_path_rejects_dot_component():
     """The current-directory path is not a sealed perception input filename."""
 
-    from so101_demo.parallel_batch.contracts import (
-        ContractError,
-        ExecutionKind,
-        InferenceRequest,
-    )
+    from so101_demo.parallel_batch.contracts.common import ContractError, ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
     with pytest.raises(ContractError, match="SAFE_RELATIVE_PATH"):
         InferenceRequest(
@@ -288,7 +278,10 @@ def test_relative_input_path_rejects_dot_component():
 def test_runtime_config_rejects_reviewed_value_drift(tmp_path, key, value):
     """Changing any admission-critical value requires a new reviewed config."""
 
-    from so101_demo.parallel_batch.contracts import ContractError, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     document = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
     document["execution"][key] = value
@@ -302,7 +295,9 @@ def test_runtime_config_rejects_reviewed_value_drift(tmp_path, key, value):
 def test_runtime_config_exposes_reviewed_model_hashes_without_yaml_schema_drift():
     """Model provenance must be frozen even though the reviewed YAML has no hash keys."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     config = load_parallel_runtime_config_linux_cuda(CONFIG_PATH)
     assert config.yolo_weights_sha256 == (
@@ -317,11 +312,10 @@ def test_runtime_config_exposes_reviewed_model_hashes_without_yaml_schema_drift(
 def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
     """Float schema versions and string selections must not be normalized into valid inputs."""
 
-    from so101_demo.parallel_batch.contracts import (
+    from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         BatchKind,
         BatchRequest,
-        ContractError,
-        RunMode,
         load_parallel_runtime_config_linux_cuda,
     )
 
@@ -345,7 +339,8 @@ def test_runtime_schema_and_batch_selection_reject_coercible_types(tmp_path):
 def test_batch_request_rejects_duplicate_empty_and_overbound_selection_controls():
     """Duplicate IDs and counts beyond frozen admission limits must fail before leasing."""
 
-    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, ContractError, RunMode
+    from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
 
     shared = dict(
         batch_id="batch-1",
@@ -372,9 +367,8 @@ def test_batch_request_rejects_duplicate_empty_and_overbound_selection_controls(
 def test_lease_and_normalized_validation_identity_reject_invalid_boundaries():
     """Nonfinite leases and mixed response identities cannot be fenced safely."""
 
-    from so101_demo.parallel_batch.contracts import (
-        ContractError,
-        ExecutionKind,
+    from so101_demo.parallel_batch.contracts.common import ContractError, ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import (
         LeaseIdentity,
         NormalizedInferenceResponseIdentity,
     )
@@ -411,13 +405,13 @@ def test_lease_and_normalized_validation_identity_reject_invalid_boundaries():
 def test_pending_validation_and_batch_terminality_keep_qualification_false():
     """A pending validation projection is not complete and cannot contaminate physical status."""
 
-    from so101_demo.parallel_batch.contracts import (
-        BatchSummary,
+    from so101_demo.parallel_batch.contracts.common import (
         ContractError,
         PointStatus,
         RunMode,
         ValidationStatus,
     )
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
     pending = BatchSummary(
         run_mode=RunMode.DRY_RUN,
@@ -447,7 +441,8 @@ def test_pending_validation_and_batch_terminality_keep_qualification_false():
 def test_execute_qualification_requires_normal_points_complete_terminal_reason():
     """Durable PASSED points cannot qualify a dependency-failed batch."""
 
-    from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus, RunMode
+    from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
     statuses = {"task_start": PointStatus.PASSED}
     completed = BatchSummary(
@@ -475,12 +470,8 @@ def test_execute_qualification_requires_normal_points_complete_terminal_reason()
 def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mode):
     """A dependency failure preserves validation history without reporting pass."""
 
-    from so101_demo.parallel_batch.contracts import (
-        BatchSummary,
-        PointStatus,
-        RunMode,
-        ValidationStatus,
-    )
+    from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode, ValidationStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
 
     summary = BatchSummary(
         run_mode=RunMode[run_mode],
@@ -498,21 +489,23 @@ def test_validation_pass_requires_normal_points_complete_terminal_reason(run_mod
 
 @pytest.mark.parametrize("workers", [1, 2, 8])
 def test_fixed_batch_contract_supports_exact_count_through_eight(tmp_path, workers):
-    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
     request = BatchRequest("eight", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
                              workers, tmp_path, BatchKind.FIRST_PASS)
     assert request.worker_count == workers
 
 
 def test_fixed_batch_nine_is_outside_supported_range(tmp_path):
-    from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, ContractError
+    from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
     with pytest.raises(ContractError, match="MAX_WORKER_COUNT"):
         BatchRequest("nine", RunMode.EXECUTE, ("p1",), 9, tmp_path, BatchKind.FIRST_PASS)
 
 
 def test_request_has_no_lifetime_quota_and_keeps_retry_single_point(tmp_path):
-    from so101_demo.parallel_batch.contracts import (
-        BatchKind, BatchRequest, ContractError, RunMode)
+    from so101_demo.parallel_batch.contracts.common import ContractError, RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest
     request = BatchRequest("batch-a", RunMode.EXECUTE, tuple(f"p{i}" for i in range(20)),
                              2, tmp_path, BatchKind.FIRST_PASS)
     assert request.schema_version == 2
@@ -535,8 +528,10 @@ def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
     """The broker transport loads whichever profile document it is given; the loader must
     choose the parser by the declared schema."""
 
-    from so101_demo.parallel_batch.contracts import (
-        ContractError, load_runtime_config_any_schema)
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_runtime_config_any_schema,
+    )
 
     loaded = load_runtime_config_any_schema(CONFIG_PATH)
     assert getattr(loaded, "schema_version", None) == 3
@@ -563,9 +558,9 @@ def test_linux_cuda_config_is_closed_budget_free_and_carries_the_guard():
     """The active document keeps the functional fields, adds the guard, and has no
     measurement, safety, coverage or deployment section left to consult."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
-    config = contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
+    config = contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
     assert config.schema_version == 3
     assert config.max_worker_count == 8
     assert config.gpu_device.selector_kind == "INDEX"
@@ -577,20 +572,20 @@ def test_linux_cuda_config_is_closed_budget_free_and_carries_the_guard():
     for retired in ("sampling", "safety", "coverage", "deployment", "measurement"):
         assert retired not in document
         assert retired not in document["execution"]
-    field_names = {item.name for item in fields(contracts.ParallelRuntimeConfigLinuxCuda)}
+    field_names = {item.name for item in fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)}
     for retired in ("measurement", "deployment", "profile_sha256", "qualification_sha256",
                     "execution_identity_sha256", "capacity_fraction"):
         assert retired not in field_names
 
 
 def test_linux_cuda_execution_field_set_is_exactly_the_closed_list():
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
-    assert set(contracts.EXECUTION_LINUX_CUDA_FIELDS) == set(
-        item.name for item in fields(contracts.ParallelRuntimeConfigLinuxCuda)
+    assert set(contracts_linux_cuda.EXECUTION_LINUX_CUDA_FIELDS) == set(
+        item.name for item in fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)
     ) - {"schema_version", "start_guard"}
-    assert len(contracts.EXECUTION_LINUX_CUDA_FIELDS) == 38
-    assert contracts.START_GUARD_FIELDS == {
+    assert len(contracts_linux_cuda.EXECUTION_LINUX_CUDA_FIELDS) == 38
+    assert contracts_linux_cuda.START_GUARD_FIELDS == {
         "timeout_s", "cpu_busy_warn_fraction", "ram_minimum_bytes", "ram_minimum_fraction",
         "gpu_minimum_bytes"}
 
@@ -598,8 +593,10 @@ def test_linux_cuda_execution_field_set_is_exactly_the_closed_list():
 def test_linux_cuda_config_rejects_unknown_duplicate_and_legacy_sections(tmp_path):
     import yaml
 
-    from so101_demo.parallel_batch.contracts import (
-        ContractError, load_parallel_runtime_config_linux_cuda)
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     document = _linux_cuda_document()
 
@@ -647,52 +644,56 @@ def test_linux_cuda_config_rejects_unknown_duplicate_and_legacy_sections(tmp_pat
 
 
 def test_require_linux_cuda_execution_refuses_every_legacy_version():
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
-    contracts.require_linux_cuda_execution(3, 3)
+    contracts_linux_cuda.require_linux_cuda_execution(3, 3)
     for request_version, config_version in ((1, 1), (2, 2), (3, 2), (2, 3), (True, 3)):
-        with pytest.raises(contracts.ContractError,
+        with pytest.raises(contracts_common.ContractError,
                            match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
-            contracts.require_linux_cuda_execution(request_version, config_version)
+            contracts_linux_cuda.require_linux_cuda_execution(request_version, config_version)
 
 
 def test_gpu_selector_requires_an_explicit_well_formed_choice():
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
-    assert contracts.GpuDeviceSelector("UUID", "GPU-abc").selector == "GPU-abc"
-    assert contracts.GpuDeviceSelector("INDEX", "0").selector_kind == "INDEX"
+    assert contracts_linux_cuda.GpuDeviceSelector("UUID", "GPU-abc").selector == "GPU-abc"
+    assert contracts_linux_cuda.GpuDeviceSelector("INDEX", "0").selector_kind == "INDEX"
     for kind, selector in (("HOST", "0"), ("INDEX", "zero"), ("INDEX", ""),
                            ("UUID", "0"), ("INDEX", "0.0")):
-        with pytest.raises(contracts.ContractError):
-            contracts.GpuDeviceSelector(kind, selector)
+        with pytest.raises(contracts_common.ContractError):
+            contracts_linux_cuda.GpuDeviceSelector(kind, selector)
 
 
 def test_runtime_config_loader_selects_linux_cuda_parser(tmp_path):
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
+    from so101_demo.parallel_batch.contracts import macos_single_worker as contracts_macos_single_worker
 
-    loaded = contracts.load_runtime_config_any_schema(LINUX_CUDA_CONFIG_PATH)
-    assert isinstance(loaded, contracts.ParallelRuntimeConfigLinuxCuda)
+    loaded = contracts_macos_single_worker.load_runtime_config_any_schema(LINUX_CUDA_CONFIG_PATH)
+    assert isinstance(loaded, contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)
     assert loaded.schema_version == 3
     for retired in (1, 2):
         path = tmp_path / f"retired-{retired}.yaml"
         path.write_text(f"schema_version: {retired}\n")
-        with pytest.raises(contracts.ContractError, match="SCHEMA_VERSION"):
-            contracts.load_runtime_config_any_schema(path)
+        with pytest.raises(contracts_common.ContractError, match="SCHEMA_VERSION"):
+            contracts_macos_single_worker.load_runtime_config_any_schema(path)
 
 
 def test_budget_environment_does_not_change_linux_cuda_loading(monkeypatch):
     """The retired authority environment must not influence the active contract."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
-    baseline = contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
+    baseline = contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
     for name in ("SO101_VALIDATION_BUDGET_PROFILE", "SO101_VALIDATION_BUDGET_PROFILE_SHA256",
                  "SO101_VALIDATION_PROMOTION_RECORD", "SO101_VALIDATION_QUALIFICATION_PATHS",
                  "SO101_VALIDATION_EXECUTION_IDENTITY", "SO101_PARALLEL_RUNTIME_CONFIG",
                  "SO101_VALIDATION_PROVENANCE_BINDING"):
         monkeypatch.setenv(name, "/nonexistent/retired")
     monkeypatch.setenv("SO101_VALIDATION_LOCATION_BINDING", "/nonexistent/location.json")
-    assert contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH) == baseline
+    assert contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH) == baseline
 
 
 # --------------------------------------------------------------------------------------
@@ -714,36 +715,36 @@ def _macos_mps_two_worker_document() -> dict:
 def test_linux_cuda_bytes_are_frozen_by_the_macos_mps_work():
     """Adding v4 must not rewrite one byte of the v3 document or its parser surface."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
     digest = hashlib.sha256(LINUX_CUDA_CONFIG_PATH.read_bytes()).hexdigest()
     assert digest == LINUX_CUDA_CONFIG_SHA256
-    config = contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
+    config = contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG_PATH)
     assert config.schema_version == 3
     assert config.requested_device == "cuda"
     assert config.max_worker_count == 8
-    assert set(contracts.EXECUTION_LINUX_CUDA_FIELDS) == set(
-        item.name for item in fields(contracts.ParallelRuntimeConfigLinuxCuda)
+    assert set(contracts_linux_cuda.EXECUTION_LINUX_CUDA_FIELDS) == set(
+        item.name for item in fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)
     ) - {"schema_version", "start_guard"}
     # v3 selects its platform the v3 way; the v4 accelerator vocabulary must not leak in.
-    assert "accelerator" not in {item.name for item in fields(contracts.ParallelRuntimeConfigLinuxCuda)}
-    assert "ipc_transport" not in {item.name for item in fields(contracts.ParallelRuntimeConfigLinuxCuda)}
+    assert "accelerator" not in {item.name for item in fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)}
+    assert "ipc_transport" not in {item.name for item in fields(contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)}
 
 
 def test_macos_mps_two_worker_document_resolves_the_closed_darwin_combination():
     """The shipped macOS document resolves to mps + darwin_private_path_unix + cgl at W2."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    config = contracts.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
-    assert isinstance(config, contracts.ParallelRuntimeConfigMacosMpsTwoWorker)
+    config = contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    assert isinstance(config, contracts_macos_two_worker.ParallelRuntimeConfigMacosMpsTwoWorker)
     assert config.schema_version == 4
-    assert config.accelerator.kind is contracts.AcceleratorKind.MPS
+    assert config.accelerator.kind is contracts_macos_two_worker.AcceleratorKind.MPS
     assert config.accelerator.selector == "default"
     assert config.requested_device == "mps"
     assert config.allow_cpu_fallback is False
     assert config.worker_count == 2
-    assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    assert config.ipc_transport is contracts_macos_two_worker.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
     assert config.mujoco_gl == "cgl"
     assert config.mps_process_memory_fraction == 0.8
     assert config.start_guard.mps_minimum_headroom_bytes == 1 << 30
@@ -753,12 +754,13 @@ def test_macos_mps_two_worker_document_resolves_the_closed_darwin_combination():
 def test_schema_macos_mps_two_worker_platform_worker_count_is_exactly_two(worker_count):
     """W4/W6/W8 and W1 are outside this contract's declared platform support."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document["worker_count"] = worker_count
-    with pytest.raises(contracts.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
 
 @pytest.mark.parametrize(
@@ -773,33 +775,35 @@ def test_schema_macos_mps_two_worker_platform_worker_count_is_exactly_two(worker
 def test_schema_macos_mps_two_worker_rejects_cpu_fallback_and_cross_platform_combinations(key, value):
     """No CPU device, CPU fallback, arbitrary TCP transport or third GL backend is admitted."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document[key] = value
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
 
 def test_schema_macos_mps_two_worker_rejects_cross_platform_accelerator_and_ipc_pairs():
     """Accelerator, IPC transport and GL backend must form one closed combination."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document["ipc_transport"] = "proc_fd_unix"
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
     document = _macos_mps_two_worker_document()
     document["mujoco_gl"] = "egl"
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
     document = _macos_mps_two_worker_document()
     document["accelerator"] = {"kind": "cuda", "selector": "INDEX:0"}
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
 
 @pytest.mark.parametrize(
@@ -808,30 +812,33 @@ def test_schema_macos_mps_two_worker_rejects_cross_platform_accelerator_and_ipc_
 def test_schema_macos_mps_two_worker_rejects_non_positive_or_coercible_memory_fraction(fraction):
     """The allocator cap must be a real number in (0, 1] before any MPS allocation."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document["mps_process_memory_fraction"] = fraction
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
 
 @pytest.mark.parametrize("headroom", [0, -1, 1.5, True, "1073741824", None])
 def test_schema_macos_mps_two_worker_requires_a_positive_integer_headroom(headroom):
     """The fixed headroom is a positive byte count, never a scaled or coerced budget."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document["start_guard"]["mps_minimum_headroom_bytes"] = headroom
-    with pytest.raises(contracts.ContractError):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    with pytest.raises(contracts_common.ContractError):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
 
 def test_schema_macos_mps_two_worker_document_is_closed_against_unknown_fields(tmp_path):
     """Unknown top-level, accelerator, execution or guard fields all fail closed."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     for mutate, expected in (
         (lambda d: d.update({"deployment": {"approved_profile_path": None}}),
@@ -845,28 +852,28 @@ def test_schema_macos_mps_two_worker_document_is_closed_against_unknown_fields(t
         mutate(document)
         path = tmp_path / "v4-drift.yaml"
         path.write_text(yaml.safe_dump(document))
-        with pytest.raises(contracts.ContractError, match=expected):
-            contracts.load_parallel_runtime_config_macos_mps_two_worker(path)
+        with pytest.raises(contracts_common.ContractError, match=expected):
+            contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(path)
 
 
 def test_macos_mps_two_worker_auto_transport_resolves_to_the_darwin_default():
     """`auto` resolves to the closed Darwin default and never to TCP."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     document = _macos_mps_two_worker_document()
     document["ipc_transport"] = "auto"
-    config = contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
-    assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    config = contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
+    assert config.ipc_transport is contracts_macos_two_worker.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
     assert config.mujoco_gl == "cgl"
 
 
 def test_schema_macos_mps_two_worker_manifest_records_resolved_platform_values():
     """A resolved manifest must never report `auto`; it records the real platform choice."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    config = contracts.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    config = contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
     manifest = config.resolved_manifest()
     assert manifest["accelerator"] == "mps"
     assert manifest["ipc_transport"] == "darwin_private_path_unix"
@@ -879,13 +886,14 @@ def test_schema_macos_mps_two_worker_manifest_records_resolved_platform_values()
 def test_macos_mps_two_worker_keeps_the_linux_cuda_runtime_values_frozen():
     """v4 reuses the frozen functional timing/frame values instead of redefining them."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    config = contracts.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
-    assert "ros_domain_ids" not in contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER, (
+    config = contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    assert "ros_domain_ids" not in contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER, (
         "ros_domain_ids is a per-platform isolation choice, not a frozen runtime value"
     )
-    for name, expected in contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER.items():
+    for name, expected in contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER.items():
         if name == "accelerator_kind":
             assert str(config.accelerator.kind) == expected, name
             continue
@@ -895,43 +903,47 @@ def test_macos_mps_two_worker_keeps_the_linux_cuda_runtime_values_frozen():
         assert getattr(config, name) == expected, name
     # The functional timing/frame values v4 does not redefine must still match v3 exactly.
     # The platform selection itself (`requested_device`, `allow_cpu_fallback`) may differ.
-    shared = ((set(contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER)
-               & set(contracts._FROZEN_RUNTIME_VALUES_LINUX_CUDA))
+    shared = ((set(contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER)
+               & set(contracts_linux_cuda._FROZEN_RUNTIME_VALUES_LINUX_CUDA))
               - {"schema_version", "requested_device", "allow_cpu_fallback"})
     assert len(shared) >= 30
     for name in shared:
-        assert (contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER[name]
-                == contracts._FROZEN_RUNTIME_VALUES_LINUX_CUDA[name]), name
+        assert (contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER[name]
+                == contracts_linux_cuda._FROZEN_RUNTIME_VALUES_LINUX_CUDA[name]), name
 
 
 def test_runtime_config_loader_selects_macos_mps_two_worker_parser():
     """The any-schema loader must dispatch v4 to the v4 parser and keep v3 intact."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
+    from so101_demo.parallel_batch.contracts import macos_single_worker as contracts_macos_single_worker
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    loaded = contracts.load_runtime_config_any_schema(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
-    assert isinstance(loaded, contracts.ParallelRuntimeConfigMacosMpsTwoWorker)
-    assert isinstance(contracts.load_runtime_config_any_schema(LINUX_CUDA_CONFIG_PATH),
-                      contracts.ParallelRuntimeConfigLinuxCuda)
+    loaded = contracts_macos_single_worker.load_runtime_config_any_schema(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    assert isinstance(loaded, contracts_macos_two_worker.ParallelRuntimeConfigMacosMpsTwoWorker)
+    assert isinstance(contracts_macos_single_worker.load_runtime_config_any_schema(LINUX_CUDA_CONFIG_PATH),
+                      contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda)
 
 
 def test_require_macos_mps_two_worker_execution_refuses_other_versions():
     """Execution admission is version-exact: v4 runs only against a v4 config."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    contracts.require_macos_mps_two_worker_execution(4, 4)
+    contracts_macos_two_worker.require_macos_mps_two_worker_execution(4, 4)
     for request_version, config_version in ((3, 3), (4, 3), (3, 4), (2, 2), (True, 4)):
-        with pytest.raises(contracts.ContractError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
-            contracts.require_macos_mps_two_worker_execution(request_version, config_version)
+        with pytest.raises(contracts_common.ContractError, match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
+            contracts_macos_two_worker.require_macos_mps_two_worker_execution(request_version, config_version)
 
 
 def test_schema_macos_mps_two_worker_declares_the_independent_snapshot_limit():
     """The snapshot ceiling is its own closed field, separate from the control-frame cap."""
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    config = contracts.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    config = contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
     assert config.max_input_snapshot_bytes == 64 * 1024 * 1024
     assert config.max_input_snapshot_bytes != config.broker_max_frame_bytes
     assert config.resolved_manifest()["max_input_snapshot_bytes"] == 64 * 1024 * 1024
@@ -939,13 +951,13 @@ def test_schema_macos_mps_two_worker_declares_the_independent_snapshot_limit():
     for bad in (0, -1, 1.5, True, "67108864"):
         document = _macos_mps_two_worker_document()
         document["max_input_snapshot_bytes"] = bad
-        with pytest.raises(contracts.ContractError):
-            contracts.parse_parallel_runtime_config_macos_mps_two_worker(document)
+        with pytest.raises(contracts_common.ContractError):
+            contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(document)
 
     missing = _macos_mps_two_worker_document()
     missing.pop("max_input_snapshot_bytes")
-    with pytest.raises(contracts.ContractError, match="MISSING_CONFIG_FIELD"):
-        contracts.parse_parallel_runtime_config_macos_mps_two_worker(missing)
+    with pytest.raises(contracts_common.ContractError, match="MISSING_CONFIG_FIELD"):
+        contracts_macos_two_worker.parse_parallel_runtime_config_macos_mps_two_worker(missing)
 
 
 def test_frozen_model_digests_match_the_published_hub_artifacts():
@@ -958,36 +970,37 @@ def test_frozen_model_digests_match_the_published_hub_artifacts():
     published values so the next drift fails here instead of at a campaign start.
     """
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
-    assert contracts._FROZEN_YOLO_WEIGHTS_SHA256 == (
+    assert contracts_linux_cuda._FROZEN_YOLO_WEIGHTS_SHA256 == (
         "f281d25258493e2c7c220dd1d84a7ca4f0501adf99ed4a921a065d74ace40781"
     )
-    assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 == (
+    assert contracts_linux_cuda._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 == (
         "b55bb601d311407df8f9f25d9da18649f6bd78ac1299148bde0d07f7cfdfed05"
     )
     # Both runtime schemas must expose the same pair, so a platform cannot freeze its own.
-    for schema in (contracts.ParallelRuntimeConfigLinuxCuda, contracts.ParallelRuntimeConfigMacosMpsTwoWorker):
-        assert schema.FROZEN_YOLO_WEIGHTS_SHA256 == contracts._FROZEN_YOLO_WEIGHTS_SHA256
+    for schema in (contracts_linux_cuda.ParallelRuntimeConfigLinuxCuda, contracts_macos_two_worker.ParallelRuntimeConfigMacosMpsTwoWorker):
+        assert schema.FROZEN_YOLO_WEIGHTS_SHA256 == contracts_linux_cuda._FROZEN_YOLO_WEIGHTS_SHA256
         assert (schema.FROZEN_GROUNDED_SAM_MANIFEST_SHA256
-                == contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256)
+                == contracts_linux_cuda._FROZEN_GROUNDED_SAM_MANIFEST_SHA256)
 
 
 def test_the_benchmark_and_training_configs_carry_the_same_frozen_digests():
     """Every config that names a model digest names the same one as the code."""
 
 
-    import so101_demo.parallel_batch.contracts as contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
     package = PACKAGE_ROOT
     benchmark = (package / "config/perception_benchmark/benchmark.yaml").read_text()
-    assert contracts._FROZEN_YOLO_WEIGHTS_SHA256 in benchmark
-    assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in benchmark
+    assert contracts_linux_cuda._FROZEN_YOLO_WEIGHTS_SHA256 in benchmark
+    assert contracts_linux_cuda._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in benchmark
     for name in ("grounding_dino_training.yaml",
                  "grounding_dino_domain_retention_training.yaml",
                  "grounding_dino_domain_retention_last_stage_training.yaml"):
         text = (package / "config/perception" / name).read_text()
-        assert contracts._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in text, name
+        assert contracts_linux_cuda._FROZEN_GROUNDED_SAM_MANIFEST_SHA256 in text, name
 
 
 def test_the_retired_grounded_sam_manifest_digest_is_not_used_anywhere():
@@ -1027,7 +1040,7 @@ def test_the_frozen_two_worker_document_is_unchanged_by_the_single_worker_profil
     """v5/v6 are new files: the v4 document's bytes are frozen, not rewritten."""
 
     assert hashlib.sha256(MACOS_MPS_TWO_WORKER_CONFIG_PATH.read_bytes()).hexdigest() == MACOS_MPS_TWO_WORKER_CONFIG_SHA256
-    config = contracts_module().load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
+    config = contracts_macos_two_worker.load_parallel_runtime_config_macos_mps_two_worker(MACOS_MPS_TWO_WORKER_CONFIG_PATH)
     assert config.worker_count == 2
     assert config.ros_domain_ids == (181, 182)
 
@@ -1043,18 +1056,18 @@ def test_macos_mps_single_worker_retry_document_resolves_its_profile():
 
     contracts = contracts_module()
 
-    config = contracts.load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH)
-    assert isinstance(config, contracts.ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
+    config = contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH)
+    assert isinstance(config, contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
     assert config.schema_version == 5
     assert config.worker_count == 1
     assert config.ros_domain_ids == (181,)
     assert str(config.execution_profile) == "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"
     assert str(config.batch_kind) == "FULL_RESTART_RETRY"
-    assert config.accelerator.kind is contracts.AcceleratorKind.MPS
+    assert config.accelerator.kind is contracts_macos_two_worker.AcceleratorKind.MPS
     assert config.accelerator.resolved_selector == "default"
     assert config.requested_device == "mps"
     assert config.allow_cpu_fallback is False
-    assert config.ipc_transport is contracts.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
+    assert config.ipc_transport is contracts_macos_two_worker.IpcTransport.DARWIN_PRIVATE_PATH_UNIX
     assert config.mujoco_gl == "cgl"
     assert config.mps_process_memory_fraction == 0.8
     assert config.mps_minimum_headroom_bytes == 1 << 30
@@ -1067,8 +1080,8 @@ def test_macos_mps_single_worker_first_pass_document_resolves_its_profile():
 
     contracts = contracts_module()
 
-    config = contracts.load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH)
-    assert isinstance(config, contracts.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
+    config = contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH)
+    assert isinstance(config, contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
     assert config.schema_version == 6
     assert config.worker_count == 1
     assert config.ros_domain_ids == (181,)
@@ -1088,9 +1101,9 @@ def test_the_single_worker_profiles_are_exactly_one_worker(version, worker_count
 
     document = _macos_mps_single_worker_retry_document() if version == 5 else _macos_mps_single_worker_first_pass_document()
     document["worker_count"] = worker_count
-    with pytest.raises(contracts.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
-        (contracts.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
-         else contracts.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)(document)
+    with pytest.raises(contracts_common.ContractError, match="PLATFORM_WORKER_COUNT_UNSUPPORTED"):
+        (contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
+         else contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)(document)
 
 
 @pytest.mark.parametrize("version", [5, 6])
@@ -1114,9 +1127,9 @@ def test_the_single_worker_profiles_refuse_cpu_fallback_and_linux_transport(vers
 
     document = _macos_mps_single_worker_retry_document() if version == 5 else _macos_mps_single_worker_first_pass_document()
     document[key] = value
-    parser = (contracts.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
-              else contracts.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)
-    with pytest.raises(contracts.ContractError):
+    parser = (contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
+              else contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)
+    with pytest.raises(contracts_common.ContractError):
         parser(document)
 
 
@@ -1132,9 +1145,9 @@ def test_the_single_worker_profiles_refuse_a_cuda_accelerator(version):
     document["ipc_transport"] = "proc_fd_unix"
     document["mujoco_gl"] = "egl"
     document["mps_process_memory_fraction"] = None
-    parser = (contracts.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
-              else contracts.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)
-    with pytest.raises(contracts.ContractError, match="ACCELERATOR_INVALID"):
+    parser = (contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
+              else contracts_macos_single_worker.parse_parallel_runtime_config_macos_mps_single_worker_first_pass)
+    with pytest.raises(contracts_common.ContractError, match="ACCELERATOR_INVALID"):
         parser(document)
 
 
@@ -1164,9 +1177,9 @@ def test_the_single_worker_profiles_are_closed_against_unknown_fields(version, t
         mutate(document)
         path = tmp_path / f"v{version}-drift.yaml"
         path.write_text(yaml.safe_dump(document))
-        loader = (contracts.load_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
-                  else contracts.load_parallel_runtime_config_macos_mps_single_worker_first_pass)
-        with pytest.raises(contracts.ContractError, match=expected):
+        loader = (contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_retry if version == 5
+                  else contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_first_pass)
+        with pytest.raises(contracts_common.ContractError, match=expected):
             loader(path)
 
 
@@ -1176,15 +1189,15 @@ def test_the_single_worker_profiles_share_every_closed_field_set_with_the_two_wo
     contracts = contracts_module()
     from dataclasses import fields
 
-    for schema in (contracts.ParallelRuntimeConfigMacosMpsSingleWorkerRetry, contracts.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass):
+    for schema in (contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerRetry, contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass):
         assert {item.name for item in fields(schema)} == {
-            item.name for item in fields(contracts.ParallelRuntimeConfigMacosMpsTwoWorker)}
-    assert contracts.MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_FIELDS == contracts.MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
-    assert contracts.MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_FIELDS == contracts.MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
-    assert contracts.EXECUTION_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS == contracts.EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
-    assert contracts.EXECUTION_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS == contracts.EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
-    assert contracts.START_GUARD_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS == contracts.START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
-    assert contracts.START_GUARD_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS == contracts.START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
+            item.name for item in fields(contracts_macos_two_worker.ParallelRuntimeConfigMacosMpsTwoWorker)}
+    assert contracts_routes.MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_FIELDS == contracts_macos_two_worker.MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
+    assert contracts_routes.MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_FIELDS == contracts_macos_two_worker.MACOS_MPS_TWO_WORKER_CONFIG_FIELDS
+    assert contracts_routes.EXECUTION_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS == contracts_macos_two_worker.EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
+    assert contracts_routes.EXECUTION_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS == contracts_macos_two_worker.EXECUTION_MACOS_MPS_TWO_WORKER_FIELDS
+    assert contracts_routes.START_GUARD_MACOS_MPS_SINGLE_WORKER_RETRY_FIELDS == contracts_macos_two_worker.START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
+    assert contracts_routes.START_GUARD_MACOS_MPS_SINGLE_WORKER_FIRST_PASS_FIELDS == contracts_macos_two_worker.START_GUARD_MACOS_MPS_TWO_WORKER_FIELDS
 
 
 def test_the_single_worker_profiles_invent_no_budget_or_qualification_field():
@@ -1194,8 +1207,8 @@ def test_the_single_worker_profiles_invent_no_budget_or_qualification_field():
     from dataclasses import fields
 
     forbidden = ("budget", "qualification", "promotion", "forecast", "profile", "adaptive")
-    v4_fields = {item.name for item in fields(contracts.ParallelRuntimeConfigMacosMpsTwoWorker)}
-    for schema in (contracts.ParallelRuntimeConfigMacosMpsSingleWorkerRetry, contracts.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass):
+    v4_fields = {item.name for item in fields(contracts_macos_two_worker.ParallelRuntimeConfigMacosMpsTwoWorker)}
+    for schema in (contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerRetry, contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass):
         names = {item.name for item in fields(schema)}
         assert names == v4_fields, "a W1 profile adds no field, so it can invent no claim"
         for name in names:
@@ -1207,17 +1220,17 @@ def test_require_macos_mps_single_worker_execution_is_profile_exact():
 
     contracts = contracts_module()
 
-    contracts.require_macos_mps_single_worker_retry_execution(5, 5)
-    contracts.require_macos_mps_single_worker_first_pass_execution(6, 6)
+    contracts_macos_single_worker.require_macos_mps_single_worker_retry_execution(5, 5)
+    contracts_macos_single_worker.require_macos_mps_single_worker_first_pass_execution(6, 6)
     for require, request_version, config_version in (
-        (contracts.require_macos_mps_single_worker_retry_execution, 5, 4),
-        (contracts.require_macos_mps_single_worker_retry_execution, 4, 5),
-        (contracts.require_macos_mps_single_worker_retry_execution, 6, 6),
-        (contracts.require_macos_mps_single_worker_first_pass_execution, 6, 5),
-        (contracts.require_macos_mps_single_worker_first_pass_execution, 5, 6),
-        (contracts.require_macos_mps_single_worker_first_pass_execution, True, 6),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_retry_execution, 5, 4),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_retry_execution, 4, 5),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_retry_execution, 6, 6),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_first_pass_execution, 6, 5),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_first_pass_execution, 5, 6),
+        (contracts_macos_single_worker.require_macos_mps_single_worker_first_pass_execution, True, 6),
     ):
-        with pytest.raises(contracts.ContractError,
+        with pytest.raises(contracts_common.ContractError,
                            match="CONFIG_VERSION_UNSUPPORTED_FOR_EXECUTION"):
             require(request_version, config_version)
 
@@ -1262,15 +1275,15 @@ def test_the_execution_routing_table_admits_exactly_three_combinations(route, ex
 
     schema_version, execution_profile, batch_kind, worker_count = route
     if expected is None:
-        resolved = contracts.resolve_execution_route(
+        resolved = contracts_routes.resolve_execution_route(
             schema_version=schema_version, execution_profile=execution_profile,
             batch_kind=batch_kind, worker_count=worker_count)
         assert resolved.schema_version == schema_version
         assert resolved.worker_count == worker_count
         assert str(resolved.batch_kind) == batch_kind
         return
-    with pytest.raises(contracts.ContractError, match=expected):
-        contracts.resolve_execution_route(
+    with pytest.raises(contracts_common.ContractError, match=expected):
+        contracts_routes.resolve_execution_route(
             schema_version=schema_version, execution_profile=execution_profile,
             batch_kind=batch_kind, worker_count=worker_count)
 
@@ -1280,15 +1293,15 @@ def test_a_profile_is_never_inferred_from_the_selected_point_count():
 
     contracts = contracts_module()
 
-    with pytest.raises(contracts.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
-        contracts.resolve_execution_route(
+    with pytest.raises(contracts_common.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
+        contracts_routes.resolve_execution_route(
             schema_version=6, execution_profile=None, batch_kind="FIRST_PASS", worker_count=1)
-    with pytest.raises(contracts.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
-        contracts.resolve_execution_route(
+    with pytest.raises(contracts_common.ContractError, match="PROFILE_FROM_SELECTED_POINTS"):
+        contracts_routes.resolve_execution_route(
             schema_version=4, execution_profile="MPS_TWO_WORKER_FIRST_PASS", batch_kind="FIRST_PASS",
             worker_count=None)
-    with pytest.raises(contracts.ContractError, match="EXECUTION_PROFILE_UNKNOWN"):
-        contracts.resolve_execution_route(
+    with pytest.raises(contracts_common.ContractError, match="EXECUTION_PROFILE_UNKNOWN"):
+        contracts_routes.resolve_execution_route(
             schema_version=6, execution_profile="W1", batch_kind="FIRST_PASS", worker_count=1)
 
 
@@ -1297,16 +1310,16 @@ def test_the_routing_table_names_the_three_approved_profiles_only():
 
     contracts = contracts_module()
 
-    assert len(contracts.APPROVED_EXECUTION_ROUTES) == 3
+    assert len(contracts_routes.APPROVED_EXECUTION_ROUTES) == 3
     assert {(route.schema_version, str(route.execution_profile))
-            for route in contracts.APPROVED_EXECUTION_ROUTES} == {
+            for route in contracts_routes.APPROVED_EXECUTION_ROUTES} == {
         (4, "MPS_TWO_WORKER_FIRST_PASS"),
         (5, "MPS_SINGLE_WORKER_FULL_RESTART_RETRY"),
         (6, "MPS_SINGLE_WORKER_FIRST_PASS"),
     }
-    assert {route.worker_count for route in contracts.APPROVED_EXECUTION_ROUTES} == {1, 2}
+    assert {route.worker_count for route in contracts_routes.APPROVED_EXECUTION_ROUTES} == {1, 2}
     assert "ADAPTIVE_POOL" not in {str(route.batch_kind)
-                                   for route in contracts.APPROVED_EXECUTION_ROUTES}
+                                   for route in contracts_routes.APPROVED_EXECUTION_ROUTES}
 
 
 def test_the_single_worker_runtime_values_reuse_the_two_worker_freeze():
@@ -1314,19 +1327,19 @@ def test_the_single_worker_runtime_values_reuse_the_two_worker_freeze():
 
     contracts = contracts_module()
 
-    for values, version in ((contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY, 5),
-                            (contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS, 6)):
-        shared = set(values) & set(contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER)
+    for values, version in ((contracts_routes.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY, 5),
+                            (contracts_routes.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS, 6)):
+        shared = set(values) & set(contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER)
         assert len(shared) >= 30
         for name in shared - {"schema_version", "worker_count"}:
-            assert values[name] == contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER[name], name
+            assert values[name] == contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER[name], name
         assert values["schema_version"] == version
         assert values["worker_count"] == 1
-    for config in (contracts.load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH),
-                   contracts.load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH)):
-        for name, expected in (contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY.items()
+    for config in (contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_retry(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH),
+                   contracts_macos_single_worker.load_parallel_runtime_config_macos_mps_single_worker_first_pass(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH)):
+        for name, expected in (contracts_routes.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_RETRY.items()
                                if config.schema_version == 5
-                               else contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS.items()):
+                               else contracts_routes.FROZEN_RUNTIME_VALUES_MACOS_MPS_SINGLE_WORKER_FIRST_PASS.items()):
             assert getattr(config, name) == expected, name
 
 
@@ -1335,7 +1348,7 @@ def test_the_any_schema_loader_selects_the_single_worker_profiles():
 
     contracts = contracts_module()
 
-    assert isinstance(contracts.load_runtime_config_any_schema(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH),
-                      contracts.ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
-    assert isinstance(contracts.load_runtime_config_any_schema(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH),
-                      contracts.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)
+    assert isinstance(contracts_macos_single_worker.load_runtime_config_any_schema(MACOS_MPS_SINGLE_WORKER_RETRY_CONFIG_PATH),
+                      contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerRetry)
+    assert isinstance(contracts_macos_single_worker.load_runtime_config_any_schema(MACOS_MPS_SINGLE_WORKER_FIRST_PASS_CONFIG_PATH),
+                      contracts_macos_single_worker.ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass)

@@ -122,9 +122,9 @@ def test_history_jsonl_reader_is_lossless(tmp_path):
 
 
 def test_history_and_contracts_agree_on_the_active_version():
-    from so101_demo.parallel_batch import contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
 
     view = history.load_history(LINUX_CUDA_CONFIG)
-    config = contracts.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)
+    config = contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)
     assert view["schema_version"] == config.schema_version == 3
     assert view["kind"] == "LINUX_CUDA"

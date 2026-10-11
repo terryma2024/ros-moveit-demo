@@ -28,7 +28,7 @@ from execution_port import (  # noqa: E402
 from so101_teleop.expert_validation.production import create_production_service  # noqa: E402
 from so101_teleop.expert_validation.supervisor import ExpertValidationSupervisor  # noqa: E402
 from so101_demo.parallel_batch.artifacts import verify_attempt  # noqa: E402
-from so101_demo.parallel_batch.contracts import AttemptIdentity  # noqa: E402
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity  # noqa: E402
 from so101_demo.parallel_batch.journal import CoordinatorJournal  # noqa: E402
 
 import inspect  # noqa: E402

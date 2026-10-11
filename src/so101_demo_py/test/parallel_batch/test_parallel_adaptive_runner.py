@@ -12,7 +12,7 @@ from so101_demo.parallel_batch.adaptive_contracts import (
     PoolExecutionResult,
     load_adaptive_worker_options,
 )
-from so101_demo.parallel_batch.contracts import PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode
 from paths import PACKAGE_ROOT
 
 

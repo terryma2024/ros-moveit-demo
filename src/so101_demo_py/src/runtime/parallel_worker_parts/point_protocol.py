@@ -8,7 +8,7 @@ import sys
 from typing import Any
 
 from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
-from so101_demo.parallel_batch.contracts import RunMode, ValidationStatus
+from so101_demo.parallel_batch.contracts.common import RunMode, ValidationStatus
 from so101_demo.runtime.parallel_worker_parts.process_tree import _finite_timestamp
 from so101_demo.runtime.parallel_worker_parts.receipts import (
     InferenceSnapshotReceipt,

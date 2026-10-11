@@ -53,7 +53,7 @@ wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/config.py	str	so10
 wire	src/so101_demo_py/src/adapters/perception/mujoco_dataset/generate.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/cli/macos_campaign/admission.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/cli/mujoco_batch/outcome.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_demo_py/src/parallel_batch/contracts.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/parallel_batch/contracts/linux_cuda.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/perception_benchmark/contracts.py	str	plastic-cup-yolo11s-seg-v2	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/ros/rgbd_object_pose_node.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/runtime/composition.py	str	fusion-v1	permanent	-	design	model or dataset identifier (design B, not versions)

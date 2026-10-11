@@ -10,8 +10,15 @@ from pathlib import Path
 import pytest
 
 from so101_demo.parallel_batch import artifacts as api
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity, BatchKind, BatchRequest, LeaseIdentity, PointStatus, RunMode, ValidationIdentity,
+from so101_demo.parallel_batch.contracts.common import PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import (
+    AttemptIdentity,
+    LeaseIdentity,
+    ValidationIdentity,
+)
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator

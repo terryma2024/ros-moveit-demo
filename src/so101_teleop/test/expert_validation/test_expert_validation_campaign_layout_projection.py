@@ -640,7 +640,7 @@ def _write_coordinator_batch(root, *, with_reference=True):
 
     from dataclasses import asdict
 
-    from so101_demo.parallel_batch.contracts import AttemptIdentity
+    from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
 
     from validation_seal_fixture import make_sealed_attempt
 

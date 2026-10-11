@@ -7,7 +7,7 @@ import os
 import sys
 
 from so101_demo.application.qualification_stack import ros2_command
-from so101_demo.parallel_batch.resources import WorkerResources
+from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
 from so101_demo.runtime.task_stack import (
     PersistentStackConfig,
     StackProcessSpec,

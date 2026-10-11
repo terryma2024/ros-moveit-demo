@@ -17,7 +17,8 @@ from typing import Mapping
 import uuid
 
 from .recorder import verify_episode_seal
-from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 from so101_demo.application.e2e_acceptance import SCHEMA_GENERAL, SCHEMA_TEACHER, is_manifest_of
 from so101_demo.parallel_batch.dynamic_manifest import (
     DATA_STATUSES, EXECUTION_STATUSES, TASK_RESULTS, teacher_attempt_status)
@@ -888,7 +889,8 @@ def verify_coordinator_commit(coordinator_root, *, location, scope, inputs_manif
     """Re-read the actual hash chain, projection, original phase leases and QC-bound receipt."""
     from copy import deepcopy
     from so101_demo.parallel_batch.journal import CoordinatorJournal,JournalCorruption
-    from so101_demo.parallel_batch.contracts import BatchSummary,PointStatus,ValidationStatus
+    from so101_demo.parallel_batch.contracts.common import PointStatus, ValidationStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
     try:
         root=_safe(Path(coordinator_root));location=_safe(Path(location))
         epoch=json.loads(_read_regular(root/'coordinator_epoch.json'))

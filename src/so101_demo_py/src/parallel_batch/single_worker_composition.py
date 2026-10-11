@@ -23,14 +23,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from .contracts import (
-    BatchKind,
-    ExecutionProfile,
-    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
     ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
-    require_macos_mps_single_worker_retry_execution,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
     require_macos_mps_single_worker_first_pass_execution,
+    require_macos_mps_single_worker_retry_execution,
 )
+from so101_demo.parallel_batch.contracts.routes import ExecutionProfile
 from .two_worker_composition import (
     CompositionError,
     _sha256_file,
@@ -263,7 +263,7 @@ def compose_single_worker_first_pass(*, config, config_path: Path, campaign_id: 
 def assert_no_host_platform_calls(plan: SingleWorkerCampaignPlan) -> None:
     """The Darwin plan must not claim an NVML or `/proc/self/fd` dependency, and vice versa."""
 
-    from .contracts import IpcTransport
+    from so101_demo.parallel_batch.contracts.macos_two_worker import IpcTransport
 
     if plan.accelerator == "mps":
         if plan.ipc_transport != str(IpcTransport.DARWIN_PRIVATE_PATH_UNIX):

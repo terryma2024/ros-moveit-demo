@@ -151,7 +151,7 @@ def _episode(boundaries=None, *, started=True):
         append_reference_continuity=lambda report: boundaries.append(("reference_continuity", report["reset_epoch"])))
     from dataclasses import asdict
 
-    from so101_demo.parallel_batch.contracts import LeaseIdentity
+    from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
     lease = LeaseIdentity(batch_id="batch-1", coordinator_epoch=1, worker_id="w00", worker_generation=1,
                           point_id="point-1", attempt_id="attempt-1", lease_generation=1,
                           lease_issued_monotonic_s=1.0, lease_deadline_monotonic_s=time.monotonic() + 600.)

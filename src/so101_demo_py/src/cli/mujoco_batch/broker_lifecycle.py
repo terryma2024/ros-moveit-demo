@@ -18,10 +18,7 @@ from so101_demo.cli.mujoco_batch.common import (
 )
 from so101_demo.cli.mujoco_batch.fixed_web_control import _FixedWebStopRequested
 from so101_demo.cli.mujoco_batch.outcome import _validate_broker_ready
-from so101_demo.parallel_batch.contracts import (
-    RunMode,
-    WorkerState,
-)
+from so101_demo.parallel_batch.contracts.common import RunMode, WorkerState
 
 
 class BrokerLifecycle:

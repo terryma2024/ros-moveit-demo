@@ -143,8 +143,8 @@ class TwoWorkerBrokerPort:
         nothing else, because schema v4 has no token, generation or lease field to put there.
         """
 
-        from ..parallel_batch.contracts import (
-            ExecutionKind,
+        from so101_demo.parallel_batch.contracts.common import ExecutionKind
+        from so101_demo.parallel_batch.contracts.identity import (
             InferenceRequest,
             NormalizedInferenceResponseIdentity,
         )

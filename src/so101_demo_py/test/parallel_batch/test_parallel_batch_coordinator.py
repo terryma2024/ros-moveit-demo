@@ -10,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
-    BatchKind, BatchRequest, RunMode, ValidationStatus, WorkerState,
+from so101_demo.parallel_batch.contracts.common import RunMode, ValidationStatus, WorkerState
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.journal import CoordinatorJournal

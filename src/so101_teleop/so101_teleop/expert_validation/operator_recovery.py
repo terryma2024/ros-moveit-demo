@@ -51,7 +51,7 @@ def _containers(batch_id):
 
 
 def _domain_in_use(domain):
-    from so101_demo.parallel_batch.resources import SystemResourceProbe
+    from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
     return SystemResourceProbe().ros_domain_in_use(domain)
 
 

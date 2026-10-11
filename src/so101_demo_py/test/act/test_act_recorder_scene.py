@@ -607,7 +607,7 @@ def sources_fixture(ctx, monkeypatch):
     from dataclasses import asdict
 
     from so101_demo.act.offline import sources as module
-    from so101_demo.parallel_batch.contracts import LeaseIdentity
+    from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
     from test_act_episode_recorder_sources import RecordingNode
 
     lease = LeaseIdentity(batch_id="b", coordinator_epoch=1, worker_id="w00", worker_generation=1, point_id="p",

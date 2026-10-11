@@ -31,9 +31,7 @@ import sys
 
 from so101_demo.cli.macos_campaign.drive import run, run_routed
 from so101_demo.cli.macos_campaign.guard import RefusedRun, route_spec
-from so101_demo.parallel_batch.contracts import (
-    ContractError,
-)
+from so101_demo.parallel_batch.contracts.common import ContractError
 from so101_demo.parallel_batch.single_worker_composition import (
     SINGLE_WORKER_RETRY_BATCH_KIND,
 )

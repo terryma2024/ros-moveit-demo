@@ -27,7 +27,7 @@ def test_adaptive_outcome_document_is_stable_and_failure_exit_is_nonzero(tmp_pat
         BatchTerminalStatus,
         CommittedPointResult,
     )
-    from so101_demo.parallel_batch.contracts import PointStatus
+    from so101_demo.parallel_batch.contracts.common import PointStatus
 
     summary = AdaptiveBatchSummary(
         BatchTerminalStatus.COMPLETED_WITH_FAILURES,

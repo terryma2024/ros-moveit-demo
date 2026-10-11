@@ -105,8 +105,8 @@ def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, 
     from test_parallel_batch_cli import argv as cli_argv, verified
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.cli.mujoco_batch.request import prepare_batch
-    from so101_demo.parallel_batch.resources import ResourceSnapshot
-    from so101_demo.parallel_batch.resources import runtime_ipc_base
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
+    from so101_demo.parallel_batch.resource_allocation.models import runtime_ipc_base
 
     class Probe:
         def snapshot(self):

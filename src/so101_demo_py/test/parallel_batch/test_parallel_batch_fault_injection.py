@@ -5,13 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity,
-    BatchKind, BatchRequest,
-    ExecutionKind,
-    InferenceRequest,
-    ModelOutcome,
-    RunMode,
+from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, RunMode
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity, InferenceRequest
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator

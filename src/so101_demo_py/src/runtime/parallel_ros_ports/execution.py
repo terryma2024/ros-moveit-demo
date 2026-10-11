@@ -12,7 +12,7 @@ import re
 import stat
 import time
 
-from so101_demo.parallel_batch.contracts import AttemptStatus
+from so101_demo.parallel_batch.contracts.common import AttemptStatus
 from so101_demo.parallel_batch.start_guard_probe import read_process_identity
 from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 from so101_demo.runtime.parallel_worker_parts.receipts import (
@@ -358,7 +358,7 @@ class ExecutionPorts:
         call = self.dependencies.get("execute_result")
         if call is not None:
             return call(lease, admitted, child)
-        from so101_demo.parallel_batch.contracts import teacher_execution_bound_s
+        from so101_demo.parallel_batch.contracts.linux_cuda import teacher_execution_bound_s
 
         timeout_s = teacher_execution_bound_s(self.config)
         deadline = time.monotonic() + timeout_s
@@ -374,7 +374,7 @@ class ExecutionPorts:
             / f"attempts/{lease.point_id}/{lease.attempt_id}/working/dynamic/"
             "dynamic-execute-manifest.json"
         )
-        from so101_demo.parallel_batch.contracts import AttemptStatus
+        from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
         try:
             outcome, reason, teacher = self._dynamic_manifest_outcome(

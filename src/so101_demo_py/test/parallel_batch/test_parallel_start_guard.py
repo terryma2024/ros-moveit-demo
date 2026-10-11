@@ -654,13 +654,13 @@ def test_linux_cuda_start_guard_policy_default_carries_no_mps_threshold():
 
     from dataclasses import fields
 
-    from so101_demo.parallel_batch import contracts
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
     from so101_demo.parallel_batch import start_guard as guard
 
     policy = StartGuardPolicy()
     assert policy.mps_minimum_headroom_bytes is None
     # The v3 document parser still refuses the key, so a v3 config cannot acquire the floor.
-    assert "mps_minimum_headroom_bytes" not in contracts.START_GUARD_FIELDS
+    assert "mps_minimum_headroom_bytes" not in contracts_linux_cuda.START_GUARD_FIELDS
     # And the v3 decision cannot be handed the proxy: it demands an NVML-shaped snapshot whose
     # device-level figure lives in `gpu_free_bytes`.
     assert "gpu_free_bytes" in {item.name for item in fields(guard.ResourceSnapshot)}

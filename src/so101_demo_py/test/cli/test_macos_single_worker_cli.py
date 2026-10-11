@@ -27,7 +27,9 @@ from so101_demo.cli.macos_campaign.guard import (
 )
 from so101_demo.parallel_batch.start_guard_probe import GUARD_RESULT_FD_VARIABLE
 from so101_demo.parallel_batch.accelerator_probe import AcceleratorSnapshot
-from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
+    load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+)
 from so101_demo.parallel_batch.start_guard import FAIL, PASS, StartGuardPolicy
 from so101_demo.parallel_batch.start_guard_probe import (
     CAMPAIGN_GUARD_EPOCH,
@@ -155,7 +157,9 @@ def test_the_single_worker_lease_names_the_profile_the_worker_executes(tmp_path,
     import json as _json
 
     from so101_demo.cli.macos_campaign.journal import build_worker_leases
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    )
     from so101_demo.parallel_batch.queue import DurablePointQueue
     from so101_demo.parallel_batch.selection import build_first_pass_selection
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
@@ -455,7 +459,9 @@ def test_the_cli_guard_phase_hands_the_admission_over_through_its_own_pipe(tmp_p
 
     import so101_demo.cli.macos_two_worker_campaign as cli
     from so101_demo.cli.macos_campaign import guard as cli_guard
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    )
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     class _ExecCalled(Exception):
@@ -509,7 +515,9 @@ def test_the_cli_guard_phase_refuses_before_the_handover_on_a_failed_admission(t
 
     import so101_demo.cli.macos_two_worker_campaign as cli
     from so101_demo.cli.macos_campaign import guard as cli_guard
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    )
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     monkeypatch.setattr(cli.os, "execve",
@@ -544,7 +552,9 @@ def test_the_campaign_body_stops_on_a_refused_admission_before_the_broker_phase(
 
     from so101_demo.cli.macos_campaign import drive as cli_drive
     from so101_demo.cli.macos_campaign import guard as cli_guard
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_first_pass
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    )
     from so101_demo.parallel_batch.single_worker_composition import compose_single_worker_first_pass
 
     def refused_guard_phase(arguments, **kwargs):

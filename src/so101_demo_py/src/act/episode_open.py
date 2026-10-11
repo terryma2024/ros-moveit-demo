@@ -32,7 +32,8 @@ def open_recorder_episode(options, *, offline: bool = False):
     from .execution_snapshot import verify_execution_snapshot
     from .diagnostic_episode_inputs import POLICY_BINDINGS, verify_frozen_inputs, validate_execution_snapshot_binding
     from .collection_config import validate_recorder_policy
-    from ..parallel_batch.contracts import ContractError, LeaseIdentity
+    from so101_demo.parallel_batch.contracts.common import ContractError
+    from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 
     manifest_path = getattr(options, "episode_inputs_manifest", None)
     if manifest_path is None:

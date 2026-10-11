@@ -411,7 +411,9 @@ def test_legacy_contract_versions_are_refused_for_new_execution(service, monkeyp
 def test_linux_cuda_guard_policy_projection_is_unchanged_and_reports_no_mps_floor():
     """A schema-v3 policy reports a null MPS floor, so existing clients see no drift."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
     from so101_demo.parallel_batch.start_guard import StartGuardPolicy
     from so101_teleop.expert_validation.api import StartGuardPolicyResponse
 

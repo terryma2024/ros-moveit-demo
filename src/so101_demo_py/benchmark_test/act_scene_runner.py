@@ -18,7 +18,8 @@ from so101_demo.adapters.perception import detector_factory
 from so101_demo.application.object_pose import LocalizationError
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 from so101_demo.parallel_batch.broker import BrokerResponse
-from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest, ModelOutcome
+from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
+from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 from so101_demo.runtime import parallel_perception_runtime as runtime
 from so101_demo.runtime.parallel_perception_runtime import normalize_batch
 from so101_demo.runtime.parallel_ros_ports.observations import (

@@ -143,7 +143,7 @@ def test_live_fixed_supervisor_uses_real_authenticated_coordinator_not_signals(t
     config = SOURCE_ROOT / "so101_demo_py/config/mujoco/parallel_batch_linux_cuda.yaml"
     program = '''
 import json, os, pathlib, time
-from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_linux_cuda
+from so101_demo.parallel_batch.contracts.common import RunMode; from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind, BatchRequest, load_parallel_runtime_config_linux_cuda
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer

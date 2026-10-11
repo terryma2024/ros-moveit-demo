@@ -258,10 +258,9 @@ def test_broker_transport_validates_locally_before_real_socket_mutation(
     tmp_path,
 ):
     from so101_demo.parallel_batch.broker import BrokerResponse, BrokerSubmission
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind,
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
+    from so101_demo.parallel_batch.contracts.identity import (
         InferenceRequest,
-        ModelOutcome,
         NormalizedInferenceResponseIdentity,
     )
     from so101_demo.runtime.parallel_ipc import (
@@ -446,7 +445,9 @@ def test_broker_transport_validates_locally_before_real_socket_mutation(
 
 
 def test_broker_summary_survives_runtime_start_failure(tmp_path):
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
     from so101_demo.runtime.parallel_ipc import BrokerTransport
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 

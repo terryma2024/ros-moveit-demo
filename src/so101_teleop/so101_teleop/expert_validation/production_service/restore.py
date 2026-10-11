@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from so101_demo.parallel_batch.contracts import ContractError
+from so101_demo.parallel_batch.contracts.common import ContractError
 from so101_teleop.expert_validation.coordinator_events import (
     CoordinatorProjectionError,
 )

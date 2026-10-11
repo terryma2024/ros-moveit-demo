@@ -6,13 +6,16 @@ from dataclasses import asdict
 import pytest
 
 from so101_demo.parallel_batch import artifacts
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity,
+from so101_demo.parallel_batch.contracts.common import (
     AttemptStatus,
-    BatchKind, BatchRequest,
     PointStatus,
     RunMode,
     WorkerState,
+)
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator

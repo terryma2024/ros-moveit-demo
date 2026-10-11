@@ -12,7 +12,9 @@ MODEL_VERSION = "f" * 64
 
 
 def _config():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     return load_parallel_runtime_config_linux_cuda(
         PACKAGE_ROOT / "config/mujoco/parallel_batch_linux_cuda.yaml"
@@ -20,7 +22,7 @@ def _config():
 
 
 def _request(request_id, *, deadline_s=3.0):
-    from so101_demo.parallel_batch.contracts import InferenceRequest
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
     return InferenceRequest(
         request_id=request_id,
@@ -97,7 +99,7 @@ class _FastRuntime:
             self.active -= 1
             self._condition.notify_all()
         from so101_demo.parallel_batch.broker import ModelResult
-        from so101_demo.parallel_batch.contracts import ModelOutcome
+        from so101_demo.parallel_batch.contracts.common import ModelOutcome
 
         return ModelResult(
             ModelOutcome.QUALIFIED,
@@ -276,7 +278,7 @@ def test_queue_full_is_prompt_and_does_not_evict_accepted_work():
 
 def test_one_request_deadline_cannot_cancel_or_misroute_another():
     from so101_demo.parallel_batch.broker import ModelResult, PerceptionBroker
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
 
     clock = [100.0]
     broker = PerceptionBroker(

@@ -27,8 +27,9 @@ from .adaptive_contracts import (
     PoolRequest,
 )
 from .adaptive_queue import AdaptivePointSelector
-from .contracts import AttemptStatus, BatchSummary, PointStatus, RunMode
-from .resources import configured_runtime_ipc_root
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, PointStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
+from so101_demo.parallel_batch.resource_allocation.models import configured_runtime_ipc_root
 
 
 @dataclass(frozen=True, slots=True)

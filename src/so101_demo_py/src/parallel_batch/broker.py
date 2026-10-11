@@ -13,11 +13,17 @@ from dataclasses import dataclass
 import threading
 import time
 
-from .contracts import (
-    _require_finite, _require_id, _require_positive_int, InferenceRequest,
-    ModelOutcome, NormalizedInferenceResponseIdentity,
-    ParallelRuntimeConfigLinuxCuda,
+from so101_demo.parallel_batch.contracts.common import (
+    _require_finite,
+    _require_id,
+    _require_positive_int,
+    ModelOutcome,
 )
+from so101_demo.parallel_batch.contracts.identity import (
+    InferenceRequest,
+    NormalizedInferenceResponseIdentity,
+)
+from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
 
 
 @dataclass(frozen=True)

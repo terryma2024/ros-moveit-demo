@@ -332,7 +332,9 @@ def test_the_worker_accepts_either_act_workload_only_in_execute_mode(tmp_path):
     from types import SimpleNamespace
 
     from test_parallel_batch_worker import Fake
-    from so101_demo.parallel_batch.worker import ParallelWorker, RunMode, WorkerError
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.worker import ParallelWorker
+    from so101_demo.parallel_batch.worker_parts.contracts import WorkerError
 
     from so101_demo.act import collection as act_collection
     from so101_demo.act.parallel_collection import ActFixedCollectionWorkload

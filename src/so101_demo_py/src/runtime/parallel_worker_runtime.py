@@ -9,8 +9,8 @@ import time
 from typing import Any, Callable
 
 from so101_demo.core.domain import State
-from so101_demo.parallel_batch.contracts import RunMode, ValidationStatus
-from so101_demo.parallel_batch.resources import WorkerResources
+from so101_demo.parallel_batch.contracts.common import RunMode, ValidationStatus
+from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
 from so101_demo.runtime.parallel_worker_parts.captures import WorkerCaptures
 from so101_demo.runtime.parallel_worker_parts.collection import CollectionRecorder
 from so101_demo.runtime.parallel_worker_parts.execution_recovery import ExecutionRecovery

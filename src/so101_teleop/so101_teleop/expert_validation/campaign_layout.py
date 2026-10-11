@@ -37,7 +37,7 @@ import json
 from pathlib import Path
 from typing import Mapping
 
-from so101_demo.parallel_batch.contracts import AttemptIdentity
+from so101_demo.parallel_batch.contracts.identity import AttemptIdentity
 
 from .committed_artifacts import CommittedAttemptEvidence
 from .coordinator_events import (

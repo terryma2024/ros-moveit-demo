@@ -196,7 +196,7 @@ def _tripwires(monkeypatch, *, memo_covers):
 
 def test_the_coordinators_gate_skips_the_covered_verifications_only_when_it_trusts_a_covering_memo(tmp_path, monkeypatch):
     from test_act_result_schema3 import _verifier, sealed_teacher, setup_result
-    from so101_demo.parallel_batch.contracts import RunMode
+    from so101_demo.parallel_batch.contracts.common import RunMode
     from test_act_result_qc import lease
 
     store, seal, document, inputs = setup_result(tmp_path, monkeypatch)

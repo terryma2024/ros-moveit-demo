@@ -7,7 +7,7 @@ import json
 import math
 from typing import Mapping
 
-from .contracts import ContractError
+from so101_demo.parallel_batch.contracts.common import ContractError
 
 
 def canonical_sha256(value: object) -> str:

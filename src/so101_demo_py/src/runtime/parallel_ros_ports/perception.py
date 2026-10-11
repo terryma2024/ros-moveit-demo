@@ -8,7 +8,7 @@ import time
 
 from so101_demo.application.object_pose import LocalizationError
 from so101_demo.core.task_geometry import Pose7
-from so101_demo.parallel_batch.contracts import ModelOutcome
+from so101_demo.parallel_batch.contracts.common import ModelOutcome
 from so101_demo.parallel_batch.perception import (
     AdmissionContext,
     LocalizedPose,
@@ -94,7 +94,7 @@ class PerceptionPorts:
         """Drive the reviewed two-model policy and durable admission latch."""
 
         from so101_demo.cli.rgbd_point_cloud import message_stamp_ns
-        from so101_demo.parallel_batch.contracts import ExecutionKind
+        from so101_demo.parallel_batch.contracts.common import ExecutionKind
         from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID
 
         if execution_kind not in (ExecutionKind.ATTEMPT, ExecutionKind.VALIDATION):

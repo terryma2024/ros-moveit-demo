@@ -7,13 +7,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
+from so101_demo.parallel_batch.contracts.common import (
     AttemptStatus,
-    BatchSummary,
     PointStatus,
     RunMode,
     ValidationStatus,
 )
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
 from paths import PACKAGE_ROOT
 
 
@@ -546,7 +546,9 @@ def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     tmp_path, monkeypatch, worker_count, yolo_executor_count
 ):
     from so101_demo.cli.mujoco_batch import composition as cli
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     config_path = (
         PACKAGE_ROOT

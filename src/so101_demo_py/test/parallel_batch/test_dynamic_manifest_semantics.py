@@ -303,20 +303,20 @@ def general_error(execution: str) -> dict[str, object]:
 
 
 def test_general_completed_pass_is_the_only_passed_outcome():
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     assert validate(general_done("PASS"), "DONE") is AttemptStatus.PASSED
 
 
 def test_general_completed_task_fail_is_failed():
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     document = general_done("FAIL", ["FINAL_XY_OUT_OF_TOLERANCE"])
     assert validate(document, "DONE") is AttemptStatus.FAILED
 
 
 def test_general_completed_unconfirmed_is_indeterminate():
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     document = general_done("UNCONFIRMED", ["END_OBSERVATION_UNCONFIRMED: observation is missing"])
     assert validate(document, "DONE") is AttemptStatus.INDETERMINATE
@@ -324,20 +324,20 @@ def test_general_completed_unconfirmed_is_indeterminate():
 
 @pytest.mark.parametrize("execution", ["FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE"])
 def test_general_failed_and_stopped_executions_are_failed(execution):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     assert validate(general_error(execution), "ERROR") is AttemptStatus.FAILED
 
 
 def test_general_indeterminate_execution_is_indeterminate():
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     assert validate(general_error("INDETERMINATE"), "ERROR") is AttemptStatus.INDETERMINATE
 
 
 def test_general_process_quality_contradictions_no_longer_decide_a_done_run():
     """REPLACED_BY: the old DONE contract (velocity, table/fingertip contact, release order, scene) is audit-only."""
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     document = general_done("PASS")
     final = document["final_samples"][0]

@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from so101_demo.parallel_batch.contracts import RunMode
+from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.runtime.parallel_worker_parts.process_tree import (
     _IDENTIFIER,
     SourceStampedCapture,

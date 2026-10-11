@@ -22,18 +22,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from .contracts import (
-    ContractError,
-    IpcTransport,
-    ParallelRuntimeConfigLinuxCuda,
-    ParallelRuntimeConfigMacosMpsTwoWorker,
-    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
-    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.linux_cuda import (
     load_parallel_runtime_config_linux_cuda,
-    load_parallel_runtime_config_macos_mps_two_worker,
-    load_parallel_runtime_config_macos_mps_single_worker_retry,
-    load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    ParallelRuntimeConfigLinuxCuda,
     require_linux_cuda_execution,
+)
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
+    load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+    load_parallel_runtime_config_macos_mps_single_worker_retry,
+    ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+)
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
+    IpcTransport,
+    load_parallel_runtime_config_macos_mps_two_worker,
+    ParallelRuntimeConfigMacosMpsTwoWorker,
     require_macos_mps_two_worker_execution,
 )
 

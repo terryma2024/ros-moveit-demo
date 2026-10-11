@@ -34,10 +34,8 @@ from so101_demo.cli.macos_campaign.selection import (
 )
 from so101_demo.parallel_batch import point_drain
 from so101_demo.parallel_batch.campaign_supervisor import CampaignSupervisor
-from so101_demo.parallel_batch.contracts import (
-    ContractError,
-    resolve_execution_route,
-)
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.routes import resolve_execution_route
 from so101_demo.parallel_batch.inference_registry import InferenceRegistry
 from so101_demo.parallel_batch.macos_two_worker_campaign import (
     CampaignPorts,

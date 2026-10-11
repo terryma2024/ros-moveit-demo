@@ -16,10 +16,8 @@ import time
 
 from so101_demo.parallel_batch.adaptive_pool import adaptive_socket_paths
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.parallel_batch.resources import (
-    ResourceAllocationError,
-    SystemResourceProbe,
-)
+from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
+from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
 from so101_demo.runtime.parallel_processes import ProcessSupervisor
 
 

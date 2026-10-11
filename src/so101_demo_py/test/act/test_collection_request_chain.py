@@ -14,7 +14,7 @@ from test_parallel_batch_cli import _scratch_root, argv, local_start_guard, veri
 
 class Probe:
     def snapshot(self):
-        from so101_demo.parallel_batch.resources import ResourceSnapshot
+        from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
         return ResourceSnapshot(32, 64.0, 16.0)
 
     def ros_domain_in_use(self, _domain):

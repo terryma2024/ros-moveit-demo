@@ -287,11 +287,8 @@ def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
 
 def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_tf():
     from so101_demo.parallel_batch.broker import BrokerResponse
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind,
-        InferenceRequest,
-        ModelOutcome,
-    )
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
     from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
 
     request = InferenceRequest(
@@ -389,7 +386,8 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
 def _broker_response(masks):
     """A qualified Broker response with one candidate per entry of `masks` (a 2x3 list of lists of 0/1), ids cand-0, cand-1, ..."""
     from so101_demo.parallel_batch.broker import BrokerResponse
-    from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest, ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
     request = InferenceRequest(
         request_id="attempt-1-yolo", model_id="plastic-cup-yolo11n-seg-v1", execution_kind=ExecutionKind.ATTEMPT,
@@ -510,7 +508,8 @@ def test_a_qualified_response_without_candidates_is_still_ambiguous():
 
 
 def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
-    from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest
     from so101_demo.runtime.parallel_ros_ports import perception as runtime_module_perception
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
@@ -657,7 +656,9 @@ def test_recovery_requires_observed_child_and_ros_graph_absence():
 
 def test_f21_config_reuses_dynamic_age_and_orders_workspace_min_then_max():
     from so101_demo.core.dynamic_pick_policy import load_dynamic_policy_variant
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     template = load_dynamic_policy_variant(PACKAGE, backend="mujoco").template
     config = load_parallel_runtime_config_linux_cuda(
@@ -675,12 +676,9 @@ def test_model_policy_persists_admission_and_rejects_mixed_source_clock(
     tmp_path, source_now, accepted
 ):
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind,
-        InferenceRequest,
-        ModelOutcome,
-        RunMode,
-        ValidationIdentity,
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, RunMode
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest, ValidationIdentity
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
@@ -816,12 +814,9 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
 ):
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
     from so101_demo.parallel_batch.broker import BrokerResponse
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind,
-        InferenceRequest,
-        ModelOutcome,
-        RunMode,
-        ValidationIdentity,
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, RunMode
+    from so101_demo.parallel_batch.contracts.identity import InferenceRequest, ValidationIdentity
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
@@ -1105,7 +1100,7 @@ def test_initial_gate_requires_exact_worker_node_inventory():
 
 
 def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
-    from so101_demo.parallel_batch.worker import _bounded_failure_message
+    from so101_demo.parallel_batch.worker_parts.contracts import _bounded_failure_message
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
     from so101_demo.runtime.parallel_ros_ports.observations import (
         InitialGateObservation,
@@ -1272,8 +1267,9 @@ def _teacher_general_fields(failed, *, result="PASS", reasons=(), execution=None
 def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     from so101_demo.application.object_pose import LocalizationError
     from so101_demo.parallel_batch.artifacts import ValidationWorkspace
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind, ModelOutcome, RunMode, ValidationIdentity,
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, RunMode
+    from so101_demo.parallel_batch.contracts.identity import ValidationIdentity
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
@@ -1326,7 +1322,7 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
     calls = []
 
     def broker_request(model_id, before_send):
-        from so101_demo.parallel_batch.contracts import InferenceRequest
+        from so101_demo.parallel_batch.contracts.identity import InferenceRequest
         request = InferenceRequest(
             request_id=f"attempt-1-{model_id}", model_id=model_id,
             execution_kind=ExecutionKind.VALIDATION, batch_id="batch-1",
@@ -1950,7 +1946,7 @@ def test_pose_publication_fails_closed_when_sim_clock_cannot_reach_source(monkey
 @pytest.mark.parametrize("case", ["empty", "malformed", "wrong_identity"])
 def test_exit_zero_unverifiable_dynamic_manifest_never_passes(
         tmp_path, monkeypatch, case):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     lease = _lease()
@@ -1997,7 +1993,7 @@ def test_exit_zero_unverifiable_dynamic_manifest_never_passes(
 def test_execute_result_waits_for_configured_execution_timeout(
         tmp_path, monkeypatch):
     import so101_demo.runtime.parallel_ros_runtime as runtime_module
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))
@@ -2081,7 +2077,7 @@ def test_exact_dynamic_manifest_maps_terminal_business_outcome(
 )
 def test_post_submission_error_without_controller_settlement_is_indeterminate(
         tmp_path, monkeypatch, failure):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     lease = _lease()
@@ -2157,7 +2153,7 @@ def test_post_submission_error_without_controller_settlement_is_indeterminate(
 
 
 def test_runtime_rejects_semantically_impossible_done_trace(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     lease = _lease()
@@ -2200,7 +2196,7 @@ def test_runtime_rejects_semantically_impossible_done_trace(tmp_path, monkeypatc
 @pytest.mark.parametrize("corruption", ["producer_target", "zero_quaternion"])
 def test_runtime_rejects_untrusted_final_pose_claims(
         tmp_path, monkeypatch, corruption):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     lease = _lease()
@@ -2303,7 +2299,7 @@ def test_general_worker_classifies_the_teacher_task_result(
 
 @pytest.mark.parametrize("schema", ["so101-dynamic-mujoco-execute-v4", "so101-dynamic-mujoco-execute-v0", None])
 def test_worker_rejects_unknown_manifest_versions(tmp_path, monkeypatch, schema):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     def build(lease, policy):
         document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy)
@@ -2320,7 +2316,7 @@ def test_worker_rejects_unknown_manifest_versions(tmp_path, monkeypatch, schema)
 
 
 def test_general_worker_rejects_a_pass_whose_execution_did_not_complete(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     def build(lease, policy):
         document = _dynamic_execute_manifest(lease, session_id="session-1", policy_path=policy, status="ERROR")
@@ -2363,7 +2359,7 @@ def _general_with(data_status, *, result="PASS", reasons=(), status="DONE"):
 def test_a_done_run_with_the_retired_data_invalid_exit_code_is_unverifiable(tmp_path, monkeypatch):
     """REPLACED_BY the Recorder verdict: exit 3 used to say 'Teacher COMPLETED, data INVALID'; the Teacher has no data
     side now, so a DONE manifest ending with anything but exit 0 is an inconsistent receipt and claims nothing."""
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
     ports, receipt, lease = _execute_with_ports(tmp_path, monkeypatch, _general_with("DISABLED"), wait_status=RC_DATA_INVALID)
     assert receipt.decision.status is AttemptStatus.INDETERMINATE
     assert receipt.decision.reason == "DYNAMIC_EXECUTION_RECEIPT_UNVERIFIABLE"
@@ -2393,7 +2389,7 @@ def test_a_teacher_task_fail_with_exit_0_is_a_fail_with_disabled_data(tmp_path, 
     ["exit3_disabled", "exit3_retired_schema", "exit1_done"],
 )
 def test_inconsistent_exit_code_and_manifest_never_classify(tmp_path, monkeypatch, case):
-    from so101_demo.parallel_batch.contracts import AttemptStatus
+    from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
     def build(lease, policy):
         document = _general_with("DISABLED")(lease, policy)

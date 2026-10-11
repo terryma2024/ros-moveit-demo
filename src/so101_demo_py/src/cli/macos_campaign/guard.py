@@ -14,10 +14,12 @@ from so101_demo.cli.macos_campaign.journal import (
     MPS_TWO_WORKER_FIRST_PASS,
     TWO_WORKER_FIRST_PASS_BATCH_KIND,
 )
-from so101_demo.parallel_batch.contracts import (
-    ContractError,
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
     ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
     ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+)
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
     ParallelRuntimeConfigMacosMpsTwoWorker,
 )
 from so101_demo.parallel_batch.single_worker_composition import (

@@ -17,7 +17,7 @@ from so101_demo.act.offline.engine import RESULT_SCHEMA
 from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import (
     BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, LEASE_FIELDS, OfflineCollection, drop_bag_messages)
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
 from so101_demo.runtime.task_stack import StackProcessSpec
@@ -71,7 +71,9 @@ def test_the_worker_specification_round_trips_and_a_forged_one_is_refused(tmp_pa
 # ---- the stage bounds a data pipeline with offline processing needs (frozen runtime config, version three) -------------------
 
 def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_processing():
-    from so101_demo.parallel_batch.contracts import load_runtime_config_any_schema
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_runtime_config_any_schema,
+    )
 
     package = PACKAGE_ROOT
     act = load_runtime_config_any_schema(package / "config/mujoco/parallel_batch_act_offline.yaml")
@@ -85,17 +87,19 @@ def test_the_act_runtime_config_carries_stage_bounds_long_enough_for_offline_pro
 
 
 def test_below_the_original_floor_a_version_three_config_is_refused_and_other_versions_stay_pinned(tmp_path):
-    from so101_demo.parallel_batch import contracts
+    from so101_demo.parallel_batch.contracts import common as contracts_common
+    from so101_demo.parallel_batch.contracts import linux_cuda as contracts_linux_cuda
+    from so101_demo.parallel_batch.contracts import macos_two_worker as contracts_macos_two_worker
 
     package = PACKAGE_ROOT
     text = (package / "config/mujoco/parallel_batch_act_offline.yaml").read_text()
     for field, bad in (("executing_hard_timeout_s", "239.0"), ("lease_duration_s", "299.0")):
         broken = tmp_path / f"{field}.yaml"
         broken.write_text(text.replace(f"{field}: 1500.0", f"{field}: {bad}"))
-        with pytest.raises(contracts.ContractError, match="FROZEN_RUNTIME_VALUE"):
-            contracts.load_parallel_runtime_config_linux_cuda(broken)
-    assert contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["executing_hard_timeout_s"] == 240.0
-    assert contracts.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["lease_duration_s"] == 300.0
+        with pytest.raises(contracts_common.ContractError, match="FROZEN_RUNTIME_VALUE"):
+            contracts_linux_cuda.load_parallel_runtime_config_linux_cuda(broken)
+    assert contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["executing_hard_timeout_s"] == 240.0
+    assert contracts_macos_two_worker.FROZEN_RUNTIME_VALUES_MACOS_MPS_TWO_WORKER["lease_duration_s"] == 300.0
 
 
 def test_the_collection_config_binds_the_act_runtime_config_and_the_input_inspector_reads_that_file():

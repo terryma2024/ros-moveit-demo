@@ -176,7 +176,7 @@ def test_the_retry_flags_are_the_macos_mps_single_worker_retry_routes_own_flags(
     """
 
     from so101_demo.cli import macos_two_worker_campaign as campaign
-    from so101_demo.parallel_batch.contracts import ExecutionProfile
+    from so101_demo.parallel_batch.contracts.routes import ExecutionProfile
 
     parser = campaign.build_single_worker_parser(str(ExecutionProfile.MPS_SINGLE_WORKER_FULL_RESTART_RETRY))
     accepted = {option for action in parser._actions for option in action.option_strings}

@@ -9,9 +9,7 @@ import re
 
 from so101_demo.cli.mujoco_batch.common import CliError
 from so101_demo.cli.mujoco_batch.request import PreparedBatch
-from so101_demo.parallel_batch.contracts import (
-    BatchRequest,
-)
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchRequest
 
 
 class _FixedWebStopRequested(CliError):

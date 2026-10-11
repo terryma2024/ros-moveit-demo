@@ -40,14 +40,18 @@ import time
 # known parent package", which a test that imports this file as a module cannot see. Absolute imports
 # need ``so101_demo`` to be importable, which the service guarantees - it imports that package itself to
 # resolve its layout, and the child inherits the same path.
-from so101_demo.parallel_batch.contracts import (
-    BatchKind,
-    ContractError,
-    ExecutionProfile,
-    ParallelRuntimeConfigMacosMpsTwoWorker,
-    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.linux_cuda import BatchKind
+from so101_demo.parallel_batch.contracts.macos_single_worker import (
     ParallelRuntimeConfigMacosMpsSingleWorkerFirstPass,
+    ParallelRuntimeConfigMacosMpsSingleWorkerRetry,
+)
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
+    ParallelRuntimeConfigMacosMpsTwoWorker,
+)
+from so101_demo.parallel_batch.contracts.routes import (
     execution_route_for_schema,
+    ExecutionProfile,
     resolve_execution_route,
 )
 from so101_demo.parallel_batch.macos_control_endpoint import MacosFixedControlEndpoint

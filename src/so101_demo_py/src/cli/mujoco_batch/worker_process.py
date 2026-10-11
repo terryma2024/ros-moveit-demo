@@ -27,16 +27,10 @@ from so101_demo.parallel_batch.artifacts import (
     ValidationWorkspace,
     write_recovery_receipt,
 )
-from so101_demo.parallel_batch.contracts import (
-    AttemptStatus,
-    RunMode,
-    ValidationStatus,
-    teacher_execution_bound_s,
-)
-from so101_demo.parallel_batch.worker import (
-    ParallelWorker,
-    adaptive_result_is_infrastructure,
-)
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode, ValidationStatus
+from so101_demo.parallel_batch.contracts.linux_cuda import teacher_execution_bound_s
+from so101_demo.parallel_batch.worker import ParallelWorker
+from so101_demo.parallel_batch.worker_parts.contracts import adaptive_result_is_infrastructure
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,
     WorkerTokenAuthority,
@@ -81,7 +75,7 @@ class _ArtifactResults:
         if self.mode is RunMode.DRY_RUN:
             raise CliError("DRY_RUN_WORKSPACE_RESERVATION")
         if self._collection_scope is not None:
-            from so101_demo.parallel_batch.contracts import LeaseIdentity
+            from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
             from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
             if type(lease) is not LeaseIdentity or type(reset_receipt) is not ResetBoundaryReceipt:
                 raise ValueError("ACT_RESET_RECEIPT_SCHEMA")

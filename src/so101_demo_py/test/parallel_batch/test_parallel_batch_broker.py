@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
-    ExecutionKind, InferenceRequest, load_parallel_runtime_config_linux_cuda, ModelOutcome,
-)
+from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
+from so101_demo.parallel_batch.contracts.identity import InferenceRequest
+from so101_demo.parallel_batch.contracts.linux_cuda import load_parallel_runtime_config_linux_cuda
 from paths import PACKAGE_ROOT
 
 

@@ -27,8 +27,10 @@ from so101_demo.adapters.perception.errors import (
 from so101_demo.adapters.perception.grounded_sam_postprocess import GroundedSamThresholds
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate, DetectionFrame, DetectionQuery
 from so101_demo.parallel_batch.broker import BrokerSubmission, ModelResult, PerceptionBroker
-from so101_demo.parallel_batch.contracts import (
-    InferenceRequest, ModelOutcome, NormalizedInferenceResponseIdentity,
+from so101_demo.parallel_batch.contracts.common import ModelOutcome
+from so101_demo.parallel_batch.contracts.identity import (
+    InferenceRequest,
+    NormalizedInferenceResponseIdentity,
 )
 from so101_demo.parallel_batch.frozen_models import (
     FROZEN_GROUNDED_SAM_MANIFEST_SHA256, FROZEN_YOLO_WEIGHTS_SHA256)

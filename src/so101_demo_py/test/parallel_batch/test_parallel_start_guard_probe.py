@@ -408,10 +408,12 @@ def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path
 
     import json as _json
 
-    from so101_demo.parallel_batch.contracts import (
-        load_parallel_runtime_config_macos_mps_two_worker,
-        load_parallel_runtime_config_macos_mps_single_worker_retry,
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
         load_parallel_runtime_config_macos_mps_single_worker_first_pass,
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
+    )
+    from so101_demo.parallel_batch.contracts.macos_two_worker import (
+        load_parallel_runtime_config_macos_mps_two_worker,
     )
 
     package = PACKAGE_ROOT
@@ -452,7 +454,9 @@ def test_the_probe_request_shape_is_shared_by_all_three_darwin_profiles(tmp_path
 def test_a_macos_mps_single_worker_retry_policy_takes_the_darwin_helper_half_and_demands_the_mps_admission(tmp_path):
     """The helper half is shared; the accelerator admission stays mandatory for v5/v6 too."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_macos_mps_single_worker_retry
+    from so101_demo.parallel_batch.contracts.macos_single_worker import (
+        load_parallel_runtime_config_macos_mps_single_worker_retry,
+    )
 
     package = PACKAGE_ROOT
     policy = load_parallel_runtime_config_macos_mps_single_worker_retry(

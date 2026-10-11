@@ -20,11 +20,15 @@ from functools import wraps
 from pathlib import Path
 from typing import Callable, Protocol
 
-from .contracts import (
-    ParallelRuntimeConfigLinuxCuda,
-    AttemptStatus, BatchSummary, LeaseIdentity,
-    PointStatus, RunMode, ValidationStatus, WorkerState,
+from so101_demo.parallel_batch.contracts.common import (
+    AttemptStatus,
+    PointStatus,
+    RunMode,
+    ValidationStatus,
+    WorkerState,
 )
+from so101_demo.parallel_batch.contracts.identity import BatchSummary, LeaseIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
 
 
 _START_AUTHORIZATION_FROM_PROJECTION = object()

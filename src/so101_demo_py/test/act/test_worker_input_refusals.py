@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 from so101_demo.parallel_batch.perception import PerceptionError, PoseAdmissionCommitError
 from so101_demo.parallel_batch.worker import ParallelWorker
 
@@ -183,7 +183,7 @@ def test_plan_only_and_validation_runs_are_not_affected():
 
 def test_the_origin_type_is_written_only_when_it_is_set(tmp_path):
     from so101_demo.cli.mujoco_batch.worker_process import _write_worker_results
-    from so101_demo.parallel_batch.worker import WorkerRunResult
+    from so101_demo.parallel_batch.worker_parts.contracts import WorkerRunResult
     resources = SimpleNamespace(worker_id="worker-01", generation=1, worker_root=tmp_path)
     plain = WorkerRunResult("task_start", None, False, "INITIAL_GATE_FAILED", failure_boundary="x", failure_type="RuntimeError",
                             failure_message="m")

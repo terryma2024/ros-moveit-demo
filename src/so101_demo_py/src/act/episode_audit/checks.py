@@ -9,7 +9,8 @@ import math
 from pathlib import Path
 
 from so101_demo.act.qc_session import cached_lines
-from so101_demo.parallel_batch.contracts import ContractError, LeaseIdentity
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
 
 
 def _reference_target_s(sim_time_s):

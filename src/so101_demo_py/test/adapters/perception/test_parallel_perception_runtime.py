@@ -27,8 +27,11 @@ def fixture_runtime(
         ParallelPerceptionRuntime, Snapshot, frozen_options)
     from so101_demo.adapters.perception import detector_factory
     from so101_demo.core.detection import DetectionBatch, DetectionCandidate
-    from so101_demo.parallel_batch.contracts import (
-        ExecutionKind, InferenceRequest, NormalizedInferenceResponseIdentity)
+    from so101_demo.parallel_batch.contracts.common import ExecutionKind
+    from so101_demo.parallel_batch.contracts.identity import (
+        InferenceRequest,
+        NormalizedInferenceResponseIdentity,
+    )
     root = tmp_path / 'inputs'
     root.mkdir(mode=0o700)
     branch, eid = ('validations', 'v1') if validation else ('attempts', 'a1')
@@ -91,7 +94,7 @@ def fixture_runtime(
 
 @pytest.mark.parametrize('validation', [False, True])
 def test_both_execution_kinds_normalize_lossless_candidates(tmp_path, monkeypatch, validation):
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch, validation=validation)
     f.runtime.start()
     result = f.runtime.infer(f.req, f.snapshot)
@@ -205,7 +208,7 @@ def test_started_unhealthy_runtime_still_requires_new_generation(tmp_path, monke
 ])
 @pytest.mark.parametrize('validation', [False, True])
 def test_invalid_snapshot_never_reaches_model(tmp_path, monkeypatch, bad, validation):
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch, validation=validation)
     f.runtime.start()
     if bad == 'kind_path':
@@ -232,7 +235,7 @@ def test_invalid_snapshot_never_reaches_model(tmp_path, monkeypatch, bad, valida
 @pytest.mark.parametrize('name', ['oom', 'unknown', 'socket', 'deadline', 'legacy_yolo'])
 def test_runtime_errors_are_infrastructure_and_poison_health(tmp_path, monkeypatch, name):
     from so101_demo.adapters.perception.yolo_seg import YoloResultError
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     errors = {'oom': RuntimeError('CUDA out of memory'), 'unknown': RuntimeError('unknown'),
               'socket': ConnectionError('closed'), 'deadline': TimeoutError('deadline'),
               'legacy_yolo': YoloResultError('INFERENCE_FAILED: unknown')}
@@ -243,7 +246,7 @@ def test_runtime_errors_are_infrastructure_and_poison_health(tmp_path, monkeypat
 
 
 def test_first_runtime_failure_is_durable_and_never_overwritten(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
 
     f = fixture_runtime(
         tmp_path, monkeypatch, failure=RuntimeError('diagnostic CUDA sentinel'))
@@ -281,7 +284,7 @@ def test_first_runtime_failure_is_durable_and_never_overwritten(tmp_path, monkey
 
 def test_deterministic_error_is_model_error_and_empty_is_normal(tmp_path, monkeypatch):
     from so101_demo.adapters.perception.errors import DeterministicModelResultError
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch, failure=DeterministicModelResultError('schema'))
     f.runtime.start()
     assert f.runtime.infer(f.req, f.snapshot).outcome is ModelOutcome.MODEL_ERROR
@@ -350,7 +353,7 @@ def test_ready_receipt_io_failure_is_unhealthy_and_retained(tmp_path, monkeypatc
 @pytest.mark.parametrize('mutation', ['bytes', 'mode'])
 def test_actual_input_change_between_path_check_and_open_never_reaches_model(
         tmp_path, monkeypatch, mutation):
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     original_open = os.open
@@ -397,7 +400,10 @@ def test_grounded_oom_has_infrastructure_type():
 
 def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService, GROUNDED_ID
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
     config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
     service = PerceptionService(f.runtime, config, generation=3)
@@ -418,8 +424,8 @@ def test_service_drives_real_broker_and_honors_local_generation_fence(tmp_path, 
 def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
         tmp_path, monkeypatch):
     from so101_demo.parallel_batch.broker import ModelResult
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome,
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
@@ -513,8 +519,8 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
 
 def test_watchdog_times_out_blocked_inference_and_wakes_waiter(tmp_path, monkeypatch):
     from so101_demo.parallel_batch.broker import ModelResult
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome,
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
@@ -580,8 +586,8 @@ def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
         tmp_path, monkeypatch):
     """A blocked detector must not trigger a 20 ms remote-authorization loop."""
     from so101_demo.parallel_batch.broker import ModelResult
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome,
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
@@ -643,8 +649,8 @@ def test_watchdog_waits_for_deadlines_without_reauthorizing_blocked_work(
 def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
         tmp_path, monkeypatch):
     from so101_demo.parallel_batch.broker import ModelResult
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome,
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import (
@@ -708,7 +714,10 @@ def test_wait_response_does_not_run_watchdog_scan_on_client_thread(
 def test_service_preserves_initiating_runtime_failure_before_health_fanout(
         tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     config = load_parallel_runtime_config_linux_cuda(
         PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
@@ -729,7 +738,10 @@ def test_service_preserves_initiating_runtime_failure_before_health_fanout(
 def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
         tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     config = load_parallel_runtime_config_linux_cuda(
         PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
@@ -754,7 +766,7 @@ def test_service_never_repolls_a_delivered_qualified_response_past_its_deadline(
 
 
 def test_input_changed_during_detector_never_returns_candidate(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     detector = f.runtime.detectors[f.req.model_id][0].detector
@@ -798,7 +810,10 @@ def test_yolo_nonfinite_mask_is_deterministic_output_error():
 
 def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path, monkeypatch):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
     from so101_demo.core.detection import DetectionBatch
     config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     f = fixture_runtime(tmp_path, monkeypatch)
@@ -821,7 +836,7 @@ def test_service_preserves_empty_rejection_and_isolates_queue_deadline(tmp_path,
 
 def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch):
     from so101_demo.adapters.perception.yolo_seg import YoloSegDetector
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     detector = object.__new__(YoloSegDetector)
@@ -1000,7 +1015,10 @@ def test_container_entry_installs_transport_from_exact_runtime_spec(
 @pytest.mark.parametrize('running', [False, True])
 def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_path, monkeypatch, running):
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
-    from so101_demo.parallel_batch.contracts import ModelOutcome, load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
     f = fixture_runtime(tmp_path, monkeypatch)
     config = load_parallel_runtime_config_linux_cuda(PACKAGE_ROOT / 'config/mujoco/parallel_batch_linux_cuda.yaml')
     now = [1.]
@@ -1022,8 +1040,9 @@ def test_dispatch_scan_timeout_poison_health_even_without_returned_result(tmp_pa
 @pytest.mark.parametrize('outcome', ['INFRA_ERROR'])
 def test_health_losing_response_reports_one_exact_event(
         tmp_path, monkeypatch, outcome):
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome, load_parallel_runtime_config_linux_cuda,
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
 
@@ -1059,7 +1078,7 @@ def test_health_losing_response_reports_one_exact_event(
                                'transfer_oom', 'transfer_type_error'])
 def test_yolo_completed_schema_vs_tensor_transfer_boundary(tmp_path, monkeypatch, bad):
     from so101_demo.adapters.perception.yolo_seg import YoloSegDetector
-    from so101_demo.parallel_batch.contracts import ModelOutcome
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
     f = fixture_runtime(tmp_path, monkeypatch)
     f.runtime.start()
     result = SimpleNamespace(boxes=SimpleNamespace(xyxy=np.array([[0., 0., 3., 2.]]),
@@ -1220,10 +1239,8 @@ def test_each_model_is_asked_for_the_class_its_own_prompt_profile_declares(tmp_p
 
     from so101_demo.cli.parallel_perception_broker import smoke_models
     from so101_demo.core.detection import DetectionFrame
-    from so101_demo.parallel_batch.contracts import (
-        ModelOutcome,
-        NormalizedInferenceResponseIdentity,
-    )
+    from so101_demo.parallel_batch.contracts.common import ModelOutcome
+    from so101_demo.parallel_batch.contracts.identity import NormalizedInferenceResponseIdentity
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 
     f = fixture_runtime(tmp_path, monkeypatch)

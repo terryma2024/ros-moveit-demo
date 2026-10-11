@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from so101_demo.core.dynamic_pick import DYNAMIC_REACHABILITY_STATES
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode, ValidationStatus
-from so101_demo.parallel_batch.resources import WorkerResources
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode, ValidationStatus
+from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
 
 
 def _resources(root: Path, worker: str, slot: int, domain: int) -> WorkerResources:

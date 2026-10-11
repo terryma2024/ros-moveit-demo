@@ -8,14 +8,17 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.parallel_batch.contracts import (
+from so101_demo.parallel_batch.contracts.common import (
     AttemptStatus,
-    BatchKind, BatchRequest,
     ExecutionKind,
-    LeaseIdentity,
     RunMode,
     ValidationStatus,
     WorkerState,
+)
+from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
     load_parallel_runtime_config_linux_cuda,
 )
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
@@ -617,7 +620,7 @@ def test_prepare_for_start_is_idempotent_and_never_requests_a_lease():
     ],
 )
 def test_adaptive_worker_result_infrastructure_classification(result, expected):
-    from so101_demo.parallel_batch.worker import adaptive_result_is_infrastructure
+    from so101_demo.parallel_batch.worker_parts.contracts import adaptive_result_is_infrastructure
 
     assert adaptive_result_is_infrastructure(result) is expected
 
@@ -988,7 +991,7 @@ def _expert_blocked_with_a_fenced_teacher_channel(fake, *, code="TEACHER_CHANNEL
     """An EXECUTE run whose Teacher child is blocked in execute_expert while the broker fences its channel.
 
     The Coordinator keeps answering; only the Teacher lifecycle's renewal hook refuses, as the live run's did."""
-    from so101_demo.parallel_batch.contracts import TeacherChannelTerminal
+    from so101_demo.parallel_batch.contracts.common import TeacherChannelTerminal
 
     entered, release, hooks = threading.Event(), threading.Event(), []
     original_execute = fake.runtime.execute_expert
@@ -1043,7 +1046,7 @@ def test_a_fenced_teacher_channel_is_the_teachers_terminal_event_and_its_attempt
 
 
 def test_a_fence_noticed_only_at_the_finalizing_acknowledgement_is_tolerated_too():
-    from so101_demo.parallel_batch.contracts import TeacherChannelTerminal
+    from so101_demo.parallel_batch.contracts.common import TeacherChannelTerminal
 
     fake = Fake(RunMode.EXECUTE)
     fake.runtime.execute_decision = Decision(AttemptStatus.INDETERMINATE, "DYNAMIC_EXECUTION_FAILED",
@@ -2111,7 +2114,7 @@ def test_original_heartbeat_acceptance_precedes_start_transition_without_blockin
 
 
 def test_late_ordered_owner_hook_cannot_publish_a_phase_ack_after_its_original_deadline():
-    from so101_demo.parallel_batch.worker import WorkerError
+    from so101_demo.parallel_batch.worker_parts.contracts import WorkerError
     fake=Fake(RunMode.EXECUTE)
     fake.runtime.requires_ordered_coordinator_receipts=True
     worker=ParallelWorker(fake.ports())
@@ -2151,7 +2154,7 @@ def _watchdog_owner(revoked, **overrides):
 
 
 def _run_watchdog(owner):
-    from so101_demo.parallel_batch.worker import _HeartbeatWatchdog
+    from so101_demo.parallel_batch.worker_parts.watchdog import _HeartbeatWatchdog
 
     watchdog = _HeartbeatWatchdog(owner, _watchdog_lease())
     watchdog.start()
@@ -2291,7 +2294,7 @@ def _capture_sealed_decisions(fake):
 
 
 def test_a_pre_motion_teacher_refusal_after_the_start_ack_is_committed_as_a_teacher_attempt_that_did_not_pass():
-    from so101_demo.parallel_batch.contracts import TeacherPreMotionRefused
+    from so101_demo.parallel_batch.contracts.common import TeacherPreMotionRefused
     from so101_demo.parallel_batch.dynamic_manifest import teacher_attempt_status
     fake = Fake(RunMode.EXECUTE)
     sealed = _capture_sealed_decisions(fake)
@@ -2316,9 +2319,9 @@ def test_a_pre_motion_teacher_refusal_after_the_start_ack_is_committed_as_a_teac
 
 
 def test_started_non_pass_outcomes_count_in_the_teacher_attempt_denominator_and_invalid_does_not():
-    from so101_demo.parallel_batch import contracts
-    assert AttemptStatus.INDETERMINATE in contracts._TEACHER_STARTED and AttemptStatus.FAILED in contracts._TEACHER_STARTED
-    assert AttemptStatus.INVALID not in contracts._TEACHER_STARTED
+    from so101_demo.parallel_batch.contracts import identity as contracts_identity
+    assert AttemptStatus.INDETERMINATE in contracts_identity._TEACHER_STARTED and AttemptStatus.FAILED in contracts_identity._TEACHER_STARTED
+    assert AttemptStatus.INVALID not in contracts_identity._TEACHER_STARTED
 
 
 def test_the_pre_motion_result_is_exactly_the_manifest_free_contract_the_result_store_already_accepts(tmp_path):
@@ -2331,7 +2334,7 @@ def test_the_pre_motion_result_is_exactly_the_manifest_free_contract_the_result_
 
 @pytest.mark.parametrize("boundary,patch", [("reset_point", "reset_point"), ("point_initial_gate", "point_initial_gate")])
 def test_a_failure_before_the_start_ack_stays_invalid_even_for_a_teacher_refusal(boundary, patch):
-    from so101_demo.parallel_batch.contracts import TeacherPreMotionRefused
+    from so101_demo.parallel_batch.contracts.common import TeacherPreMotionRefused
     fake = Fake(RunMode.EXECUTE)
     sealed = _capture_sealed_decisions(fake)
     def refuse(*args, **kwargs):

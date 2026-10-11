@@ -17,10 +17,16 @@ from numbers import Real
 import threading
 
 from .artifacts import AttemptWorkspace, ValidationWorkspace
-from .contracts import (
-    _require_finite, _require_id, _require_positive_int, _require_sha256,
-    AttemptStatus, ExecutionKind, InferenceRequest, ModelOutcome,
+from so101_demo.parallel_batch.contracts.common import (
+    _require_finite,
+    _require_id,
+    _require_positive_int,
+    _require_sha256,
+    AttemptStatus,
+    ExecutionKind,
+    ModelOutcome,
 )
+from so101_demo.parallel_batch.contracts.identity import InferenceRequest
 
 
 class PerceptionError(ValueError):

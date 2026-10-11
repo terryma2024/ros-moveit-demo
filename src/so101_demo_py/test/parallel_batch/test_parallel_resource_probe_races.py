@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import time
+
 import pytest
 
 
@@ -17,7 +19,7 @@ def _proc_process(root: Path, pid: int) -> Path:
 
 
 def test_transient_proc_metadata_error_is_retried(tmp_path, monkeypatch):
-    from so101_demo.parallel_batch.resources import SystemResourceProbe
+    from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
 
     proc_root = tmp_path / "proc"
     proc_root.mkdir()
@@ -42,7 +44,7 @@ def test_transient_proc_metadata_error_is_retried(tmp_path, monkeypatch):
 
 def test_cleanup_domain_probe_rescans_a_transient_proc_race(monkeypatch):
     from so101_demo.cli import parallel_batch_cleanup
-    from so101_demo.parallel_batch.resources import ResourceAllocationError
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
 
     class Probe:
         calls = 0
@@ -69,7 +71,7 @@ def test_cleanup_domain_probe_rescans_a_transient_proc_race(monkeypatch):
 
 def test_cleanup_domain_probe_outlives_the_five_second_shutdown_tail(monkeypatch):
     from so101_demo.cli import parallel_batch_cleanup
-    from so101_demo.parallel_batch.resources import ResourceAllocationError
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
 
     class Probe:
         calls = 0
@@ -97,7 +99,8 @@ def test_cleanup_domain_probe_outlives_the_five_second_shutdown_tail(monkeypatch
 def test_allocator_release_probe_outlives_the_five_second_shutdown_tail(
     monkeypatch,
 ):
-    from so101_demo.parallel_batch import resources
+    from so101_demo.parallel_batch.resource_allocation import models as resources_models
+    from so101_demo.parallel_batch.resource_allocation import probe as resources_probe
 
     class Probe:
         calls = 0
@@ -106,16 +109,16 @@ def test_allocator_release_probe_outlives_the_five_second_shutdown_tail(
             assert domain_id == 181
             self.calls += 1
             if self.calls <= 101:
-                raise resources.ResourceAllocationError(
+                raise resources_models.ResourceAllocationError(
                     "PROC_METADATA_UNVERIFIABLE: 4249"
                 )
             return False
 
     probe = Probe()
     sleeps = []
-    monkeypatch.setattr(resources.time, "sleep", sleeps.append)
+    monkeypatch.setattr(time, "sleep", sleeps.append)
 
-    assert resources._ros_domain_in_use_after_cleanup_quiescence(
+    assert resources_probe._ros_domain_in_use_after_cleanup_quiescence(
         probe, 181
     ) is False
     assert probe.calls == 102
@@ -126,7 +129,7 @@ def test_cleanup_domain_probe_keeps_persistent_proc_races_fail_closed(
     monkeypatch,
 ):
     from so101_demo.cli import parallel_batch_cleanup
-    from so101_demo.parallel_batch.resources import ResourceAllocationError
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
 
     class Probe:
         calls = 0

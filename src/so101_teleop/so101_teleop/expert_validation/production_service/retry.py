@@ -9,7 +9,7 @@ import sys
 import time
 import uuid
 
-from so101_demo.parallel_batch.contracts import ContractError
+from so101_demo.parallel_batch.contracts.common import ContractError
 from so101_teleop.expert_validation.control import ControlProtocolError
 from so101_teleop.expert_validation.execution_context import (
     LINUX_RETRY_PROFILE,
@@ -151,7 +151,9 @@ class CampaignRetry:
             campaign_id, point_id
         )
         if sys.platform.startswith("linux") and original.execution_profile is None:
-            from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+            from so101_demo.parallel_batch.contracts.linux_cuda import (
+                load_parallel_runtime_config_linux_cuda,
+            )
 
             try:
                 load_parallel_runtime_config_linux_cuda(Path(original.parallel_config_path))

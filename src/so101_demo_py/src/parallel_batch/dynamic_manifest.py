@@ -10,7 +10,7 @@ from ..application.e2e_acceptance import SCHEMA_GENERAL, SCHEMA_TEACHER, is_mani
 from ..core.domain import State
 from ..core.dynamic_pick import DYNAMIC_MOTION_STATES
 from ..core.workflow import SIM_INTEGRITY_CODES, SO101_WORKFLOW, TEACHER_WORKFLOW, TERMINAL_STOP_CODES
-from .contracts import AttemptStatus
+from so101_demo.parallel_batch.contracts.common import AttemptStatus
 
 EXECUTION_STATUSES = frozenset({
     "COMPLETED", "FAILED", "STOPPED_SAFETY", "STOPPED_USER", "DEADLINE", "INDETERMINATE",

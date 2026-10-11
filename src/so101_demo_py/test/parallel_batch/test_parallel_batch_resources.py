@@ -24,21 +24,23 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.parallel_batch import resources as resources_api
+from so101_demo.parallel_batch.resource_allocation import allocator_layout as resources_api_allocator_layout
+from so101_demo.parallel_batch.resource_allocation import filesystem as resources_api_filesystem
+from so101_demo.parallel_batch.resource_allocation import manifest as resources_api_manifest
+from so101_demo.parallel_batch.resource_allocation import probe as resources_api_probe
 from so101_demo.parallel_batch.start_guard_probe import (
     CLEAR,
     ProbeCoordinator,
 )
-from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
-from so101_demo.parallel_batch.resources import (
+from so101_demo.parallel_batch.resource_allocation.models import (
     AllocationPolicy,
-    main,
+    configured_runtime_ipc_root,
     ResourceAllocationError,
     ResourceSnapshot,
-    SystemResourceProbe,
-    WorkerResourceAllocator,
-    configured_runtime_ipc_root,
     runtime_ipc_base,
 )
+from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
+from so101_demo.parallel_batch.resources import main, WorkerResourceAllocator
 from paths import PACKAGE_ROOT
 
 
@@ -80,7 +82,9 @@ class FakeProbe:
 
 @pytest.fixture
 def config():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     return load_parallel_runtime_config_linux_cuda(CLI_CONFIG_PATH)
 
@@ -195,7 +199,7 @@ def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias():
         relative = real_path.relative_to('/private/tmp')
         alias_target = Path('/tmp') / relative / 'batch'
 
-        descriptor = resources_api._open_trusted_parent(alias_target)
+        descriptor = resources_api_filesystem._open_trusted_parent(alias_target)
         try:
             assert os.fstat(descriptor).st_ino == real_path.stat().st_ino
         finally:
@@ -206,7 +210,7 @@ def test_trusted_parent_accepts_the_root_owned_macos_tmp_alias():
 def test_domain_claim_owner_has_a_portable_process_birth_identity():
     """Persistent ROS-domain claims remain PID-reuse safe without procfs."""
 
-    assert resources_api._process_starttime_ticks() > 0
+    assert resources_api_manifest._process_starttime_ticks() > 0
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='requires Linux /proc/<pid>/cmdline')
@@ -222,7 +226,8 @@ def test_oversized_cmdline_process_is_classified_not_refused():
     import subprocess
     import sys as _sys
 
-    from so101_demo.parallel_batch.resources import ResourceAllocationError, SystemResourceProbe
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
+    from so101_demo.parallel_batch.resource_allocation.probe import SystemResourceProbe
 
     filler = "x" * 6000
     child = subprocess.Popen(
@@ -256,7 +261,7 @@ def test_oversized_cmdline_process_is_classified_not_refused():
 def test_interactive_and_headless_sshd_transports_are_frozen_non_candidates(argv):
     """Remote execution must not read the protected environment of its sshd transport."""
 
-    reason = resources_api._frozen_non_candidate_reason('S', 'sshd', argv)
+    reason = resources_api_probe._frozen_non_candidate_reason('S', 'sshd', argv)
 
     assert reason == 'frozen_sshd_transport_non_candidate'
 
@@ -266,7 +271,7 @@ def test_interactive_and_headless_sshd_transports_are_frozen_non_candidates(argv
     [("sshd: robot.user@tty7",), ("sshd: robot.user@notty extra",)],
 )
 def test_unknown_sshd_transport_shapes_remain_unclassified(argv):
-    assert resources_api._frozen_non_candidate_reason('S', 'sshd', argv) is None
+    assert resources_api_probe._frozen_non_candidate_reason('S', 'sshd', argv) is None
 
 
 def test_claim_root_is_stable_per_test_and_isolated_between_tests(monkeypatch):
@@ -1182,7 +1187,7 @@ import json
 import os
 import signal
 import sys
-from so101_demo.parallel_batch import resources
+from so101_demo.parallel_batch.resource_allocation import manifest as resources
 root = sys.argv[1]
 descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
 resources.os.link = lambda *args, **kwargs: os.kill(os.getpid(), signal.SIGKILL)
@@ -1214,7 +1219,7 @@ def test_directory_fsync_failure_after_publish_is_explicitly_uncertain(
     monkeypatch.setattr(os, 'fsync', fail_published_directory_sync)
     try:
         with pytest.raises(ResourceAllocationError, match='PUBLICATION_UNCERTAIN'):
-            resources_api._write_manifest_at(
+            resources_api_manifest._write_manifest_at(
                 root_fd, final.name, {'complete': True}
             )
     finally:
@@ -1235,7 +1240,7 @@ def test_manifest_publish_is_no_replace_and_cleans_temporary(tmp_path):
     root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         with pytest.raises(ResourceAllocationError, match='MANIFEST_CONFLICT'):
-            resources_api._write_manifest_at(root_fd, final.name, {'replacement': True})
+            resources_api_manifest._write_manifest_at(root_fd, final.name, {'replacement': True})
     finally:
         os.close(root_fd)
     assert final.read_bytes() == b'prior-authoritative-manifest\n'
@@ -1265,7 +1270,7 @@ def system_probe(tmp_path, monkeypatch, meminfo):
     monkeypatch.setattr(resources_api.os, 'cpu_count', lambda: 24)
     monkeypatch.setattr(resources_api.os, 'sysconf', lambda _name: 0)
     monkeypatch.setattr(
-        resources_api.subprocess,
+        subprocess,
         'run',
         lambda *args, **kwargs: SimpleNamespace(stdout='15269\n'),
     )
@@ -1383,7 +1388,9 @@ def _refusing_guard(tmp_path, reason):
 
 
 def config_policy():
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     return load_parallel_runtime_config_linux_cuda(CLI_CONFIG_PATH).start_guard
 
@@ -1538,7 +1545,7 @@ def test_each_guard_failure_fails_closed_without_creating_directories(
 def test_admission_records_the_start_guard_decision(tmp_path, config):
     """The manifest carries the guard's own decision, not a fabricated budget pass."""
 
-    from so101_demo.parallel_batch.resources import StartGuardAdmission
+    from so101_demo.parallel_batch.resource_allocation.manifest import StartGuardAdmission
 
     manifest = allocator(tmp_path, config).allocate()
 
@@ -1726,9 +1733,9 @@ def test_short_external_ipc_root_preserves_long_durable_evidence_root(tmp_path, 
         assert worker.worker_root.is_relative_to(root)
         assert worker.socket_path == ipc_root / "1/s"
         capacity = (
-            resources_api.DARWIN_SUN_PATH_CAPACITY_BYTES
+            resources_api_allocator_layout.DARWIN_SUN_PATH_CAPACITY_BYTES
             if sys.platform == 'darwin'
-            else resources_api.LINUX_SUN_PATH_CAPACITY_BYTES
+            else resources_api_allocator_layout.LINUX_SUN_PATH_CAPACITY_BYTES
         )
         assert len(os.fsencode(worker.socket_path)) + 1 <= capacity
         assert not (root / "ipc").exists()
@@ -1797,26 +1804,26 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
     if sys.platform == 'darwin':
         # This test never binds a socket; Darwin's missing dirfd transport is covered
         # separately and must not hide which schema-v3 resource probe was invoked.
-        monkeypatch.setattr(resources_api, 'require_transport_basename', lambda _path: None)
+        monkeypatch.setattr(resources_api_allocator_layout, 'require_transport_basename', lambda _path: None)
 
     def retired_probe(_self):
         raise AssertionError('schema-v3 must use only the lightweight start guard')
 
     monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.SystemResourceProbe.snapshot',
+        'so101_demo.parallel_batch.resource_allocation.probe.SystemResourceProbe.snapshot',
         retired_probe,
     )
     monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.SystemResourceProbe.ros_domain_in_use',
+        'so101_demo.parallel_batch.resource_allocation.probe.SystemResourceProbe.ros_domain_in_use',
         lambda self, domain_id: False,
     )
     monkeypatch.setattr(
-        'so101_demo.parallel_batch.resources.SystemResourceProbe.socket_in_use',
+        'so101_demo.parallel_batch.resource_allocation.probe.SystemResourceProbe.socket_in_use',
         lambda self, path: False,
     )
     if sys.platform != 'darwin':
         monkeypatch.setattr(
-            'so101_demo.parallel_batch.resources.subprocess.Popen',
+            'subprocess.Popen',
             lambda *args, **kwargs: calls.append((args, kwargs)),
             raising=False,
         )
@@ -1995,10 +2002,8 @@ def test_domain_claim_check_reads_the_durable_claim(tmp_path: Path) -> None:
     from pathlib import Path as _Path
     from types import SimpleNamespace
 
-    from so101_demo.parallel_batch.resources import (
-        ResourceAllocationError,
-        WorkerResourceAllocator,
-    )
+    from so101_demo.parallel_batch.resource_allocation.models import ResourceAllocationError
+    from so101_demo.parallel_batch.resources import WorkerResourceAllocator
 
     claim_root = _Path(tmp_path) / "claims"
     claim_root.mkdir(mode=0o700)

@@ -7,8 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from so101_demo.parallel_batch.artifacts import AttemptWorkspace, ValidationWorkspace
-from so101_demo.parallel_batch.contracts import (
-    AttemptIdentity, ExecutionKind, InferenceRequest, ModelOutcome, RunMode,
+from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome, RunMode
+from so101_demo.parallel_batch.contracts.identity import (
+    AttemptIdentity,
+    InferenceRequest,
     ValidationIdentity,
 )
 
@@ -411,7 +413,7 @@ def test_a_tf_stamp_failure_is_named_and_the_candidate_path_keeps_its_prefix(tmp
 
 def test_the_named_reason_reaches_the_worker_failure_message():
     from so101_demo.parallel_batch.perception import PerceptionError
-    from so101_demo.parallel_batch.worker import _bounded_failure_message
+    from so101_demo.parallel_batch.worker_parts.contracts import _bounded_failure_message
     text = 'STALE_RGBD: FUTURE_STAMP now=7.7 rgb=7.8 depth=7.8 reset=3.24 max_age=5.0 max_skew=0.0'
     assert _bounded_failure_message(PerceptionError(text)) == text
 

@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from so101_demo.parallel_batch.contracts import (
-    ContractError,
+from so101_demo.parallel_batch.contracts.common import ContractError
+from so101_demo.parallel_batch.contracts.linux_cuda import ParallelRuntimeConfigLinuxCuda
+from so101_demo.parallel_batch.contracts.macos_two_worker import (
     IpcTransport,
-    ParallelRuntimeConfigLinuxCuda,
     ParallelRuntimeConfigMacosMpsTwoWorker,
 )
 from so101_demo.parallel_batch.two_worker_composition import (
@@ -42,7 +42,9 @@ MACOS_MPS_TWO_WORKER_CONFIG = PACKAGE / "config/mujoco/parallel_batch_macos_mps_
 def test_linux_cuda_still_loads_through_the_widened_loader():
     """Widening the gate for v4 must not change the v3 result at all."""
 
-    from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        load_parallel_runtime_config_linux_cuda,
+    )
 
     through_new = load_execution_config(LINUX_CUDA_CONFIG)
     through_old = load_parallel_runtime_config_linux_cuda(LINUX_CUDA_CONFIG)

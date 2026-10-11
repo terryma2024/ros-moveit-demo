@@ -15,8 +15,13 @@ from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import (
     ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults,
 )
-from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
-from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, load_parallel_runtime_config_linux_cuda
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
+from so101_demo.parallel_batch.contracts.linux_cuda import (
+    BatchKind,
+    BatchRequest,
+    load_parallel_runtime_config_linux_cuda,
+)
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
 from paths import PACKAGE_ROOT

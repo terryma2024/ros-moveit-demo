@@ -28,17 +28,15 @@ from so101_demo.parallel_batch.adaptive_pool import (
 from so101_demo.parallel_batch.artifacts import (
     SealedResultAdapter,
 )
-from so101_demo.parallel_batch.contracts import (
-    BatchSummary,
-    RunMode,
-)
+from so101_demo.parallel_batch.contracts.common import RunMode
+from so101_demo.parallel_batch.contracts.identity import BatchSummary
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.parallel_batch.resources import (
+from so101_demo.parallel_batch.resource_allocation.models import (
     AllocationPolicy,
-    WorkerResourceAllocator,
     configured_runtime_ipc_root,
 )
+from so101_demo.parallel_batch.resources import WorkerResourceAllocator
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
 from so101_demo.runtime.parallel_ipc import (
     AuthenticatedUnixServer,

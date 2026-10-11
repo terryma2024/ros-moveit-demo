@@ -13,7 +13,7 @@ import pytest
 
 from act_result_teacher import OUTCOMES, sealed_teacher, teacher, write_manifest
 from test_act_result_qc import controlled_committed_result, lease, setup_result
-from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
+from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode
 
 
 def _verifier(tmp_path, location, inputs):
@@ -247,7 +247,8 @@ def test_a_result_of_another_schema_version_cannot_be_committed_by_the_coordinat
 
 
 def test_batch_summary_reports_the_teacher_success_rate_over_all_started_attempts():
-    from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
+    from so101_demo.parallel_batch.contracts.common import PointStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
     summary = BatchSummary(RunMode.EXECUTE, {"a": PointStatus.PASSED, "b": PointStatus.PASSED,
         "c": PointStatus.FAILED, "d": PointStatus.INDETERMINATE, "f": PointStatus.UNRUN},
         batch_terminal=True,
@@ -262,7 +263,8 @@ def test_batch_summary_reports_the_teacher_success_rate_over_all_started_attempt
 
 
 def test_batch_summary_without_started_attempts_has_no_rate():
-    from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
+    from so101_demo.parallel_batch.contracts.common import PointStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
     summary = BatchSummary(RunMode.EXECUTE, {"a": PointStatus.UNRUN})
     assert summary.teacher_attempts_started == 0 and summary.teacher_success_rate is None
     assert summary.act_data_pass_rate is None and summary.committable_episodes == 0
@@ -270,7 +272,8 @@ def test_batch_summary_without_started_attempts_has_no_rate():
 
 def test_the_outcome_document_reports_teacher_and_data_rates_separately():
     from so101_demo.cli.mujoco_batch.outcome import outcome_document
-    from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
+    from so101_demo.parallel_batch.contracts.common import PointStatus
+    from so101_demo.parallel_batch.contracts.identity import BatchSummary
     summary = BatchSummary(RunMode.EXECUTE, {"a": PointStatus.PASSED, "b": PointStatus.FAILED}, batch_terminal=True,
         act_results={"a": dict(act_data_qc="FAIL", export_eligible=False)})
     _, document = outcome_document(summary)

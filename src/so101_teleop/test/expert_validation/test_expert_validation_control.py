@@ -209,8 +209,11 @@ def test_real_control_transport_preserves_a_long_private_batch_socket(tmp_path):
 
 def test_real_client_cancel_reaches_the_upstream_durable_coordinator(tmp_path):
     """No injected transport or stand-in terminal-result authority on this path."""
-    from so101_demo.parallel_batch.contracts import (
-        BatchKind, BatchRequest, RunMode, load_parallel_runtime_config_linux_cuda,
+    from so101_demo.parallel_batch.contracts.common import RunMode
+    from so101_demo.parallel_batch.contracts.linux_cuda import (
+        BatchKind,
+        BatchRequest,
+        load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.journal import CoordinatorJournal
