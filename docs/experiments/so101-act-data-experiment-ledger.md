@@ -69,11 +69,28 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3552
+latest_checkpoint: CP-3553
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3553 — general place offset −0.01835 m (f78ec8f9c): the general path now places and passes; one start-of-run pause race remains
+
+- Grasp comparison:
+  - same grasp transform and place pose as the Teacher;
+  - close target −0.0485 vs −0.0476 rad;
+  - scene.xml cup damping 1.0 vs 0.01 in the ACT scene;
+  - the general grasp squeezes harder (about 18.7 N vs 1.53 N) and holds the cup upright at hover z 0.1829 (Teacher 0.1801).
+- Offset calibration: an offline headless replay (place_descent_general.py, adapted from CP-3398) matches the live sample: 0.18286 replayed vs 0.182648 live, 4/4 contacts. Support first holds at −17.85 mm on the worst point (all 11 manifests true at −18.35 mm), so −0.01835 m was chosen (cup z 0.1645, table force 0.36–0.65 N). The Teacher's −0.01325 does not apply.
+- Commit f78ec8f9c: general_runtime_policy place_descend_offset_m −0.01835, required and limited to ±0.05 m. _place_target applies it to general DESCEND_TO_PLACE only (no snapshot root and not a Teacher run); the support gate stays on and the Teacher path is unchanged. RED 9 failed → GREEN.
+- Gates: demo 11296 pass, 0 fail (one load flake in head_local_runtime passed 3/3 alone and in the full rerun); colcon 1926 tests, 0/0; scripts 12 pass.
+- Live fixed-N through the service (PARALLEL, 2 workers, 4 points), campaign bb6b9be1:
+  - P01, P03, P04 PASSED, each with table contact at DETACH_MOVEIT, the full release sequence to DONE and cup final z about 0.1644. FIRST general-path PASSes on record.
+  - P02 FAILED with DYNAMIC_RESET_EPOCH_MISMATCH at PREPARE_OPEN_GRIPPER, step 819, before any motion. reset_epoch 1 was as expected, so the trigger was paused=true. The simulator log shows a pause/resume about 124 ms long at the run start; the issuer is not identified.
+  - Status COMPLETED_WITH_FAILURES; cleanup complete.
+- Adaptive and the offline smoke were not run (stopped at the first failing boundary).
+- Next: diagnose and fix the start-of-run pause race. Enrich RESET_EPOCH_MISMATCH with paused, epoch, step and age; identify the set_pause issuer. Then rerun fixed-N, adaptive and the offline smoke under new identities.
 
 ## CP-3552 — refactor phase D done (HEAD a4d2d2273, 9 commits), all guard allowlists permanent-only, gates 0/0, live checks pass; general place-offset fix next
 
