@@ -404,7 +404,7 @@ def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identit
     """T3-F3(c): the runner carries the writer's lease and emits the release event the seal tie names."""
 
 
-    from test_act_episode_audit import _lease, identity
+    from act_episode_audit_support import _lease, identity
     from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
     port = AlignedPort()
@@ -445,7 +445,7 @@ class AlignedPort(FakePort):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        from test_act_episode_audit import identity
+        from act_episode_audit_support import identity
 
         self.names = {"session_id": identity()["session_id"], "attempt_id": identity()["attempt_id"]}
 

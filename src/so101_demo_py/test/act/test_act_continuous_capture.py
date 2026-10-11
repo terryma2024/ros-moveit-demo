@@ -770,7 +770,7 @@ def test_the_capture_reports_only_the_window_facts_it_observed():
 def test_the_capture_forwards_the_ratified_packed_reference_shape():
     """Proposal A: the packed frames/evaluation group must reach the audit unchanged."""
 
-    from test_act_episode_audit import _ratified_reference
+    from act_episode_audit_support import _ratified_reference
 
     audit = RawReferenceAudit()
     capture, minter = build()

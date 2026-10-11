@@ -372,7 +372,7 @@ def test_adaptive_uses_one_wrapper_request_without_k(tmp_path):
 def test_each_retry_is_a_new_single_worker_single_point_batch_after_prior_cleanup(tmp_path):
     """One admitted retry is one command, one context and exactly one N1 batch."""
 
-    from test_expert_validation_store import _retry_events, point_result_sha256
+    from expert_validation_store_support import _retry_events, point_result_sha256
 
     events = _retry_events("batch-1", outcomes={"p1": "FAILED", "p2": "FAILED"})
     supervisor, store, first, context = _retry_supervisor(tmp_path, events=events)
@@ -439,7 +439,7 @@ class RefusingOwner:
 
 
 def _retry_supervisor(tmp_path, *, owner=None, events=None):
-    from test_expert_validation_store import _retry_events, _retry_fixture
+    from expert_validation_store_support import _retry_events, _retry_fixture
 
     store, request, context, _intent = _retry_fixture(
         tmp_path, events=events or _retry_events("batch-1")
@@ -566,7 +566,7 @@ def test_a_retry_without_an_admission_context_never_spawns(tmp_path):
 def test_an_interrupted_retry_is_reconciled_and_never_replayed(tmp_path):
     """A queue entry that reached spawn is reconciled from its journal, never re-executed."""
 
-    from test_expert_validation_store import _retry_events
+    from expert_validation_store_support import _retry_events
 
     events = _retry_events("batch-1", outcomes={"p1": "FAILED", "p2": "FAILED"})
     supervisor, store, request, context = _retry_supervisor(tmp_path, events=events)
@@ -690,7 +690,7 @@ def _production_first_pass_context(candidate):
 
 
 def _first_pass_supervisor(tmp_path):
-    from test_expert_validation_store import _first_pass_fixture
+    from test_expert_validation_store_first_pass import _first_pass_fixture
 
     store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(tmp_path)
     supervisor = ExpertValidationSupervisor(
@@ -766,7 +766,7 @@ def test_a_candidate_first_pass_never_spawns_over_an_unadmitted_receipt(tmp_path
 
 
 def test_a_production_context_never_starts_a_candidate_first_pass(tmp_path):
-    from test_expert_validation_store import _first_pass_fixture
+    from test_expert_validation_store_first_pass import _first_pass_fixture
 
     store, request, context, _intent, _receipt, _campaign, _batch = _first_pass_fixture(tmp_path)
     supervisor = ExpertValidationSupervisor(
@@ -793,7 +793,7 @@ def test_a_production_context_never_starts_a_candidate_first_pass(tmp_path):
 
 def test_a_spawn_failure_after_the_first_pass_admission_keeps_intent_and_fence(tmp_path):
     from so101_teleop.expert_validation.execution_context import runtime_closure_sha256
-    from test_expert_validation_store import _first_pass_fixture
+    from test_expert_validation_store_first_pass import _first_pass_fixture
 
     store, request, context, _intent, _receipt, _campaign, _batch = (
         _first_pass_fixture(tmp_path)

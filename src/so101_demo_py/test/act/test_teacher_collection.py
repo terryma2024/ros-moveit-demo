@@ -221,7 +221,7 @@ def test_the_goal_sending_phase_begin_becomes_the_first_command_clock():
 # ---- audit writer ----------------------------------------------------------------------------------------------
 
 def test_the_audit_refuses_a_retired_dispatch_row_a_retired_event_and_a_repeated_event(tmp_path):
-    from test_act_episode_audit import complete_audit
+    from act_episode_audit_support import complete_audit
     writer, _window = complete_audit(tmp_path)
     identity = dict(writer.identity)
     assert not hasattr(writer, "append_native_dispatch")

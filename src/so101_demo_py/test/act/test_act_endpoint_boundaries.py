@@ -7,7 +7,7 @@ import pytest
 
 from so101_demo.act.pick_place_runner import PickPlaceRunner
 from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
-from test_act_episode_audit import scope, _lease
+from act_episode_audit_support import _lease, scope
 from test_act_release_boundary import FakePort, request as boundary_request
 
 

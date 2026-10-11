@@ -24,7 +24,16 @@ import xml.etree.ElementTree as ET
 
 
 SERIAL_MODULE_REASONS = {
-    "test_parallel_batch_resources.py": (
+    "test_parallel_batch_resources_claims.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_process_scan.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_layout.py": (
+        "preserves the established first-module ordering for process/resource probes"
+    ),
+    "test_parallel_batch_resources_allocation.py": (
         "preserves the established first-module ordering for process/resource probes"
     ),
     "test_parallel_start_guard_launch.py": (
@@ -36,7 +45,19 @@ SERIAL_MODULE_REASONS = {
     "test_parallel_adaptive_integration.py": (
         "starts and signals real process groups, including an unowned sentinel"
     ),
-    "test_parallel_batch_worker.py": (
+    "test_parallel_batch_worker_stop_commit.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_gate_watchdog.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_fencing_recovery.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_coordinator.py": (
+        "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
+    ),
+    "test_parallel_batch_worker_diagnostics.py": (
         "owns deadline-sensitive background heartbeat threads and is order/load sensitive"
     ),
     "test_inject_so101_parallel_fault.py": (

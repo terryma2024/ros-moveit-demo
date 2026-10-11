@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from test_act_episode_audit import complete_audit
+from act_episode_audit_support import complete_audit
 
 
 def original_reset(identity):

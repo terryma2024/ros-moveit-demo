@@ -774,7 +774,7 @@ def test_issuing_refuses_a_config_document_that_is_not_the_installed_one(tmp_pat
 @DARWIN_ONLY
 def test_issuing_is_refused_by_a_recovery_fence_or_an_unknown_owner(tmp_path):
     from so101_teleop.expert_validation.supervisor_store.schema import StoreConflict
-    from test_expert_validation_store import _admit_first_pass, _first_pass_fixture
+    from test_expert_validation_store_first_pass import _admit_first_pass, _first_pass_fixture
 
     store, request, context, intent, receipt, campaign, batch = _first_pass_fixture(
         tmp_path / "durable"

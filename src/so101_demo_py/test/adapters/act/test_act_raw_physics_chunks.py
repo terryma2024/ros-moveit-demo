@@ -406,7 +406,7 @@ def test_pre_execution_child_failure_durably_retains_rejected_original_and_accep
 def test_actual_audit_seal_rechecks_raw_scope_clocks_and_chunk_continuity(tmp_path):
     import hashlib
     import json
-    from test_act_episode_audit import complete_audit
+    from act_episode_audit_support import complete_audit
     from so101_demo.act.episode_audit.verification import verify_audit_manifest
     convert, verify = _api()
     writer, window = complete_audit(tmp_path)
