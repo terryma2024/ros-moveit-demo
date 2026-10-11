@@ -72,7 +72,7 @@ def test_a_teacher_that_runs_past_240_s_is_still_waited_for_only_240_s_under_the
     import so101_demo.runtime.parallel_ros_runtime as runtime_module
     from so101_demo.parallel_batch.contracts.common import AttemptStatus
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
-    from test_parallel_ros_runtime import _lease
+    from parallel_ros_runtime_support import _lease
 
     observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))   # the deadline is 100 + 240 = 340 s
     waitpid_calls = []

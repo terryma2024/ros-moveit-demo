@@ -243,7 +243,7 @@ def test_a_teacher_child_that_cannot_be_stopped_keeps_the_window_and_its_deadlin
 def test_execute_result_reports_a_child_that_is_still_alive_when_the_wait_gives_up(tmp_path, monkeypatch):
     import so101_demo.runtime.parallel_ros_runtime as runtime_module
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
-    from test_parallel_ros_runtime import _lease
+    from parallel_ros_runtime_support import _lease
 
     for alive in (True, False):
         observations = iter((100.0, 200.0, 341.0, 342.0))
