@@ -34,7 +34,7 @@ from so101_demo.perception_benchmark.adapters.base import (
     _MaskArtifactStore,
     _validate_accelerated_component,
 )
-from so101_demo.perception_benchmark.calibration import YoloThresholds
+from so101_demo.perception_benchmark.calibration.thresholds import YoloThresholds
 from so101_demo.perception_benchmark.contracts import YOLO_MODEL_ID, RawCandidate
 from so101_demo.perception_benchmark.timing import (
     DeviceSynchronizer,

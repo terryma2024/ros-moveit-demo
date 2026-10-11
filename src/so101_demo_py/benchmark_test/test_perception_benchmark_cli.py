@@ -10,12 +10,18 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 from so101_demo.cli import perception_benchmark
+from so101_demo.cli.benchmark import aggregate as perception_benchmark_aggregate
+from so101_demo.cli.benchmark import assets as perception_benchmark_assets
+from so101_demo.cli.benchmark import calibrate as perception_benchmark_calibrate
+from so101_demo.cli.benchmark import collect as perception_benchmark_collect
+from so101_demo.cli.benchmark import common as perception_benchmark_common
+from so101_demo.cli.benchmark import dry_run as perception_benchmark_dry_run
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import (
     CollectionMode,
     RawDetectionResult,
 )
-from so101_demo.perception_benchmark.calibration import ThresholdLock
+from so101_demo.perception_benchmark.calibration.results import ThresholdLock
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     encode_mask_rle,
@@ -32,7 +38,7 @@ from so101_demo.perception_benchmark.contracts import (
     TruthInstance,
     TruthSample,
 )
-from so101_demo.perception_benchmark.reporting import verify_evidence_index
+from so101_demo.perception_benchmark.reporting.writer import verify_evidence_index
 from so101_demo.perception_benchmark.timing import PhaseTimingBreakdown
 
 PACKAGE_ROOT = Path(__file__).parents[1]
@@ -94,7 +100,7 @@ def test_config_contains_frozen_literals() -> None:
 
 
 def test_checked_in_config_matches_cli_frozen_hash() -> None:
-    assert sha256_bytes(CONFIG.read_bytes()) == perception_benchmark._CONFIG_SHA256
+    assert sha256_bytes(CONFIG.read_bytes()) == perception_benchmark_common._CONFIG_SHA256
 
 
 def test_unlock_without_verified_locks_is_typed_error(
@@ -166,7 +172,7 @@ def test_dry_run_publishes_eight_samples_and_sixteen_model_records(tmp_path: Pat
 
 
 def test_dry_run_plan_is_two_per_scenario_and_never_formal() -> None:
-    plan = perception_benchmark.build_dry_run_plan(
+    plan = perception_benchmark_common.build_dry_run_plan(
         {
             "scenario_counts": {
                 scenario: 50
@@ -205,12 +211,13 @@ def test_actual_dry_run_uses_fixed_val_images_and_both_accelerated_adapters(
         split="val",
         inventory_sha256="a" * 64,
         archive_sha256=ARCHIVE_SHA256,
-        scenario_counts={scenario: 50 for scenario in perception_benchmark._SCENARIOS},
+        scenario_counts={scenario: 50 for scenario in perception_benchmark_common._SCENARIOS},
         samples=samples,
     )
-    monkeypatch.setattr(perception_benchmark, "_inventory", lambda *args: inventory)
+    monkeypatch.setattr(perception_benchmark_collect, "_inventory", lambda *args: inventory)
+    monkeypatch.setattr(perception_benchmark_dry_run, "_inventory", lambda *args: inventory)
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_dry_run,
         "_load_actual_dry_frame",
         lambda *args: DetectionFrame(
             rgb8=np.zeros((4, 5, 3), dtype=np.uint8),
@@ -267,12 +274,32 @@ def test_actual_dry_run_uses_fixed_val_images_and_both_accelerated_adapters(
             )
 
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
         "_raw_adapter",
         lambda arguments, config: FakeAdapter(arguments.model, arguments.output_root),
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_dry_run,
+        "_raw_adapter",
+        lambda arguments, config: FakeAdapter(arguments.model, arguments.output_root),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_collect,
+        "_runtime_provenance",
+        lambda arguments: RuntimeProvenance(
+            runtime_device="mps",
+            runtime_name="fake-runtime",
+            runtime_version="1.0",
+            weights_sha256=(
+                arguments.weights_sha256
+                if arguments.model == "yolo_seg"
+                else arguments.manifest_sha256
+            ),
+            environment={"python": "test"},
+        ),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_dry_run,
         "_runtime_provenance",
         lambda arguments: RuntimeProvenance(
             runtime_device="mps",
@@ -448,9 +475,11 @@ def test_inventory_forwards_explicit_relocated_test_access_log(
         captured.update(options)
         return object()
 
-    monkeypatch.setattr(perception_benchmark, "load_dataset_inventory", capture)
+    monkeypatch.setattr(perception_benchmark_calibrate, "load_dataset_inventory", capture)
+    monkeypatch.setattr(perception_benchmark_dry_run, "load_dataset_inventory", capture)
+    monkeypatch.setattr(perception_benchmark_aggregate, "load_dataset_inventory", capture)
 
-    perception_benchmark._inventory(arguments, perception_benchmark._load_frozen_config(CONFIG))
+    perception_benchmark_dry_run._inventory(arguments, perception_benchmark_common._load_frozen_config(CONFIG))
 
     assert captured["root"] == arguments.dataset_inventory.parent
     assert captured["expected_access_log_path"] == access_log
@@ -563,7 +592,7 @@ def test_public_calibrated_builder_still_rejects_unsafe_lock(
     monkeypatch.setattr(ThresholdLock, "with_recomputed_sha256", lambda self: self)
 
     with pytest.raises(ValueError, match="formal deployable"):
-        perception_benchmark.build_calibrated_detector_port("yolo_seg", lock, object())
+        perception_benchmark_collect.build_calibrated_detector_port("yolo_seg", lock, object())
 
 
 def test_unsafe_characterization_uses_frozen_selected_port_not_calibrated_builder(
@@ -579,14 +608,15 @@ def test_unsafe_characterization_uses_frozen_selected_port_not_calibrated_builde
         return detector
 
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
         "build_calibrated_detector_port",
         lambda *args, **kwargs: pytest.fail("unsafe lock reached calibrated builder"),
     )
-    monkeypatch.setattr(perception_benchmark, "verify_threshold_lock", lambda path: lock)
-    monkeypatch.setattr(perception_benchmark, "YoloCalibratedDetector", fake_yolo)
+    monkeypatch.setattr(perception_benchmark_collect, "verify_threshold_lock", lambda path: lock)
+    monkeypatch.setattr(perception_benchmark_aggregate, "verify_threshold_lock", lambda path: lock)
+    monkeypatch.setattr(perception_benchmark_collect, "YoloCalibratedDetector", fake_yolo)
     monkeypatch.setattr(
-        perception_benchmark, "_validate_characterization_runtime", lambda *args: None
+        perception_benchmark_collect, "_validate_characterization_runtime", lambda *args: None
     )
     arguments = SimpleNamespace(
         model="yolo_seg",
@@ -598,7 +628,7 @@ def test_unsafe_characterization_uses_frozen_selected_port_not_calibrated_builde
         threshold_lock=tmp_path / "unsafe-lock.json",
     )
 
-    observer = perception_benchmark._production_observer(arguments, RunKind.TEST_CHARACTERIZATION)
+    observer = perception_benchmark_collect._production_observer(arguments, RunKind.TEST_CHARACTERIZATION)
 
     assert observer.args[0] is detector
     assert captured["thresholds"] is selected
@@ -606,7 +636,7 @@ def test_unsafe_characterization_uses_frozen_selected_port_not_calibrated_builde
 
 
 def test_config_registers_exact_low_floor_limits() -> None:
-    frozen = perception_benchmark._load_frozen_config(CONFIG)
+    frozen = perception_benchmark_common._load_frozen_config(CONFIG)
 
     assert frozen["models"]["yolo_seg"]["low_floor"] == {
         "confidence": 0.01,
@@ -626,7 +656,7 @@ def test_formal_asset_verification_rejects_caller_sha_not_frozen_config(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "verify_weights",
         lambda *args: pytest.fail("unfrozen asset reached verifier"),
     )
@@ -639,8 +669,8 @@ def test_formal_asset_verification_rejects_caller_sha_not_frozen_config(
         manifest_sha256=None,
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_verify_assets(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_assets._handle_verify_assets(arguments)
 
     assert caught.value.code == "FROZEN_PROVENANCE_MISMATCH"
 
@@ -649,7 +679,7 @@ def test_formal_archive_rejects_internally_consistent_but_unregistered_identity(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(
-        perception_benchmark.DatasetArchiveVerifier,
+        perception_benchmark_assets.DatasetArchiveVerifier,
         "verify_archive",
         lambda *args: pytest.fail("unregistered archive reached verifier"),
     )
@@ -660,8 +690,8 @@ def test_formal_archive_rejects_internally_consistent_but_unregistered_identity(
         sealed_member_inventory=tmp_path / "sealed.json",
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_inspect_archive(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_assets._handle_inspect_archive(arguments)
 
     assert caught.value.code == "FROZEN_PROVENANCE_MISMATCH"
 
@@ -681,7 +711,7 @@ def test_inspect_archive_prints_sealed_member_inventory_sha(
     sealed = tmp_path / "sealed.json"
     expected_sha = "1" * 64
     monkeypatch.setattr(
-        perception_benchmark.DatasetArchiveVerifier,
+        perception_benchmark_assets.DatasetArchiveVerifier,
         "verify_archive",
         lambda *args: SimpleNamespace(sealed_test_member_inventory_sha256=expected_sha),
     )
@@ -692,7 +722,7 @@ def test_inspect_archive_prints_sealed_member_inventory_sha(
         sealed_member_inventory=sealed,
     )
 
-    assert perception_benchmark._handle_inspect_archive(arguments) == 0
+    assert perception_benchmark_assets._handle_inspect_archive(arguments) == 0
     assert capsys.readouterr().out == f"{expected_sha}\n"
 
 
@@ -716,13 +746,18 @@ def test_collect_rejects_short_source_commit_before_dataset_io(
         config=CONFIG,
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
+        "_inventory",
+        lambda *args: pytest.fail("short source commit reached dataset I/O"),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_dry_run,
         "_inventory",
         lambda *args: pytest.fail("short source commit reached dataset I/O"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_collect(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_collect._handle_collect(arguments)
 
     assert caught.value.code == "SOURCE_COMMIT_INVALID"
 
@@ -780,12 +815,19 @@ def _patch_calibration_loaders(
         dataset_root=arguments.dataset_inventory.parent,
         inventory_sha256=arguments.inventory_sha256,
     )
-    monkeypatch.setattr(perception_benchmark, "load_dataset_inventory", lambda *a, **k: inventory)
-    monkeypatch.setattr(perception_benchmark, "load_truth_samples", lambda *a, **k: ())
-    monkeypatch.setattr(perception_benchmark, "_expectation", lambda *a, **k: object())
+    monkeypatch.setattr(perception_benchmark_calibrate, "load_dataset_inventory", lambda *a, **k: inventory)
+    monkeypatch.setattr(perception_benchmark_dry_run, "load_dataset_inventory", lambda *a, **k: inventory)
+    monkeypatch.setattr(perception_benchmark_aggregate, "load_dataset_inventory", lambda *a, **k: inventory)
+    monkeypatch.setattr(perception_benchmark_calibrate, "load_truth_samples", lambda *a, **k: ())
+    monkeypatch.setattr(perception_benchmark_aggregate, "load_truth_samples", lambda *a, **k: ())
+    monkeypatch.setattr(perception_benchmark_aggregate, "_expectation", lambda *a, **k: object())
+    monkeypatch.setattr(perception_benchmark_calibrate, "_expectation", lambda *a, **k: object())
     loaded = iter((mac, linux))
     monkeypatch.setattr(
-        perception_benchmark, "load_verified_run_evidence", lambda *a, **k: next(loaded)
+        perception_benchmark_calibrate, "load_verified_run_evidence", lambda *a, **k: next(loaded)
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate, "load_verified_run_evidence", lambda *a, **k: next(loaded)
     )
 
 
@@ -822,7 +864,7 @@ def test_calibration_rehomes_truth_masks_with_prediction_masks(
             ),
         ),
     )
-    config_sha = perception_benchmark.sha256_bytes(CONFIG.read_bytes())
+    config_sha = perception_benchmark_assets.sha256_bytes(CONFIG.read_bytes())
     mac = _verified_val_run(
         arguments.mac_run_root,
         platform="macos",
@@ -836,7 +878,8 @@ def test_calibration_rehomes_truth_masks_with_prediction_masks(
         config_sha256=config_sha,
     )
     _patch_calibration_loaders(monkeypatch, arguments, mac, linux)
-    monkeypatch.setattr(perception_benchmark, "load_truth_samples", lambda *a, **k: (truth,))
+    monkeypatch.setattr(perception_benchmark_calibrate, "load_truth_samples", lambda *a, **k: (truth,))
+    monkeypatch.setattr(perception_benchmark_aggregate, "load_truth_samples", lambda *a, **k: (truth,))
 
     def verify_rehomed(*values: object, **options: object) -> SimpleNamespace:
         rehomed_truth = values[3][0]  # type: ignore[index]
@@ -849,11 +892,12 @@ def test_calibration_rehomes_truth_masks_with_prediction_masks(
         ).read_bytes() == source_payload
         return SimpleNamespace(lock_sha256="e" * 64)
 
-    monkeypatch.setattr(perception_benchmark, "calibrate_joint_platform_val", verify_rehomed)
-    monkeypatch.setattr(perception_benchmark, "write_threshold_lock", lambda *a: None)
-    monkeypatch.setattr(perception_benchmark, "_write_index", lambda *a: None)
+    monkeypatch.setattr(perception_benchmark_calibrate, "calibrate_joint_platform_val", verify_rehomed)
+    monkeypatch.setattr(perception_benchmark_calibrate, "write_threshold_lock", lambda *a: None)
+    monkeypatch.setattr(perception_benchmark_calibrate, "_write_index", lambda *a: None)
+    monkeypatch.setattr(perception_benchmark_dry_run, "_write_index", lambda *a: None)
 
-    assert perception_benchmark._handle_calibrate(arguments) == 0
+    assert perception_benchmark_calibrate._handle_calibrate(arguments) == 0
     progress = capsys.readouterr().err
     assert "phase=verify" in progress
     assert "phase=rehome" in progress
@@ -864,7 +908,7 @@ def test_calibration_rejects_cross_platform_provenance_mismatch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     arguments = _calibration_arguments(tmp_path)
-    config_sha = perception_benchmark.sha256_bytes(CONFIG.read_bytes())
+    config_sha = perception_benchmark_assets.sha256_bytes(CONFIG.read_bytes())
     mac = _verified_val_run(
         arguments.mac_run_root,
         platform="macos",
@@ -879,13 +923,13 @@ def test_calibration_rejects_cross_platform_provenance_mismatch(
     )
     _patch_calibration_loaders(monkeypatch, arguments, mac, linux)
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_calibrate,
         "calibrate_joint_platform_val",
         lambda *a, **k: pytest.fail("mismatched runs reached calibration"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_calibrate(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_calibrate._handle_calibrate(arguments)
 
     assert caught.value.code == "RUN_PROVENANCE_MISMATCH"
     assert not arguments.output_root.exists()
@@ -898,7 +942,7 @@ def test_calibration_output_must_be_disjoint_from_verified_inputs(
     arguments.mac_run_root.mkdir()
     arguments.linux_run_root.mkdir()
     arguments.output_root = arguments.mac_run_root / "locks"
-    config_sha = perception_benchmark.sha256_bytes(CONFIG.read_bytes())
+    config_sha = perception_benchmark_assets.sha256_bytes(CONFIG.read_bytes())
     mac = _verified_val_run(
         arguments.mac_run_root,
         platform="macos",
@@ -913,13 +957,13 @@ def test_calibration_output_must_be_disjoint_from_verified_inputs(
     )
     _patch_calibration_loaders(monkeypatch, arguments, mac, linux)
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_calibrate,
         "calibrate_joint_platform_val",
         lambda *a, **k: pytest.fail("overlapping output reached calibration"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_calibrate(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_calibrate._handle_calibrate(arguments)
 
     assert caught.value.code == "CALIBRATION_OUTPUT_OVERLAP"
     assert not arguments.output_root.exists()
@@ -947,13 +991,13 @@ def test_unlock_preflights_output_before_appending_access_event(
         output_root=output,
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "unlock_test_seal",
         lambda *a, **k: pytest.fail("access event appended before output preflight"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_unlock_test(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_assets._handle_unlock_test(arguments)
 
     assert caught.value.code == "OUTPUT_ROOT_ALREADY_EXISTS"
 
@@ -981,23 +1025,33 @@ def test_unlock_checks_sealed_inventory_against_archive_before_access_event(
         output_root=tmp_path / "test-open",
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "sha256_file",
         lambda path: arguments.expected_sha256,
     )
     monkeypatch.setattr(
-        perception_benchmark.DatasetArchiveVerifier,
+        perception_benchmark_dry_run,
+        "sha256_file",
+        lambda path: arguments.expected_sha256,
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate,
+        "sha256_file",
+        lambda path: arguments.expected_sha256,
+    )
+    monkeypatch.setattr(
+        perception_benchmark_assets.DatasetArchiveVerifier,
         "verify_archive",
         lambda *args: SimpleNamespace(sealed_test_member_inventory_sha256="0" * 64),
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "unlock_test_seal",
         lambda *a, **k: pytest.fail("access event appended before seal preflight"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_unlock_test(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_assets._handle_unlock_test(arguments)
 
     assert caught.value.code == "TEST_SEAL_ARCHIVE_MISMATCH"
     assert not arguments.access_log.exists()
@@ -1009,7 +1063,7 @@ def test_expected_model_setup_error_is_stable_cli_error_without_traceback(
     weights = tmp_path / "best.pt"
     weights.write_bytes(b"not-used")
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "verify_weights",
         lambda *a, **k: (_ for _ in ()).throw(
             perception_benchmark.ModelSetupError("MODEL_UNAVAILABLE", str(tmp_path))
@@ -1061,7 +1115,7 @@ def test_malformed_aggregation_plan_is_typed_error_not_traceback(
             "--aggregation-plan",
             str(plan),
             "--aggregation-plan-sha256",
-            perception_benchmark.sha256_bytes(plan.read_bytes()),
+            perception_benchmark_assets.sha256_bytes(plan.read_bytes()),
             "--output-root",
             str(tmp_path / "report"),
         ]
@@ -1112,13 +1166,13 @@ def test_calibration_requires_every_frozen_run_provenance_field(
         arguments.mac_run_root,
         platform="macos",
         source_commit=arguments.source_commit,
-        config_sha256=perception_benchmark.sha256_bytes(CONFIG.read_bytes()),
+        config_sha256=perception_benchmark_assets.sha256_bytes(CONFIG.read_bytes()),
     )
     setattr(run.manifest, field, drift)
-    config = perception_benchmark._load_frozen_config(CONFIG)
+    config = perception_benchmark_common._load_frozen_config(CONFIG)
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._validate_val_run_provenance(
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_calibrate._validate_val_run_provenance(
             run,
             platform_name="macos",
             device="mps",
@@ -1130,7 +1184,7 @@ def test_calibration_requires_every_frozen_run_provenance_field(
 
 
 def test_raw_adapter_result_must_match_registered_limits() -> None:
-    config = perception_benchmark._load_frozen_config(CONFIG)
+    config = perception_benchmark_common._load_frozen_config(CONFIG)
     delegate = SimpleNamespace(
         model_id="plastic-cup-yolo11s-seg-v2",
         runtime_device="mps",
@@ -1140,13 +1194,13 @@ def test_raw_adapter_result_must_match_registered_limits() -> None:
             raw_candidates=(),
         ),
     )
-    adapter = perception_benchmark._FrozenRawAdapter(
+    adapter = perception_benchmark_dry_run._FrozenRawAdapter(
         delegate,
         "yolo_seg",
         config["models"]["yolo_seg"],
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
         adapter.collect(object(), object())
 
     assert caught.value.code == "LOW_FLOOR_CONFIG_MISMATCH"
@@ -1156,7 +1210,7 @@ def test_output_preflight_accepts_only_the_known_macos_tmp_alias() -> None:
     output = Path("/tmp") / "so101-preflight-does-not-exist"
     assert not output.exists()
 
-    assert perception_benchmark._preflight_output_root(output) == output
+    assert perception_benchmark_common._preflight_output_root(output) == output
 
 
 def test_output_preflight_rejects_user_created_symlink_parent(tmp_path: Path) -> None:
@@ -1165,8 +1219,8 @@ def test_output_preflight_rejects_user_created_symlink_parent(tmp_path: Path) ->
     alias_parent = tmp_path / "user-alias"
     alias_parent.symlink_to(real_parent, target_is_directory=True)
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._preflight_output_root(alias_parent / "output")
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_common._preflight_output_root(alias_parent / "output")
 
     assert caught.value.code == "OUTPUT_ROOT_PARENT_INVALID"
 
@@ -1197,18 +1251,28 @@ def test_collect_uses_shared_output_preflight_before_dataset_or_adapter_boundary
         output_root=alias_parent / "formal-run",
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
         "_inventory",
         lambda *a, **k: pytest.fail("unsafe output reached dataset boundary"),
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_dry_run,
+        "_inventory",
+        lambda *a, **k: pytest.fail("unsafe output reached dataset boundary"),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_collect,
+        "_raw_adapter",
+        lambda *a, **k: pytest.fail("unsafe output reached adapter boundary"),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_dry_run,
         "_raw_adapter",
         lambda *a, **k: pytest.fail("unsafe output reached adapter boundary"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_collect(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_collect._handle_collect(arguments)
 
     assert caught.value.code == "OUTPUT_ROOT_PARENT_INVALID"
     assert not arguments.output_root.exists()
@@ -1227,7 +1291,7 @@ def test_unlock_rechecks_output_after_archive_verify_before_access_event(
     for name in ("yolo.json", "grounded.json", "sealed.json"):
         (tmp_path / name).write_text("{}")
     output = tmp_path / "test-open"
-    sealed_sha = perception_benchmark.sha256_bytes((tmp_path / "sealed.json").read_bytes())
+    sealed_sha = perception_benchmark_assets.sha256_bytes((tmp_path / "sealed.json").read_bytes())
     arguments = SimpleNamespace(
         config=CONFIG,
         archive=archive,
@@ -1239,7 +1303,17 @@ def test_unlock_rechecks_output_after_archive_verify_before_access_event(
         output_root=output,
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
+        "sha256_file",
+        lambda path: arguments.expected_sha256,
+    )
+    monkeypatch.setattr(
+        perception_benchmark_dry_run,
+        "sha256_file",
+        lambda path: arguments.expected_sha256,
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate,
         "sha256_file",
         lambda path: arguments.expected_sha256,
     )
@@ -1249,18 +1323,18 @@ def test_unlock_rechecks_output_after_archive_verify_before_access_event(
         return SimpleNamespace(sealed_test_member_inventory_sha256=sealed_sha)
 
     monkeypatch.setattr(
-        perception_benchmark.DatasetArchiveVerifier,
+        perception_benchmark_assets.DatasetArchiveVerifier,
         "verify_archive",
         verify_and_race,
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_assets,
         "unlock_test_seal",
         lambda *a, **k: pytest.fail("access event appended after output race"),
     )
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._handle_unlock_test(arguments)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_assets._handle_unlock_test(arguments)
 
     assert caught.value.code == "OUTPUT_ROOT_ALREADY_EXISTS"
     assert not arguments.access_log.exists()
@@ -1357,7 +1431,12 @@ def test_aggregate_rejects_resource_list_pairs_before_external_loaders(
     plan = tmp_path / "plan.json"
     plan.write_text(json.dumps(plan_document))
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
+        "verify_threshold_lock",
+        lambda *a, **k: pytest.fail("resource type drift reached an external loader"),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate,
         "verify_threshold_lock",
         lambda *a, **k: pytest.fail("resource type drift reached an external loader"),
     )
@@ -1370,7 +1449,7 @@ def test_aggregate_rejects_resource_list_pairs_before_external_loaders(
             "--aggregation-plan",
             str(plan),
             "--aggregation-plan-sha256",
-            perception_benchmark.sha256_bytes(plan.read_bytes()),
+            perception_benchmark_assets.sha256_bytes(plan.read_bytes()),
             "--output-root",
             str(tmp_path / "report"),
         ]
@@ -1385,7 +1464,7 @@ def test_aggregate_rejects_resource_list_pairs_before_external_loaders(
 def test_aggregation_plan_accepts_raw_resource_mappings(tmp_path: Path) -> None:
     plan = _plan_with_resource_sample(tmp_path)
 
-    _, _, runs, _ = perception_benchmark._validated_aggregation_plan(plan)
+    _, _, runs, _ = perception_benchmark_aggregate._validated_aggregation_plan(plan)
 
     assert runs[0]["resource_trace"] is not None
 
@@ -1397,8 +1476,8 @@ def test_aggregation_plan_rejects_resource_scalar_type_drift(tmp_path: Path) -> 
     ]
     sample["process_rss_bytes"] = []
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._validated_aggregation_plan(plan)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_aggregate._validated_aggregation_plan(plan)
 
     assert caught.value.code == "AGGREGATION_PLAN_INVALID"
 
@@ -1419,8 +1498,8 @@ def test_aggregation_plan_recursively_rejects_nested_type_drift(
     plan = _aggregation_plan_document(tmp_path)
     plan["runs"][0][field] = drift  # type: ignore[index]
 
-    with pytest.raises(perception_benchmark.BenchmarkError) as caught:
-        perception_benchmark._validated_aggregation_plan(plan)
+    with pytest.raises(perception_benchmark_common.BenchmarkError) as caught:
+        perception_benchmark_aggregate._validated_aggregation_plan(plan)
 
     assert caught.value.code == "AGGREGATION_PLAN_INVALID"
 
@@ -1449,12 +1528,17 @@ def test_aggregate_platform_list_is_stable_exit2_without_traceback(
         )
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_collect,
         "verify_threshold_lock",
         lambda *a, **k: next(locks),
     )
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_aggregate,
+        "verify_threshold_lock",
+        lambda *a, **k: next(locks),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_calibrate,
         "load_dataset_inventory",
         lambda *a, **k: SimpleNamespace(
             dataset_root=tmp_path / "test-dataset",
@@ -1462,10 +1546,35 @@ def test_aggregate_platform_list_is_stable_exit2_without_traceback(
             inventory_sha256="1" * 64,
         ),
     )
-    monkeypatch.setattr(perception_benchmark, "load_truth_samples", lambda *a, **k: ())
-    monkeypatch.setattr(perception_benchmark, "_expectation", lambda *a, **k: object())
     monkeypatch.setattr(
-        perception_benchmark,
+        perception_benchmark_dry_run,
+        "load_dataset_inventory",
+        lambda *a, **k: SimpleNamespace(
+            dataset_root=tmp_path / "test-dataset",
+            archive_sha256=plan_document["dataset"]["archive_sha256"],  # type: ignore[index]
+            inventory_sha256="1" * 64,
+        ),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate,
+        "load_dataset_inventory",
+        lambda *a, **k: SimpleNamespace(
+            dataset_root=tmp_path / "test-dataset",
+            archive_sha256=plan_document["dataset"]["archive_sha256"],  # type: ignore[index]
+            inventory_sha256="1" * 64,
+        ),
+    )
+    monkeypatch.setattr(perception_benchmark_calibrate, "load_truth_samples", lambda *a, **k: ())
+    monkeypatch.setattr(perception_benchmark_aggregate, "load_truth_samples", lambda *a, **k: ())
+    monkeypatch.setattr(perception_benchmark_aggregate, "_expectation", lambda *a, **k: object())
+    monkeypatch.setattr(perception_benchmark_calibrate, "_expectation", lambda *a, **k: object())
+    monkeypatch.setattr(
+        perception_benchmark_calibrate,
+        "load_verified_run_evidence",
+        lambda *a, **k: SimpleNamespace(),
+    )
+    monkeypatch.setattr(
+        perception_benchmark_aggregate,
         "load_verified_run_evidence",
         lambda *a, **k: SimpleNamespace(),
     )
@@ -1478,7 +1587,7 @@ def test_aggregate_platform_list_is_stable_exit2_without_traceback(
             "--aggregation-plan",
             str(plan),
             "--aggregation-plan-sha256",
-            perception_benchmark.sha256_bytes(plan.read_bytes()),
+            perception_benchmark_assets.sha256_bytes(plan.read_bytes()),
             "--output-root",
             str(tmp_path / "report"),
         ]

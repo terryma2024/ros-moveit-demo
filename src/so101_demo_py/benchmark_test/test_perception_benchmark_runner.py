@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import so101_demo.perception_benchmark.dataset as dataset_module
+from so101_demo.perception_benchmark.dataset import truth as dataset_module_truth
 from PIL import Image
 from so101_demo.adapters.perception.yolo_seg import _trim_mask_boundary
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate
@@ -23,13 +23,15 @@ from so101_demo.perception_benchmark.adapters import (
     RawDetectionResult,
     ResourceSamplingError,
 )
-from so101_demo.perception_benchmark.calibration import (
-    GroundedSamBenchmarkThresholds,
+from so101_demo.perception_benchmark.calibration.lock_io import write_threshold_lock
+from so101_demo.perception_benchmark.calibration.results import (
     ObjectiveCalibrationMetrics,
     PlatformCalibrationMetrics,
     ThresholdLock,
+)
+from so101_demo.perception_benchmark.calibration.thresholds import (
+    GroundedSamBenchmarkThresholds,
     YoloThresholds,
-    write_threshold_lock,
 )
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
@@ -49,22 +51,21 @@ from so101_demo.perception_benchmark.contracts import (
     RunStatus,
     RuntimeProvenance,
 )
-from so101_demo.perception_benchmark.dataset import (
+from so101_demo.perception_benchmark.dataset.contracts import (
+    append_test_access_event,
     DatasetInventory,
     DatasetSampleRef,
-    append_test_access_event,
 )
-from so101_demo.perception_benchmark.runner import (
-    DetectorBenchmarkRunner,
-    LoadedRunEvidence,
+from so101_demo.perception_benchmark.runner.contracts import (
     RunCheckpoint,
     RunEvidenceExpectation,
     RunIntegrityError,
     RunSpec,
-    _record_from_document,
-    load_verified_run_evidence,
-    verify_resume,
 )
+from so101_demo.perception_benchmark.runner.detector_runner import DetectorBenchmarkRunner
+from so101_demo.perception_benchmark.runner.records import _record_from_document
+from so101_demo.perception_benchmark.runner.resume import load_verified_run_evidence, verify_resume
+from so101_demo.perception_benchmark.runner.storage import LoadedRunEvidence
 from so101_demo.perception_benchmark.timing import (
     PhaseTimingBreakdown,
     ResourceSample,
@@ -183,7 +184,7 @@ def _synthetic_inventory(
     (dataset_root / "inventory.sha256").write_text(
         f"{inventory.inventory_sha256}  inventory.json\n", encoding="ascii"
     )
-    dataset_module._issue_inventory(inventory)
+    dataset_module_truth._issue_inventory(inventory)
     return inventory
 
 
@@ -2301,7 +2302,7 @@ def test_runner_honors_relocated_access_log_bound_into_inventory_capability(
         dataset_root=relocated_root,
         access_log_path=relocated_access_log,
     )
-    dataset_module._issue_inventory(relocated_inventory)
+    dataset_module_truth._issue_inventory(relocated_inventory)
     output_root = tmp_path / "run"
     output_root.mkdir()
     spec = _spec(

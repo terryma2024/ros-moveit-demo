@@ -13,15 +13,20 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import so101_demo.perception_benchmark.reporting as reporting_module
-from so101_demo.perception_benchmark.calibration import (
+from so101_demo.perception_benchmark.reporting import evidence as reporting_module_evidence
+from so101_demo.perception_benchmark.reporting import records as reporting_module_records
+from so101_demo.perception_benchmark.calibration.contracts import (
     LOCK_SCHEMA_VERSION,
     OBJECTIVE_VERSION,
     TIE_BREAK_VERSION,
-    GroundedSamBenchmarkThresholds,
+)
+from so101_demo.perception_benchmark.calibration.results import (
     ObjectiveCalibrationMetrics,
     PlatformCalibrationMetrics,
     ThresholdLock,
+)
+from so101_demo.perception_benchmark.calibration.thresholds import (
+    GroundedSamBenchmarkThresholds,
     YoloThresholds,
 )
 from so101_demo.perception_benchmark.codec import (
@@ -45,14 +50,16 @@ from so101_demo.perception_benchmark.contracts import (
     TruthInstance,
     TruthSample,
 )
-from so101_demo.perception_benchmark.reporting import (
+from so101_demo.perception_benchmark.reporting.aggregator import MetricsAggregator
+from so101_demo.perception_benchmark.reporting.records import (
     AggregationInput,
     EvidenceEntry,
     EvidenceIndex,
-    MetricsAggregator,
-    ReportWriter,
     RunAggregationEvidence,
+)
+from so101_demo.perception_benchmark.reporting.writer import (
     load_evidence_index,
+    ReportWriter,
     verify_evidence_index,
 )
 from so101_demo.perception_benchmark.timing import ResourceSample
@@ -559,10 +566,10 @@ def test_unavailable_resource_telemetry_stays_null_with_reasons(
         unavailable_reasons={field: "probe unavailable" for field in missing_fields},
         tool_versions={"resource-probe": "1.0"},
     )
-    trace = reporting_module.ResourceTrace(
+    trace = reporting_module_records.ResourceTrace(
         sampling_frequency_hz=2.0,
         observations=(
-            reporting_module.ResourceObservation(
+            reporting_module_records.ResourceObservation(
                 phase="inference",
                 monotonic_ns=1_000_000,
                 formal_sample_index=0,
@@ -1235,7 +1242,7 @@ def _formal_run_evidence(
     root.mkdir(parents=True, exist_ok=True)
     samples = tuple(_formal_resource_sample(offset) for offset in range(3))
     observations = tuple(
-        reporting_module.ResourceObservation(
+        reporting_module_records.ResourceObservation(
             phase=phase,
             monotonic_ns=1_000_000_000 + position * 100_000_000,
             formal_sample_index=0 if phase == "inference" else None,
@@ -1243,13 +1250,13 @@ def _formal_run_evidence(
         )
         for position, phase in enumerate(("load", "warmup", "inference"))
     )
-    trace = reporting_module.ResourceTrace(
+    trace = reporting_module_records.ResourceTrace(
         sampling_frequency_hz=10.0,
         observations=observations,
     )
     first = records[0].runtime_provenance
     cold_samples = tuple(
-        reporting_module.ColdProcessSample(
+        reporting_module_records.ColdProcessSample(
             process_id=f"{platform}-{model}-{config}-cold-{position}",
             pid=10_000 + position,
             process_started_ns=2_000_000_000 + position * 1_000_000,
@@ -1455,7 +1462,7 @@ def test_formal_validation_rejects_empty_candidate_impostor_model_ids(
     )
 
     with pytest.raises(ValueError, match="canonical model identity"):
-        reporting_module._validate_input(value)
+        reporting_module_evidence._validate_input(value)
 
 
 def test_complete_positive_formal_matrix_aggregates_and_is_deployable(
@@ -1668,14 +1675,14 @@ def test_formal_candidate_mask_sha_tamper_fails_closed(tmp_path: Path) -> None:
 def test_runner_record_codec_feeds_canonical_grounded_record_to_aggregator(
     tmp_path: Path,
 ) -> None:
-    from so101_demo.perception_benchmark.runner import _record_from_document
+    from so101_demo.perception_benchmark.runner.records import _record_from_document
 
     full = _positive_formal_input(tmp_path)
     source_key = ("linux", "grounded_sam", "TEST_RAW_FROZEN")
     source_evidence = full.run_evidence[source_key]
     document = json.loads(
         canonical_json_bytes(
-            reporting_module._plain(
+            reporting_module_records._plain(
                 source_evidence.extended_record_documents[50]
             )
         )
@@ -2094,18 +2101,18 @@ def test_report_writer_is_deterministic_and_indexes_payload_not_itself(
 def test_report_writer_never_publishes_partial_root_on_write_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from so101_demo.perception_benchmark import reporting
+    from so101_demo.perception_benchmark.reporting import writer as reporting_writer
 
     summary = MetricsAggregator().aggregate(_fixture(tmp_path / "fixture"))
     output_root = tmp_path / "report-output"
-    original = reporting._atomic_write_bytes
+    original = reporting_writer._atomic_write_bytes
 
     def fail_on_per_image(path: Path, payload: bytes) -> None:
         if path.name == "per-image.csv":
             raise OSError("injected write failure")
         original(path, payload)
 
-    monkeypatch.setattr(reporting, "_atomic_write_bytes", fail_on_per_image)
+    monkeypatch.setattr(reporting_writer, "_atomic_write_bytes", fail_on_per_image)
 
     with pytest.raises(OSError, match="injected write failure"):
         ReportWriter().write(summary, output_root)

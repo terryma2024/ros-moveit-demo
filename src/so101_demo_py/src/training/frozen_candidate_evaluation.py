@@ -21,10 +21,10 @@ from PIL import Image
 from so101_demo.adapters.perception.model_bundle import verify_model_bundle
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
-from so101_demo.perception_benchmark.calibration import GroundedSamBenchmarkThresholds
+from so101_demo.perception_benchmark.calibration.thresholds import GroundedSamBenchmarkThresholds
 from so101_demo.perception_benchmark.codec import encode_mask_rle, read_mask
 from so101_demo.perception_benchmark.contracts import DecisionOutput, MaskRef
-from so101_demo.perception_benchmark.dataset import rasterize_polygon
+from so101_demo.perception_benchmark.dataset.truth import rasterize_polygon
 from so101_demo.perception_benchmark.matching import mask_iou
 from so101_demo.training.grounding_dino_dataset import (
     _boxes_match,

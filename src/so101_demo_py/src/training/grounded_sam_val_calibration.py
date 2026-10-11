@@ -20,14 +20,14 @@ from PIL import Image
 from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
-from so101_demo.perception_benchmark.calibration import GroundedSamBenchmarkThresholds
+from so101_demo.perception_benchmark.calibration.thresholds import GroundedSamBenchmarkThresholds
 from so101_demo.perception_benchmark.codec import (
     atomic_write_json,
     canonical_json_bytes,
     read_mask,
 )
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
-from so101_demo.perception_benchmark.dataset import rasterize_polygon
+from so101_demo.perception_benchmark.dataset.truth import rasterize_polygon
 from so101_demo.training.grounding_dino_dataset import (
     BoundingBox,
     GroundingDinoDatasetError,

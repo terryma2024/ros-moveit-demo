@@ -34,11 +34,13 @@ from so101_demo.perception_benchmark.adapters import (
     build_production_detector_port,
     run_production_detector_port,
 )
-from so101_demo.perception_benchmark.calibration import (
-    GroundedSamBenchmarkThresholds,
+from so101_demo.perception_benchmark.calibration.results import (
     ObjectiveCalibrationMetrics,
     PlatformCalibrationMetrics,
     ThresholdLock,
+)
+from so101_demo.perception_benchmark.calibration.thresholds import (
+    GroundedSamBenchmarkThresholds,
     YoloThresholds,
 )
 from so101_demo.perception_benchmark.codec import decode_mask_rle, sha256_bytes
@@ -869,7 +871,7 @@ def test_zero_candidate_collection_is_representable_in_evidence_index(
 ) -> None:
     """Keep a durable file carrier for frames that correctly yield no masks."""
 
-    from so101_demo.cli.perception_benchmark import _write_index
+    from so101_demo.cli.benchmark.common import _write_index
 
     class _EmptyYoloModel(_YoloModel):
         def predict(self, **kwargs: object) -> list[SimpleNamespace]:
