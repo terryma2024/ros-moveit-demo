@@ -1,5 +1,9 @@
 # SO-101 Head/Wrist RGB ACT Implementation Plan
 
+> 2026-10-05：优先遵循 [Teacher 执行与 ACT 数据验证分离修订](../specs/2026-10-05-so101-teacher-act-decoupling-amendment.md)。旧的 Recorder/QC 运动前置、数据异常停机及过程质量成功门禁不得继续按本文执行。用户已授权现有 ai-station Claude 更新实施步骤、清理被替代的代码/测试并执行；保留 Teacher 执行保护、严格数据 QC、历史证据和用途隔离。
+
+> **2026-10-01 acceptance amendment:** [Shared endpoint-Pose design](../specs/2026-10-01-so101-act-endpoint-pose-acceptance-design.md) and its [implementation amendment](2026-10-01-so101-act-endpoint-pose-acceptance-implementation.md) replace the object-quality success conditions in Tasks 6/8/9/11/11A/16. This applies to formal collection, qualification and rollout, not only the non-head diagnostic. Safety, Head, data integrity and eligibility gates remain independent. Existing runtime evidence does not qualify the changed contract.
+
 > **2026-09-24 refresh:** [Task 8 live and formal collection design](../specs/2026-09-24-so101-act-task8-live-formal-collection-design.md) is approved and incorporated below. MuJoCo is the only simulator; campaign resource binding is checked once at admission; W2 proceeds directly to one independent 40-scene exact-W8 qualification, without W4/W6. This plan supersedes the earlier Task 7A–11A wording.
 
 > **For execution:** follow the repository model rule: run implementation with DeepSeek Harness TUI (`dst`) in a dedicated ai-station `tmux` session, one reviewed task boundary at a time. This document update does not start that execution. Steps use checkbox (`- [ ]`) syntax for tracking.
