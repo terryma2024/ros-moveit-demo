@@ -1,4 +1,4 @@
-"""HS-302: the closed-loop deadband lock trials and the `deadband_candidates` document.
+""" the closed-loop deadband lock trials and the `deadband_candidates` document.
 
 Every case here runs against an injected plant and an injected detector, so the closed loop, the
 lock-run rule, the reversal rule, every refusal and both documents are exercised without MuJoCo, a
@@ -60,7 +60,7 @@ ROTATION_OPTICAL_TO_BASE = (
 #: the yaw-to-pixel gain of that camera's forward axis in base, px per rad near the optical axis
 GAIN_PX_PER_RAD = 0.8 * FOCAL_PX
 VERTICAL_BOUNDS_PX = (110.0, 370.0)
-#: every top-level key `build_deadband_candidates` wrote before HS-324 declared the warm-up frame: the
+#: every top-level key `build_deadband_candidates` wrote before the warm-up frame was declared: the
 #: warm-up block is added to this set and no key of it is dropped (the digest covers the new block too)
 PRE_WARMUP_DEADBAND_DOCUMENT_KEYS = (
     "anchors",
@@ -467,12 +467,12 @@ def test_the_loop_refuses_when_it_never_reaches_a_verdict_inside_its_frame_budge
     assert "2" in refusal.value.detail
 
 
-# --- the declared warm-up frame (HS-324) --------------------------------------------------------
+# --- the declared warm-up frame --------------------------------------------------------
 
 
-#: the promoted `max_age_s` (HS-296: p99.9 of the frame age + 10 ms) that refused this trial's frame 0
+#: the promoted `max_age_s` (p99.9 of the frame age + 10 ms) that refused this trial's frame 0
 PROMOTED_MAX_AGE_S = 0.014736005008453503
-#: the one-off cost HS-323 measured for the process's first detection-bearing predict (31-37 ms)
+#: the one-off cost measured for the process's first detection-bearing predict (31-37 ms)
 FIRST_DETECTION_COST_S = 0.035
 
 
@@ -492,7 +492,7 @@ class StepClock:
 
 
 class OneOffDetectionCostDetector:
-    """The production detector's measured one-off cost (HS-323 section 2.2).
+    """The production detector's measured one-off cost.
 
     `YoloSegDetector`'s constructor warms the model up on a zeros image, which carries no box and no mask
     and costs 5.3 ms; the first predict that really resolves a detection costs 34.2 ms and every later one
@@ -568,7 +568,7 @@ def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames(
 
 
 def test_the_warm_up_frame_is_excluded_from_the_measured_ages_under_the_promoted_max_age():
-    """HS-323: this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
+    """ this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
 
     clock = StepClock()
     plant = FakePlant(cup_yaw_rad=-0.0588)
@@ -765,7 +765,7 @@ def test_the_document_declares_the_frame_cadence_the_trials_really_ran_at(tmp_pa
 
 
 def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
-    """HS-324: the whole key set this producer wrote before the warm-up was declared, plus the block."""
+    """ the whole key set this producer wrote before the warm-up was declared, plus the block."""
 
     document = _document(tmp_path)
 

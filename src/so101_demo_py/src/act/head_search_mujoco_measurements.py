@@ -18,8 +18,8 @@ This module turns that declaration into the document the run declares under `--m
   not the one a reader happened to keep.
 * :func:`validate_head_search_mujoco_measurements` cross-checks the scene's bytes against every declared
   sealed identity and builds the document, whose `path` and `sha256` are the convention the run's other
-  measurement documents already use (`sha256 = canonical_sha256(body without the sha256 field)`, ledger
-  HS-298). Without at least one sealed identity the document would be an anonymous XML reading, so it is
+  measurement documents already use (`sha256 = canonical_sha256(body without the sha256 field)`, ledger).
+  Without at least one sealed identity the document would be an anonymous XML reading, so it is
   refused rather than written.
 * :func:`write_mujoco_measurements` is the producer: it claims a brand-new output directory, writes the
   document and the receipt into it, and records what ran. It never imports a detector, never touches a

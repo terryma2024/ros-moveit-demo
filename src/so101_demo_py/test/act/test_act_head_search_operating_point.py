@@ -3,7 +3,7 @@
 The policy layer owns the parts of phase 3 that must not be able to fit the verdict after the fact. The
 selection rule is recorded before any measurement exists, the search runs over the four operating-point
 values on the head val and calibration-episode measurements only, the choice follows the chain the
-campaign declared before it measured (ledger HS-248/HS-265), and a point that yields even one false
+campaign declared before it measured, and a point that yields even one false
 candidate on an empty scene is refused rather than shipped.
 
 Everything here is synthetic and in memory: no detector, no GPU, no MuJoCo, no ROS. The detection

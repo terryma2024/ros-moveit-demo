@@ -1,6 +1,6 @@
 """The campaign body drains the durable shared queue: one lease, one point (design section 8).
 
-Task 11's live gate found the gap this module exists to close. The campaign reported
+The live gate found the gap this module exists to close. The campaign reported
 `TWO_WORKER_CAMPAIGN_PASS` / `SINGLE_WORKER_CAMPAIGN_PASS` while `per_slot_pick_place.*.executed_points` was `[]` and
 every Worker reported `pick_place.requested=false` with `error=POINTS_PATH_MISSING`: the lease the
 campaign wrote carried no `points_path`/`points_sha256`, so `single_point_input.pick_place_request`
@@ -48,7 +48,7 @@ from so101_demo.cli.macos_campaign import guard as macos_campaign_guard
 from so101_demo.cli.macos_campaign import journal as macos_campaign_journal
 from so101_demo.cli.macos_campaign import selection as macos_campaign_selection
 
-#: The Task 11 selection ids, plus the anchors the first-pass binding contract requires.
+#: The selection ids of the live campaign, plus the anchors the first-pass binding contract requires.
 DRAIN_POINT_IDS = ("cup_test_left_5cm", "sample_07_mid_center", "sample_12_far_left",
               "sample_16_far_right")
 
@@ -82,7 +82,7 @@ def _batch_binary(tmp_path: Path) -> Path:
 
 
 def _selected(point_ids=DRAIN_POINT_IDS) -> tuple[str, ...]:
-    """The Task 11 ids, ordered after the four anchors the first-pass binding requires."""
+    """The campaign ids, ordered after the four anchors the first-pass binding requires."""
 
     return ANCHOR_IDS + tuple(point_id for point_id in point_ids if point_id not in ANCHOR_IDS)
 
@@ -129,7 +129,7 @@ class _SingleWorkerPlan(_Plan):
 
 
 def test_a_lease_without_a_single_point_input_is_refused_by_name(tmp_path: Path) -> None:
-    """`POINTS_PATH_MISSING` is what the Task 11 leases produced, and it is never a pass.
+    """`POINTS_PATH_MISSING` is what the campaign leases produced, and it is never a pass.
 
     This is the exact refusal the live campaign hid behind a `*_CAMPAIGN_PASS`: the Worker reads
     `points_path`/`points_sha256` back out of its lease document, and a lease without them cannot

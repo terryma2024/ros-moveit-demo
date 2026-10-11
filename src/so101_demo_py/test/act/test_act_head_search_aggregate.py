@@ -183,7 +183,7 @@ def test_the_declared_gate_list_is_exactly_the_plan_and_task_gates() -> None:
 
 
 def test_a_hex_only_evidence_set_can_never_qualify(tmp_path: Path) -> None:
-    """The HS-233/HS-315 defect: any well-formed digest used to be enough to publish a pass."""
+    """The digest-only defect: any well-formed digest used to be enough to publish a pass."""
 
     fixture = _fixture(tmp_path)
     document = aggregate_qualification(

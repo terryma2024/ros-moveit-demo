@@ -1,7 +1,7 @@
 """The migrated Teleop surface must exist on the unified app.
 
 This test replaces the legacy/unified parity comparison that lived here while
-`so101_teleop/api.py` still carried its own route table (implementation ledger CP-69). That table is
+`so101_teleop/api.py` still carried its own route table (the implementation ledger). That table is
 deleted, so the guard now asserts the thing that still matters: every route the legacy per-domain tests
 were migrated onto is actually served by the unified app, and the unified-only additions are present
 too.

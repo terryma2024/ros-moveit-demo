@@ -8,7 +8,7 @@ The plan's Step 3 is one sentence of requirements and one sentence of refusals:
 
 The installed ``so101_head_search_smoke`` proved something else: planning coverage of the bounded stop plan
 against the geometry seal, with no stack, no detector, no journal and its ``--scenario`` flag accepted but
-never read (HS-179, HS-315 row 5). That proof is still produced - the plan's coverage gate cites it - but it
+never read. That proof is still produced - the plan's coverage gate cites it - but it
 is **not** what this phase's success stands on. This module is the smoke the plan asks for:
 
 * **The producer owns the stack.** It takes the exclusive-ownership receipt, refuses unless

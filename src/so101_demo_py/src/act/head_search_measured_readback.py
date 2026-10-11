@@ -1,11 +1,11 @@
 """The runtime readback of the eleven measured calibration parameters.
 
 Seventeen values enter the bundle. Six of them - the field of view, the safe neck interval and the four
-perception values - are declared by the run and read back by their producers (ledger HS-311). The other
+perception values - are declared by the run and read back by their producers. The other
 eleven are *measured*: phase 6 computes the sweep step, the search timeout, the deadband, the vertical
 bounds and the two fine-correction budgets, and phase 7 computes the freshness bound, the skew bound, the
 submission lead, the stop velocity and the stop latency. Until now those eleven were recorded with
-`verified: false`, because nothing queried a running component for them (ledger HS-311, inference ten).
+`verified: false`, because nothing queried a running component for them.
 
 This module is that query. For every one of the eleven it **constructs the production component that
 consumes the value with the recorded value and records what it observes**:
@@ -20,7 +20,7 @@ consumes the value with the recorded value and records what it observes**:
   (``.stop_timeout``, the value the recorded ``stop_latency_s`` becomes for the neck port) and the
   freshness bound (``.max_age``, the staleness check before every command);
 * the installed ``so101_demo.adapters.act.ros_execution.RosControllerPort`` - the stop criterion the
-  measurement harness of HS-304..308 already drives - for ``stop_velocity_rad_s`` (``.stop_velocity``,
+  measurement harness already drives - for ``stop_velocity_rad_s`` (``.stop_velocity``,
   the bound every monitored joint's measured velocity is compared against).
 
 Three of the eight controller values are *also* observed behaviourally, at the exact float boundary the

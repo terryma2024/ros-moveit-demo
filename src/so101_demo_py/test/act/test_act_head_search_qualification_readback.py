@@ -236,7 +236,7 @@ def test_the_seventeen_values_are_observed_off_the_components_that_consume_them(
     )
     assert records["tracking_iou"]["observation"] == readback_observations.LOADED_DETECTOR_OBSERVATION
     assert records["min_bbox_aspect"]["component"].endswith("_Detector")
-    # the eleven measured ones are the readback ledger HS-312 wired, with its behavioural probes
+    # the eleven measured ones are the readback wired into the run, with its behavioural probes
     assert records["max_age_s"]["observation"] == "constructed_production_component"
     assert records["max_age_s"]["behavioural"]["probe"] == "frame_freshness"
     assert records["search_timeout_s"]["behavioural"]["probe"] == "search_deadline"

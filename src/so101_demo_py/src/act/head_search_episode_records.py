@@ -11,7 +11,7 @@ It **computes nothing**: every frame is copied verbatim, in its recorded order, 
 carries the digest of the frames it holds together with the path and digest of the measurement document it
 came from. It refuses - before writing anything - a declared seed the flight never measured, a frame whose
 detections or latencies do not cover all three candidates, a frame of an unknown domain, a domain the
-split has no frames for (the gate refuses that from the other side with a less specific message, HS-239),
+split has no frames for (the gate refuses that from the other side with a less specific message),
 and a frame whose seed is not the document it would land in.
 
 Nothing here renders, detects, starts ROS or a simulator, and nothing is written unless the caller passes

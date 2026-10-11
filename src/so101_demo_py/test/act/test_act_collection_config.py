@@ -1,4 +1,4 @@
-"""Task 8P1: the ACT collection config freezes W8 and recorder backpressure."""
+"""The ACT collection config freezes W8 and recorder backpressure."""
 
 import hashlib
 import json

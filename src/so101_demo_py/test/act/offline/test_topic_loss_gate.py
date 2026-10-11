@@ -99,7 +99,7 @@ def test_planning_scene_reads_fewer_in_the_bag_than_the_sidecar_made_are_a_topic
 
 
 def test_scene_reads_made_before_the_window_are_recorded_but_do_not_count(tmp_path):
-    """The sidecar can start reading before the bag recorder has matched its subscription (T03, T06 of the first v2 round:
+    """The sidecar can start reading before the bag recorder has matched its subscription (seen in the first live rounds:
     the first 5 and 3 reads, at sim time 0, are in the sidecar and not in the bag). Reads before the window are never used by a row."""
     bag = build_bag(tmp_path / "raw")
     bag_read_ns = 950_000_000

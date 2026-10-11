@@ -42,7 +42,7 @@ MATCH_RADIUS_PX = 8.0
 
 #: a re-rendered stop is not bit-identical (the EGL renderer differs by up to one 8-bit level), so the
 #: reconstruction check of a val scene compares the rendered image with the dataset's own image within
-#: this bound - measured at 1 for all 200 val scenes of the head dataset (ledger HS-298)
+#: this bound - measured at 1 for all 200 val scenes of the head dataset
 RECONSTRUCTION_PIXEL_TOLERANCE = 1
 
 

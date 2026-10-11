@@ -21,7 +21,7 @@ class RestartStack(MujocoRosTransport):
     """The production ACT composition: MuJoCo, the camera plugin, TF and the four controllers.
 
     ``so101_demo.act.head_search_transport_measurement.MujocoRosTransport`` is the frozen, measured
-    producer of exactly this transport (HS-308: EGL, headless, the camera plugin publishing ``/head_camera``
+    producer of exactly this transport (EGL, headless, the camera plugin publishing ``/head_camera``
     on the simulator's own clock). This subclass uses that composition with the settings a restart needs:
 
     * the remaining three controller spawners of the ACT profile (the base starts

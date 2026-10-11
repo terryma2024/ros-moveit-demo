@@ -136,7 +136,7 @@ bool SimulationEvidencePlugin::init(
         "/so101/simulation/scene_state", evidence_qos);
       realtime_scene_publisher_ = std::make_unique<realtime_tools::RealtimePublisher<msg::SceneStateEvidence>>(scene_publisher_);
     }
-    // The strict Task 6 capture consumes every atomic sequence, even while it
+    // The strict capture consumes every atomic sequence, even while it
     // fsyncs paired RGB frames. Keep its offered history as deep as its queue.
     const auto capture_evidence_qos =
       rclcpp::QoS(rclcpp::KeepLast(256)).reliable().transient_local();
@@ -171,7 +171,7 @@ bool SimulationEvidencePlugin::init(
     physics_step_buffer_ = std::make_unique<PhysicsStepEvidenceBuffer>(
       static_cast<std::size_t>(physics_step_buffer_capacity),
       static_cast<std::size_t>(physics_step_chunk_size), diagnostic_hard_stop_force_n_);
-    // The integer grid (CP-3488): refuse a rate whose period is not a whole number of physics steps.
+    // The integer grid: refuse a rate whose period is not a whole number of physics steps.
     if (!std::isfinite(rate) || rate <= 0.0 || !std::isfinite(model->opt.timestep) || model->opt.timestep <= 0.0) {
       cleanup();
       return false;

@@ -178,7 +178,7 @@ def test_the_partition_schema_and_contract_are_tracked() -> None:
 
 
 def test_the_reviewer_s_probes_are_refused() -> None:
-    """The exact inputs the Task 6 review found were accepted."""
+    """The exact inputs a review found were accepted."""
 
     def nan_fov(fixture: dict) -> None:
         fixture["geometry"]["horizontal_fov_rad"] = float("nan")

@@ -118,7 +118,7 @@ PARAMETER_PHASES = (
 
 #: the artefact each phase owns, in the run root, exactly as design section 8.3 names it. The evidence
 #: already produced is the subset of these that exists when the run stops, so a phase that wrote part of
-#: its evidence before refusing (the gate writes its comparison first, HS-275) is recorded with it.
+#: its evidence before refusing (the gate writes its comparison first) is recorded with it.
 INPUTS_NAME = "calibration-inputs.json"
 GEOMETRY_NAME = "geometry-measurements.json"
 PERCEPTION_NAME = "perception-calibration.json"

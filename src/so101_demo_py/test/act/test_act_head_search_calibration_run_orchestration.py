@@ -783,7 +783,7 @@ def test_a_run_that_declares_no_coarse_step_sweep_stops_at_bundle_generation(tmp
 def test_the_run_completes_the_eight_phases_and_writes_the_bundle(tmp_path):
     """With the selected model's val sweep declared, the sixth parameter has an owner and phase 8 runs.
 
-    This is the gap HS-295/HS-297 left open, closed at the library level: phase 6 chooses
+    This is the gap the earlier library work left open, closed at the library level: phase 6 chooses
     `coarse_step_rad` from the raw sweep, the bundle carries all seventeen parameters with their
     evidence, and the run reports SUCCEEDED with a bundle a promotion could be approved against.
     """
@@ -1104,7 +1104,7 @@ def test_a_failing_phase_leaves_the_later_phases_unrun_and_the_earlier_evidence_
 
 def test_an_injected_phase_failure_names_its_phase_and_keeps_its_partial_evidence(tmp_path):
     def runner(context):
-        # the real gate writes its comparison before it refuses (HS-275), so the failure records it
+        # the real gate writes its comparison before it refuses, so the failure records it
         (context.run_root / "model-comparison.json").write_text(
             json.dumps({"kind": "head-search-model-comparison"}, sort_keys=True) + "\n",
             encoding="utf-8",

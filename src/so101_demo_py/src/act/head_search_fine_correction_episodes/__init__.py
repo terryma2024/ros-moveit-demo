@@ -4,7 +4,7 @@ Phase 6 chooses ``max_fine_corrections`` as *the largest count a successful held
 needed plus one recovery allowance* and ``max_fine_total_rad`` as *the largest cumulative fine correction
 of those episodes plus the largest single correction observed in them*
 (``head_search_search_params.compute_max_fine_corrections`` / ``compute_max_fine_total_rad``, design
-section 7.1, ledger HS-296). Both numbers are properties of the **closed loop** - a scene, a bounded
+section 7.1). Both numbers are properties of the **closed loop** - a scene, a bounded
 sweep, a rendered frame, a detection and a correction fed back into the controller - so no open-loop
 episode can carry them: the retained `episodes8` recordings are three fixed neck angles per scene, with no
 correction and no success verdict at all.
@@ -30,10 +30,10 @@ What this module measures, and how:
   (:func:`verify_correction_consistency`), and a disagreement refuses the episode rather than recording a
   number nobody can check.
 
-The two corridors, declared and never clamped (this is the split HS-302's single corridor needs, and the
+The two corridors, declared and never clamped (this is the split a single corridor needs, and the
 one thing about this document a reviewer should check first):
 
-* the **coarse corridor** is HS-302's own rule - the intersection of the seal's
+* the **coarse corridor** is the rule of the scenario run - the intersection of the seal's
   ``required_search_domain_rad`` and its ``lock_valid_neck_rad`` - and it bounds the anchor the episode
   starts from and every stop of the bounded sweep.
 * the **fine corridor** is the seal's ``lock_valid_neck_rad``: the interval the seal declares a lock
@@ -42,7 +42,7 @@ one thing about this document a reviewer should check first):
   fine correction to ``required_search_domain_rad`` - that interval is the *coverage* the coarse sweep
   owes, and the seal's own ``in_frame_matrix`` says so - so bounding the fine path by the required domain
   would refuse every held-out episode of this dataset (their cup sits at the ``default`` anchor's cup
-  point, which is outside the sealed pick workspace). Applying HS-302's intersection to the fine path
+  point, which is outside the sealed pick workspace). Applying that intersection to the fine path
   would therefore not make the measurement stricter, only impossible; instead every episode records how
   far outside the required domain it locked (:func:`required_domain_excursion_rad`), and the document
   counts the excursions.

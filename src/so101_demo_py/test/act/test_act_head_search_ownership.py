@@ -1,4 +1,4 @@
-"""The stack-free exclusive-ownership gate Task 14 Step 1 must pass before any qualifier starts.
+"""The stack-free exclusive-ownership gate that must pass before any qualifier starts.
 
 Every fixture is synthetic: a fake `/proc` tree, fake command runners and fake observation documents. No
 test in this file starts a stack, loads a detector, touches the GPU or reads the live process table

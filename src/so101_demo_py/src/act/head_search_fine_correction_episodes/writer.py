@@ -187,7 +187,7 @@ def write_head_search_fine_correction_episodes(
             CAL_TIMING_EVIDENCE_MISSING,
             f"this measurement runs one episode per held-out seed from exactly one sealed anchor, but "
             f"{len(requests)} were declared: the anchor is the search start every episode shares, and the "
-            f"HS-302 corridor admits only the anchors whose start lies inside the required search domain",
+            f"the coarse corridor admits only the anchors whose start lies inside the required search domain",
         )
     request = requests[0]
     _fine_corridor_check(

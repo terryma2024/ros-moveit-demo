@@ -1,4 +1,4 @@
-"""A Task 8 stack needs its own process owner and terminal proof."""
+"""A stack needs its own process owner and terminal proof."""
 
 import asyncio
 from dataclasses import replace

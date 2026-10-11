@@ -1,4 +1,4 @@
-"""Task 8P1: source provenance is closed, canonical and tamper-evident."""
+"""Source provenance is closed, canonical and tamper-evident."""
 
 import hashlib
 import json

@@ -1,4 +1,4 @@
-"""Contract tests for the short macOS test scratch (remediation Task 4).
+"""Contract tests for the short macOS test scratch (remediation).
 
 Darwin refuses an AF_UNIX endpoint longer than 104 bytes, and an evidence-root ``TMPDIR`` is longer
 than that before a fixture adds anything. The scratch therefore lives under ``/opt/data/tmp``, is

@@ -19,7 +19,7 @@ Phase 6 reads five keys off this document
   ``rad_per_px`` phase 6 divides by, so ``ceil(centre_jitter_rad / rad_per_px)`` is the pixel spread that
   was measured. The document headlines the **worst case over poses** and keeps every pose's own
   distribution, its frames and its stamps beside it; the row-axis spread is recorded too, for review.
-* ``safety_margin_px`` is a **declaration**, and since HS-305 it is declared as a **fraction of the shorter
+* ``safety_margin_px`` is a **declaration**, and it is declared as a **fraction of the shorter
   production image edge** in the production head-camera declaration
   ``config/perception/head_camera_yolo_seg.yaml``: this producer derives
   ``safety_margin_px = ceil(image_safety_margin_fraction * min(image_width_px, image_height_px))`` from

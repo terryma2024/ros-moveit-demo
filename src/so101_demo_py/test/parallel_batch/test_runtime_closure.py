@@ -1,6 +1,6 @@
 """Contract tests for the macOS task runtime closure (design section 4.1).
 
-These tests drive the RED/GREEN boundary of Task 1 of the macOS service campaign closure
+These tests drive the RED/GREEN boundary of the macOS service campaign closure
 plan. They import the module under test lazily so that a missing implementation is reported
 as a failed assertion (a real RED) instead of a collection error, and they never start a
 process: every child, identity and loaded-image probe is injected.

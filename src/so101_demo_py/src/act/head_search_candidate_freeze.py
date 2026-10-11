@@ -2,7 +2,7 @@
 
 The consumer side already exists: ``load_frozen_candidate`` reads a six-key document and refuses
 anything it cannot apply. This module is the producer for that contract, so a frozen candidate is
-built to the validator's rules rather than to a description of them (HS-201/202/205):
+built to the validator's rules rather than to a description of them:
 
     candidate_id  weight_sha256  promotable
     operating_points.head/.task = {min_confidence, tracker: {iou}}
@@ -78,8 +78,7 @@ def freeze_candidate(
     unsupported, so the document carries those and nothing else. The same operating point is sealed
     for both domains because calibration measures them on the same val/calibration split pair.
 
-    ``promotable`` is written true: a candidate that is not promotable never enters model selection
-    (HS-052), and this producer exists only for candidates that may.
+    ``promotable`` is written true: a candidate that is not promotable never enters model selection, and this producer exists only for candidates that may.
     """
 
     if candidate_id not in CANDIDATE_IDS:

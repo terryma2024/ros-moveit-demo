@@ -342,7 +342,7 @@ def test_retry_batch_root_is_the_one_path_the_store_and_supervisor_both_derive(t
 
 
 # --------------------------------------------------------------------------------------
-# Task 8 left a gap: a restored campaign must be rebuilt from its receipt's own profile
+# A gap remained: a restored campaign must be rebuilt from its receipt's own profile
 # --------------------------------------------------------------------------------------
 
 
@@ -526,7 +526,7 @@ def test_candidate_context_replay_is_refused_after_its_command_is_consumed(tmp_p
 # --------------------------------------------------------------------------------------
 # the candidate context has a real issuance entry point
 #
-# The gap Task 11 found: `issue_candidate_context()` authorized the retry endpoint only and
+# The gap found later: `issue_candidate_context()` authorized the retry endpoint only and
 # had no HTTP route and no CLI caller, so no first-pass candidate run could be authorized.
 # Issuance is now one-time and command-scoped, binds the profile's installed document and the
 # current runtime closure / copied-install binding, and is refused by a fence or an unknown

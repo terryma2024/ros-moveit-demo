@@ -21,7 +21,7 @@ is hand-written:
 `controller_generation` and `broker_generation` are recorded as absent with their reason: no phase of
 this calibration sends a neck target and no broker session takes part, so there is no controller
 incarnation or broker generation to cite. Writing a token there would invent one; the receipt records
-the absence instead (HS-311).
+the absence instead.
 
 Nothing here commands motion, starts ROS, a simulator or a detector, and nothing is written unless the
 caller passes an explicit `output_dir`; the three documents named below are the only files this module
@@ -110,7 +110,7 @@ _CONTROLLER_INCARNATION_REASON = (
     "this calibration flight declares no controller incarnation and no broker generation: no phase of "
     "this run sends a neck target (phase 2 issues computed sweep-check receipts with "
     "motion_commanded=false) and no command broker session takes part, so no such identity exists to "
-    "cite and none is invented (HS-311)"
+    "cite and none is invented"
 )
 
 #: the zero position the bounded two-way plan starts from when the caller declares no other start; it is

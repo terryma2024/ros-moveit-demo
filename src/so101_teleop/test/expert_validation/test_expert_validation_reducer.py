@@ -268,7 +268,7 @@ def test_sequence_regression_is_refused() -> None:
     ).as_document() == state.as_document()
 
 
-# -- Task 5: the service-facing document is derived from canonical state, never from a delta ---
+# -- the service-facing document is derived from canonical state, never from a delta ---
 
 
 def _leased(module, state, *, sequence=2, worker_id="worker-01", generation=1):

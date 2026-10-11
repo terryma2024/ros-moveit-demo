@@ -7,7 +7,7 @@ The phase assembles what the earlier phases measured and records it as the run's
   production owner and the startup readback that proves the running system uses the value;
 * the five items section 7.1 also requires recorded though they are not among the seventeen:
   `settle_velocity_rad_s`, `goal_tolerance_rad`, the three-consecutive-frame lock rule, the tracker
-  algorithm and the 10 Hz frame contract (plan section 2b, ledger HS-282);
+  algorithm and the 10 Hz frame contract (plan section 2b);
 * the runtime identity of section 2b and the controlled dependencies with their digests;
 * `manifest.json` and `run-status.json`. The status is `SUCCEEDED` or `FAILED`, and a failed run records
   the first failing phase, its code, command, exit code and the evidence already produced - and never a
@@ -47,7 +47,7 @@ CAL_BUNDLE_INCOMPLETE = "CAL_BUNDLE_INCOMPLETE"
 CAL_EFFECTIVE_VALUE_MISMATCH = "CAL_EFFECTIVE_VALUE_MISMATCH"
 REFUSAL_CODES = (CAL_BUNDLE_INCOMPLETE, CAL_EFFECTIVE_VALUE_MISMATCH)
 
-#: the authoritative seventeen, in the order ledger HS-278 lists them (design section 7.1)
+#: the authoritative seventeen, in the order design section 7.1 lists them
 PARAMETERS = (
     "horizontal_fov_rad",
     "lock_valid_neck_rad",

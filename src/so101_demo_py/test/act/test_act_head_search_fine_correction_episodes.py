@@ -1,4 +1,4 @@
-"""HS-307: the closed-loop fine-correction episodes and the `fine_correction_episodes` document.
+""" the closed-loop fine-correction episodes and the `fine_correction_episodes` document.
 
 Every case here runs against an injected scene preparation, an injected plant and an injected detector,
 so the closed loop, the split isolation, the correction reduction, every refusal and both documents are
@@ -75,7 +75,7 @@ VERTICAL_BOUNDS_PX = (110.0, 370.0)
 #: the seal's required search domain and its lock-valid interval
 REQUIRED_DOMAIN_RAD = (-0.17559216195018026, 0.08047101126546086)
 LOCK_VALID_RAD = (-6.283175307179587, 6.283175307179587)
-#: every top-level key `build_fine_correction_episodes` wrote before HS-324 declared the warm-up frame: the
+#: every top-level key `build_fine_correction_episodes` wrote before the warm-up frame was declared: the
 #: warm-up block is added to this set and no key of it is dropped (the digest covers the new block too)
 PRE_WARMUP_FINE_CORRECTION_DOCUMENT_KEYS = (
     "anchors",
@@ -577,12 +577,12 @@ def test_a_settle_time_that_is_not_the_simulation_clocks_refuses_the_episode():
     assert refused.value.code == CAL_TIMING_TIME_BASE_UNVERIFIED
 
 
-# --- the declared warm-up frame (HS-324) --------------------------------------------------------
+# --- the declared warm-up frame --------------------------------------------------------
 
 
-#: the promoted `max_age_s` (HS-296: p99.9 of the frame age + 10 ms) that refused this episode's frame 0
+#: the promoted `max_age_s` (p99.9 of the frame age + 10 ms) that refused this episode's frame 0
 PROMOTED_MAX_AGE_S = 0.014736005008453503
-#: the one-off cost HS-323 measured for the process's first detection-bearing predict (31-37 ms)
+#: the one-off cost measured for the process's first detection-bearing predict (31-37 ms)
 FIRST_DETECTION_COST_S = 0.035
 
 
@@ -602,7 +602,7 @@ class StepClock:
 
 
 class OneOffDetectionCostDetector:
-    """The production detector's measured one-off cost (HS-323 section 2.2).
+    """The production detector's measured one-off cost.
 
     `YoloSegDetector`'s constructor warms the model up on a zeros image, which carries no box and no mask
     and costs 5.3 ms; the first predict that really resolves a detection costs 34.2 ms and every later one
@@ -675,7 +675,7 @@ def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames(
 
 
 def test_the_warm_up_frame_is_excluded_from_the_measured_ages_under_the_promoted_max_age():
-    """HS-323: this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
+    """ this is the fixture whose first measured frame refused both flights (`INPUT_STALE`)."""
 
     clock = StepClock()
     plant = FakePlant(cup_yaw_rad=-0.0588)
@@ -872,7 +872,7 @@ def test_the_document_digest_covers_every_field_but_itself(tmp_path):
 
 
 def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
-    """HS-324: the whole key set this producer wrote before the warm-up was declared, plus the block."""
+    """ the whole key set this producer wrote before the warm-up was declared, plus the block."""
 
     document = _document(tmp_path)
 

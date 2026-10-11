@@ -698,7 +698,7 @@ def test_stop_velocity_requires_a_positive_feedback_period():
 
 
 def test_stop_velocity_accepts_an_explicitly_zero_quantisation():
-    """HS-305 Proposal B: the zero resolution is a declaration, and the envelope keeps its three terms."""
+    """The zero resolution is a declaration, and the envelope keeps its three terms."""
 
     block = compute_stop_velocity_rad_s(
         stationary=stationary_document(),

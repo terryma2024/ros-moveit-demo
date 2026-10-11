@@ -12,7 +12,7 @@ the policy half of that phase, the half that must not be able to fit the verdict
 * the search runs only over the head-domain measurements of the splits the rule declares for selection
   (head val plus the calibration episodes), and any frame of another split - above all a held-out frame -
   is refused with `CAL_SPLIT_LEAK`; held-out measurements may be *reported* and never consumed;
-* the choice follows the chain the campaign declared before it measured (ledger HS-248/HS-265): highest
+* the choice follows the chain the campaign declared before it measured: highest
   f1, then highest recall, then lowest `min_confidence`, then the earliest declared grid point;
 * a chosen point that yields even one false candidate on an empty scene is refused with
   `CAL_NO_CUP_FALSE_CANDIDATE` rather than shipped;
@@ -20,7 +20,7 @@ the policy half of that phase, the half that must not be able to fit the verdict
 
 The measurements are records the phase reads, never produces: each frame carries a `split`, a `domain`,
 its ground-truth centres under `truth`, and one list of detections per candidate under `detections`
-(HS-245: the value is an ordered collection whose length is the detection count, never a mapping whose
+(the value is an ordered collection whose length is the detection count, never a mapping whose
 keys could be miscounted as detections). A detection carries at least `x`, `y` and `conf`; a detection
 that also declares its bbox (`w`/`h`, `bbox`, or `area_px2`) lets the three non-confidence values be
 re-applied to the record, and one that declares no bbox is judged by the confidence floor alone.
@@ -55,7 +55,7 @@ CAL_SPLIT_LEAK = "CAL_SPLIT_LEAK"
 CAL_NO_CUP_FALSE_CANDIDATE = "CAL_NO_CUP_FALSE_CANDIDATE"
 REFUSAL_CODES = (CAL_RULE_AFTER_MEASUREMENT, CAL_SPLIT_LEAK, CAL_NO_CUP_FALSE_CANDIDATE)
 
-#: the chain the campaign declared before it measured (HS-248/HS-265), in the order it is applied
+#: the chain the campaign declared before it measured, in the order it is applied
 TIE_BREAK_CHAIN = (
     "highest f1",
     "highest recall",
@@ -72,7 +72,7 @@ SELECTION_RULE = (
 )
 
 #: the values a candidate point is, and the order the filter chain re-applies them in: the confidence
-#: floor first (HS-265: filtering recorded detections by confidence is equivalent to re-running predict
+#: floor first (filtering recorded detections by confidence is equivalent to re-running predict
 #: at that confidence), then the tracker's IoU as a re-suppression of the recorded list, then the
 #: geometric floors the production postprocess applies to the tracker's output
 POINT_KEYS = ("min_confidence", "min_bbox_aspect", "min_area_px2", "tracking_iou")
@@ -122,7 +122,7 @@ def _detections(frame: Mapping, candidate_id: str) -> list[Mapping]:
     """One candidate's detections on one frame, as the ordered collection the contract fixes.
 
     An absent measurement is not an empty detection list, and a mapping is not a list of detections -
-    `len()` of its keys once produced 48 phantom false candidates (HS-245), so both are caller errors
+    `len()` of its keys once produced 48 phantom false candidates, so both are caller errors
     rather than silently-coerced counts.
     """
 
@@ -136,7 +136,7 @@ def _detections(frame: Mapping, candidate_id: str) -> list[Mapping]:
     if isinstance(recorded, (str, bytes)) or not isinstance(recorded, Sequence):
         raise ValueError(
             f"the detections of candidate {candidate_id!r} must be an ordered collection of detection "
-            "records, never a mapping whose keys would be miscounted as detections (HS-245)"
+            "records, never a mapping whose keys would be miscounted as detections"
         )
     return list(recorded)
 
@@ -322,7 +322,7 @@ def _metrics(frames: Sequence[Mapping], candidate_id: str, point: Mapping) -> di
 
 
 def _empty_scene_count(frames: Sequence[Mapping], candidate_id: str, point: Mapping) -> dict:
-    """Count the point's detections on frames that hold no object, from the records (HS-245)."""
+    """Count the point's detections on frames that hold no object, from the records."""
 
     total = 0
     checked = 0
@@ -775,7 +775,7 @@ def report_held_out_measurements(*, rule, measurements, candidate_id, point) -> 
     """Report the chosen point's held-out figures without ever letting them enter the choice.
 
     Only the rule's declared held-out splits are consumed here, and the record says so
-    (`consumed_for_selection: False`), because ledger HS-265 is explicit that held-out data already seen
+    (`consumed_for_selection: False`), because held-out data already seen
     by a reviewer is a re-check and not an unbiased validation - and because a selection that read it
     would no longer be the rule that was declared before the measurement. A frame of an undeclared split
     is refused with `CAL_SPLIT_LEAK`; frames of the selection splits are already the selection's own and

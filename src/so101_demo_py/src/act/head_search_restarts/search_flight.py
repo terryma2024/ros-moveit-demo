@@ -365,7 +365,7 @@ def measure_and_search(
                 "corridor_definition": (
                     "the corridor is the seal's own lock_valid_neck_rad (fine_corridor_rad); the required "
                     "search domain is reported beside it because the seal's own anchor start lies outside "
-                    "it (HS-316), and the anchor's declared start is not an unbounded command"
+                    "it, and the anchor's declared start is not an unbounded command"
                 ),
             },
         }

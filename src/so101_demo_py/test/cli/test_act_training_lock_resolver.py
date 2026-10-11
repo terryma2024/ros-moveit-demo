@@ -1,4 +1,4 @@
-"""The resolver that turns a uv install report into the closed Task 12 training lock.
+"""The resolver that turns a uv install report into the closed training lock.
 
 The lock is only meaningful if every package carries the SHA of the artifact that was actually resolved and
 the resolver records which interpreter and which indexes produced it. Anything less fails closed, because a

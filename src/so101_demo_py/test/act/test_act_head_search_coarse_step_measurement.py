@@ -59,7 +59,7 @@ SHA_WEIGHTS = "3" * 64
 OBSERVATIONS_PATH = "/evidence/coarse-step-observations.json"
 GEOMETRY_PATH = "/evidence/head-camera-geometry.json"
 
-#: the sealed camera geometry the Task 11 campaign measured (HS-290), and its three anchors
+#: the sealed camera geometry the campaign measured, and its three anchors
 GEOMETRY = {
     "horizontal_fov_rad": 1.3121067481206794,
     "lock_valid_neck_rad": [-6.283175307179587, 6.283175307179587],
@@ -67,7 +67,7 @@ GEOMETRY = {
     "sealed_coarse_step_candidate_rad": 0.3,
     "anchors_rad": {"default": 0.1, "left": 0.0, "forward": 0.0},
 }
-#: the six generated candidates of that geometry, largest first (HS-290)
+#: the six generated candidates of that geometry, largest first
 CANDIDATES = (
     0.6560533740603397,
     0.32802668703016985,

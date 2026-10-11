@@ -4,7 +4,7 @@ The plan starts *one* new stack from the frozen install, the promoted config, th
 approval receipt and the closed head-only report; runs the installed unified app against that one stack
 and its one detector; exercises the head-camera surface; and tears everything down before it writes
 anything. The installed surface this module replaces wrote a connection descriptor immediately, ran no
-probe and recorded ``teardown: not-attempted`` (HS-315 row 10).
+probe and recorded ``teardown: not-attempted``.
 
 What this module owns, in the plan's order and with no step optional:
 

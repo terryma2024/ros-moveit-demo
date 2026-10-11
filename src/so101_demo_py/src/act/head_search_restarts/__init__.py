@@ -14,7 +14,7 @@ What this producer implements, stated exactly:
   process table, the ROS graph and the GPU compute processes are read and must be empty of owners; the
   stack is then the production composition of ``runtime/launch_composition.py`` for the ACT profile
   (``ros2_control_node`` with the production MuJoCo camera plugin, ``robot_state_publisher`` and the four
-  controller spawners), started headless under EGL exactly as the frozen HS-308 transport measurement
+  controller spawners), started headless under EGL exactly as the frozen transport measurement
   starts it. The camera at 10 Hz, the simulation clock, the joint states and TF are the real production
   transport, not a stand-in.
 * **The health gates are measured, not asserted.** The graph gate reads ``ros2 node list`` and refuses on

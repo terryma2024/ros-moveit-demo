@@ -188,7 +188,7 @@ def _fine_correction_parser() -> argparse.ArgumentParser:
         action="append",
         help=(
             "the sealed anchor every episode starts from (default `left`, the anchor whose start lies "
-            "inside the HS-302 corridor and whose sweep sees the held-out scenes' cup)"
+            "inside the coarse corridor and whose sweep sees the held-out scenes' cup)"
         ),
     )
     parser.add_argument("--device", default="cuda", help="the detector device (never a CPU fallback)")

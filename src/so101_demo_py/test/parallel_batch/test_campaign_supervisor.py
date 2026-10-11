@@ -363,7 +363,7 @@ def test_clean_release_clears_the_receipt_for_the_next_campaign(tmp_path):
 def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
     """Without a birth identity a child cannot be signalled safely, so it is stopped and failed.
 
-    This is a real defect the Task 13 runtime smoke found: the identity read races with process
+    This is a real defect the runtime smoke found: the identity read races with process
     start, and the first version recorded `birth_identity: None` while still reporting the child
     ACTIVE, which would have made a later PID-reuse check impossible.
     """
@@ -400,7 +400,7 @@ def test_a_child_without_a_readable_birth_identity_is_never_promoted(tmp_path):
 def test_a_child_that_exits_after_the_spawn_read_is_still_promoted_with_its_identity(tmp_path):
     """A vanished child is not a reused PID: the spawn-time identity stands.
 
-    This is the Task 13 root cause, measured: on this host a Worker can complete its round trips
+    This is the root cause, measured: on this host a Worker can complete its round trips
     inside the ACK window, so the promotion recheck legitimately sees a zombie or nothing at all.
     Refusing that rejected healthy Workers; refusing a *changed* identity is what stops reuse.
     """

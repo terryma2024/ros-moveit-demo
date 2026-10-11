@@ -231,7 +231,7 @@ def test_the_feedback_document_derives_a_declared_quantisation(tmp_path: Path) -
     assert document["refusals"] == []
 
 
-# --- HS-305: the explicitly zero resolution of this platform (approved Proposal B) --------------------
+# ---  the explicitly zero resolution of this platform (approved Proposal B) --------------------
 
 
 def _zero_declaration(tmp_path: Path, **document) -> Path:

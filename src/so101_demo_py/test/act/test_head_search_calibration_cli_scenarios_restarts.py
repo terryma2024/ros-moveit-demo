@@ -427,7 +427,7 @@ def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
 ) -> None:
     """The installed entry must reach the acceptance with every declaration the plan names.
 
-    Before HS-325 this handler wrote a descriptor from a `--report` it had to be handed and returned 0
+    Before the acceptance was owned this handler wrote a descriptor from a `--report` it had to be handed and returned 0
     without starting, probing or tearing anything down.
     """
 

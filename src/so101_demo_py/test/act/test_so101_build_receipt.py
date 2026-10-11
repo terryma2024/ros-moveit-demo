@@ -1,4 +1,4 @@
-"""The build-receipt writer the Task 8L provenance step depends on.
+"""The build-receipt writer the provenance step depends on.
 
 `source_provenance` requires, for every `compiled` role, a receipt beside the artefact with exactly
 `sources, headers, cmake_arguments, compiler, linker, dependency_sha256, output_sha256`, the first five

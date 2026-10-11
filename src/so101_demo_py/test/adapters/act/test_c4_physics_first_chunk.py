@@ -1,6 +1,6 @@
-"""C4, superseded by CP-3410: a chunk delivered while the Recorder's subscription is still matching can be arbitrarily late
-(CP-3379: sequence 25 reached the callback 313 ms after its newest sample began and PHYSICS_RAW_CLOCK_INVALID closed the whole
-episode; CP-3409: sequence 58, 283 ms late, 26 chunks in). Under the old rule the first stale chunk was discarded and a later
+"""Superseded by the removal of the per-chunk delivery-age rule: a chunk delivered while the Recorder's subscription is still matching can be arbitrarily late
+(sequence 25 reached the callback 313 ms after its newest sample began and PHYSICS_RAW_CLOCK_INVALID closed the whole
+episode;  a later run: sequence 58, 283 ms late, 26 chunks in). Under the old rule the first stale chunk was discarded and a later
 one was a hazard. The user-authorized contract change removes the per-chunk delivery rule: a late chunk, first or not, is
 admitted, audited and recorded as lateness; scope and continuity are still enforced."""
 import copy

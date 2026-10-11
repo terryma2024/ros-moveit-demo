@@ -176,7 +176,7 @@ def test_protected_systemd_user_is_recorded_as_frozen_non_candidate(
 
     def protected(path):
         if path == environ:
-            raise PermissionError('EXP-011 kernel protection')
+            raise PermissionError('kernel protection')
         return original(path)
 
     monkeypatch.setattr(Path, 'read_bytes', protected)

@@ -1,6 +1,6 @@
 """The closed runtime-role registry must describe what the runtime actually loads.
 
-Task 8P1 provenance is a claim about the installed artefacts the runtime uses, so each role has to name the
+Source provenance is a claim about the installed artefacts the runtime uses, so each role has to name the
 overlay that owns it, the package-owned installed path inside that overlay, and where its sources really live.
 The vendored MuJoCo plugin is the case that makes this visible: it is built by its own package in the dependency
 overlay, not by `so101_mujoco_support`, so it must not be described as if this worktree produced it.

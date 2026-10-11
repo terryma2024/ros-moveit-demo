@@ -1,4 +1,4 @@
-"""Safety contract for the explicit Task 12 process-group fault injector."""
+"""Safety contract for the explicit process-group fault injector."""
 
 import importlib.util
 import json

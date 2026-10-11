@@ -1,4 +1,4 @@
-"""The admitted head detector must be the one measured by Task 6."""
+"""The admitted head detector must be the one the calibration measured."""
 
 import hashlib
 import json

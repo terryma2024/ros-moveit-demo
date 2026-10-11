@@ -960,7 +960,7 @@ TEST_F(AtomicEvidenceTest, PhysicsHookAdvancesAtFiveHundredHertzNotControllerCad
   EXPECT_EQ(chunks.front().first_physics_step, 1U);
   EXPECT_EQ(chunks.front().last_physics_step, 5U);
   EXPECT_EQ(chunks.front().simulation_session_id, "physics-step-test");
-  // CP-3410: the publish path stamps itself. handoff = the physics thread posted the chunk; publish = the publishing thread
+  // The publish path stamps itself. handoff = the physics thread posted the chunk; publish = the publishing thread
   // was about to call publish(); both on the clock of the samples' clock intervals.
   const auto & stamped = chunks.front();
   EXPECT_GT(stamped.handoff_monotonic_ns, 0U);
@@ -1060,7 +1060,7 @@ TEST_F(AtomicEvidenceTest, PhysicsFenceAckCarriesClockBoundsFromTheActualStepHoo
   rclcpp::shutdown();
 }
 
-// ---- CP-3488: the publish gate is an integer-nanosecond grid ----------------------------------------------------------------------
+// ---- the publish gate is an integer-nanosecond grid ----------------------------------------------------------------------
 
 namespace
 {

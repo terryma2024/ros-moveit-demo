@@ -45,7 +45,7 @@ RULE_NAME = "selection-rule.json"
 TASK_RULE_NAME = "selection-rule-task.json"
 
 
-#: the two splits the rule selects on, and the split it only reports (design section 7.1, HS-265)
+#: the two splits the rule selects on, and the split it only reports (design section 7.1)
 SELECTION_SPLITS = ("val", "calibration")
 
 
@@ -62,8 +62,8 @@ DOMAINS = ("head", "task")
 CANDIDATE_IDS = ("A", "B", "C")
 
 
-#: the grid of record: the 18 `(min_confidence, tracker.iou)` cells HS-248 declared before measuring it
-#: and HS-249 measured. Order is part of the rule - it is the last tie-break of the chain.
+#: the grid of record: the 18 `(min_confidence, tracker.iou)` cells the campaign declared before measuring them
+#: and then measured. Order is part of the rule - it is the last tie-break of the chain.
 GRID_CONFIDENCES = (0.25, 0.35, 0.45, 0.51, 0.60, 0.70)
 
 
@@ -86,10 +86,10 @@ MATCH_RADIUS_PX = 8.0
 NECK_ANGLES_PER_EPISODE = 3
 
 
-#: what the campaign's recorder declared a calibration seed's scenario to be (HS-260..HS-265)
+#: what the campaign's recorder declared a calibration seed's scenario to be
 EPISODE_SCENARIO_ASSIGNMENT = (
     "condition_classes[min(seed_index // 2, len(condition_classes) - 1)] - the campaign recorder's own "
-    "assignment (grid/record_episodes7.py, ledger HS-260..HS-265); the partitions file declares the "
+    "assignment (grid/record_episodes7.py); the partitions file declares the "
     "classes but not which seed carries which"
 )
 
@@ -161,7 +161,7 @@ def recording_settings() -> dict:
             "tracker.iou, so every declared point can be re-applied to the same record: a confidence "
             "floor at or above the recording floor only drops what that floor would have dropped, and "
             "NMS re-suppression at or below the recorded threshold yields exactly what the pipeline "
-            "would have produced at that threshold (HS-265)"
+            "would have produced at that threshold"
         ),
         "channel_order": (
             "the val images are read by Ultralytics itself, and a rendered episode frame is passed to "

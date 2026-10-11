@@ -50,8 +50,8 @@ What this harness cannot measure yet, and will not invent:
 * **the simulation is paused while a frame is produced.** The neck does not advance in wall-clock time
   while the renderer and the detector work, so ``sim_age_s`` is zero by construction and the wall-clock age
   is the whole perception cost. The recorded ``real_time_factor`` says how fast the harness actually stepped
-  the sealed scene, and it is a measurement rather than an assumption: in the one real run recorded by
-  ledger HS-300 it was above one, because the sealed physics steps faster than wall clock while a frame
+  the sealed scene, and it is a measurement rather than an assumption: in the one real run recorded it
+  was above one, because the sealed physics steps faster than wall clock while a frame
   costs a few milliseconds. What is measured is the cost of the perception pipeline, not the residual lag
   of a pipeline coupled to a real-time clock.
 

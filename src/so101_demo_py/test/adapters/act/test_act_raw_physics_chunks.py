@@ -86,7 +86,7 @@ _AGE_NS = 100_000_000
 
 @pytest.mark.parametrize("receipt_offset_ns", [_AGE_NS, _AGE_NS + 1, _AGE_NS * 3, 2_000_000_000])
 def test_a_late_receipt_is_admitted_whatever_its_age(receipt_offset_ns):
-    """CP-3410 (user-authorized contract change): there is no per-chunk delivery-age rule any more. The old pin (exactly
+    """There is no per-chunk delivery-age rule any more. The old pin (exactly
     100 ms accepted, one ns more stale) is gone; lateness is telemetry, bounded by the Recorder's backlog and lag policy."""
     convert, verify = _api()
     record = convert(_chunk(), received_monotonic_ns=10_000_000_000)

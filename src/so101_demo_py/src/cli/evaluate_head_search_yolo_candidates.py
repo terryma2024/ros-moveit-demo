@@ -395,12 +395,12 @@ def main(arguments: list[str] | None = None) -> int:
         try:
             verdict = choose_candidate(*evaluations)
         except Exception as error:  # the selection rules refuse instead of choosing
-            # HS-275: write the refusal as an artefact for ANY selection refusal, not only the
+            # write the refusal as an artefact for ANY selection refusal, not only the
             # retention guard - the F1-margin refusal left no comparison behind, so its measured
             # numbers existed only inside the message.
             if "EVALUATION_" not in str(error):
                 raise
-            # HS-251/252/255: record the refusal as a decision with evidence, then re-raise so the
+            # Record the refusal as a decision with evidence, then re-raise so the
             # exit status still reports failure. Nothing is promoted; the margin is untouched.
             from so101_demo.perception_benchmark.head_search_models import TASK_RETENTION_MARGIN
 
@@ -554,7 +554,7 @@ def _measure_static_per_scene(
         scene = str(sample.get("scene_group_id") or sample.get("seed"))
         by_scene.setdefault(scene, []).append(sample)
     cells: dict[str, dict[str, float]] = {}
-    # Memoisation (HS-264): a per-scene value depends only on the weights file, the operating point
+    # Memoisation: a per-scene value depends only on the weights file, the operating point
     # and that scene's images, and each call costs one whole Ultralytics validation. Re-running with
     # an unchanged head point must therefore not pay ~200 val calls again. The key covers all three
     # inputs, so a changed weight, point or image can never reuse a stale cell.

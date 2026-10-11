@@ -1,4 +1,4 @@
-"""The Task 14 Step 6 acceptance: owned start, measured probes, proven teardown, honest receipt.
+"""The teleop acceptance: owned start, measured probes, proven teardown, honest receipt.
 
 Every fixture here is synthetic. No MuJoCo, no detector, no GPU, no ROS node and no browser is started:
 the orchestration's own seams (the stack factory, the head-camera flight, the app factory, the route

@@ -199,7 +199,7 @@ def test_qualify_refuses_and_names_a_single_missing_phase_root(tmp_path: Path, c
 
 
 def test_qualify_has_no_digest_only_surface_any_more(tmp_path: Path) -> None:
-    """The HS-233/HS-315 defect: a directory of hex digests used to be enough to publish a pass."""
+    """The digest-only defect: a directory of hex digests used to be enough to publish a pass."""
 
     evidence = tmp_path / "evidence"
     evidence.mkdir()
@@ -234,7 +234,7 @@ def test_run_stops_at_the_first_refusing_phase_and_writes_only_the_run_status(
     assert status["status"] == "FAILED"
     assert status["first_failing_phase"] == "input_validation"
     assert status["failure_code"] == "CAL_INPUT_UNSEALED"
-    # HS-233: the run used to write a receipt and a state file that claimed six phases had happened
+    # the run used to write a receipt and a state file that claimed six phases had happened
     assert not (root / "run-receipt.json").exists()
     assert not (root / "calibration-state.json").exists()
     assert not (root / "head-search-calibration-bundle.json").exists()

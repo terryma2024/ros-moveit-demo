@@ -308,7 +308,7 @@ def test_frames_faster_than_the_frame_contract_refuse_the_scenario():
 def test_the_declared_anchor_start_is_bounded_by_the_lock_valid_interval_not_the_sweep_domain():
     """The `default` anchor starts at 0.1 rad, outside the required search domain the sweep owes.
 
-    HS-302's corridor is the intersection the *sweep stops* have to stay inside; the anchor is where the
+    The coarse corridor is the intersection the *sweep stops* have to stay inside; the anchor is where the
     search starts, and the seal declares `lock_valid_neck_rad` as the interval a lock is valid in, which is
     where a legal start anchor lives. Refusing the declared anchor would refuse the plan's own `default`
     restart anchor and 14 of the 40 declared scenarios with it.

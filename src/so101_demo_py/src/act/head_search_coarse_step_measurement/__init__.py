@@ -9,7 +9,7 @@ turns a raw sweep into the value and the evidence block phase 6 hands to phase 8
 
 The raw observations are exactly that, raw: one entry per generated candidate step, per val scene, per
 anchor and per bounded stop, carrying that stop's per-camera ground truth and the selected model's
-detections (the recorder semantics of ledger HS-260/HS-261). **This module never trusts a declared
+detections (the recorder semantics). **This module never trusts a declared
 verdict**: it re-derives the bounded plan of every candidate from the sealed geometry (the repository's
 own `bounded_search_stops` and `independent_sweep_check`), requires the recorded stops to be that plan,
 matches the detections to the truth itself with the gate's greedy nearest rule, and decides from those

@@ -5,7 +5,7 @@ of a qualification run - and refuses unless all seventeen approved values and th
 were read back **under that qualification run root**, unless the readback's own values digest is the digest
 the frozen promoted config carries, and unless exactly one CUDA detector was in play. Nothing produced
 such a document: the values were proven once, inside the calibration run, by
-``head_search_measured_readback`` (ledger HS-312), but the qualification itself never queried a running
+``head_search_measured_readback``, but the qualification itself never queried a running
 system for them. This module is that producer.
 
 What it observes, and from which consumer

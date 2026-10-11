@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 from paths import REPOSITORY
 
-#: The copied install under test. Task 9 of the lightweight start guard plan replaced the
+#: The copied install under test. The lightweight start guard replaced the
 #: hardcoded historical prefix with an explicit one: the new immutable copy of the current
 #: runtime is named by SO101_E2E_INSTALL_PREFIX, and the old path stays only as the
 #: historical default for this file's pre-guard assertions.
@@ -35,7 +35,7 @@ def _resolve_prefixes() -> tuple[Path, Path]:
 
     An explicit ``SO101_E2E_INSTALL_PREFIX`` names an immutable copy; otherwise the active
     ament overlay is the subject. The historical ``freeze-install`` prefix is no longer a
-    fallback: it was superseded by the copy produced in Task 9, and silently testing it made
+    fallback: it was superseded by the newer copy, and silently testing it made
     this check report drift that belonged to an old build.
     """
 

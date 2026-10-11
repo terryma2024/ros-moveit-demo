@@ -3,7 +3,7 @@
 The two W2 slots are concurrent capacity, not a static point assignment: every selected point
 enters one fsync-backed queue, one lease carries exactly one point, and an unselected point can
 never obtain a lease, an invocation or a result. These tests drive the RED/GREEN boundary of
-plan Task 2 and import the module under test lazily so a missing implementation fails as an
+the plan and import the module under test lazily so a missing implementation fails as an
 assertion rather than a collection error.
 """
 

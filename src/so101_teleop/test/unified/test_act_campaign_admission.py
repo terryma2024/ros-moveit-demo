@@ -78,7 +78,7 @@ def _write_policy(tmp_path):
 
 
 def _prepared_receipt(tmp_path):
-    """A real prepared bundle, so a Task 8 payload can name its receipt.
+    """A real prepared bundle, so a collection payload can name its receipt.
 
     Admission re-verifies the receipt and the bundle before it acquires anything, so the fixture
     prepares a genuine bundle through the real producer rather than synthesising a path and digest.
@@ -413,7 +413,7 @@ def test_pick_place_calibration_start_rejects_unverified_calibration_before_reso
 @pytest.mark.parametrize("field,other", (("source_commit", "c" * 40),
                                           ("config_sha256", "d" * 64)))
 def test_pick_place_calibration_start_records_a_calibration_identity_that_is_not_current(tmp_path, field, other):
-    """CP-1928 amendment: the report's recorded identity is provenance, not a comparison.
+    """The report's recorded identity is provenance, not a comparison.
 
     The report must still be structurally valid - the same report with a malformed identity or an
     unmeasured check is refused by the gates that remain.
@@ -584,7 +584,7 @@ def test_formal_eight_worker_without_exact_qualification_has_no_resources(tmp_pa
             launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
             for index in range(8)
         ])
-        # a collection payload must not carry the Task 8 receipt pair
+        # a collection payload must not carry the calibration receipt pair
         payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
         formal = replace(base, kind="act_collection_start", payload=payload)
         with pytest.raises(ValueError, match="EIGHT_WORKER_QUALIFICATION_REQUIRED"):
@@ -612,7 +612,7 @@ def test_formal_eight_worker_rejects_a_self_declared_passed_json_without_indepen
     payload = dict(base.payload, worker_count=8, qualification_receipt_path=str(fake_path),
                    children=[launch(f"w{index:02d}", 40 + index, f"session-{index}").__dict__
                              for index in range(8)])
-    # a collection payload must not carry the Task 8 receipt pair
+    # a collection payload must not carry the calibration receipt pair
     payload = {k: v for k, v in payload.items() if k not in ("preparation_receipt_path", "preparation_receipt_sha256")}
     formal = replace(base, kind="act_collection_start", payload=payload)
     store = IntentStore.open(tmp_path / "state")

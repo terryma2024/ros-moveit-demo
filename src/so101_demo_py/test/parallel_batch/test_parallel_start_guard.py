@@ -1,6 +1,6 @@
 """Lightweight start guard: decision model, cheap reads and rejection rules.
 
-These tests are the Task 2 regression for the approved design
+These tests are the regression for the approved design
 `docs/superpowers/specs/2026-09-19-so101-parallel-validation-lightweight-start-guard-design.md`:
 one CPU/RAM/GPU snapshot inside a shared deadline, WARN never blocks, missing optional
 information is reported as unknown, and no swap/PSI/Git read can influence the decision.

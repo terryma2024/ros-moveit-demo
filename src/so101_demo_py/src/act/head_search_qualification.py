@@ -216,7 +216,7 @@ def qualify_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
     The implementation is :mod:`so101_demo.act.head_search_aggregate`; this name stays because it is the
     qualifier's own phase entry and the last element of :data:`RUN_PHASES`. There is no digest-only path
     any more: a well-formed sha256 of nothing used to publish ``HEAD_SEARCH_QUALIFIED``, which is exactly
-    the HS-233 failure mode the declared gates replace.
+    the failure mode the declared gates replace.
     """
 
     from so101_demo.act.head_search_aggregate.aggregate import aggregate_qualification

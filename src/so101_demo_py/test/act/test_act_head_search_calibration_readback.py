@@ -53,7 +53,7 @@ HELD_OUT_SPLITS = ("held_out_evaluation",)
 MATCH_RADIUS_PX = 8.0
 COMMAND = "ros2 run so101_demo_py so101_head_search_calibration run --run-root /evidence/run-01"
 
-#: the four perception values in the order design section 7.1 lists them (ledger HS-278): they are the
+#: the four perception values in the order design section 7.1 lists them: they are the
 #: first four in the dependency order, and the phase-8 bundle keeps that order too
 DESIGN_PERCEPTION_PARAMETERS = (
     "min_confidence",

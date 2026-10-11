@@ -137,7 +137,7 @@ def test_the_sidecar_writes_every_read_but_publishes_none_until_the_bag_has_matc
 
 
 def test_a_slow_fsync_never_stalls_the_read_loop(tmp_path, isolated_ros_domain, monkeypatch):
-    """The first live round lost 340 ms reads to one fsync on a busy filesystem (T01): the durable write is on its own thread."""
+    """The first live round lost 340 ms reads to one fsync on a busy filesystem: the durable write is on its own thread."""
     from so101_demo.act.offline import raw_recorder
 
     real = os.fsync

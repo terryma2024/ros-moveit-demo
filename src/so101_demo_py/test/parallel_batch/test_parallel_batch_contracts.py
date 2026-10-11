@@ -542,7 +542,7 @@ def test_runtime_config_loader_selects_the_parser_by_schema(tmp_path):
 
 
 # --------------------------------------------------------------------------------------
-# Version 3: the active budget-free runtime contract (lightweight start guard plan, Task 3)
+# Version 3: the active budget-free runtime contract (lightweight start guard plan)
 # --------------------------------------------------------------------------------------
 
 LINUX_CUDA_CONFIG_PATH = PACKAGE / "config/mujoco/parallel_batch_linux_cuda.yaml"

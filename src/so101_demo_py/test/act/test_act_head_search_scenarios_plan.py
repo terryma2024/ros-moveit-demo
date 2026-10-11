@@ -78,7 +78,7 @@ def test_a_partition_that_declares_no_qualification_list_is_a_refusal():
 
 
 def test_the_plan_step_three_terminals_are_declared_per_condition_class():
-    """Plan Task 14 Step 3: one cup locks, two cups are ambiguous, no cup is a clean negative."""
+    """One cup locks, two cups are ambiguous, no cup is a clean negative."""
 
     assert expected_terminals("nominal") == ("TARGET_LOCKED",)
     assert expected_terminals("distractor_present") == ("TARGET_LOCKED",)

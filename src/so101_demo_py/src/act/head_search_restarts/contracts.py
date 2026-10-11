@@ -132,7 +132,7 @@ SCENE_SERVICE = "/mujoco_ros2_control_node/set_free_joint_state"
 
 
 #: the four controllers the ACT profile activates; the restart spawns exactly these, so the stack under
-#: test is the production one rather than the two-node transport subset the HS-308 stamp measurement used
+#: test is the production one rather than the two-node transport subset the stamp measurement used
 CONTROLLERS = ("joint_state_broadcaster", "arm_controller", "gripper_controller", "neck_controller")
 
 

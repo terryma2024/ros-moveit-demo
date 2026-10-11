@@ -382,7 +382,7 @@ def observe_qualification_values(
     """Observe all seventeen approved values off the production components that consume them.
 
     The eleven measured values go through ``head_search_measured_readback.observe_measured_readbacks`` -
-    the capability ledger HS-312 wired into the calibration run - because those are exactly the values the
+    the capability wired into the calibration run - because those are exactly the values the
     neck port, the stop criterion and the eight controller keys were read back for; the six declared ones
     are read off the same constructed controller's plan and configuration, and the two the detector applies
     off the loaded detector. The result is one record per value, in the order ``head_search_binding._MEASURED``

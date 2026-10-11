@@ -2,7 +2,7 @@
 
 The service must write one binding before a campaign starts, and the adapter must accept only
 that binding: no default points, no "first two of the catalog", no full-catalog traversal by a
-Worker. These tests drive the RED/GREEN boundary of plan Task 2. The module under test is
+Worker. These tests drive the RED/GREEN boundary of the plan. The module under test is
 imported lazily so a missing implementation is reported as a failed assertion instead of a
 collection error.
 """

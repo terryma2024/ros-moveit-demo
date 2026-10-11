@@ -106,7 +106,7 @@ def test_collection_faults_are_invalid(frozen_scene, fault, match):
 
 
 def test_a_step_finished_before_the_stop_receipt_but_ahead_of_its_sim_stamp_is_not_the_stops_step():
-    """CP-3449 (bag 429dbf50): the Teacher's stop stamp is a received /clock value, so physics may already be one step ahead of
+    """The Teacher's stop stamp is a received /clock value, so physics may already be one step ahead of
     it when the stamp is taken: step 55981 (116.548 s) ended 46 us before the stop receipt that read 116.546 s. The stop's native
     step is the last step finished before the receipt AND not later than the stamp (55980); a step ahead of the stamp is neither
     stale evidence nor the stop's state."""

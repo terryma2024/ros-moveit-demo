@@ -3,7 +3,7 @@
 The phase assembles what the earlier phases measured: the seventeen parameters of design section 7.1
 with one evidence block each, the five items section 7.1 also requires recorded though they are not
 among the seventeen (settle velocity, goal tolerance, the three-consecutive-frame lock rule, the tracker
-algorithm and the 10 Hz frame contract, ledger HS-282), the runtime identity and the controlled
+algorithm and the 10 Hz frame contract), the runtime identity and the controlled
 dependencies with their digests. It records no approval state of any kind: the approval is bound to the
 bundle digest later, by the promotion step (plan section 2a).
 
@@ -34,7 +34,7 @@ from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 COMMAND = "ros2 run so101_demo_py so101_head_search_calibration run --run-root /evidence/run-01"
 
-#: the authoritative seventeen, in the order ledger HS-278 lists them (design section 7.1)
+#: the authoritative seventeen, in the order design section 7.1 lists them
 CALIBRATION_BUNDLE_PARAMETERS = (
     "horizontal_fov_rad",
     "lock_valid_neck_rad",

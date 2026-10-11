@@ -184,7 +184,7 @@ def test_initial_gap_inside_window_still_refuses_and_prints_one_facts_line(froze
 
 
 def test_initial_capture_does_not_wait_for_world_sources_newer_than_the_newest_raw_chunk(frozen_scene, monkeypatch):
-    """CP-3489 (T08, T13, T14 of the first v2 round): a world source whose native chunk has not been published yet (here 20 steps past
+    """A world source whose native chunk has not been published yet (here 20 steps past
     the newest raw step) must not hold back the selection of the first eligible source, which IS covered. Waiting for it landed the
     capture a whole chunk (100 ms) late, past the rule that the capture is at most 100 ms after the selected source."""
     sources, boundary, capture, raw = final_boundary(frozen_scene)
@@ -659,7 +659,7 @@ def test_c3b_the_alignment_raw_lookup_uses_the_bounded_accessor():
 
 
 def test_final_boundary_does_not_wait_for_the_chunk_of_a_world_record_after_the_selected_one(frozen_scene, monkeypatch):
-    """CP-3394 (L2 e6be258c): physics chunks arrive every 100 ms of simulation, world records every 12 ms. The boundary is the first
+    """Physics chunks arrive every 100 ms of simulation, world records every 12 ms. The boundary is the first
     record after the stop; a later record whose chunk has not arrived yet is not needed to select it, and waiting for that chunk
     made the capture clock lag the selected record by 110 ms against the 100 ms the endpoint allows."""
     sources, boundary, final_clock, raw = final_boundary(frozen_scene)

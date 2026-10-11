@@ -269,7 +269,7 @@ def test_the_real_synchronizer_satisfies_the_sampler_contract_the_capture_calls(
 
     The capture calls `sampler.sample_with_audit(session_id, attempt_id, at_s)` and expects an `(observation,
     source_audit)` pair; `RgbObservationSynchronizer` is the production object that provides it. Reading its `sample`
-    rather than guessing (three guesses cost three rounds at CP-2824) gives its requirements exactly: `causal_sample`
+    rather than guessing (three guesses cost three rounds) gives its requirements exactly: `causal_sample`
     runs over **every** stream buffer, so all four must hold a stamp within `max_age_s` of the instant, their stamps
     must agree within `max_skew_s`, and `neck` and `arm` are read by name - `neck` for the yaw the state appends.
     """
@@ -417,7 +417,7 @@ def test_an_endpoint_failing_episode_commits_the_teacher_status_and_is_not_expor
 
 
 def test_the_producer_keeps_the_receipt_mapping_out_of_the_recorded_row():
-    """CP-2842's split: the row records `source_stamps`; the extraction can still read the receipt times."""
+    """The split: the row records `source_stamps`; the extraction can still read the receipt times."""
     producer = ProductionProducer()
     producer.stamps["head"].append(1.0)
     producer.stamps["wrist"].append(1.0)

@@ -176,7 +176,7 @@ def valid_dynamic_manifest(who, session):
 
 
 def complete_execute(root, *, omit=(), wrong_identity=None):
-    """Build the compact contract shape observed in an EXP-095 PASSED seal."""
+    """Build the compact contract shape observed in a PASSED seal."""
     who = identity()
     session = 'session-worker-01'
     work = api.AttemptWorkspace.create(

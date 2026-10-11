@@ -53,7 +53,7 @@ SHA_D = "d" * 64
 
 HELD_OUT_SPLITS = ("head_held_out",)
 
-#: the sealed camera geometry the campaign measured (HS-290): 640x480 head camera
+#: the sealed camera geometry the campaign measured: 640x480 head camera
 HORIZONTAL_FOV_RAD = 1.3121067481206794
 IMAGE_WIDTH_PX = 640
 IMAGE_HEIGHT_PX = 480
@@ -241,7 +241,7 @@ def synthetic_runtime_identity() -> dict:
     return identity
 
 
-#: the generated candidate steps of the phase-6 fixture geometry (HS-290's field of view, largest first)
+#: the generated candidate steps of the phase-6 fixture geometry (the field of view of the sealed camera geometry, largest first)
 COARSE_STEP_CANDIDATES = (
     0.6560533740603397,
     0.32802668703016985,

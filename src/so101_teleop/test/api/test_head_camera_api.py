@@ -184,7 +184,7 @@ def test_the_router_exposes_the_five_endpoints_over_the_composed_backend(tmp_pat
     assert sealed.status_code == 409
     assert sealed.json()["detail"]["code"] == "HEAD_TARGET_INTERVAL_SEALED"
     # the stream endpoint exists and refuses an unavailable domain; its live framing is exercised by
-    # Task 11's installed smoke and Task 14's end-to-end run, where a real socket and teardown exist
+    # the installed smoke and the end-to-end run, where a real socket and teardown exist
     router = head_camera_router(services)
     declared = {getattr(route, "path", None) for route in router.routes}
     assert {
@@ -286,7 +286,7 @@ def test_status_carries_every_field_the_shipped_panel_reads(tmp_path: Path) -> N
 
     A status that omits them is not a view-only page: `HeadCameraPanel` destructures the interval
     unconditionally, so the shipped tab throws while rendering a perfectly available domain (found by
-    the Task 14 Step 6 acceptance, HS-325).
+    the teleop acceptance).
     """
 
     descriptor = valid_descriptor(tmp_path)
@@ -319,7 +319,7 @@ def test_status_reports_a_closed_report_and_authority_only_when_declared(tmp_pat
 def test_the_unified_composition_root_exposes_the_head_camera_domain(tmp_path: Path) -> None:
     """The router reads `services.head_camera`; nothing composed it, so the whole domain answered 503.
 
-    Found by the Task 14 Step 6 acceptance (HS-325): `compose_head_camera_service` existed, was unit
+    Found by the teleop acceptance: `compose_head_camera_service` existed, was unit
     tested, and was never called by the composition root the installed app actually runs.
     """
 
@@ -374,8 +374,8 @@ def test_the_stream_endpoint_really_upgrades_the_websocket(tmp_path: Path) -> No
     `head_camera.py` carries `from __future__ import annotations`, so every annotation is a string that
     FastAPI resolves against the module's globals. `WebSocket` was imported *inside* the router factory,
     so the annotation was unresolvable: FastAPI validated the socket itself as a query parameter named
-    `websocket` and closed every handshake with 403 before the handler ran. Found by the Task 14 Step 6
-    acceptance (HS-325); the plan's raw/overlay pair is impossible without this route.
+    `websocket` and closed every handshake with 403 before the handler ran. Found by the teleop
+    acceptance; the plan's raw/overlay pair is impossible without this route.
     """
 
     from fastapi import FastAPI

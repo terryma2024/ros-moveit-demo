@@ -180,7 +180,7 @@ def test_startup_rejects_a_drifted_motion_block() -> None:
 
 
 def test_the_readiness_path_verifies_the_promoted_pair(tmp_path: Path) -> None:
-    """The Task 8 call-site wiring, exercised where it can be verified."""
+    """The call-site wiring, exercised where it can be verified."""
 
     from so101_demo.cli.act_stack_ready import verify_head_search_startup
 

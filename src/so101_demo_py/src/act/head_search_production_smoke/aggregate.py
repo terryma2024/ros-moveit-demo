@@ -489,7 +489,7 @@ def write_head_search_production_smoke(
         "lock_valid_definition": (
             "the seal's own lock_valid_neck_rad: the interval a lock is valid in, the interval the "
             "controller's plan clamps its stops to, and the corridor every commanded target is judged "
-            "against (HS-316: the seal's `default` anchor starts outside the required search domain, so "
+            "against (the seal's `default` anchor starts outside the required search domain, so "
             "that domain cannot bound the anchor start without refusing the plan's own anchor)"
         ),
     }

@@ -650,7 +650,7 @@ def test_an_invalid_reference_never_reaches_the_audit():
 
 
 def test_a_refusing_tail_writer_is_reported_by_every_later_call():
-    """Finalization must not be declared before the tail handoff succeeded (Task 2 minor)."""
+    """Finalization must not be declared before the tail handoff succeeded."""
 
     def refusing_writer(observation, audit):
         raise ValueError("AUDIT_WRITE_FAILED")

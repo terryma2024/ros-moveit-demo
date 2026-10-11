@@ -1,4 +1,4 @@
-"""A Task 8 stack needs one bounded, coherent pre-reset readback."""
+"""A stack needs one bounded, coherent pre-reset readback."""
 
 from copy import deepcopy
 

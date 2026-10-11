@@ -280,7 +280,7 @@ def _unavailable_value(clear_frames=True):
 
 
 def test_an_unavailable_post_stop_source_explains_what_it_was_waiting_for():
-    """CP-3489 (T06 of the first v2 round): the code is unchanged, the facts say what the loop waited for; the decision is not."""
+    """The code is unchanged, the facts say what the loop waited for; the decision is not."""
     import json
 
     value, commands = _unavailable_value()
@@ -310,7 +310,7 @@ def test_a_stale_scene_state_is_named_in_the_facts():
 
 
 def test_a_pending_candidate_that_ages_out_records_the_same_facts_with_the_same_code():
-    """CP-3493 (T09 of the second v2 round ended DYNAMIC_RELEASE_SOURCE_EXPIRED without the facts the deadline path records): a
+    """A run that ended DYNAMIC_RELEASE_SOURCE_EXPIRED without the facts the deadline path records: a
     candidate whose scene frame never arrives ends the search either at the deadline (UNAVAILABLE) or when it ages out (EXPIRED)."""
     import json
 

@@ -198,7 +198,7 @@ def run_scenario(
 
             Three kinds share this path and each has its own bound: `anchor` is the declared start of the
             search (the seal's lock-valid interval), `plan` is a stop of the controller's bounded sweep
-            (HS-302's intersection of the required search domain and that interval) and `fine` is a
+            (the intersection of the required search domain and that interval) and `fine` is a
             centring correction or the stop that ends an attempt (the lock-valid interval again). A target
             outside its bound refuses the scenario rather than being clamped into it.
             """

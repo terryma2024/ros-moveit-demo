@@ -49,10 +49,10 @@ def test_the_runner_refuses_any_existing_run_root(tmp_path: Path) -> None:
 
 
 def test_head_only_report_does_not_grant_pick_place_calibration_ready(tmp_path: Path) -> None:
-    """A closed head-only report grants nothing Task 8 owns - and a digest-only fixture is no report.
+    """A closed head-only report grants nothing the full qualification owns - and a digest-only fixture is no report.
 
-    Deliberately changed in HS-317: this test used to hand `qualify_head_search` a mapping of
-    well-formed hex digests and assert it published a pass. That is the HS-233/HS-315 defect, and the
+    Deliberately changed in  this test used to hand `qualify_head_search` a mapping of
+    well-formed hex digests and assert it published a pass. That is the digest-only defect, and the
     aggregate phase now refuses it; the pick-place refusal is proven on a closed report document instead.
     """
 

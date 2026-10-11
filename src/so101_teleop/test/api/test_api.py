@@ -99,7 +99,7 @@ def unified_app_for(service=None, *, static_dir=None, capture_dir=None, task_ser
 class AuthorityFixture:
     """A real instance binding, so a migrated mutation case can carry instance authority.
 
-    This is the fixture CP-75 specified: a real store, arbiter and registry in a temporary
+    This is the fixture the migration plan specified: a real store, arbiter and registry in a temporary
     directory, an instance registered, a channel connected and a lease claimed.
     """
 
@@ -307,11 +307,11 @@ def test_task_websocket_uses_independent_ordered_event_stream():
 
 
 def test_the_stub_service_satisfies_the_unified_read_only_port():
-    """First step of CP-75's migration, proving the recipe before rewriting the rest.
+    """First step of the migration, proving the recipe before rewriting the rest.
 
     The existing `Service` stub is exercised through the unified factory, which is what the legacy
     tests will move to. Only read-only routes are involved here; the mutation cases need the instance
-    authority fixture described in CP-75.
+    authority fixture described in the migration plan.
     """
     from so101_teleop.unified.app import create_unified_app
     from so101_teleop.unified.ports import UnifiedServices

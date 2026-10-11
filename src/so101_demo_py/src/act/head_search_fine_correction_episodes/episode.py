@@ -160,7 +160,7 @@ def cup_count_for_condition_class(condition_class: str) -> int:
 
 
 def coarse_corridor_rad(*, geometry_seal) -> tuple[float, float]:
-    """HS-302's corridor: the required search domain intersected with the lock-valid neck interval."""
+    """The coarse corridor: the required search domain intersected with the lock-valid neck interval."""
 
     return _re_raised(motion_corridor_rad, geometry_seal=geometry_seal)
 

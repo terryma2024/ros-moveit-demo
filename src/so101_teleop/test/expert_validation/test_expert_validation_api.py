@@ -382,7 +382,7 @@ def test_every_route_and_artifact_download_exist(tmp_path):
         for path, methods in paths.items()
         if path.startswith("/expert-validation/")
     )
-    # The two Task 11 candidate routes (context issuance and candidate first pass) are included,
+    # The two candidate routes (context issuance and candidate first pass) are included,
     # and the WebSocket event route is not an OpenAPI path.
     assert operations == 15
     response = client.get("/expert-validation/artifacts/artifact-1")

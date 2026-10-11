@@ -354,7 +354,7 @@ def test_the_command_check_counts_the_targets_outside_the_declared_corridor() ->
     assert bounded["outside_corridor_count"] == 0
     assert bounded["targets_rad"] == [0.1, 0.23109066719589708]
     assert bounded["max_abs_neck_rad"] == pytest.approx(0.23109066719589708)
-    # the anchor start is outside the required search domain by the seal's own declaration (HS-316)
+    # the anchor start is outside the required search domain by the seal's own declaration
     assert bounded["outside_required_domain_count"] == 2
 
     outside = module_journal.smoke_commands(_commands(0.1, 9.0))
@@ -515,7 +515,7 @@ def test_the_produced_journal_satisfies_the_aggregates_own_production_smoke_gate
 
 
 def test_a_planning_coverage_proof_is_not_a_smoke_journal(tmp_path) -> None:
-    """The HS-315/HS-317 defect restated: the old coverage proof must not satisfy this gate."""
+    """The coverage-proof defect restated: the old coverage proof must not satisfy this gate."""
 
     root = tmp_path / "head-search-smoke-old"
     root.mkdir()

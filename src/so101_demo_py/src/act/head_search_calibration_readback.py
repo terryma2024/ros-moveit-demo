@@ -51,7 +51,7 @@ CAL_VALUE_MUTATED = "CAL_VALUE_MUTATED"
 CAL_SELECTION_MISMATCH = "CAL_SELECTION_MISMATCH"
 REFUSAL_CODES = (CAL_VALUE_MUTATED, CAL_SELECTION_MISMATCH)
 
-#: the four perception values, in the order design section 7.1 lists them (ledger HS-278)
+#: the four perception values, in the order design section 7.1 lists them
 PERCEPTION_PARAMETERS = (
     "min_confidence",
     "tracking_iou",

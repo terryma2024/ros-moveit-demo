@@ -257,7 +257,7 @@ def smoke_commands(commands) -> dict:
     search domain, and the distinct targets with the ticks that repeated them. A target is inside the
     corridor when it is within the seal's ``lock_valid_neck_rad`` plus one float ulp of allowance; the
     required search domain is reported beside it because the seal's own anchor start is outside that
-    domain (HS-316's recorded inference), and an anchor start is not an unbounded command.
+    domain, and an anchor start is not an unbounded command.
     """
 
     if not isinstance(commands, Mapping):
@@ -344,7 +344,7 @@ def smoke_commands(commands) -> dict:
             "the corridor is the seal's own lock_valid_neck_rad, the interval a lock is valid in, which "
             "is the interval the seal's anchor start and a fine correction both lie in; the required "
             "search domain is reported beside it because the seal's own `default` anchor starts outside "
-            "it (HS-316), and the anchor's declared start is not an unbounded command"
+            "it, and the anchor's declared start is not an unbounded command"
         ),
         "definition": (
             "a command is bounded when the neck target the controller really commanded lies inside the "

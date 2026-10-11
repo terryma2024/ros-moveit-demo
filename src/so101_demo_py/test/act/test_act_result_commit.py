@@ -1,4 +1,4 @@
-"""A Task 9 episode becomes a result only through its reserved lease workspace."""
+"""An episode becomes a result only through its reserved lease workspace."""
 
 from __future__ import annotations
 

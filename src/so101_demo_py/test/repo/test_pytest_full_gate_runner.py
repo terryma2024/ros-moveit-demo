@@ -345,7 +345,7 @@ def test_porcelain_status_preserves_the_leading_index_column() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# Task 9: the colcon split of a recorded collection
+# The colcon split of a recorded collection
 # --------------------------------------------------------------------------------------
 
 

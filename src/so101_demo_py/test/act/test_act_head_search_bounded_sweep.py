@@ -1,6 +1,6 @@
 """RED: the neck sweep must be the bounded stop-point sequence of the plan's required domain.
 
-HS-286 pins the violation: `HeadSearchController` still walks a forward-cumulative revolution - the
+The violation is pinned: `HeadSearchController` still walks a forward-cumulative revolution - the
 `2 * math.pi` branch of `src/act/search.py` - whenever the sealed plan is not handed to it in the exact
 opt-in key pair the controller happens to recognise. The design (section 7, "coarse sweep trajectory")
 fixes the trajectory instead: per anchor, first to the NEARER endpoint of `required_search_domain_rad`,

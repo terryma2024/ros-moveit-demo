@@ -21,7 +21,7 @@ from pathlib import Path
 #: ``from __future__ import annotations``, so every annotation is a *string* that FastAPI resolves against
 #: the module's globals; with a local import the stream endpoint's ``WebSocket`` was unresolvable, so
 #: FastAPI validated the socket itself as a query parameter named ``websocket`` and closed every
-#: handshake (403) before the handler ran (HS-325). The placeholders keep the backend half importable
+#: handshake (403) before the handler ran. The placeholders keep the backend half importable
 #: without FastAPI, which was the only reason the import was local in the first place.
 try:  # pragma: no cover - FastAPI is a hard dependency of the service that serves this router
     from fastapi import WebSocket, WebSocketDisconnect
@@ -88,7 +88,7 @@ class HeadCameraBackend:
 
         A descriptor that declares no interval exposes a zero-width interval rather than nothing: the
         shipped panel destructures this field unconditionally, so an omission crashed the tab while the
-        domain was perfectly available (HS-325). Zero width also means no motion is claimable, which is
+        domain was perfectly available. Zero width also means no motion is claimable, which is
         the honest reading of a descriptor that seals no interval.
         """
 

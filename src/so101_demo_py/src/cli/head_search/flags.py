@@ -382,7 +382,7 @@ STOP_CONFIG_REQUIRED_FLAGS = (
 #: optional artefact that declares the quantisation resolution. Without that artefact the resolution is
 #: written as null and refused, exactly like the camera measurement's undeclared safety margin; the
 #: retained declaration `config/act/feedback-quantisation-declaration.json` states this platform's
-#: explicit zero with its basis (HS-305)
+#: explicit zero with its basis
 FEEDBACK_REQUIRED_FLAGS = (
     ("controller_config", "--controller-config"),
     ("output_dir", "--output-dir"),

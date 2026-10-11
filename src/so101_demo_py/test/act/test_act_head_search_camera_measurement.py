@@ -1,4 +1,4 @@
-"""HS-303: the `camera_measurements` document - the measured centre jitter and the declared margin.
+""" the `camera_measurements` document - the measured centre jitter and the declared margin.
 
 Every case here runs against an injected plant, an injected detector and synthetic declaration
 artefacts, so the pose hold, the spread computation, the angular conversion, every refusal and both
@@ -419,7 +419,7 @@ def test_a_missing_declaration_file_is_a_caller_error(tmp_path):
         read_declared_safety_margin(tmp_path / "absent.json")
 
 
-# --- HS-305: the declared image safety margin fraction (approved Proposal A) -----------------------
+# ---  the declared image safety margin fraction (approved Proposal A) -----------------------
 
 
 def _image_geometry() -> dict:
@@ -566,7 +566,7 @@ def test_the_two_fraction_refusals_are_registered_and_the_old_one_survives():
     assert CAL_CAMERA_SAFETY_MARGIN_UNDECLARED in REFUSAL_CODES
 
 
-# --- HS-305: what phase 6 does with the derived margin ---------------------------------------------
+# ---  what phase 6 does with the derived margin ---------------------------------------------
 
 
 def test_the_document_carries_the_derived_margin_and_no_refusal(tmp_path):

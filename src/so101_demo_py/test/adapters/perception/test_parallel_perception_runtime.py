@@ -1160,7 +1160,7 @@ def test_grounded_preparation_is_not_a_completed_model_result(tmp_path, monkeypa
 # --------------------------------------------------------------------------------------
 # The Broker's inference device is a resolved platform value, not a hard-coded constant
 #
-# Task 13 found this: the broker CLI accepted `--device` but dropped it, so the runtime always
+# The broker CLI accepted `--device` but dropped it, so the runtime always
 # asked for CUDA. On the schema-v4 macOS combination that made the real model set unloadable even
 # though every layer above the Broker said MPS.
 # --------------------------------------------------------------------------------------

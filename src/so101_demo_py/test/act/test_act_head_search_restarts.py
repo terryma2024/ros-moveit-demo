@@ -1,4 +1,4 @@
-"""HS-318: the three ``FULL_RESTART`` anchor phases, their teardown proofs and the aggregate contract.
+""" the three ``FULL_RESTART`` anchor phases, their teardown proofs and the aggregate contract.
 
 Every case here runs against injected observations: a synthetic process table, a synthetic ROS node list,
 synthetic camera frames, a synthetic detector and a fake controller stack. The frozen
@@ -819,7 +819,7 @@ def test_producer_refuses_a_runtime_that_never_falls_back_to_the_cpu():
     assert refusal.value.code == RESTART_RUNTIME_UNVERIFIED
 
 
-# --- HS-326: the commanded-target record the smoke's bounded-command gate reads -----------------------
+# ---  the commanded-target record the smoke's bounded-command gate reads -----------------------
 
 
 def test_the_command_record_collapses_repeated_ticks_into_one_target():
@@ -874,7 +874,7 @@ def test_the_command_record_ignores_a_decision_that_commanded_no_target():
 
 
 def test_the_flight_node_runs_on_the_stacks_clock():
-    """HS-326, found by the production smoke: a wall-clock flight node refuses every neck command.
+    """Found by the production smoke: a wall-clock flight node refuses every neck command.
 
     ``RosNeckSearchPort.command_neck`` compares ``node.get_clock().now()`` against the ``/joint_states``
     header stamp, and the stack's nodes run on the simulator's clock. A flight node left on the wall clock
