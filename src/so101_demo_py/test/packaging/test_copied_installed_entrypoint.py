@@ -66,7 +66,15 @@ WORKTREE = REPOSITORY
 RUNTIME_MODULES = (
     "runtime/provenance.py",
     "runtime/debug_provenance.py",
-    "runtime/launch_composition.py",
+    "runtime/launch_composition/__init__.py",
+    "runtime/launch_composition/common.py",
+    "runtime/launch_composition/descriptions.py",
+    "runtime/launch_composition/gazebo_actions.py",
+    "runtime/launch_composition/mujoco_actions.py",
+    "runtime/launch_composition/perception.py",
+    "runtime/launch_composition/supervisor.py",
+    "runtime/launch_composition/task_station.py",
+    "runtime/launch_composition/text_pick_agent.py",
     "cli/text_pick_agent.py",
 )
 

@@ -81,9 +81,10 @@ def test_act_profile_requires_the_neck_controller_but_not_a_broker_node():
 
 
 def test_ready_probe_asks_for_the_neck_in_the_act_profile_and_waits_for_no_broker(monkeypatch):
-    import so101_demo.runtime.parallel_ros_runtime as module
+    import subprocess
+
     seen = []
-    monkeypatch.setattr(module.subprocess, "run", lambda command, **_kw: seen.append(list(command)) or SimpleNamespace(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr(subprocess, "run", lambda command, **_kw: seen.append(list(command)) or SimpleNamespace(returncode=0, stdout="", stderr=""))
     assert ports(act_profile=True).ready_probe(None) is True
     assert "--include-neck" in seen[-1]
     assert ports().ready_probe(None) is True
@@ -107,8 +108,12 @@ def test_worker_kwargs_carry_no_lifecycle_acknowledgements():
 
 def test_no_teacher_lifecycle_in_the_reset_path_sources():
     root = PACKAGE_ROOT / "src"
-    for relative in ("backends/mujoco/reset.py", "backends/mujoco/client.py", "backends/mujoco/teleop_runtime.py",
-                     "cli/teleop_reset.py", "runtime/parallel_ros_runtime.py", "cli/mujoco_parallel_batch.py"):
+    relatives = ["backends/mujoco/reset.py", "backends/mujoco/client.py", "backends/mujoco/teleop_runtime.py",
+                 "cli/teleop_reset.py", "runtime/parallel_ros_runtime.py", "cli/mujoco_parallel_batch.py"]
+    # the ports and the batch command live in these packages now
+    for package in ("runtime/parallel_ros_ports", "cli/mujoco_batch"):
+        relatives += sorted(path.relative_to(root).as_posix() for path in (root / package).glob("*.py"))
+    for relative in relatives:
         text = (root / relative).read_text()
         for forbidden in ("leased_action_client", "teacher_worker_lifecycle", "TeacherWorkerLifecycle",
                           "initial_empty_retirement", "broker_connection", "act_command_broker"):
