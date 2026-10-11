@@ -46,6 +46,30 @@ def _complete_window(window):
                     for key in ('max_abs_feedback_velocity', 'max_abs_reference_velocity')))
 
 
+def _deadman_close_matches_proof(proof, planned_closes, fault_closes, activation=None):
+    """The dead-man close that goes with a proven stock stop: planned, or one acknowledged fault close.
+
+    A planned close ends a case that finished on its own terms. A SIGTERM, a camera cut or any other fault
+    origin latches the controller at once, so the same proven stop (terminal result, raw stop, 51-sample
+    window) is followed by one acknowledged DEADMAN_CLOSED_FAULT. The window is checked by the caller; the
+    fault branch also checks the terminal results and the raw-stop samples, which the planned branch never did.
+    """
+    if proof.get('deadman_closed_planned') is True:
+        return (len(planned_closes) == 1 and type(planned_closes[0]) is dict
+                and (activation is None or planned_closes[0].get('activation_id') == activation))
+    if proof.get('deadman_closed_planned') is not False or planned_closes or len(fault_closes) != 1:
+        return False
+    close = fault_closes[0]
+    receipt = close.get('receipt') if type(close) is dict else None
+    terminal, samples = proof.get('terminal'), proof.get('raw_stop_samples')
+    if (type(terminal) is not dict or any(status not in (4, 5, 6) for status in terminal.values())
+            or type(samples) is not list or len(samples) < 3):
+        return False
+    return (type(receipt) is dict and close.get('ack') is True and close.get('error') is None
+            and receipt.get('helper_closed') is True
+            and (activation is None or receipt.get('activation_id') == activation))
+
+
 def _startup_complete(facts):
     """Startup protocol v2: the subclass readback, the armed dead-man, the graph, the windows and the close."""
     protocol = facts['startup_protocol']
@@ -76,13 +100,12 @@ def _startup_complete(facts):
         return False
     proof = one('STOCK_STOP_PROOF')
     terminal = proof.get('terminal')
-    if (proof.get('deadman_closed_planned') is not True or not _complete_window(proof.get('window'))
-            or type(terminal) is not dict
+    if (not _complete_window(proof.get('window')) or type(terminal) is not dict
             or any(status not in (4, 5, 6) for status in terminal.values())
             or type(proof.get('raw_stop_samples')) is not list or len(proof['raw_stop_samples']) < 3):
         return False
-    close = one('DEADMAN_CLOSED_PLANNED')
-    if close.get('activation_id') != activation:
+    if not _deadman_close_matches_proof(proof, protocol['DEADMAN_CLOSED_PLANNED'],
+                                        protocol['DEADMAN_CLOSED_FAULT'], activation):
         return False
     stops = protocol['CANCEL_STOP']
     if not stops or not any(row.get('raw_stop_confirmed') is True and row.get('cancel_error') is None
@@ -258,11 +281,12 @@ def extract_attempt(inputs_path, receipt, output):
             'DEADMAN_CLOSED_FAULT', 'NATIVE_CLOSE', 'CANCEL_STOP')})
     raw_stopped = any(row.get('raw_stop_confirmed') is True for row in records('CANCEL_STOP'))
     # v2: a stop is confirmed by the terminal result, the raw stop and the end window, with the dead-man
-    # closed as planned. A v1 (broker-era) run is confirmed by the native close acknowledgement.
+    # closed as planned or (a fault origin) as one acknowledged fault close. A v1 (broker-era) run is confirmed by the native close acknowledgement.
     stock = records('STOCK_STOP_PROOF')
     if stock or records('DEADMAN_ARMED'):
         facts['stop_confirmed'] = (raw_stopped and len(stock) == 1 and _complete_window(stock[0].get('window'))
-            and stock[0].get('deadman_closed_planned') is True and len(records('DEADMAN_CLOSED_PLANNED')) == 1)
+            and _deadman_close_matches_proof(stock[0], records('DEADMAN_CLOSED_PLANNED'),
+                                             records('DEADMAN_CLOSED_FAULT')))
     else:
         facts['stop_confirmed'] = (raw_stopped and any(row.get('ack') is True and row.get('error') is None
             for row in records('NATIVE_CLOSE')))

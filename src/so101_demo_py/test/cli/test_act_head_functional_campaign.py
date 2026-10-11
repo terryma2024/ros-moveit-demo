@@ -236,3 +236,92 @@ def test_strict_run_case_stops_before_second_attempt_after_a_refused_deadman_arm
         executable='entry',domain=229,generation_base=17,minimum_free_bytes=0,require_startup_protocol=True)
     assert len(result)==len(calls)==1
     assert not (output/'attempt-2').exists()
+
+
+def fault_closed_protocol_facts():
+    """The stop of a SIGTERM / fault origin: proven, but the dead-man was closed as a fault, not as planned."""
+    facts=startup_protocol_facts();p=facts['startup_protocol']
+    p['STOCK_STOP_PROOF'][0]['deadman_closed_planned']=False
+    p['DEADMAN_CLOSED_PLANNED']=[]
+    p['DEADMAN_CLOSED_FAULT']=[dict(reason='sigterm',ack=True,error=None,requested_wall_s=1.0,
+        receipt=dict(activation_id=1,helper_closed=True,reason='sigterm'))]
+    return facts
+
+
+def test_fault_close_with_a_proven_stop_allows_the_next_attempt():
+    from so101_demo.cli.head_search_functional_campaign import may_continue
+    facts=fault_closed_protocol_facts();facts['original_terminal']='INTERRUPTED'
+    assert may_continue(facts,require_startup_protocol=True)
+
+
+@pytest.mark.parametrize('damage',[
+    'proof_missing','stop_unconfirmed','stop_error','proof_window_short','proof_terminal','proof_samples',
+    'close_not_acknowledged','close_error','close_missing','close_duplicated','close_activation','also_planned'])
+def test_fault_close_without_a_proven_stop_stays_unsafe(damage):
+    from so101_demo.cli.head_search_functional_campaign import may_continue
+    facts=fault_closed_protocol_facts();p=facts['startup_protocol']
+    if damage=='proof_missing':p['STOCK_STOP_PROOF']=[]
+    elif damage=='stop_unconfirmed':p['CANCEL_STOP'][0]['raw_stop_confirmed']=False
+    elif damage=='stop_error':p['CANCEL_STOP'][0]['result_error']='TimeoutError'
+    elif damage=='proof_window_short':p['STOCK_STOP_PROOF'][0]['window']['n']=3
+    elif damage=='proof_terminal':p['STOCK_STOP_PROOF'][0]['terminal']={'g':2}
+    elif damage=='proof_samples':p['STOCK_STOP_PROOF'][0]['raw_stop_samples']=[1]
+    elif damage=='close_not_acknowledged':p['DEADMAN_CLOSED_FAULT'][0]['ack']=False
+    elif damage=='close_error':p['DEADMAN_CLOSED_FAULT'][0]['error']='OSError'
+    elif damage=='close_missing':p['DEADMAN_CLOSED_FAULT']=[]
+    elif damage=='close_duplicated':p['DEADMAN_CLOSED_FAULT']*=2
+    elif damage=='close_activation':p['DEADMAN_CLOSED_FAULT'][0]['receipt']['activation_id']=2
+    elif damage=='also_planned':p['DEADMAN_CLOSED_PLANNED']=[dict(activation_id=1)]
+    assert not may_continue(facts,require_startup_protocol=True)
+
+
+def test_planned_close_requirements_are_unchanged():
+    from so101_demo.cli.head_search_functional_campaign import may_continue
+    assert may_continue(startup_protocol_facts(),require_startup_protocol=True)
+    facts=startup_protocol_facts()
+    facts['startup_protocol']['DEADMAN_CLOSED_FAULT']=[dict(reason='x',ack=True,error=None,
+        receipt=dict(activation_id=1,helper_closed=True))]
+    facts['startup_protocol']['DEADMAN_CLOSED_PLANNED']=[]
+    assert not may_continue(facts,require_startup_protocol=True)
+
+
+def _extracted_stop_confirmed(base,monkeypatch,protocol_rows):
+    """stop_confirmed as extract_attempt derives it from the sealed events of one run (own directory per call)."""
+    import json
+    tmp_path=base;tmp_path.mkdir()
+    import so101_demo.cli.head_search_functional_campaign as campaign
+    from head_run_audit_support import corpus,RUN
+    from test_act_head_search_campaign_scene import _baseline,_case
+    from so101_demo.act.head_search_campaign_scene import prepare_case_fixture
+    baseline=_baseline(tmp_path)
+    baseline['run']=dict(RUN)
+    prepared=prepare_case_fixture(_case(0),baseline,tmp_path/'fixture',paired_truth_enabled=False)
+    baseline['refs'].update(prepared['refs'])
+    run,_,_,_=corpus(tmp_path,protocol_rows)
+    baseline['run_root']=str(run)
+    inputs=tmp_path/'extraction-inputs.json';inputs.write_text(json.dumps(baseline))
+    monkeypatch.setattr(campaign,'postflight',lambda *args:dict(graph_empty=False,owner_absent=False))
+    output=tmp_path/'extracted';output.mkdir()
+    return campaign.extract_attempt(inputs,dict(actual_os_return_code=1),output)['stop_confirmed']
+
+
+def _protocol_rows(facts):
+    protocol=facts['startup_protocol']
+    return [(kind,record) for kind in ('CANCEL_STOP','STOCK_STOP_PROOF','DEADMAN_ARMED',
+        'DEADMAN_CLOSED_PLANNED','DEADMAN_CLOSED_FAULT') for record in protocol[kind]]
+
+
+def test_extracted_stop_is_confirmed_by_a_fault_close_with_a_proven_stop(tmp_path,monkeypatch):
+    assert _extracted_stop_confirmed(tmp_path/'run',monkeypatch,_protocol_rows(fault_closed_protocol_facts())) is True
+
+
+def test_extracted_stop_is_unconfirmed_by_a_fault_close_without_stop_proof(tmp_path,monkeypatch):
+    facts=fault_closed_protocol_facts();facts['startup_protocol']['STOCK_STOP_PROOF']=[]
+    facts['startup_protocol']['CANCEL_STOP'][0]['raw_stop_confirmed']=False
+    assert _extracted_stop_confirmed(tmp_path/'run',monkeypatch,_protocol_rows(facts)) is False
+
+
+def test_extracted_stop_still_needs_the_planned_close_of_a_planned_proof(tmp_path,monkeypatch):
+    assert _extracted_stop_confirmed(tmp_path/'planned',monkeypatch,_protocol_rows(startup_protocol_facts())) is True
+    facts=startup_protocol_facts();facts['startup_protocol']['DEADMAN_CLOSED_PLANNED']=[]
+    assert _extracted_stop_confirmed(tmp_path/'unclosed',monkeypatch,_protocol_rows(facts)) is False

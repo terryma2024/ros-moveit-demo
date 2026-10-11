@@ -540,3 +540,10 @@ def test_hfa009_fault_close_must_be_acknowledged(tmp_path, monkeypatch):
     assert result['stop']['status']=='FAIL'
 
 
+
+
+def test_hfa009_accepts_an_acknowledged_fault_close_after_a_proven_stop(tmp_path, monkeypatch):
+    # The campaign classifier accepts the same shape (a fault origin latches at once, the stop is proven).
+    result=audit(make_reader(tmp_path,_stop_records(planned=False),monkeypatch))
+    assert result['stop']['status']=='PASS', result['stop']
+    assert verdict(result,'HFA-009')!='VIOLATED'
