@@ -69,11 +69,33 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3553
+latest_checkpoint: CP-3554
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3554 — start-of-run pause race fixed (98fb98fdb); general path fully green live: fixed-N 4/4, adaptive 2/2, offline smoke; phase F dispatched
+
+- Pause issuer:
+  - OBSERVED: the 124 ms pause/resume is the parent's inference hold: pause_physics in point_initial_gate (parallel_worker_runtime.py ~1277), resume_physics in localize_and_admit_pose (~1321), both via MujocoPauseControl. It is issued after _start_execute_consumer has started.
+  - INFERRED: the consumer sampled a frame during the hold, and _snapshot/_monitor_sample treated paused as an identity breach. This is plausibly the same mechanism as the adaptive-fallback mismatch (CP-3548/3550).
+  - Not reproduced live.
+- Fix 98fb98fdb (RED 6 failed → GREEN):
+  - DYNAMIC_RESET_EPOCH_MISMATCH now carries paused, epoch, expected epoch, step, sequence, receive age and the last five frames (MujocoWorldObserver.recent_summaries()).
+  - _snapshot waits for a running frame within its existing deadline (Teacher 1.0 s, general 2.0 s).
+  - _monitor_sample treats a paused same-session, same-epoch sample as unavailable, bounded by state_unavailable_stop_s.
+  - Another epoch or session still fails immediately; a hold beyond the bound still fails. The Teacher path gets the same tolerance.
+- Gates (gates/pausefix): demo 11304 pass, 0 fail; colcon 1926 tests, 0/0; scripts 12 pass.
+- Load flakes in head tests across the gate runs, all passing alone or on rerun; to be hardened later: head_local_runtime watchdog stall; HEAD_INVENTORY_CURRENT_GUARD_REFUSED; a 0.1 s deadline in head_campaign_initial_reset.
+- Live, new identities:
+  - (a) fixed-N through the service (PARALLEL, 2 workers, 4 points): 4/4 PASSED, COMPLETED, all with table contact at DETACH, cup z 0.16442–0.16462;
+  - (b) adaptive pf236 (workers 2, fallback 1, 2 points): 2/2 PASSED, COMPLETED, no fallback, so the fallback path itself was not exercised;
+  - (c) offline smoke: load_training_view returns 10 samples.
+  - Cleanup and teardown clean throughout.
+  - Not checked: whether the bounded wait actually fired, because the manifests do not record waited holds.
+- The general (expert-validation) path is now live-green for the first time since 2026-09-19. Commits on the way: 62b71880d, a52589548, 95dc81f75, 978e39122, f78ec8f9c, 98fb98fdb.
+- Next: refactor phase F (file splits), dispatched to a fresh Sonnet executor.
 
 ## CP-3553 — general place offset −0.01835 m (f78ec8f9c): the general path now places and passes; one start-of-run pause race remains
 
