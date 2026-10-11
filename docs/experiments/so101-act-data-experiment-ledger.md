@@ -69,11 +69,27 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3557
+latest_checkpoint: CP-3558
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3558 — user: push, clean up evidence, run the 40-case Head search and a 20-run pick-place round
+
+- User (2026-10-11): "1. push 2. cleanup evidence 3. 运行40点head search用力。 和20点pick place".
+- Push: codex/so101-act-data-0917a be2f18e16..6baf54e63 to origin (gitee), fast-forward, no force. The submodule pin bab9841 is already on origin (so101-clock-fix-20261010). github not pushed.
+- Interpretation:
+  - "40点head search" = the functional-40 Head search campaign: 40 cases, 10 conditions × 4 seeds, per docs/superpowers/specs/2026-10-07-so101-head-search-functional-40-design.md and the head-search-scenario-partitions matrix.
+  - "20点pick place" = a 20-run Teacher pick-place round at the default point with collection on (as p10 T01–T20).
+- Cleanup policy (data-work-rm pre-authorization plus this explicit request): delete phase scratch and dev build bases, aborted and rejected runs, superseded freezes and plan roots, and gate tmp trees. KEEP:
+  - the p9/p10/p11 retained episodes and the CP-3532/3539/3547–3557 live evidence;
+  - the current freezes and the latest postF tooling;
+  - train-venv, test-venv, imports/antzb-head-20261010, calibration;
+  - proofs/, manifests and the sha256 lists;
+  - the latest gate install needed by the next runs.
+  - Every deletion recorded in a new cleanup-20261011/deleted.tsv.
+- Dispatched to a fresh Sonnet executor, in order: cleanup → Head 40 → pick-place 20 (one stack at a time).
 
 ## CP-3557 — post-refactor live checks on the clock-fixed stack: 5/5 PASS (HEAD 436ec72fa); refactor complete
 
