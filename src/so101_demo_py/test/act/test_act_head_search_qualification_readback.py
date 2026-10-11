@@ -27,10 +27,8 @@ from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_ownership import read_runtime_identity
 from so101_demo.act.head_search_timing_measurement.control import controller_config
-from so101_demo.cli.head_search_calibration import (
-    HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
-    main,
-)
+from so101_demo.cli.head_search.flags import HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE
+from so101_demo.cli.head_search_calibration import main
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 #: a promoted value set the installed controller can actually be constructed with, so the observation of

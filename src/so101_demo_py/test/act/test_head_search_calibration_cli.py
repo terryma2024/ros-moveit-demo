@@ -11,11 +11,11 @@ import pytest
 from head_search_qualification_fixtures import ANCHORS, build_fixture
 from head_search_qualification_fixtures import digest as fixture_digest
 from so101_demo.act.head_search_aggregate.contracts import GATES
-from so101_demo.cli.head_search_calibration import (
+from so101_demo.cli.head_search.flags import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
     HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
-    main,
 )
+from so101_demo.cli.head_search_calibration import main
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 
@@ -710,7 +710,7 @@ def test_a_formatting_only_change_is_caught_because_bytes_are_hashed(tmp_path: P
 
 
 def test_the_run_declares_the_coarse_step_sweep_as_its_fifteenth_measurement(tmp_path, capsys) -> None:
-    from so101_demo.cli.head_search_calibration import RUN_PHASE_SIX_MEASUREMENTS
+    from so101_demo.cli.head_search.flags import RUN_PHASE_SIX_MEASUREMENTS
 
     assert ("coarse_step_observations", "--coarse-step-observations", "document") in (
         RUN_PHASE_SIX_MEASUREMENTS
@@ -724,7 +724,7 @@ def test_the_run_declares_the_coarse_step_sweep_as_its_fifteenth_measurement(tmp
 def test_the_run_takes_the_gates_episode_records_as_a_directory(tmp_path, capsys) -> None:
     """Phase 4's gate reads `--episode-records` as a directory of per-seed documents, so the run does."""
 
-    from so101_demo.cli.head_search_calibration import (
+    from so101_demo.cli.head_search.flags import (
         RUN_OPTIONAL_DIRECTORY_FLAGS,
         RUN_OPTIONAL_FILE_FLAGS,
     )
@@ -2892,7 +2892,7 @@ def test_the_run_entry_observes_the_measured_values_off_the_running_components(t
     """The run's phase inputs carry the observer, so phases 6 and 7 record proof rather than a restatement."""
 
     from so101_demo.act.head_search_measured_readback import observe_measured_readbacks
-    from so101_demo.cli.head_search_calibration import _phase_inputs, _run_parser
+    from so101_demo.cli.head_search.run import _phase_inputs, _run_parser
 
     parsed = _run_parser().parse_args(_run_arguments(tmp_path)[1:])
     phase_inputs = _phase_inputs(parsed)
@@ -3855,7 +3855,8 @@ def test_measure_production_smoke_reports_the_librarys_refusal_and_returns_two(
 def test_the_plan_smoke_entry_runs_the_production_smoke_when_given_a_run_root(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.cli import head_search_calibration as calibration
+    from so101_demo.cli.head_search import flags as calibration_flags
+    from so101_demo.cli.head_search import smoke_readback as calibration_head_search_calibration
     from so101_demo.cli import head_search_smoke
 
     seen: dict = {}
@@ -3865,7 +3866,7 @@ def test_the_plan_smoke_entry_runs_the_production_smoke_when_given_a_run_root(
         seen["entry"] = entry
         return 7
 
-    monkeypatch.setattr(calibration, "_measure_production_smoke", fake)
+    monkeypatch.setattr(calibration_head_search_calibration, "_measure_production_smoke", fake)
     rc = head_search_smoke.main(
         [
             "--run-root",
@@ -3886,7 +3887,7 @@ def test_the_plan_smoke_entry_runs_the_production_smoke_when_given_a_run_root(
         "--scenario",
         "nominal",
     ]
-    assert seen["entry"] == calibration.PRODUCTION_SMOKE_SCRIPT_ENTRY
+    assert seen["entry"] == calibration_flags.PRODUCTION_SMOKE_SCRIPT_ENTRY
 
 
 def test_the_plan_smoke_entry_still_plans_coverage_without_a_run_root(

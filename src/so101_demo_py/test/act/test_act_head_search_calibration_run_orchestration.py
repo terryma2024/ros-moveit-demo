@@ -949,7 +949,8 @@ def test_a_run_missing_a_phase_six_or_seven_measurement_is_refused_at_the_cli(tm
 
     # the CLI's own end-to-end fixture builds a complete, real argument set; reusing it keeps this test
     # from drifting away from the flags the installed entry actually accepts
-    from so101_demo.cli.head_search_calibration import HEAD_SEARCH_RUN_INPUTS_INCOMPLETE, main
+    from so101_demo.cli.head_search.flags import HEAD_SEARCH_RUN_INPUTS_INCOMPLETE
+    from so101_demo.cli.head_search_calibration import main
     from test_head_search_calibration_cli import _run_arguments
 
     for flag in ("--search-timing", "--frame-contract"):

@@ -35,10 +35,8 @@ def main(arguments: list[str] | None = None) -> int:
     # parser sees flags it does not declare, and forward the invocation verbatim
     forwarded = list(sys.argv[1:] if arguments is None else arguments)
     if "--run-root" in forwarded:
-        from so101_demo.cli.head_search_calibration import (
-            PRODUCTION_SMOKE_SCRIPT_ENTRY,
-            _measure_production_smoke,
-        )
+        from so101_demo.cli.head_search.flags import PRODUCTION_SMOKE_SCRIPT_ENTRY
+        from so101_demo.cli.head_search.smoke_readback import _measure_production_smoke
 
         # the subcommand's own parser owns the flags, so the token itself is not forwarded
         return _measure_production_smoke(forwarded, entry=PRODUCTION_SMOKE_SCRIPT_ENTRY)
