@@ -69,11 +69,40 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3555
+latest_checkpoint: CP-3556
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3556 — refactor phase F done (HEAD 45224968c); every source module ≤ 1200 lines, every test file ≤ 1500; 0 import cycles; gates 0/0 on 14 packages; post-F live checks dispatched
+
+- Splits: 54 source files over 1200 lines (41 Python in demo/teleop/mujoco_support, plus simulation_evidence_plugin.cpp → 5 translation units) and 16 test files over 1500 lines, all moved into packages or collaborator mixins. No facades remain; per-file table in phaseF/proofs/split-table.txt. Import cycles: 0 before and 0 after (883 modules), guarded by test_no_import_cycles.py.
+- Module-size guard enabled: test_no_module_over_lines (Python/C/C++ in 4 packages). Its single allowlist entry is the generated Cython _ik_numeric.c.
+- Cleanups:
+  - about 110 HS-n references and about 100 CP/EXP/Task labels reworded;
+  - macOS sockets renamed worker-0.sock / worker-1.sock (max path 62 of 104 bytes, new host-independent test).
+- Changes that are not pure moves (reviewed and accepted by root):
+  - package names parallel_ros_ports/ and parallel_worker_parts/, to avoid shadowing;
+  - path anchors in cli/mujoco_batch/provenance.py and cli/head_search/common.py;
+  - RuntimeBinding classmethod reference, to avoid a cycle;
+  - qc_memo.code_digest hashes every file of a split package;
+  - module-level __all__ dropped;
+  - gate-runner serial lane and teleop CMake registrations updated;
+  - source-reading tests scan whole packages;
+  - unused-import pruning in rewritten tests.
+- WIP 14055994a is completed by 61b34f7b8, left as a fixup.
+- Gates (phaseF/gates/final2):
+  - 14-package fresh build including the vendored controller_manager, hardware_interface_testing, so101_clock_test_hardware and so101_clock_regression;
+  - demo 11325 pass, 0 fail;
+  - colcon 2231 tests, 0/0 (controller_manager 208, hardware_interface_testing 56, so101_clock_regression 20);
+  - scripts 12 pass;
+  - benchmark with the literal colcon command: 617 tests, 0 fail;
+  - web untouched.
+- Load flakes seen once each under full-suite load, all passing alone: test_capture_runs_before_teacher_start, test_act_head_stop_window_subscriber, test_act_raw_readiness (3/3 alone).
+- Housekeeping: root removed the four registered gatewt-* detached git worktrees under phaseF/ and pruned. Remaining worktrees: main, 20260924-pytest-opt-021323, so101-act-data-0917a, so101-unified-webapp.
+- The code-style refactor (step 0, phases A–F) is complete in source. Final guard state: versioned 29 / process 0 / wire 49 permanent entries; module size ≤ 1200; unique test basenames; no import cycles; no host paths in tests.
+- Next: post-F live checks on the clock-fixed stack — Head 900000, Teacher pick-place (new freeze), fixed-N through the service, adaptive, offline smoke.
 
 ## CP-3555 — user: pull the clock-stability fix and rebase; branch rebased onto origin be2f18e16 (phase F paused and resumed)
 
