@@ -69,11 +69,41 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3564
+latest_checkpoint: CP-3565
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3565 — 900017 root cause is detector bbox mode-hopping, not overshoot; lock hold band (a6a312bd4); gates 0/0; uninterrupted functional-40 f41 = 40/40
+
+- User decision (2026-10-12): fix the fine-centering convergence, then push everything together.
+- Diagnosis (no code change; `centering-convergence-20261012/diag/`): rigid reprojection predicts the post-correction
+  error within 0.3 px, loop gain 0.98-1.04, capture velocity at most 0.019 rad/s, so the overshoot hypothesis of CP-3564
+  is refuted. On the occluded cup the detector has two modes (bbox width about 20 px at yaw 0.206 rad, 33-37 px at
+  0.184 rad); the left bbox edge moves about 16 px between them, the centre 7-8 px, against a 5 px deadband. f40 lost the
+  lock at -6.3 px on an unchanged pose (rigid change 0.25 px). Only 900017 shows a second fine correction or sign flip.
+  Existing damping never engaged because each moved observation gets a new `track_id`.
+- Design decision (root): candidate A only. A lock run starts in the strict `center_deadband_px`; once started, frames
+  count while `|err| <= deadband + LOCK_HOLD_MARGIN_PX` (3.0, module constant, not a config key; no schema, bundle or
+  policy-hash change). Damping/track reset (B) and detector (C) untouched.
+- Implementation `a6a312bd4` (Sonnet 5.5 executor): new `act/lock_band.py` (`counts_for_lock`), used by `act/search.py`
+  and by the HFA-008 recount in `act/head_run_audit.py`. RED 7 failed (search) and 2 failed (audit); GREEN 16 passed.
+  No existing test changed. No hold-band flag added to the lock record (audited schema); usage is derived offline by
+  `scripts/hold_band_usage.py`. `head_search_deadband_measurement/lock_trial.py` still uses the strict band (left).
+- Gates, fresh 14-package build from `a6a312bd4`: build rc 0; `so101_demo_py` 11377 passed, 165 skipped; colcon 2233
+  tests, 0 failures, 0 errors; scripts 12 passed. No retries. Benchmark suite not run.
+- Live `f41`: one uninterrupted campaign, 695.7 s, seeds 900000-900039, 48 attempts; integrity and stop PASS on 48/48;
+  HFA-008 holds on 40, not applicable on the 8 interrupted first attempts; HFA-010 UNKNOWN on all 48 (audit coverage
+  gap, open). Visual verdicts applied; summary 40 PASS. Teardown clean.
+- 900017: errors -116.1, +6.83, -2.87, -5.02, -3.27; observation 4 counted via the hold band by 0.018 px; final yaw
+  error 3.80 deg. No other seed used the hold band; their maximum yaw error is 0.68 deg.
+- Limits: the fix absorbs up to 3 px of centre jitter after a run has started. It does not remove the detector
+  instability on a partly occluded cup nor the about 3.8 deg visible-part bias; f41 did not reproduce the f40
+  mode-hopping sequence, so robustness against that exact sequence rests on the unit tests, not on a live run.
+- Evidence: `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/centering-convergence-20261012/` (retained).
+  Deletion candidates: its `scratch/` (about 5 GB), `gates/final/*-run.*/tmp`, `/tmp/so101-ipc.*`. Nothing deleted.
+- Commit attribution on `a6a312bd4` names Sonnet 5.5 (the executing model); not amended.
 
 ## CP-3564 — single uninterrupted functional-40 on final code: 39/40; 900017 partial_occlusion TARGET_NOT_CENTERED (deadband-edge oscillation)
 
