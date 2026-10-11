@@ -14,7 +14,8 @@ from so101_demo.act.collection_orchestration import (
     CollectionOptions, CollectionRefused, collection_from_document, validate_collection_request)
 from so101_demo.core.domain import ActionResult, ActionStatus, Failure, FailureCategory, State
 from so101_demo.ros import dynamic_mujoco_execution as module
-from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution, _ExecutionFailed
+from so101_demo.ros.dynamic_execution.common import _ExecutionFailed
+from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 
 from test_teacher_execution import teacher_adapter
 from test_teacher_moveit_execution import make_adapter

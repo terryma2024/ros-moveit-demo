@@ -197,7 +197,9 @@ def test_apply_planning_scene_requests_are_only_built_in_the_teachers_own_scene_
     """AST evidence: in the execution, only `_attach`, `_detach_or_sync` and `_set_touch_collision` build an apply.
 
     (`_sync_collection_world`, the data side's initial world apply, is gone.)"""
-    names = _functions_building_apply_requests(SRC / "ros/dynamic_mujoco_execution.py")
+    names = set()
+    for source in (SRC / "ros/dynamic_mujoco_execution.py", *sorted((SRC / "ros/dynamic_execution").glob("*.py"))):
+        names |= _functions_building_apply_requests(source)
     assert names == {"_attach", "_detach_or_sync", "_set_touch_collision"}
     assert not hasattr(RosDynamicMujocoExecution, "_sync_collection_world")
     assert not hasattr(RosDynamicMujocoExecution, "_initial_world_sync_best_effort")

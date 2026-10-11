@@ -134,7 +134,18 @@ SOURCE_FILES_WITHOUT_LEASED_CLIENT = (
     "backends/mujoco/qualified_phases/contact_hold.py", "backends/mujoco/qualified_phases/policy_lift_waypoint1.py",
     "backends/mujoco/qualified_phases/release_retreat.py", "backends/mujoco/qualified_phases/descend.py",
     "backends/mujoco/qualified_phases/staged_approach.py", "backends/mujoco/qualified_phases/place_alignment.py",
-    "backends/mujoco/qualified_phases/micro_lift.py", "ros/dynamic_mujoco_execution.py", "ros/dynamic_runtime.py",
+    "backends/mujoco/qualified_phases/micro_lift.py", "ros/dynamic_mujoco_execution.py",
+    "ros/dynamic_execution/common.py",
+    "ros/dynamic_execution/evidence.py",
+    "ros/dynamic_execution/joint_state.py",
+    "ros/dynamic_execution/motion.py",
+    "ros/dynamic_execution/phases.py",
+    "ros/dynamic_execution/planning.py",
+    "ros/dynamic_execution/release.py",
+    "ros/dynamic_execution/safety.py",
+    "ros/dynamic_execution/scene.py",
+    "ros/dynamic_execution/teacher.py",
+    "ros/dynamic_runtime.py",
     "control/gripper/client.py")
 
 

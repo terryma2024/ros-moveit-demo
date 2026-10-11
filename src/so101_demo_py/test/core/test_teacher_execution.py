@@ -13,8 +13,8 @@ from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER
 from so101_demo.core import place_height as ph
 from so101_demo.core.domain import ActionStatus, State
 from so101_demo.core.process_summary import ProcessSummary
-from so101_demo.ros.dynamic_mujoco_execution import (
-    RosDynamicMujocoExecution, _JointStateStale)
+from so101_demo.ros.dynamic_execution.common import _JointStateStale
+from so101_demo.ros.dynamic_mujoco_execution import RosDynamicMujocoExecution
 from so101_demo.ros.teacher_safety import CupSafetyLimits
 from so101_demo.ros.teacher_stop import TeacherStop
 

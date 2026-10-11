@@ -123,8 +123,9 @@ def test_slow_progress_fact_lines_are_capped_per_execution(monkeypatch, capsys):
 
 
 def test_fact_line_failure_never_changes_progress(monkeypatch, capsys):
-    import so101_demo.ros.dynamic_mujoco_execution as module
+    import json
+
     execution = _slow_execution(monkeypatch, spin_s=0.06)
-    monkeypatch.setattr(module.json, "dumps", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
+    monkeypatch.setattr(json, "dumps", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x")))
     execution._progress()
     assert _slow_lines(capsys) == []

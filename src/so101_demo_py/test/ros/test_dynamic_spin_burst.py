@@ -47,7 +47,7 @@ def test_progress_callback_exception_propagates(monkeypatch):
 
 
 def test_burst_is_bounded_by_budget_and_idle_costs_at_most_the_budget():
-    from so101_demo.ros.dynamic_mujoco_execution import _spin_burst
+    from so101_demo.ros.dynamic_execution.common import _spin_burst
 
     spin = QueueSpin(10_000_000)
     began = time.monotonic()
@@ -65,7 +65,7 @@ def test_burst_is_bounded_by_budget_and_idle_costs_at_most_the_budget():
 
 
 def test_burst_first_spin_uses_first_timeout_then_zero():
-    from so101_demo.ros.dynamic_mujoco_execution import _spin_burst
+    from so101_demo.ros.dynamic_execution.common import _spin_burst
 
     timeouts = []
     _spin_burst("node", first_timeout_s=0.01, budget_s=0.005, spin=lambda node, timeout_sec: timeouts.append(timeout_sec))
