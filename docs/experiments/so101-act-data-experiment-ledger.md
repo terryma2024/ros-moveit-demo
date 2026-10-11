@@ -69,11 +69,38 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3563
+latest_checkpoint: CP-3564
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3564 — single uninterrupted functional-40 on final code: 39/40; 900017 partial_occlusion TARGET_NOT_CENTERED (deadband-edge oscillation)
+
+- Scope: measurement only, no source change. Executor: Claude Sonnet 5.5 subagent. Evidence:
+  `/data/work/so101-evidence/act-data/20260924-fbc25063-resume/functional40-final-20261012/`
+  (`RESULT-table.md`, `live/`, `live/audit/`, `visual/`, `diag900017/`, `teardown/final.txt`, `tooling.sha256`).
+- Install reused: `occlusion-dedup-20261012/gates/final/install`, build head `e64aac849`. HEAD `43d256126` differs by the
+  ledger and the test fixture JSON `head_900027_nested_children.json` only; installed `so101_demo` tree has no code diff
+  against source. Not a fresh build.
+- Campaign `f40`: seeds 900000-900039, domain 173, one invocation, rc 1, 689429 ms. 48 attempts; audit integrity PASS and
+  stop PASS on 48/48, no HFA-009 findings. Visual review of the 31 locked attempts applied. Summary 39 PASS / 1 FAIL,
+  qualified False.
+- Per condition: nominal, left_anchor, forward_anchor, distractor_present, two_cups (all TARGET_AMBIGUOUS, expected),
+  no_cup, low_light, fast_interruption, reacquire_after_stop 4/4 each; partial_occlusion 3/4 (900007 0.02 deg,
+  900027 0.37 deg, 900037 0.25 deg locked).
+- FAIL 900017: `HEAD_SEARCH_TARGET_NOT_CENTERED`, stop confirmed. Centre error per observation (px): f40
+  -116.1, 7.2, -4.7, -6.3, 6.5, -7.8; oc2 (locked yesterday, 3.80 deg) -116.1, 6.8, -2.9, -5.0, -4.7. Observation 1
+  payload is byte-identical between the two runs. Lock counter reached 1 then reset; head oscillated 0.18-0.206 rad
+  until `max_fine_corrections` ran out. Inference (not verified by offline detector replay): cup mostly behind the
+  bottle, detected centre sits on the deadband edge, run-to-run settling difference decides the outcome; not attributed
+  to the containment dedup. Not rerun, not fixed.
+- Stop-window velocity maxima (limit 0.002 rad/s): 0.0019843 (900028-1), 0.0019834 (900017-1), 0.0019718 (900024-1);
+  ten more above 0.00196. Margin about 0.8 percent.
+- Teardown clean (no nodes, processes, GPU apps, containers). Retained: whole run dir (1.4 GB). Deletion candidate:
+  `scratch/` (16 KB). Nothing deleted. Branch still 3 code/ledger commits ahead of origin, unpushed.
+- Open: 900017 deadband-edge behaviour (decide: fix fine-correction convergence vs reclassify the seed); stop-window
+  velocity margin.
 
 ## CP-3563 — containment dedup implemented (e64aac849, 2352c716e); 900027 now locks; two_cups stay ambiguous; gates 0/0
 
