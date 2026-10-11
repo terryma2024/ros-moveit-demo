@@ -69,11 +69,22 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3559
+latest_checkpoint: CP-3560
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3560 — user approved: fix Head defect A (RED first), diagnose defect B, rerun the 8 interruption cases + 900027
+
+- User (2026-10-11):
+  1. Fix defect A first: let the classifier accept a fault close when the stop is otherwise proven. Tests first, red then green.
+  2. Diagnose defect B.
+  3. Rerun the 8 interruption cases plus 900027.
+- Dispatched to a fresh Sonnet executor (sole writer).
+- Defect A rule: DEADMAN_CLOSED_FAULT is accepted only together with a proven stop (terminal result or cancel, the raw /joint_states stop proof, and a valid 51-sample window). A fault close without a proven stop stays unsafe; a planned close is unchanged. The classifier, the HFA-009 v2 audit and the retirement receipt must agree.
+- Defect B: diagnosis with evidence. Code changes only if the cause is proven.
+- Rerun: new identities, fresh install, serial, with visual judgement.
 
 ## CP-3559 — cleanup freed 798 GB; Head functional-40 31/40 (interruption classes 0/8, one occlusion fail); 20-point general pick-place with 4 workers 20/20 PASS
 
