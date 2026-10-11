@@ -298,18 +298,18 @@ def test_two_concurrent_clients_complete_a_round_trip(campaign):
         except BaseException as error:  # noqa: BLE001 - recorded and re-raised below
             errors.append(error)
 
-    threads = [threading.Thread(target=worker, args=(name,)) for name in ("w1", "w2")]
+    threads = [threading.Thread(target=worker, args=(name,)) for name in ("worker-0", "worker-1")]
     for thread in threads:
         thread.start()
     for thread in threads:
         thread.join(timeout=15)
     try:
         assert not errors, errors
-        assert set(results) == {"w1", "w2"}
-        assert results["w1"].request_id == "req-w1"
-        assert results["w2"].request_id == "req-w2"
-        assert results["w1"].output_descriptor["echo"] == {"who": "w1"}
-        assert results["w2"].output_descriptor["echo"] == {"who": "w2"}
+        assert set(results) == {"worker-0", "worker-1"}
+        assert results["worker-0"].request_id == "req-worker-0"
+        assert results["worker-1"].request_id == "req-worker-1"
+        assert results["worker-0"].output_descriptor["echo"] == {"who": "worker-0"}
+        assert results["worker-1"].output_descriptor["echo"] == {"who": "worker-1"}
     finally:
         _stop(address, root, server)
 
