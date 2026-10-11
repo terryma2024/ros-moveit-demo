@@ -1983,7 +1983,7 @@ def _measure_selection_rule(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_operating_point_measurement import (
+    from so101_demo.act.head_search_operating_point_measurement.documents import (
         record_selection_rule_documents,
     )
 
@@ -2107,7 +2107,7 @@ def _measure_operating_point(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_operating_point_measurement import (
+    from so101_demo.act.head_search_operating_point_measurement.measurement import (
         measure_operating_point_measurements,
     )
 

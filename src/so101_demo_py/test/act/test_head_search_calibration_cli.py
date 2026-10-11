@@ -1672,7 +1672,6 @@ def test_measure_camera_hands_the_flight_to_the_library_and_refuses_an_undeclare
 
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
-    from so101_demo.act import head_search_camera_measurement as measurement
     from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
     from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
@@ -1716,7 +1715,6 @@ def test_measure_camera_accepts_a_declared_safety_margin_and_returns_zero(
     output = tmp_path / "camera"
     declaration = tmp_path / "camera-safety.json"
     declaration.write_text(json.dumps({"safety_margin_px": 4.0}), encoding="utf-8")
-    from so101_demo.act import head_search_camera_measurement as measurement
     from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
     from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
@@ -1743,7 +1741,6 @@ def test_measure_camera_prints_the_librarys_refusal_and_returns_two(
 ) -> None:
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "camera"
-    from so101_demo.act import head_search_camera_measurement as measurement
     from so101_demo.act.head_search_camera_measurement import declarations as measurement_declarations
     from so101_demo.act.head_search_camera_measurement import writer as measurement_writer
 
@@ -2850,7 +2847,7 @@ def test_measure_operating_point_refuses_an_existing_output_directory(
 def test_measure_operating_point_prints_the_librarys_selection(
     tmp_path: Path, capsys, monkeypatch
 ) -> None:
-    from so101_demo.act import head_search_operating_point_measurement as measurement
+    from so101_demo.act.head_search_operating_point_measurement import measurement as measurement_measurement
 
     inputs = _operating_point_inputs(tmp_path)
     weights = tmp_path / "weights"
@@ -2874,7 +2871,7 @@ def test_measure_operating_point_prints_the_librarys_selection(
             },
         }
 
-    monkeypatch.setattr(measurement, "measure_operating_point_measurements", fake_measure)
+    monkeypatch.setattr(measurement_measurement, "measure_operating_point_measurements", fake_measure)
     rc = main(arguments)
 
     assert rc == 0
