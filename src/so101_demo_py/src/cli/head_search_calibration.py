@@ -645,7 +645,9 @@ def _measure_coarse_step(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_coarse_step_measurement import measure_coarse_step_val_sweep
+    from so101_demo.act.head_search_coarse_step_measurement.measurement import (
+        measure_coarse_step_val_sweep,
+    )
 
     try:
         result = measure_coarse_step_val_sweep(

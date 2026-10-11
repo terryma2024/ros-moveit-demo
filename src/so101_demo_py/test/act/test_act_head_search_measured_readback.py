@@ -82,7 +82,9 @@ def _refusing(message):
 
 
 def test_the_eleven_measured_parameters_are_exactly_the_two_phases_own_values():
-    from so101_demo.act.head_search_coarse_step_measurement import PARAMETER as COARSE_STEP
+    from so101_demo.act.head_search_coarse_step_measurement.contracts import (
+        PARAMETER as COARSE_STEP,
+    )
     from so101_demo.act.head_search_search_params import PARAMETERS as PHASE_SIX
     from so101_demo.act.head_search_timing_params import PARAMETERS as PHASE_SEVEN
 

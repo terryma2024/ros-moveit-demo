@@ -23,7 +23,7 @@ from so101_demo.act.head_search_calibration_inputs import (
     SEALED_INPUT_NAMES,
     CalibrationInputsRefused,
 )
-from so101_demo.act.head_search_coarse_step_measurement import (
+from so101_demo.act.head_search_coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_PARTIAL,
 )

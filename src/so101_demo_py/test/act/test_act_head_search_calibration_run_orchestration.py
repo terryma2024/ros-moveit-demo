@@ -50,7 +50,7 @@ from so101_demo.act.head_search_calibration_run import (
     execute_calibration_run,
 )
 from so101_demo.act.head_search_candidate_freeze import freeze_candidate
-from so101_demo.act.head_search_coarse_step_measurement import (
+from so101_demo.act.head_search_coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_PARTIAL,
     CAL_SWEEP_UNSTABLE,

@@ -981,7 +981,7 @@ def measure_operating_point_measurements(
 
     import mujoco
     import numpy as np
-    from so101_demo.act.head_search_coarse_step_measurement import runtime_identity
+    from so101_demo.act.head_search_coarse_step_measurement.measurement import runtime_identity
     from so101_demo.adapters.perception.mujoco_dataset import (
         DatasetScenario,
         MuJoCoDatasetRenderer,

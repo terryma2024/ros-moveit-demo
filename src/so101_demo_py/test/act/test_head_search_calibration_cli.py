@@ -783,7 +783,7 @@ def test_measure_coarse_step_refuses_a_missing_input_and_an_existing_output(tmp_
 def test_measure_coarse_step_parses_and_hands_the_flight_to_the_library(tmp_path, monkeypatch, capsys) -> None:
     """The CLI is a parser and a validator: the measurement itself is the library module's."""
 
-    from so101_demo.act import head_search_coarse_step_measurement
+    from so101_demo.act.head_search_coarse_step_measurement import measurement as coarse_step_sweep
 
     input_paths = {}
     for flag, name in (
@@ -805,7 +805,7 @@ def test_measure_coarse_step_parses_and_hands_the_flight_to_the_library(tmp_path
                             "candidate_count": 6, "passes": 2}}
 
     monkeypatch.setattr(
-        head_search_coarse_step_measurement, "measure_coarse_step_val_sweep", fake_measure
+        coarse_step_sweep, "measure_coarse_step_val_sweep", fake_measure
     )
     arguments = ["measure-coarse-step"]
     for flag, path in input_paths.items():

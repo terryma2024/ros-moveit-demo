@@ -55,19 +55,19 @@ from so101_demo.act.head_search_calibration_bundle import (
 )
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_measured_readback import OBSERVED_OBSERVATIONS
-from so101_demo.act.head_search_coarse_step_measurement import (
+from so101_demo.act.head_search_coarse_step_measurement.contracts import (
     CAL_SWEEP_EVIDENCE_CONTRADICTORY,
     CAL_SWEEP_EVIDENCE_MISSING,
     CAL_SWEEP_EVIDENCE_PARTIAL,
     CalibrationCoarseStepRefused,
+)
+from so101_demo.act.head_search_coarse_step_measurement.verdicts import (
     validate_head_search_coarse_step_measurement,
 )
-from so101_demo.act.head_search_coarse_step_measurement import (
+from so101_demo.act.head_search_coarse_step_measurement.contracts import (
     PARAMETER as COARSE_STEP_PARAMETER,
 )
-from so101_demo.act.head_search_coarse_step_measurement import (
-    UNIT as COARSE_STEP_UNIT,
-)
+from so101_demo.act.head_search_coarse_step_measurement.contracts import UNIT as COARSE_STEP_UNIT
 from so101_demo.act.head_search_operating_point import CAL_SPLIT_LEAK
 
 SCHEMA_VERSION = 1
