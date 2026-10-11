@@ -69,11 +69,30 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3554
+latest_checkpoint: CP-3555
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3555 — user: pull the clock-stability fix and rebase; branch rebased onto origin be2f18e16 (phase F paused and resumed)
+
+- User (2026-10-11): "时间交错稳定性的问题已经被另一个agent fix，并push到了当前分支，你pull下来rebase一下。"
+- Remote: origin/codex/so101-act-data-0917a gained one commit, be2f18e16 "fix(clock): preserve sampled sim-time cycles and committed clock publication" (cherry-pick of b15410437). Its parent is 7e936ec58, the last root push. It contains:
+  - a new test package src/so101_clock_regression (actual-CM-cycle and clock-publication boundary tests);
+  - controller_manager 4.45.2 with the repair, vendored under third_party/ros2_control (source manifest included);
+  - the submodule third_party/mujoco_ros2_control moved b843139 → bab9841 "keep sim-time cycles coherent and publish every committed clock tick". This is a fast-forward: bab9841 descends from b843139, so the unified lossless camera path a68bcf4 is kept.
+  - It shares no files with the 88 local commits.
+- Procedure:
+  - phase-F executor paused at a clean HEAD 06015ce7b (its last commit is "WIP(phase-F): deadband split", 12 tests still red);
+  - backup ref backup/pre-rebase-20261011;
+  - `git rebase origin/codex/so101-act-data-0917a`: rc 0, 88 commits, no conflicts;
+  - submodule checked out at bab9841; worktree clean.
+  - New HEAD: 14055994a (the WIP commit) on top of be2f18e16; ahead 88, behind 0. Not pushed.
+- Consequences:
+  - every later build includes the vendored controller_manager 4.45.2 and so101_clock_regression; the gate package set grows accordingly;
+  - all post-phase-F live checks run on the clock-fixed stack;
+  - the Head 120 s nominal hold (CP-HFP-1028 4 ms skip) can be re-measured on this stack after phase F, if the user wants.
 
 ## CP-3554 — start-of-run pause race fixed (98fb98fdb); general path fully green live: fixed-N 4/4, adaptive 2/2, offline smoke; phase F dispatched
 
