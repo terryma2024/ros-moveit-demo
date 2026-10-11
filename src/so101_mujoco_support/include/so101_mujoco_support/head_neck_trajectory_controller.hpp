@@ -4,6 +4,7 @@
 #include <joint_trajectory_controller/joint_trajectory_controller.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -89,13 +90,15 @@ private:
   double deadman_timeout_s_{0.2};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
 
-  // Canceled goals that were no longer the active goal (the latch had already aborted them). The
-  // realtime handle cannot finish them, so a non-realtime timer does.
+  // Accepted cancels, watched until the goal is terminal (see decide_cancel).
+  static constexpr std::chrono::milliseconds kStrandedCancelGrace{100};
+  static constexpr std::chrono::seconds kStrandedCancelExpiry{5};
   struct StrandedCancel
   {
     std::shared_ptr<rclcpp_action::ServerGoalHandle<
       control_msgs::action::FollowJointTrajectory>> goal;
-    int attempts{0};
+    std::chrono::steady_clock::time_point ready;
+    std::chrono::steady_clock::time_point expires;
   };
   std::mutex stranded_mutex_;
   std::vector<StrandedCancel> stranded_cancels_;

@@ -576,6 +576,33 @@ TEST(HeadNeckTrajectoryController, ACancelAfterTheLatchAbortedTheGoalStillEndsTh
     code == rclcpp_action::ResultCode::ABORTED);
 }
 
+TEST(HeadNeckTrajectoryController, ACancelOfTheActiveGoalEndsItCanceledThroughTheRealtimeHandle)
+{
+  Rig rig;
+  ASSERT_TRUE(rig.configure());
+  ASSERT_TRUE(rig.activate());
+  rig.start_spinning();
+  const int owner = rig.connect_owner();
+  ASSERT_TRUE(wait_until([&] {return rig.controller.goal_decision_admits();}));
+  const auto handle = rig.send(rig.goal(0.5, 3.0));
+  ASSERT_NE(handle, nullptr);
+  auto result_future = rig.client->async_get_result(handle);
+  for (int i = 0; i < 100; ++i) {
+    ASSERT_EQ(rig.tick(), controller_interface::return_type::OK);
+    if (i % 10 == 0) {rig.heartbeat(owner);}
+    std::this_thread::sleep_for(500us);
+  }
+  auto cancel_future = rig.client->async_cancel_goal(handle);
+  for (int i = 0; i < 400 && result_future.wait_for(0ms) != std::future_status::ready; ++i) {
+    ASSERT_EQ(rig.tick(), controller_interface::return_type::OK);
+    if (i % 10 == 0) {rig.heartbeat(owner);}
+    std::this_thread::sleep_for(1ms);
+  }
+  ASSERT_EQ(result_future.wait_for(1s), std::future_status::ready);
+  EXPECT_EQ(result_future.get().code, rclcpp_action::ResultCode::CANCELED);
+  EXPECT_EQ(cancel_future.wait_for(1s), std::future_status::ready);
+}
+
 TEST(HeadNeckTrajectoryController, SilenceLatchesAfterTheTimeoutAndStopsTheGoal)
 {
   Options options;
