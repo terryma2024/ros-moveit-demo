@@ -643,7 +643,9 @@ class BasicAudit:
             track,epoch,last_source=current_track,current_epoch,source if is_integer(source) else last_source
 
     def stop_checks(self):
-        origins=self.rows['FAULT'] or self.rows['STOP_REQUEST']
+        # The stop obligation starts at the earliest cause. A SIGTERM latches the controller at once, and the
+        # hold can then raise a later derived FAULT (for example HEAD_REFERENCE_DIVERGED).
+        origins=self.rows['FAULT']+self.rows['STOP_REQUEST']
         actions=bool(self.goals or self.rows['INVENTORY_OWNED'])
         if not origins:
             if not actions and self.rows['EXECUTION_LOOP_REFUSED'] and self.reader.integrity_status=='PASS':

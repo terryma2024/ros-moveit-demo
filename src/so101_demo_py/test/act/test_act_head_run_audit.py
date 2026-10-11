@@ -547,3 +547,17 @@ def test_hfa009_accepts_an_acknowledged_fault_close_after_a_proven_stop(tmp_path
     result=audit(make_reader(tmp_path,_stop_records(planned=False),monkeypatch))
     assert result['stop']['status']=='PASS', result['stop']
     assert verdict(result,'HFA-009')!='VIOLATED'
+
+
+def _sigterm_with_derived_fault_records():
+    """SIGTERM latches the controller at once; the hold then diverges the reference and raises a later FAULT."""
+    records=_stop_records(planned=False)
+    records[0]=('STOP_REQUEST',{'origin':'sigterm','evidence':{'signal':15,'status':'INTERRUPTED'}})
+    records.append(('FAULT',{'occurred_ns':(len(records)+3)*1000000,'reason':'HEAD_REFERENCE_DIVERGED'}))
+    return records
+
+
+def test_hfa009_the_stop_origin_is_the_earliest_cause_not_a_later_derived_fault(tmp_path, monkeypatch):
+    result=audit(make_reader(tmp_path,_sigterm_with_derived_fault_records(),monkeypatch))
+    assert result['stop']['status']=='PASS', (result['stop'],[f['code'] for f in result['findings'] if 'HFA-009' in f['rule']])
+    assert verdict(result,'HFA-009')!='VIOLATED'
