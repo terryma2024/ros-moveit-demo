@@ -6,6 +6,7 @@ import math
 import statistics
 import uuid
 
+from .lock_band import counts_for_lock
 from .head_run_reader import (AuditToolError, MAX_CORRELATIONS, canonical_digest,
                               is_integer, normalized, open_regular)
 
@@ -625,7 +626,8 @@ class BasicAudit:
                         lock = None
                         track, epoch, last_source = current_track, current_epoch, source
                         continue
-                    centered=eligible and abs(center-k[2])<=deadband and bounds[0]<=vertical<=bounds[1]
+                    centered=eligible and counts_for_lock(center-k[2],vertical,deadband_px=deadband,
+                                                              vertical_bounds_px=bounds,lock_count=lock or 0)
                     self.metrics['observations'][list(self.observations).index(row['observation_sequence'])][
                         'horizontal_center_error_px']=center-k[2]
             advancing=is_integer(source) and source>last_source

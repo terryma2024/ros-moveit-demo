@@ -5,6 +5,7 @@ import math
 from .bearing import bearing, optical_ray_base
 from .contracts import fields, finite, identifier, integer, validate_search_result, vector
 from .head_search_domain import TARGET_NOT_FOUND_WITHIN_SAFE_INTERVAL, bounded_search_stops
+from .lock_band import counts_for_lock
 from .head_feedback import FeedbackPolicy, nanoseconds
 from .head_evidence_identity import canonical_bytes
 from .head_simulation_policy import HeadSimulationPolicy
@@ -267,9 +268,12 @@ class HeadSearchController:
                 self.centering_gain = 1.0
             vertical = self.config["vertical_bounds_px"]
             horizontal_error = center[0] - frame["k"][2]
-            if (
-                abs(horizontal_error) <= self.config["center_deadband_px"]
-                and vertical[0] <= center[1] <= vertical[1]
+            if counts_for_lock(
+                horizontal_error,
+                center[1],
+                deadband_px=self.config["center_deadband_px"],
+                vertical_bounds_px=vertical,
+                lock_count=self.lock_count,
             ):
                 self.lock_count += 1
                 self.state = "CENTER_CUP"
