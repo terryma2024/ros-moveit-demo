@@ -69,11 +69,39 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3556
+latest_checkpoint: CP-3557
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3557 — post-refactor live checks on the clock-fixed stack: 5/5 PASS (HEAD 436ec72fa); refactor complete
+
+- Build: 14-package fresh build rc 0 (submodule bab9841, vendored controller_manager 4.45.2). No source changes and no refactor defect found.
+- (1) Head 900000, protocol v2:
+  - TARGET_LOCKED, rc 0, yaw error 0.665°; classify booleans all true; HFA-009 HOLDS (integrity and stop PASS); DEADMAN_CLOSED_PLANNED.
+  - End window: sim 11.004–11.104, max |v_fb| 1.6e-4. It opens 2 ms after the raw stop (CP-3539: 99.9 ms), consistent with the clock fix.
+  - final.png: cup centred near x≈323.
+  - The campaign rc 1 / UNKNOWN only means the visual verdict is pending, as in phase D.
+- (2) Teacher pick-place:
+  - New freeze Or6hTNfB, inputs JuKx4SjM, episode 38cf0f8a.
+  - The r12 activation (cbd85126…) still binds; the freeze resolves controller_manager 4.45.2 from its own install.
+  - Teacher PASS, VALID, QC PASS, readback PASS, commit_sequence 318.
+  - xy 4.927 mm, z 0.152 mm, tilt 7.9e-7 rad; 108.96 µm and 1.712 N with no flags; head/wrist 823/823 acquisitions; topic_loss 0 lost.
+- (3) Fixed-N through the teleop service (PARALLEL, 2 workers, 4 points): 4/4 PASSED, COMPLETED, table contact at DETACH, cup z 0.16442–0.16467, cleanup true.
+- (4) Adaptive pq1 (2 workers, fallback 1, 2 points): 2/2 PASSED, COMPLETED, cleanup true, no fallback.
+- (5) Offline smoke: load_training_view returns 10 samples.
+- Teardown clean after every run (no-daemon node lists empty on all polled domains, no stack processes, no GPU apps, no containers).
+- Tooling finding: the old freeze/qualify scripts did not include third_party/ros2_control, so a Teacher freeze would silently have used the system controller_manager and missed the clock fix. New versions were written: freeze-copy-build r11-postF, qualify r8-postF, cycle-r12-postF, plus env, service, adaptive and teardown postF scripts and Head postF scripts; sha256 in postrefactor-live-20261011/tooling.sha256.
+- Minor: scripts/run_so101_adaptive_batch.zsh prints its --batch-id error via `print -u2 "--batch-id …"`, which zsh parses as an option, so the message is hidden. Cosmetic; left as is.
+- Status: the code-style refactor (CP-3540 user request: latest-only versions, business names, tests by module/component, oversized files split) is complete and live-verified. Along the way the general/expert-validation path was fixed and is live-green for the first time since 2026-09-19 (scene frames, SCENE_SOURCE_ABSENT, dead-coordinator projection, −18.35 mm place offset, pause-hold tolerance), and the branch was rebased onto the remote clock fix.
+- Local branch: 90 commits ahead of origin/codex/so101-act-data-0917a, 0 behind; not pushed (awaiting the user).
+- Open follow-ups:
+  - harden the load-flaky head and recorder tests;
+  - journal-less coordinator cleanup decision;
+  - adaptive fallback path not exercised (no failure to fall back from);
+  - the Head 120 s nominal hold on the clock-fixed stack is not yet re-measured;
+  - deletion candidates under the evidence root (about 112 GB of phase scratch and dev bases).
 
 ## CP-3556 — refactor phase F done (HEAD 45224968c); every source module ≤ 1200 lines, every test file ≤ 1500; 0 import cycles; gates 0/0 on 14 packages; post-F live checks dispatched
 
