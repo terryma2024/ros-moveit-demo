@@ -32,29 +32,28 @@ import math
 from collections.abc import Callable
 
 import pytest
-from so101_demo.act.head_camera_geometry import (
-    HeadCameraGeometryContract,
-    camera_pose_from_seal,
-    project_point,
-)
+from so101_demo.act.head_camera_geometry.contract import HeadCameraGeometryContract, project_point
+from so101_demo.act.head_camera_geometry.validation import camera_pose_from_seal
 from so101_demo.act.head_search_calibration_geometry import SELECTION_RULE
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_search_params import compute_vertical_bounds_px
-from so101_demo.act.head_search_workspace_projection import (
+from so101_demo.act.head_search_workspace_projection.projection import (
     CAL_PROJECTION_EMPTY,
     CAL_PROJECTION_EVIDENCE_CONTRADICTORY,
     CAL_PROJECTION_EVIDENCE_MISSING,
     CAL_PROJECTION_POINT_UNPROJECTABLE,
     CAL_PROJECTION_POSE_SET_AMBIGUOUS,
+    CalibrationWorkspaceProjectionRefused,
     DIGEST_CONVENTION,
     KIND,
     PHASE,
-    REFUSAL_CODES,
-    CalibrationWorkspaceProjectionRefused,
-    build_head_search_workspace_projection,
     projection_poses,
+    REFUSAL_CODES,
     sealed_bearing_rad,
     workspace_sample_points,
+)
+from so101_demo.act.head_search_workspace_projection.writer import (
+    build_head_search_workspace_projection,
     write_head_search_workspace_projection,
 )
 from so101_demo.perception_benchmark.contracts import canonical_sha256

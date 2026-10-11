@@ -185,12 +185,12 @@ def test_a_missing_target_body_is_refused_by_name():
 
 import math  # noqa: E402
 
-from so101_demo.act.head_camera_geometry import (  # noqa: E402
+from so101_demo.act.head_camera_geometry.contract import (
     HeadCameraAnchor,
     HeadCameraGeometryContract,
     horizontal_fov_rad,
-    validate_head_camera_geometry,
 )
+from so101_demo.act.head_camera_geometry.validation import validate_head_camera_geometry
 
 PACKAGE = PACKAGE_ROOT
 GEOMETRY_CONTRACT_PATH = PACKAGE / "config/act/head-camera-geometry-contract.json"
@@ -417,7 +417,7 @@ def test_geometry_seal_refuses_a_required_domain_outside_the_safe_interval():
 
 
 def test_the_coverage_proof_rejects_a_gap_inside_the_required_domain():
-    from so101_demo.act.head_camera_geometry import coverage_intervals_cover
+    from so101_demo.act.head_camera_geometry.contract import coverage_intervals_cover
 
     assert coverage_intervals_cover(((-1.0, -0.1), (0.1, 1.0)), (-1.0, 1.0)) is False
     assert coverage_intervals_cover(((-1.0, 0.0), (-0.1, 1.0)), (-1.0, 1.0)) is True

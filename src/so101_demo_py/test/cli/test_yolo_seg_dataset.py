@@ -368,7 +368,7 @@ def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> N
 # generation program refuses to run without.
 # ----------------------------------------------------------------------------------------------------------------------
 
-from so101_demo.act.head_camera_geometry import scene_source_digests  # noqa: E402
+from so101_demo.act.head_camera_geometry.contract import scene_source_digests  # noqa: E402
 from so101_demo.adapters.perception.mujoco_dataset import (  # noqa: E402
     GeometrySealRequirement,
     split_scene_plan,
@@ -398,7 +398,7 @@ class _HeadFakeRenderer:
         if seal is None:
             self.pose = ((-0.06, 0.06, 0.43), (0.9, 0.0, 0.0, 0.44))
         else:
-            from so101_demo.act.head_camera_geometry import (
+            from so101_demo.act.head_camera_geometry.validation import (
                 camera_pose_from_seal,
                 quaternion_wxyz_from_xyaxes,
             )

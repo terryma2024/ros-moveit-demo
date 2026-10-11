@@ -2128,6 +2128,7 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
     """The CLI is a parser and a validator: the projection itself is the library module's."""
 
     from so101_demo.act import head_search_workspace_projection
+    from so101_demo.act.head_search_workspace_projection import writer as head_search_workspace_projection_writer
 
     inputs = {}
     for flag, name in (
@@ -2157,7 +2158,7 @@ def test_measure_workspace_projection_hands_the_flight_to_the_library(
         }
 
     monkeypatch.setattr(
-        head_search_workspace_projection, "write_head_search_workspace_projection", fake_write
+        head_search_workspace_projection_writer, "write_head_search_workspace_projection", fake_write
     )
     arguments = ["measure-workspace-projection"]
     for flag, path in inputs.items():
@@ -2189,7 +2190,8 @@ def test_measure_workspace_projection_reports_the_library_refusal(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     from so101_demo.act import head_search_workspace_projection
-    from so101_demo.act.head_search_workspace_projection import (
+    from so101_demo.act.head_search_workspace_projection import writer as head_search_workspace_projection_writer
+    from so101_demo.act.head_search_workspace_projection.projection import (
         CAL_PROJECTION_POSE_SET_AMBIGUOUS,
         CalibrationWorkspaceProjectionRefused,
     )
@@ -2210,7 +2212,7 @@ def test_measure_workspace_projection_reports_the_library_refusal(
         )
 
     monkeypatch.setattr(
-        head_search_workspace_projection, "write_head_search_workspace_projection", fake_write
+        head_search_workspace_projection_writer, "write_head_search_workspace_projection", fake_write
     )
     arguments = ["measure-workspace-projection"]
     for flag, path in inputs.items():
@@ -3472,7 +3474,7 @@ def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
     without starting, probing or tearing anything down.
     """
 
-    from so101_demo.act import head_search_teleop_acceptance as acceptance
+    from so101_demo.act.head_search_teleop_acceptance import acceptance as acceptance_acceptance
 
     recorded: dict = {}
 
@@ -3480,7 +3482,7 @@ def test_serve_teleop_runs_the_owned_acceptance_with_the_plans_declarations(
         recorded.update(kwargs)
         return {"status": "REFUSED", "refusals": [{"code": "X", "detail": "y"}]}
 
-    monkeypatch.setattr(acceptance, "accept_teleop", fake_accept)
+    monkeypatch.setattr(acceptance_acceptance, "accept_teleop", fake_accept)
     final_run = tmp_path / "frozen"
     (final_run / "install/so101_demo_py/share/so101_demo_py/config/mujoco/act").mkdir(parents=True)
     (
@@ -3535,14 +3537,16 @@ def test_serve_teleop_refuses_without_the_acceptance_declarations(tmp_path: Path
 
 
 def test_serve_teleop_reports_a_library_refusal_by_name(tmp_path: Path, monkeypatch, capsys) -> None:
-    from so101_demo.act import head_search_teleop_acceptance as acceptance
+    from so101_demo.act.head_search_teleop_acceptance import acceptance as acceptance_acceptance
+    from so101_demo.act.head_search_teleop_acceptance import receipts as acceptance_receipts
+    from so101_demo.act.head_search_teleop_acceptance import runners as acceptance_runners
 
     def refuse(**kwargs):
-        raise acceptance.TeleopAcceptanceRefused(
-            acceptance.TELEOP_SOCKET_PATH_TOO_LONG, "the socket path is 158 bytes"
+        raise acceptance_runners.TeleopAcceptanceRefused(
+            acceptance_receipts.TELEOP_SOCKET_PATH_TOO_LONG, "the socket path is 158 bytes"
         )
 
-    monkeypatch.setattr(acceptance, "accept_teleop", refuse)
+    monkeypatch.setattr(acceptance_acceptance, "accept_teleop", refuse)
     final_run = tmp_path / "frozen"
     final_run.mkdir()
     rc = main(
@@ -3560,7 +3564,7 @@ def test_serve_teleop_reports_a_library_refusal_by_name(tmp_path: Path, monkeypa
     )
 
     assert rc == 2
-    assert acceptance.TELEOP_SOCKET_PATH_TOO_LONG in capsys.readouterr().err
+    assert acceptance_receipts.TELEOP_SOCKET_PATH_TOO_LONG in capsys.readouterr().err
 
 
 # --- the production smoke (HS-326) ---------------------------------------------------

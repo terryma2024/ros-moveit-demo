@@ -15,10 +15,10 @@ from types import MappingProxyType
 from typing import Any, Mapping, Protocol
 
 import numpy as np
-from so101_demo.act.head_camera_geometry import (
+from so101_demo.act.head_camera_geometry.contract import scene_source_digests
+from so101_demo.act.head_camera_geometry.validation import (
     camera_pose_from_seal,
     quaternion_wxyz_from_xyaxes,
-    scene_source_digests,
 )
 from so101_demo.adapters.perception.mujoco_scene_geometry import (
     ScenePenetrationError,

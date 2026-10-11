@@ -72,10 +72,8 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--output-root", required=True, type=_absolute_path)
     parsed = parser.parse_args(arguments)
 
-    from so101_demo.act.head_camera_geometry import (
-        HeadCameraGeometryContract,
-        validate_head_camera_geometry,
-    )
+    from so101_demo.act.head_camera_geometry.contract import HeadCameraGeometryContract
+    from so101_demo.act.head_camera_geometry.validation import validate_head_camera_geometry
 
     try:
         contract = HeadCameraGeometryContract.from_path(parsed.contract)

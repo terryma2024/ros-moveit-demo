@@ -807,7 +807,7 @@ def _measure_workspace_projection(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_workspace_projection import (
+    from so101_demo.act.head_search_workspace_projection.writer import (
         write_head_search_workspace_projection,
     )
 
@@ -3781,14 +3781,14 @@ def _serve_teleop(parsed) -> int:
     ``teardown: not-attempted``.
     """
 
-    from so101_demo.act.head_search_teleop_acceptance import (
+    from so101_demo.act.head_search_teleop_acceptance.acceptance import accept_teleop
+    from so101_demo.act.head_search_teleop_acceptance.receipts import (
         DEFAULT_FRAME_PROBE,
         DEFAULT_WEB_PORT,
         PROFILE,
         RECEIPT_ARTIFACT,
-        TeleopAcceptanceRefused,
-        accept_teleop,
     )
+    from so101_demo.act.head_search_teleop_acceptance.runners import TeleopAcceptanceRefused
 
     if not parsed.bundle:
         print(

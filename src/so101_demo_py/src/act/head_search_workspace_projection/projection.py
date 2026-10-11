@@ -1,69 +1,17 @@
-"""The workspace projection document phase 6 consumes: the legal pick workspace in the head camera.
-
-`vertical_bounds_px` is "the legal pick workspace projected into the head camera, intersected with the
-image safety margin, never back-filled from detection extremes" (design section 7.1). Three things have
-to exist before an installed phase can compute it: a **declared** legal pick workspace, a projection of
-that workspace into the **sealed** head camera, and the image-space extent the projection produces. The
-workspace is declared - `config/act/head-camera-geometry-contract.json` fixes
-`workspace_x_m`/`workspace_y_m`/`workspace_z_m` and `workspace_step_m`, and the seal's own
-`workspace_matrix.samples` counts the samples that declaration produces - but the projection itself is
-retained only as that count and five key samples, so this module is the producer that projects it.
-
-Where every number comes from (nothing here is invented):
-
-* **the points**: the geometry contract's declared workspace box under the seal's own sampling rule -
-  both declared edges of each axis, at the three declared heights - is the point set. It is the same rule
-  the seal's `workspace_matrix` was built with, and this document records the seal's own sample count
-  beside the one it computed, refusing a disagreement rather than projecting a different workspace.
-* **the poses**: the bounded plan's stop points that lie inside the sealed `required_search_domain_rad`,
-  per sealed anchor, plus each anchor's own start angle when that start is inside the domain. The plan is
-  phase 2's `bounded_search_stops`, at the coarse step phase 2's own selection rule chooses (the largest
-  generated candidate whose sweep covers the required domain from every anchor - the step phase 2
-  receipts and phase 6 accepts). A caller holding that plan may declare it instead; a declared step then
-  has to be a generated candidate and to cover the domain, or the pose set would be one no plan of this
-  geometry could have, which refuses with `CAL_PROJECTION_POSE_SET_AMBIGUOUS`. Every candidate's
-  in-domain stop set is recorded and `poses_are_step_independent` says whether the choice mattered. An
-  anchor start outside the required domain is recorded as excluded, never clamped.
-* **the camera pose**: `head_camera_geometry.camera_pose_from_seal`, the sealed mount model (the neck
-  rotates the mount about the world z axis through the sealed `camera_mount_origin_m`), and the scene
-  itself is read through MuJoCo at every projected pose so the sealed model and the model the runtime
-  steps have to agree, pose by pose, before a point is projected.
-* **the projection**: `head_camera_geometry.project_point`, the seal's own projection, and the same
-  convention its scene port feeds it (the columns of the rotation are the camera's world axes). The
-  document records the camera pose it used for every pose and the function it used for every point.
-* **the extent**: per pose, the smallest and largest projected row, clipped to the image; and the
-  headline `top_px`/`bottom_px` is the **union** over the visited poses - the envelope of the legal
-  workspace in the image, which contains the row of every legal sample at every visited pose. The
-  **intersection** over the poses (the rows every visited pose can produce) and the **aimed band** (every
-  sample projected at its own bearing, i.e. the row a horizontally centred sample has) are recorded beside
-  it, with whether they cover the aimed band, because the lock rule accepts a detection whose box centre
-  is inside the centre deadband, and the fine-correction path can hold the neck between the stops.
-
-Not this document's field: the image safety margin. Phase 6 intersects this projection with
-`safety_margin_px` from the camera measurements document, so no margin is read, defaulted or intersected
-here.
-
-Nothing here loads a detector, touches a GPU, starts a ROS node or commands motion: the run is
-detector-free by construction, the receipt and the document both say so, and the only heavy import
-(MuJoCo) happens inside the scene reader. Nothing is written unless the caller passes an explicit
-`output_dir` (the producer) or `document_path`.
-"""
+"""Projection inputs, camera geometry and the workspace projection document."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import hashlib
 import json
 import math
-import sys
-import time
-from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
-from so101_demo.act.head_camera_geometry import (
-    HeadCameraGeometryContract,
+from so101_demo.act.head_camera_geometry.contract import HeadCameraGeometryContract, project_point
+from so101_demo.act.head_camera_geometry.validation import (
     camera_pose_from_seal,
-    project_point,
     workspace_matrix_points,
 )
 from so101_demo.act.head_search_calibration_geometry import (
@@ -78,25 +26,50 @@ from so101_demo.act.head_search_domain import (
     bounded_search_stops,
     coverage_is_complete,
 )
-from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
+
+
 KIND = "head_search_calibration_workspace_projection"
+
+
 RECEIPT_KIND = "head_search_calibration_workspace_projection_receipt"
+
+
 PHASE = "workspace_projection"
+
 
 #: the artefact the run declares under `--workspace-projection`, and the two fields phase 6 reads
 ARTIFACT_NAME = "workspace-projection.json"
+
+
 RECEIPT_ARTIFACT_NAME = "measurement-receipt.json"
+
+
 TOP_FIELD = "top_px"
+
+
 BOTTOM_FIELD = "bottom_px"
+
+
 UNIT = "px"
 
+
 CAL_PROJECTION_EVIDENCE_MISSING = "CAL_PROJECTION_EVIDENCE_MISSING"
+
+
 CAL_PROJECTION_EVIDENCE_CONTRADICTORY = "CAL_PROJECTION_EVIDENCE_CONTRADICTORY"
+
+
 CAL_PROJECTION_POSE_SET_AMBIGUOUS = "CAL_PROJECTION_POSE_SET_AMBIGUOUS"
+
+
 CAL_PROJECTION_POINT_UNPROJECTABLE = "CAL_PROJECTION_POINT_UNPROJECTABLE"
+
+
 CAL_PROJECTION_EMPTY = "CAL_PROJECTION_EMPTY"
+
+
 REFUSAL_CODES = (
     CAL_PROJECTION_EVIDENCE_MISSING,
     CAL_PROJECTION_EVIDENCE_CONTRADICTORY,
@@ -105,40 +78,55 @@ REFUSAL_CODES = (
     CAL_PROJECTION_EMPTY,
 )
 
+
 #: the convention the run's other measurement documents use, so phase 6 can cite this one by path+digest
 DIGEST_CONVENTION = "sha256 = canonical_sha256(body without the sha256 field)"
+
 
 #: two poses closer than this are the same pose: phase 2's anchors reach the same domain endpoints
 #: through different legs, and a last-bit difference is not a different place to look from
 POSE_DEDUP_TOLERANCE_RAD = 1e-12
 
+
 #: how far the MuJoCo scene reading of a camera pose may differ from the sealed mount model; the sealed
 #: derivation reproduced the model to 2.2e-16 when it was measured, so a real disagreement is far larger
 CAMERA_POSE_TOLERANCE = 1e-9
+
 
 POINT_RULE = (
     "the geometry contract's declared workspace box (workspace_x_m x workspace_y_m x workspace_z_m at "
     "workspace_step_m) under the seal's own workspace-matrix rule: both declared edges of each axis, at "
     "the three declared heights (low, mid, high)"
 )
+
+
 POSE_RULE = (
     "the bounded plan's stop points inside the sealed required_search_domain_rad, per sealed anchor, plus "
     "each anchor's own start angle when it lies inside that domain; the plan is phase 2's "
     "`bounded_search_stops` and a pose outside the domain is excluded, never clamped"
 )
+
+
 BOUNDARY_RULE = (
     "top_px = the smallest, and bottom_px = the largest, projected row over the visited poses (the union "
     "of the per-pose extents): the band contains the image row of every legal workspace sample at every "
     "pose the search holds. The intersection over the poses is recorded beside it as a strictly stronger "
     "claim, and so is the aimed band (every sample at its own bearing)"
 )
+
+
 AIMED_RULE = (
     "every workspace sample projected at its own sealed bearing (the seal's own neck_angle_for_point "
     "construction, which puts it on the optical column u = width / 2): the row a horizontally centred "
     "sample has, which is the row the three-frame lock rule accepts"
 )
+
+
 PROJECTION_FUNCTION = "head_camera_geometry.project_point"
+
+
 CAMERA_POSE_SOURCE = "camera_pose_from_seal"
+
 
 RECORDED_LIMITATIONS = (
     "the projection covers the contract's declared workspace samples - the target's placement positions "
@@ -819,386 +807,4 @@ def _aimed_projection(*, inputs) -> dict:
         "u_equals_width_over_two": all(abs(u - width / 2.0) <= 1e-6 for u in columns),
         "u_min_px": float(min(columns)),
         "u_max_px": float(max(columns)),
-    }
-
-
-def build_head_search_workspace_projection(
-    *,
-    scene_path,
-    geometry_seal_path,
-    geometry_contract_path,
-    scene_reader: SceneCameraPort,
-    document_path=None,
-    coarse_step_rad=None,
-    command=None,
-) -> dict:
-    """Build the document phase 6 declares, from the seal, the contract and the scene.
-
-    The order is: read and cross-check the sealed inputs, decide the pose set, read the camera pose the
-    scene really has at every pose, project every declared workspace sample, and only then aggregate the
-    extents. Every refusal stops the document before a number is produced. No file is written here.
-    """
-
-    inputs = load_projection_inputs(
-        geometry_seal_path=geometry_seal_path,
-        geometry_contract_path=geometry_contract_path,
-        scene_path=scene_path,
-    )
-    geometry = inputs["geometry"]
-    poses = projection_poses(
-        seal=inputs["seal"],
-        required_domain_rad=geometry["required_search_domain_rad"],
-        safe_interval_rad=geometry["lock_valid_neck_rad"],
-        anchors_rad=geometry["anchors_rad"],
-        horizontal_fov_rad=geometry["horizontal_fov_rad"],
-        sealed_candidate_rad=geometry["sealed_coarse_step_candidate_rad"],
-        declared_step_rad=coarse_step_rad,
-    )
-    projections = [
-        {**project_pose(inputs=inputs, pose_rad=pose["pose_rad"], reader=scene_reader), **pose}
-        for pose in poses["poses"]
-    ]
-    tops = [projection["top_px"] for projection in projections]
-    bottoms = [projection["bottom_px"] for projection in projections]
-    union = [min(tops), max(bottoms)]
-    intersection = [max(tops), min(bottoms)]
-    aimed = _aimed_projection(inputs=inputs)
-    aimed_band = aimed["band_px"]
-    max_position_delta = max(
-        projection["camera_pose"]["scene_reading_max_position_delta_m"] for projection in projections
-    )
-    max_rotation_delta = max(
-        projection["camera_pose"]["scene_reading_max_axes_delta"] for projection in projections
-    )
-    contract = inputs["contract"]
-    document: dict[str, Any] = {
-        "schema_version": SCHEMA_VERSION,
-        "kind": KIND,
-        "phase": PHASE,
-        "path": None if document_path is None else str(document_path),
-        "command": command,
-        "unit": UNIT,
-        TOP_FIELD: float(union[0]),
-        BOTTOM_FIELD: float(union[1]),
-        "image_width_px": float(contract.image_width),
-        "image_height_px": float(contract.image_height),
-        "extent": {
-            "headline": "union_over_visited_poses",
-            "rule": BOUNDARY_RULE,
-            "union_px": [float(union[0]), float(union[1])],
-            "intersection_px": [float(intersection[0]), float(intersection[1])],
-            "intersection_empty": not intersection[0] < intersection[1],
-            "per_pose": [
-                {
-                    "pose_rad": projection["pose_rad"],
-                    "top_px": projection["top_px"],
-                    "bottom_px": projection["bottom_px"],
-                    "in_frame_points": projection["in_frame_points"],
-                }
-                for projection in projections
-            ],
-        },
-        "aimed_projection": {
-            **aimed,
-            "covered_by_union": bool(
-                union[0] <= aimed_band[0] + 1e-9 and aimed_band[1] <= union[1] + 1e-9
-            ),
-            "covered_by_intersection": bool(
-                intersection[0] <= aimed_band[0] + 1e-9
-                and aimed_band[1] <= intersection[1] + 1e-9
-            ),
-            "union_gap_px": [float(union[0] - aimed_band[0]), float(aimed_band[1] - union[1])],
-        },
-        "workspace": {
-            "declared_by": {
-                "geometry_contract": {
-                    "path": str(inputs["contract_path"]),
-                    "sha256": inputs["contract_sha256"],
-                    "keys": {
-                        "workspace_x_m": "workspace_x_m",
-                        "workspace_y_m": "workspace_y_m",
-                        "workspace_z_m": "workspace_z_m",
-                        "workspace_step_m": "workspace_step_m",
-                    },
-                },
-                "geometry_seal": {
-                    "path": str(inputs["seal_path"]),
-                    "sha256": inputs["seal_sha256"],
-                    "seal_sha256": inputs["seal"].get("seal_sha256"),
-                    "key": "workspace_matrix.samples",
-                },
-            },
-            "rule": POINT_RULE,
-            "x_m": list(contract.workspace_x_m),
-            "y_m": list(contract.workspace_y_m),
-            "z_m": list(contract.workspace_z_m),
-            "step_m": contract.workspace_step_m,
-            "heights_m": list(
-                (
-                    contract.workspace_z_m[0],
-                    (contract.workspace_z_m[0] + contract.workspace_z_m[1]) / 2.0,
-                    contract.workspace_z_m[1],
-                )
-            ),
-            "sample_count": len(inputs["points"]),
-            "seal_sample_count": (inputs["seal"].get("workspace_matrix") or {}).get("samples"),
-            "bearing_domain_rad": list(inputs["bearing_domain_rad"]),
-        },
-        "poses": projections,
-        "pose_set": {
-            "rule": poses["rule"],
-            "step_source": poses["step_source"],
-            "chosen_step_rad": poses["chosen_step_rad"],
-            "phase_2_choice": poses["phase_2_choice"],
-            "poses_are_step_independent": poses["poses_are_step_independent"],
-            "candidate_steps": poses["candidate_steps"],
-            "dedup_tolerance_rad": poses["dedup_tolerance_rad"],
-            "pose_count": poses["pose_count"],
-            "excluded_poses": poses["excluded_poses"],
-        },
-        "camera": contract.camera.to_document(),
-        "camera_pose_source": CAMERA_POSE_SOURCE,
-        "projection_function": PROJECTION_FUNCTION,
-        "scene_path": str(inputs["scene_path"]),
-        "scene_sha256": inputs["scene_sha256"],
-        "sealed_evidence": {
-            "geometry_seal": {
-                "path": str(inputs["seal_path"]),
-                "sha256": inputs["seal_sha256"],
-                "seal_sha256": inputs["seal"].get("seal_sha256"),
-            },
-            "geometry_contract": {
-                "path": str(inputs["contract_path"]),
-                "sha256": inputs["contract_sha256"],
-            },
-            "scene": {"path": str(inputs["scene_path"]), "sha256": inputs["scene_sha256"]},
-            "cross_checks": inputs["cross_checks"],
-        },
-        "mujoco_readback": {
-            "reader": type(scene_reader).__name__,
-            "poses_checked": len(projections),
-            "max_position_delta_m": float(max_position_delta),
-            "max_rotation_delta": float(max_rotation_delta),
-            "agrees": bool(
-                max_position_delta <= CAMERA_POSE_TOLERANCE
-                and max_rotation_delta <= CAMERA_POSE_TOLERANCE
-            ),
-            "detail": (
-                "the scene's own camera pose was read at every projected pose and compared with the "
-                "sealed mount model before any sample was projected"
-            ),
-        },
-        "recorded_limitations": list(RECORDED_LIMITATIONS),
-        "refusals": [],
-        "measured_here": True,
-        "motion_commanded": False,
-        "mujoco_neck_commanded": False,
-        "mujoco_kinematics_read": True,
-        "hardware_motion_commanded": False,
-        "detector_loaded": False,
-        "cuda_used": False,
-        "ros_nodes_started": False,
-        "digest_convention": DIGEST_CONVENTION,
-    }
-    document["sha256"] = canonical_sha256(
-        {key: value for key, value in document.items() if key != "sha256"}
-    )
-    return document
-
-
-def mujoco_version() -> str | None:
-    """The MuJoCo the scene reader would load, or None when this environment has none."""
-
-    try:
-        import mujoco
-    except ImportError:  # pragma: no cover - this environment ships MuJoCo
-        return None
-    return str(mujoco.__version__)
-
-
-def runtime_identity(*, output_dir, scene_reader: SceneCameraPort | None = None) -> dict:
-    """What the producer ran as: the interpreter, the module it loaded and the tools it did not load."""
-
-    import so101_demo
-
-    return {
-        "python_executable": sys.executable,
-        "python_version": sys.version.split()[0],
-        "so101_demo_module_path": str(Path(so101_demo.__file__).resolve()),
-        "mujoco_version": mujoco_version(),
-        "scene_reader": None if scene_reader is None else type(scene_reader).__name__,
-        "output_dir": str(output_dir),
-        "mujoco_only": True,
-        "detector_loaded": False,
-        "cuda_used": False,
-        "ros_nodes_started": False,
-        "motion_commanded": False,
-    }
-
-
-class MuJoCoSceneCamera:
-    """The sealed scene read through MuJoCo: the camera's world pose at one neck angle.
-
-    This is the same reading `head_camera_geometry`'s own scene port takes - the camera body's world
-    position and the columns of its `cam_xmat` as the x and y axes - with the declared validation arm pose
-    and the requested neck angle set before `mj_forward`, so the scene's camera pose and the sealed mount
-    model can be compared field for field. No renderer, no GL context, no detector.
-    """
-
-    def __init__(self, scene_path, contract: HeadCameraGeometryContract) -> None:
-        import mujoco
-
-        self._mujoco = mujoco
-        self._model = mujoco.MjModel.from_xml_path(str(Path(scene_path)))
-        self._data = mujoco.MjData(self._model)
-        self._camera_id = mujoco.mj_name2id(
-            self._model, mujoco.mjtObj.mjOBJ_CAMERA, contract.camera_name
-        )
-        if self._camera_id < 0:
-            raise _refuse(
-                CAL_PROJECTION_EVIDENCE_MISSING,
-                f"{contract.camera_name} is not a camera of {scene_path}",
-            )
-        self._neck_id = mujoco.mj_name2id(
-            self._model, mujoco.mjtObj.mjOBJ_JOINT, contract.neck_joint
-        )
-        if self._neck_id < 0:
-            raise _refuse(
-                CAL_PROJECTION_EVIDENCE_MISSING,
-                f"{contract.neck_joint} is not a joint of {scene_path}",
-            )
-        self._neck_qpos_adr = int(self._model.jnt_qposadr[self._neck_id])
-        self._arm_qpos_adr = []
-        for index, joint_name in enumerate(("1", "2", "3", "4", "5", "6")):
-            joint_id = mujoco.mj_name2id(self._model, mujoco.mjtObj.mjOBJ_JOINT, joint_name)
-            if joint_id < 0:
-                raise _refuse(
-                    CAL_PROJECTION_EVIDENCE_MISSING,
-                    f"the scene {scene_path} names no arm joint {joint_name!r}",
-                )
-            self._arm_qpos_adr.append(
-                (int(self._model.jnt_qposadr[joint_id]), float(contract.validation_arm_rad[index]))
-            )
-
-    def camera_world_pose(self, neck_rad: float) -> tuple[Sequence[float], Sequence[float]]:
-        mujoco = self._mujoco
-        mujoco.mj_resetData(self._model, self._data)
-        for address, value in self._arm_qpos_adr:
-            self._data.qpos[address] = value
-        self._data.qpos[self._neck_qpos_adr] = float(neck_rad)
-        mujoco.mj_forward(self._model, self._data)
-        camera_id = self._camera_id
-        position = [float(value) for value in self._data.cam_xpos[camera_id]]
-        matrix = self._data.cam_xmat[camera_id].reshape(3, 3)
-        axes = [
-            float(matrix[0][0]),
-            float(matrix[1][0]),
-            float(matrix[2][0]),
-            float(matrix[0][1]),
-            float(matrix[1][1]),
-            float(matrix[2][1]),
-        ]
-        return (position, axes)
-
-    def close(self) -> None:
-        self._data = None
-        self._model = None
-
-
-def write_head_search_workspace_projection(
-    *,
-    scene_path,
-    geometry_seal_path,
-    geometry_contract_path,
-    output_dir,
-    scene_reader: SceneCameraPort | None = None,
-    coarse_step_rad=None,
-    command=None,
-) -> dict:
-    """Produce the workspace projection document and its receipt into a brand-new directory.
-
-    The directory is claimed before anything is read, so an existing one is refused rather than merged
-    with; a reader the caller passed is closed here, and one this producer opened is closed too. The
-    document and the receipt are the only files this producer creates.
-    """
-
-    started = time.time()
-    scene = Path(scene_path)
-    if not scene.is_file():
-        raise FileNotFoundError(f"the workspace projection needs {scene}")
-    output = Path(output_dir)
-    output.mkdir(parents=True)
-    reader = scene_reader
-    try:
-        if reader is None:
-            contract = HeadCameraGeometryContract.from_path(Path(geometry_contract_path))
-            reader = MuJoCoSceneCamera(scene, contract)
-        document_path = output / ARTIFACT_NAME
-        document = build_head_search_workspace_projection(
-            scene_path=scene,
-            geometry_seal_path=geometry_seal_path,
-            geometry_contract_path=geometry_contract_path,
-            scene_reader=reader,
-            document_path=document_path,
-            coarse_step_rad=coarse_step_rad,
-            command=command,
-        )
-    finally:
-        close = getattr(reader, "close", None)
-        if callable(close):
-            close()
-    document_path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    receipt = {
-        "schema_version": SCHEMA_VERSION,
-        "kind": RECEIPT_KIND,
-        "phase": PHASE,
-        "status": "SUCCEEDED",
-        "command": command,
-        "unit": UNIT,
-        TOP_FIELD: document[TOP_FIELD],
-        BOTTOM_FIELD: document[BOTTOM_FIELD],
-        "union_px": list(document["extent"]["union_px"]),
-        "intersection_px": list(document["extent"]["intersection_px"]),
-        "aimed_px": list(document["aimed_projection"]["band_px"]),
-        "pose_count": document["pose_set"]["pose_count"],
-        "poses_rad": [pose["pose_rad"] for pose in document["poses"]],
-        "chosen_step_rad": document["pose_set"]["chosen_step_rad"],
-        "step_source": document["pose_set"]["step_source"],
-        "poses_are_step_independent": document["pose_set"]["poses_are_step_independent"],
-        "projected_point_records": sum(len(pose["points"]) for pose in document["poses"]),
-        "point_count": document["workspace"]["sample_count"],
-        "image_width_px": document["image_width_px"],
-        "image_height_px": document["image_height_px"],
-        "measurement_path": str(document_path),
-        "measurement_sha256": document["sha256"],
-        "scene_path": document["scene_path"],
-        "scene_sha256": document["scene_sha256"],
-        "geometry_seal_path": document["sealed_evidence"]["geometry_seal"]["path"],
-        "geometry_seal_sha256": document["sealed_evidence"]["geometry_seal"]["sha256"],
-        "geometry_contract_path": document["sealed_evidence"]["geometry_contract"]["path"],
-        "geometry_contract_sha256": document["sealed_evidence"]["geometry_contract"]["sha256"],
-        "mujoco_readback": document["mujoco_readback"]["agrees"],
-        "mujoco_readback_detail": dict(document["mujoco_readback"]),
-        "excluded_poses": document["pose_set"]["excluded_poses"],
-        "refusals": list(document["refusals"]),
-        "elapsed_s": time.time() - started,
-        "runtime_identity": runtime_identity(output_dir=output, scene_reader=reader),
-        "mujoco_kinematics_read": True,
-        "detector_loaded": False,
-        "cuda_used": False,
-        "ros_nodes_started": False,
-        "mujoco_neck_commanded": False,
-        "hardware_motion_commanded": False,
-        "motion_commanded": False,
-    }
-    (output / RECEIPT_ARTIFACT_NAME).write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return {
-        "document": document,
-        "receipt": receipt,
-        "document_path": document_path,
-        "output_dir": output,
-        "poses": document["poses"],
-        "refusals": list(document["refusals"]),
     }
