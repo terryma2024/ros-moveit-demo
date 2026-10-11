@@ -69,7 +69,7 @@ def test_the_teacher_window_is_closed_before_the_data_work_and_the_deadline_guar
 def test_the_worker_runtime_tells_the_worker_the_teacher_exited_before_it_finishes_the_collection(tmp_path, monkeypatch):
     """The order inside `execute_expert`: Teacher receipt, exit callback, terminal capture, then the collection."""
     from test_parallel_worker_runtime import _write_numeric
-    from so101_demo.runtime.parallel_worker_runtime import ExecutionCompletionReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
     order = []
@@ -195,7 +195,7 @@ def _expert_runtime(tmp_path, monkeypatch, *, child_exited, cancel_result):
     from test_parallel_worker_runtime import _lease, _write_numeric
 
     from so101_demo.act.collection_orchestration import CollectionOptions
-    from so101_demo.runtime.parallel_worker_runtime import ExecutionCompletionReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
     order, events = [], []
@@ -247,8 +247,8 @@ def test_execute_result_reports_a_child_that_is_still_alive_when_the_wait_gives_
 
     for alive in (True, False):
         observations = iter((100.0, 200.0, 341.0, 342.0))
-        monkeypatch.setattr(runtime_module.time, "monotonic", lambda: next(observations))
-        monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
+        monkeypatch.setattr(time, "monotonic", lambda: next(observations))
+        monkeypatch.setattr(time, "sleep", lambda _duration: None)
         monkeypatch.setattr(os, "waitpid", (lambda pid, options: (0, 0)) if alive else (lambda pid, options: (pid, 0)))
         ports = ParallelRosRuntimePorts(SimpleNamespace(worker_root=tmp_path, session_id="session-1"), catalog={},
                                         config=SimpleNamespace(executing_hard_timeout_s=240.0))

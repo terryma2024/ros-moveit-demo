@@ -35,7 +35,7 @@ if len(station_arguments) == 3:
     # The domain is the one the plan allocated to this slot, so two Workers never share a ROS graph.
     import subprocess
 
-    from so101_demo.runtime.parallel_worker_runtime import station_environment
+    from so101_demo.runtime.parallel_worker_parts.station import station_environment
     from so101_demo.runtime.task_stack import PersistentTaskStack, default_task_station_config
 
     station_session, station_root, station_domain = station_arguments

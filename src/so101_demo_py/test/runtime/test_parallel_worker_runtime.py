@@ -142,10 +142,8 @@ def _lease(
 
 
 def _write_capture(path, source_stamp, source_stamp_ns=12_000_000_000):
-    from so101_demo.runtime.parallel_worker_runtime import (
-        InferenceSnapshotReceipt,
-        SourceStampedCapture,
-    )
+    from so101_demo.runtime.parallel_worker_parts.process_tree import SourceStampedCapture
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix != ".npy":
@@ -292,11 +290,9 @@ def test_revocation_receipts_are_durable_exact_lease_events(tmp_path):
 
 
 def test_inference_rgb_must_be_newer_than_reset_sim_clock_and_same_session(tmp_path):
-    from so101_demo.runtime.parallel_worker_runtime import (
-        InferenceSnapshotReceipt,
-        SourceStampedCapture,
-        build_worker_runtime,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts.process_tree import SourceStampedCapture
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     def capture(path, boundary):
         if path.suffix != ".npy":
@@ -346,10 +342,7 @@ def test_inference_rgb_must_be_newer_than_reset_sim_clock_and_same_session(tmp_p
 def test_perception_terminal_maps_without_planning_or_execution(
     tmp_path, mode, disposition, expected
 ):
-    from so101_demo.runtime.parallel_worker_runtime import (
-        SourceStampedCapture,
-        build_worker_runtime,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
 
     called = []
     runtime = build_worker_runtime(
@@ -491,7 +484,7 @@ def test_execute_consumer_is_ready_before_its_inference_snapshot(tmp_path: Path)
 
 
 def _write_numeric(root, source_stamp):
-    from so101_demo.runtime.parallel_worker_runtime import NumericEvidenceReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import NumericEvidenceReceipt
 
     root.mkdir(parents=True, exist_ok=True)
     paths = tuple(root / name for name in ("depth.json", "tf.json", "physical.json"))
@@ -501,7 +494,7 @@ def _write_numeric(root, source_stamp):
 
 
 def _plan_receipt(states, completion=25.0):
-    from so101_demo.runtime.parallel_worker_runtime import (
+    from so101_demo.runtime.parallel_worker_parts.receipts import (
         PlanPrefixReceipt,
         PlanSegmentReceipt,
     )
@@ -538,7 +531,7 @@ def _replacement(resources: WorkerResources) -> WorkerResources:
 
 
 def test_worker_launch_configs_keep_resources_distinct(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import headless_task_station_config
+    from so101_demo.runtime.parallel_worker_parts.station import headless_task_station_config
 
     first = _resources(tmp_path, "worker-1", 0, 181)
     second = _resources(tmp_path, "worker-2", 1, 182)
@@ -563,7 +556,7 @@ def test_worker_launch_configs_keep_resources_distinct(tmp_path: Path) -> None:
 def test_task_station_config_keeps_linux_frozen_and_gives_darwin_a_visible_station(
     tmp_path: Path,
 ) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
+    from so101_demo.runtime.parallel_worker_parts.station import (
         headless_task_station_config,
         task_station_config,
     )
@@ -589,17 +582,15 @@ def test_task_station_config_keeps_linux_frozen_and_gives_darwin_a_visible_stati
 
 
 def test_task_station_config_refuses_a_platform_it_cannot_launch(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import task_station_config
+    from so101_demo.runtime.parallel_worker_parts.station import task_station_config
 
     with pytest.raises(RuntimeError, match="unsupported task station platform: win32"):
         task_station_config(_resources(tmp_path, "worker-1", 0, 181), platform="win32")
 
 
 def test_physical_runtime_uses_the_injected_station_config(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
-        build_worker_runtime,
-        task_station_config,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts.station import task_station_config
 
     resources = _resources(tmp_path, "worker-1", 0, 181)
     processes = _ProcessGroup()
@@ -796,7 +787,7 @@ def test_ros_plan_prefix_adapter_uses_dynamic_targets_for_every_motion_state() -
         PlanResult,
         TcpMotionRequest,
     )
-    from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
+    from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 
     calls = []
     starts = []
@@ -865,7 +856,7 @@ def test_ros_plan_prefix_adapter_uses_dynamic_targets_for_every_motion_state() -
 def test_ros_plan_prefix_adapter_fails_when_an_accepted_plan_has_no_terminal_state() -> None:
     from so101_demo.ports.evidence import PoseEvidence
     from so101_demo.ports.robot_control import PlanResult, TcpMotionRequest
-    from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
+    from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 
     control = SimpleNamespace(
         plan_tcp_motion=lambda _request: PlanResult(True, trajectory="trajectory")
@@ -902,10 +893,10 @@ def test_ros_plan_prefix_adapter_fails_when_an_accepted_plan_has_no_terminal_sta
 
 
 def test_execute_failure_still_captures_terminal_evidence(tmp_path: Path) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts.receipts import (
         ExecutionCompletionReceipt,
         RuntimeDecision,
-        build_worker_runtime,
     )
 
     lease = _lease()
@@ -1426,10 +1417,8 @@ def test_recover_does_not_continue_after_shutdown_crosses_deadline(tmp_path: Pat
 def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_watermark(
     tmp_path: Path,
 ) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import (
-        SourceStampedCapture,
-        build_worker_runtime,
-    )
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts.process_tree import SourceStampedCapture
 
     events = []
     resources = _resources(tmp_path, "worker-1", 0, 181)
@@ -1474,9 +1463,7 @@ def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_water
     stale_resources = _resources(stale_root, "worker-1", 0, 181)
 
     def stale_capture(path, boundary):
-        from so101_demo.runtime.parallel_worker_runtime import (
-            SourceStampedCapture,
-        )
+        from so101_demo.runtime.parallel_worker_parts.process_tree import SourceStampedCapture
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"rgb")
@@ -1507,7 +1494,7 @@ def test_point_gate_resumes_only_after_fresh_camera_frame_newer_than_reset_water
 def test_worker_owned_tree_reaps_exact_child_when_identity_or_manifest_fails(
     monkeypatch, tmp_path: Path,
 ) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+    from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
     class Child(_Child):
         def __init__(self, pid):
@@ -1554,7 +1541,7 @@ def test_worker_owned_tree_reaps_exact_child_when_identity_or_manifest_fails(
 def test_worker_owned_tree_retries_transient_incomplete_proc_identity(
     monkeypatch,
 ) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+    from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
     child = _Child(504)
     observations = iter(
@@ -1590,7 +1577,7 @@ def test_worker_owned_tree_retries_transient_incomplete_proc_identity(
 
 
 def test_worker_owned_tree_stops_only_the_exact_owned_child(monkeypatch) -> None:
-    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+    from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
     children = [_Child(504), _Child(505)]
     signals = []
@@ -1621,7 +1608,7 @@ def test_worker_owned_tree_serializes_concurrent_shutdown_manifest_publication(
     import threading
     import time
 
-    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+    from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
     path = tmp_path / "owned.json"
     tree = WorkerOwnedProcessTree(manifest_path=path)
@@ -1668,7 +1655,7 @@ def test_worker_owned_tree_serializes_concurrent_shutdown_manifest_publication(
 
 
 def test_ros_planner_adapter_closes_owned_node_and_context() -> None:
-    from so101_demo.runtime.parallel_worker_runtime import RosDynamicPlanPrefixAdapter
+    from so101_demo.runtime.parallel_worker_parts.plan_prefix import RosDynamicPlanPrefixAdapter
 
     events = []
     planner = SimpleNamespace(
@@ -1746,7 +1733,7 @@ def test_generation_replacement_rebinds_runtime_ports_before_restart(tmp_path: P
 
 
 def test_default_worker_process_tree_joins_outer_worker_pgid(monkeypatch, tmp_path: Path):
-    from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+    from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
     calls = []
     child = _Child(502)
@@ -1795,7 +1782,7 @@ def test_station_environment_scrubs_and_refuses_a_canonical_prefix(tmp_path: Pat
 
     import os
 
-    from so101_demo.runtime.parallel_worker_runtime import (
+    from so101_demo.runtime.parallel_worker_parts.station import (
         CANONICAL_INSTALL_MARKER,
         station_environment,
     )
@@ -1827,10 +1814,10 @@ def test_station_environment_scrubs_and_refuses_a_canonical_prefix(tmp_path: Pat
 
 def test_terminal_capture_failure_keeps_the_teacher_decision_and_only_marks_the_data_invalid(tmp_path: Path) -> None:
     """Terminal capture and the episode seal are data work: a failure there cannot change the Teacher's result."""
-    from so101_demo.runtime.parallel_worker_runtime import (
+    from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts.receipts import (
         ExecutionCompletionReceipt,
         RuntimeDecision,
-        build_worker_runtime,
     )
 
     lease = _lease()
@@ -1875,7 +1862,7 @@ def test_station_environment_annotations_resolve() -> None:
     """The module defers annotations, so an unimported name in one only fails when something resolves it."""
     import typing
 
-    from so101_demo.runtime import parallel_worker_runtime
+    from so101_demo.runtime.parallel_worker_parts import station as parallel_worker_runtime_station
 
-    hints = typing.get_type_hints(parallel_worker_runtime.station_environment)
+    hints = typing.get_type_hints(parallel_worker_runtime_station.station_environment)
     assert hints["return"] == dict[str, str]

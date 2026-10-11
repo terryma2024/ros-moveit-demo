@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from so101_demo.runtime.parallel_worker_runtime import WorkerOwnedProcessTree
+from so101_demo.runtime.parallel_worker_parts.process_tree import WorkerOwnedProcessTree
 
 
 def test_owned_child_receives_exact_socket_fd_without_new_process_group(tmp_path):

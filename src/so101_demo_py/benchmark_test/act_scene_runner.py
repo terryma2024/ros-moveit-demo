@@ -21,7 +21,10 @@ from so101_demo.parallel_batch.broker import BrokerResponse
 from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest, ModelOutcome
 from so101_demo.runtime import parallel_perception_runtime as runtime
 from so101_demo.runtime.parallel_perception_runtime import normalize_batch
-from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer, _candidates_from_response
+from so101_demo.runtime.parallel_ros_ports.observations import (
+    _candidates_from_response,
+    BrokerMaskLocalizer,
+)
 
 STAMP_NS = 1_000_000_000
 FRAME_ID = "task_camera_frame"

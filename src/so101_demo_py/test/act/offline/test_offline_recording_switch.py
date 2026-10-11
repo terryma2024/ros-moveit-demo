@@ -18,7 +18,8 @@ from so101_demo.act.offline import orchestration
 from so101_demo.act.offline.orchestration import (
     BAG_FAULTS, FAULT_DROP_COUNT, FAULT_TOPIC, LEASE_FIELDS, OfflineCollection, drop_bag_messages)
 from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
-from so101_demo.runtime.parallel_worker_runtime import RuntimeDecision, build_worker_runtime
+from so101_demo.runtime.parallel_worker_runtime import build_worker_runtime
+from so101_demo.runtime.parallel_worker_parts.receipts import RuntimeDecision
 from so101_demo.runtime.task_stack import StackProcessSpec
 from test_parallel_worker_runtime import _ProcessGroup, _lease, _resources, _write_capture
 from paths import PACKAGE_ROOT
@@ -790,7 +791,7 @@ def test_execute_expert_replaces_only_the_data_fields_with_the_processors_verdic
     """The Teacher's receipt passes through `execute_expert`; the data verdict is added beside it, never over it."""
     from test_parallel_worker_runtime import _write_numeric
 
-    from so101_demo.runtime.parallel_worker_runtime import ExecutionCompletionReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import ExecutionCompletionReceipt
 
     monkeypatch.setattr(orchestration, "PilotRecording", pilot_factory())
     processor = FakeProcesses(returncode=3, outputs="invalid")

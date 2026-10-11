@@ -82,7 +82,7 @@ class _ArtifactResults:
             raise CliError("DRY_RUN_WORKSPACE_RESERVATION")
         if self._collection_scope is not None:
             from so101_demo.parallel_batch.contracts import LeaseIdentity
-            from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
+            from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
             if type(lease) is not LeaseIdentity or type(reset_receipt) is not ResetBoundaryReceipt:
                 raise ValueError("ACT_RESET_RECEIPT_SCHEMA")
             if not lease.lease_issued_monotonic_s < reset_receipt.reset_completed_monotonic_s < lease.lease_deadline_monotonic_s:

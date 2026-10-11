@@ -1833,7 +1833,7 @@ def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
     from so101_demo.runtime.parallel_ipc import (
         BrokerTransport,
     )
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     class Probe:
         def snapshot(self):
@@ -2005,7 +2005,7 @@ class SimpleLease:
 
 def test_artifact_workspace_is_reserved_before_runtime_files_and_reused_for_seal(tmp_path):
     from so101_demo.cli.mujoco_batch.worker_process import _ArtifactResults
-    from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
+    from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
 
     lease = SimpleLease()
     root = tmp_path / "worker-01"
@@ -2042,7 +2042,7 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
         load_parallel_runtime_config_linux_cuda,
         load_parallel_runtime_config_linux_cuda,
     )
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     worker_root = tmp_path / "worker-01"
     path = worker_root / "validations/task_start/attempt-1/working/perception/input/rgb.npy"
@@ -3488,7 +3488,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
         load_parallel_runtime_config_linux_cuda,
         load_parallel_runtime_config_linux_cuda,
     )
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     endpoint = tmp_path / "broker-g2.sock"
     discoveries = []

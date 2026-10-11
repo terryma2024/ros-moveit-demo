@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import hashlib
 import json
 import os
@@ -60,7 +61,7 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
     from so101_demo.backends.mujoco import teleop_runtime
-    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_ports import observations as runtime_module_observations
 
     captured_qos = []
 
@@ -143,8 +144,8 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
         ),
     )
 
-    table_supported = runtime_module.observe_parallel_initial_gate(
-        runtime_module.ResetBoundaryReceipt(
+    table_supported = runtime_module_observations.observe_parallel_initial_gate(
+        runtime_module_observations.ResetBoundaryReceipt(
             "reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6
         ),
         timeout_s=0.25,
@@ -153,8 +154,8 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
     assert table_supported.worker_node_fqns == _valid_worker_nodes()
 
     fingertip_contacts["left"] = (SimpleNamespace(geom1="left_fingertip"),)
-    fingertip_contact = runtime_module.observe_parallel_initial_gate(
-        runtime_module.ResetBoundaryReceipt(
+    fingertip_contact = runtime_module_observations.observe_parallel_initial_gate(
+        runtime_module_observations.ResetBoundaryReceipt(
             "reset-2", "session-1", 1.0, 2.0, 2, (0.0,) * 6
         ),
         timeout_s=0.25,
@@ -167,16 +168,16 @@ def test_production_initial_gate_queries_goals_and_uses_action_status_qos(monkey
         RuntimeError,
         match=r"^POINT_INITIAL_GATE_OBSERVATION_TIMEOUT:joint_state$",
     ):
-        runtime_module.observe_parallel_initial_gate(
-            runtime_module.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0),
+        runtime_module_observations.observe_parallel_initial_gate(
+            runtime_module_observations.ResetBoundaryReceipt("reset-2", "session-1", 1.0, 2.0),
             timeout_s=0.05,
         )
 
 
 def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_and_nodes():
-    from so101_demo.runtime.parallel_ros_runtime import (
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
         InitialGateObservation,
-        ParallelRosRuntimePorts,
         ResetBoundaryReceipt,
     )
 
@@ -235,9 +236,9 @@ def test_initial_gate_requires_fresh_observed_joints_goals_attachment_contact_an
 
 
 def test_initial_gate_rejection_names_every_failed_predicate_in_fixed_order():
-    from so101_demo.runtime.parallel_ros_runtime import (
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
         InitialGateObservation,
-        ParallelRosRuntimePorts,
         ResetBoundaryReceipt,
     )
 
@@ -291,7 +292,7 @@ def test_broker_mask_is_decoded_row_major_and_localized_against_exact_depth_and_
         InferenceRequest,
         ModelOutcome,
     )
-    from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
 
     request = InferenceRequest(
         request_id="attempt-1-yolo",
@@ -435,7 +436,7 @@ class _ByInstance:
 
 
 def _ring_candidate_localizer(outcomes, masks=None):
-    from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
 
     masks = masks or [[[0, 1, 1], [0, 0, 1]]] * len(outcomes)
     localizer = _ByInstance(outcomes)
@@ -499,7 +500,7 @@ def test_the_survivors_pose_is_the_localizers_result_for_its_mask_unchanged():
 
 
 def test_a_qualified_response_without_candidates_is_still_ambiguous():
-    from so101_demo.runtime.parallel_ros_runtime import BrokerMaskLocalizer
+    from so101_demo.runtime.parallel_ros_ports.observations import BrokerMaskLocalizer
 
     response = _broker_response([[[1, 0, 0], [0, 0, 0]]])
     response.candidate["candidates"].clear()
@@ -510,7 +511,7 @@ def test_a_qualified_response_without_candidates_is_still_ambiguous():
 
 def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
     from so101_demo.parallel_batch.contracts import ExecutionKind, InferenceRequest
-    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_ports import perception as runtime_module_perception
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
     stamp_ns = 12_000_000_000
@@ -532,7 +533,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
             seen["lookup"] = (target, frame, stamp, timeout_s)
             return "exact-transform"
 
-    monkeypatch.setattr(runtime_module, "BrokerMaskLocalizer", lambda: Localizer())
+    monkeypatch.setattr(runtime_module_perception, "BrokerMaskLocalizer", lambda: Localizer())
     camera = object()
     depth = SimpleNamespace(data=b"depth")
     ports = ParallelRosRuntimePorts(
@@ -591,10 +592,8 @@ def test_production_port_factory_binds_every_production_port_without_empty_side_
 
 
 def test_pause_control_is_retained_across_point_freeze_and_resume() -> None:
-    from so101_demo.runtime.parallel_ros_runtime import (
-        ParallelRosRuntimePorts,
-        ResetBoundaryReceipt,
-    )
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
 
     events = []
 
@@ -632,10 +631,8 @@ def test_pause_control_is_retained_across_point_freeze_and_resume() -> None:
 
 
 def test_recovery_requires_observed_child_and_ros_graph_absence():
-    from so101_demo.runtime.parallel_ros_runtime import (
-        ParallelRosRuntimePorts,
-        ShutdownObservation,
-    )
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import ShutdownObservation
 
     resources = SimpleNamespace(
         worker_id="worker-01", generation=1, session_id="session-1"
@@ -688,12 +685,12 @@ def test_model_policy_persists_admission_and_rejects_mixed_source_clock(
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
     from so101_demo.parallel_batch.perception import LocalizedPose, PerceptionError
-    from so101_demo.runtime.parallel_ros_runtime import (
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
         AdmittedPose,
-        ParallelRosRuntimePorts,
         ResetBoundaryReceipt,
     )
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     lease = _lease()
     worker_root = tmp_path / "worker-01"
@@ -827,12 +824,12 @@ def test_perception_terminal_preserves_only_broker_infrastructure_diagnostic(
         ValidationIdentity,
         load_parallel_runtime_config_linux_cuda,
     )
-    from so101_demo.runtime.parallel_ros_runtime import (
-        ParallelRosRuntimePorts,
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
         PerceptionTerminal,
         ResetBoundaryReceipt,
     )
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     lease = _lease()
     workspace = ValidationWorkspace.create(
@@ -1059,8 +1056,10 @@ def test_inference_capture_retries_frame_older_than_child_ready_fence(
 
 
 def test_initial_gate_requires_exact_worker_node_inventory():
-    from so101_demo.runtime.parallel_ros_runtime import (
-        InitialGateObservation, ParallelRosRuntimePorts, ResetBoundaryReceipt,
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
+        InitialGateObservation,
+        ResetBoundaryReceipt,
     )
 
     expected = (
@@ -1107,8 +1106,10 @@ def test_initial_gate_requires_exact_worker_node_inventory():
 
 def test_initial_gate_worker_node_diagnostic_is_bounded_and_deterministic():
     from so101_demo.parallel_batch.worker import _bounded_failure_message
-    from so101_demo.runtime.parallel_ros_runtime import (
-        InitialGateObservation, ParallelRosRuntimePorts, ResetBoundaryReceipt,
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import (
+        InitialGateObservation,
+        ResetBoundaryReceipt,
     )
 
     expected = ParallelRosRuntimePorts.expected_worker_nodes()
@@ -1276,8 +1277,9 @@ def test_localization_infrastructure_failure_never_triggers_fallback(tmp_path):
         load_parallel_runtime_config_linux_cuda,
     )
     from so101_demo.parallel_batch.broker import BrokerResponse
-    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts, ResetBoundaryReceipt
-    from so101_demo.runtime.parallel_worker_runtime import InferenceSnapshotReceipt
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
+    from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     lease = _lease()
     workspace = ValidationWorkspace.create(
@@ -1380,20 +1382,18 @@ def test_resource_rebind_closes_generation_state_and_uses_new_session():
 
 
 def test_shutdown_cancels_and_independently_confirms_goals_without_reset(monkeypatch):
-    import so101_demo.runtime.parallel_ros_runtime as ros_runtime
-    from so101_demo.runtime.parallel_ros_runtime import (
-        ParallelRosRuntimePorts,
-        ResetBoundaryReceipt,
-    )
+    from so101_demo.runtime.parallel_ros_ports import recovery as ros_runtime_recovery
+    from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
+    from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
 
     events = []
     monkeypatch.setattr(
-        ros_runtime,
+        ros_runtime_recovery,
         "cancel_and_confirm_parallel_goals",
         lambda *, timeout_s: events.append(("cancel", timeout_s)) or True,
     )
     monkeypatch.setattr(
-        ros_runtime,
+        ros_runtime_recovery,
         "observe_no_parallel_goals",
         lambda *, timeout_s: events.append(("confirm", timeout_s)) or True,
     )
@@ -1414,7 +1414,8 @@ def test_shutdown_cancels_and_independently_confirms_goals_without_reset(monkeyp
 def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch):
     import rclpy
     from rclpy.qos import qos_profile_action_status_default
-    from so101_demo.runtime import parallel_ros_runtime as ros_runtime
+    from so101_demo.runtime.parallel_ros_ports import observations as ros_runtime_observations
+    from so101_demo.runtime.parallel_ros_ports import perception as ros_runtime_perception
 
     captured_qos = []
 
@@ -1464,17 +1465,20 @@ def test_recovery_goal_checks_use_transient_local_action_status_qos(monkeypatch)
             return None
 
     monkeypatch.setattr(
-        ros_runtime, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner()
+        ros_runtime_observations, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner()
+    )
+    monkeypatch.setattr(
+        ros_runtime_perception, "_open_isolated_ros_node", lambda *_args, **_kwargs: Owner()
     )
 
-    assert ros_runtime.cancel_and_confirm_parallel_goals(timeout_s=1.0) is True
-    assert ros_runtime.observe_no_parallel_goals(timeout_s=1.0) is True
+    assert ros_runtime_observations.cancel_and_confirm_parallel_goals(timeout_s=1.0) is True
+    assert ros_runtime_observations.observe_no_parallel_goals(timeout_s=1.0) is True
     assert captured_qos == [qos_profile_action_status_default] * 6
 
 
 def test_isolated_ros_node_owns_executor_for_its_private_context(monkeypatch):
     import rclpy.executors
-    from so101_demo.runtime.parallel_ros_runtime import _open_isolated_ros_node
+    from so101_demo.runtime.parallel_ros_ports.isolated_node import _open_isolated_ros_node
 
     events = []
 
@@ -1537,7 +1541,7 @@ def test_isolated_ros_node_owns_executor_for_its_private_context(monkeypatch):
 def test_isolated_ros_node_can_keep_sim_clock_callbacks_live_in_background():
     import threading
 
-    from so101_demo.runtime.parallel_ros_runtime import _IsolatedRosNode
+    from so101_demo.runtime.parallel_ros_ports.isolated_node import _IsolatedRosNode
 
     spun = threading.Event()
 
@@ -1731,7 +1735,7 @@ def test_pose_publication_allows_recovered_publisher_clock_to_catch_up(monkeypat
     monkeypatch.setattr(rclpy, "ok", lambda: True)
     monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
     monkeypatch.setattr(rclpy, "spin_once", spin_once)
-    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: monotonic_s[0])
+    monkeypatch.setattr(time, "monotonic", lambda: monotonic_s[0])
     admitted = SimpleNamespace(
         source_stamp_ns=3_000_000_000,
         pose_world=Pose7((1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0)),
@@ -1748,7 +1752,8 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(
     tmp_path, monkeypatch
 ):
     from so101_demo.core.task_geometry import Pose7
-    from so101_demo.runtime import parallel_ros_runtime as runtime_module
+    from so101_demo.runtime.parallel_ros_ports import observations as runtime_module_observations
+    from so101_demo.runtime.parallel_ros_ports import perception as runtime_module_perception
     from so101_demo.runtime import task_batch_runtime
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
@@ -1807,7 +1812,12 @@ def test_consumer_readiness_primes_and_retains_isolated_pose_publisher(
 
     monkeypatch.setattr(task_batch_runtime, "RosGraphProbe", GraphProbe)
     monkeypatch.setattr(
-        runtime_module,
+        runtime_module_observations,
+        "_open_isolated_ros_node",
+        lambda *_args, **_kwargs: owner,
+    )
+    monkeypatch.setattr(
+        runtime_module_perception,
         "_open_isolated_ros_node",
         lambda *_args, **_kwargs: owner,
     )
@@ -1924,7 +1934,7 @@ def test_pose_publication_fails_closed_when_sim_clock_cannot_reach_source(monkey
         monotonic_s[0] += 1.0
         return monotonic_s[0]
 
-    monkeypatch.setattr(runtime_module.time, "monotonic", monotonic)
+    monkeypatch.setattr(time, "monotonic", monotonic)
     monkeypatch.setattr(rclpy, "ok", lambda: True)
     monkeypatch.setattr(rclpy, "create_node", lambda *_args, **_kwargs: Node())
     monkeypatch.setattr(rclpy, "spin_once", lambda *_args, **_kwargs: None)
@@ -1993,8 +2003,8 @@ def test_execute_result_waits_for_configured_execution_timeout(
     observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))
     waitpid_calls = []
 
-    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: next(observations))
-    monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
+    monkeypatch.setattr(time, "monotonic", lambda: next(observations))
+    monkeypatch.setattr(time, "sleep", lambda _duration: None)
     monkeypatch.setattr(
         os,
         "waitpid",

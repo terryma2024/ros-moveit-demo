@@ -14,7 +14,7 @@ from so101_demo.parallel_batch.contracts import (BatchKind, BatchRequest, RunMod
     AttemptStatus, load_parallel_runtime_config_linux_cuda)
 from so101_demo.parallel_batch.coordinator import BatchCoordinator
 from so101_demo.parallel_batch.journal import CoordinatorJournal
-from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
+from so101_demo.runtime.parallel_ros_ports.observations import ResetBoundaryReceipt
 from so101_demo.act.episode_assembly import assemble_episode_capture, ProductionProducer
 from test_act_continuous_capture import AcquisitionGuard, AcquisitionMinter, feed, reference
 from test_act_recorder import PROVENANCE

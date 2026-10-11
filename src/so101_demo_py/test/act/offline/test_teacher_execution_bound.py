@@ -72,8 +72,8 @@ def test_a_teacher_that_runs_past_240_s_is_still_waited_for_only_240_s_under_the
 
     observations = iter((100.0, 200.0, 300.0, 341.0, 342.0))   # the deadline is 100 + 240 = 340 s
     waitpid_calls = []
-    monkeypatch.setattr(runtime_module.time, "monotonic", lambda: next(observations))
-    monkeypatch.setattr(runtime_module.time, "sleep", lambda _duration: None)
+    monkeypatch.setattr(time, "monotonic", lambda: next(observations))
+    monkeypatch.setattr(time, "sleep", lambda _duration: None)
     monkeypatch.setattr(os, "waitpid", lambda pid, options: (waitpid_calls.append((pid, options)) or (0, 0)))
     ports = ParallelRosRuntimePorts(SimpleNamespace(worker_root=tmp_path, session_id="session-1"), catalog={},
                                     config=contracts.load_parallel_runtime_config_linux_cuda(ACT_FILE))
