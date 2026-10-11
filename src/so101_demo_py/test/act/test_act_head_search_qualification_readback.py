@@ -19,7 +19,8 @@ from head_search_qualification_fixtures import (
     FIXTURE_VALUES,
     build_fixture,
 )
-from so101_demo.act import head_search_aggregate as aggregate
+from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
+from so101_demo.act.head_search_aggregate import run_gates as aggregate_run_gates
 from so101_demo.act import head_search_qualification_readback as readback
 from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
@@ -254,7 +255,7 @@ def test_the_seventeen_values_are_observed_off_the_components_that_consume_them(
 def test_the_document_is_the_one_the_gate_reads(tmp_path: Path) -> None:
     document = _document(tmp_path)
 
-    assert document["kind"] == aggregate.READBACK_KIND
+    assert document["kind"] == aggregate_contracts.READBACK_KIND
     assert document["run_root"] == str(tmp_path / "qualification-run")
     assert document["values_count"] == 17
     assert document["values_sha256"] == canonical_sha256(dict(PROMOTED_VALUES))
@@ -297,8 +298,8 @@ def test_the_gate_holds_against_the_readback_the_real_producer_writes(tmp_path: 
     assert document["run_root"] == str(fixture.run_root)
     assert (evidence / readback.TEARDOWN_ARTIFACT).is_file()
 
-    reasons = aggregate._Reasons()
-    readings = aggregate._gate_values(
+    reasons = aggregate_contracts._Reasons()
+    readings = aggregate_run_gates._gate_values(
         {
             "runtime_readback": result["document_path"],
             "approved_bundle": str(fixture.paths["approved_bundle"]),
@@ -711,7 +712,7 @@ def test_the_cli_runs_the_readback_and_prints_the_measured_values(
     assert "camera_measurements=" in printed
     document = json.loads((evidence / readback.ARTIFACT).read_text(encoding="utf-8"))
     assert document["values_count"] == 17
-    assert document["kind"] == aggregate.READBACK_KIND
+    assert document["kind"] == aggregate_contracts.READBACK_KIND
     assert document["command"].startswith(
         "so101_head_search_calibration measure-qualification-readback"
     )

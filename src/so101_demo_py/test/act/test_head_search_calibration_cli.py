@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from head_search_qualification_fixtures import ANCHORS, build_fixture
 from head_search_qualification_fixtures import digest as fixture_digest
-from so101_demo.act.head_search_aggregate import GATES
+from so101_demo.act.head_search_aggregate.contracts import GATES
 from so101_demo.cli.head_search_calibration import (
     HEAD_SEARCH_MEASUREMENT_INPUTS_INCOMPLETE,
     HEAD_SEARCH_RUN_INPUTS_INCOMPLETE,
@@ -3761,7 +3761,8 @@ def test_measure_production_smoke_refuses_missing_inputs_and_an_existing_root(
 def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_aggregate as aggregate
+    from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
+    from so101_demo.act.head_search_aggregate import measurement_gates as aggregate_measurement_gates
     from so101_demo.act import head_search_production_smoke as smoke
 
     inputs = _production_smoke_inputs(tmp_path)
@@ -3776,7 +3777,7 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
     printed = capsys.readouterr().out
     assert "SMOKE_MEASURED status=PASS" in printed
     document = json.loads((run_root / smoke.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
-    assert document["kind"] == aggregate.SMOKE_KIND
+    assert document["kind"] == aggregate_contracts.SMOKE_KIND
     assert document["phase"] == "production_smoke"
     assert document["terminal_status"] == "TARGET_LOCKED"
     assert document["condition_class"] == "nominal"
@@ -3789,8 +3790,8 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
     assert (run_root / "default" / "stdout.log").is_file()
     assert (run_root / "default" / "stderr.log").is_file()
 
-    reasons = aggregate._Reasons()
-    aggregate._gate_smoke(
+    reasons = aggregate_contracts._Reasons()
+    aggregate_measurement_gates._gate_smoke(
         {"production_smoke_root": str(run_root)},
         {
             "runtime": {

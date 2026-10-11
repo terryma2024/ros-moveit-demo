@@ -40,11 +40,8 @@ def test_owned_head_tf_publisher_launch_uses_joint_cadence_without_changing_othe
     finally:
         if child.poll() is None:child.terminate();child.wait(timeout=2.)
         for handle in stack.handles:handle.close()
-from so101_demo.act.head_search_aggregate import (
-    RESTART_KIND,
-    _gate_restarts,
-    _Reasons,
-)
+from so101_demo.act.head_search_aggregate.contracts import _Reasons, RESTART_KIND
+from so101_demo.act.head_search_aggregate.measurement_gates import _gate_restarts
 from so101_demo.act.head_search_restarts.contracts import (
     AGGREGATE_ARTIFACT,
     ANCHORS,

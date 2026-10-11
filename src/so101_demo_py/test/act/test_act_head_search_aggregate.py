@@ -20,7 +20,8 @@ from head_search_qualification_fixtures import (
     build_fixture,
     digest,
 )
-from so101_demo.act.head_search_aggregate import (
+from so101_demo.act.head_search_aggregate.aggregate import aggregate_qualification
+from so101_demo.act.head_search_aggregate.contracts import (
     ACCEPTANCE_GATES,
     CLOSED_REPORT_ARTIFACT,
     GATES,
@@ -29,9 +30,8 @@ from so101_demo.act.head_search_aggregate import (
     QUALIFIED,
     REFUSED,
     VERDICT_ARTIFACT,
-    aggregate_qualification,
-    classify_qualification_terminal,
 )
+from so101_demo.act.head_search_aggregate.run_gates import classify_qualification_terminal
 from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
 from so101_demo.act.head_search_scenarios.contracts import ARTIFACT, EVIDENCE_DIR, JOURNAL_ARTIFACT
 from so101_demo.act.head_search_scenarios.journal import aggregate_scenarios, scenario_journal_entry

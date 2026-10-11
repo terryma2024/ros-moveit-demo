@@ -219,7 +219,7 @@ def qualify_head_search(inputs: Mapping[str, object], run_root: Path) -> dict:
     the HS-233 failure mode the declared gates replace.
     """
 
-    from so101_demo.act.head_search_aggregate import aggregate_qualification
+    from so101_demo.act.head_search_aggregate.aggregate import aggregate_qualification
 
     return aggregate_qualification(inputs, run_root)
 

@@ -476,10 +476,11 @@ def test_the_aggregator_refuses_a_sealed_journal_that_is_not_there(tmp_path) -> 
 def _gate_smoke(root):
     """The aggregate phase's own ``production_smoke`` gate, fed the produced journal only."""
 
-    from so101_demo.act import head_search_aggregate as aggregate
+    from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
+    from so101_demo.act.head_search_aggregate import measurement_gates as aggregate_measurement_gates
 
-    reasons = aggregate._Reasons()
-    readings = aggregate._gate_smoke(
+    reasons = aggregate_contracts._Reasons()
+    readings = aggregate_measurement_gates._gate_smoke(
         {"production_smoke_root": str(root)},
         {
             "runtime": {
