@@ -49,10 +49,12 @@ from pathlib import Path
 
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_qualification import _require_new_root
-from so101_demo.act.head_search_restarts import (
+from so101_demo.act.head_search_restarts.contracts import (
     RESTART_OWNERSHIP_MISMATCH,
     RESTART_OWNERSHIP_REFUSED,
     RESTART_RUNTIME_UNVERIFIED,
+)
+from so101_demo.act.head_search_restarts.observation import (
     anchor_declarations,
     read_ownership_receipt,
     require_runtime_of_record,
@@ -1221,6 +1223,6 @@ def run_smoke_flight(**kwargs) -> dict:
 def read_runtime_of_record(final_run, production_config=None) -> dict:
     """The frozen runtime's own identity, read off disk through the Step 1 reader."""
 
-    from so101_demo.act.head_search_restarts import read_runtime_of_record as read
+    from so101_demo.act.head_search_restarts.observation import read_runtime_of_record as read
 
     return read(final_run, production_config)

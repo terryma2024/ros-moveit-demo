@@ -12,14 +12,19 @@ import json
 import sys
 
 import pytest
-from so101_demo.act import head_search_restarts as module
+from so101_demo.act.head_execution_stack import RestartStack
+from so101_demo.act.head_search_restarts import contracts as module_contracts
+from so101_demo.act.head_search_restarts import gates as module_gates
+from so101_demo.act.head_search_restarts import observation as module_observation
+from so101_demo.act.head_search_restarts import process_probes as module_process_probes
+from so101_demo.act.head_search_restarts import search_flight as module_search_flight
 
 
 @pytest.mark.parametrize('name,expected_tail',[
     ('robot_state_publisher',['-p','publish_frequency:=100.0']),
     ('ros2_control_node',[]),('spawner neck_controller',[])])
 def test_owned_head_tf_publisher_launch_uses_joint_cadence_without_changing_other_children(tmp_path,name,expected_tail):
-    stack=object.__new__(module.RestartStack)
+    stack=object.__new__(RestartStack)
     stack.workspace=tmp_path;stack.log_path=tmp_path/'child.log';stack.handles=[];stack.logger=None
     stack.event_log_enabled=True
     stack.batch_spawners=False
@@ -40,7 +45,7 @@ from so101_demo.act.head_search_aggregate import (
     _gate_restarts,
     _Reasons,
 )
-from so101_demo.act.head_search_restarts import (
+from so101_demo.act.head_search_restarts.contracts import (
     AGGREGATE_ARTIFACT,
     ANCHORS,
     DECLARED_FRAME_RATE_HZ,
@@ -64,21 +69,25 @@ from so101_demo.act.head_search_restarts import (
     RESTART_STOP_UNPROVEN,
     RESTART_TEARDOWN_UNPROVEN,
     RestartRefused,
+)
+from so101_demo.act.head_search_restarts.gates import (
+    restart_gates,
+    restart_refusals,
+    timing_document,
+    validate_restart_receipt,
+)
+from so101_demo.act.head_search_restarts.observation import (
     anchor_declarations,
     camera_rate,
     classify_nodes,
     frame_thresholds,
     read_ownership_receipt,
-    receipt_document,
-    restart_gates,
-    restart_refusals,
     sim_clock_progress,
     stack_observation,
     teardown_proof,
-    timing_document,
-    validate_restart_receipt,
-    write_head_search_restarts,
 )
+from so101_demo.act.head_search_restarts.restart_run import receipt_document
+from so101_demo.act.head_search_restarts.writer import write_head_search_restarts
 
 SHA = "a" * 64
 OTHER_SHA = "b" * 64
@@ -273,7 +282,7 @@ def test_every_anchor_maps_to_its_own_phase_and_artifact():
         "left": "restart_left",
         "forward": "restart_forward",
     }
-    assert len({module.ARTIFACT_BY_ANCHOR[anchor] for anchor in ANCHORS}) == 3
+    assert len({module_contracts.ARTIFACT_BY_ANCHOR[anchor] for anchor in ANCHORS}) == 3
 
 
 def test_the_receipt_satisfies_the_aggregates_own_restart_gate(tmp_path):
@@ -336,14 +345,14 @@ def test_receipt_is_self_consistent_and_carries_its_own_digest():
     document = receipt()
     assert validate_restart_receipt(document) == []
     body = {key: value for key, value in document.items() if key != "sha256"}
-    assert document["sha256"] == module.canonical_sha256(body)
+    assert document["sha256"] == module_gates.canonical_sha256(body)
 
 
 def test_validate_restart_receipt_names_what_is_missing():
     document = receipt()
     body = {key: value for key, value in document.items() if key != "sha256"}
     del body["detector"]
-    body["sha256"] = module.canonical_sha256(body)
+    body["sha256"] = module_gates.canonical_sha256(body)
     problems = validate_restart_receipt(body)
     assert problems and any("detector" in problem for problem in problems)
 
@@ -469,7 +478,7 @@ def test_camera_rate_refuses_a_rate_that_is_not_the_declared_one():
     reading = camera_rate(slow, declared_hz=DECLARED_FRAME_RATE_HZ)
     assert reading["matches_declared"] is False
     assert reading["measured_rate_hz"] < DECLARED_FRAME_RATE_HZ
-    assert reading["rate_error_hz"] > module.RATE_TOLERANCE_HZ
+    assert reading["rate_error_hz"] > module_contracts.RATE_TOLERANCE_HZ
 
 
 def test_camera_rate_refuses_duplicate_and_backward_stamps():
@@ -702,11 +711,11 @@ def test_producer_runs_the_three_anchors_in_order_and_writes_one_receipt_each(tm
     )
     assert fixture["log"] == ["anchor:default", "anchor:left", "anchor:forward"]
     assert result["receipts"] == {
-        anchor: str(fixture["run_root"] / anchor / module.ARTIFACT_BY_ANCHOR[anchor])
+        anchor: str(fixture["run_root"] / anchor / module_contracts.ARTIFACT_BY_ANCHOR[anchor])
         for anchor in ANCHORS
     }
     for anchor in ANCHORS:
-        path = fixture["run_root"] / anchor / module.ARTIFACT_BY_ANCHOR[anchor]
+        path = fixture["run_root"] / anchor / module_contracts.ARTIFACT_BY_ANCHOR[anchor]
         document = json.loads(path.read_text(encoding="utf-8"))
         assert document["anchor"] == anchor
         assert document["lifecycle"] == LIFECYCLE
@@ -783,7 +792,7 @@ def test_producer_records_a_refused_anchor_and_still_runs_the_next_one(tmp_path)
     assert refusal.value.code == RESTART_SEARCH_UNPROVEN
     assert fixture["log"] == ["anchor:default", "anchor:left", "anchor:forward"]
     for anchor in ANCHORS:
-        assert (fixture["run_root"] / anchor / module.ARTIFACT_BY_ANCHOR[anchor]).is_file()
+        assert (fixture["run_root"] / anchor / module_contracts.ARTIFACT_BY_ANCHOR[anchor]).is_file()
     aggregate = json.loads((fixture["run_root"] / AGGREGATE_ARTIFACT).read_text(encoding="utf-8"))
     assert aggregate["receipt_status"] == {"default": "PASS", "left": "REFUSED", "forward": "PASS"}
 
@@ -803,13 +812,13 @@ def test_producer_stops_at_the_anchor_whose_teardown_cannot_be_proven(tmp_path):
         )
     assert refusal.value.code == RESTART_TEARDOWN_UNPROVEN
     assert fixture["log"] == ["anchor:default", "anchor:left"]
-    assert (fixture["run_root"] / "default" / module.ARTIFACT_BY_ANCHOR["default"]).is_file()
+    assert (fixture["run_root"] / "default" / module_contracts.ARTIFACT_BY_ANCHOR["default"]).is_file()
     assert not (fixture["run_root"] / "forward").exists()
 
 
 def test_producer_refuses_a_runtime_that_never_falls_back_to_the_cpu():
     with pytest.raises(RestartRefused) as refusal:
-        module.require_runtime_of_record(runtime_identity(allow_cpu_fallback=True))
+        module_observation.require_runtime_of_record(runtime_identity(allow_cpu_fallback=True))
     assert refusal.value.code == RESTART_RUNTIME_UNVERIFIED
 
 
@@ -836,7 +845,7 @@ def test_the_command_record_collapses_repeated_ticks_into_one_target():
         },
     ]
 
-    record = module.command_targets(consumed, initial_target_rad=0.1)
+    record = module_search_flight.command_targets(consumed, initial_target_rad=0.1)
 
     assert [entry["target_rad"] for entry in record["targets"]] == [0.1, 0.231]
     assert record["initial_target_rad"] == 0.1
@@ -853,7 +862,7 @@ def test_the_command_record_collapses_repeated_ticks_into_one_target():
 
 
 def test_the_command_record_ignores_a_decision_that_commanded_no_target():
-    record = module.command_targets(
+    record = module_search_flight.command_targets(
         [
             {"frame": {"sim_time_s": 1.0}, "decision": {"status": "TARGET_LOCKED", "found": True}},
             {"frame": {"sim_time_s": 1.1}, "decision": {"neck_target_rad": None, "stop": True}},
@@ -878,15 +887,15 @@ def test_the_flight_node_runs_on_the_stacks_clock():
 
     import inspect
 
-    overrides = module.flight_node_overrides()
+    overrides = module_process_probes.flight_node_overrides()
     assert [(parameter.name, parameter.value) for parameter in overrides] == [("use_sim_time", True)]
 
-    assert module.flight_node_name("default") == "head_search_restart_default"
+    assert module_process_probes.flight_node_name("default") == "head_search_restart_default"
     for anchor in ANCHORS:
-        assert f"/{module.flight_node_name(anchor)}" in module.RUNNER_NODE_NAMES
+        assert f"/{module_process_probes.flight_node_name(anchor)}" in module_process_probes.RUNNER_NODE_NAMES
 
     # the node the flight really builds is the one that carries the override
-    source = inspect.getsource(module.measure_and_search)
+    source = inspect.getsource(module_search_flight.measure_and_search)
     assert "flight_node_overrides()" in source
     assert "Node(flight_node_name(anchor)" in source
 
@@ -920,7 +929,7 @@ def test_the_neck_port_diagnostic_records_both_clocks_a_command_is_judged_with()
         _stamp = 111.86
         max_age = 0.014736005008453503
 
-    diagnostic = module.neck_port_diagnostic(_Neck(), _Node(), 1000.004)
+    diagnostic = module_process_probes.neck_port_diagnostic(_Neck(), _Node(), 1000.004)
 
     assert diagnostic["use_sim_time"] is True
     assert diagnostic["node_name"] == "head_search_restart_default"
@@ -955,7 +964,7 @@ def test_the_neck_port_diagnostic_survives_a_node_without_the_parameter():
         _stamp = None
         max_age = 0.01
 
-    diagnostic = module.neck_port_diagnostic(_Neck(), _Node(), 5.0)
+    diagnostic = module_process_probes.neck_port_diagnostic(_Neck(), _Node(), 5.0)
 
     assert diagnostic["use_sim_time"] is None
     assert diagnostic["feedback_wall_age_s"] is None

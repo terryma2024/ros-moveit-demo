@@ -13,7 +13,6 @@ the shape that gate reads cannot drift apart unnoticed.
 
 from __future__ import annotations
 
-import inspect
 import json
 from pathlib import Path
 
@@ -796,12 +795,12 @@ def test_the_producer_refuses_a_seal_that_declares_no_coarse_step(tmp_path) -> N
 
 def test_legacy_flight_refuses_before_calling_restart(tmp_path, monkeypatch) -> None:
     from so101_demo.act import head_search_production_smoke as module
-    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_restarts import restart_run as restarts_restart_run
 
     def forbidden_restart(**kwargs):
         pytest.fail('legacy smoke attempted to enter restart execution')
 
-    monkeypatch.setattr(restarts, 'run_anchor_restart', forbidden_restart)
+    monkeypatch.setattr(restarts_restart_run, 'run_anchor_restart', forbidden_restart)
     with pytest.raises(module.SmokeRefused, match='HEAD_LEGACY_EXECUTION_REMOVED'):
         module.run_smoke_flight(anchor='default', root=tmp_path / 'unclaimed',
                                declared={'anchor': 'default'})

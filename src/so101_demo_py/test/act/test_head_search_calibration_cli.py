@@ -3278,7 +3278,9 @@ def _restart_arguments(inputs: dict, output: Path, *extra: str) -> list:
 def _patch_restart_flight(monkeypatch, *, status="PASS"):
     """Stub the two heavy seams: the runtime readback and the per-anchor flight itself."""
 
-    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search_restarts import observation as restarts_observation
+    from so101_demo.act.head_search_restarts import restart_run as restarts_restart_run
 
     seen: dict = {}
 
@@ -3305,7 +3307,7 @@ def _patch_restart_flight(monkeypatch, *, status="PASS"):
             "anchor": anchor,
             "declared_anchor": dict(kwargs["declared"]),
             "stack": {
-                "nodes": list(restarts.STACK_OWNED_NODES),
+                "nodes": list(restarts_contracts.STACK_OWNED_NODES),
                 "processes": [
                     {"pid": 11, "argv": "lib/mujoco_ros2_control/ros2_control_node"},
                     {"pid": 12, "argv": "lib/robot_state_publisher/robot_state_publisher"},
@@ -3367,8 +3369,8 @@ def _patch_restart_flight(monkeypatch, *, status="PASS"):
                              "wrong_locks": 0}
         return row
 
-    monkeypatch.setattr(restarts, "read_runtime_of_record", fake_runtime)
-    monkeypatch.setattr(restarts, "run_anchor_restart", fake)
+    monkeypatch.setattr(restarts_observation, "read_runtime_of_record", fake_runtime)
+    monkeypatch.setattr(restarts_restart_run, "run_anchor_restart", fake)
     return seen
 
 
@@ -3402,11 +3404,11 @@ def test_measure_restarts_runs_the_three_anchors_and_writes_three_receipts(
     printed = capsys.readouterr().out
     assert "HEAD_SEARCH_RESTARTS_MEASURED" in printed
     assert "status=PASS" in printed
-    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
 
-    for anchor in restarts.ANCHORS:
+    for anchor in restarts_contracts.ANCHORS:
         document = json.loads(
-            (run_root / anchor / restarts.ARTIFACT_BY_ANCHOR[anchor]).read_text(encoding="utf-8")
+            (run_root / anchor / restarts_contracts.ARTIFACT_BY_ANCHOR[anchor]).read_text(encoding="utf-8")
         )
         assert document["anchor"] == anchor
         assert document["kind"] == "head_search_full_restart_receipt"
@@ -3421,8 +3423,8 @@ def test_measure_restarts_runs_the_three_anchors_and_writes_three_receipts(
         }
         assert (run_root / anchor / "stdout.log").is_file()
         assert (run_root / anchor / "stderr.log").is_file()
-    aggregate = json.loads((run_root / restarts.AGGREGATE_ARTIFACT).read_text(encoding="utf-8"))
-    assert aggregate["anchors"] == list(restarts.ANCHORS)
+    aggregate = json.loads((run_root / restarts_contracts.AGGREGATE_ARTIFACT).read_text(encoding="utf-8"))
+    assert aggregate["anchors"] == list(restarts_contracts.ANCHORS)
     assert aggregate["status"] == "PASS"
 
 
@@ -3440,7 +3442,8 @@ def test_measure_restarts_returns_two_when_an_anchor_refuses(
 def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search_restarts import writer as restarts_writer
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 
     inputs = _restart_inputs(tmp_path)
@@ -3448,13 +3451,13 @@ def test_measure_restarts_reports_the_librarys_refusal_and_returns_two(
 
     def refuse(**kwargs):
         raise CalibrationInputsRefused(
-            restarts.RESTART_OWNERSHIP_REFUSED,
+            restarts_contracts.RESTART_OWNERSHIP_REFUSED,
             "the exclusive-ownership gate refused with STACK_OWNER_ACTIVE",
         )
 
-    monkeypatch.setattr(restarts, "write_head_search_restarts", refuse)
+    monkeypatch.setattr(restarts_writer, "write_head_search_restarts", refuse)
     assert main(_restart_arguments(inputs, tmp_path / "restart-run")) == 2
-    assert restarts.RESTART_OWNERSHIP_REFUSED in capsys.readouterr().err
+    assert restarts_contracts.RESTART_OWNERSHIP_REFUSED in capsys.readouterr().err
 
 
 # --- serve-teleop is the owned acceptance, not a descriptor writer -------------------
@@ -3623,7 +3626,8 @@ def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", tea
     """Stub the two heavy seams: the runtime readback and the one smoke flight itself."""
 
     from so101_demo.act import head_search_production_smoke as smoke
-    from so101_demo.act import head_search_restarts as restarts
+    from so101_demo.act.head_search_restarts import contracts as restarts_contracts
+    from so101_demo.act.head_search_restarts import observation as restarts_observation
 
     seen: dict = {}
 
@@ -3665,7 +3669,7 @@ def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", tea
             "anchor": anchor,
             "declared_anchor": dict(kwargs["declared"]),
             "stack": {
-                "nodes": list(restarts.STACK_OWNED_NODES),
+                "nodes": list(restarts_contracts.STACK_OWNED_NODES),
                 "processes": [{"pid": "11", "argv": "lib/mujoco_ros2_control/ros2_control_node"}],
                 "gpu_compute_apps": [],
             },
@@ -3734,7 +3738,7 @@ def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", tea
             "finished_at_utc": "2026-10-02T00:01:01Z",
         }
 
-    monkeypatch.setattr(restarts, "read_runtime_of_record", fake_runtime)
+    monkeypatch.setattr(restarts_observation, "read_runtime_of_record", fake_runtime)
     monkeypatch.setattr(smoke, "run_smoke_flight", fake)
     return seen
 

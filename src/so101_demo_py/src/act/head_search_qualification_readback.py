@@ -97,19 +97,21 @@ from so101_demo.act.head_search_measured_readback import (
     observe_measured_readbacks,
 )
 from so101_demo.act.head_search_ownership import APPROVED_VALUE_COUNT
-from so101_demo.act.head_search_restarts import (
+from so101_demo.act.head_search_restarts.contracts import (
     CAMERA_INFO_TOPIC,
     CAMERA_PROBE_S,
     JOINT_TOPIC,
     RESTART_OWNERSHIP_MISMATCH,
     RESTART_OWNERSHIP_REFUSED,
     RESTART_RUNTIME_UNVERIFIED,
-    probe_owners,
+)
+from so101_demo.act.head_search_restarts.gates import stack_environment
+from so101_demo.act.head_search_restarts.observation import (
     read_ownership_receipt,
     require_runtime_of_record,
-    stack_environment,
     teardown_proof,
 )
+from so101_demo.act.head_search_restarts.process_probes import probe_owners
 from so101_demo.perception_benchmark.contracts import canonical_sha256
 
 SCHEMA_VERSION = 1
@@ -923,7 +925,7 @@ def run_readback_observation(
     from rclpy.time import Time
     from sensor_msgs.msg import CameraInfo, Image, JointState
     from so101_demo.act.head_search_deadband_measurement.plant import _anchor_requests
-    from so101_demo.act.head_search_restarts import (
+    from so101_demo.act.head_search_restarts.restart_run import (
         _await_graph,
         _kill_stragglers,
         _require_empty,

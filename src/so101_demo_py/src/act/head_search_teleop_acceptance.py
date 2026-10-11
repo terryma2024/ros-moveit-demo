@@ -1253,7 +1253,7 @@ class TeleopAcceptance:
 
 
 def stack_environment(session_id: str, base: Mapping | None = None) -> dict:
-    from so101_demo.act.head_search_restarts import stack_environment as build
+    from so101_demo.act.head_search_restarts.gates import stack_environment as build
 
     return build(session_id, base)
 
@@ -1261,7 +1261,7 @@ def stack_environment(session_id: str, base: Mapping | None = None) -> dict:
 def real_stack_factory(**kwargs):
     """The frozen production composition: the same transport and the same four controllers."""
 
-    from so101_demo.act.head_search_restarts import RestartStack
+    from so101_demo.act.head_execution_stack import RestartStack
 
     kwargs.pop("logger", None)
     return RestartStack(
@@ -1276,7 +1276,7 @@ def real_stack_factory(**kwargs):
 
 
 def real_ownership_probe() -> dict:
-    from so101_demo.act.head_search_restarts import probe_owners
+    from so101_demo.act.head_search_restarts.process_probes import probe_owners
 
     observation = probe_owners()
     return {
@@ -1307,7 +1307,7 @@ def detector_flight(
     import rclpy
     from rclpy.node import Node
     from sensor_msgs.msg import Image
-    from so101_demo.act.head_search_restarts import TimedHeadDetector
+    from so101_demo.act.head_search_restarts.process_probes import TimedHeadDetector
 
     # the operating point is the frozen candidate's own declaration when it was supplied
     point = dict(operating_point or {}) or {"iou": float(values.get("tracking_iou", 0.5))}
@@ -1560,7 +1560,7 @@ def accept_teleop(
 ) -> dict:
     """Assemble and run the real acceptance: the one entry point ``serve-teleop`` calls."""
 
-    from so101_demo.act.head_search_restarts import read_runtime_of_record
+    from so101_demo.act.head_search_restarts.observation import read_runtime_of_record
 
     # the run root is claimed by the acceptance itself, first thing, so a refused input can never leave
     # a half-created run root behind and two starts can never both believe they won it
@@ -1584,7 +1584,7 @@ def accept_teleop(
     values = dict(document.get("values") or {})
     operating_point = {}
     if frozen_candidate is not None:
-        from so101_demo.act.head_search_restarts import _operating_point
+        from so101_demo.act.head_search_restarts.search_flight import _operating_point
 
         operating_point = dict(_operating_point(frozen_candidate))
     weights = Path(weights_path or runtime.get("weight_path") or "")
