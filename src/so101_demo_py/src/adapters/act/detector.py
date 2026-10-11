@@ -11,12 +11,12 @@ from so101_demo.act.contracts import fields, finite, identifier, integer, sha256
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 
 
-# A fragment must be substantially smaller and less confident than its parent.
-# Independent mask and bbox containment allow tiny segmentation/box edge errors.
-_FRAGMENT_MIN_CONTAINMENT = .95
-_FRAGMENT_MAX_AREA_RATIO = .5
-_FRAGMENT_MAX_CONFIDENCE = .5
-_FRAGMENT_MAX_CONFIDENCE_RATIO = .5
+# A candidate nested in a higher-ranked kept mask of the same class is a part of
+# that cup (an occluded or split instance), whatever its own confidence. Mask and
+# bbox containment are independent; every boundary is inclusive.
+NESTED_MIN_MASK_CONTAINMENT = .95
+NESTED_MIN_BBOX_CONTAINMENT = .95
+NESTED_MAX_AREA_RATIO = .8
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +114,22 @@ def overlap(a, b):
     return intersection / union if union > 0 else 0.
 
 
+def is_nested_in(candidate, kept):
+    """True when candidate is a smaller part of kept: both containments and area."""
+    import numpy as np
+    area = np.count_nonzero(candidate.mask)
+    kept_area = np.count_nonzero(kept.mask)
+    if area == 0 or area > NESTED_MAX_AREA_RATIO * kept_area:
+        return False
+    if np.count_nonzero(candidate.mask & kept.mask) / area < NESTED_MIN_MASK_CONTAINMENT:
+        return False
+    x1, y1, x2, y2 = candidate.bbox_xyxy
+    kx1, ky1, kx2, ky2 = kept.bbox_xyxy
+    bbox_intersection = (max(0., min(x2, kx2)-max(x1, kx1)) *
+                         max(0., min(y2, ky2)-max(y1, ky1)))
+    return bbox_intersection / ((x2-x1) * (y2-y1)) >= NESTED_MIN_BBOX_CONTAINMENT
+
+
 class HeadRgbDetector:
     def __init__(self, detector, *, model_id, weights_sha256, tracking_iou, min_bbox_aspect):
         self.detector = detector
@@ -156,7 +172,7 @@ class HeadRgbDetector:
             if (y2-y1) / (x2-x1) < self.min_bbox_aspect: continue
             eligible.append(candidate)
         distinct = []
-        # Duplicate masks from one cup must not create competing spatial tracks.
+        # Duplicate or nested masks from one cup must not create competing spatial tracks.
         for candidate in sorted(eligible, key=lambda value: (
                 -value.confidence, value.bbox_xyxy, value.instance_id)):
             duplicate = False
@@ -167,24 +183,7 @@ class HeadRgbDetector:
                 if intersection / union >= .7:
                     duplicate = True
                     break
-                if (candidate.confidence > _FRAGMENT_MAX_CONFIDENCE or
-                        candidate.confidence >= kept.confidence or
-                        candidate.confidence > (
-                            _FRAGMENT_MAX_CONFIDENCE_RATIO * kept.confidence)):
-                    continue
-                area = np.count_nonzero(candidate.mask)
-                kept_area = np.count_nonzero(kept.mask)
-                if (area > _FRAGMENT_MAX_AREA_RATIO * kept_area or
-                        intersection / area < _FRAGMENT_MIN_CONTAINMENT):
-                    continue
-                x1, y1, x2, y2 = candidate.bbox_xyxy
-                kx1, ky1, kx2, ky2 = kept.bbox_xyxy
-                bbox_area = (x2-x1) * (y2-y1)
-                kept_bbox_area = (kx2-kx1) * (ky2-ky1)
-                bbox_intersection = (max(0., min(x2, kx2)-max(x1, kx1)) *
-                                     max(0., min(y2, ky2)-max(y1, ky1)))
-                if (bbox_area <= _FRAGMENT_MAX_AREA_RATIO * kept_bbox_area and
-                        bbox_intersection / bbox_area >= _FRAGMENT_MIN_CONTAINMENT):
+                if is_nested_in(candidate, kept):
                     duplicate = True
                     break
             if not duplicate:

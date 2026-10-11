@@ -1,0 +1,26 @@
+{
+  "sources": [
+    {
+      "name": "head40",
+      "path": "/data/work/so101-evidence/act-data/20260924-fbc25063-resume/postrefactor-live-20261011/head40/runs/hf40s5-900027-1/artifacts/f8cb47fd879cbe7c81a53f7835858b35f7f975d31f94396dbd1c4eaf20160dcd.rgb",
+      "rgb_sha256": "f8cb47fd879cbe7c81a53f7835858b35f7f975d31f94396dbd1c4eaf20160dcd",
+      "count": 3
+    },
+    {
+      "name": "rerun2",
+      "path": "/data/work/so101-evidence/act-data/20260924-fbc25063-resume/head-interrupt-fix-20261011/rerun2/runs/hj1-900027-1/artifacts/683b56b548d9c0dd4564a582be1f96a63bdadc3e68b5163932e922a57f38bd1e.rgb",
+      "rgb_sha256": "683b56b548d9c0dd4564a582be1f96a63bdadc3e68b5163932e922a57f38bd1e",
+      "count": 3
+    },
+    {
+      "name": "two_cups",
+      "path": "/data/work/so101-evidence/act-data/20260924-fbc25063-resume/postrefactor-live-20261011/head40/runs/hf40s5-900024-1/artifacts/38b21c126100696d022e5144bbfa27401b38d47d208f65ce91bea90a4ccc020e.rgb",
+      "rgb_sha256": "38b21c126100696d022e5144bbfa27401b38d47d208f65ce91bea90a4ccc020e",
+      "count": 2
+    }
+  ],
+  "weights_sha256": "2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a",
+  "fixture": "test/data/head_900027_nested_children.npz",
+  "note": "Post-erosion boolean masks, boxes and confidences from an offline YoloSegDetector replay (c2a weights, imgsz 640) of the saved decision frames: head40 and rerun2 are the one partial-occlusion cup (900027); two_cups is 900024, two separate cups. Candidates are ordered by descending confidence. Ordinary tests do not load the model.",
+  "fixture_sha256": "f7094b65c8415ee091c6ffa75d99d274bf6a8d607f1e37057eea69132f02b546"
+}

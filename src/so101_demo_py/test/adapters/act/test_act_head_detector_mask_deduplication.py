@@ -4,6 +4,7 @@
 import numpy as np
 import pytest
 
+from so101_demo.adapters.act import detector as detector_module
 from so101_demo.adapters.act.detector import HeadRgbDetector
 from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 from so101_demo.act.search import HeadSearchController
@@ -74,10 +75,14 @@ def test_actual_900027_duplicate_masks_keep_high_confidence_instance(reverse):
         assert not value.mask.flags.writeable
 
 
-@pytest.mark.parametrize('shared_pixels, expected_count', [(7, 1), (6, 2)])
-def test_mask_overlap_boundary_is_inclusive(shared_pixels, expected_count):
-    head = runtime([candidate('high', mask(*range(10)), confidence=.9),
-                    candidate('low', mask(*range(shared_pixels)), confidence=.8)])
+@pytest.mark.parametrize('extra_pixels, expected_count', [(1, 1), (2, 2)])
+def test_mask_iou_boundary_is_inclusive(extra_pixels, expected_count):
+    # The low mask is not nested (7/8 and 7/9 inside the high mask), so only the
+    # IoU rule applies: 7/10 is exactly .7, 7/11 is below it.
+    high = mask(*range(9))
+    low = mask(*range(2, 9), *range(9, 9 + extra_pixels))
+    head = runtime([candidate('high', high, confidence=.9),
+                    candidate('low', low, confidence=.8)])
     assert len(detect(head)) == expected_count
 
 
@@ -196,46 +201,172 @@ def test_actual_nested_fragment_still_requires_three_fresh_frames_before_lock():
         'status'] == 'TARGET_LOCKED'
 
 
+BROAD_BOX = (300., 200., 400., 300.)
+
+
+def nested_pair(child_pixels, child_box, *, child_confidence=.8, child_class='plastic_cup',
+                reverse=False):
+    """A 100 px parent on row 200 and a child; return the deduplicated result."""
+    candidates = [candidate('broad', mask(*range(300, 400)), box=BROAD_BOX, confidence=.9),
+                  candidate('child', mask(*child_pixels), box=child_box,
+                            confidence=child_confidence, class_id=child_class)]
+    if reverse:
+        candidates.reverse()
+    return detect(runtime(candidates))
+
+
 @pytest.mark.parametrize('reverse', [False, True])
-@pytest.mark.parametrize('damage', [None, 'mask_containment', 'mask_area',
-                                   'bbox_containment', 'bbox_area',
-                                   'confidence_absolute', 'confidence_relative',
-                                   'confidence_equal', 'class'])
-def test_nested_fragment_guards_and_inclusive_boundaries(damage, reverse):
-    # Exactly 19/20 mask and bbox containment, 20/40 mask area, 200/400 bbox
-    # area, and .5/1 confidence exercise all inclusive boundaries together.
-    broad_mask = mask(*range(300, 340))
-    fragment_mask = mask(*range(321, 341))
-    broad_box = (300., 200., 320., 220.)
-    fragment_box = (310.5, 200., 320.5, 220.)
-    broad_confidence, fragment_confidence = 1., .5
-    fragment_class = 'plastic_cup'
-    if damage == 'mask_containment':
-        fragment_mask = mask(*range(322, 342))  # 18/20 inside.
-    elif damage == 'mask_area':
-        fragment_mask = mask(*range(318, 339))  # 21/40, despite full containment.
-    elif damage == 'bbox_containment':
-        fragment_box = (310.51, 200., 320.51, 220.)
-    elif damage == 'bbox_area':
-        fragment_box = (310.4, 200., 320.41, 220.)
-    elif damage == 'confidence_absolute':
-        fragment_confidence = .5001
-    elif damage == 'confidence_relative':
-        broad_confidence = .999
-    elif damage == 'confidence_equal':
-        broad_confidence = .5
-    elif damage == 'class':
-        fragment_class = 'cup'
-    candidates = [candidate('broad', broad_mask, box=broad_box,
-                            confidence=broad_confidence),
-                  candidate('fragment', fragment_mask, box=fragment_box,
-                            confidence=fragment_confidence, class_id=fragment_class)]
+@pytest.mark.parametrize('child_pixels, child_box, expected_count', [
+    # Fully nested child: dropped.
+    (range(310, 340), (310., 210., 340., 250.), 1),
+    # Mask containment: 19/20 = .95 is inclusive, 18/20 is not.
+    (range(381, 401), (381., 210., 400., 250.), 1),
+    (range(382, 402), (381., 210., 400., 250.), 2),
+    # Bbox containment: 19/20 = .95 is inclusive, 18/20 is not.
+    (range(381, 400), (381., 210., 401., 250.), 1),
+    (range(381, 400), (382., 210., 402., 250.), 2),
+    # The child's mask is only 82 percent inside the parent (41/50): both stay.
+    (range(359, 409), (359., 210., 400., 250.), 2),
+])
+def test_containment_thresholds_are_inclusive(child_pixels, child_box, expected_count,
+                                              reverse):
+    result = nested_pair(child_pixels, child_box, reverse=reverse)
+    assert len(result) == expected_count
+    if expected_count == 1:
+        assert result[0]['xyxy'] == BROAD_BOX
+
+
+def nested_predicate(child_pixels, child_box):
+    parent = candidate('broad', mask(*range(300, 400)), box=BROAD_BOX, confidence=.9)
+    child = candidate('child', mask(*child_pixels), box=child_box, confidence=.8)
+    return detector_module.is_nested_in(child, parent)
+
+
+@pytest.mark.parametrize('child_pixels, child_box, expected', [
+    # Area ratio: 80/100 = .8 is inclusive, 81/100 is not.
+    (range(310, 390), (310., 210., 390., 250.), True),
+    (range(310, 391), (310., 210., 391., 250.), False),
+    # The same boundaries for mask and bbox containment.
+    (range(381, 401), (381., 210., 400., 250.), True),
+    (range(382, 402), (381., 210., 400., 250.), False),
+    (range(381, 400), (381., 210., 401., 250.), True),
+    (range(381, 400), (382., 210., 402., 250.), False),
+])
+def test_nested_predicate_boundaries_are_inclusive(child_pixels, child_box, expected):
+    # The area-ratio cap is not reachable through detect(): a mask that is at
+    # least 95 percent inside a larger one with a ratio above .8 always has an
+    # IoU above .7 and is removed by the IoU rule, so it is pinned here.
+    assert nested_predicate(child_pixels, child_box) is expected
+
+
+def test_containment_dedup_thresholds_are_the_named_constants():
+    assert (detector_module.NESTED_MIN_MASK_CONTAINMENT,
+            detector_module.NESTED_MIN_BBOX_CONTAINMENT,
+            detector_module.NESTED_MAX_AREA_RATIO) == (.95, .95, .8)
+
+
+@pytest.mark.parametrize('child_confidence', [.89, .5001, .3, .26])
+def test_fully_nested_child_is_dropped_whatever_its_confidence(child_confidence):
+    # Neither a high absolute confidence nor a confidence close to the parent's
+    # protects a child that lies wholly inside a higher-confidence mask.
+    result = nested_pair(range(310, 340), (310., 210., 340., 250.),
+                         child_confidence=child_confidence)
+    assert [value['xyxy'] for value in result] == [BROAD_BOX]
+
+
+def test_nested_child_of_another_class_is_not_dropped():
+    assert len(nested_pair(range(310, 340), (310., 210., 340., 250.),
+                           child_class='cup')) == 2
+
+
+def test_equal_confidence_nested_child_follows_the_tie_break_order():
+    # Candidates are ranked by confidence, then bbox, then instance id, and only
+    # a candidate ranked below a kept mask can be dropped as nested in it.
+    result = detect(runtime([
+        candidate('broad', mask(*range(300, 400)), box=BROAD_BOX, confidence=.9),
+        candidate('child', mask(*range(310, 340)), box=(310., 210., 340., 250.),
+                  confidence=.9)]))
+    assert [value['xyxy'] for value in result] == [BROAD_BOX]
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_front_mask_over_a_comparable_second_cup_is_not_a_containment_duplicate(reverse):
+    # A front mask that covers 75 of 90 pixels (83 percent) of a comparably sized
+    # second candidate (ratio .9 > .8) is neither nested nor an IoU duplicate
+    # (75/115 = .65), so two real cups stay two and the search stays ambiguous.
+    second = range(325, 415)
+    assert not nested_predicate(second, (325., 210., 415., 290.))
+    result = nested_pair(second, (325., 210., 415., 290.), reverse=reverse)
+    assert len(result) == 2
+    decision = HeadSearchController(config(min_confidence=.25)).tick(
+        *evidence(1., detections=result), 1.)
+    assert decision['status'] == 'TARGET_AMBIGUOUS'
+
+
+def test_fully_covered_comparable_candidate_is_removed_by_the_iou_rule_only():
+    # Full containment with a ratio above .8 is a mask duplicate (IoU .9), as it
+    # was before containment dedup; the containment predicate itself rejects it.
+    second = range(310, 400)
+    assert not nested_predicate(second, (310., 210., 400., 290.))
+    assert len(nested_pair(second, (310., 210., 400., 290.))) == 1
+
+
+def captured_900027(name):
+    with np.load(TEST_ROOT / 'data/head_900027_nested_children.npz') as saved:
+        return [candidate(f'{name}-{index}', pixels, confidence=float(box[4]),
+                          box=tuple(float(value) for value in box[:4]))
+                for index, (pixels, box) in enumerate(zip(
+                    saved[f'masks_{name}'], saved[f'boxes_{name}']))]
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+@pytest.mark.parametrize('name, count', [('head40', 3), ('rerun2', 3)])
+def test_actual_900027_nested_children_keep_the_whole_cup(name, count, reverse):
+    candidates = captured_900027(name)
+    whole = candidates[0]
+    assert len(candidates) == count
+    assert whole.confidence == max(value.confidence for value in candidates)
+    # Both children lie inside the whole silhouette (IoU alone misses some).
+    for child in candidates[1:]:
+        assert np.count_nonzero(child.mask & whole.mask) / np.count_nonzero(
+            child.mask) >= .99
+    if reverse:
+        candidates.reverse()
+    snapshots = [value.mask.copy() for value in candidates]
+    head = runtime(candidates)
+    assert detect(head) == [dict(xyxy=whole.bbox_xyxy, confidence=whole.confidence,
+                                class_id=0, track_id='head-cup-0')]
+    assert detect(head, 2)[0]['track_id'] == 'head-cup-0'
+    assert len(head.detector.batch.candidates) == count
+    for value, before in zip(candidates, snapshots):
+        np.testing.assert_array_equal(value.mask, before)
+        assert not value.mask.flags.writeable
+
+
+def test_actual_900027_nested_children_are_one_target_for_the_search():
+    # The whole cup is off-centre in this frame, so the search centres it; the
+    # point is that it never ends as TARGET_AMBIGUOUS.
+    head = runtime(captured_900027('head40'))
+    search = HeadSearchController(config(min_confidence=.25))
+    for stamp, time_s in ((1, 1.), (2, 1.1), (3, 1.2)):
+        decision = search.tick(*evidence(time_s, detections=detect(head, stamp)), time_s)
+        assert decision['status'] != 'TARGET_AMBIGUOUS'
+    assert decision['status'] == 'CENTER_CUP'
+
+
+@pytest.mark.parametrize('reverse', [False, True])
+def test_actual_two_separate_cups_stay_two_and_ambiguous(reverse):
+    candidates = captured_900027('two_cups')
+    assert len(candidates) == 2
+    assert np.count_nonzero(candidates[0].mask & candidates[1].mask) == 0
     if reverse:
         candidates.reverse()
     result = detect(runtime(candidates))
-    assert len(result) == (1 if damage is None else 2)
-    if damage is None:
-        assert result[0]['xyxy'] == broad_box
+    assert sorted(value['xyxy'] for value in result) == sorted(
+        value.bbox_xyxy for value in candidates)
+    decision = HeadSearchController(config(min_confidence=.25)).tick(
+        *evidence(1., detections=result), 1.)
+    assert decision['status'] == 'TARGET_AMBIGUOUS'
 
 
 @pytest.mark.parametrize('shared_pixels', [0, 8, 19])
