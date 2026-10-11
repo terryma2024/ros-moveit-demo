@@ -69,11 +69,50 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3558
+latest_checkpoint: CP-3559
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3559 — cleanup freed 798 GB; Head functional-40 31/40 (interruption classes 0/8, one occlusion fail); 20-point general pick-place with 4 workers 20/20 PASS
+
+- Cleanup (cleanup-20261011/):
+  - 268 units, 798.4 GB, 15.8 M files deleted, all rc 0; /data used 1,176 → 379 GB.
+  - /proc scan clean before deleting.
+  - Kept scratch/merge-head-final2.nqKmxQ7s/install, because the kept freeze SES69LkF and episode 08742d4a reference it; its build/ was deleted.
+  - Freeze iIzIVfAB deleted; kept episode 85a85934 still names it in its manifest (text only).
+  - copy-build-evidence-path.txt files in kept freezes point at deleted scratch (text only).
+- Head functional-40 (postrefactor-live-20261011/head40/, installed tool on gate/install 436ec72fa, c2a weights, grounded-sam, domain 173):
+  - The installed campaign tool halts after any unconfirmed stop. The executor continued in fresh segments s2–s8, each seed with one identity, and teardown was clean each time. This deviates from the design's "stop new launches after an unconfirmed Stop"; root accepts it for this diagnostic run and records it.
+  - Visual review: all 23 locked final.png images show the cup visible and centred (x ≈ 318–323; occlusion 900017 x ≈ 300). Yaw errors 0.03–0.68°, except 900017 at 3.8° (limit 5°).
+  - Per-condition PASS:
+
+    | Condition | PASS |
+    |---|---|
+    | nominal, left, forward, distractor | 4/4 each |
+    | two_cups | 4/4 (AMBIGUOUS, as designed) |
+    | no_cup | 4/4 (NOT_FOUND, as designed) |
+    | low_light | 4/4 |
+    | partial_occlusion | 3/4 |
+    | fast_interruption | 0/4 |
+    | reacquire_after_stop | 0/4 |
+    | Total | 31/40 |
+
+  - Defect A (900009, 900018, 900028, 900029):
+    - OBSERVED: the raw stop is confirmed and HFA-009 stop is PASS, but DEADMAN_CLOSED_FAULT is recorded rather than planned, and the campaign classifier (thin-subclass v2, CP-3538) requires a planned dead-man close for stop_confirmed.
+    - INFERRED: this is a contract mismatch introduced by the stock-JTC refactor's v2 classifier. The fault and interrupt paths must accept a fault close when the stop is otherwise proven.
+  - Defect B (900008, 900019, 900038, 900039):
+    - OBSERVED: the raw stop is never confirmed (49–50 stopped() observations, all false), then EXECUTION_LOOP_RETIRE_FAILED for runtime, owner and exposure (PermissionError in owner and exposure). The last goal status was 3 (canceling). Neck velocity is about 3e-9, so the neck appears physically stopped while the proof stays false.
+    - HYPOTHESIS: after the camera cut or SIGTERM the /joint_states feed, or the stop observer, stops advancing, or the cancel never terminates. Not diagnosed.
+  - 900027 partial occlusion (left anchor): TARGET_AMBIGUOUS where a lock was expected. The first-detection image shows one cup partly behind a cyan bottle. HYPOTHESIS: a false second detection caused by the occluder. Same class as antzb 900017 historically.
+- 20-point general pick-place (postrefactor-live-20261011/general20/):
+  - teleop unified service, parallel_batch_linux_cuda.yaml, PARALLEL with 4 workers (start guard PASS: 32 CPUs, 29 GB RAM, 16 GB GPU free); points exactly as in moveit_expert_validation_points.yaml.
+  - COMPLETED, 20/20 PASSED, no failure codes, no fallback, cleanup true, 444 s wall, 5 points per worker.
+  - Table contact before and after DETACH on all 20; cup z at DETACH 0.16401–0.16434; final z 0.16491–0.16506; tilt ≤ 0.00275 rad. Offsets from the ring centre are (−0.0003…−0.0006, −0.0008…−0.0009) m; derived values, since this path records no verdict.
+  - Three driver startup stumbles (LEASE_ALREADY_HELD, CONTROLLER_ALREADY_BOUND, port busy) occurred before any campaign started; no point identity was used.
+  - Teardown clean.
+- Next (CP-3394 recommended): diagnose and fix Head defects A and B (RED first), then rerun the 8 interruption cases plus 900027; diagnose the 900027 occlusion ambiguity separately (detector output).
 
 ## CP-3558 — user: push, clean up evidence, run the 40-case Head search and a 20-run pick-place round
 
