@@ -3152,8 +3152,8 @@ PRODUCTION_SMOKE_SCRIPT_ENTRY = "so101_head_search_smoke --run-root"
 def _production_smoke_parser() -> argparse.ArgumentParser:
     """The `measure-production-smoke` entry: one owned stack, one bounded search, one sealed journal."""
 
-    from so101_demo.act.head_search_production_smoke import ANCHORS as SMOKE_ANCHORS
-    from so101_demo.act.head_search_production_smoke import CONDITION_CLASS
+    from so101_demo.act.head_search_production_smoke.journal import ANCHORS as SMOKE_ANCHORS
+    from so101_demo.act.head_search_production_smoke.journal import CONDITION_CLASS
 
     parser = argparse.ArgumentParser(
         prog="so101_head_search_calibration measure-production-smoke",
@@ -3270,7 +3270,7 @@ def _measure_production_smoke(arguments: list[str], *, entry: str = PRODUCTION_S
     from functools import partial
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_production_smoke import (
+    from so101_demo.act.head_search_production_smoke.aggregate import (
         read_runtime_of_record,
         run_smoke_flight,
         write_head_search_production_smoke,
@@ -3502,7 +3502,7 @@ def _measure_qualification_readback(
     from functools import partial
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_qualification_readback import (
+    from so101_demo.act.head_search_qualification_readback.readback_run import (
         run_readback_observation,
         write_head_search_qualification_readback,
     )

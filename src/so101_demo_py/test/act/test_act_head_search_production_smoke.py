@@ -263,7 +263,8 @@ def _seal() -> dict:
 def _produce(tmp_path, *, flight=None, run_root=None, **overrides):
     """Run the producer with a synthetic flight and return ``(result, journal, run_root)``."""
 
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import aggregate as module_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     root = Path(run_root) if run_root is not None else tmp_path / "production-smoke-run"
     producer = {
@@ -283,8 +284,8 @@ def _produce(tmp_path, *, flight=None, run_root=None, **overrides):
         "approved_bundle_sha256": "e21899c2" + "0" * 56,
     }
     kwargs.update(overrides)
-    result = module.write_head_search_production_smoke(**kwargs)
-    journal = json.loads((root / module.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
+    result = module_aggregate.write_head_search_production_smoke(**kwargs)
+    journal = json.loads((root / module_journal.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
     return result, journal, root
 
 
@@ -292,9 +293,9 @@ def _produce(tmp_path, *, flight=None, run_root=None, **overrides):
 
 
 def test_the_cadence_check_accepts_a_sequence_the_declared_contract_produces() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
-    cadence = module.smoke_cadence(_frames(6))
+    cadence = module_journal.smoke_cadence(_frames(6))
 
     assert cadence["continuous"] is True
     assert cadence["duplicate_count"] == 0
@@ -307,38 +308,38 @@ def test_the_cadence_check_accepts_a_sequence_the_declared_contract_produces() -
 
 
 def test_the_cadence_check_names_a_duplicate_a_backward_stamp_and_an_undeclared_gap() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     duplicate = _frames(6)
     duplicate[3]["frame_sim_s"] = duplicate[2]["frame_sim_s"]
-    cadence = module.smoke_cadence(duplicate)
+    cadence = module_journal.smoke_cadence(duplicate)
     assert cadence["duplicate_count"] == 1 and cadence["continuous"] is False
 
     backward = _frames(6)
     backward[4]["frame_sim_s"] = backward[3]["frame_sim_s"] - 0.2
-    assert module.smoke_cadence(backward)["backward_count"] == 1
+    assert module_journal.smoke_cadence(backward)["backward_count"] == 1
 
     # a gap no declared settle budget plus one frame period can produce: the loop stopped consuming
     gap = _frames(6)
     for position in range(3, 6):
         gap[position]["frame_sim_s"] = 12.0 + (position + 60) * 0.1
-    cadence = module.smoke_cadence(gap)
+    cadence = module_journal.smoke_cadence(gap)
     assert cadence["undeclared_gap_count"] == 1 and cadence["continuous"] is False
 
     # a frame faster than the declared period is the same violation the design refuses
     fast = _frames(6, period=0.05)
-    cadence = module.smoke_cadence(fast)
+    cadence = module_journal.smoke_cadence(fast)
     assert cadence["too_fast_count"] == 5 and cadence["continuous"] is False
 
 
 def test_the_cadence_check_uses_the_declared_settle_budget_as_its_upper_bound() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     # one frame period plus the measured settle budget is still a declared cadence; more is not
     frames = _frames(3)
     frames[1]["frame_sim_s"] = frames[0]["frame_sim_s"] + DEFAULT_MAX_SETTLE_S + 0.1
     frames[2]["frame_sim_s"] = frames[1]["frame_sim_s"] + DEFAULT_MAX_SETTLE_S + 0.1 + 0.05
-    cadence = module.smoke_cadence(frames)
+    cadence = module_journal.smoke_cadence(frames)
     assert cadence["undeclared_gap_count"] == 1
 
 
@@ -346,9 +347,9 @@ def test_the_cadence_check_uses_the_declared_settle_budget_as_its_upper_bound() 
 
 
 def test_the_command_check_counts_the_targets_outside_the_declared_corridor() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
-    bounded = module.smoke_commands(_commands(0.1, 0.23109066719589708))
+    bounded = module_journal.smoke_commands(_commands(0.1, 0.23109066719589708))
     assert bounded["bounded"] is True
     assert bounded["outside_corridor_count"] == 0
     assert bounded["targets_rad"] == [0.1, 0.23109066719589708]
@@ -356,13 +357,13 @@ def test_the_command_check_counts_the_targets_outside_the_declared_corridor() ->
     # the anchor start is outside the required search domain by the seal's own declaration (HS-316)
     assert bounded["outside_required_domain_count"] == 2
 
-    outside = module.smoke_commands(_commands(0.1, 9.0))
+    outside = module_journal.smoke_commands(_commands(0.1, 9.0))
     assert outside["bounded"] is False
     assert outside["outside_corridor_count"] == 1
 
     # a corridor with no commanded target at all is not a proof
     assert (
-        module.smoke_commands({"corridor_rad": list(CORRIDOR), "targets": []})["bounded"] is False
+        module_journal.smoke_commands({"corridor_rad": list(CORRIDOR), "targets": []})["bounded"] is False
     )
 
 
@@ -370,46 +371,46 @@ def test_the_command_check_counts_the_targets_outside_the_declared_corridor() ->
 
 
 def test_the_terminal_classification_reuses_the_scenario_modules_own_rule() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
-    locked = module.classify_terminal("TARGET_LOCKED", coverage={"complete": True})
+    locked = module_journal.classify_terminal("TARGET_LOCKED", coverage={"complete": True})
     assert locked["outcome"] == "PASSED" and locked["outcome_code"] is None
 
-    ambiguous = module.classify_terminal("TARGET_AMBIGUOUS", coverage={"complete": True})
+    ambiguous = module_journal.classify_terminal("TARGET_AMBIGUOUS", coverage={"complete": True})
     assert ambiguous["outcome"] == "FAILED"
     assert ambiguous["outcome_code"] == "CAL_SCENARIO_TARGET_AMBIGUOUS"
 
-    not_found = module.classify_terminal("TARGET_NOT_FOUND", coverage={"complete": True})
+    not_found = module_journal.classify_terminal("TARGET_NOT_FOUND", coverage={"complete": True})
     assert not_found["outcome"] == "FAILED"
     assert not_found["outcome_code"] == "CAL_SCENARIO_CUP_NOT_FOUND"
 
     # the controller's own timeout is neither a terminal the class declares nor an outcome it records
-    timeout = module.classify_terminal("SEARCH_TIMEOUT", coverage={"complete": True})
+    timeout = module_journal.classify_terminal("SEARCH_TIMEOUT", coverage={"complete": True})
     assert timeout["outcome"] == "REFUSED"
     assert timeout["outcome_code"] == "CAL_SCENARIO_NO_VERDICT"
 
 
 def test_the_terminal_classification_refuses_a_class_the_plan_does_not_declare() -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     with pytest.raises(CalibrationInputsRefused) as refusal:
-        module.classify_terminal(
+        module_journal.classify_terminal(
             "TARGET_LOCKED", condition_class="made_up", coverage={"complete": True}
         )
-    assert module.SMOKE_CLASS_UNDECLARED in str(refusal.value)
+    assert module_journal.SMOKE_CLASS_UNDECLARED in str(refusal.value)
 
 
 # --- producer -> sealed journal -> aggregator ---------------------------------------------------------
 
 
 def test_the_producer_writes_a_sealed_journal_the_aggregator_can_re_read(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     result, journal, root = _produce(tmp_path)
-    sealed_path = root / module.SEALED_ARTIFACT
+    sealed_path = root / module_journal.SEALED_ARTIFACT
     sealed = json.loads(sealed_path.read_text(encoding="utf-8"))
 
-    assert sealed["kind"] == module.SEALED_KIND
+    assert sealed["kind"] == module_journal.SEALED_KIND
     assert sealed["anchor"] == "default"
     assert sealed["condition_class"] == "nominal"
     assert sealed["frames"] == _flight()["frames"]
@@ -421,23 +422,24 @@ def test_the_producer_writes_a_sealed_journal_the_aggregator_can_re_read(tmp_pat
     assert sealed["sealed"]["body_sha256"] == canonical_sha256(body)
 
     assert journal["journal"]["path"] == str(sealed_path)
-    assert journal["journal"]["sha256"] == module._digest(sealed_path)
+    assert journal["journal"]["sha256"] == module_journal._digest(sealed_path)
     assert journal["aggregator"]["journal_sha256"] == journal["journal"]["sha256"]
     assert journal["aggregator"]["status"] == "SUCCEEDED"
     assert journal["status"] == "PASS"
-    assert result["journal"] == str(root / module.JOURNAL_ARTIFACT)
-    assert (root / module.RECEIPT_ARTIFACT).is_file()
+    assert result["journal"] == str(root / module_journal.JOURNAL_ARTIFACT)
+    assert (root / module_journal.RECEIPT_ARTIFACT).is_file()
     assert (root / "default" / "stdout.log").is_file()
     assert (root / "default" / "stderr.log").is_file()
 
 
 def test_the_aggregator_re_derives_every_gate_from_the_sealed_journal_on_disk(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import aggregate as module_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     result, journal, root = _produce(tmp_path)
     # re-running the aggregator over the sealed journal must reproduce the same readings
-    again = module.aggregate_production_smoke(
-        root / module.SEALED_ARTIFACT, run_root=root, producer=journal["producer"]
+    again = module_aggregate.aggregate_production_smoke(
+        root / module_journal.SEALED_ARTIFACT, run_root=root, producer=journal["producer"]
     )
     assert again["terminal_status"] == journal["terminal_status"]
     assert again["frame_cadence"] == journal["frame_cadence"]
@@ -449,25 +451,27 @@ def test_the_aggregator_re_derives_every_gate_from_the_sealed_journal_on_disk(tm
 
 
 def test_the_aggregator_refuses_a_sealed_journal_whose_body_was_edited(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import aggregate as module_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, _, root = _produce(tmp_path)
-    sealed_path = root / module.SEALED_ARTIFACT
+    sealed_path = root / module_journal.SEALED_ARTIFACT
     sealed = json.loads(sealed_path.read_text(encoding="utf-8"))
     sealed["terminal_status"] = "SEARCH_TIMEOUT"
     sealed_path.write_text(json.dumps(sealed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     with pytest.raises(CalibrationInputsRefused) as refusal:
-        module.aggregate_production_smoke(sealed_path, run_root=root)
-    assert module.SMOKE_SEAL_MISMATCH in str(refusal.value)
+        module_aggregate.aggregate_production_smoke(sealed_path, run_root=root)
+    assert module_journal.SMOKE_SEAL_MISMATCH in str(refusal.value)
 
 
 def test_the_aggregator_refuses_a_sealed_journal_that_is_not_there(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import aggregate as module_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     with pytest.raises(CalibrationInputsRefused) as refusal:
-        module.aggregate_production_smoke(tmp_path / "absent.json", run_root=tmp_path)
-    assert module.SMOKE_JOURNAL_UNREADABLE in str(refusal.value)
+        module_aggregate.aggregate_production_smoke(tmp_path / "absent.json", run_root=tmp_path)
+    assert module_journal.SMOKE_JOURNAL_UNREADABLE in str(refusal.value)
 
 
 # --- the strongest case: the aggregate module's own gate -----------------------------------------------
@@ -565,9 +569,9 @@ def test_a_planning_coverage_proof_is_not_a_smoke_journal(tmp_path) -> None:
 )
 def test_the_gate_names_the_item_a_mutated_journal_lost(tmp_path, mutate, expected) -> None:
     _, _, root = _produce(tmp_path)
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
-    path = root / module.JOURNAL_ARTIFACT
+    path = root / module_journal.JOURNAL_ARTIFACT
     document = json.loads(path.read_text(encoding="utf-8"))
     mutate(document)
     path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -578,12 +582,12 @@ def test_the_gate_names_the_item_a_mutated_journal_lost(tmp_path, mutate, expect
 
 
 def test_the_shape_check_names_every_field_the_gate_reads(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, journal, _ = _produce(tmp_path)
-    assert module.validate_smoke_journal(journal) == []
+    assert module_journal.validate_smoke_journal(journal) == []
 
-    problems = module.validate_smoke_journal({"kind": module.KIND})
+    problems = module_journal.validate_smoke_journal({"kind": module_journal.KIND})
     assert problems and all(isinstance(problem, str) for problem in problems)
     assert any("phase" in problem for problem in problems)
 
@@ -592,100 +596,100 @@ def test_the_shape_check_names_every_field_the_gate_reads(tmp_path) -> None:
 
 
 def test_the_producer_refuses_a_run_root_that_already_exists(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     existing = tmp_path / "already-there"
     existing.mkdir()
     with pytest.raises(CalibrationInputsRefused) as refusal:
         _produce(tmp_path, run_root=existing)
-    assert module.SMOKE_RUN_ROOT_EXISTS in str(refusal.value)
+    assert module_journal.SMOKE_RUN_ROOT_EXISTS in str(refusal.value)
 
 
 def test_the_producer_refuses_an_ownership_receipt_that_guards_another_root(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     root = tmp_path / "production-smoke-run"
     receipt = tmp_path / "other-ownership.json"
     receipt.write_text(json.dumps(_ownership(tmp_path / "some-other-root")), encoding="utf-8")
     with pytest.raises(CalibrationInputsRefused) as refusal:
         _produce(tmp_path, run_root=root, ownership_receipt=receipt)
-    assert module.SMOKE_OWNERSHIP_MISMATCH in str(refusal.value)
+    assert module_journal.SMOKE_OWNERSHIP_MISMATCH in str(refusal.value)
     assert not root.exists()
 
 
 def test_the_producer_refuses_a_runtime_that_is_not_the_cuda_only_runtime_of_record(
     tmp_path,
 ) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     for key, value in (("allow_cpu_fallback", True), ("cuda_device", "cpu"), ("values_count", 16)):
         runtime = dict(RUNTIME)
         runtime[key] = value
         with pytest.raises(CalibrationInputsRefused) as refusal:
             _produce(tmp_path, run_root=tmp_path / f"root-{key}", runtime=runtime)
-        assert module.SMOKE_RUNTIME_UNVERIFIED in str(refusal.value)
+        assert module_journal.SMOKE_RUNTIME_UNVERIFIED in str(refusal.value)
 
 
 def test_the_producer_refuses_a_flight_that_does_not_lock_the_cup(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, journal, root = _produce(tmp_path, flight=_flight(terminal="TARGET_AMBIGUOUS"))
 
     assert journal["status"] == "REFUSED"
-    assert module.SMOKE_LOCK_UNPROVEN in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_LOCK_UNPROVEN in [item["code"] for item in journal["refusals"]]
     assert journal["gates"]["search"] == "FAIL"
     assert journal["outcome_code"] == "CAL_SCENARIO_TARGET_AMBIGUOUS"
     # the sealed journal and the journal are both on disk: the run is readable, not silent
-    assert (root / module.SEALED_ARTIFACT).is_file()
-    assert (root / module.JOURNAL_ARTIFACT).is_file()
+    assert (root / module_journal.SEALED_ARTIFACT).is_file()
+    assert (root / module_journal.JOURNAL_ARTIFACT).is_file()
 
 
 def test_the_producer_refuses_a_cadence_outside_the_declared_contract(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     frames = _frames(6)
     frames[4]["frame_sim_s"] = frames[3]["frame_sim_s"]
     _, journal, _ = _produce(tmp_path, flight=_flight(frames=frames))
 
     assert journal["status"] == "REFUSED"
-    assert module.SMOKE_CADENCE_BROKEN in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_CADENCE_BROKEN in [item["code"] for item in journal["refusals"]]
     assert journal["frame_cadence"]["continuous"] is False
     assert journal["frame_cadence"]["duplicate_count"] == 1
 
 
 def test_the_producer_refuses_commands_outside_the_declared_corridor(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, journal, _ = _produce(tmp_path, flight=_flight(targets=(0.1, 9.0)))
 
     assert journal["status"] == "REFUSED"
-    assert module.SMOKE_COMMANDS_UNBOUNDED in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_COMMANDS_UNBOUNDED in [item["code"] for item in journal["refusals"]]
     assert journal["commands"]["outside_corridor_count"] == 1
 
 
 def test_the_producer_refuses_an_unproven_stop(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     loud = _stop_samples(4, velocity=1.0)
     _, journal, _ = _produce(tmp_path, flight=_flight(stop_samples=loud))
 
     assert journal["status"] == "REFUSED"
-    assert module.SMOKE_STOP_UNPROVEN in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_STOP_UNPROVEN in [item["code"] for item in journal["refusals"]]
     assert journal["stop_proof"]["proven"] is False
 
 
 def test_the_producer_refuses_a_gpu_that_was_not_released(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, journal, _ = _produce(tmp_path, flight=_flight(teardown=_teardown(gpu_released=False)))
 
     assert journal["status"] == "REFUSED"
     codes = [item["code"] for item in journal["refusals"]]
-    assert module.SMOKE_GPU_NOT_RELEASED in codes
+    assert module_journal.SMOKE_GPU_NOT_RELEASED in codes
     assert journal["gates"]["gpu"] == "FAIL"
     # the four teardown facts are separately proven and separately named
     assert journal["gates"]["teardown"] == "PASS"
-    assert module.SMOKE_TEARDOWN_UNPROVEN not in codes
+    assert module_journal.SMOKE_TEARDOWN_UNPROVEN not in codes
 
 
 @pytest.mark.parametrize(
@@ -693,7 +697,7 @@ def test_the_producer_refuses_a_gpu_that_was_not_released(tmp_path) -> None:
     ["previous_stack_stopped", "controller_owner_stopped", "children_exited", "graph_clear"],
 )
 def test_the_producer_refuses_a_teardown_that_did_not_prove_one_fact(tmp_path, field) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     teardown = _teardown()
     teardown[field] = False
@@ -701,11 +705,11 @@ def test_the_producer_refuses_a_teardown_that_did_not_prove_one_fact(tmp_path, f
 
     assert journal["status"] == "REFUSED"
     assert journal["gates"]["teardown"] == "FAIL"
-    assert module.SMOKE_TEARDOWN_UNPROVEN in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_TEARDOWN_UNPROVEN in [item["code"] for item in journal["refusals"]]
 
 
 def test_the_producer_leaves_a_named_refusal_when_the_flight_itself_refuses(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     def refuse(**call):
         raise CalibrationInputsRefused(
@@ -716,38 +720,38 @@ def test_the_producer_leaves_a_named_refusal_when_the_flight_itself_refuses(tmp_
 
     assert journal["status"] == "REFUSED"
     codes = [item["code"] for item in journal["refusals"]]
-    assert module.SMOKE_STACK_START_FAILED in codes
+    assert module_journal.SMOKE_STACK_START_FAILED in codes
     assert "RESTART_STACK_START_FAILED" in json.dumps(journal["refusals"])
-    assert (root / module.JOURNAL_ARTIFACT).is_file()
+    assert (root / module_journal.JOURNAL_ARTIFACT).is_file()
 
 
 def test_the_producer_refuses_a_condition_class_the_plan_does_not_declare(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     with pytest.raises(CalibrationInputsRefused) as refusal:
         _produce(tmp_path, condition_class="made_up")
-    assert module.SMOKE_CLASS_UNDECLARED in str(refusal.value)
+    assert module_journal.SMOKE_CLASS_UNDECLARED in str(refusal.value)
 
 
 def test_the_producer_refuses_a_cup_that_was_never_placed(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     flight = _flight()
     flight["scene"] = {"body": "plastic_cup", "point_m": None, "service": "/service"}
     _, journal, _ = _produce(tmp_path, flight=flight)
 
     assert journal["status"] == "REFUSED"
-    assert module.SMOKE_CUP_NOT_PLACED in [item["code"] for item in journal["refusals"]]
+    assert module_journal.SMOKE_CUP_NOT_PLACED in [item["code"] for item in journal["refusals"]]
 
 
 def test_the_seal_the_producer_reads_declares_the_anchors_it_may_run(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     seal = _seal()
     seal["in_frame_matrix"].pop("left")
     with pytest.raises(CalibrationInputsRefused):
         _produce(tmp_path, seal=seal, anchor="left")
-    assert module.ANCHORS == ("default", "left", "forward")
+    assert module_journal.ANCHORS == ("default", "left", "forward")
 
 
 def test_the_journal_carries_the_provenance_step_3_asks_for(tmp_path) -> None:
@@ -768,42 +772,43 @@ def test_the_journal_carries_the_provenance_step_3_asks_for(tmp_path) -> None:
 def test_the_coverage_proof_stays_available_beside_the_journal(tmp_path) -> None:
     """Requirement (b): the old coverage proof is still produced; it is just not the success condition."""
 
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     _, journal, root = _produce(tmp_path)
-    proof = json.loads((root / module.COVERAGE_PROOF_ARTIFACT).read_text(encoding="utf-8"))
+    proof = json.loads((root / module_journal.COVERAGE_PROOF_ARTIFACT).read_text(encoding="utf-8"))
 
     assert proof["coverage_complete"] is True
     assert proof["anchor"] == "default"
     assert proof["coarse_step_rad"] == 0.3
-    assert (root / module.PLAN_ARTIFACT.format(anchor="default")).is_file()
+    assert (root / module_journal.PLAN_ARTIFACT.format(anchor="default")).is_file()
     assert journal["coverage_proof"]["document"] == proof
-    assert journal["coverage_proof"]["sha256"] == module._digest(
-        root / module.COVERAGE_PROOF_ARTIFACT
+    assert journal["coverage_proof"]["sha256"] == module_journal._digest(
+        root / module_journal.COVERAGE_PROOF_ARTIFACT
     )
     assert "not this phase's success condition" in journal["coverage_proof"]["role"]
 
 
 def test_the_producer_refuses_a_seal_that_declares_no_coarse_step(tmp_path) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
 
     seal = _seal()
     seal.pop("coarse_step_candidate_rad")
     with pytest.raises(CalibrationInputsRefused) as refusal:
         _produce(tmp_path, seal=seal)
-    assert module.SMOKE_COVERAGE_UNPROVEN in str(refusal.value)
+    assert module_journal.SMOKE_COVERAGE_UNPROVEN in str(refusal.value)
 
 
 def test_legacy_flight_refuses_before_calling_restart(tmp_path, monkeypatch) -> None:
-    from so101_demo.act import head_search_production_smoke as module
+    from so101_demo.act.head_search_production_smoke import aggregate as module_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as module_journal
     from so101_demo.act.head_search_restarts import restart_run as restarts_restart_run
 
     def forbidden_restart(**kwargs):
         pytest.fail('legacy smoke attempted to enter restart execution')
 
     monkeypatch.setattr(restarts_restart_run, 'run_anchor_restart', forbidden_restart)
-    with pytest.raises(module.SmokeRefused, match='HEAD_LEGACY_EXECUTION_REMOVED'):
-        module.run_smoke_flight(anchor='default', root=tmp_path / 'unclaimed',
+    with pytest.raises(module_journal.SmokeRefused, match='HEAD_LEGACY_EXECUTION_REMOVED'):
+        module_aggregate.run_smoke_flight(anchor='default', root=tmp_path / 'unclaimed',
                                declared={'anchor': 'default'})
     assert not (tmp_path / 'unclaimed').exists()
 
@@ -813,7 +818,7 @@ def test_development_smoke_uses_the_formal_provider_and_one_composition(
         tmp_path, monkeypatch, business_return_code):
     from test_head_execution_run_cli import build_inputs, fake_provider
     from so101_demo.cli import head_execution_run
-    from so101_demo.act.head_search_production_smoke import run_smoke_flight
+    from so101_demo.act.head_search_production_smoke.aggregate import run_smoke_flight
     inputs, _ = build_inputs(tmp_path)
     calls = []
     provider = fake_provider(monkeypatch, calls, outcome=business_return_code)
@@ -831,7 +836,8 @@ def test_development_smoke_uses_the_formal_provider_and_one_composition(
 
 def test_development_smoke_refuses_mixed_qualification_arguments_before_provider(tmp_path, monkeypatch):
     from so101_demo.cli import head_execution_run
-    from so101_demo.act.head_search_production_smoke import run_smoke_flight, SmokeRefused
+    from so101_demo.act.head_search_production_smoke.aggregate import run_smoke_flight
+    from so101_demo.act.head_search_production_smoke.journal import SmokeRefused
     calls = []
     monkeypatch.setattr(head_execution_run, 'resolve_provider', lambda supplied=None: calls.append('resolve'))
     with pytest.raises(SmokeRefused, match='SMOKE_EXECUTION_INPUTS_MIXED'):

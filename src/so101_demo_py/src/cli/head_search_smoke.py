@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 from so101_demo.act.head_search_domain import HeadSearchDomainError, bounded_search_stops
-from so101_demo.act.head_search_production_smoke import coverage_proof_document
+from so101_demo.act.head_search_production_smoke.journal import coverage_proof_document
 
 
 def _path(value: str) -> Path:

@@ -21,7 +21,8 @@ from head_search_qualification_fixtures import (
 )
 from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
 from so101_demo.act.head_search_aggregate import run_gates as aggregate_run_gates
-from so101_demo.act import head_search_qualification_readback as readback
+from so101_demo.act.head_search_qualification_readback import observations as readback_observations
+from so101_demo.act.head_search_qualification_readback import readback_run as readback_readback_run
 from so101_demo.act.head_search_binding import _CAMERA_MEASURED, _MEASURED
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
 from so101_demo.act.head_search_ownership import read_runtime_identity
@@ -93,7 +94,7 @@ def _configuration(values=None) -> dict:
 
 
 def _observed(values=None, *, detector=None) -> dict:
-    return readback.observe_qualification_values(
+    return readback_observations.observe_qualification_values(
         values=dict(values or PROMOTED_VALUES),
         configuration=_configuration(values),
         detector=detector or _Detector(),
@@ -172,9 +173,9 @@ def _live_camera(**overrides) -> dict:
     live = {
         name: {
             "value": value,
-            "observation": readback.RUNNING_STACK_OBSERVATION,
+            "observation": readback_observations.RUNNING_STACK_OBSERVATION,
             "component": "the running camera plugin",
-            "source": readback.CAMERA_SOURCES[name],
+            "source": readback_observations.CAMERA_SOURCES[name],
         }
         for name, value in PROMOTED_CAMERA.items()
     }
@@ -184,13 +185,13 @@ def _live_camera(**overrides) -> dict:
 
 def _document(tmp_path: Path, *, values=None, detector=None, live=None, reference=None) -> dict:
     runtime = _runtime(tmp_path, values)
-    return readback.readback_document(
+    return readback_observations.readback_document(
         run_root=tmp_path / "qualification-run",
         evidence_root=tmp_path / "evidence",
         runtime=runtime,
         approved={"values_sha256": canonical_sha256(dict(values or PROMOTED_VALUES))},
         observations=_observed(values, detector=detector),
-        camera_measurements=readback.camera_measurement_records(
+        camera_measurements=readback_observations.camera_measurement_records(
             live=_live_camera() if live is None else live, reference=reference
         ),
         detector={
@@ -235,7 +236,7 @@ def test_the_seventeen_values_are_observed_off_the_components_that_consume_them(
     assert records["lock_valid_neck_rad"]["source"] == (
         "HeadSearchController(...).plan.safe_interval_rad"
     )
-    assert records["tracking_iou"]["observation"] == readback.LOADED_DETECTOR_OBSERVATION
+    assert records["tracking_iou"]["observation"] == readback_observations.LOADED_DETECTOR_OBSERVATION
     assert records["min_bbox_aspect"]["component"].endswith("_Detector")
     # the eleven measured ones are the readback ledger HS-312 wired, with its behavioural probes
     assert records["max_age_s"]["observation"] == "constructed_production_component"
@@ -281,7 +282,7 @@ def test_the_gate_holds_against_the_readback_the_real_producer_writes(tmp_path: 
     fixture = build_fixture(tmp_path / "fixture")
     evidence = tmp_path / "readback-evidence"
     runtime = read_runtime_identity(fixture.paths["final_run"])
-    result = readback.write_head_search_qualification_readback(
+    result = readback_readback_run.write_head_search_qualification_readback(
         run_root=fixture.run_root,
         evidence_root=evidence,
         ownership_receipt=fixture.paths["ownership_receipt"],
@@ -293,10 +294,10 @@ def test_the_gate_holds_against_the_readback_the_real_producer_writes(tmp_path: 
         production_config_path=fixture.paths["production_config"],
         camera_reference=FIXTURE_CAMERA_MEASUREMENTS,
     )
-    assert result["status"] == readback.PASS
+    assert result["status"] == readback_observations.PASS
     document = json.loads(Path(result["document_path"]).read_text(encoding="utf-8"))
     assert document["run_root"] == str(fixture.run_root)
-    assert (evidence / readback.TEARDOWN_ARTIFACT).is_file()
+    assert (evidence / readback_observations.TEARDOWN_ARTIFACT).is_file()
 
     reasons = aggregate_contracts._Reasons()
     readings = aggregate_run_gates._gate_values(
@@ -314,11 +315,11 @@ def test_the_gate_holds_against_the_readback_the_real_producer_writes(tmp_path: 
 
 
 def test_a_camera_measurement_the_stack_did_not_publish_is_recorded_not_invented() -> None:
-    records = readback.camera_measurement_records(
+    records = readback_observations.camera_measurement_records(
         live=_live_camera(
             head_rpy_rad={
                 "value": None,
-                "observation": readback.NOT_OBSERVABLE,
+                "observation": readback_observations.NOT_OBSERVABLE,
                 "reason": "no base -> head_camera_frame transform: LookupException: no frames",
             }
         ),
@@ -326,13 +327,13 @@ def test_a_camera_measurement_the_stack_did_not_publish_is_recorded_not_invented
     )
 
     assert records["head_rpy_rad"]["value"] is None
-    assert records["head_rpy_rad"]["observation"] == readback.NOT_OBSERVABLE
+    assert records["head_rpy_rad"]["observation"] == readback_observations.NOT_OBSERVABLE
     assert records["head_rpy_rad"]["matches_approved"] is None
     assert "LookupException" in records["head_rpy_rad"]["reason"]
     assert records["head_intrinsics_px"]["value"] == PROMOTED_CAMERA["head_intrinsics_px"]
     assert records["head_intrinsics_px"]["matches_approved"] is True
     # without an approved reference the live observation is still recorded, and the comparison says so
-    unreferenced = readback.camera_measurement_records(live=_live_camera())
+    unreferenced = readback_observations.camera_measurement_records(live=_live_camera())
     assert unreferenced["yaw_zero_bearing_rad"]["value"] == 0.12
     assert unreferenced["yaw_zero_bearing_rad"]["matches_approved"] is None
     assert "no approved reference" in unreferenced["yaw_zero_bearing_rad"]["reason"]
@@ -345,10 +346,10 @@ def test_the_runner_node_name_is_one_rclpy_accepts() -> None:
     separate constants and this test keeps them from collapsing back into one.
     """
 
-    assert readback.RUNNER_NODE == readback.RUNNER_GRAPH_NODE.lstrip("/")
-    assert "/" not in readback.RUNNER_NODE
-    assert re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", readback.RUNNER_NODE)
-    assert readback.RUNNER_GRAPH_NODE == f"/{readback.RUNNER_NODE}"
+    assert readback_observations.RUNNER_NODE == readback_observations.RUNNER_GRAPH_NODE.lstrip("/")
+    assert "/" not in readback_observations.RUNNER_NODE
+    assert re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", readback_observations.RUNNER_NODE)
+    assert readback_observations.RUNNER_GRAPH_NODE == f"/{readback_observations.RUNNER_NODE}"
 
 
 # --- the hard failures ---------------------------------------------------------------------------------
@@ -362,7 +363,7 @@ def test_an_observed_value_that_differs_is_a_hard_failure_naming_both(tmp_path: 
 
     with pytest.raises(CalibrationInputsRefused) as raised:
         _document(tmp_path, detector=_Detector(tracking_iou=0.3))
-    assert raised.value.code == readback.READBACK_VALUE_MISMATCH
+    assert raised.value.code == readback_observations.READBACK_VALUE_MISMATCH
     assert "tracking_iou" in raised.value.detail
     assert "0.3" in raised.value.detail and "0.5" in raised.value.detail
 
@@ -371,26 +372,26 @@ def test_a_bundle_that_is_not_the_promotion_refuses(tmp_path: Path) -> None:
     other = dict(PROMOTED_VALUES)
     other["max_age_s"] = 0.02
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.approved_values(
+        readback_observations.approved_values(
             production_config={"values": dict(PROMOTED_VALUES)},
             approved_bundle={
                 "parameters": {name: {"value": value} for name, value in other.items()}
             },
         )
-    assert raised.value.code == readback.READBACK_BUNDLE_MISMATCH
+    assert raised.value.code == readback_observations.READBACK_BUNDLE_MISMATCH
     assert "max_age_s" in raised.value.detail
 
 
 def test_a_promoted_config_without_the_seventeen_refuses() -> None:
     short = {name: PROMOTED_VALUES[name] for name in _MEASURED[:16]}
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.approved_values(
+        readback_observations.approved_values(
             production_config={"values": short},
             approved_bundle={
                 "parameters": {name: {"value": value} for name, value in short.items()}
             },
         )
-    assert raised.value.code == readback.READBACK_VALUES_INCOMPLETE
+    assert raised.value.code == readback_observations.READBACK_VALUES_INCOMPLETE
 
 
 def test_a_component_that_cannot_be_built_refuses(tmp_path: Path) -> None:
@@ -398,13 +399,13 @@ def test_a_component_that_cannot_be_built_refuses(tmp_path: Path) -> None:
         raise ValueError("SEARCH_CONFIG_INVALID")
 
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.observe_qualification_values(
+        readback_observations.observe_qualification_values(
             values=dict(PROMOTED_VALUES),
             configuration=_configuration(),
             detector=_Detector(),
             controller_factory=refuse,
         )
-    assert raised.value.code == readback.READBACK_COMPONENT_UNBUILDABLE
+    assert raised.value.code == readback_observations.READBACK_COMPONENT_UNBUILDABLE
     assert "SEARCH_CONFIG_INVALID" in raised.value.detail
 
 
@@ -414,7 +415,7 @@ def test_a_detector_without_the_values_it_applies_refuses() -> None:
 
     with pytest.raises(CalibrationInputsRefused) as raised:
         _observed(detector=_Bare())
-    assert raised.value.code == readback.READBACK_DETECTOR_FAILED
+    assert raised.value.code == readback_observations.READBACK_DETECTOR_FAILED
     assert "tracking_iou" in raised.value.detail
 
 
@@ -426,7 +427,7 @@ def test_a_detector_that_is_not_one_cuda_instance_refuses(tmp_path: Path) -> Non
         "runtime": runtime,
         "approved": {"values_sha256": canonical_sha256(dict(PROMOTED_VALUES))},
         "observations": _observed(),
-        "camera_measurements": readback.camera_measurement_records(live=_live_camera()),
+        "camera_measurements": readback_observations.camera_measurement_records(live=_live_camera()),
         "detector": {
             "count": 2,
             "device": "cuda",
@@ -440,8 +441,8 @@ def test_a_detector_that_is_not_one_cuda_instance_refuses(tmp_path: Path) -> Non
         "taken_at_utc": "2026-10-02T08:00:00Z",
     }
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.readback_document(**readings)
-    assert raised.value.code == readback.READBACK_DETECTOR_FAILED
+        readback_observations.readback_document(**readings)
+    assert raised.value.code == readback_observations.READBACK_DETECTOR_FAILED
 
     readings["detector"] = {
         "count": 1,
@@ -450,8 +451,8 @@ def test_a_detector_that_is_not_one_cuda_instance_refuses(tmp_path: Path) -> Non
         "weights_sha256": runtime["weight_sha256_declared"],
     }
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.readback_document(**readings)
-    assert raised.value.code == readback.READBACK_DETECTOR_FAILED
+        readback_observations.readback_document(**readings)
+    assert raised.value.code == readback_observations.READBACK_DETECTOR_FAILED
 
     readings["detector"] = {
         "count": 1,
@@ -460,8 +461,8 @@ def test_a_detector_that_is_not_one_cuda_instance_refuses(tmp_path: Path) -> Non
         "weights_sha256": "d" * 64,
     }
     with pytest.raises(CalibrationInputsRefused) as raised:
-        readback.readback_document(**readings)
-    assert raised.value.code == readback.READBACK_DETECTOR_FAILED
+        readback_observations.readback_document(**readings)
+    assert raised.value.code == readback_observations.READBACK_DETECTOR_FAILED
 
 
 # --- the producer's own refusals -----------------------------------------------------------------------
@@ -488,7 +489,7 @@ def _fake_observer(values, runtime, *, teardown=None):
                 for name in _MEASURED
             },
             "camera_measurements": {
-                name: {"value": value, "observation": readback.RUNNING_STACK_OBSERVATION}
+                name: {"value": value, "observation": readback_observations.RUNNING_STACK_OBSERVATION}
                 for name, value in FIXTURE_CAMERA_MEASUREMENTS.items()
             },
             "detector": {
@@ -514,7 +515,7 @@ def _fake_observer(values, runtime, *, teardown=None):
 def _producer(tmp_path: Path, *, observe, receipt=None, runtime=None, run_root=None):
     fixture = build_fixture(tmp_path / "fixture")
     runtime = runtime or read_runtime_identity(fixture.paths["final_run"])
-    return readback.write_head_search_qualification_readback(
+    return readback_readback_run.write_head_search_qualification_readback(
         run_root=run_root or fixture.run_root,
         evidence_root=tmp_path / "evidence",
         ownership_receipt=receipt or fixture.paths["ownership_receipt"],
@@ -532,7 +533,7 @@ def test_the_producer_refuses_an_existing_qualification_run_root(tmp_path: Path)
     existing.mkdir()
     with pytest.raises(CalibrationInputsRefused) as raised:
         _producer(tmp_path, observe=_fake_observer(FIXTURE_VALUES, {}), run_root=existing)
-    assert raised.value.code == readback.READBACK_RUN_ROOT_EXISTS
+    assert raised.value.code == readback_observations.READBACK_RUN_ROOT_EXISTS
 
 
 def test_the_producer_refuses_a_receipt_that_guards_another_run_root(tmp_path: Path) -> None:
@@ -546,7 +547,7 @@ def test_the_producer_refuses_a_receipt_that_guards_another_run_root(tmp_path: P
             receipt=receipt,
             runtime=runtime,
         )
-    assert raised.value.code == readback.READBACK_OWNERSHIP_MISMATCH
+    assert raised.value.code == readback_observations.READBACK_OWNERSHIP_MISMATCH
     assert str(tmp_path / "some-other-run") in raised.value.detail
 
 
@@ -568,9 +569,9 @@ def test_the_producer_refuses_a_receipt_that_refused(tmp_path: Path) -> None:
             receipt=receipt,
             runtime=runtime,
         )
-    assert raised.value.code == readback.READBACK_OWNERSHIP_REFUSED
+    assert raised.value.code == readback_observations.READBACK_OWNERSHIP_REFUSED
     assert "GPU_COMPUTE_APP_ACTIVE" in raised.value.detail
-    assert not (tmp_path / "evidence" / readback.ARTIFACT).exists()
+    assert not (tmp_path / "evidence" / readback_observations.ARTIFACT).exists()
 
 
 def test_the_producer_refuses_a_runtime_that_is_not_the_cuda_one(tmp_path: Path) -> None:
@@ -579,7 +580,7 @@ def test_the_producer_refuses_a_runtime_that_is_not_the_cuda_one(tmp_path: Path)
     runtime["allow_cpu_fallback"] = True
     with pytest.raises(CalibrationInputsRefused) as raised:
         _producer(tmp_path, observe=_fake_observer(FIXTURE_VALUES, runtime), runtime=runtime)
-    assert raised.value.code == readback.READBACK_RUNTIME_UNVERIFIED
+    assert raised.value.code == readback_observations.READBACK_RUNTIME_UNVERIFIED
 
 
 def test_the_producer_refuses_an_unproven_teardown_and_records_the_refusal(tmp_path: Path) -> None:
@@ -587,20 +588,20 @@ def test_the_producer_refuses_an_unproven_teardown_and_records_the_refusal(tmp_p
     runtime = read_runtime_identity(fixture.paths["final_run"])
 
     def observe(**_kwargs):
-        raise readback.QualificationReadbackRefused(
-            readback.READBACK_TEARDOWN_UNPROVEN, "one stack process was still alive"
+        raise readback_observations.QualificationReadbackRefused(
+            readback_observations.READBACK_TEARDOWN_UNPROVEN, "one stack process was still alive"
         )
 
     with pytest.raises(CalibrationInputsRefused) as raised:
         _producer(tmp_path, observe=observe, runtime=runtime)
-    assert raised.value.code == readback.READBACK_TEARDOWN_UNPROVEN
+    assert raised.value.code == readback_observations.READBACK_TEARDOWN_UNPROVEN
     refusal = json.loads(
         (tmp_path / "evidence" / "readback-refusal.json").read_text(encoding="utf-8")
     )
-    assert refusal["code"] == readback.READBACK_TEARDOWN_UNPROVEN
+    assert refusal["code"] == readback_observations.READBACK_TEARDOWN_UNPROVEN
     assert refusal["run_root"] == str(fixture.run_root)
     assert refusal["provenance"]["values_sha256"]
-    assert not (tmp_path / "evidence" / readback.ARTIFACT).exists()
+    assert not (tmp_path / "evidence" / readback_observations.ARTIFACT).exists()
 
 
 def test_the_producer_writes_the_document_and_the_teardown_proof(tmp_path: Path) -> None:
@@ -614,14 +615,14 @@ def test_the_producer_writes_the_document_and_the_teardown_proof(tmp_path: Path)
 
     result = _producer(tmp_path, observe=observe, runtime=runtime)
 
-    assert result["status"] == readback.PASS
+    assert result["status"] == readback_observations.PASS
     assert seen["run_root"] == fixture.run_root
     assert seen["values"] == FIXTURE_VALUES
     assert seen["stdout"] is not None and seen["stderr"] is not None
     proof = json.loads(Path(result["teardown_proof"]).read_text(encoding="utf-8"))
     assert proof["gpu_released"] is True
-    assert (tmp_path / "evidence" / readback.STDOUT_LOG).is_file()
-    assert (tmp_path / "evidence" / readback.STDERR_LOG).is_file()
+    assert (tmp_path / "evidence" / readback_observations.STDOUT_LOG).is_file()
+    assert (tmp_path / "evidence" / readback_observations.STDERR_LOG).is_file()
     # the qualification run root stays unclaimed: the aggregate owns it, and it never resumes one
     assert not fixture.run_root.exists()
 
@@ -698,7 +699,7 @@ def test_the_cli_runs_the_readback_and_prints_the_measured_values(
     def observe(**kwargs):
         return _fake_observer(FIXTURE_VALUES, runtime)(**kwargs)
 
-    monkeypatch.setattr(readback, "run_readback_observation", observe)
+    monkeypatch.setattr(readback_readback_run, "run_readback_observation", observe)
     (tmp_path / "ipc").mkdir()
     run_root = fixture.run_root
     evidence = tmp_path / "evidence"
@@ -710,7 +711,7 @@ def test_the_cli_runs_the_readback_and_prints_the_measured_values(
     assert "READBACK_MEASURED status=PASS" in printed
     assert "observed coarse_step_rad=" in printed
     assert "camera_measurements=" in printed
-    document = json.loads((evidence / readback.ARTIFACT).read_text(encoding="utf-8"))
+    document = json.loads((evidence / readback_observations.ARTIFACT).read_text(encoding="utf-8"))
     assert document["values_count"] == 17
     assert document["kind"] == aggregate_contracts.READBACK_KIND
     assert document["command"].startswith(
@@ -739,7 +740,7 @@ def test_the_readback_creates_the_declared_private_deadman_directory(tmp_path):
     base = Path(tempfile.mkdtemp(prefix="dm", dir="/tmp"))
     directory = base / "dm"
     try:
-        got = readback.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
+        got = readback_readback_run.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
         assert got == str(directory)
         assert stat.S_IMODE(os.stat(directory).st_mode) == 0o700 and os.stat(directory).st_uid == os.getuid()
     finally:
@@ -749,13 +750,13 @@ def test_the_readback_creates_the_declared_private_deadman_directory(tmp_path):
 def test_the_readback_refuses_a_controller_file_that_declares_no_deadman_directory(tmp_path):
     path = tmp_path / "controllers.yaml"
     path.write_text("neck_controller:\n  ros__parameters:\n    joints: [neck_yaw_joint]\n", encoding="utf-8")
-    with pytest.raises(readback.QualificationReadbackRefused) as refused:
-        readback.prepare_deadman_directory(path)
-    assert refused.value.code == readback.READBACK_PROBE_FAILED
+    with pytest.raises(readback_observations.QualificationReadbackRefused) as refused:
+        readback_readback_run.prepare_deadman_directory(path)
+    assert refused.value.code == readback_observations.READBACK_PROBE_FAILED
 
 
 def test_the_readback_refuses_a_deadman_directory_whose_socket_path_is_too_long(tmp_path):
     directory = tmp_path / ("d" * 90)
-    with pytest.raises(readback.QualificationReadbackRefused) as refused:
-        readback.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
-    assert refused.value.code == readback.READBACK_PROBE_FAILED
+    with pytest.raises(readback_observations.QualificationReadbackRefused) as refused:
+        readback_readback_run.prepare_deadman_directory(_controllers_yaml(tmp_path, directory))
+    assert refused.value.code == readback_observations.READBACK_PROBE_FAILED

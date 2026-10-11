@@ -3625,7 +3625,7 @@ def _production_smoke_arguments(inputs: dict, run_root: Path, *extra: str) -> li
 def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", teardown=None):
     """Stub the two heavy seams: the runtime readback and the one smoke flight itself."""
 
-    from so101_demo.act import head_search_production_smoke as smoke
+    from so101_demo.act.head_search_production_smoke import aggregate as smoke_aggregate
     from so101_demo.act.head_search_restarts import contracts as restarts_contracts
     from so101_demo.act.head_search_restarts import observation as restarts_observation
 
@@ -3739,7 +3739,7 @@ def _patch_production_smoke_flight(monkeypatch, *, terminal="TARGET_LOCKED", tea
         }
 
     monkeypatch.setattr(restarts_observation, "read_runtime_of_record", fake_runtime)
-    monkeypatch.setattr(smoke, "run_smoke_flight", fake)
+    monkeypatch.setattr(smoke_aggregate, "run_smoke_flight", fake)
     return seen
 
 
@@ -3763,7 +3763,7 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
 ) -> None:
     from so101_demo.act.head_search_aggregate import contracts as aggregate_contracts
     from so101_demo.act.head_search_aggregate import measurement_gates as aggregate_measurement_gates
-    from so101_demo.act import head_search_production_smoke as smoke
+    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     seen = _patch_production_smoke_flight(monkeypatch)
@@ -3776,17 +3776,17 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
     assert seen["device"] == "cuda"
     printed = capsys.readouterr().out
     assert "SMOKE_MEASURED status=PASS" in printed
-    document = json.loads((run_root / smoke.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
+    document = json.loads((run_root / smoke_journal.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
     assert document["kind"] == aggregate_contracts.SMOKE_KIND
     assert document["phase"] == "production_smoke"
     assert document["terminal_status"] == "TARGET_LOCKED"
     assert document["condition_class"] == "nominal"
     assert set(document["gates"].values()) == {"PASS"}
     assert document["producer"]["entry"] == "so101_head_search_calibration measure-production-smoke"
-    assert (run_root / smoke.SEALED_ARTIFACT).is_file()
-    assert (run_root / smoke.RECEIPT_ARTIFACT).is_file()
+    assert (run_root / smoke_journal.SEALED_ARTIFACT).is_file()
+    assert (run_root / smoke_journal.RECEIPT_ARTIFACT).is_file()
     # the coverage proof is still produced, and it is still not the success condition
-    assert (run_root / smoke.COVERAGE_PROOF_ARTIFACT).is_file()
+    assert (run_root / smoke_journal.COVERAGE_PROOF_ARTIFACT).is_file()
     assert (run_root / "default" / "stdout.log").is_file()
     assert (run_root / "default" / "stderr.log").is_file()
 
@@ -3795,7 +3795,7 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
         {"production_smoke_root": str(run_root)},
         {
             "runtime": {
-                key: json.loads((run_root / smoke.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))[
+                key: json.loads((run_root / smoke_journal.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))[
                     "runtime"
                 ].get(key)
                 for key in (
@@ -3815,7 +3815,7 @@ def test_measure_production_smoke_writes_the_journal_the_gate_consumes(
 def test_measure_production_smoke_returns_two_when_the_cup_is_not_locked(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_production_smoke as smoke
+    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     _patch_production_smoke_flight(monkeypatch, terminal="TARGET_AMBIGUOUS")
@@ -3824,7 +3824,7 @@ def test_measure_production_smoke_returns_two_when_the_cup_is_not_locked(
     assert main(_production_smoke_arguments(inputs, run_root)) == 2
     printed = capsys.readouterr()
     assert "SMOKE_LOCK_UNPROVEN" in printed.err
-    document = json.loads((run_root / smoke.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
+    document = json.loads((run_root / smoke_journal.JOURNAL_ARTIFACT).read_text(encoding="utf-8"))
     assert document["status"] == "REFUSED"
     assert document["gates"]["search"] == "FAIL"
 
@@ -3832,19 +3832,20 @@ def test_measure_production_smoke_returns_two_when_the_cup_is_not_locked(
 def test_measure_production_smoke_reports_the_librarys_refusal_and_returns_two(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    from so101_demo.act import head_search_production_smoke as smoke
+    from so101_demo.act.head_search_production_smoke import aggregate as smoke_aggregate
+    from so101_demo.act.head_search_production_smoke import journal as smoke_journal
 
     inputs = _production_smoke_inputs(tmp_path)
     _patch_production_smoke_flight(monkeypatch)
 
     def refuse(**kwargs):
-        raise smoke.SmokeRefused(
-            smoke.SMOKE_OWNERSHIP_REFUSED, "the gate refused with STACK_OWNER_ACTIVE"
+        raise smoke_journal.SmokeRefused(
+            smoke_journal.SMOKE_OWNERSHIP_REFUSED, "the gate refused with STACK_OWNER_ACTIVE"
         )
 
-    monkeypatch.setattr(smoke, "write_head_search_production_smoke", refuse)
+    monkeypatch.setattr(smoke_aggregate, "write_head_search_production_smoke", refuse)
     assert main(_production_smoke_arguments(inputs, inputs["smoke_run_root"])) == 2
-    assert smoke.SMOKE_OWNERSHIP_REFUSED in capsys.readouterr().err
+    assert smoke_journal.SMOKE_OWNERSHIP_REFUSED in capsys.readouterr().err
 
 
 def test_the_plan_smoke_entry_runs_the_production_smoke_when_given_a_run_root(
