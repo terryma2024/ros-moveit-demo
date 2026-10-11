@@ -176,7 +176,7 @@ def verified(_spec):
 
 
 def test_linux_cuda_retry_cli_records_the_admitted_original_chain(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     catalog_sha256 = hashlib.sha256(POINTS.read_bytes()).hexdigest()
     values = argv(
@@ -199,7 +199,8 @@ def test_linux_cuda_retry_cli_records_the_admitted_original_chain(tmp_path):
 
 
 def test_linux_cuda_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="RETRY_ROOT_REQUIRED"):
         prepare_batch(
@@ -212,7 +213,8 @@ def test_linux_cuda_retry_cli_refuses_an_unnamed_original_chain(tmp_path):
 
 
 def test_linux_cuda_retry_cli_refuses_a_foreign_catalog_digest(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="RETRY_CATALOG_MISMATCH"):
         prepare_batch(
@@ -229,7 +231,7 @@ def test_linux_cuda_retry_cli_refuses_a_foreign_catalog_digest(tmp_path):
 
 
 def _fixed_web_spec(tmp_path, monkeypatch, *, run_mode="dry_run"):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import runtime_ipc_base
 
     root = _socket_fixture_root(tmp_path, "fw") / "batch"
@@ -297,7 +299,7 @@ def _cancel_fixed_cli(values, batch_id):
 def test_fixed_cli_authenticated_stop_uses_existing_cleanup_not_worker_launch(
     tmp_path, monkeypatch, corrupt_cleanup,
 ):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     spec, values = _fixed_web_spec(tmp_path, monkeypatch)
 
@@ -353,7 +355,8 @@ def test_fixed_cli_authenticated_stop_uses_existing_cleanup_not_worker_launch(
     ("SO101_FIXED_CONTROL_SOCKET", "/tmp/unbound-control.sock", "FIXED_CONTROL_SOCKET_INVALID"),
 ])
 def test_fixed_cli_rejects_unbound_credentials_before_allocation(tmp_path, monkeypatch, key, value, reason):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     spec, values = _fixed_web_spec(tmp_path, monkeypatch)
     if value is None:
@@ -376,7 +379,8 @@ def test_fixed_cli_rejects_unbound_credentials_before_allocation(tmp_path, monke
 
 def test_fixed_cli_epoch_matches_real_journal_before_endpoint_or_worker_setup(tmp_path, monkeypatch):
     from dataclasses import replace
-    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     spec, values = _fixed_web_spec(tmp_path, monkeypatch)
     # A short source-test root needs no external IPC. Retain its allocated
@@ -396,7 +400,8 @@ def test_fixed_cli_epoch_matches_real_journal_before_endpoint_or_worker_setup(tm
 
 def test_fixed_cli_credentials_cannot_open_an_adaptive_pool_endpoint(tmp_path, monkeypatch):
     from dataclasses import replace
-    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.parallel_batch.adaptive_contracts import _new_pool_request_for_production_factory
 
     spec, values = _fixed_web_spec(tmp_path, monkeypatch)
@@ -412,7 +417,8 @@ def test_fixed_cli_credentials_cannot_open_an_adaptive_pool_endpoint(tmp_path, m
 
 
 def test_fixed_cli_checks_authenticated_stop_during_broker_ready_loop(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     spec, values = _fixed_web_spec(tmp_path, monkeypatch, run_mode="plan_only")
     composition = ProductionBatchComposition(
@@ -441,7 +447,7 @@ def test_fixed_cli_checks_authenticated_stop_during_broker_ready_loop(tmp_path, 
 
 
 def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import _runtime_package_root
+    from so101_demo.cli.mujoco_batch.provenance import _runtime_package_root
 
     module_path = (
         tmp_path
@@ -464,10 +470,8 @@ def test_runtime_package_root_uses_installed_share_for_copied_module(tmp_path):
 def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch):
     import signal
 
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        _run_with_shutdown_signals,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals
 
     handlers = {}
 
@@ -490,7 +494,7 @@ def test_shutdown_signal_handler_is_idempotent_while_cleanup_unwinds(monkeypatch
 
 
 def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import _write_worker_results
+    from so101_demo.cli.mujoco_batch.worker_process import _write_worker_results
     from so101_demo.parallel_batch.worker import WorkerRunResult
 
     resources = SimpleNamespace(
@@ -529,7 +533,7 @@ def test_worker_result_evidence_is_private_structured_and_no_replace(tmp_path):
 
 
 def test_recovered_initial_gate_terminal_is_not_a_worker_process_failure():
-    from so101_demo.cli.mujoco_parallel_batch import _worker_results_failed
+    from so101_demo.cli.mujoco_batch.worker_process import _worker_results_failed
     from so101_demo.parallel_batch.contracts import AttemptStatus, ValidationStatus
 
     recovered = SimpleNamespace(
@@ -569,7 +573,7 @@ def test_recovered_initial_gate_terminal_is_not_a_worker_process_failure():
 
 
 def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure():
-    from so101_demo.cli.mujoco_parallel_batch import _worker_results_failed
+    from so101_demo.cli.mujoco_batch.worker_process import _worker_results_failed
     from so101_demo.parallel_batch.contracts import AttemptStatus
 
     invalid = SimpleNamespace(
@@ -614,14 +618,15 @@ def test_adaptive_worker_process_classifies_recovered_invalid_as_infrastructure(
     ],
 )
 def test_rejects_invalid_requests_before_composition(tmp_path, changes, error):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match=error):
         prepare_batch(argv(tmp_path / "batch", **changes), provenance_verifier=verified)
 
 
 def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     monkeypatch.chdir(PACKAGE)
     prepared = prepare_batch(
@@ -636,7 +641,8 @@ def test_relative_catalog_and_config_paths_are_supported(tmp_path, monkeypatch):
 
 
 def test_duplicate_batch_root_rejected_before_provenance_side_effect(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     root = tmp_path / "batch"
     root.mkdir()
@@ -648,11 +654,9 @@ def test_duplicate_batch_root_rejected_before_provenance_side_effect(tmp_path):
 
 def test_explicit_resume_replays_started_dry_run_and_continues_remaining_point(tmp_path):
     """A production recovery mode reaches replay without starting physical runtime."""
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        _write_json,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import _write_json
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -731,7 +735,8 @@ def test_explicit_resume_replays_started_dry_run_and_continues_remaining_point(t
 
 def test_explicit_resume_rejects_changed_frozen_batch_manifest(tmp_path):
     """Recovery cannot change selection, capacity, mode, root, or provenance."""
-    from so101_demo.cli.mujoco_parallel_batch import CliError, _write_json, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import _write_json, CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     root = tmp_path / 'batch'
     prepared = prepare_batch(argv(root), provenance_verifier=verified)
@@ -745,7 +750,7 @@ def test_explicit_resume_rejects_changed_frozen_batch_manifest(tmp_path):
 
 
 def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     selected = prepare_batch(
         argv(
@@ -769,7 +774,8 @@ def test_selection_uses_catalog_order_and_hash_and_omission_selects_all(tmp_path
 
 
 def test_stale_or_inconsistent_provenance_is_rejected(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="PROVENANCE"):
         prepare_batch(argv(tmp_path / "batch"), provenance_verifier=lambda _spec: False)
@@ -794,7 +800,7 @@ def summary(mode, statuses, *, cleanup=True, terminal=True):
 
 @pytest.mark.parametrize("mode", [RunMode.DRY_RUN, RunMode.PLAN_ONLY])
 def test_nonexecute_exit_and_aggregate_matrix(mode):
-    from so101_demo.cli.mujoco_parallel_batch import outcome_document
+    from so101_demo.cli.mujoco_batch.outcome import outcome_document
 
     passed = summary(mode, {"task_start": ValidationStatus.VALIDATION_PASSED})
     code, document = outcome_document(passed)
@@ -810,7 +816,7 @@ def test_nonexecute_exit_and_aggregate_matrix(mode):
 
 
 def test_execute_exit_matrix_and_validation_does_not_qualify():
-    from so101_demo.cli.mujoco_parallel_batch import outcome_document
+    from so101_demo.cli.mujoco_batch.outcome import outcome_document
 
     passed = summary(RunMode.EXECUTE, {"task_start": PointStatus.PASSED})
     code, document = outcome_document(passed)
@@ -823,7 +829,7 @@ def test_execute_exit_matrix_and_validation_does_not_qualify():
 
 @pytest.mark.parametrize("mode", [RunMode.DRY_RUN, RunMode.PLAN_ONLY])
 def test_nonexecute_dependency_failure_keeps_validation_history_but_exits_nonzero(mode):
-    from so101_demo.cli.mujoco_parallel_batch import outcome_document
+    from so101_demo.cli.mujoco_batch.outcome import outcome_document
 
     failed = BatchSummary(
         mode,
@@ -904,10 +910,8 @@ def test_cli_never_unlinks_or_replaces_an_existing_aggregate(tmp_path):
 
 
 def test_default_production_composition_derives_real_dry_run_snapshot():
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.coordinator import BatchCoordinator
     from so101_demo.parallel_batch.resources import ResourceSnapshot, WorkerResourceAllocator
     from so101_demo.parallel_batch.worker import ParallelWorker
@@ -977,10 +981,8 @@ def test_default_production_composition_derives_real_dry_run_snapshot():
 def test_physical_composition_prepares_and_supervises_one_external_broker(
     tmp_path,
 ):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1046,7 +1048,8 @@ def test_physical_composition_prepares_and_supervises_one_external_broker(
 
 
 def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot, runtime_ipc_base
     import so101_demo.cli.parallel_perception_broker as broker_cli
 
@@ -1114,7 +1117,8 @@ def test_physical_broker_receives_validated_external_ipc_root(tmp_path, monkeypa
 
 
 def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1162,9 +1166,9 @@ def test_physical_worker_launches_receive_exact_isolated_environments(tmp_path):
 
 
 def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError, ProductionBatchComposition, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     import so101_demo.cli.parallel_perception_broker as broker_cli
 
@@ -1209,9 +1213,9 @@ def test_broker_start_rejects_missing_image_id_and_mutable_tag_drift(tmp_path, m
 def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_path):
     import threading
 
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition, _write_json, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import _write_json
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_ipc import BrokerTransport
 
@@ -1297,9 +1301,9 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
 
 
 def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError, ProductionBatchComposition, _write_json, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import _write_json, CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1333,9 +1337,9 @@ def test_broker_ready_rejects_regular_file_endpoint(tmp_path):
 
 
 def test_initial_broker_ready_uses_broker_startup_budget_not_heartbeat(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError, ProductionBatchComposition, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1376,9 +1380,8 @@ def test_initial_broker_ready_uses_broker_startup_budget_not_heartbeat(tmp_path)
 
 def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_path):
     from types import SimpleNamespace
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1434,7 +1437,7 @@ def test_broker_container_cleanup_stops_only_exact_labeled_batch_container(tmp_p
 
 
 def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     owner = object.__new__(ProductionBatchComposition)
     owner._uses_production_broker_container = True
@@ -1483,7 +1486,7 @@ def test_broker_cleanup_accepts_exact_container_removed_during_stop_race(tmp_pat
 
 
 def test_broker_exit_capture_persists_process_container_logs_and_events(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     owner = object.__new__(ProductionBatchComposition)
     owner.broker_runtime_root = tmp_path / "broker"
@@ -1547,10 +1550,8 @@ def test_broker_exit_capture_persists_process_container_logs_and_events(tmp_path
 
 
 def test_broker_cleanup_waits_for_exact_auto_remove_after_successful_stop(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        ProductionBatchComposition,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     owner = object.__new__(ProductionBatchComposition)
     owner._uses_production_broker_container = True
@@ -1637,7 +1638,7 @@ def test_broker_cleanup_waits_for_exact_auto_remove_after_successful_stop(tmp_pa
 
 
 def test_broker_container_id_is_hardened_before_cleanup(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     owner = object.__new__(ProductionBatchComposition)
     owner.broker_container_id_path = tmp_path / "container.cid"
@@ -1652,9 +1653,9 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     tmp_path, monkeypatch,
 ):
     import socket
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition, _write_json, prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import _write_json
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1734,7 +1735,8 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
 
 
 def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -1822,12 +1824,9 @@ def test_composition_always_runs_fail_closed_cleanup_when_worker_start_raises(tm
 def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
     import threading
 
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        _CoordinatorRpcProxy,
-        _WorkerBrokerProxy,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _CoordinatorRpcProxy, _WorkerBrokerProxy
     from so101_demo.parallel_batch.broker import BrokerResponse, BrokerSubmission
     from so101_demo.parallel_batch.contracts import ExecutionKind, ModelOutcome
     from so101_demo.parallel_batch.resources import ResourceSnapshot
@@ -2005,7 +2004,7 @@ class SimpleLease:
 
 
 def test_artifact_workspace_is_reserved_before_runtime_files_and_reused_for_seal(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import _ArtifactResults
+    from so101_demo.cli.mujoco_batch.worker_process import _ArtifactResults
     from so101_demo.runtime.parallel_ros_runtime import ResetBoundaryReceipt
 
     lease = SimpleLease()
@@ -2036,7 +2035,8 @@ def test_artifact_workspace_is_reserved_before_runtime_files_and_reused_for_seal
 
 
 def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, _WorkerBrokerProxy
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
         load_parallel_runtime_config_linux_cuda,
@@ -2092,7 +2092,7 @@ def test_worker_broker_proxy_rejects_unexpected_generation_before_return(tmp_pat
 
 
 def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     values = argv(tmp_path / "defaults")
     for flag in ("--worker-count",):
@@ -2107,7 +2107,7 @@ def test_frozen_worker_topology_defaults_to_two_by_ten(tmp_path):
 
 
 def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     prepared = prepare_batch(
         adaptive_argv(tmp_path / "adaptive"), provenance_verifier=verified
@@ -2123,7 +2123,8 @@ def test_adaptive_cli_uses_frozen_options_without_a_hard_capacity(tmp_path):
 
 
 def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     root = tmp_path / "registered"
     root.mkdir(mode=0o700)
@@ -2139,7 +2140,7 @@ def test_adaptive_cli_reuses_registered_root_but_reserves_short_runtime(tmp_path
 
 
 def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.contracts import ContractError
 
     # The retired flag is refused before mode handling with the stable legacy code.
@@ -2154,7 +2155,7 @@ def test_adaptive_cli_rejects_legacy_hard_capacity_flag(tmp_path):
 def test_adaptive_readiness_probe_does_not_treat_a_missing_socket_as_success(
     tmp_path
 ):
-    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerControlProxy
 
     token = tmp_path / "control.token"
     token.write_text("ab" * 32, encoding="ascii")
@@ -2172,7 +2173,7 @@ def test_adaptive_readiness_probe_does_not_treat_a_missing_socket_as_success(
 
 
 def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     prepared = prepare_batch(
         adaptive_argv(
@@ -2206,7 +2207,8 @@ def test_adaptive_cli_overrides_worker_options_and_records_them(tmp_path):
 
 @pytest.mark.parametrize("value", ["0", "3", "8", "true"])
 def test_adaptive_cli_rejects_invalid_yolo_executor_count(tmp_path, value):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="YOLO_EXECUTOR_COUNT|MALFORMED_INTEGER"):
         prepare_batch(
@@ -2219,7 +2221,8 @@ def test_adaptive_cli_rejects_invalid_yolo_executor_count(tmp_path, value):
 
 
 def test_nonadaptive_cli_rejects_yolo_executor_count(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="ADAPTIVE_OPTIONS_REQUIRE_FLAG"):
         prepare_batch(
@@ -2235,7 +2238,7 @@ def test_nonadaptive_cli_rejects_yolo_executor_count(tmp_path):
 def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
     tmp_path, worker_count, levels
 ):
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     prepared = prepare_batch(
         adaptive_argv(tmp_path / worker_count, worker_count=worker_count),
@@ -2248,7 +2251,8 @@ def test_adaptive_cli_filters_default_fallbacks_below_preferred_count(
 def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
     """The CLI exposes W16 as optional capacity without changing its W8 default."""
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     prepared = prepare_batch(
         adaptive_argv(tmp_path / "w16", worker_count="16"),
@@ -2268,7 +2272,8 @@ def test_adaptive_cli_accepts_w16_and_rejects_w17(tmp_path):
 
 @pytest.mark.parametrize("fallbacks", ["6,4", "8,4", "4,6", "4,4", "4,,2"])
 def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match="FALLBACK_WORKER_COUNTS"):
         prepare_batch(
@@ -2296,7 +2301,8 @@ def test_adaptive_cli_rejects_invalid_explicit_fallbacks(tmp_path, fallbacks):
 def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
     tmp_path, changes, extra, error
 ):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match=error):
         prepare_batch(
@@ -2308,7 +2314,7 @@ def test_adaptive_cli_rejects_missing_config_and_legacy_modes(
 def test_fixed_four_worker_starts_without_any_budget_authority(tmp_path):
     """The plain v3 default path needs no profile, no promotion and no budget environment."""
 
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.contracts import ParallelRuntimeConfigLinuxCuda
 
     prepared = prepare_batch(argv(tmp_path / "w4", worker_count="4"),
@@ -2332,7 +2338,8 @@ def test_fixed_four_worker_starts_without_any_budget_authority(tmp_path):
 def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
     """A FAIL from the real decision must surface as a CLI error, never a partial batch."""
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch import start_guard_probe as probe_module
     from so101_demo.parallel_batch.start_guard import GuardCheck, GuardResult
 
@@ -2356,7 +2363,7 @@ def test_a_failing_guard_refuses_the_start_instead_of_allocating(tmp_path):
 def test_production_adaptive_factory_builds_an_internal_eight_worker_pool(tmp_path, monkeypatch):
     from dataclasses import replace
 
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.adaptive_contracts import (
         PoolRequest,
         _new_pool_request_for_production_factory,
@@ -2406,7 +2413,8 @@ def test_production_adaptive_factory_builds_an_internal_eight_worker_pool(tmp_pa
 
 
 def test_worker_process_environment_is_the_exact_pick_place_validation_whitelist(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -2447,7 +2455,8 @@ def test_worker_process_environment_is_the_exact_pick_place_validation_whitelist
 
 
 def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.cli.parallel_perception_broker import container_run_argv
 
@@ -2514,7 +2523,8 @@ def test_broker_runtime_mount_cannot_see_worker_tokens_or_coordinator_sockets(tm
 def test_coordinator_rpc_payload_schema_rejects_extra_and_missing_before_mutation(
     operation, payload
 ):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, _validate_rpc_payload
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _validate_rpc_payload
 
     valid = {"operation": operation, **payload}
     assert _validate_rpc_payload(valid) == valid
@@ -2526,9 +2536,10 @@ def test_coordinator_rpc_payload_schema_rejects_extra_and_missing_before_mutatio
 
 
 def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
-    import so101_demo.cli.mujoco_parallel_batch as batch_cli
+    import so101_demo.cli.mujoco_batch.composition as batch_cli
 
     class Probe:
         def snapshot(self):
@@ -2568,7 +2579,7 @@ def test_constructor_failure_releases_partial_allocator_journal_and_endpoints(tm
 
 
 def test_composition_cleanup_invokes_real_worker_control_actions_in_order():
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     events = []
 
@@ -2599,7 +2610,7 @@ def test_composition_cleanup_invokes_real_worker_control_actions_in_order():
 
 
 def test_cleanup_skips_dead_control_rpc_after_worker_groups_are_reaped():
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     class Control:
         def call(self, _operation):
@@ -2613,7 +2624,8 @@ def test_cleanup_skips_dead_control_rpc_after_worker_groups_are_reaped():
 
 
 def test_broker_ready_receipt_is_exactly_bound_to_batch_generation_and_image():
-    from so101_demo.cli.mujoco_parallel_batch import CliError, _validate_broker_ready
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.outcome import _validate_broker_ready
 
     expected = {
         "batch_id": "batch-1", "run_mode": "plan_only", "coordinator_epoch": 3,
@@ -2636,7 +2648,9 @@ def test_broker_ready_receipt_is_exactly_bound_to_batch_generation_and_image():
 
 
 def test_physical_start_revalidates_complete_provenance_before_process_side_effect(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
 
     class Probe:
@@ -2680,7 +2694,7 @@ def test_physical_start_revalidates_complete_provenance_before_process_side_effe
 
 def test_crashed_worker_recovery_terminates_only_exact_recorded_children(tmp_path):
     import signal
-    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerControlProxy
 
     token = tmp_path / "control.token"
     token.write_text("ab" * 32, encoding="ascii")
@@ -2715,7 +2729,7 @@ def test_crashed_worker_recovery_terminates_only_exact_recorded_children(tmp_pat
 
 def test_worker_control_proxy_completes_real_authenticated_socket_round_trip(tmp_path):
     import threading
-    from so101_demo.cli.mujoco_parallel_batch import _WorkerControlProxy
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerControlProxy
     from so101_demo.runtime.parallel_ipc import AuthenticatedUnixServer, WorkerTokenAuthority
 
     authority = WorkerTokenAuthority(
@@ -2750,10 +2764,8 @@ def test_worker_control_proxy_completes_real_authenticated_socket_round_trip(tmp
 
 
 def test_provenance_rejects_mixed_source_install_overlay_before_snapshot(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        _validate_provenance_overlay,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.provenance import _validate_provenance_overlay
 
     repository = tmp_path / "checkout"
     module = repository / "src/so101_demo_py/src/cli/mujoco_parallel_batch.py"
@@ -2865,7 +2877,7 @@ def _external_overlay_fixture(tmp_path):
 
 
 def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import _validate_provenance_overlay
+    from so101_demo.cli.mujoco_batch.provenance import _validate_provenance_overlay
 
     fixture = _external_overlay_fixture(tmp_path)
     identity = _validate_provenance_overlay(
@@ -2893,10 +2905,8 @@ def test_explicit_external_overlay_binding_accepts_exact_candidate(tmp_path):
     ],
 )
 def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, error):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        _validate_provenance_overlay,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.provenance import _validate_provenance_overlay
 
     fixture = _external_overlay_fixture(tmp_path)
     document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
@@ -2925,7 +2935,7 @@ def test_external_overlay_binding_rejects_identity_mismatch(tmp_path, mutation, 
 def test_external_overlay_binding_accepts_any_debug_commit_value(tmp_path):
     """The binding's commit is compatibility metadata; byte artifacts still bind it."""
 
-    from so101_demo.cli.mujoco_parallel_batch import _validate_provenance_overlay
+    from so101_demo.cli.mujoco_batch.provenance import _validate_provenance_overlay
 
     fixture = _external_overlay_fixture(tmp_path)
     document = json.loads(fixture["binding"].read_text(encoding="utf-8"))
@@ -2945,10 +2955,8 @@ def test_external_overlay_binding_accepts_any_debug_commit_value(tmp_path):
 
 
 def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        _validate_provenance_overlay,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.provenance import _validate_provenance_overlay
 
     fixture = _external_overlay_fixture(tmp_path)
     with pytest.raises(CliError, match="MIXED_OVERLAY"):
@@ -2963,9 +2971,8 @@ def test_external_overlay_remains_rejected_when_not_explicitly_bound(tmp_path):
 
 
 def test_installed_provenance_binds_exact_editable_tree_and_rejects_stale_target(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError, _installed_overlay_identity,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.provenance import _installed_overlay_identity
     from so101_demo.cli.parallel_perception_broker import source_hash
 
     repository = tmp_path / "checkout"
@@ -3052,10 +3059,8 @@ if __name__ == '__main__':
 
 
 def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_processes import OwnedProcess
 
@@ -3145,12 +3150,10 @@ def test_broker_exit_restarts_fresh_generation_while_leases_remain_paused(tmp_pa
 def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path):
     import threading
 
-    from so101_demo.cli.mujoco_parallel_batch import (
-        CliError,
-        ProductionBatchComposition,
-        _CoordinatorRpcProxy,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _CoordinatorRpcProxy
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_ipc import IpcError
 
@@ -3291,10 +3294,8 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
 
 
 def test_broker_recovery_deadline_failure_keeps_shared_dependency_reason(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition,
-        prepare_batch,
-    )
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.runtime.parallel_processes import OwnedProcess
 
@@ -3361,7 +3362,7 @@ def test_failed_broker_recovery_waits_for_active_physical_stage_before_shutdown(
         gate_summary,
         make_coordinator,
     )
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     clock = Clock()
     coordinator, journal = make_coordinator(tmp_path, clock, points=("p1",))
@@ -3407,7 +3408,7 @@ def test_failed_broker_recovery_waits_for_active_physical_stage_before_shutdown(
 
 def test_pre_pose_broker_outage_seals_invalid_and_runs_worker_recovery():
     from test_parallel_batch_worker import Fake
-    from so101_demo.cli.mujoco_parallel_batch import CliError
+    from so101_demo.cli.mujoco_batch.common import CliError
     from so101_demo.parallel_batch.contracts import AttemptStatus, RunMode
     from so101_demo.parallel_batch.worker import ParallelWorker
 
@@ -3481,7 +3482,7 @@ def test_worker_stays_alive_across_a_paused_grant_and_resumes_remaining_work():
 def test_existing_worker_fetches_current_broker_before_each_request_and_recovery(
     tmp_path,
 ):
-    from so101_demo.cli.mujoco_parallel_batch import _WorkerBrokerProxy
+    from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerBrokerProxy
     from so101_demo.parallel_batch.contracts import (
         ExecutionKind,
         load_parallel_runtime_config_linux_cuda,
@@ -3592,7 +3593,7 @@ def test_existing_worker_fetches_current_broker_before_each_request_and_recovery
 def test_legacy_cli_flag_is_an_explicit_error():
     """The retired lifetime quota flag is refused before any resource is touched."""
 
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.contracts import ContractError
     with pytest.raises(ContractError) as error:
         prepare_batch(['--max-points-per-worker', '20'])

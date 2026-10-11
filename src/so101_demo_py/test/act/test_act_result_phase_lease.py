@@ -9,7 +9,7 @@ import pytest
 from act_result_teacher import sealed_teacher
 from so101_demo.act.result_store import ActCollectionResultVerifier
 from so101_demo.act.collection_scope import write_collection_scope
-from so101_demo.cli.mujoco_parallel_batch import _ArtifactResults
+from so101_demo.cli.mujoco_batch.worker_process import _ArtifactResults
 from so101_demo.parallel_batch.contracts import (BatchKind, BatchRequest, RunMode,
     AttemptStatus, load_parallel_runtime_config_linux_cuda)
 from so101_demo.parallel_batch.coordinator import BatchCoordinator

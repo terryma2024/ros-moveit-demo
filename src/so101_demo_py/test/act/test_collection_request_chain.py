@@ -30,7 +30,8 @@ class Supervisor:
 
 
 def composition_with(collection, name, **extra):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     root = _scratch_root() / name
     spec = prepare_batch(
@@ -43,7 +44,7 @@ def composition_with(collection, name, **extra):
 
 @pytest.mark.parametrize("mode", ["on", "off"])
 def test_the_collection_option_is_in_the_worker_specification_and_the_worker_runtime_receives_it(mode, monkeypatch):
-    from so101_demo.cli import mujoco_parallel_batch
+    from so101_demo.cli.mujoco_batch import worker_process
 
     monkeypatch.delenv("SO101_RAW_PILOT", raising=False)   # nothing ambient: the option travels in the specification
     from so101_demo.act import frozen_runtime_inputs
@@ -63,13 +64,13 @@ def test_the_collection_option_is_in_the_worker_specification_and_the_worker_run
     document = json.loads(path.read_text())
     assert document["collection"] == {"mode": mode, "fault": "none", "sandbox_root": None, "raw_pilot": mode == "on"}
     seen = {}
-    real = mujoco_parallel_batch.build_worker_runtime
+    real = worker_process.build_worker_runtime
 
     def capture(resources, run_mode, **kwargs):
         seen["collection"] = kwargs.get("collection")
         return real(resources, run_mode, **kwargs)
 
-    monkeypatch.setattr(mujoco_parallel_batch, "build_worker_runtime", capture)
-    _worker, runtime = mujoco_parallel_batch._build_worker_from_spec(path)
+    monkeypatch.setattr(worker_process, "build_worker_runtime", capture)
+    _worker, runtime = worker_process._build_worker_from_spec(path)
     assert seen["collection"] == CollectionOptions(mode)
     assert runtime._collection.enabled is (mode == "on") and runtime._collection.raw_pilot is (mode == "on")

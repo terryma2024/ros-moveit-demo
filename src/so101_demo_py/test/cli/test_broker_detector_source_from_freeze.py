@@ -52,7 +52,8 @@ def test_the_freezes_detector_hands_the_frame_to_ultralytics_as_bgr():
 
 
 def test_the_composition_records_the_freezes_detector_in_a_qualified_run_and_nothing_outside_one(tmp_path, monkeypatch):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot, runtime_ipc_base
     from test_parallel_batch_cli import argv as cli_argv
     from test_parallel_batch_cli import verified

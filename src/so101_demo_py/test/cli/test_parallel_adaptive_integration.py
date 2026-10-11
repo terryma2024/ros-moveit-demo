@@ -21,7 +21,7 @@ import pytest
 
 
 def test_adaptive_outcome_document_is_stable_and_failure_exit_is_nonzero(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import adaptive_outcome_document
+    from so101_demo.cli.mujoco_batch.outcome import adaptive_outcome_document
     from so101_demo.parallel_batch.adaptive_contracts import (
         AdaptiveBatchSummary,
         BatchTerminalStatus,
@@ -463,7 +463,8 @@ def test_setup_adaptive_wrapper_source_is_relative_and_resolves(monkeypatch):
 
 
 def test_adaptive_help_is_explicit_and_rejects_heavy_admission_flags():
-    from so101_demo.cli.mujoco_parallel_batch import build_parser, CliError
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import build_parser
 
     parser = build_parser()
     help_document = parser.format_help()
@@ -529,7 +530,7 @@ print(json.dumps([name for name in forbidden if name in sys.modules]))
 def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
     """The adaptive route loads its own contract; fixed v2 is never substituted for it."""
 
-    from so101_demo.cli import mujoco_parallel_batch as cli
+    from so101_demo.cli.mujoco_batch import request as cli
 
     parser = cli.build_parser()
     options = parser.parse_args([
@@ -543,7 +544,9 @@ def test_adaptive_cli_keeps_its_own_config_route(tmp_path):
     worker_options, adaptive_path = cli._adaptive_options(options)
     assert Path(adaptive_path).name == "adaptive_worker_pool.yaml"
     assert worker_options.worker_count >= 1
-    source = Path(cli.__file__).read_text(encoding="utf-8")
+    from so101_demo.cli.mujoco_batch import provenance
+
+    source = "".join(Path(module.__file__).read_text(encoding="utf-8") for module in (cli, provenance))
     assert "parallel_batch_linux_cuda.yaml" in source
     assert "_adaptive_options" in source
 

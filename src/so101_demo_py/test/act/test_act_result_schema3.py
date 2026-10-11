@@ -269,7 +269,7 @@ def test_batch_summary_without_started_attempts_has_no_rate():
 
 
 def test_the_outcome_document_reports_teacher_and_data_rates_separately():
-    from so101_demo.cli.mujoco_parallel_batch import outcome_document
+    from so101_demo.cli.mujoco_batch.outcome import outcome_document
     from so101_demo.parallel_batch.contracts import BatchSummary, PointStatus
     summary = BatchSummary(RunMode.EXECUTE, {"a": PointStatus.PASSED, "b": PointStatus.FAILED}, batch_terminal=True,
         act_results={"a": dict(act_data_qc="FAIL", export_eligible=False)})

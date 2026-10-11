@@ -112,7 +112,7 @@ class HealthySupervisor:
 
 
 def startup_composition(clock, controls, recorder):
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     composition = object.__new__(ProductionBatchComposition)
     composition._clock = clock
@@ -203,7 +203,7 @@ def test_worker_ready_timeout_occurs_without_release_or_pool_running_record():
     recorded = []
     composition = startup_composition(clock, [Control()], recorded.append)
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError
+    from so101_demo.cli.mujoco_batch.common import CliError
 
     with pytest.raises(CliError, match="WORKER_READY_TIMEOUT"):
         composition._release_adaptive_workers()
@@ -235,7 +235,7 @@ def test_second_release_failure_is_after_pool_running_linearization():
         lambda receipts: order.append(("pool_running", len(receipts))),
     )
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError
+    from so101_demo.cli.mujoco_batch.common import CliError
 
     with pytest.raises(CliError, match="POOL_RUNTIME_RELEASE_FAILED"):
         composition._release_adaptive_workers()
@@ -276,7 +276,7 @@ def test_final_readiness_recheck_rejects_wrong_broker_or_stale_receipt(change):
 
     composition = startup_composition(clock, [Control()], lambda _receipts: None)
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError
+    from so101_demo.cli.mujoco_batch.common import CliError
 
     with pytest.raises(CliError, match="WORKER_READINESS_INVALID"):
         composition._release_adaptive_workers()
@@ -545,7 +545,7 @@ def test_adaptive_socket_paths_can_use_explicit_short_runtime_root():
 def test_adaptive_broker_runtime_spec_carries_effective_concurrency(
     tmp_path, monkeypatch, worker_count, yolo_executor_count
 ):
-    from so101_demo.cli import mujoco_parallel_batch as cli
+    from so101_demo.cli.mujoco_batch import composition as cli
     from so101_demo.parallel_batch.contracts import load_parallel_runtime_config_linux_cuda
 
     config_path = (

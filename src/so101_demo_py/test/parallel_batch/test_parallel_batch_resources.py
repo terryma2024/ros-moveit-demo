@@ -432,8 +432,8 @@ def production_batch_argv(
 def test_production_cli_composes_three_workers_with_an_admitted_exact_n_gate(tmp_path):
     """Version two composes N=3 through the exact-N gate, not the retired evidence chain."""
 
-    from so101_demo.cli.mujoco_parallel_batch import (
-        ProductionBatchComposition, prepare_batch)
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     root = resource_root(tmp_path, 'cli-three-valid')
     prepared = prepare_batch(
@@ -452,8 +452,8 @@ def test_production_cli_composes_three_workers_with_an_admitted_exact_n_gate(tmp
 def test_production_cli_needs_no_budget_authority_for_three_workers(tmp_path, monkeypatch):
     """The retired default-gate hook no longer decides anything: the guard does."""
 
-    import so101_demo.cli.mujoco_parallel_batch as parallel_cli
-    from so101_demo.cli.mujoco_parallel_batch import prepare_batch
+    import so101_demo.cli.mujoco_batch.request as parallel_cli
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     monkeypatch.setattr(parallel_cli, '_DEFAULT_START_GUARD', None)
     prepared = prepare_batch(
@@ -467,7 +467,8 @@ def test_production_cli_needs_no_budget_authority_for_three_workers(tmp_path, mo
 def test_production_cli_refuses_retired_headroom_authority_for_any_n(tmp_path, config):
     """The retired three-worker evidence chain is refused before it is even read."""
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     for worker_count in ('2', '3'):
         with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
@@ -482,7 +483,8 @@ def test_production_cli_refuses_retired_headroom_authority_for_any_n(tmp_path, c
                 provenance_verifier=lambda _inputs: {'source_commit': 'a' * 40},
             )
 def test_production_cli_refuses_forged_or_stale_legacy_evidence(tmp_path, config):
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
         prepare_batch(
@@ -1845,7 +1847,8 @@ def test_dry_run_cli_writes_private_manifest_without_starting_processes(tmp_path
 def test_default_three_worker_cli_refuses_retired_self_signed_evidence(tmp_path, config):
     """The CLI refuses the retired evidence chain with the explicit retired error."""
 
-    from so101_demo.cli.mujoco_parallel_batch import CliError, prepare_batch
+    from so101_demo.cli.mujoco_batch.common import CliError
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
 
     with pytest.raises(CliError, match='LIVE_HEADROOM_EVIDENCE_UNEXPECTED'):
         prepare_batch(

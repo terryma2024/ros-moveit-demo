@@ -182,7 +182,7 @@ def test_plan_only_and_validation_runs_are_not_affected():
 # ---- worker-run-results.json: backward compatible ---------------------------------------------------------------------------
 
 def test_the_origin_type_is_written_only_when_it_is_set(tmp_path):
-    from so101_demo.cli.mujoco_parallel_batch import _write_worker_results
+    from so101_demo.cli.mujoco_batch.worker_process import _write_worker_results
     from so101_demo.parallel_batch.worker import WorkerRunResult
     resources = SimpleNamespace(worker_id="worker-01", generation=1, worker_root=tmp_path)
     plain = WorkerRunResult("task_start", None, False, "INITIAL_GATE_FAILED", failure_boundary="x", failure_type="RuntimeError",

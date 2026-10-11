@@ -413,7 +413,7 @@ class ProductionAdaptivePoolFactory:
         if getattr(prepared, "request", object()) is not None or adaptive_request is None:
             raise ValueError("ADAPTIVE_PREPARED_BATCH_REQUIRED")
         if composition_factory is None:
-            from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+            from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
             composition_factory = ProductionBatchComposition
         if not callable(composition_factory):

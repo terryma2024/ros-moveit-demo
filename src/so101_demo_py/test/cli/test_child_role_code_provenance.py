@@ -103,7 +103,8 @@ def test_the_qualified_package_root_is_the_running_package_and_must_lie_inside_t
 def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, monkeypatch):
     """The default (container) route hands `container_run_argv` the package of the running install; outside the install it stops."""
     from test_parallel_batch_cli import argv as cli_argv, verified
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, prepare_batch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resources import ResourceSnapshot
     from so101_demo.parallel_batch.resources import runtime_ipc_base
 
@@ -156,7 +157,7 @@ def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, 
 def test_every_role_command_resolves_to_a_qualified_executable_under_a_decoy_path(tmp_path, monkeypatch):
     from so101_demo.act.offline.orchestration import PROCESSOR_ROLE, RAW_ROLE
     from so101_demo.cli.act_diagnostic_episode import _broker_command
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
 
     decoys = _decoy_path(tmp_path)
     monkeypatch.setenv("PATH", f"{decoys}:{os.environ.get('PATH', '')}")

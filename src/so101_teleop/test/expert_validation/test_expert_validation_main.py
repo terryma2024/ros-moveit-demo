@@ -30,7 +30,7 @@ def test_validation_main_module_does_not_import_rclpy():
 
 
 def test_production_default_broker_image_matches_fixed_coordinator_contract():
-    from so101_demo.cli.mujoco_parallel_batch import _BROKER_IMAGE as coordinator_image
+    from so101_demo.cli.mujoco_batch.provenance import _BROKER_IMAGE as coordinator_image
     from so101_teleop.expert_validation.production import _BROKER_IMAGE as production_image
 
     assert production_image == coordinator_image

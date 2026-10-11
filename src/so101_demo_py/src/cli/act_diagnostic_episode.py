@@ -689,7 +689,8 @@ def _run(arguments) -> int:
         (root / "injected-failure.json").write_text(json.dumps(
             {"kind": "teacher_injected_failure", "schema_version": 1, "state": collection.inject_failure_at,
              "mode": arguments.mode, "code": "TEACHER_INJECTED_EXECUTION_FAILURE", "batch_id": batch_id}, sort_keys=True) + "\n")
-    from so101_demo.cli.mujoco_parallel_batch import ProductionBatchComposition, PreparedBatch
+    from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
+    from so101_demo.cli.mujoco_batch.request import PreparedBatch
     from so101_demo.parallel_batch.start_guard import StartGuardPolicy
     from so101_demo.parallel_batch.start_guard_probe import compose_default_start_guard
 
@@ -750,7 +751,9 @@ def _run(arguments) -> int:
         episode_inputs_manifest=str((inputs / "inputs-manifest.json").resolve()))
     # the drive, exactly as the batch path does it: the composition runs itself, its summary becomes an outcome
     # document, and the document is written as the aggregate beside the run's own evidence
-    from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals, _write_json, outcome_document
+    from so101_demo.cli.mujoco_batch.common import _write_json
+    from so101_demo.cli.mujoco_batch.outcome import outcome_document
+    from so101_demo.cli.mujoco_parallel_batch import _run_with_shutdown_signals
 
     evidence_root = request.evidence_root
     if not evidence_root.exists():

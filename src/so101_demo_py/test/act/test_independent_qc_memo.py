@@ -151,9 +151,9 @@ def test_the_result_gates_trust_the_memo_only_when_asked_and_the_readback_never_
 def test_the_production_composition_asks_for_the_memo_in_both_gates():
     import inspect
 
-    from so101_demo.cli import mujoco_parallel_batch
+    from so101_demo.cli.mujoco_batch import composition, worker_process
 
-    source = inspect.getsource(mujoco_parallel_batch)
+    source = inspect.getsource(composition) + inspect.getsource(worker_process)
     assert source.count("trust_independent_qc_memo=True") == 2
 
 

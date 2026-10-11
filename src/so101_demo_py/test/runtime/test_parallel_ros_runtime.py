@@ -579,7 +579,7 @@ def test_localization_allows_bounded_fresh_stack_tf_discovery(monkeypatch):
 
 
 def test_production_port_factory_binds_every_production_port_without_empty_side_effects():
-    from so101_demo.cli.mujoco_parallel_batch import RosWorkerRuntimePorts
+    from so101_demo.cli.mujoco_batch.worker_process import RosWorkerRuntimePorts
 
     ports = RosWorkerRuntimePorts(
         SimpleNamespace(session_id="session-1"),
@@ -2509,7 +2509,7 @@ def test_the_worker_binds_the_manifest_to_the_frozen_execution_policy(tmp_path):
     import json
     import os
 
-    from so101_demo.cli.mujoco_parallel_batch import RosWorkerRuntimePorts
+    from so101_demo.cli.mujoco_batch.worker_process import RosWorkerRuntimePorts
     from so101_demo.parallel_batch import dynamic_manifest
     from so101_demo.runtime.parallel_ros_runtime import ParallelRosRuntimePorts
 
