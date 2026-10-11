@@ -7,7 +7,6 @@ the capture and the recorder together before this file, which is why the defect 
 """
 
 import pytest
-import re
 from dataclasses import asdict, replace
 
 import json
@@ -15,10 +14,9 @@ import json
 
 from so101_demo.act.continuous_capture import ContinuousEpisodeCapture
 from so101_demo.act.episode_assembly import EpisodeSink, LiveSampler, PhysicalAuditAdapter, PointEpisode, ProductionProducer, assemble_episode_capture, episode_audit_pair, physical_audit_from_captured, physical_audit_from_observation
-from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act import episode_qc
 from act_result_teacher import sealed_teacher
-from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import ActCollectionResultStore, ActCollectionResultVerifier
 from so101_demo.parallel_batch.contracts import LeaseIdentity, RunMode
 from test_act_continuous_capture import (AcquisitionGuard, AcquisitionMinter, FakeSampler, feed,
@@ -313,7 +311,7 @@ def test_the_qc_verdict_comes_from_a_separate_process(tmp_path):
     audit_dir = (sealed / "episode" / "audit").resolve()
     program = (
         "import json, sys\n"
-        "from so101_demo.act.episode_audit import verify_audit_manifest\n"
+        "from so101_demo.act.episode_audit.verification import verify_audit_manifest\n"
         "from so101_demo.act.episode_qc import verify_teacher_references\n"
         "manifest = verify_audit_manifest(sys.argv[1] + '/audit-manifest.json')\n"
         "document = verify_teacher_references(None, identity=manifest['identity'], window=manifest['window'],\n"

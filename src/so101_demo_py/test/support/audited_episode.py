@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 from so101_demo.act.acquisition import AcquisitionMinter
-from so101_demo.act.episode_audit import EpisodeAuditWriter
+from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
 SCOPE_DOCUMENT = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1, "mode": "preselected_target_diagnostic",
                   "scene_id": "default", "seed": 0, "inputs_sha256": "c" * 64}

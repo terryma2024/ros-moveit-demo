@@ -7,7 +7,7 @@ import shutil
 import pytest
 
 from so101_demo.act.episode_assembly import PointEpisode, assemble_episode_capture, ProductionProducer
-from so101_demo.act.episode_audit import verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from test_act_continuous_capture import AcquisitionGuard, AcquisitionMinter, feed, reference
 from test_act_recorder import PROVENANCE
 from test_act_seal_and_downgrade import IDENTITY, SCOPE, recorder_physical_audit

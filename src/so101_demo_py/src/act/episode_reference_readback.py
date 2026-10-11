@@ -28,7 +28,11 @@ def verify_original_frame(frame, kind):
 
 
 def verify_original_references(references):
-    from .episode_audit import _REFERENCE_FIELDS, _REFERENCE_FRAME_FIELDS, _reference_frames_ok
+    from so101_demo.act.episode_audit.checks import (
+        _REFERENCE_FIELDS,
+        _REFERENCE_FRAME_FIELDS,
+        _reference_frames_ok,
+    )
     try:
         if not references:
             raise ValueError("original references absent")

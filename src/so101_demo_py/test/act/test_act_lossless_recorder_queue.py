@@ -209,7 +209,7 @@ def test_actual_child_queue_seals_and_independent_audit_requires_queue_receipt(t
     from so101_demo.act.episode_open import open_recorder_episode
     from so101_demo.act.episode_assembly import episode_audit_pair
     from so101_demo.act.recorder import verify_episode_seal
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
 
     manifest, _, snapshot = frozen_child_inputs(tmp_path)
     episode = open_recorder_episode(_options(tmp_path, inputs=manifest))
@@ -276,7 +276,7 @@ def test_execution_bound_audit_requires_raw_physics_and_frozen_dimensions(tmp_pa
     from so101_demo.act.episode_open import open_recorder_episode
     from so101_demo.act.raw_physics_chunks import raw_chunk_from_ros
     from so101_demo.act.episode_assembly import episode_audit_pair
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     import time
 
     manifest, _, snapshot = frozen_child_inputs(tmp_path)

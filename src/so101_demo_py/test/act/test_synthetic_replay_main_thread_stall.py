@@ -255,7 +255,7 @@ import json, sys
 from pathlib import Path
 from so101_demo.act import episode_qc
 from so101_demo.act.episode_assembly import episode_audit_pair
-from so101_demo.act.episode_audit import verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act.recorder import verify_episode_seal
 root = Path(sys.argv[1]) / "episode"
 audit_manifest, scope = episode_audit_pair(root)

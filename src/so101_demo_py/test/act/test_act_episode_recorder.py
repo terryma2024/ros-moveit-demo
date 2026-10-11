@@ -19,7 +19,7 @@ import pytest
 
 from so101_demo.act import episode_qc
 from so101_demo.act.episode_assembly import PointEpisode, episode_audit_pair
-from so101_demo.act.episode_audit import verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act.recorder import verify_episode_seal
 from so101_demo.act.teacher_event_stream import StreamIdentity, TeacherEventStream
 from so101_demo.act.offline.engine import RC_INVALID, RC_VALID, OfflineEngine

@@ -799,10 +799,10 @@ def test_a_capture_driven_to_its_seal_binds_the_audit_the_endpoint_qc_reads(tmp_
     path because its finish() converts its arguments with Path(...) and cross-checks the file against the episode.
     """
 
-    import json
 
 
-    from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
     from so101_demo.act import episode_qc
     from so101_demo.act.recorder import EpisodeRecorder
     from test_act_recorder import PROVENANCE

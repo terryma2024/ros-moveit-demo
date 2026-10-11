@@ -23,7 +23,7 @@ import uuid
 from pathlib import Path
 
 from so101_demo.application.e2e_acceptance import SCHEMA_TEACHER, is_manifest_of
-from so101_demo.act.episode_audit import verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from so101_demo.act.qc_session import active, cached_lines, file_signature, load_model, session_memo
 
 PHYSICS_STREAM = "physics.jsonl"
@@ -63,7 +63,7 @@ def verify_native_collection_events(events, *, identity, window, inputs):
     import mujoco
     from .collection_boundaries import boundary_clock, claim_collection_boundary, world_source_digest
     from .contracts import finite
-    from .episode_audit import _identity_ok
+    from so101_demo.act.episode_audit.checks import _identity_ok
     from .execution_snapshot import verify_execution_snapshot
     from .diagnostic_episode_inputs import audit_execution_model_identity
     from .joints import ACT_JOINTS
@@ -337,7 +337,7 @@ def verify_episode_physical_audit(episode_root, audit_manifest, scope):
     This production boundary requires the full observed window and native/source-alignment
     originals; its return is data evidence, not a complete QC verdict.
     """
-    from .episode_audit import _WINDOW_FIELDS, _identity_ok
+    from so101_demo.act.episode_audit.checks import _identity_ok, _WINDOW_FIELDS
     from .recorder import verify_episode_seal
 
     try:
@@ -520,7 +520,7 @@ def validate_qc_report(report):
     gate; no task success and no endpoint rule.
     """
     from .contracts import sha256
-    from .episode_audit import _identity_ok
+    from so101_demo.act.episode_audit.checks import _identity_ok
     try:
         if (type(report) is not dict or set(report) != QC_REPORT_FIELDS
                 or report["kind"] != "ACT_EPISODE_QC" or type(report["schema_version"]) is not int

@@ -1,7 +1,6 @@
 """Frozen-source source alignment reconstruction with full generated ROS values, never live acceptance."""
 
 import copy
-from dataclasses import asdict
 import time
 from types import SimpleNamespace
 
@@ -117,7 +116,8 @@ def test_actual_audit_writer_and_resigned_reader_resolve_alignment_to_retained_n
     import json
     import shutil
     from so101_demo.act.collection_scope import build_collection_scope
-    from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
     from so101_demo.act.lossless_recorder import LosslessRecorderQueue
     from so101_demo.act.scene_association import canonical
     from test_act_lossless_recorder_queue import POLICY

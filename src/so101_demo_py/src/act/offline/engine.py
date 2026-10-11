@@ -474,7 +474,7 @@ class OfflineEngine:
         """Verify the sealed files with the existing readers, then the Teacher references again from the files."""
 
         from ..episode_assembly import episode_audit_pair
-        from ..episode_audit import verify_audit_manifest
+        from so101_demo.act.episode_audit.verification import verify_audit_manifest
         from ..episode_qc import _raw_physics_samples, read_verified_rows
         from ..recorder import verify_episode_seal
 

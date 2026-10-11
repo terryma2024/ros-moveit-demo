@@ -26,7 +26,7 @@ _AUDIT_KEYS = frozenset({
     "phase", "reference_time_s", "reference_source", "reference_positions", "source_stamps",
     "mujoco_truth", "contacts", "planning_scene", "controller_state",
 })
-from .episode_audit import verify_audit_manifest
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
 from .qc_session import file_signature, session_memo, tree_signature
 
 _PROVENANCE_KEYS = frozenset({

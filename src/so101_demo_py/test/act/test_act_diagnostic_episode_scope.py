@@ -103,7 +103,7 @@ def test_scope_document_is_closed_and_binds_the_frozen_inputs(tmp_path):
 
 
 def test_unicode_common_scope_keeps_the_exact_audit_payload_bytes(tmp_path):
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
     scope = build_collection_scope("preselected_target_diagnostic", scene_id="场景", seed=0,
                                    inputs_sha256=INPUTS_SHA)
     target = tmp_path / "collection-scope.json"

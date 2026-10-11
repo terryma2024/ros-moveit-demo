@@ -164,7 +164,13 @@ def code_digest() -> str:
         package = Path(__file__).resolve().parent
         for name in CODE_MODULES:
             digest.update(f"{name}\0".encode())
-            digest.update((package / f"{name}.py").read_bytes())
+            if (package / f"{name}.py").is_file():
+                digest.update((package / f"{name}.py").read_bytes())
+            else:
+                # a module split into a package: every file of the package, in a stable order
+                for part in sorted((package / name).rglob("*.py")):
+                    digest.update(f"{part.relative_to(package / name).as_posix()}\0".encode())
+                    digest.update(part.read_bytes())
             digest.update(b"\n")
         _CODE_DIGEST.append(digest.hexdigest())
     return _CODE_DIGEST[0]

@@ -11,18 +11,14 @@ from __future__ import annotations
 
 import hashlib
 import json
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from so101_demo.act.acquisition import AcquisitionMinter
-from so101_demo.act.episode_audit import (
-    MANIFEST_KIND,
-    SOURCE_KINDS,
-    EpisodeAuditWriter,
-    verify_audit_manifest,
-)
+from so101_demo.act.episode_audit.checks import MANIFEST_KIND, SOURCE_KINDS
+from so101_demo.act.episode_audit.verification import verify_audit_manifest
+from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
 ZERO = np.zeros((480, 640, 3), dtype=np.uint8)
 
@@ -1343,13 +1339,13 @@ def test_each_complete_raw_reference_alternative_round_trips(tmp_path):
 def test_the_audit_names_the_runner_s_phases():
     """F5/CP-2147: the audit's declared lifecycle is the runner's, and the test is what keeps it so."""
 
-    from so101_demo.act.episode_audit import FORMAL_PHASES
+    from so101_demo.act.episode_audit.checks import FORMAL_PHASES
     from so101_demo.act.pick_place_runner import PickPlaceRunner
 
     assert tuple(FORMAL_PHASES) == tuple(PickPlaceRunner.PHASES)
 
 
-from so101_demo.act.episode_audit import FORMAL_PHASES   # F5: the prescribed lifecycle
+from so101_demo.act.episode_audit.checks import FORMAL_PHASES   # F5: the prescribed lifecycle
 
 
 from so101_demo.act.joints import ARM_JOINTS   # F5: the ratified joint order

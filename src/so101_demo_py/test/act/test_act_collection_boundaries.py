@@ -1,6 +1,5 @@
 """Original boundary retention in the existing audit; controlled source records only."""
 
-import base64
 import copy
 import hashlib
 import json
@@ -22,7 +21,7 @@ def original_reset(identity):
 
 @pytest.mark.parametrize('fault',[None,'foreign','clock','bool_clock','extra','duplicate','v1'])
 def test_sole_audit_retains_original_reset_boundary_and_rejects_bad_or_repeated(tmp_path,fault):
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     writer,window=complete_audit(tmp_path)
     append=getattr(writer,'append_collection_boundary',None)
     assert callable(append),'collection audit has no original reset boundary retention'
@@ -44,7 +43,7 @@ def test_sole_audit_retains_original_reset_boundary_and_rejects_bad_or_repeated(
 
 
 def test_original_capture_start_clock_survives_seal_readback(tmp_path):
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     writer,window=complete_audit(tmp_path)
     append=getattr(writer,'append_collection_boundary',None)
     assert callable(append),'actual capture-start clock cannot be retained'
@@ -58,7 +57,7 @@ def test_original_capture_start_clock_survives_seal_readback(tmp_path):
 
 @pytest.mark.parametrize('fault',['clock_mapping','scope','duplicate','bool_clock'])
 def test_sealed_reader_refuses_resigned_boundary_tamper_after_positive_control(tmp_path,fault):
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     writer,window=complete_audit(tmp_path)
     writer.append_collection_boundary('verified_reset',original_reset(writer.identity))
     path=writer.seal(window)

@@ -4,10 +4,8 @@ The bag is `offline_synthetic_bag`; the sources are `BagSyntheticSources` (real 
 real episode/lossless writer/engine/seal). The production sources (`OfflineRosSources`) are exercised on the pilot bag.
 """
 
-import filecmp
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -16,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from so101_demo.act.offline import processor, replay
-from offline_synthetic_bag import (ATTEMPT, EPOCH, SESSION, BagSyntheticSources, arm_reference, build_bag, mono_of,
+from offline_synthetic_bag import (ATTEMPT, BagSyntheticSources, arm_reference, build_bag, mono_of,
                                    system_of)
 from test_act_episode_recorder import POLICY_FILE, make_episode
 from paths import PACKAGE_ROOT, TEST_IMPORT_PATH
@@ -182,7 +180,7 @@ def test_the_events_are_in_the_qc_order_on_sim_time(tmp_path):
     reset = round(timeline["reset_complete_sim_s"] * 1e9)
     assert reset <= timeline["first_command_sim_ns"] <= timeline["normal_stop_sim_ns"] <= timeline["terminal_sim_ns"]
     from so101_demo.act.episode_assembly import episode_audit_pair
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     audit_manifest, _ = episode_audit_pair(out / "episode")
     window = verify_audit_manifest(audit_manifest)["window"]
     assert reset / 1e9 <= window["collection_start_s"] <= window["first_command_s"] <= window["collection_end_s"]

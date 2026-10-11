@@ -215,12 +215,11 @@ def test_fsync_failure_is_infrastructure_not_a_business_failed_seal(tmp_path, mo
 
 
 def _audit_and_scope(tmp_path, *, session="session-1", attempt="attempt-1"):
-    import hashlib as _hashlib
 
     import numpy as _np
 
     from so101_demo.act.acquisition import AcquisitionMinter
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
     def canonical(document):
         # byte-for-byte the payload the audit writes, so the seal and the audit name one scope
@@ -344,10 +343,9 @@ def test_a_seal_refuses_an_audit_of_another_episode(tmp_path):
 def _multi_row_audit(tmp_path, instants, *, mismatched_pixels=False):
     """An audit with one binding per recorded instant, plus the scope the seal must share."""
 
-    import numpy as _np
 
     from so101_demo.act.acquisition import AcquisitionMinter
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
     scope_document = {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
                       "mode": "preselected_target_diagnostic", "scene_id": "default", "seed": 0,

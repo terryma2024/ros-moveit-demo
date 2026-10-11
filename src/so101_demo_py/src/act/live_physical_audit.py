@@ -4,7 +4,7 @@ import copy
 import math
 
 from .contracts import identifier, integer
-from .episode_audit import _identity_ok
+from so101_demo.act.episode_audit.checks import _identity_ok
 from .joints import ACT_JOINTS, ordered_positions
 from .nonfinite import json_safe
 from .synchronizer import bracketed_age_ok_ns, source_age_ok_ns

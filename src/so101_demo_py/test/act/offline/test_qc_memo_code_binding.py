@@ -30,7 +30,7 @@ def test_the_code_digest_covers_the_qc_chain_and_is_stable():
     assert len(digest) == 64 and digest == qc_memo.code_digest()
     assert {"episode_qc", "episode_audit", "recorder", "qc_memo"} <= set(qc_memo.CODE_MODULES)
     package = Path(qc_memo.__file__).parent
-    assert all((package / f"{name}.py").is_file() for name in qc_memo.CODE_MODULES)
+    assert all((package / f"{name}.py").is_file() or (package / name / "__init__.py").is_file() for name in qc_memo.CODE_MODULES)
 
 
 def test_a_memo_written_by_other_qc_code_triggers_a_full_recompute(tmp_path, monkeypatch):

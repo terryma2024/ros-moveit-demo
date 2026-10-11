@@ -328,8 +328,8 @@ def _build_worker_from_spec(path, *, runtime_side_effects=None):
     if act_profile and mode is not RunMode.DRY_RUN:
         # the manifest the worker writes is bound to the frozen Teacher execution policy (its place_height record)
         try:
-            from ..act.diagnostic_episode_inputs import verify_frozen_inputs
-            from ..act.frozen_runtime_inputs import EXECUTION_POLICY_BINDING
+            from so101_demo.act.diagnostic_episode_inputs import verify_frozen_inputs
+            from so101_demo.act.frozen_runtime_inputs import EXECUTION_POLICY_BINDING
 
             frozen = verify_frozen_inputs(Path(document["episode_inputs_manifest"]))
             frozen_execution_policy = dict(frozen[EXECUTION_POLICY_BINDING]["values"])

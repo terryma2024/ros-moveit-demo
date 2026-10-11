@@ -407,7 +407,7 @@ def test_actual_audit_seal_rechecks_raw_scope_clocks_and_chunk_continuity(tmp_pa
     import hashlib
     import json
     from test_act_episode_audit import complete_audit
-    from so101_demo.act.episode_audit import verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
     convert, verify = _api()
     writer, window = complete_audit(tmp_path)
     for sequence, first, receipt in ((7, 101, 10_000_000_000), (8, 106, 10_010_000_000)):

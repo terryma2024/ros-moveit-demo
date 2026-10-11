@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from test_act_scene_association import association, frozen_scene
+from test_act_scene_association import association, frozen_scene  # noqa: F401  (pytest fixture)
 
 
 def source_record(frozen_scene):
@@ -77,9 +77,9 @@ def test_actual_audit_retains_world_source_and_independent_reader_refuses_resign
     import hashlib
     import json
     import shutil
-    import time
     from so101_demo.act.collection_scope import build_collection_scope
-    from so101_demo.act.episode_audit import EpisodeAuditWriter, verify_audit_manifest
+    from so101_demo.act.episode_audit.verification import verify_audit_manifest
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
     from so101_demo.act.lossless_recorder import LosslessRecorderQueue
     from so101_demo.act.scene_association import canonical
     from test_act_lossless_recorder_queue import POLICY

@@ -368,7 +368,7 @@ def test_both_retreat_segments_record_the_raw_observation():
 def test_the_missing_raw_branch_is_accepted_by_a_real_audit_writer(tmp_path):
     """T3-F10: the non-formal epilogue must not be refused by a real writer."""
 
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
     audit = EpisodeAuditWriter(tmp_path / "episode",
                                {"kind": "ACT_COLLECTION_SCOPE", "schema_version": 1,
@@ -405,7 +405,7 @@ def test_a_formal_writer_admits_the_runners_events_and_refuses_a_foreign_identit
 
 
     from test_act_episode_audit import _lease, identity
-    from so101_demo.act.episode_audit import EpisodeAuditWriter
+    from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 
     port = AlignedPort()
 

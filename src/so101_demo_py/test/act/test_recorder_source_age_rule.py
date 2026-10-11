@@ -9,7 +9,6 @@ floating point, so a step landing exactly 100 ms before the instant fails this w
 """
 import json
 
-import numpy as np
 import pytest
 
 from so101_demo.act.recorder import EpisodeRecorder
@@ -85,9 +84,9 @@ def test_the_capture_and_the_synchronizer_admit_the_same_boundary_ages(age_ns, a
 @pytest.mark.parametrize("age_ns,admitted", CASES)
 def test_the_audit_binding_check_never_refuses_what_the_provider_admits(age_ns, admitted):
     """QC's causality check keeps its 1 microsecond tolerance: it may be looser than the provider, never tighter."""
-    from so101_demo.act import episode_audit
+    from so101_demo.act.episode_audit import checks as episode_audit_checks
     age_s = (round(AT * 1e9) - round(stamp_at_age(AT, age_ns) * 1e9)) / 1e9
-    qc_ok = not (age_s < -episode_audit._TOLERANCE_S or age_s > episode_audit._MAX_SOURCE_AGE_S + episode_audit._TOLERANCE_S)
+    qc_ok = not (age_s < -episode_audit_checks._TOLERANCE_S or age_s > episode_audit_checks._MAX_SOURCE_AGE_S + episode_audit_checks._TOLERANCE_S)
     assert qc_ok or not admitted
 
 

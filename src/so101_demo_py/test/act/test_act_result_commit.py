@@ -8,12 +8,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from act_result_teacher import sealed_teacher, write_manifest
+from act_result_teacher import sealed_teacher
 from so101_demo.act.collection_scope import write_collection_scope
-from so101_demo.act.episode_audit import EpisodeAuditWriter
+from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 from so101_demo.act.recorder import EpisodeRecorder
 from so101_demo.act.result_store import (
-    ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults, ResultInfraError,
+    ActCollectionResultStore, ActCollectionResultVerifier, ActCollectionResults,
 )
 from so101_demo.parallel_batch.contracts import AttemptStatus, LeaseIdentity, RunMode
 from so101_demo.parallel_batch.contracts import BatchKind, BatchRequest, load_parallel_runtime_config_linux_cuda

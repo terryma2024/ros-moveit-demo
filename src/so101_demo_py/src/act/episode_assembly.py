@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .continuous_capture import ContinuousEpisodeCapture
-from .episode_audit import EpisodeAuditWriter
+from so101_demo.act.episode_audit.writer import EpisodeAuditWriter
 from .recorder import EpisodeRecorder
 
 __all__ = ["EpisodeSink", "LiveSampler", "PhysicalAuditAdapter", "PointEpisode",
@@ -313,7 +313,7 @@ class PointEpisode:
                     or getattr(self, "_physical_provider_bound", False)
                     or not callable(provider) or not callable(getattr(provider, "ready", None))):
                 raise ValueError("EPISODE_CAUSAL_SOURCE_BINDING_INVALID")
-            from .episode_audit import _identity_ok
+            from so101_demo.act.episode_audit.checks import _identity_ok
             from .scene_association import canonical
             identity = getattr(provider, "identity", None)
             if (not _identity_ok(identity, formal="lease" in self.identity)

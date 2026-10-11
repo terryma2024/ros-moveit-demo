@@ -28,7 +28,11 @@ def test_the_diagnostic_episode_chain_does_not_consult_the_quality_contract():
              SOURCE / "act" / "pick_place_runner.py",
              SOURCE / "act" / "recorder.py",
              SOURCE / "act" / "result_store.py"]
+    expanded = []
     for path in chain:
+        package = path.with_suffix("")
+        expanded += sorted(package.rglob("*.py")) if not path.exists() and package.is_dir() else [path]
+    for path in expanded:
         imports = _imports(path)
         offenders = sorted(name for name in imports if QUALITY in name)
         print("QUALITY", path.name, "->", offenders or "none")
