@@ -244,12 +244,10 @@ def measure_coarse_step_val_sweep(
     frozen_document = load_selected_candidate(frozen_candidate_path)
     weights_digest = hashlib.sha256(weights.read_bytes()).hexdigest()
 
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-        MuJoCoDatasetRenderer,
-        load_dataset_config,
-        verify_head_search_manifest,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import load_dataset_config
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
+    from so101_demo.adapters.perception.mujoco_dataset.verify import verify_head_search_manifest
 
     config = load_dataset_config(
         config_path,

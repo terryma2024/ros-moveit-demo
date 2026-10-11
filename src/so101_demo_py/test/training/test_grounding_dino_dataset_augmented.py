@@ -7,13 +7,10 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from so101_demo.adapters.perception.mujoco_dataset import (
-    DatasetConfig,
-    DatasetScenario,
-    RawRender,
-    decode_binary_mask_rle,
-    generate_dataset,
-)
+from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig
+from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario, RawRender
+from so101_demo.adapters.perception.mujoco_dataset.render import decode_binary_mask_rle
 from so101_demo.training.grounding_dino_dataset import (
     GroundingDinoDatasetError,
     _box_document,

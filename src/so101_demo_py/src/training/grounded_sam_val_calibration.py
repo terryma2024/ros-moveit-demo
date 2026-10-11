@@ -17,7 +17,7 @@ from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 from PIL import Image
-from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
+from so101_demo.adapters.perception.mujoco_dataset.render import decode_binary_mask_rle
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
 from so101_demo.perception_benchmark.calibration.thresholds import GroundedSamBenchmarkThresholds

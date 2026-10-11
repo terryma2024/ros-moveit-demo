@@ -91,11 +91,9 @@ def prepare_episode_scene(
 
     import numpy as np
 
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-        MuJoCoDatasetRenderer,
-        load_dataset_config,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import load_dataset_config
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
 
     config = load_dataset_config(Path(dataset_config_path), generator_commit=generator_commit)
     renderer = MuJoCoDatasetRenderer(config)
@@ -244,7 +242,7 @@ def _measurement_budget(budget, *, start_rad: float, fine_corridor_rad) -> dict:
 def scenario_name_for_cup_count(cup_count: int) -> str:
     """The dataset scenario name for a cup count, spelled as the renderer's own enum spells it."""
 
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
 
     return DatasetScenario.for_cup_count(int(cup_count)).value
 

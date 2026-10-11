@@ -38,10 +38,8 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--sample-limit", type=_positive_integer)
     parsed = parser.parse_args(arguments)
 
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        generate_dataset,
-        load_dataset_config,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import load_dataset_config
+    from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
 
     try:
         geometry_seal = None

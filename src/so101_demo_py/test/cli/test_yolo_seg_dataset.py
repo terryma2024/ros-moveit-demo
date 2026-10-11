@@ -9,16 +9,15 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pytest
 
-from so101_demo.adapters.perception.mujoco_dataset import (
+from so101_demo.adapters.perception.mujoco_dataset.config import (
     DatasetConfig,
-    DatasetScenario,
-    RawRender,
-    build_labeled_sample,
-    generate_dataset,
     limited_split_counts,
     load_dataset_config,
     split_seed_plan,
 )
+from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario, RawRender
+from so101_demo.adapters.perception.mujoco_dataset.render import build_labeled_sample
 from paths import PACKAGE_ROOT
 
 
@@ -369,11 +368,11 @@ def test_fresh_benchmark_dataset_config_uses_preregistered_seed_namespace() -> N
 # ----------------------------------------------------------------------------------------------------------------------
 
 from so101_demo.act.head_camera_geometry.contract import scene_source_digests  # noqa: E402
-from so101_demo.adapters.perception.mujoco_dataset import (  # noqa: E402
+from so101_demo.adapters.perception.mujoco_dataset.config import (
     GeometrySealRequirement,
     split_scene_plan,
-    verify_head_search_manifest,
 )
+from so101_demo.adapters.perception.mujoco_dataset.verify import verify_head_search_manifest
 from so101_demo.perception_benchmark.contracts import canonical_sha256  # noqa: E402
 
 HEAD_CONFIG_PATH = PACKAGE_ROOT / "config/perception/head_camera_yolo_seg.yaml"

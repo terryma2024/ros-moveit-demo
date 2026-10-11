@@ -5,17 +5,21 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from so101_demo.adapters.perception.mujoco_dataset import (
+from so101_demo.adapters.perception.mujoco_dataset.config import (
     DatasetConfig,
+    load_dataset_config,
+    scenario_plan,
+)
+from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+from so101_demo.adapters.perception.mujoco_dataset.models import (
     DatasetScenario,
     RawRender,
     SceneGeometry,
+)
+from so101_demo.adapters.perception.mujoco_dataset.render import (
     build_labeled_sample,
     decode_binary_mask_rle,
     encode_binary_mask_rle,
-    generate_dataset,
-    load_dataset_config,
-    scenario_plan,
     select_bounded_render,
 )
 from paths import PACKAGE_ROOT

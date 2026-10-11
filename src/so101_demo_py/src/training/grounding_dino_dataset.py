@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
-from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
+from so101_demo.adapters.perception.mujoco_dataset.render import decode_binary_mask_rle
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _COMMIT = re.compile(r"[0-9a-f]{40}\Z")

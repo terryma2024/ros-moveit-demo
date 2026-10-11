@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from so101_demo.adapters.perception.mujoco_dataset import encode_binary_mask_rle
+from so101_demo.adapters.perception.mujoco_dataset.render import encode_binary_mask_rle
 from so101_demo.perception_benchmark.codec import canonical_json_bytes, encode_mask_rle
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
 from so101_demo.training.grounded_sam_val_calibration import (

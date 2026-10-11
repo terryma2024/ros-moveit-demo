@@ -295,7 +295,8 @@ def test_unsupported_visual_primitive_fails_closed(scene):
 def test_enabled_renderer_rejects_penetration_before_rgb(scene, monkeypatch):
     from types import SimpleNamespace
 
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario, MuJoCoDatasetRenderer
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
     from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
 
     class ForbiddenRenderer:
@@ -319,11 +320,8 @@ def test_enabled_renderer_rejects_penetration_before_rgb(scene, monkeypatch):
 
 
 def test_enabled_all_scenarios_stop_at_deterministic_retry_limit():
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-        SceneGeometry,
-        select_bounded_render,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario, SceneGeometry
+    from so101_demo.adapters.perception.mujoco_dataset.render import select_bounded_render
     from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
 
     attempts = []
@@ -347,12 +345,12 @@ def test_enabled_all_scenarios_stop_at_deterministic_retry_limit():
 
 
 def test_enabled_generation_rejects_missing_geometry_receipt():
-    from so101_demo.adapters.perception.mujoco_dataset import (
+    from so101_demo.adapters.perception.mujoco_dataset.models import (
         DatasetScenario,
         RawRender,
         SceneGeometry,
-        select_bounded_render,
     )
+    from so101_demo.adapters.perception.mujoco_dataset.render import select_bounded_render
 
     render = RawRender(np.zeros((4, 4, 3), dtype=np.uint8), np.full((4, 4), -1), np.array([0]), {})
     with pytest.raises(ValueError, match="geometry receipt"):
@@ -366,7 +364,7 @@ def test_enabled_generation_rejects_missing_geometry_receipt():
 
 
 def test_nonpenetration_policy_is_explicit_and_legacy_default_is_preserved(tmp_path):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetConfig
+    from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig
 
     path = tmp_path / "model.xml"
     path.write_text("<mujoco/>")
@@ -419,11 +417,9 @@ def test_pair_requires_exactly_two_nonempty_geom_name_strings(names):
 
 
 def test_writer_rejects_supplied_receipt_with_malformed_pair_fields(scene, tmp_path):
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetConfig,
-        RawRender,
-        generate_dataset,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig
+    from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+    from so101_demo.adapters.perception.mujoco_dataset.models import RawRender
     from so101_demo.adapters.perception.mujoco_scene_geometry import (
         TaskGeometryPair,
         TaskSceneGeometry,
@@ -476,11 +472,9 @@ def test_writer_enforces_and_persists_explicit_geometry_policy(
 ):
     import json
 
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetConfig,
-        RawRender,
-        generate_dataset,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig
+    from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+    from so101_demo.adapters.perception.mujoco_dataset.models import RawRender
     from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
 
     _, model, data = scene
@@ -542,12 +536,12 @@ def test_receipt_rejects_invalid_state_identity(scene, sha):
 def test_selector_rejects_wrong_receipt_scope(scene, mutation):
     from dataclasses import replace
 
-    from so101_demo.adapters.perception.mujoco_dataset import (
+    from so101_demo.adapters.perception.mujoco_dataset.models import (
         DatasetScenario,
         RawRender,
         SceneGeometry,
-        select_bounded_render,
     )
+    from so101_demo.adapters.perception.mujoco_dataset.render import select_bounded_render
     from so101_demo.adapters.perception.mujoco_scene_geometry import measure_task_scene_geometry
 
     _, model, data = scene
@@ -575,12 +569,12 @@ def test_selector_rejects_wrong_receipt_scope(scene, mutation):
 
 
 def test_retry_accepts_first_valid_scene_and_propagates_invalid_measurement(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import (
+    from so101_demo.adapters.perception.mujoco_dataset.models import (
         DatasetScenario,
         RawRender,
         SceneGeometry,
-        select_bounded_render,
     )
+    from so101_demo.adapters.perception.mujoco_dataset.render import select_bounded_render
     from so101_demo.adapters.perception.mujoco_scene_geometry import (
         ScenePenetrationError,
         measure_task_scene_geometry,

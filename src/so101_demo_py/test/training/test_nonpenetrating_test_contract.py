@@ -5,12 +5,12 @@ from pathlib import Path
 
 import pytest
 import so101_demo.training.grounding_dino_dataset as dino_dataset
-from so101_demo.adapters.perception.mujoco_dataset import (
-    DatasetScenario,
+from so101_demo.adapters.perception.mujoco_dataset.config import (
     load_dataset_config,
     scenario_plan,
     split_seed_plan,
 )
+from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
 from so101_demo.training.grounding_dino_dataset import GroundingDinoDatasetError
 from paths import PACKAGE_ROOT
 

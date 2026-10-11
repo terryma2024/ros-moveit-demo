@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from so101_demo.adapters.perception.mujoco_dataset import MuJoCoDatasetRenderer
+from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
 
 
 def backend(monkeypatch, *, fail_second=False, ignore_zero=False):

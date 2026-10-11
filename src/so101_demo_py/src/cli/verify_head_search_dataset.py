@@ -135,7 +135,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--require-non-promotable", action="store_true")
     parsed = parser.parse_args(arguments)
 
-    from so101_demo.adapters.perception.mujoco_dataset import verify_head_search_manifest
+    from so101_demo.adapters.perception.mujoco_dataset.verify import verify_head_search_manifest
 
     try:
         manifest = json.loads(parsed.head.read_text(encoding="utf-8"))

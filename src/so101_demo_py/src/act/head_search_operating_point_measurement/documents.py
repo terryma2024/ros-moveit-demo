@@ -82,7 +82,7 @@ def truth_from_instances(instances, *, width: float, height: float) -> list[dict
 
     import numpy as np
 
-    from so101_demo.adapters.perception.mujoco_dataset import decode_binary_mask_rle
+    from so101_demo.adapters.perception.mujoco_dataset.render import decode_binary_mask_rle
 
     centres = []
     for instance in instances or ():

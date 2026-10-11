@@ -14,16 +14,18 @@ import numpy as np
 import pytest
 import so101_demo.training.grounding_dino_dataset as dino_dataset
 import yaml
-from so101_demo.adapters.perception.mujoco_dataset import (
+from so101_demo.adapters.perception.mujoco_dataset.config import (
     DatasetConfig,
-    DatasetScenario,
-    RawRender,
-    SceneGeometry,
-    generate_dataset,
     limited_split_counts,
     load_dataset_config,
     scenario_plan,
     split_seed_plan,
+)
+from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
+from so101_demo.adapters.perception.mujoco_dataset.models import (
+    DatasetScenario,
+    RawRender,
+    SceneGeometry,
 )
 from so101_demo.adapters.perception.mujoco_scene_geometry import (
     TaskGeometryPair,
@@ -815,8 +817,23 @@ from pathlib import Path
 
 forbidden_roots = {"mujoco", "OpenGL"}
 module_suffixes = {
-    "so101_demo.adapters.perception.mujoco_dataset": (
-        "adapters/perception/mujoco_dataset.py"
+    "so101_demo.adapters.perception.mujoco_dataset.models": (
+        "adapters/perception/mujoco_dataset/models.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_dataset.config": (
+        "adapters/perception/mujoco_dataset/config.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_dataset.render": (
+        "adapters/perception/mujoco_dataset/render.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_dataset.verify": (
+        "adapters/perception/mujoco_dataset/verify.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_dataset.renderer": (
+        "adapters/perception/mujoco_dataset/renderer.py"
+    ),
+    "so101_demo.adapters.perception.mujoco_dataset.generate": (
+        "adapters/perception/mujoco_dataset/generate.py"
     ),
     "so101_demo.adapters.perception.mujoco_scene_geometry": (
         "adapters/perception/mujoco_scene_geometry.py"

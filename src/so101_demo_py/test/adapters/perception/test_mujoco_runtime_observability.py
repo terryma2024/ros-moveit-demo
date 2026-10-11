@@ -61,10 +61,8 @@ class _SegmentationBackendSpy:
 
 
 def _instrumented_renderer(scene, *, maximum_attempts=2):
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        MuJoCoDatasetRenderer,
-        SceneGeometry,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.models import SceneGeometry
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
 
     mujoco, _, model, data = scene
     calls = []
@@ -97,9 +95,7 @@ def _prepare_one_cup_state(scene, *, penetrating):
 
 
 def test_native_penetration_error_carries_exact_immutable_receipt_and_context(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
     from so101_demo.adapters.perception.mujoco_scene_geometry import (
         ScenePenetrationError,
     )
@@ -141,7 +137,7 @@ def test_message_only_penetration_error_remains_compatible_but_has_no_evidence()
 
 
 def test_actual_boundaries_emit_ordered_immutable_reject_then_accept_events(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
 
     renderer, calls = _instrumented_renderer(scene)
     preparations = 0
@@ -203,7 +199,7 @@ def test_actual_boundaries_emit_ordered_immutable_reject_then_accept_events(scen
 
 
 def test_all_penetrating_attempts_emit_exact_bound_and_make_no_image_calls(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
 
     renderer, calls = _instrumented_renderer(scene, maximum_attempts=3)
     renderer._prepare = lambda random, scenario: _prepare_one_cup_state(
@@ -228,7 +224,7 @@ def test_all_penetrating_attempts_emit_exact_bound_and_make_no_image_calls(scene
 
 
 def test_event_sink_failure_aborts_before_image_or_next_attempt(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import (
+    from so101_demo.adapters.perception.mujoco_dataset.models import (
         DatasetScenario,
         RenderObserverError,
     )
@@ -262,7 +258,7 @@ def test_event_sink_failure_aborts_before_image_or_next_attempt(scene):
 def test_structured_penetration_error_from_rejected_sink_is_not_retried(
     scene, failure_kind
 ):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
     from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
 
     renderer, calls = _instrumented_renderer(scene)
@@ -308,7 +304,7 @@ def test_structured_penetration_error_from_rejected_sink_is_not_retried(
 
 
 def test_structured_penetration_error_from_rgb_start_sink_aborts_before_backend(scene):
-    from so101_demo.adapters.perception.mujoco_dataset import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
     from so101_demo.adapters.perception.mujoco_scene_geometry import ScenePenetrationError
 
     renderer, calls = _instrumented_renderer(scene)
@@ -352,11 +348,8 @@ def test_structured_penetration_error_from_rgb_start_sink_aborts_before_backend(
 
 @pytest.mark.parametrize("malformation", ["missing", "accepted", "wrong_scope", "nonfinite"])
 def test_observed_retry_rejects_malformed_penetration_evidence(scene, malformation):
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-        SceneGeometry,
-        select_bounded_render,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario, SceneGeometry
+    from so101_demo.adapters.perception.mujoco_dataset.render import select_bounded_render
     from so101_demo.adapters.perception.mujoco_scene_geometry import (
         ScenePenetrationError,
         measure_task_scene_geometry,
@@ -402,12 +395,9 @@ def test_observed_retry_rejects_malformed_penetration_evidence(scene, malformati
 
 def test_split_free_renderer_settings_are_exact_and_construct_the_real_renderer(scene, monkeypatch):
     import mujoco
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetConfig,
-        MuJoCoDatasetRenderer,
-        RendererSettings,
-        SceneGeometry,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig, RendererSettings
+    from so101_demo.adapters.perception.mujoco_dataset.models import SceneGeometry
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
 
     _, path, _, _ = scene
     config = DatasetConfig(

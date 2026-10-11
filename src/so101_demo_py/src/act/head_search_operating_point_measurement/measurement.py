@@ -81,11 +81,9 @@ def measure_operating_point_measurements(
     from ultralytics import YOLO
 
     from so101_demo.act.head_search_coarse_step_measurement.measurement import runtime_identity
-    from so101_demo.adapters.perception.mujoco_dataset import (
-        DatasetScenario,
-        MuJoCoDatasetRenderer,
-        load_dataset_config,
-    )
+    from so101_demo.adapters.perception.mujoco_dataset.config import load_dataset_config
+    from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
+    from so101_demo.adapters.perception.mujoco_dataset.renderer import MuJoCoDatasetRenderer
     from so101_demo.cli.evaluate_head_search_yolo_candidates import _dataset_sums, _measure_static
     from so101_demo.perception_benchmark.head_search_models import (
         load_frozen_candidate,
