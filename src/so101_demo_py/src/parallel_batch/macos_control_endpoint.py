@@ -28,7 +28,7 @@ import stat
 import threading
 from typing import Callable, Mapping
 
-from so101_demo.runtime.parallel_ipc import IpcError, encode_frame, receive_frame
+from so101_demo.runtime.parallel_ipc.frames import encode_frame, IpcError, receive_frame
 
 from .web_control import (
     _IDENTIFIER,

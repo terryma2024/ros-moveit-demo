@@ -450,7 +450,7 @@ def main(argv=None, *, transport=None):
     parser.add_argument('--smoke-input', type=Path)
     args = parser.parse_args(argv)
     if args.smoke_input is None and transport is None:
-        from so101_demo.runtime.parallel_ipc import build_broker_transport
+        from so101_demo.runtime.parallel_ipc.broker_transport import build_broker_transport
 
         transport = build_broker_transport(Path(args.runtime_spec))
     versions = {}

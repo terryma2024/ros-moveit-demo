@@ -4,14 +4,14 @@ import copy
 from pathlib import Path
 
 import pytest
-import so101_demo.training.grounding_dino_dataset as dino_dataset
+from so101_demo.training.grounding_dino_dataset import validation as dino_dataset_validation
 from so101_demo.adapters.perception.mujoco_dataset.config import (
     load_dataset_config,
     scenario_plan,
     split_seed_plan,
 )
 from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario
-from so101_demo.training.grounding_dino_dataset import GroundingDinoDatasetError
+from so101_demo.training.grounding_dino_dataset.contracts import GroundingDinoDatasetError
 from paths import PACKAGE_ROOT
 
 CONTRACT = "so101-nonpenetrating-test-v1"
@@ -70,7 +70,7 @@ def test_official_test_config_loads_the_preregistered_population() -> None:
 
 
 def test_official_test_converter_validator_accepts_only_the_preregistered_schedule() -> None:
-    validator = getattr(dino_dataset, "_validate_official_test_version", None)
+    validator = getattr(dino_dataset_validation, "_validate_official_test_version", None)
     assert callable(validator), "missing official test-only version validator"
     manifest = _official_manifest()
 
@@ -89,4 +89,4 @@ def test_test_only_dataset_yaml_exposes_no_train_or_val(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    dino_dataset._dataset_contract(root, ("test",))
+    dino_dataset_validation._dataset_contract(root, ("test",))

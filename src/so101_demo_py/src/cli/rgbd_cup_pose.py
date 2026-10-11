@@ -240,10 +240,8 @@ def main(arguments: list[str] | None = None) -> int:
             "--emit-workflow-events and a safe --workflow-id must be provided together"
         )
 
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
     from so101_demo.runtime.workflow_events import EventEmitter
 
     event_emitter = (

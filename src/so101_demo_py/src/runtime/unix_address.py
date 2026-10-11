@@ -483,7 +483,7 @@ class ProcFdUnixAddress:
         self._capacity = int(capacity_bytes)
 
     def create_campaign_root(self) -> CampaignIpcRoot:  # pragma: no cover - Linux only
-        from ..runtime.parallel_ipc import require_proc_fd_transport
+        from so101_demo.runtime.parallel_ipc.frames import require_proc_fd_transport
 
         require_proc_fd_transport()
         raise UnixAddressError(

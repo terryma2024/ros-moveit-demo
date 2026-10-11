@@ -16,7 +16,8 @@ from so101_demo.adapters.perception.grounded_sam_postprocess import (
 )
 from so101_demo.core.detection import DetectionFrame, DetectionQuery
 
-from .grounded_sam_val_calibration import ValDataset, _greedy_matches
+from so101_demo.training.grounded_sam_val_calibration.datasets import ValDataset
+from so101_demo.training.grounded_sam_val_calibration.selection import _greedy_matches
 
 REPLAY_THRESHOLDS = GroundedSamThresholds(
     box_threshold=.25, text_threshold=.25, duplicate_iou=.85,

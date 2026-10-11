@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 from so101_demo.cli.prepare_grounding_dino_dataset import main
-from so101_demo.training.grounding_dino_dataset import (
+from so101_demo.training.grounding_dino_dataset.contracts import (
     GroundingDinoDatasetError,
-    convert_dataset,
     polygon_to_box,
 )
+from so101_demo.training.grounding_dino_dataset.conversion import convert_dataset
 
 ARCHIVE_SHA = "a" * 64
 CONVERTER_COMMIT = "b" * 40

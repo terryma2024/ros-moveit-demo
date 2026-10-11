@@ -318,7 +318,7 @@ def _first_bad_phase(markers: Sequence[str]) -> str | None:
 
 
 def _identity_alive(pid: int, birth: int) -> bool:
-    from so101_demo.runtime.runtime_closure import read_process_birth_identity
+    from so101_demo.runtime.runtime_closure.build import read_process_birth_identity
 
     try:
         return read_process_birth_identity(pid) == birth

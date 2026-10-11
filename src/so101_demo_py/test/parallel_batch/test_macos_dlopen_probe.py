@@ -9,6 +9,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from so101_demo.runtime.macos_dlopen_gate import control as macos_dlopen_gate_control
+from so101_demo.runtime.macos_dlopen_gate import farm as macos_dlopen_gate_farm
+from so101_demo.runtime.macos_dlopen_gate import semantics as macos_dlopen_gate_semantics
 
 
 def _module():
@@ -18,7 +21,7 @@ def _module():
 
 
 def _attested(module, *, marker="DLOPEN_SUCCEEDED", first_bad=None):
-    return module.GateAControlObservation(
+    return macos_dlopen_gate_control.GateAControlObservation(
         invariants_valid=True,
         collector_healthy=True,
         process_identity_stable=True,
@@ -48,7 +51,7 @@ def _attested(module, *, marker="DLOPEN_SUCCEEDED", first_bad=None):
 
 
 def _missing(module, *, collector=True, identity=True):
-    return module.GateAControlObservation(
+    return macos_dlopen_gate_control.GateAControlObservation(
         invariants_valid=True,
         collector_healthy=collector,
         process_identity_stable=identity,
@@ -73,19 +76,19 @@ def _missing(module, *, collector=True, identity=True):
 def test_closed_verdict_axes_match_the_reviewed_design() -> None:
     module = _module()
 
-    assert [item.value for item in module.CurrentBoundaryVerdict] == [
+    assert [item.value for item in macos_dlopen_gate_semantics.CurrentBoundaryVerdict] == [
         "UNCONFIRMED_CURRENT",
         "CONFIRMED_RPATH",
         "CURRENT_CLOSURE_ALREADY_VALID",
         "CURRENT_NON_RPATH_FAILURE",
         "INVALID_CONTROL",
     ]
-    assert [item.value for item in module.ControllerVerdict] == [
+    assert [item.value for item in macos_dlopen_gate_semantics.ControllerVerdict] == [
         "NOT_EXCLUDED",
         "EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT",
         "CURRENT_CONTROLLER_PATH_OPERATIONAL",
     ]
-    assert [item.value for item in module.LegacyAttribution] == [
+    assert [item.value for item in macos_dlopen_gate_semantics.LegacyAttribution] == [
         "LEGACY_TRACEABLE",
         "LEGACY_PROVENANCE_UNRECOVERABLE",
     ]
@@ -94,38 +97,38 @@ def test_closed_verdict_axes_match_the_reviewed_design() -> None:
 def test_valid_n_missing_and_p_pass_confirms_rpath() -> None:
     module = _module()
 
-    decision = module.reduce_gate_a_controls(_missing(module), _attested(module))
+    decision = macos_dlopen_gate_control.reduce_gate_a_controls(_missing(module), _attested(module))
 
-    assert decision.current is module.CurrentBoundaryVerdict.CONFIRMED_RPATH
+    assert decision.current is macos_dlopen_gate_semantics.CurrentBoundaryVerdict.CONFIRMED_RPATH
     assert (
         decision.controller
-        is module.ControllerVerdict.EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT
+        is macos_dlopen_gate_semantics.ControllerVerdict.EXCLUDED_BEFORE_ROS_PLUGIN_INSTANCE_INIT
     )
 
 
 def test_same_loader_surface_without_collector_or_process_identity_is_invalid() -> None:
     module = _module()
 
-    decision = module.reduce_gate_a_controls(
+    decision = macos_dlopen_gate_control.reduce_gate_a_controls(
         _missing(module, collector=False, identity=False), _attested(module)
     )
 
-    assert decision.current is module.CurrentBoundaryVerdict.INVALID_CONTROL
-    assert decision.controller is module.ControllerVerdict.NOT_EXCLUDED
+    assert decision.current is macos_dlopen_gate_semantics.CurrentBoundaryVerdict.INVALID_CONTROL
+    assert decision.controller is macos_dlopen_gate_semantics.ControllerVerdict.NOT_EXCLUDED
 
 
 def test_both_pass_selects_current_closure_without_product_edit() -> None:
     module = _module()
 
-    decision = module.reduce_gate_a_controls(_attested(module), _attested(module))
+    decision = macos_dlopen_gate_control.reduce_gate_a_controls(_attested(module), _attested(module))
 
     assert (
         decision.current
-        is module.CurrentBoundaryVerdict.CURRENT_CLOSURE_ALREADY_VALID
+        is macos_dlopen_gate_semantics.CurrentBoundaryVerdict.CURRENT_CLOSURE_ALREADY_VALID
     )
     assert (
         decision.controller
-        is module.ControllerVerdict.CURRENT_CONTROLLER_PATH_OPERATIONAL
+        is macos_dlopen_gate_semantics.ControllerVerdict.CURRENT_CONTROLLER_PATH_OPERATIONAL
     )
 
 
@@ -146,21 +149,21 @@ def test_control_invariants_win_before_surface_classification(mutation: str) -> 
         document["dlopen_marker"] = None
     else:
         document["invariants_valid"] = False
-    invalid_n = module.GateAControlObservation.from_document(document)
+    invalid_n = macos_dlopen_gate_control.GateAControlObservation.from_document(document)
 
-    decision = module.reduce_gate_a_controls(invalid_n, _attested(module))
+    decision = macos_dlopen_gate_control.reduce_gate_a_controls(invalid_n, _attested(module))
 
-    assert decision.current is module.CurrentBoundaryVerdict.INVALID_CONTROL
+    assert decision.current is macos_dlopen_gate_semantics.CurrentBoundaryVerdict.INVALID_CONTROL
 
 
 def test_non_rpath_failure_stops_at_the_first_bad_ros_phase() -> None:
     module = _module()
     non_rpath = _attested(module, first_bad="HARDWARE_READY")
 
-    decision = module.reduce_gate_a_controls(non_rpath, _attested(module))
+    decision = macos_dlopen_gate_control.reduce_gate_a_controls(non_rpath, _attested(module))
 
-    assert decision.current is module.CurrentBoundaryVerdict.CURRENT_NON_RPATH_FAILURE
-    assert decision.controller is module.ControllerVerdict.NOT_EXCLUDED
+    assert decision.current is macos_dlopen_gate_semantics.CurrentBoundaryVerdict.CURRENT_NON_RPATH_FAILURE
+    assert decision.controller is macos_dlopen_gate_semantics.ControllerVerdict.NOT_EXCLUDED
 
 
 def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Path) -> None:
@@ -179,7 +182,7 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
             (str(closure_library), str(ros_farm))
         ),
     }
-    n = module.FrozenSemanticLaunchContract(
+    n = macos_dlopen_gate_semantics.FrozenSemanticLaunchContract(
         argv=(
             "/venv/bin/python",
             "/ros/bin/ros2",
@@ -193,7 +196,7 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
         ros_library_directory=ros_farm,
         vendor_library_directory=vendor,
     )
-    p = module.FrozenSemanticLaunchContract(
+    p = macos_dlopen_gate_semantics.FrozenSemanticLaunchContract(
         argv=n.argv,
         environment={
             **base,
@@ -207,12 +210,12 @@ def test_frozen_semantics_allow_only_the_manifest_vendor_dyld_delta(tmp_path: Pa
         vendor_library_directory=vendor,
     )
 
-    module.validate_np_semantic_delta(n, p)
+    macos_dlopen_gate_semantics.validate_np_semantic_delta(n, p)
 
-    with pytest.raises(module.GateAControlError) as error:
-        module.validate_np_semantic_delta(
+    with pytest.raises(macos_dlopen_gate_farm.GateAControlError) as error:
+        macos_dlopen_gate_semantics.validate_np_semantic_delta(
             n,
-            module.FrozenSemanticLaunchContract(
+            macos_dlopen_gate_semantics.FrozenSemanticLaunchContract(
                 argv=(*n.argv, "headless:=true"),
                 environment=p.environment,
                 python_executable=n.python_executable,
@@ -254,7 +257,7 @@ def test_filtered_ros_dylib_farm_keeps_ros_dependencies_and_excludes_closure_nam
         ),
     )
 
-    identity = module.build_filtered_ros_dylib_farm(
+    identity = macos_dlopen_gate_farm.build_filtered_ros_dylib_farm(
         source_farm=source,
         output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
         excluded_basenames={
@@ -268,7 +271,7 @@ def test_filtered_ros_dylib_farm_keeps_ros_dependencies_and_excludes_closure_nam
         "librosidl_typesupport_c.dylib",
     }
     assert not (identity.directory / "libmujoco.3.4.0.dylib").exists()
-    module.verify_filtered_ros_dylib_farm(
+    macos_dlopen_gate_farm.verify_filtered_ros_dylib_farm(
         identity,
         excluded_basenames={
             "libmujoco.3.4.0.dylib",
@@ -285,8 +288,8 @@ def test_filtered_ros_dylib_farm_requires_the_two_ros_bootstrap_dependencies(
         tmp_path, ("libhardware_interface.dylib",)
     )
 
-    with pytest.raises(module.GateAControlError) as error:
-        module.build_filtered_ros_dylib_farm(
+    with pytest.raises(macos_dlopen_gate_farm.GateAControlError) as error:
+        macos_dlopen_gate_farm.build_filtered_ros_dylib_farm(
             source_farm=source,
             output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
             excluded_basenames=set(),
@@ -301,15 +304,15 @@ def test_filtered_ros_dylib_farm_detects_target_byte_drift(tmp_path: Path) -> No
         tmp_path,
         ("libhardware_interface.dylib", "librosidl_typesupport_c.dylib"),
     )
-    identity = module.build_filtered_ros_dylib_farm(
+    identity = macos_dlopen_gate_farm.build_filtered_ros_dylib_farm(
         source_farm=source,
         output_directory=tmp_path / "gate-a/filtered-ros-dylib-farm",
         excluded_basenames=set(),
     )
     targets["libhardware_interface.dylib"].write_bytes(b"replacement")
 
-    with pytest.raises(module.GateAControlError) as error:
-        module.verify_filtered_ros_dylib_farm(identity, excluded_basenames=set())
+    with pytest.raises(macos_dlopen_gate_farm.GateAControlError) as error:
+        macos_dlopen_gate_farm.verify_filtered_ros_dylib_farm(identity, excluded_basenames=set())
 
     assert error.value.code == "CONTROL_ROS_DYLIB_FARM_DRIFT"
 
@@ -319,7 +322,7 @@ def test_gate_a_binding_validates_domain_session_and_containment(tmp_path: Path)
     root = tmp_path / "run"
     root.mkdir()
 
-    binding = module.GateARunBinding.create(
+    binding = macos_dlopen_gate_control.GateARunBinding.create(
         run_root=root,
         session_id="gate-a-safe-1",
         ros_domain_id=232,
@@ -329,13 +332,13 @@ def test_gate_a_binding_validates_domain_session_and_containment(tmp_path: Path)
     assert binding.report_path.is_relative_to(root)
     assert binding.task_evidence_root.is_relative_to(root)
     for domain in (-1, 233):
-        with pytest.raises(module.GateAControlError) as error:
-            module.GateARunBinding.create(
+        with pytest.raises(macos_dlopen_gate_farm.GateAControlError) as error:
+            macos_dlopen_gate_control.GateARunBinding.create(
                 run_root=root, session_id="gate-a-safe-2", ros_domain_id=domain
             )
         assert error.value.code == "CONTROL_BINDING_INVALID"
-    with pytest.raises(module.GateAControlError):
-        module.GateARunBinding.create(
+    with pytest.raises(macos_dlopen_gate_farm.GateAControlError):
+        macos_dlopen_gate_control.GateARunBinding.create(
             run_root=root, session_id="../escape", ros_domain_id=22
         )
 
@@ -353,7 +356,7 @@ def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
     closure_library.mkdir()
     scene.parent.mkdir(parents=True)
     scene.write_text("<mujoco/>", encoding="utf-8")
-    semantic = module.FrozenSemanticLaunchContract(
+    semantic = macos_dlopen_gate_semantics.FrozenSemanticLaunchContract(
         argv=(
             "/venv/bin/python",
             "/ros/bin/ros2",
@@ -380,14 +383,14 @@ def test_gate_a_bindings_keep_ros_farm_and_only_positive_adds_vendor(
     n_root.mkdir()
     p_root.mkdir()
 
-    negative = module.GateARunBinding.create(
+    negative = macos_dlopen_gate_control.GateARunBinding.create(
         run_root=n_root,
         session_id="gate-a-n",
         ros_domain_id=40,
         control="N",
         manifest=manifest,
     )
-    positive = module.GateARunBinding.create(
+    positive = macos_dlopen_gate_control.GateARunBinding.create(
         run_root=p_root,
         session_id="gate-a-p",
         ros_domain_id=41,
@@ -414,7 +417,7 @@ def test_create_binding_accepts_precreated_empty_plan_run_root(
     monkeypatch.setattr(module, "load_manifest", lambda _path: object())
     monkeypatch.setattr(module, "_next_domain", lambda _root, _session: 117)
     monkeypatch.setattr(
-        module.GateARunBinding, "create", lambda **_kwargs: fake_binding
+        macos_dlopen_gate_control.GateARunBinding, "create", lambda **_kwargs: fake_binding
     )
 
     result = module.main(
@@ -446,7 +449,7 @@ def test_create_binding_refuses_reused_nonempty_plan_run_root(
     (run_root / "foreign.txt").write_text("occupied", encoding="utf-8")
     monkeypatch.setattr(module, "load_manifest", lambda _path: object())
 
-    with pytest.raises(module.GateAControlError) as error:
+    with pytest.raises(macos_dlopen_gate_farm.GateAControlError) as error:
         module.main(
             [
                 "--create-run-binding",
@@ -471,7 +474,7 @@ def test_direct_probe_observation_preserves_markers_and_raw_dlerror(tmp_path: Pa
     plugin = tmp_path / "libplugin.dylib"
     plugin.write_bytes(b"not a dylib")
 
-    observation = module.run_direct_dlopen(plugin)
+    observation = macos_dlopen_gate_control.run_direct_dlopen(plugin)
 
     assert observation.markers[0] == "DLOPEN_STARTED"
     assert observation.markers[-1] == "DLOPEN_FAILED"

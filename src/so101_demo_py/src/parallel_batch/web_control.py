@@ -19,7 +19,7 @@ import struct
 import sys
 import threading
 
-from so101_demo.runtime.parallel_ipc import IpcError, encode_frame, receive_frame
+from so101_demo.runtime.parallel_ipc.frames import encode_frame, IpcError, receive_frame
 from so101_demo.runtime.unix_address import (
     DARWIN_SUN_PATH_CAPACITY_BYTES,
     LINUX_SUN_PATH_CAPACITY_BYTES,

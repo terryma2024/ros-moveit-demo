@@ -48,22 +48,22 @@ def run_full_task_station_control(
 ) -> dict[str, object]:
     """Launch, attest, stop, and classify one manifest-bound full-station control."""
 
-    from so101_demo.runtime.macos_dlopen_probe import (
+    from so101_demo.runtime.macos_dlopen_gate.control import (
         GateAControlObservation,
         GateARunBinding,
-        _closure_dylib_basenames,
-        load_binding,
-        load_manifest,
-        verify_filtered_ros_dylib_farm,
-        write_json,
     )
-    from so101_demo.runtime.runtime_closure import (
-        ControllerRuntimeOwnerBinding,
-        RuntimeClosureError,
-        build_runtime_process_attestation,
+    from so101_demo.runtime.macos_dlopen_gate.farm import verify_filtered_ros_dylib_farm
+    from so101_demo.runtime.macos_dlopen_gate.semantics import _closure_dylib_basenames
+    from so101_demo.runtime.macos_dlopen_probe import load_binding, load_manifest, write_json
+    from so101_demo.runtime.runtime_closure.attestation import build_runtime_process_attestation
+    from so101_demo.runtime.runtime_closure.build import (
         default_loaded_image_probe,
         read_process_birth_identity,
         verify_runtime_closure,
+    )
+    from so101_demo.runtime.runtime_closure.identities import (
+        ControllerRuntimeOwnerBinding,
+        RuntimeClosureError,
     )
 
     manifest = load_manifest(manifest_path)
@@ -353,13 +353,15 @@ def run_fixed_dylib_farm_full_task_station(
     ``spawned=false`` and no signal at all.
     """
 
-    from so101_demo.runtime.runtime_closure import (
+    from so101_demo.runtime.runtime_closure.attestation import build_runtime_process_attestation
+    from so101_demo.runtime.runtime_closure.build import (
+        default_loaded_image_probe,
+        read_process_birth_identity,
+    )
+    from so101_demo.runtime.runtime_closure.identities import (
         ControllerRuntimeOwnerBinding,
         ProcessIdentity,
         RuntimeClosureError,
-        build_runtime_process_attestation,
-        default_loaded_image_probe,
-        read_process_birth_identity,
     )
 
     runtime_paths = paths or FixedFarmRuntimePaths.production()

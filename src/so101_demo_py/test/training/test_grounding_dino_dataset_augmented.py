@@ -11,12 +11,12 @@ from so101_demo.adapters.perception.mujoco_dataset.config import DatasetConfig
 from so101_demo.adapters.perception.mujoco_dataset.generate import generate_dataset
 from so101_demo.adapters.perception.mujoco_dataset.models import DatasetScenario, RawRender
 from so101_demo.adapters.perception.mujoco_dataset.render import decode_binary_mask_rle
-from so101_demo.training.grounding_dino_dataset import (
-    GroundingDinoDatasetError,
-    _box_document,
+from so101_demo.training.grounding_dino_dataset.contracts import (
     binary_mask_to_box,
-    convert_dataset,
+    GroundingDinoDatasetError,
 )
+from so101_demo.training.grounding_dino_dataset.conversion import convert_dataset
+from so101_demo.training.grounding_dino_dataset.validation import _box_document
 from so101_demo.training.grounding_dino_finetune import (
     TrainingDataError,
     _box_truth,

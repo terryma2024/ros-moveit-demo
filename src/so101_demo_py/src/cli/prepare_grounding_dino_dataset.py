@@ -6,10 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
-from so101_demo.training.grounding_dino_dataset import (
-    GroundingDinoDatasetError,
-    convert_dataset,
-)
+from so101_demo.training.grounding_dino_dataset.contracts import GroundingDinoDatasetError
+from so101_demo.training.grounding_dino_dataset.conversion import convert_dataset
 
 
 def _absolute_path(value: str) -> Path:

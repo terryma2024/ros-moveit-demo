@@ -157,7 +157,7 @@ def test_control_socket_appearing_after_six_seconds_uses_shared_120_second_deadl
 def test_transient_readiness_transport_failure_is_retried_before_shared_deadline(
     transport_error,
 ):
-    from so101_demo.runtime.parallel_ipc import IpcError
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     clock = FakeClock()
 

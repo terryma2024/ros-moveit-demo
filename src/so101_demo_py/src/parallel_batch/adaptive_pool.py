@@ -17,7 +17,7 @@ import time
 import traceback
 from typing import Callable
 
-from ..runtime.parallel_ipc import IpcError, require_transport_basename
+from so101_demo.runtime.parallel_ipc.frames import IpcError, require_transport_basename
 from .adaptive_contracts import (
     AdaptiveWorkerOptions,
     CommittedPointResult,

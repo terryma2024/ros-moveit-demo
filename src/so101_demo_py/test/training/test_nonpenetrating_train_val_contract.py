@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import so101_demo.training.grounding_dino_dataset as dino_dataset
+from so101_demo.training.grounding_dino_dataset import validation as dino_dataset_validation
 import yaml
 from so101_demo.adapters.perception.mujoco_dataset.config import (
     DatasetConfig,
@@ -31,10 +31,8 @@ from so101_demo.adapters.perception.mujoco_scene_geometry import (
     TaskGeometryPair,
     TaskSceneGeometry,
 )
-from so101_demo.training.grounding_dino_dataset import (
-    GroundingDinoDatasetError,
-    convert_dataset,
-)
+from so101_demo.training.grounding_dino_dataset.contracts import GroundingDinoDatasetError
+from so101_demo.training.grounding_dino_dataset.conversion import convert_dataset
 from paths import PACKAGE_ROOT
 
 CONTRACT = "so101-nonpenetrating-train-val-v1"
@@ -308,16 +306,16 @@ def _convert(root: Path, output: Path) -> dict[str, str]:
 
 def _assert_conversion_error(root: Path, output: Path, code: str) -> None:
     with pytest.raises(GroundingDinoDatasetError) as caught:
-        manifest, _ = dino_dataset._manifest(root)
-        dino_dataset._dataset_contract(root, ("train", "val"))
+        manifest, _ = dino_dataset_validation._manifest(root)
+        dino_dataset_validation._dataset_contract(root, ("train", "val"))
         samples = [
-            dino_dataset._validate_sample_shape(sample, index, ("train", "val"))
+            dino_dataset_validation._validate_sample_shape(sample, index, ("train", "val"))
             for index, sample in enumerate(manifest["samples"])
         ]
-        dino_dataset._validate_manifest_members(manifest, samples, ("train", "val"))
+        dino_dataset_validation._validate_manifest_members(manifest, samples, ("train", "val"))
         for sample in samples:
             truth_path = root / sample["truth"]
-            dino_dataset._truth_instances(
+            dino_dataset_validation._truth_instances(
                 truth_path.read_bytes(),
                 member=sample["truth"],
                 sample=sample,
@@ -499,15 +497,15 @@ def test_synthetic_legacy_three_way_generator_and_converter_remain_byte_compatib
 
 def test_compact_new_contract_exercises_lower_level_validators_only(tmp_path: Path) -> None:
     source, _ = _new_source(tmp_path / "source")
-    manifest, _ = dino_dataset._manifest(source)
+    manifest, _ = dino_dataset_validation._manifest(source)
     samples = [
-        dino_dataset._validate_sample_shape(sample, index, ("train", "val"))
+        dino_dataset_validation._validate_sample_shape(sample, index, ("train", "val"))
         for index, sample in enumerate(manifest["samples"])
     ]
-    dino_dataset._dataset_contract(source, ("train", "val"))
-    dino_dataset._validate_manifest_members(manifest, samples, ("train", "val"))
+    dino_dataset_validation._dataset_contract(source, ("train", "val"))
+    dino_dataset_validation._validate_manifest_members(manifest, samples, ("train", "val"))
     for sample in samples:
-        result = dino_dataset._truth_instances(
+        result = dino_dataset_validation._truth_instances(
             (source / sample["truth"]).read_bytes(),
             member=sample["truth"],
             sample=sample,
@@ -838,8 +836,14 @@ module_suffixes = {
     "so101_demo.adapters.perception.mujoco_scene_geometry": (
         "adapters/perception/mujoco_scene_geometry.py"
     ),
-    "so101_demo.training.grounding_dino_dataset": (
-        "training/grounding_dino_dataset.py"
+    "so101_demo.training.grounding_dino_dataset.contracts": (
+        "training/grounding_dino_dataset/contracts.py"
+    ),
+    "so101_demo.training.grounding_dino_dataset.validation": (
+        "training/grounding_dino_dataset/validation.py"
+    ),
+    "so101_demo.training.grounding_dino_dataset.conversion": (
+        "training/grounding_dino_dataset/conversion.py"
     ),
 }
 
@@ -1044,7 +1048,7 @@ def _official_version_manifest() -> dict[str, object]:
 
 
 def _official_version_validator():
-    validator = getattr(dino_dataset, "_validate_official_train_val_version", None)
+    validator = getattr(dino_dataset_validation, "_validate_official_train_val_version", None)
     assert callable(validator), "missing official train/val version validator"
     return validator
 
@@ -1116,7 +1120,7 @@ def _scenario_truth_case(scenario: str) -> tuple[dict[str, object], dict[str, ob
 
 
 def _validate_scenario_truth(truth: dict[str, object], sample: dict[str, object]) -> None:
-    dino_dataset._truth_instances(
+    dino_dataset_validation._truth_instances(
         _canonical_json(truth).encode(),
         member="synthetic-truth.json",
         sample=sample,
@@ -1172,14 +1176,14 @@ def test_new_contract_rejects_scenario_target_count_and_body_mutations(
 
 
 def _tree_validator():
-    validator = getattr(dino_dataset, "_validate_train_val_source_tree", None)
+    validator = getattr(dino_dataset_validation, "_validate_train_val_source_tree", None)
     assert callable(validator), "missing exact train/val source-tree validator"
     return validator
 
 
 def _validate_compact_tree(root: Path, manifest: dict[str, object]) -> None:
     samples = [
-        dino_dataset._validate_sample_shape(sample, index, ("train", "val"))
+        dino_dataset_validation._validate_sample_shape(sample, index, ("train", "val"))
         for index, sample in enumerate(manifest["samples"])
     ]
     _tree_validator()(root, manifest, samples)
@@ -1355,7 +1359,7 @@ def test_new_converter_normalizes_non_plain_integer_schema(
     _rewrite_manifest(root, lambda document: document.__setitem__("schema_version", schema))
 
     with pytest.raises(GroundingDinoDatasetError) as caught:
-        dino_dataset._manifest(root)
+        dino_dataset_validation._manifest(root)
     assert caught.value.code == "MANIFEST_INVALID"
 
 

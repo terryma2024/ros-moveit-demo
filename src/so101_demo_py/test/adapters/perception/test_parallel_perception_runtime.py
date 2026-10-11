@@ -433,7 +433,7 @@ def test_service_executor_pool_overlaps_two_yolo_and_serializes_grounded(
         PerceptionService,
         YOLO_ID,
     )
-    from so101_demo.runtime.parallel_ipc import _BrokerMetrics
+    from so101_demo.runtime.parallel_ipc.broker_transport import _BrokerMetrics
 
     f = fixture_runtime(tmp_path, monkeypatch)
     release = threading.Event()
@@ -976,7 +976,7 @@ def test_container_entry_installs_transport_from_exact_runtime_spec(
     tmp_path, monkeypatch
 ):
     from so101_demo.cli import parallel_perception_broker as cli
-    from so101_demo.runtime import parallel_ipc
+    from so101_demo.runtime.parallel_ipc import broker_transport as parallel_ipc_broker_transport
 
     f = fixture_runtime(tmp_path, monkeypatch)
     monkeypatch.setattr(cli, 'ParallelPerceptionRuntime', lambda **kwargs: f.runtime)
@@ -1001,7 +1001,7 @@ def test_container_entry_installs_transport_from_exact_runtime_spec(
             return 0
 
     monkeypatch.setattr(
-        parallel_ipc,
+        parallel_ipc_broker_transport,
         'build_broker_transport',
         lambda runtime_spec: calls.append(('build', runtime_spec)) or Transport(),
         raising=False,

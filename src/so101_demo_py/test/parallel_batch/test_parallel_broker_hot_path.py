@@ -120,7 +120,7 @@ class _FastRuntime:
 
 @contextmanager
 def _running_broker(root, *, capacity=10, handlers=10, deadline_s=3.0):
-    from so101_demo.runtime.parallel_ipc import BrokerTransport
+    from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
     from so101_demo.runtime.parallel_perception_runtime import PerceptionService
 
     root.mkdir(mode=0o700)
@@ -158,7 +158,7 @@ def _running_broker(root, *, capacity=10, handlers=10, deadline_s=3.0):
 
 
 def _call(server, transport, request, marker, index):
-    from so101_demo.runtime.parallel_ipc import UnixRpcClient
+    from so101_demo.runtime.parallel_ipc.authority import UnixRpcClient
 
     return UnixRpcClient(server.path, deadline_s=5.0).call(
         _message(transport, request, _snapshot(marker), index)

@@ -31,10 +31,7 @@ from so101_demo.parallel_batch.contracts.common import AttemptStatus, RunMode, V
 from so101_demo.parallel_batch.contracts.linux_cuda import teacher_execution_bound_s
 from so101_demo.parallel_batch.worker import ParallelWorker
 from so101_demo.parallel_batch.worker_parts.contracts import adaptive_result_is_infrastructure
-from so101_demo.runtime.parallel_ipc import (
-    AuthenticatedUnixServer,
-    WorkerTokenAuthority,
-)
+from so101_demo.runtime.parallel_ipc.authority import AuthenticatedUnixServer, WorkerTokenAuthority
 from so101_demo.runtime.parallel_ros_runtime import (
     ParallelRosRuntimePorts as _ConcreteRosWorkerRuntimePorts,
 )

@@ -57,7 +57,7 @@ def _cloud(*, stamp_ns: int):
 
 
 def _valid_frame(*, stamp_ns: int = 20):
-    from so101_demo.ros.rgbd_cup_pose_node import CupPoseFrame
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrame
 
     return CupPoseFrame(
         stamp_ns=stamp_ns,
@@ -234,10 +234,7 @@ def test_estimate_world_cup_pose_transforms_points_before_circle_fit() -> None:
 
 
 def test_frame_estimator_uses_exact_source_stamp_and_bounded_tf_lookup() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        estimate_cup_pose_frame,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import estimate_cup_pose_frame, RgbdCupPoseOptions
 
     cloud = _cloud(stamp_ns=20_000_000)
     source_stamp = SimpleNamespace(sec=0, nanosec=20_000_000)
@@ -268,10 +265,7 @@ def test_frame_estimator_uses_exact_source_stamp_and_bounded_tf_lookup() -> None
 def test_frame_estimator_profiles_exact_stamp_world_transform(tmp_path: Path) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        estimate_cup_pose_frame,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import estimate_cup_pose_frame, RgbdCupPoseOptions
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -315,7 +309,7 @@ def test_frame_estimator_profiles_exact_stamp_world_transform(tmp_path: Path) ->
 
 
 def test_prevalid_tf_timeout_is_capped_by_remaining_startup_budget() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import bounded_tf_timeout_s
+    from so101_demo.ros.rgbd_cup_pose.frames import bounded_tf_timeout_s
 
     assert bounded_tf_timeout_s(
         0.2,
@@ -332,7 +326,7 @@ def test_prevalid_tf_timeout_is_capped_by_remaining_startup_budget() -> None:
 
 
 def test_failed_frame_never_republishes_last_valid_pose() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import CupPoseFrameProcessor
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrameProcessor
 
     published = []
     errors = []
@@ -359,7 +353,7 @@ def test_frame_processor_profiles_first_frame_wait_and_each_estimate(
 ) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import CupPoseFrameProcessor
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrameProcessor
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -412,11 +406,8 @@ def test_profiled_startup_timeout_finishes_frame_wait_as_timeout(
 ) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        CupPoseFrameProcessor,
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrameProcessor, RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -477,10 +468,8 @@ def test_profiled_runtime_construction_failure_finishes_frame_wait_as_error(
 ) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        _create_ros_runtime,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -521,11 +510,8 @@ def test_profiled_shutdown_before_first_frame_finishes_wait_as_interrupted(
 ) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        CupPoseFrameProcessor,
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrameProcessor, RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -582,7 +568,7 @@ def test_profiled_shutdown_before_first_frame_finishes_wait_as_interrupted(
 
 
 def test_fresh_frame_gate_rejects_duplicate_and_out_of_order_stamps() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import FreshFrameGate
+    from so101_demo.ros.rgbd_cup_pose.frames import FreshFrameGate
 
     gate = FreshFrameGate()
 
@@ -593,7 +579,7 @@ def test_fresh_frame_gate_rejects_duplicate_and_out_of_order_stamps() -> None:
 
 
 def test_pose_message_preserves_source_stamp_world_frame_and_identity_orientation() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import pose_message_from_frame
+    from so101_demo.ros.rgbd_cup_pose.frames import pose_message_from_frame
 
     message = SimpleNamespace(
         header=SimpleNamespace(stamp=None, frame_id=""),
@@ -625,7 +611,7 @@ def test_pose_message_preserves_source_stamp_world_frame_and_identity_orientatio
 
 
 def test_first_valid_evidence_is_written_once_while_fresh_frames_publish() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
+    from so101_demo.ros.rgbd_cup_pose.frames import (
         CupPoseFrameProcessor,
         FirstValidEvidencePublisher,
     )
@@ -662,7 +648,7 @@ def test_first_valid_evidence_is_written_once_while_fresh_frames_publish() -> No
 
 
 def test_evidence_failure_is_fatal_and_prevents_publication() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import FirstValidEvidencePublisher
+    from so101_demo.ros.rgbd_cup_pose.frames import FirstValidEvidencePublisher
 
     published = []
 
@@ -681,22 +667,24 @@ def test_evidence_failure_is_fatal_and_prevents_publication() -> None:
 
 
 def test_open3d_absence_is_an_actionable_preflight_error(monkeypatch) -> None:
-    from so101_demo.ros import rgbd_cup_pose_node
+    import importlib.util
 
-    monkeypatch.setattr(rgbd_cup_pose_node.importlib.util, "find_spec", lambda _name: None)
+    from so101_demo.ros.rgbd_cup_pose import frames as rgbd_cup_pose_node_frames
+
+    monkeypatch.setattr(importlib.util, "find_spec", lambda _name: None)
 
     with pytest.raises(RuntimeError, match="python3 -m pip install open3d"):
-        rgbd_cup_pose_node._require_open3d(1.0)
+        rgbd_cup_pose_node_frames._require_open3d(1.0)
 
 
 def test_open3d_discoverable_but_import_broken_fails_preflight() -> None:
-    from so101_demo.ros import rgbd_cup_pose_node
+    from so101_demo.ros.rgbd_cup_pose import frames as rgbd_cup_pose_node_frames
 
     def broken_import(_name: str):
         raise ImportError("dlopen native library failed")
 
     with pytest.raises(RuntimeError, match="Open3D is unusable.*dlopen"):
-        rgbd_cup_pose_node._require_open3d(
+        rgbd_cup_pose_node_frames._require_open3d(
             1.0,
             find_spec=lambda _name: object(),
             importer=broken_import,
@@ -704,11 +692,8 @@ def test_open3d_discoverable_but_import_broken_fails_preflight() -> None:
 
 
 def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        CupPoseFrameProcessor,
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import CupPoseFrameProcessor, RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     errors = []
 
@@ -749,7 +734,8 @@ def test_startup_deadline_is_monotonic_and_fails_after_only_invalid_frames(capsy
 def test_run_profiles_total_without_changing_success_result(tmp_path: Path) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, run_rgbd_cup_pose
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = True
@@ -795,10 +781,8 @@ def test_run_profiles_total_without_changing_success_result(tmp_path: Path) -> N
 
 
 def test_startup_budget_begins_before_preflight_and_runtime_construction(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False
@@ -829,10 +813,8 @@ def test_startup_budget_begins_before_preflight_and_runtime_construction(capsys)
 
 
 def test_runtime_construction_overrun_is_closed_before_spin(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False
@@ -867,10 +849,8 @@ def test_runtime_construction_overrun_is_closed_before_spin(capsys) -> None:
 
 
 def test_prevalid_spin_wait_cannot_exceed_remaining_startup_budget() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False
@@ -903,10 +883,8 @@ def test_prevalid_spin_wait_cannot_exceed_remaining_startup_budget() -> None:
 
 
 def test_context_shutdown_before_first_valid_pose_is_nonzero(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False
@@ -936,10 +914,8 @@ def test_context_shutdown_before_first_valid_pose_is_nonzero(capsys) -> None:
 
 @pytest.mark.parametrize("interrupt_phase", ["preflight", "construction"])
 def test_setup_sigint_is_actionable_nonzero_without_traceback(interrupt_phase, capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     def preflight(_remaining_s: float) -> None:
         if interrupt_phase == "preflight":
@@ -964,10 +940,8 @@ def test_setup_sigint_is_actionable_nonzero_without_traceback(interrupt_phase, c
 
 
 def test_sigint_before_first_valid_pose_is_nonzero(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False
@@ -993,10 +967,8 @@ def test_sigint_before_first_valid_pose_is_nonzero(capsys) -> None:
 
 
 def test_sigint_after_first_valid_pose_is_orderly(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = True
@@ -1024,10 +996,8 @@ def test_sigint_after_first_valid_pose_is_orderly(capsys) -> None:
 def test_context_shutdown_runtime_error_after_first_valid_pose_is_orderly(
     capsys,
 ) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = True
@@ -1062,10 +1032,8 @@ def test_context_shutdown_runtime_error_after_first_valid_pose_is_orderly(
 def test_live_context_runtime_error_after_first_valid_pose_remains_fatal(
     capsys,
 ) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = True
@@ -1096,7 +1064,8 @@ def test_live_context_runtime_error_after_first_valid_pose_remains_fatal(
 
 
 def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, _rclpy, node, _listener = _fake_ros_api()
     runtime = _create_ros_runtime(
@@ -1121,7 +1090,8 @@ def test_ros_runtime_matches_reliable_depth_one_camera_qos() -> None:
 
 
 def test_workflow_ready_is_emitted_once_after_the_first_fresh_frame_gate() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     timeline = []
 
@@ -1160,7 +1130,8 @@ def test_profiled_ros_runtime_records_matched_first_callbacks_and_common_stamp(
 ) -> None:
     from so101_demo.profiling.model import ProfilingConfig, ProfilingMode
     from so101_demo.profiling.session import build_profiler
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     profiler = build_profiler(
         ProfilingConfig(
@@ -1241,7 +1212,8 @@ def test_profiled_ros_runtime_records_matched_first_callbacks_and_common_stamp(
 
 
 def test_unprofiled_ros_runtime_constructs_no_subscription_event_callbacks() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, _rclpy, node, _listener = _fake_ros_api()
 
@@ -1264,12 +1236,13 @@ def test_unprofiled_ros_runtime_constructs_no_subscription_event_callbacks() -> 
 def test_first_valid_publish_releases_exact_rgbd_inputs_once_and_cleanup_is_safe(
     monkeypatch,
 ) -> None:
-    from so101_demo.ros import rgbd_cup_pose_node
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose import ros_runtime as rgbd_cup_pose_node_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, _rclpy, node, _listener = _fake_ros_api()
     monkeypatch.setattr(
-        rgbd_cup_pose_node,
+        rgbd_cup_pose_node_ros_runtime,
         "pose_message_from_frame",
         lambda *_args, **_kwargs: object(),
     )
@@ -1297,7 +1270,8 @@ def test_first_valid_publish_releases_exact_rgbd_inputs_once_and_cleanup_is_safe
 
 
 def test_ros_runtime_disables_unused_default_services_without_dropping_sim_time() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, fake_rclpy, node, _listener = _fake_ros_api()
     create_node_calls = []
@@ -1328,7 +1302,8 @@ def test_ros_runtime_disables_unused_default_services_without_dropping_sim_time(
 
 
 def test_partial_ros_runtime_construction_cleans_every_created_resource() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, fake_rclpy, node, listener = _fake_ros_api(fail_subscription_number=2)
 
@@ -1349,7 +1324,8 @@ def test_partial_ros_runtime_construction_cleans_every_created_resource() -> Non
 
 
 def test_node_construction_failure_after_init_shuts_down_owned_context() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RgbdCupPoseOptions, _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
 
     api, fake_rclpy, _node, _listener = _fake_ros_api()
 
@@ -1371,7 +1347,7 @@ def test_node_construction_failure_after_init_shuts_down_owned_context() -> None
 
 
 def test_cleanup_attempts_every_resource_in_reverse_order_and_aggregates_failures() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import CleanupError, RosResourceCleanup
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import CleanupError, RosResourceCleanup
 
     calls = []
 
@@ -1413,7 +1389,7 @@ def test_cleanup_attempts_every_resource_in_reverse_order_and_aggregates_failure
 
 
 def test_cleanup_is_idempotent_and_preserves_external_context() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import RosResourceCleanup
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import RosResourceCleanup
 
     calls = []
     node = SimpleNamespace(
@@ -1442,7 +1418,7 @@ def test_cleanup_is_idempotent_and_preserves_external_context() -> None:
 
 
 def test_failed_cleanup_is_idempotent_and_rethrows_without_repeating_actions() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import CleanupError, RosResourceCleanup
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import CleanupError, RosResourceCleanup
 
     calls = []
 
@@ -1466,11 +1442,9 @@ def test_failed_cleanup_is_idempotent_and_rethrows_without_repeating_actions() -
 
 
 def test_partial_construction_cleanup_failure_is_actionable_and_continues(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        _create_ros_runtime,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import _create_ros_runtime
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     api, fake_rclpy, node, listener = _fake_ros_api(fail_subscription_number=2)
 
@@ -1501,10 +1475,8 @@ def test_partial_construction_cleanup_failure_is_actionable_and_continues(capsys
 
 
 def test_post_success_cleanup_failure_forces_actionable_nonzero(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = True
@@ -1532,11 +1504,9 @@ def test_post_success_cleanup_failure_forces_actionable_nonzero(capsys) -> None:
 
 
 def test_post_success_close_accepts_owned_context_already_shut_down(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        RosResourceCleanup,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose.ros_runtime import RosResourceCleanup
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     api, fake_rclpy, node, listener = _fake_ros_api()
     subscription = object()
@@ -1574,10 +1544,8 @@ def test_post_success_close_accepts_owned_context_already_shut_down(capsys) -> N
 
 
 def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         def __init__(self) -> None:
@@ -1611,10 +1579,8 @@ def test_run_continues_after_first_valid_frame_until_orderly_shutdown() -> None:
 
 
 def test_runtime_evidence_io_failure_returns_explicit_nonzero(capsys) -> None:
-    from so101_demo.ros.rgbd_cup_pose_node import (
-        RgbdCupPoseOptions,
-        run_rgbd_cup_pose,
-    )
+    from so101_demo.ros.rgbd_cup_pose.frames import RgbdCupPoseOptions
+    from so101_demo.ros.rgbd_cup_pose_node import run_rgbd_cup_pose
 
     class FakeRuntime:
         first_valid_published = False

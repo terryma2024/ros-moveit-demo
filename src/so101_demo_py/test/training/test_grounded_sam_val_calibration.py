@@ -11,18 +11,22 @@ import pytest
 from so101_demo.adapters.perception.mujoco_dataset.render import encode_binary_mask_rle
 from so101_demo.perception_benchmark.codec import canonical_json_bytes, encode_mask_rle
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
-from so101_demo.training.grounded_sam_val_calibration import (
+from so101_demo.training.grounded_sam_val_calibration.datasets import (
+    candidate_from_document,
+    candidate_to_document,
     ValCalibrationError,
     ValDataset,
     ValSample,
-    candidate_from_document,
-    candidate_to_document,
+)
+from so101_demo.training.grounded_sam_val_calibration.evidence import (
     collect_val_raw,
     load_verified_raw_records,
-    select_mask_aware_sam_quality_threshold,
-    select_sam_quality_threshold,
     verify_val_truth_rebind,
     write_calibration_evidence,
+)
+from so101_demo.training.grounded_sam_val_calibration.selection import (
+    select_mask_aware_sam_quality_threshold,
+    select_sam_quality_threshold,
 )
 
 SHA_A = "a" * 64
@@ -410,7 +414,7 @@ def test_val_loader_binds_inventory_and_only_val_members(
     source.chmod(0o555)
     inventory_root.chmod(0o555)
 
-    from so101_demo.training import grounded_sam_val_calibration as calibration
+    from so101_demo.training.grounded_sam_val_calibration import datasets as calibration
 
     loader = getattr(calibration, f"load_locked_{split}_dataset", None)
     assert callable(loader), "train-only exact-RLE loader is not implemented"

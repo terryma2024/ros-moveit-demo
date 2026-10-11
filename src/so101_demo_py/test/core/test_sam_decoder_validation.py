@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
-from so101_demo.training.grounded_sam_val_calibration import ValDataset, ValSample
+from so101_demo.training.grounded_sam_val_calibration.datasets import ValDataset, ValSample
 
 
 def api():

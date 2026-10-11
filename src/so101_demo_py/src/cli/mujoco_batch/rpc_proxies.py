@@ -28,10 +28,8 @@ from so101_demo.parallel_batch.resource_allocation.manifest import (
 )
 from so101_demo.parallel_batch.resource_allocation.models import WorkerResources
 from so101_demo.parallel_batch.worker_parts.contracts import LeaseGrantPaused
-from so101_demo.runtime.parallel_ipc import (
-    BrokerTransport,
-    UnixRpcClient,
-)
+from so101_demo.runtime.parallel_ipc.authority import UnixRpcClient
+from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
 from so101_demo.runtime.task_stack import OwnedProcessIdentity
 
 _RPC_PAYLOAD_FIELDS = {

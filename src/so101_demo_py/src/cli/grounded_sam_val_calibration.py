@@ -10,14 +10,18 @@ from pathlib import Path
 
 from so101_demo.cli.evaluate_grounded_sam_frozen_candidate import _build_runtime
 from so101_demo.training.frozen_candidate_evaluation import verify_frozen_candidate_lock
-from so101_demo.training.grounded_sam_val_calibration import (
-    ValCalibrationError,
-    collect_val_raw,
+from so101_demo.training.grounded_sam_val_calibration.datasets import (
     load_locked_val_dataset,
+    ValCalibrationError,
+)
+from so101_demo.training.grounded_sam_val_calibration.evidence import (
+    collect_val_raw,
     load_verified_raw_records,
+    write_calibration_evidence,
+)
+from so101_demo.training.grounded_sam_val_calibration.selection import (
     select_mask_aware_sam_quality_threshold,
     select_sam_quality_threshold,
-    write_calibration_evidence,
     write_mask_aware_calibration_evidence,
 )
 

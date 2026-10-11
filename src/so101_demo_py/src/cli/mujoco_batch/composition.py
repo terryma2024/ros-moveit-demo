@@ -38,7 +38,7 @@ from so101_demo.parallel_batch.resource_allocation.models import (
 )
 from so101_demo.parallel_batch.resources import WorkerResourceAllocator
 from so101_demo.parallel_batch.web_control import FixedCoordinatorControlServer
-from so101_demo.runtime.parallel_ipc import (
+from so101_demo.runtime.parallel_ipc.authority import (
     AuthenticatedUnixServer,
     UnixRpcClient,
     WorkerTokenAuthority,

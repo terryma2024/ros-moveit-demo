@@ -15,7 +15,7 @@ from so101_demo.core.detection import (
     DetectionQuery,
     LocalizedObject,
 )
-from so101_demo.ros.rgbd_cup_pose_node import FirstValidEvidencePublisher
+from so101_demo.ros.rgbd_cup_pose.frames import FirstValidEvidencePublisher
 from so101_demo.runtime.perception_evidence import PerceptionEvidenceWriter
 
 

@@ -1220,7 +1220,7 @@ def test_workers_cannot_start_until_broker_socket_and_ready_receipt_exist(tmp_pa
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import BrokerTransport
+    from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
 
     class Probe:
         def snapshot(self):
@@ -1717,7 +1717,7 @@ def test_broker_socket_appearing_between_readiness_checks_is_snapshotted_once(
     checks = 0
 
     def racing_lstat(path):
-        from so101_demo.runtime.parallel_ipc import transport_address
+        from so101_demo.runtime.parallel_ipc.frames import transport_address
 
         nonlocal checks
         if path == composition.broker_socket_path:
@@ -1833,9 +1833,7 @@ def test_broker_transport_does_not_interpret_committed_start_event(tmp_path):
     from so101_demo.parallel_batch.broker import BrokerResponse, BrokerSubmission
     from so101_demo.parallel_batch.contracts.common import ExecutionKind, ModelOutcome
     from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import (
-        BrokerTransport,
-    )
+    from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
     from so101_demo.runtime.parallel_worker_parts.receipts import InferenceSnapshotReceipt
 
     class Probe:
@@ -2732,7 +2730,10 @@ def test_crashed_worker_recovery_terminates_only_exact_recorded_children(tmp_pat
 def test_worker_control_proxy_completes_real_authenticated_socket_round_trip(tmp_path):
     import threading
     from so101_demo.cli.mujoco_batch.rpc_proxies import _WorkerControlProxy
-    from so101_demo.runtime.parallel_ipc import AuthenticatedUnixServer, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import (
+        AuthenticatedUnixServer,
+        WorkerTokenAuthority,
+    )
 
     authority = WorkerTokenAuthority(
         _socket_fixture_root(tmp_path, "proxy"), coordinator_epoch=3)
@@ -3157,7 +3158,7 @@ def test_authenticated_worker_discovers_only_the_current_healthy_broker(tmp_path
     from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.cli.mujoco_batch.rpc_proxies import _CoordinatorRpcProxy
     from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
-    from so101_demo.runtime.parallel_ipc import IpcError
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     class Probe:
         def snapshot(self):

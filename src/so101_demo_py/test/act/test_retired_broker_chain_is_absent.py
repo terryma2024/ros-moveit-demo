@@ -79,8 +79,9 @@ def test_the_vendored_jtc_is_not_in_the_worktree_and_the_snapshot_does_not_read_
 def test_the_console_script_and_the_receipt_plumbing_are_gone():
     assert "act_command_" + "broker" not in (REPOSITORY / "src/so101_demo_py/setup.py").read_text()
     from so101_demo.runtime import parallel_ipc
+    from so101_demo.runtime.parallel_ipc import authority as parallel_ipc_authority
     assert not hasattr(parallel_ipc, "Rpc" + "WireReceipt")
-    assert not hasattr(parallel_ipc.UnixRpcClient, "call_with_" + "receipt")
+    assert not hasattr(parallel_ipc_authority.UnixRpcClient, "call_with_" + "receipt")
     from so101_demo.adapters.act.physics import MujocoPathChecker
     assert not hasattr(MujocoPathChecker, "check_native" + "_path")
     from so101_demo.act import episode_assembly

@@ -255,7 +255,7 @@ def _owner_ancestry(
 ):
     """Reconstruct the owner chain from the launch root down to the controller child."""
 
-    from so101_demo.runtime.runtime_closure import ProcessIdentity
+    from so101_demo.runtime.runtime_closure.identities import ProcessIdentity
 
     parents = {row[0]: row[1] for row in rows}
     chain: list[int] = [target_pid]

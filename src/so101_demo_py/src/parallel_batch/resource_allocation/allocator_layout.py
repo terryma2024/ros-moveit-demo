@@ -22,7 +22,7 @@ from so101_demo.parallel_batch.resource_allocation.models import (
     ResourceAllocationError,
     WorkerResources,
 )
-from so101_demo.runtime.parallel_ipc import IpcError, require_transport_basename
+from so101_demo.runtime.parallel_ipc.frames import IpcError, require_transport_basename
 from so101_demo.runtime.unix_address import (
     DARWIN_SUN_PATH_CAPACITY_BYTES,
     LINUX_SUN_PATH_CAPACITY_BYTES,

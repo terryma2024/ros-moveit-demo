@@ -16,9 +16,12 @@ def deep_root(tmp_path, *, name="d" * 80, nested="e" * 40):
 
 
 def test_transport_basename_budget_and_exact_kernel_size(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
-        IpcError, UNIX_SOCKADDR_CAPACITY_BYTES, require_transport_basename,
-        transport_address)
+    from so101_demo.runtime.parallel_ipc.frames import (
+        IpcError,
+        require_transport_basename,
+        transport_address,
+        UNIX_SOCKADDR_CAPACITY_BYTES,
+    )
     root = deep_root(tmp_path)
     assert len(os.fsencode(root / "s")) > 107
     if sys.platform == "darwin":
@@ -41,7 +44,7 @@ def test_transport_basename_budget_and_exact_kernel_size(tmp_path):
 
 
 def test_long_durable_root_binds_connects_and_keeps_canonical_path(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, transport_address
+    from so101_demo.runtime.parallel_ipc.frames import IpcError, transport_address
     root = deep_root(tmp_path)
     path = root / "control.sock"
     assert len(os.fsencode(path)) > 107
@@ -83,9 +86,9 @@ def test_long_durable_root_binds_connects_and_keeps_canonical_path(tmp_path):
 
 
 def test_missing_proc_transport_fails_closed(tmp_path, monkeypatch):
-    from so101_demo.runtime import parallel_ipc
-    from so101_demo.runtime.parallel_ipc import IpcError, require_transport_basename
-    monkeypatch.setattr(parallel_ipc, "_PROC_FD_ROOT", tmp_path / "missing-proc")
+    from so101_demo.runtime.parallel_ipc import frames as parallel_ipc_frames
+    from so101_demo.runtime.parallel_ipc.frames import IpcError, require_transport_basename
+    monkeypatch.setattr(parallel_ipc_frames, "_PROC_FD_ROOT", tmp_path / "missing-proc")
     if sys.platform == "darwin":
         require_transport_basename(tmp_path / "control.sock")
         return
@@ -94,7 +97,7 @@ def test_missing_proc_transport_fails_closed(tmp_path, monkeypatch):
 
 
 def test_symlinked_parent_is_still_rejected(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, transport_address
+    from so101_demo.runtime.parallel_ipc.frames import IpcError, transport_address
     real = deep_root(tmp_path)
     alias = tmp_path / "alias"
     alias.symlink_to(real)
@@ -114,7 +117,7 @@ def test_symlinked_parent_is_still_rejected(tmp_path):
 
 
 def test_failed_bind_leaves_no_socket_and_no_fd_leak(tmp_path):
-    from so101_demo.runtime.parallel_ipc import transport_address
+    from so101_demo.runtime.parallel_ipc.frames import transport_address
     with tempfile.TemporaryDirectory(dir=os.environ["TMPDIR"]) as directory:
         root = Path(directory)
         path = root / "control.sock"

@@ -148,7 +148,7 @@ class TwoWorkerBrokerPort:
             InferenceRequest,
             NormalizedInferenceResponseIdentity,
         )
-        from .parallel_ipc import BrokerTransport
+        from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
         from .parallel_perception_runtime import Snapshot
 
         self.refresh(wait_until_healthy=False)

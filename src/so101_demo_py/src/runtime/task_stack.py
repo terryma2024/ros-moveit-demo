@@ -17,15 +17,17 @@ from .owner_records import (
     owner_context_from_environment,
     spawner_token_from_environment,
 )
-from .runtime_closure import (
-    RuntimeAttestation,
-    RuntimeClosureError,
-    RuntimeClosureIdentity,
-    RunBinding,
+from so101_demo.runtime.runtime_closure.build import (
     build_runtime_attestation,
     default_loaded_image_probe,
     read_process_birth_identity,
     verify_runtime_closure,
+)
+from so101_demo.runtime.runtime_closure.identities import (
+    RunBinding,
+    RuntimeAttestation,
+    RuntimeClosureError,
+    RuntimeClosureIdentity,
 )
 
 

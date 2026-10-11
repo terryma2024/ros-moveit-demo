@@ -16,9 +16,7 @@ from so101_demo.cli.mujoco_batch.worker_process import (
     _worker_results_failed,
 )
 from so101_demo.parallel_batch.contracts.common import WorkerState
-from so101_demo.runtime.parallel_ipc import (
-    IpcError,
-)
+from so101_demo.runtime.parallel_ipc.frames import IpcError
 
 
 class WorkerLifecycle:

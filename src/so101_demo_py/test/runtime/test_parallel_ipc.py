@@ -42,7 +42,7 @@ def request(**changes):
 
 
 def test_codec_rejects_noncanonical_duplicate_unknown_and_bad_frames():
-    from so101_demo.runtime.parallel_ipc import IpcError, decode_frame, encode_frame
+    from so101_demo.runtime.parallel_ipc.frames import decode_frame, encode_frame, IpcError
 
     canonical = json.dumps(request(), sort_keys=True, separators=(",", ":")).encode()
     assert decode_frame(struct.pack(">I", len(canonical)) + canonical) == request()
@@ -73,7 +73,8 @@ def test_codec_rejects_noncanonical_duplicate_unknown_and_bad_frames():
     ],
 )
 def test_authority_rejects_wrong_token_fields_and_stale_identity(tmp_path, change, error):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -83,7 +84,8 @@ def test_authority_rejects_wrong_token_fields_and_stale_identity(tmp_path, chang
 
 
 def test_authority_rejects_missing_wrong_types_and_bool_as_int(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -99,7 +101,7 @@ def test_authority_rejects_missing_wrong_types_and_bool_as_int(tmp_path):
 
 
 def test_authority_accepts_explicit_private_external_ipc_root(tmp_path):
-    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
 
     evidence_root = tmp_path / "durable"
     evidence_root.mkdir()
@@ -115,7 +117,8 @@ def test_authority_accepts_explicit_private_external_ipc_root(tmp_path):
 
 
 def test_generation_advance_retires_old_lease_instead_of_rewriting_it(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -130,7 +133,8 @@ def test_generation_advance_retires_old_lease_instead_of_rewriting_it(tmp_path):
 
 
 def test_dropped_generation_register_ack_retries_with_retired_old_authority(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -155,7 +159,8 @@ def test_dropped_generation_register_ack_retries_with_retired_old_authority(tmp_
 
 
 def test_idempotency_replay_ack_loss_and_conflict(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -172,7 +177,7 @@ def test_idempotency_replay_ack_loss_and_conflict(tmp_path):
 
 
 def test_private_token_and_real_authenticated_socket_round_trip(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
@@ -199,12 +204,11 @@ def test_private_token_and_real_authenticated_socket_round_trip(tmp_path):
 
 
 def test_server_contains_reply_disconnect_to_the_single_client(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         WorkerTokenAuthority,
-        encode_frame,
-        transport_address,
     )
+    from so101_demo.runtime.parallel_ipc.frames import encode_frame, transport_address
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -263,9 +267,9 @@ def test_broker_transport_validates_locally_before_real_socket_mutation(
         InferenceRequest,
         NormalizedInferenceResponseIdentity,
     )
-    from so101_demo.runtime.parallel_ipc import (
-        BrokerTransport, IpcError, UnixRpcClient,
-    )
+    from so101_demo.runtime.parallel_ipc.authority import UnixRpcClient
+    from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
     from so101_demo.runtime.parallel_perception_runtime import Snapshot
 
     (tmp_path / "ipc").mkdir(mode=0o700)
@@ -448,7 +452,7 @@ def test_broker_summary_survives_runtime_start_failure(tmp_path):
     from so101_demo.parallel_batch.contracts.linux_cuda import (
         load_parallel_runtime_config_linux_cuda,
     )
-    from so101_demo.runtime.parallel_ipc import BrokerTransport
+    from so101_demo.runtime.parallel_ipc.broker_transport import BrokerTransport
     from so101_demo.runtime.parallel_perception_runtime import GROUNDED_ID, YOLO_ID
 
     ipc_root = tmp_path / "ipc"
@@ -484,12 +488,12 @@ def test_broker_summary_survives_runtime_start_failure(tmp_path):
 
 
 def test_server_bounds_handler_and_response_send_to_one_absolute_deadline(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
-        IpcError,
         UnixRpcClient,
         WorkerTokenAuthority,
     )
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -512,7 +516,7 @@ def test_server_bounds_handler_and_response_send_to_one_absolute_deadline(tmp_pa
 
 
 def test_server_accept_idle_does_not_consume_request_deadline(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
@@ -541,13 +545,13 @@ def test_server_accept_idle_does_not_consume_request_deadline(tmp_path):
 
 
 def test_server_handler_timeout_returns_structured_error(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
-        IpcError,
         UnixRpcClient,
         WorkerTokenAuthority,
-        _BrokerMetrics,
     )
+    from so101_demo.runtime.parallel_ipc.broker_transport import _BrokerMetrics
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 2, bytes.fromhex("ab" * 32))
@@ -578,9 +582,8 @@ def test_server_handler_timeout_returns_structured_error(tmp_path):
 
 
 def test_server_eight_distinct_requests_enter_handlers_concurrently(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
-        AuthenticatedUnixServer,
-        UnixRpcClient,
+    from so101_demo.runtime.parallel_ipc.authority import AuthenticatedUnixServer, UnixRpcClient
+    from so101_demo.runtime.parallel_ipc.broker_transport import (
         _BrokerMetrics,
         _StatelessBrokerDispatcher,
     )
@@ -658,7 +661,7 @@ def test_server_eight_distinct_requests_enter_handlers_concurrently(tmp_path):
 
 
 def test_pending_mutation_same_key_executes_once_and_replays_terminal_result(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
@@ -720,10 +723,8 @@ def test_pending_mutation_same_key_executes_once_and_replays_terminal_result(tmp
 
 
 def test_pending_mutation_failure_is_published_before_waiters_wake(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
-        IpcError,
-        WorkerTokenAuthority,
-    )
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     root = tmp_path
     worker_authority = WorkerTokenAuthority(root, coordinator_epoch=7)
@@ -768,7 +769,7 @@ def test_pending_mutation_failure_is_published_before_waiters_wake(tmp_path):
 
 
 def test_default_server_remains_serial(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
@@ -829,12 +830,8 @@ def test_default_server_remains_serial(tmp_path):
 
 
 def test_client_rejects_wrong_response_schema_and_union(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
-        IpcError,
-        UnixRpcClient,
-        encode_frame,
-        receive_frame,
-    )
+    from so101_demo.runtime.parallel_ipc.authority import UnixRpcClient
+    from so101_demo.runtime.parallel_ipc.frames import encode_frame, IpcError, receive_frame
 
     root = tmp_path
     path = root / "s"
@@ -844,7 +841,7 @@ def test_client_rejects_wrong_response_schema_and_union(tmp_path):
         {"schema_version": 1, "kind": "response", "request_id": "request-1", "idempotency_key": "same-operation-1", "ok": True, "payload": {}, "error": "also-error"},
     ]
     for reply in replies:
-        from so101_demo.runtime.parallel_ipc import transport_address
+        from so101_demo.runtime.parallel_ipc.frames import transport_address
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         parent_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
@@ -1025,7 +1022,7 @@ def test_worker_shutdown_uses_bounded_interrupt_before_termination():
 
 
 def test_broker_cancel_generation_is_lease_optional_and_strict(tmp_path):
-    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     token = bytes.fromhex("ab" * 32)
@@ -1044,7 +1041,7 @@ def test_broker_cancel_generation_is_lease_optional_and_strict(tmp_path):
 
 @pytest.mark.parametrize("operation", ["readiness", "release_start"])
 def test_adaptive_start_control_operations_are_lease_optional(tmp_path, operation):
-    from so101_demo.runtime.parallel_ipc import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 1, bytes.fromhex("ab" * 32))
@@ -1058,7 +1055,8 @@ def test_adaptive_start_control_operations_are_lease_optional(tmp_path, operatio
 
 
 def test_unlisted_worker_control_operation_still_requires_a_lease(tmp_path):
-    from so101_demo.runtime.parallel_ipc import IpcError, WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.authority import WorkerTokenAuthority
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     authority.install_token("worker-01", 1, bytes.fromhex("ab" * 32))
@@ -1074,7 +1072,7 @@ def test_unlisted_worker_control_operation_still_requires_a_lease(tmp_path):
 
 
 def test_authenticated_readiness_control_round_trip_without_a_lease(tmp_path):
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
         UnixRpcClient,
         WorkerTokenAuthority,
@@ -1108,11 +1106,11 @@ def test_authenticated_readiness_control_round_trip_without_a_lease(tmp_path):
 def test_authenticated_server_accepts_sixteen_handlers_and_rejects_seventeen(tmp_path):
     """The connection server supports the worker ceiling and rejects one above it."""
 
-    from so101_demo.runtime.parallel_ipc import (
+    from so101_demo.runtime.parallel_ipc.authority import (
         AuthenticatedUnixServer,
-        IpcError,
         WorkerTokenAuthority,
     )
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
 
     authority = WorkerTokenAuthority(tmp_path, coordinator_epoch=7)
     server = AuthenticatedUnixServer(
@@ -1136,7 +1134,7 @@ def test_authenticated_server_accepts_sixteen_handlers_and_rejects_seventeen(tmp
 
 
 def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_path, monkeypatch):
-    from so101_demo.runtime import parallel_ipc
+    from so101_demo.runtime.parallel_ipc import broker_transport as parallel_ipc_broker_transport
 
     ipc_root = tmp_path / "ipc"
     ipc_root.mkdir()
@@ -1162,7 +1160,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     spec.write_text(
         json.dumps(document, sort_keys=True, separators=(",", ":")), encoding="utf-8"
     )
-    transport = parallel_ipc.build_broker_transport(spec)
+    transport = parallel_ipc_broker_transport.build_broker_transport(spec)
     assert transport.generation == 1
     assert transport.runtime_identity == document
     adaptive_document = {
@@ -1177,7 +1175,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
         json.dumps(adaptive_document, sort_keys=True, separators=(",", ":")),
         encoding="utf-8",
     )
-    adaptive_transport = parallel_ipc.build_broker_transport(spec)
+    adaptive_transport = parallel_ipc_broker_transport.build_broker_transport(spec)
     assert adaptive_transport.runtime_identity == adaptive_document
 
     service_calls = []
@@ -1217,7 +1215,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
     adaptive_transport.serve(object(), endpoint=ipc_root / "perception.sock")
     assert service_calls[0]["queue_capacity_per_model"] == 16
 
-    from so101_demo.runtime.parallel_ipc import IpcError
+    from so101_demo.runtime.parallel_ipc.frames import IpcError
     invalid_documents = [
         {**document, "extra": True},
         {key: value for key, value in document.items() if key != "image_id"},
@@ -1239,7 +1237,7 @@ def test_broker_runtime_decoder_accepts_the_exact_producer_identity_fields(tmp_p
             encoding="utf-8",
         )
         with pytest.raises(IpcError):
-            parallel_ipc.build_broker_transport(spec)
+            parallel_ipc_broker_transport.build_broker_transport(spec)
 
 
 def test_supervisor_rejects_absent_incomplete_and_batch_mismatched_manifest():

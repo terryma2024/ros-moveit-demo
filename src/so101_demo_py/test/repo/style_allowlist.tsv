@@ -59,9 +59,9 @@ wire	src/so101_demo_py/src/ros/rgbd_object_pose_node.py	str	plastic-cup-yolo11n-
 wire	src/so101_demo_py/src/runtime/composition.py	str	fusion-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/runtime/parallel_perception_runtime.py	str	plastic-cup-yolo11n-seg-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 wire	src/so101_demo_py/src/runtime/provenance.py	str	fusion-v1	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
-wire	src/so101_demo_py/src/training/grounding_dino_dataset.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	so101-nonpenetrating-test-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	so101-nonpenetrating-train-val-v1	permanent	-	design	model or dataset identifier (design B, not versions)
+wire	src/so101_demo_py/src/training/grounding_dino_dataset/contracts.py	str	task-visual-nonpenetration-v1	permanent	-	design	model or dataset identifier (design B, not versions)
 
 wire	src/so101_demo_py/config/act/training.yaml	str	ResNet18_Weights.IMAGENET1K_V1	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version
 wire	src/so101_demo_py/config/mujoco/model-parity.yaml	str	base_motor_holder_so101_v1.stl	permanent	-	decided	vendor part, torchvision weight or third-party API name, not a format version

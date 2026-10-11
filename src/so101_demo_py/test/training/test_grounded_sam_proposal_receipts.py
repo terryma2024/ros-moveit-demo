@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 from so101_demo.core.detection import DetectionFrame
 from so101_demo.perception_benchmark.adapters.base import CollectionMode
-from so101_demo.training.grounded_sam_val_calibration import ValDataset, ValSample
+from so101_demo.training.grounded_sam_val_calibration.datasets import ValDataset, ValSample
 
 SOURCE = "c" * 40
 MODEL = "d" * 64
@@ -246,7 +246,7 @@ def test_finalize_rechecks_image_before_publishing_valid_manifest(tmp_path):
 def test_real_val_collector_keeps_masks_and_complete_proposals(tmp_path):
     from so101_demo.perception_benchmark.codec import canonical_json_bytes, encode_mask_rle
     from so101_demo.perception_benchmark.contracts import MaskRef, RawCandidate
-    from so101_demo.training.grounded_sam_val_calibration import (
+    from so101_demo.training.grounded_sam_val_calibration.evidence import (
         collect_val_raw,
         load_verified_raw_records,
     )

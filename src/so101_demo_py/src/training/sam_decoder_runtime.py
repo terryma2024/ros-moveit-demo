@@ -124,7 +124,7 @@ def run_training(*, output_root: Path, source_commit: str, inputs: Mapping[str, 
     from transformers import Sam2Model, Sam2Processor
 
     from ..adapters.perception.model_bundle import verify_model_bundle
-    from .grounded_sam_val_calibration import load_locked_train_dataset
+    from so101_demo.training.grounded_sam_val_calibration.datasets import load_locked_train_dataset
     from .sam_decoder_training import (
         configure_decoder_training,
         decoder_loss,

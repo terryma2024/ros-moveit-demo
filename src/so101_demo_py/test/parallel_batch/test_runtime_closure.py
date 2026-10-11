@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import subprocess
+import platform
 import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from so101_demo.runtime.runtime_closure import attestation as runtime_closure_attestation
+from so101_demo.runtime.runtime_closure import build as runtime_closure_build
+from so101_demo.runtime.runtime_closure import identities as runtime_closure_identities
 
 SOURCE_COMMIT = "a" * 40
 SUBMODULE_COMMIT = "b" * 40
@@ -72,7 +77,7 @@ def _install_tree_with_vendor_alias(root: Path) -> Path:
 def _closure(module, install: Path, *, environment=None, forbidden=()):
     from collections.abc import Mapping
 
-    return module.build_runtime_closure_identity(
+    return runtime_closure_build.build_runtime_closure_identity(
         install_root=install,
         source_commit=SOURCE_COMMIT,
         mujoco_ros2_control_commit=SUBMODULE_COMMIT,
@@ -82,7 +87,7 @@ def _closure(module, install: Path, *, environment=None, forbidden=()):
 
 
 def _binding(module, tmp_path: Path, *, suffix: str = "a", domain: int = 41, generation: int = 1):
-    return module.build_run_binding(
+    return runtime_closure_build.build_run_binding(
         campaign_id=f"campaign-{suffix}",
         batch_id=f"batch-{suffix}",
         ros_domain_id=domain,
@@ -159,7 +164,7 @@ def test_run_binding_and_attestation_hashes_are_unique_per_run(tmp_path: Path) -
     assert first_binding.sha256 != second_binding.sha256
 
     library = install / "lib" / "libmujoco_ros2_control.dylib"
-    first = module.build_runtime_attestation(
+    first = runtime_closure_build.build_runtime_attestation(
         closure=closure,
         run_binding=first_binding,
         install_root=install,
@@ -167,7 +172,7 @@ def test_run_binding_and_attestation_hashes_are_unique_per_run(tmp_path: Path) -
         loaded_images=(library,),
         observed_ros_domain_id=41,
     )
-    second = module.build_runtime_attestation(
+    second = runtime_closure_build.build_runtime_attestation(
         closure=closure,
         run_binding=second_binding,
         install_root=install,
@@ -252,8 +257,8 @@ def test_config_drift_is_refused_by_verify_runtime_closure(tmp_path: Path) -> No
     )
     config.write_text("schema_version: 4\nworker_count: 2\n", encoding="utf-8")
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit=SOURCE_COMMIT,
@@ -267,7 +272,7 @@ def test_verify_runtime_closure_returns_the_matching_identity(tmp_path: Path) ->
     module = _closure_module()
     install = _install_tree(tmp_path / "install")
     expected = _closure(module, install)
-    observed = module.verify_runtime_closure(
+    observed = runtime_closure_build.verify_runtime_closure(
         expected,
         install_root=install,
         source_commit=SOURCE_COMMIT,
@@ -282,8 +287,8 @@ def test_source_and_submodule_commit_drift_are_distinct_failures(tmp_path: Path)
     install = _install_tree(tmp_path / "install")
     expected = _closure(module, install)
 
-    with pytest.raises(module.RuntimeClosureError) as source_error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as source_error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit="c" * 40,
@@ -292,8 +297,8 @@ def test_source_and_submodule_commit_drift_are_distinct_failures(tmp_path: Path)
         )
     assert source_error.value.code == "CLOSURE_SOURCE_COMMIT_MISMATCH"
 
-    with pytest.raises(module.RuntimeClosureError) as submodule_error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as submodule_error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit=SOURCE_COMMIT,
@@ -306,8 +311,8 @@ def test_source_and_submodule_commit_drift_are_distinct_failures(tmp_path: Path)
 def test_missing_submodule_commit_is_refused(tmp_path: Path) -> None:
     module = _closure_module()
     install = _install_tree(tmp_path / "install")
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_closure_identity(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_closure_identity(
             install_root=install,
             source_commit=SOURCE_COMMIT,
             mujoco_ros2_control_commit="",
@@ -320,8 +325,8 @@ def test_environment_drift_is_refused(tmp_path: Path) -> None:
     module = _closure_module()
     install = _install_tree(tmp_path / "install")
     expected = _closure(module, install, environment={"DYLD_LIBRARY_PATH": "/x"})
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit=SOURCE_COMMIT,
@@ -337,8 +342,8 @@ def test_canonical_checkout_prefix_contamination_is_refused(tmp_path: Path) -> N
     (checkout / "src").mkdir(parents=True)
     install = _install_tree(checkout / "install" / "so101_demo_py")
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_closure_identity(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_closure_identity(
             install_root=install,
             source_commit=SOURCE_COMMIT,
             mujoco_ros2_control_commit=SUBMODULE_COMMIT,
@@ -354,14 +359,14 @@ def test_symlinked_install_root_and_symlinked_files_are_refused(tmp_path: Path) 
     linked = tmp_path / "linked-install"
     linked.symlink_to(real, target_is_directory=True)
 
-    with pytest.raises(module.RuntimeClosureError) as root_error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as root_error:
         _closure(module, linked)
     assert root_error.value.code == "CLOSURE_INSTALL_ROOT_INVALID"
 
     escape = tmp_path / "outside.dylib"
     escape.write_bytes(b"outside-bytes")
     (real / "lib" / "libescape.dylib").symlink_to(escape)
-    with pytest.raises(module.RuntimeClosureError) as file_error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as file_error:
         _closure(module, real)
     assert file_error.value.code == "CLOSURE_SYMLINK"
 
@@ -407,7 +412,7 @@ def test_mujoco_alias_rejects_invalid_link_shapes(
     alias.unlink()
     alias.symlink_to(link_text)
 
-    with pytest.raises(module.RuntimeClosureError) as error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
         _closure(module, install)
 
     assert error.value.code == "CLOSURE_SYMLINK", damage
@@ -420,8 +425,8 @@ def test_alias_target_and_alias_replacement_are_detected(tmp_path: Path) -> None
     target = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
     target.write_bytes(b"replacement")
 
-    with pytest.raises(module.RuntimeClosureError) as target_error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as target_error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit=SOURCE_COMMIT,
@@ -434,8 +439,8 @@ def test_alias_target_and_alias_replacement_are_detected(tmp_path: Path) -> None
     alias = install / "opt/mujoco_vendor/lib/libmujoco.dylib"
     alias.unlink()
     alias.write_bytes(b"materialized")
-    with pytest.raises(module.RuntimeClosureError) as alias_error:
-        module.verify_runtime_closure(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as alias_error:
+        runtime_closure_build.verify_runtime_closure(
             expected,
             install_root=install,
             source_commit=SOURCE_COMMIT,
@@ -453,13 +458,13 @@ def test_extra_file_and_directory_symlinks_remain_closed(tmp_path: Path) -> None
     (outside / "extra.dylib").write_bytes(b"extra")
     (install / "lib/extra.dylib").symlink_to(outside / "extra.dylib")
 
-    with pytest.raises(module.RuntimeClosureError) as file_error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as file_error:
         _closure(module, install)
     assert file_error.value.code == "CLOSURE_SYMLINK"
 
     (install / "lib/extra.dylib").unlink()
     (install / "share/linked").symlink_to(outside, target_is_directory=True)
-    with pytest.raises(module.RuntimeClosureError) as directory_error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as directory_error:
         _closure(module, install)
     assert directory_error.value.code == "CLOSURE_SYMLINK"
 
@@ -477,8 +482,8 @@ def test_replacement_race_is_refused(tmp_path: Path, monkeypatch) -> None:
             swapped.append(Path(path))
             os.replace(replacement, target)
 
-    monkeypatch.setattr(module, "_READ_HOOK", hook, raising=False)
-    with pytest.raises(module.RuntimeClosureError) as error:
+    monkeypatch.setattr(runtime_closure_attestation, "_READ_HOOK", hook, raising=False)
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
         _closure(module, install)
     assert error.value.code == "CLOSURE_FILE_REPLACED"
     assert swapped == [target]
@@ -503,7 +508,7 @@ def test_darwin_loaded_image_probe_ignores_blank_vmmap_lines(
         "__TEXT 1000-2000 [ 4K 4K 0K 0K] r-x/r-x SM=COW  "
         f"{library}\n\n"
     )
-    real_is_file = module.Path.is_file
+    real_is_file = runtime_closure_attestation.Path.is_file
 
     def is_file(path):
         if path == inaccessible:
@@ -511,15 +516,15 @@ def test_darwin_loaded_image_probe_ignores_blank_vmmap_lines(
         return real_is_file(path)
 
     monkeypatch.setattr(
-        module.subprocess,
+        subprocess,
         "run",
         lambda *args, **kwargs: SimpleNamespace(
             returncode=0, stdout=output, stderr=""
         ),
     )
-    monkeypatch.setattr(module.Path, "is_file", is_file)
+    monkeypatch.setattr(runtime_closure_attestation.Path, "is_file", is_file)
 
-    assert module._darwin_loaded_images(123) == (library,)
+    assert runtime_closure_build._darwin_loaded_images(123) == (library,)
 
 
 def test_attestation_refuses_loaded_image_outside_the_copied_install(tmp_path: Path) -> None:
@@ -531,8 +536,8 @@ def test_attestation_refuses_loaded_image_outside_the_copied_install(tmp_path: P
     outside.parent.mkdir(parents=True)
     outside.write_bytes(b"dylib-bytes-a")
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_attestation(
             closure=closure,
             run_binding=binding,
             install_root=install,
@@ -551,8 +556,8 @@ def test_attestation_refuses_loaded_image_bytes_drift(tmp_path: Path) -> None:
     library = install / "lib" / "libmujoco_ros2_control.dylib"
     library.write_bytes(b"dylib-bytes-b")
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_attestation(
             closure=closure,
             run_binding=binding,
             install_root=install,
@@ -570,8 +575,8 @@ def test_attestation_refuses_a_different_ros_domain(tmp_path: Path) -> None:
     binding = _binding(module, tmp_path, domain=41)
     library = install / "lib" / "libmujoco_ros2_control.dylib"
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_attestation(
             closure=closure,
             run_binding=binding,
             install_root=install,
@@ -587,8 +592,8 @@ def test_attestation_requires_at_least_one_process_identity(tmp_path: Path) -> N
     install = _install_tree(tmp_path / "install")
     closure = _closure(module, install)
     binding = _binding(module, tmp_path)
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_build.build_runtime_attestation(
             closure=closure,
             run_binding=binding,
             install_root=install,
@@ -617,7 +622,7 @@ def test_controller_process_attestation_requires_the_real_role_and_both_images(
     plugin = install / "lib/libmujoco_ros2_control.dylib"
     vendor = install / "opt/mujoco_vendor/lib/libmujoco.3.4.0.dylib"
 
-    attestation = module.build_runtime_process_attestation(
+    attestation = runtime_closure_attestation.build_runtime_process_attestation(
         closure=closure,
         install_root=install,
         role="controller_runtime",
@@ -664,8 +669,8 @@ def test_controller_process_attestation_rejects_wrong_child_or_incomplete_readba
     outside.write_text("#!/bin/sh\n", encoding="utf-8")
     outside.chmod(0o755)
 
-    with pytest.raises(module.RuntimeClosureError) as error:
-        module.build_runtime_process_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
+        runtime_closure_attestation.build_runtime_process_attestation(
             closure=closure,
             install_root=install,
             role="task-station" if mutation == "wrong-role" else "controller_runtime",
@@ -766,7 +771,7 @@ def test_stack_verifies_the_closure_before_any_spawn(tmp_path: Path) -> None:
         spawned=spawned,
         signals=signals,
     )
-    with pytest.raises(module.RuntimeClosureError) as error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
         task_stack.start(config, environment={"DYLD_LIBRARY_PATH": "/x"})
 
     assert error.value.code == "CLOSURE_INVENTORY_DRIFT"
@@ -836,7 +841,7 @@ def test_stack_refuses_to_attest_an_outside_loaded_image_and_reaps_children(
         spawned=spawned,
         signals=signals,
     )
-    with pytest.raises(module.RuntimeClosureError) as error:
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError) as error:
         task_stack.start(
         config, environment={"DYLD_LIBRARY_PATH": "/x", "ROS_DOMAIN_ID": "41"}
     )
@@ -892,8 +897,8 @@ def _spawn_intent_binding(
 ):
     """The owner tree a spawn intent recorded before the station was started."""
 
-    identity = module.ProcessIdentity
-    return module.ControllerRuntimeOwnerBinding(
+    identity = runtime_closure_identities.ProcessIdentity
+    return runtime_closure_identities.ControllerRuntimeOwnerBinding(
         owner_root_role="fixed_dylib_farm_full_task_station",
         owner_root_pid=9001,
         owner_root_birth_identity=41,
@@ -932,7 +937,7 @@ def _valid_controller_attestation(tmp_path: Path):
     module = _closure_module()
     install, executable = _process_attestation_tree(tmp_path)
     closure = _closure(module, install)
-    return module.build_runtime_process_attestation(
+    return runtime_closure_attestation.build_runtime_process_attestation(
         closure=closure,
         install_root=install,
         role="controller_runtime",
@@ -996,7 +1001,7 @@ def test_controller_runtime_attestation_accepts_only_the_bound_descendant(tmp_pa
     module = _closure_module()
     attestation = _valid_controller_attestation(tmp_path)
 
-    document = module.validate_controller_runtime_attestation(attestation)
+    document = runtime_closure_attestation.validate_controller_runtime_attestation(attestation)
 
     assert document["role"] == "controller_runtime"
     assert document["pid"] == 9123
@@ -1028,8 +1033,8 @@ def test_controller_runtime_attestation_rejects_unbound_or_drifted_process(
     candidate = _mutated_controller_attestation(
         _valid_controller_attestation(tmp_path), mutation)
 
-    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
-        module.validate_controller_runtime_attestation(candidate)
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        runtime_closure_attestation.validate_controller_runtime_attestation(candidate)
 
 
 def test_controller_runtime_attestation_rejects_a_broken_or_foreign_ancestry(
@@ -1046,8 +1051,8 @@ def test_controller_runtime_attestation_rejects_a_broken_or_foreign_ancestry(
         binding,
         ancestry=(binding.ancestry[0], dataclasses.replace(binding.ancestry[2], parent_pid=4242)),
     )
-    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
-        module.validate_controller_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        runtime_closure_attestation.validate_controller_runtime_attestation(
             dataclasses.replace(attestation, owner_binding=detached))
 
     # A second candidate with the same role is ambiguous, so the round fails closed.
@@ -1056,14 +1061,14 @@ def test_controller_runtime_attestation_rejects_a_broken_or_foreign_ancestry(
         ancestry=binding.ancestry
         + (dataclasses.replace(binding.ancestry[2], pid=9124),),
     )
-    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
-        module.validate_controller_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        runtime_closure_attestation.validate_controller_runtime_attestation(
             dataclasses.replace(attestation, owner_binding=ambiguous))
 
     # A plugin that read back under a name the frozen inventory does not carry is not proof.
     empty_readback = dataclasses.replace(attestation, loaded_images=())
-    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
-        module.validate_controller_runtime_attestation(empty_readback)
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        runtime_closure_attestation.validate_controller_runtime_attestation(empty_readback)
 
 
 def test_controller_runtime_attestation_requires_the_farm_prefix_to_be_sanctioned(
@@ -1075,6 +1080,6 @@ def test_controller_runtime_attestation_requires_the_farm_prefix_to_be_sanctione
     attestation = _valid_controller_attestation(tmp_path)
     binding = dataclasses.replace(attestation.owner_binding, dylib_farm_root="/tmp/rogue-farm")
 
-    with pytest.raises(module.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
-        module.validate_controller_runtime_attestation(
+    with pytest.raises(runtime_closure_identities.RuntimeClosureError, match="PROCESS_ATTESTATION_INVALID"):
+        runtime_closure_attestation.validate_controller_runtime_attestation(
             dataclasses.replace(attestation, owner_binding=binding))

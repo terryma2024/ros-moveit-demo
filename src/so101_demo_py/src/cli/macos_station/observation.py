@@ -303,7 +303,7 @@ def launch_station_process(
 ) -> StationProcessHandle:
     """Start the diagnostic child as an owned process group and read back its identity."""
 
-    from so101_demo.runtime.runtime_closure import read_process_birth_identity
+    from so101_demo.runtime.runtime_closure.build import read_process_birth_identity
 
     merged = dict(os.environ)
     if environment is not None:
