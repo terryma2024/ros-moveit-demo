@@ -64,10 +64,10 @@ from so101_demo.act.head_search_camera_measurement import (
     _anchor_pose_requests,
     _corridor_check,
 )
-from so101_demo.act.head_search_deadband_measurement import (
-    MujocoClosedLoopPlant,
+from so101_demo.act.head_search_deadband_measurement.lock_trial import motion_corridor_rad
+from so101_demo.act.head_search_deadband_measurement.plant import (
     _plant_request,
-    motion_corridor_rad,
+    MujocoClosedLoopPlant,
 )
 from so101_demo.act.head_search_timing_measurement.contracts import (
     _digest,

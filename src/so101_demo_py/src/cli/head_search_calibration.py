@@ -911,9 +911,9 @@ def _measure_deadband_candidates(arguments: list[str]) -> int:
         return 2
 
     from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-    from so101_demo.act.head_search_deadband_measurement import (
-        DEFAULT_MAX_FRAMES,
-        SETTLE_CONSECUTIVE_STEPS,
+    from so101_demo.act.head_search_timing_measurement.contracts import SETTLE_CONSECUTIVE_STEPS
+    from so101_demo.act.head_search_deadband_measurement.contracts import DEFAULT_MAX_FRAMES
+    from so101_demo.act.head_search_deadband_measurement.writer import (
         write_head_search_deadband_measurement,
     )
 

@@ -922,7 +922,7 @@ def run_readback_observation(
     from rclpy.qos import qos_profile_sensor_data
     from rclpy.time import Time
     from sensor_msgs.msg import CameraInfo, Image, JointState
-    from so101_demo.act.head_search_deadband_measurement import _anchor_requests
+    from so101_demo.act.head_search_deadband_measurement.plant import _anchor_requests
     from so101_demo.act.head_search_restarts import (
         _await_graph,
         _kill_stragglers,

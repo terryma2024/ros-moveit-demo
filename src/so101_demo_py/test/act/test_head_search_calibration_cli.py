@@ -1237,7 +1237,7 @@ def test_the_deadband_detector_wrapper_drives_the_production_head_detector() -> 
     """
 
     import numpy as np
-    from so101_demo.act.head_search_deadband_measurement import ProductionHeadDetector
+    from so101_demo.act.head_search_deadband_measurement.plant import ProductionHeadDetector
     from so101_demo.adapters.act.detector import HeadRgbDetector
     from so101_demo.core.detection import DetectionBatch, DetectionCandidate
 
@@ -1309,9 +1309,10 @@ def test_the_real_mujoco_plant_places_the_anchor_cup_and_settles(tmp_path: Path)
     """
 
     from so101_demo.act import head_search_deadband_measurement as measurement
+    from so101_demo.act.head_search_deadband_measurement import plant as measurement_plant
 
     inputs = _deadband_inputs(tmp_path)
-    plant = measurement.MujocoClosedLoopPlant(
+    plant = measurement_plant.MujocoClosedLoopPlant(
         {
             "scene_path": str(inputs["scene"]),
             "camera_name": "head_camera",
@@ -1431,6 +1432,7 @@ def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: P
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
     from so101_demo.act import head_search_deadband_measurement as measurement
+    from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
 
     class Plant:
         """A yaw-only plant whose cup sits at the principal point once the neck reaches the anchor."""
@@ -1498,7 +1500,7 @@ def test_measure_deadband_candidates_hands_the_flight_to_the_library(tmp_path: P
                 }
             ]
 
-    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", Plant)
+    monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", Plant)
     monkeypatch.setattr(
         measurement,
         "build_production_head_detector",
@@ -1529,17 +1531,19 @@ def test_measure_deadband_candidates_prints_the_librarys_refusal_and_returns_two
     inputs = _deadband_inputs(tmp_path)
     output = tmp_path / "deadband"
     from so101_demo.act import head_search_deadband_measurement as measurement
+    from so101_demo.act.head_search_deadband_measurement import contracts as measurement_contracts
+    from so101_demo.act.head_search_deadband_measurement import writer as measurement_writer
 
     def refuse(request):
-        raise measurement.CalibrationDeadbandMeasurementRefused(
-            measurement.CAL_DEADBAND_CUP_LOST, "the detector found no cup at all"
+        raise measurement_contracts.CalibrationDeadbandMeasurementRefused(
+            measurement_contracts.CAL_DEADBAND_CUP_LOST, "the detector found no cup at all"
         )
 
-    monkeypatch.setattr(measurement, "MujocoClosedLoopPlant", refuse)
-    monkeypatch.setattr(measurement, "build_production_head_detector", lambda **kwargs: None)
+    monkeypatch.setattr(measurement_writer, "MujocoClosedLoopPlant", refuse)
+    monkeypatch.setattr(measurement_writer, "build_production_head_detector", lambda **kwargs: None)
 
     assert main(_deadband_arguments(inputs, output)) == 2
-    assert measurement.CAL_DEADBAND_CUP_LOST in capsys.readouterr().err
+    assert measurement_contracts.CAL_DEADBAND_CUP_LOST in capsys.readouterr().err
 
 
 # --- measure-camera ---------------------------------------------------------------------------------

@@ -1509,10 +1509,8 @@ def measure_and_search(
         }
         log(f"detector {built.get('model_id')} on {built.get('runtime_device')}")
 
-        from so101_demo.act.head_search_deadband_measurement import (
-            _anchor_requests,
-            motion_corridor_rad,
-        )
+        from so101_demo.act.head_search_deadband_measurement.lock_trial import motion_corridor_rad
+        from so101_demo.act.head_search_deadband_measurement.plant import _anchor_requests
         from so101_demo.act.head_search_fine_correction_episodes import fine_corridor_rad
 
         attempt_id = f"{session_id}-attempt-1"
@@ -1824,7 +1822,7 @@ def _await_controllers(node, *, clock, sleep, timeout_s: float = 30.0) -> dict:
 
 
 def _operating_point(frozen_candidate_path) -> dict:
-    from so101_demo.act.head_search_deadband_measurement import detector_operating_point
+    from so101_demo.act.head_search_deadband_measurement.lock_trial import detector_operating_point
 
     frozen = json.loads(Path(frozen_candidate_path).read_text(encoding="utf-8"))
     return detector_operating_point(frozen)

@@ -48,7 +48,7 @@ What is measured, and what is refused instead of fabricated:
   simulation clock's are the timing module's own refusals, reused under this module's class.
 
 The only part that touches MuJoCo, the detector or a GPU is the injected plant (the production
-:class:`so101_demo.act.head_search_deadband_measurement.MujocoClosedLoopPlant`, whose module imports MuJoCo
+:class:`so101_demo.act.head_search_deadband_measurement.plant.MujocoClosedLoopPlant`, whose module imports MuJoCo
 inside its constructor) and the default detector factory (the production ``HeadRgbDetector`` over
 ``YoloSegDetector``, ``allow_cpu_fallback=False``); the measurement itself is a pure loop over an injected
 plant and detector, so every rule above is unit-tested without MuJoCo, CUDA or ROS. No ROS node is started,
@@ -66,13 +66,15 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from so101_demo.act.head_search_calibration_inputs import CalibrationInputsRefused
-from so101_demo.act.head_search_deadband_measurement import (
-    MujocoClosedLoopPlant,
+from so101_demo.act.head_search_deadband_measurement.lock_trial import (
+    detector_operating_point,
+    motion_corridor_rad,
+)
+from so101_demo.act.head_search_deadband_measurement.plant import (
     _anchor_requests,
     _plant_request,
     build_production_head_detector,
-    detector_operating_point,
-    motion_corridor_rad,
+    MujocoClosedLoopPlant,
 )
 from so101_demo.act.head_search_mujoco_measurements import read_mujoco_timestep
 from so101_demo.act.head_search_timing_measurement.contracts import (

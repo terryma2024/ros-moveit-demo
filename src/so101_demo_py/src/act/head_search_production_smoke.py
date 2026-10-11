@@ -1101,7 +1101,7 @@ def write_head_search_production_smoke(
             f"the seal resolves the anchor {anchor!r} to {len(declared)} declarations, not one",
         )
     declared = declared[0]
-    from so101_demo.act.head_search_deadband_measurement import motion_corridor_rad
+    from so101_demo.act.head_search_deadband_measurement.lock_trial import motion_corridor_rad
     from so101_demo.act.head_search_fine_correction_episodes import fine_corridor_rad
 
     corridors = {

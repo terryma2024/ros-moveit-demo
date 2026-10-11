@@ -13,14 +13,18 @@ import math
 
 import pytest
 from so101_demo.act import head_search_deadband_measurement as module
-from so101_demo.act.head_search_deadband_measurement import (
+from so101_demo.act.head_search_deadband_measurement import contracts as module_contracts
+from so101_demo.act.head_search_deadband_measurement import writer as module_writer
+from so101_demo.act.head_search_search_params import LOCK_FRAMES
+from so101_demo.act.head_search_deadband_measurement.contracts import (
     CAL_DEADBAND_CUP_LOST,
     CAL_DEADBAND_OUT_OF_CORRIDOR,
+    CalibrationDeadbandMeasurementRefused,
     KIND,
-    LOCK_FRAMES,
     RECORD_KEYS,
     REFUSAL_CODES,
-    CalibrationDeadbandMeasurementRefused,
+)
+from so101_demo.act.head_search_deadband_measurement.lock_trial import (
     build_deadband_candidates,
     candidate_record,
     declared_candidates,
@@ -28,6 +32,8 @@ from so101_demo.act.head_search_deadband_measurement import (
     lock_run,
     motion_corridor_rad,
     run_lock_trial,
+)
+from so101_demo.act.head_search_deadband_measurement.writer import (
     write_head_search_deadband_measurement,
 )
 from so101_demo.act.head_search_timing_measurement.contracts import (
@@ -554,7 +560,7 @@ def test_the_warm_up_frame_is_performed_and_recorded_before_the_measured_frames(
     assert warmup["performed"] is True
     assert warmup["detections"] == 1  # a real frame with a box, not the constructor's zeros
     assert warmup["wall_s"] >= FIRST_DETECTION_COST_S
-    assert warmup["declared_because"] == module.WARMUP_POLICY
+    assert warmup["declared_because"] == module_contracts.WARMUP_POLICY
     # the warm-up is the detection-bearing call before the first measured frame, and it is not measured
     assert detector.detection_calls == len(result["frames"]) + 1
     assert result["detection_frames"] == len(result["frames"])
@@ -748,7 +754,7 @@ def test_the_document_declares_the_frame_cadence_the_trials_really_ran_at(tmp_pa
 
     document = _document(tmp_path)
 
-    assert document["frame_cadence"] == module.FRAME_CADENCE
+    assert document["frame_cadence"] == module_contracts.FRAME_CADENCE
     assert "settle" in document["frame_cadence"]
     intervals = [
         frame["frame_interval_sim_s"] for trial in document["trials"] for frame in trial["frames"]
@@ -770,7 +776,7 @@ def test_the_document_gains_the_warm_up_block_without_losing_a_key(tmp_path):
     assert set(document["warmup"]) == {"performed", "detections", "wall_s", "declared_because"}
     assert document["warmup"]["performed"] is True
     assert document["warmup"]["detections"] == 1
-    assert document["warmup"]["declared_because"] == module.WARMUP_POLICY
+    assert document["warmup"]["declared_because"] == module_contracts.WARMUP_POLICY
     assert document["warmup_samples_excluded"] is True
     # the block is the first flight's own warm-up, and every flight declares the one it performed
     assert document["warmup"] == document["trials"][0]["warmup"]
@@ -924,15 +930,15 @@ def _patch_scene_declaration(monkeypatch, tmp_path):
         "read_mujoco_timestep",
         lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module._digest(path)},
     )
-    monkeypatch.setattr(module, "_cuda_available", lambda: True)
+    monkeypatch.setattr(module_writer, "_cuda_available", lambda: True)
 
 
 def test_the_producer_writes_the_document_the_receipt_and_every_trial(tmp_path, monkeypatch):
     _patch_scene_declaration(monkeypatch, tmp_path)
     result = _producer(tmp_path)
 
-    document = json.loads((tmp_path / "out" / module.ARTIFACT).read_text(encoding="utf-8"))
-    receipt = json.loads((tmp_path / "out" / module.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
+    document = json.loads((tmp_path / "out" / module_contracts.ARTIFACT).read_text(encoding="utf-8"))
+    receipt = json.loads((tmp_path / "out" / module_contracts.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
 
     assert document["sha256"] == result["document"]["sha256"]
     assert document["records"] == result["document"]["records"]
@@ -940,7 +946,7 @@ def test_the_producer_writes_the_document_the_receipt_and_every_trial(tmp_path, 
     assert len(document["trials"]) == 2
     assert all(trial["anchor"] == "left" for trial in document["trials"])
     assert receipt["status"] == "SUCCEEDED"
-    assert receipt["document_path"] == str(tmp_path / "out" / module.ARTIFACT)
+    assert receipt["document_path"] == str(tmp_path / "out" / module_contracts.ARTIFACT)
     assert receipt["document_sha256"] == document["sha256"]
     assert receipt["candidate_count"] == 2
     assert receipt["anchor_names"] == ["left"]
@@ -953,7 +959,7 @@ def test_the_producer_records_the_warm_up_frame_it_excluded(tmp_path, monkeypatc
     _patch_scene_declaration(monkeypatch, tmp_path)
     result = _producer(tmp_path)
 
-    receipt = json.loads((tmp_path / "out" / module.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
+    receipt = json.loads((tmp_path / "out" / module_contracts.RECEIPT_ARTIFACT).read_text(encoding="utf-8"))
 
     assert receipt["warmup"] == result["document"]["warmup"]
     assert receipt["warmup"]["performed"] is True
@@ -1070,7 +1076,7 @@ def test_the_producer_refuses_a_declared_cuda_device_without_one(tmp_path, monke
         "read_mujoco_timestep",
         lambda path: {"simulation_timestep_s": TIMESTEP_S, "scene_sha256": module._digest(path)},
     )
-    monkeypatch.setattr(module, "_cuda_available", lambda: False)
+    monkeypatch.setattr(module_writer, "_cuda_available", lambda: False)
     scene, seal, production, frozen, controllers, weights = _sealed_inputs(tmp_path)
     seal_document = json.loads(seal.read_text(encoding="utf-8"))
     seal_document["source_digests"]["scene_sha256"] = module._digest(scene)
@@ -1108,5 +1114,5 @@ def test_the_lock_rule_is_declared_with_its_reversal_definition(tmp_path, monkey
     assert document["lock_frames_required"] == LOCK_FRAMES
     assert "three consecutive frames" in document["lock_rule"]
     assert "correction" in document["reversal_definition"]
-    assert document["reversal_definition"] == module.REVERSAL_DEFINITION
+    assert document["reversal_definition"] == module_contracts.REVERSAL_DEFINITION
     assert document["frame_rate_hz"] == module.FRAME_RATE_HZ
