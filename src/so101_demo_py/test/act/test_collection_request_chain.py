@@ -9,7 +9,7 @@ import json
 import pytest
 
 from so101_demo.act.collection_orchestration import CollectionOptions
-from test_parallel_batch_cli import _scratch_root, argv, local_start_guard, verified  # noqa: F401  (the offline start-guard seam)
+from parallel_batch_cli_support import _scratch_root, argv, local_start_guard, verified  # noqa: F401  (the offline start-guard seam)
 
 
 class Probe:

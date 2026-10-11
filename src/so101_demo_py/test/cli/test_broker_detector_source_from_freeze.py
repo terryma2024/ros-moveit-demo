@@ -14,10 +14,10 @@ from types import SimpleNamespace
 
 import pytest
 from so101_demo.cli import parallel_perception_broker as broker_cli
-from test_child_role_code_provenance import PACKAGE, _container_kwargs
-from test_parallel_batch_cli import (
+from parallel_batch_cli_support import (
     local_start_guard,  # noqa: F401  (autouse: the offline start-guard seam)
 )
+from test_child_role_code_provenance import PACKAGE, _container_kwargs
 
 
 def test_the_detector_pin_machinery_is_gone():
@@ -58,8 +58,8 @@ def test_the_composition_records_the_freezes_detector_in_a_qualified_run_and_not
         ResourceSnapshot,
         runtime_ipc_base,
     )
-    from test_parallel_batch_cli import argv as cli_argv
-    from test_parallel_batch_cli import verified
+    from parallel_batch_cli_support import argv as cli_argv
+    from parallel_batch_cli_support import verified
 
     class Probe:
         def snapshot(self):

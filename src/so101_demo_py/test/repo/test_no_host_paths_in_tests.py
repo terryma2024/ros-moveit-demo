@@ -31,7 +31,7 @@ ALLOWED = {
     # the AF_UNIX 107-byte boundary is a property of the path string length; nothing is created
     "src/so101_demo_py/test/parallel_batch/test_parallel_adaptive_pool.py": "socket path length arithmetic on strings",
     "src/so101_demo_py/test/repo/test_pytest_full_gate_runner.py": "socket path budget arithmetic on strings",
-    "src/so101_demo_py/test/cli/test_parallel_batch_cli.py": "string argument compared with the CLI's own output",
+    "src/so101_demo_py/test/cli/test_parallel_batch_cli_composition.py": "string argument compared with the CLI's own output",
     "src/so101_demo_py/test/ports/test_pick_place_executor_adapter.py": "installed_prefix label passed to a fake adapter",
     # command-line arguments for argument-parsing / option-binding tests
     "src/so101_demo_py/test/application/test_qualification_runner.py": "CLI argument string; the runner is parsed, not executed",

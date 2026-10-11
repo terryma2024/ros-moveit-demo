@@ -21,7 +21,7 @@ from so101_demo.cli import parallel_perception_broker as broker_cli
 from so101_demo.runtime import qualified_commands
 from so101_demo.runtime.qualified_commands import QualifiedCommandError, qualified_prefix_from_env, resolve_role_command
 
-from test_parallel_batch_cli import local_start_guard  # noqa: E402,F401  (the offline start-guard seam: an autouse fixture)
+from parallel_batch_cli_support import local_start_guard  # noqa: E402,F401  (the offline start-guard seam: an autouse fixture)
 
 PACKAGE = Path(os.path.realpath(so101_demo.__file__)).parent
 #: a prefix that contains the running package, standing for `<freeze>/qualified-install`
@@ -102,7 +102,7 @@ def test_the_qualified_package_root_is_the_running_package_and_must_lie_inside_t
 
 def test_the_composition_starts_the_broker_with_the_qualified_package(tmp_path, monkeypatch):
     """The default (container) route hands `container_run_argv` the package of the running install; outside the install it stops."""
-    from test_parallel_batch_cli import argv as cli_argv, verified
+    from parallel_batch_cli_support import argv as cli_argv, verified
     from so101_demo.cli.mujoco_batch.composition import ProductionBatchComposition
     from so101_demo.cli.mujoco_batch.request import prepare_batch
     from so101_demo.parallel_batch.resource_allocation.models import ResourceSnapshot
