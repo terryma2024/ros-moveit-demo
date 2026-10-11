@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -141,6 +142,55 @@ bool HeadNeckTrajectoryController::goal_admitted() const
   return deadman && deadman->owner_connected() && !deadman->latched();
 }
 
+rclcpp_action::CancelResponse HeadNeckTrajectoryController::decide_cancel(
+  const std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> & goal_handle)
+{
+  // The dead-man latch aborts the active goal on the controller thread and clears it. A cancel that
+  // arrives afterwards matches no active goal, so the base callback finishes nothing: the goal is
+  // canceling, and the realtime handle only aborts an executing goal, so the goal would stay
+  // canceling for good and the stop could never be proved. The server marks the goal canceling only
+  // after this callback returns, so a goal that was not the active one is finished as canceled by a
+  // non-realtime timer.
+  const auto active_goal = *rt_active_goal_.readFromNonRT();
+  const bool was_active = active_goal && active_goal->gh_ == goal_handle;
+  const auto response =
+    joint_trajectory_controller::JointTrajectoryController::goal_cancelled_callback(goal_handle);
+  if (!was_active && response == rclcpp_action::CancelResponse::ACCEPT) {
+    std::lock_guard<std::mutex> lock(stranded_mutex_);
+    stranded_cancels_.push_back(StrandedCancel{goal_handle, 0});
+  }
+  return response;
+}
+
+void HeadNeckTrajectoryController::finish_stranded_cancels()
+{
+  std::vector<StrandedCancel> pending;
+  {
+    std::lock_guard<std::mutex> lock(stranded_mutex_);
+    pending.swap(stranded_cancels_);
+  }
+  std::vector<StrandedCancel> waiting;
+  for (auto & entry : pending) {
+    if (!entry.goal->is_active()) {continue;}
+    if (!entry.goal->is_canceling()) {
+      if (++entry.attempts < 500) {waiting.push_back(entry);}
+      continue;
+    }
+    try {
+      auto result = std::make_shared<FollowJTrajAction::Result>();
+      result->set__error_code(FollowJTrajAction::Result::SUCCESSFUL);
+      result->set__error_string("Canceled: the goal was no longer active");
+      entry.goal->canceled(result);
+    } catch (const std::exception & failure) {
+      RCLCPP_WARN(get_node()->get_logger(), "Stranded cancel not finished: %s", failure.what());
+    }
+  }
+  if (!waiting.empty()) {
+    std::lock_guard<std::mutex> lock(stranded_mutex_);
+    stranded_cancels_.insert(stranded_cancels_.end(), waiting.begin(), waiting.end());
+  }
+}
+
 rclcpp_action::GoalResponse HeadNeckTrajectoryController::decide_goal(
   const rclcpp_action::GoalUUID & uuid,
   const std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> & goal)
@@ -201,8 +251,7 @@ void HeadNeckTrajectoryController::create_action_server()
     },
     [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
     {
-      return joint_trajectory_controller::JointTrajectoryController::goal_cancelled_callback(
-        goal_handle);
+      return decide_cancel(goal_handle);
     },
     [this](std::shared_ptr<rclcpp_action::ServerGoalHandle<FollowJTrajAction>> goal_handle)
     {
@@ -217,6 +266,13 @@ void HeadNeckTrajectoryController::create_action_server()
       }
       joint_trajectory_controller::JointTrajectoryController::goal_accepted_callback(goal_handle);
     });
+  {
+    std::lock_guard<std::mutex> lock(stranded_mutex_);
+    stranded_cancels_.clear();
+  }
+  stranded_timer_.reset();
+  stranded_timer_ = get_node()->create_wall_timer(
+    std::chrono::milliseconds(10), [this]() {finish_stranded_cancels();});
 }
 
 controller_interface::CallbackReturn HeadNeckTrajectoryController::on_configure(
@@ -394,6 +450,7 @@ controller_interface::CallbackReturn HeadNeckTrajectoryController::on_cleanup(
 {
   active_.store(false, std::memory_order_release);
   stop_deadman();
+  stranded_timer_.reset();
   parameter_frozen_ = false;
   return joint_trajectory_controller::JointTrajectoryController::on_cleanup(previous_state);
 }

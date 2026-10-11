@@ -540,6 +540,42 @@ TEST(HeadNeckTrajectoryController, AnEofLatchAbortsTheActiveGoalHoldsAndRejectsT
   EXPECT_DOUBLE_EQ(rig.controller.desired_position(), held);
 }
 
+TEST(HeadNeckTrajectoryController, ACancelAfterTheLatchAbortedTheGoalStillEndsTheGoal)
+{
+  // The latch aborts the active goal on the controller thread and clears it. A cancel that arrives
+  // afterwards matches no active goal, the goal is already canceling, and the realtime handle only
+  // aborts an executing goal, so the goal used to stay CANCELING for good. A slow action monitor
+  // keeps the non-realtime timer from finishing the abort before the cancel arrives.
+  Options options;
+  options.extra.emplace_back("action_monitor_rate", 0.2);
+  Rig rig(options);
+  ASSERT_TRUE(rig.configure());
+  ASSERT_TRUE(rig.activate());
+  rig.start_spinning();
+  const int owner = rig.connect_owner();
+  ASSERT_TRUE(wait_until([&] {return rig.controller.goal_decision_admits();}));
+  const auto handle = rig.send(rig.goal(0.5, 3.0));
+  ASSERT_NE(handle, nullptr);
+  auto result_future = rig.client->async_get_result(handle);
+  for (int i = 0; i < 100; ++i) {
+    ASSERT_EQ(rig.tick(), controller_interface::return_type::OK);
+    if (i % 10 == 0) {rig.heartbeat(owner);}
+    std::this_thread::sleep_for(500us);
+  }
+  close(owner);
+  rig.owners.clear();
+  ASSERT_TRUE(wait_until([&] {return rig.controller.deadman()->latched();}));
+  rig.tick();
+  rig.tick();
+  EXPECT_TRUE(rig.controller.holding());
+  auto cancel_future = rig.client->async_cancel_goal(handle);
+  ASSERT_EQ(cancel_future.wait_for(2s), std::future_status::ready);
+  ASSERT_EQ(result_future.wait_for(3s), std::future_status::ready) << "the goal stays canceling";
+  const auto code = result_future.get().code;
+  EXPECT_TRUE(code == rclcpp_action::ResultCode::CANCELED ||
+    code == rclcpp_action::ResultCode::ABORTED);
+}
+
 TEST(HeadNeckTrajectoryController, SilenceLatchesAfterTheTimeoutAndStopsTheGoal)
 {
   Options options;

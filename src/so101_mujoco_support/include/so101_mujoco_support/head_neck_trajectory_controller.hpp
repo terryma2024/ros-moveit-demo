@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "so101_mujoco_support/head_neck_deadman.hpp"
 
@@ -52,6 +53,9 @@ protected:
   rclcpp_action::GoalResponse decide_goal(
     const rclcpp_action::GoalUUID & uuid,
     const std::shared_ptr<const control_msgs::action::FollowJointTrajectory::Goal> & goal);
+  rclcpp_action::CancelResponse decide_cancel(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<
+      control_msgs::action::FollowJointTrajectory>> & goal_handle);
   std::shared_ptr<NeckDeadman> deadman_copy() const;
   ErrorReason last_error_reason() const {return error_reason_.load(std::memory_order_acquire);}
   uint64_t goals_rejected() const {return goals_rejected_.load(std::memory_order_acquire);}
@@ -66,6 +70,7 @@ private:
   void set_internal_parameter(const std::string & name, int64_t value);
   void stop_deadman();
   void sanitize_command_interface() noexcept;
+  void finish_stranded_cancels();
 
   mutable std::mutex deadman_mutex_;
   std::shared_ptr<NeckDeadman> deadman_;
@@ -83,6 +88,18 @@ private:
   std::string deadman_directory_;
   double deadman_timeout_s_{0.2};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr parameter_callback_;
+
+  // Canceled goals that were no longer the active goal (the latch had already aborted them). The
+  // realtime handle cannot finish them, so a non-realtime timer does.
+  struct StrandedCancel
+  {
+    std::shared_ptr<rclcpp_action::ServerGoalHandle<
+      control_msgs::action::FollowJointTrajectory>> goal;
+    int attempts{0};
+  };
+  std::mutex stranded_mutex_;
+  std::vector<StrandedCancel> stranded_cancels_;
+  rclcpp::TimerBase::SharedPtr stranded_timer_;
 };
 
 }  // namespace so101_mujoco_support
