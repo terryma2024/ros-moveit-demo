@@ -69,11 +69,36 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3560
+latest_checkpoint: CP-3561
 next_experiment: review the minimal-runtime-gates design; implement Teacher policy v3 + process telemetry; freeze; live 20.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3561 — Head interruption defects fixed (HEAD e702ebc50); rerun 8/8 interruption cases PASS; 900027 occlusion still FAIL
+
+- Executor note: the session was cut by an API ECONNRESET at the summary step and resumed from its transcript. No run was repeated and no identity was reused.
+- Defect A (3be7a2cd9):
+  - stop_confirmed and may_continue share one predicate in the functional campaign. It accepts a single planned close, or a single acknowledged DEADMAN_CLOSED_FAULT when the stop proof is complete: terminal result 4/5/6, ≥ 3 raw-stop samples, a 51-sample window, and a matching activation id. A fault close without proof stays unsafe.
+  - RED A-red.log (2 assertion failures) → GREEN.
+  - Offline re-classification of the copied runs 900009/18/28/29: False → True.
+  - HFA-009 already accepted fault + proven stop; a pinning test was added.
+- Defect B, root cause:
+  - OBSERVED: realtime_tools' runNonRealtime only aborts a goal that is executing. The dead-man latch aborts and clears the active goal first, so a cancel arriving afterwards leaves the goal CANCELING for good. The raw-stop proof needs a terminal result, so it never confirms. The controller log shows "Got request to cancel goal" with no "Canceling active action goal".
+  - INFERRED: the retire PermissionErrors were a consequence; they disappeared once the stop confirmed.
+  - 5f5b7791f: such a goal is finished as canceled from a non-realtime timer. gtest RED B-red.log → GREEN 19/19.
+  - c15a512fc: a remaining race. The latch can clear the goal between the wrapper's read and the base callback's read; a controller ring log caught this in about 15% of live repeats. Fix: every accepted cancel is watched, and a goal still canceling after 100 ms is finished as canceled (5 s expiry). 20/20 gtests. There is no deterministic RED for the race window; it rests on the ring-log evidence plus stress: 24/24 confirmed stops (12 fast_interruption, 12 SIGTERM).
+- e702ebc50: the HFA-009 audit took a later HEAD_REFERENCE_DIVERGED fault as the origin after a SIGTERM latch, so the dead-man close appeared 5–8 ms before the "fault" (FAULT_TO_DEADMAN_CLOSE on 3 of 4 SIGTERM attempts). The origin is now the earliest of the FAULT and STOP_REQUEST rows. RED C-red.log → all 17 attempts audit PASS.
+- Gates (gates/final3, e702ebc50): 14-package fresh build rc 0; demo 11344 pass, 0 fail; colcon 2233 tests, 0/0; scripts 12 pass.
+- Rerun (rerun2, install final2 at c15a512fc, prefix hj1, one segment, never halted):
+  - 900008, 900018, 900028, 900038 (fast_interruption) and 900009, 900019, 900029, 900039 (reacquire_after_stop): all PASS.
+  - In each, attempt 1 ends FAULT or INTERRUPTED with stop_confirmed True, a fault close acknowledged, the raw stop confirmed and a valid window; attempt 2 reaches TARGET_LOCKED with yaw error 0.25–0.68° and the cup centred at x ≈ 321–323.
+  - The audits pass after e702ebc50; the audit fix landed after the runs, so the old result files are kept and the re-audit is in rerun2/audit-fixed.
+  - rerun/ is superseded (first controller fix only; it holds the diagnostic loops and the ring-log evidence).
+- 900027 (partial_occlusion): still FAIL with TARGET_AMBIGUOUS, a cup partly behind a cyan bottle. This is a detector/occlusion ambiguity unrelated to interruption. Open.
+- Functional-40 standing after the fixes: 39/40. 31 from CP-3559 plus the 8 interruption cases rerun under new identities; this is a combined count, not a single uninterrupted 40-case campaign.
+- Margin watch: end-window max |v_fb| was 1.89e-3 (900018) and 1.97e-3 (900027) against the 2e-3 bound, close to the limit (CP-3537 risk note).
+- Not pushed: 4 fix commits plus the ledger. Deletion candidates: scratch/, dev/, gates/final and final2, rerun's std/dbg runs.
 
 ## CP-3560 — user approved: fix Head defect A (RED first), diagnose defect B, rerun the 8 interruption cases + 900027
 
