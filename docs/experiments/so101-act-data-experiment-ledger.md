@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 555d747832a167878d20500ba1d45ec6a14d6067
+current_commit: 55db48a2a
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3598
-next_experiment: Review the written one-way four-operation container control design, then revise its implementation plan; preserve interrupted drafts and all original campaign gates.
+latest_checkpoint: CP-3599
+next_experiment: Review the one-way container control implementation plan; preserve the chosen inline Codex execution method, interrupted drafts and all original campaign gates.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3599 — Written design approved; one-way implementation plan self-reviewed
+
+- User approved the written design including mandatory legacy source/test cleanup. Marked design approved and wrote docs/superpowers/plans/2026-10-12-so101-container-one-way-control-implementation.md using writing-plans and project humanizer-zh; seven tasks cover closed four-operation control, fixed output, local task execution/cleanup, Host polling/readback/commit, real entry assembly, legacy removal and final post-cleanup freeze/gates/original campaign acceptance.
+- User asked the purpose of Teacher execution identity and Host commit checks. Clarified and simplified plan language to task attribution, complete sealed output and QC checks: one frozen input, local execution checks, Host-only result verification; no lease/ACK/heartbeat callback protocol. Existing data identity fields remain evidence metadata, not a new handshake. No safety or QC threshold was changed.
+- User further specified that assignment passes an ID and data recovery only checks ID equality. Updated spec/plan so task attribution checks only the dispatched/status/result task_id; removed the proposed extra execution_binding, local-start proof and container commit-proof chain. Host stores plain local dispatch/recovery records; existing runtime safety and data QC/export rules remain separate. The preceding broader proof proposal is superseded, not implemented.
+- Inline plan review corrected an ordering gap: all remaining production providers precede final source/image freeze, and fresh approved evidence precedes physical full-task acceptance. Explicitly retained generic IPC/non-container users, old evidence/history, raw denominator and approved formal export rules. All steps remain unchecked; no source implementation/runtime/tests/qualification performed in this checkpoint.
+- Same worktree/branch, documentation baseline55db48a2a, native goal last observed paused. The six interrupted source/test drafts remain untouched. Written implementation plan awaits user review, existing Codex inline execution method remains selected; no dst/delegation/alternate writer.
+- Retained all; archived none; existing scratch/build/socket deletion candidates retained. No evidence deletion, hardware, training, push or threshold downgrade.
 
 ## CP-3598 — Human-confirmed one-way control discussion; written design for review
 
