@@ -65,7 +65,7 @@ Coordinator 已知实例的宿主机目录和任务 ID，可直接定位任务�
 
 无法证明停止时，`resources_released` 保持 false，不释放对应的槽位和 GPU 安全占用，也不启动替代实例。状态查询不可达本身不证明资源已经释放。正常轮询 `RUNNING` 时也不进行数据回收。
 
-已落盘结果、日志和故障证据保留。释放运行资源不包含删除证据。无硬件、训练、push、删除、自动重试或阈值调整授权。
+已落盘结果、日志和故障证据保留。释放运行资源不包含删除证据。无硬件、训练、push、证据删除、自动重试或阈值调整授权。用户已明确要求新版本实现后清理旧协议的源码与测试，该清理属于此次代码改造范围。
 
 ## 对当前代码和验收的影响
 
@@ -74,6 +74,20 @@ Coordinator 已知实例的宿主机目录和任务 ID，可直接定位任务�
 `coordinator.py` 保留宿主机调度与 journal 职责；`owner.py`、`shard_owner.py`、`registry.py`、`retirement.py` 的资源归属和实际停止证据继续使用。`paths.py` 增加固定输出目标的精确映射；`case_artifacts.py`、`result_verifier.py` 保持独立封存与 Host 校验职责。具体代码改动顺序由后续实施计划给出。
 
 历史“terminal lease”验收对应到 Host 登记的实际终结任务，不再要求 Worker 回调。原有数量和业务门槛不变：same-eight W1/W2、独立四十场景分两轮 exact-W8、每实例每轮至少两个实际终结任务，以及已批准的 formal split、quota 和 committed manifest。业务失败仍计入原有业务分母，执行故障仍使 qualification 不通过。
+
+## 旧协议清理
+
+新协议实现并通过实际控制链与结果回收的定向验证后，在同一实施计划中移除旧协议专属源码和测试，再对清理后的最终代码运行集成与完整门禁。清理是交付条件，不另留后续任务，也不保留兼容入口、双协议开关或默认不可达的旧实现。
+
+清理范围包括容器到 Coordinator 的 RPC transport/proxy、整批 Worker dispatch runner、容器注册/领任务/ACK/心跳/提交/恢复交互，以及旧描述文件、配置、socket/token 和 CLI 组装中的专属接线。新协议仍需要的采集、停止、封存和资源归属逻辑先迁移到新组件，再移除旧协议依赖。
+
+当前明确的旧协议入口是 `worker_transport.py` 中的 `CollectionCoordinatorTransport`、`CollectionCoordinatorProxy`，以及 `worker_runner.py` 中的 `ContainerWorkerRunner`。`collection_worker.py`、`worker_builder.py`、`collection_driver.py` 和相关组装按实际引用逐项处理，不能只删除 transport 而遗留失效调用。
+
+旧协议专属测试包括 `test/parallel_batch/test_container_coordinator_transport.py`、`test_container_worker_runner.py`、`test_container_collection_worker.py`，以及其他测试中仅验证旧回调与租约交互的部分。仍有效的任务业务、数据完整性、进程停止和隔离断言迁移到新协议测试，随后移除旧测试。验收数量、数据规则和停止条件保持不变。
+
+通用 `parallel_ipc` authority 和非容器 `mujoco_batch` 目前仍有实际使用者，其源码与测试不属于整体删除对象。清理按用途和实际依赖确认边界，保留其他受支持流程使用的能力；容器采集路径必须完全脱离旧 Coordinator RPC。
+
+清理完成的证据包括：新容器路径无旧协议 import、配置或运行时调用；移除专属旧测试后新测试覆盖对应有效业务断言；CLI、实际容器及独立 Host 数据回收链通过验证；最终包级门禁针对清理后的 source/image freeze 运行。历史批准快照、Git 历史、日志、数据与测试证据全部保留。
 
 ## 验证要求
 
