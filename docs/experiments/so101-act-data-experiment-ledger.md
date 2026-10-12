@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 5a8c5893483227d2d92d67f24217f2ecc92279bb
+current_commit: 401bce5b74d2032c7d057e09e271a91b2ddafaac
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,22 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3595
-next_experiment: Bind the tested collection driver to a concrete production Worker builder and native collection spec, implement run_worker, then replace the legacy CLI; full data chain and all final campaign gates remain required.
+latest_checkpoint: CP-3596
+next_experiment: Bind the actual Host Worker runner and per-case artifact/runtime bindings to the concrete Worker builder/native spec, scope Python ROS participants, and replace the legacy CLI; full data chain and all final campaign gates remain required.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3596 — Actual Host dispatch/RPC chain and original per-case artifact bindings GREEN
+
+- Previous goal turn was progress. Same clean401bce5b7 source baseline, direct ai-station worktree/branch, single Codex writer and inline self review; native full goal ACTIVE. Preserved Claude%0/PID233376, task Codex%1/PID564888 and submodulebab9841. Read-only Docker listing shows no running container. No physical test was launched.
+- Added ContainerWorkerRunner, the concrete ConcurrentCollectionCoordinator run_worker callback: consumes the actual admitted context/config/image/endpoint limits and original frozen runtime/scene/case refs, claims each original instance once, starts actual private authenticated Coordinator transport, writes immutable Worker spec, sends one current typed control request, verifies original reply identity and retains replies/failures. Finally closes owned RPC threads without deleting tokens or sockets. Rejected/interrupted dispatch is not replayed. Only durable Coordinator commits are result authority; reply rows are Worker outcomes, not synthetic case commits.
+- Real socket integration reached Host runner -> ContainerChildIpcServer -> CollectionShardDriver -> CollectionCoordinatorProxy -> actual BatchCoordinator/durable journal commit. Physical Worker and external inference/container observations are controlled. Teacher FAILED remains a business terminal. Worker refusal sends only one request and retains failure; infrastructure failure preserves the earlier original commit but rejects the overall Worker run. Inline self review added strict current WorkerRunResult schema/type/status parsing and the existing infrastructure classifier rather than treating accepted control replies as campaign success. It also bound the original campaign config and exact shard image/endpoint limits before effects. This proves the transport/commit boundary, not a complete physical wave, native builder, calibration or QC.
+- Added CollectionCaseArtifacts with one original _ArtifactResults/ActCollectionResultStore writer per scene; exact instance/LeaseIdentity/Worker/scene, formal scope, input digest, hash readback and separate recovery receipts. No shared scope/input mutation. Two real workspaces/stores retained their own originals. Diagnostic mode, wrong scene/input, null input digest and extra ref refuse. Inputs in this test are explicit metadata fixtures, not fully verified runtime freezes or fresh-process QC.
+- ContainerCollectionRuntime now selects the current original case scope/inputs/Recorder frozen policy before reset and requires previous-case proven helper/controller/native-ready cleanup before another reset. Tests used actual original artifact bindings/borrowed runtime and controlled external ROS/process observations, proving no reset before cleanup and same native session/generation; no physical stop inference.
+- Runner intended REDtargeted.lpeas6Ny 2fail0.24s (missing module). First implementation test5v1eRywT failed from a guessed BatchRequest.point_ids field; read authoritative selected_point_ids and corrected source/test. GREEN0MFHTRH3 2pass0.78s and campaign identity bLGFtI5A 2pass0.78s. Artifacts intended REDb44nAc1u 5fail0.15s, GREENazjmIRgr5pass0.18s. Related azh0fddE13pass0.85s, strengthened1vEDVQdr14pass0.86s, final outcome wiXlz5wX15pass1.15s. Final scoped boundary targeted.OaJjywXH rc0/225pass3.94s wall4: all container_campaign, actual Coordinator transport/Host runner and original result/QC tests. All unique NVMe scratch/exact interpreter/tempfile/argv/log/JUnit retained; no full package/benchmark gate. Patch/source/JUnit inline audit in worker-dispatch-bindings-review.json/.patch.
+- Native campaign_shard still accepts no_motion_readiness only; concrete production Worker builder/closed native collection spec/scoped Python ROS participants and actual CLI admission/owner/finish are still required. Complete Teacher/Recorder/exit-stop/bag-close/offline10Hz/QC/seal/Host commit, independent40/formal report admission, production measurement/Head/live, final common freeze/full gates, fresh calibration/live, same8W1/W2, disjoint40/two20exactW8 and approved formal committed training-ready manifest remain unproven. No current genuine blocker or completion claim.
+- Retained all runs; archived none; scratch/socket/exited diagnostics are deletion candidates only, not deleted. No selfSSH/dst/agents/resume/new worktree/hardware/training/push/deletion/threshold downgrade. Full goal remains active.
 
 ## CP-3595 — Collection control contract and single-use driver lifecycle GREEN
 

@@ -1,6 +1,7 @@
 """ACT cases borrow the native shard stack and retire only their own helper processes."""
 
 import math
+from pathlib import Path
 
 from so101_demo.parallel_batch.contracts.common import RunMode
 from so101_demo.runtime.act_worker_runtime import ActWorkerRuntime
@@ -8,7 +9,7 @@ from so101_teleop.unified.act_stack import ActStackProcessOwner
 
 
 class ContainerCollectionRuntime(ActWorkerRuntime):
-    def __init__(self,*args,existing_stack,**kwargs):
+    def __init__(self,*args,existing_stack,case_artifacts=None,**kwargs):
         super().__init__(*args,**kwargs)
         if (self.run_mode is not RunMode.EXECUTE or not isinstance(existing_stack,ActStackProcessOwner)
                 or existing_stack.launch.evidence_root!=self.resources.worker_root/'stack'
@@ -17,6 +18,22 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
                 or existing_stack.launch.session_id!=self.resources.session_id):
             raise ValueError('COLLECTION_BORROWED_STACK_MISMATCH')
         self.stack=existing_stack
+        self._case_artifacts=case_artifacts
+        self._case_cleaned_key=None
+
+    def reset_point(self,lease):
+        if self._case_artifacts is not None:
+            if (self._recorders or (self._active_lease is not None
+                    and self._case_cleaned_key!=self._lease_key(self._active_lease))):
+                raise ValueError('COLLECTION_PREVIOUS_CASE_NOT_CLEANED')
+            scope,inputs=self._case_artifacts.case_binding(lease)
+            self.episode_scope_path=str(scope)
+            self.episode_inputs_manifest=str(inputs)
+            if self._collection is not None and self._collection.enabled:
+                from so101_demo.act.frozen_runtime_inputs import load_recorder_frozen_policy
+                self._recorder_policy=load_recorder_frozen_policy(Path(inputs))
+            self._case_cleaned_key=None
+        return super().reset_point(lease)
 
     def start_physical_runtime(self):
         self._execution_allowed()
@@ -48,6 +65,8 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
             self._paused_for_inference.discard(key)
             if self.stack.process is None or self.stack.process.poll() is not None:
                 return False
-            return self.worker_ready_gate() is True and self._monotonic()<deadline_monotonic_s
+            ready=self.worker_ready_gate() is True and self._monotonic()<deadline_monotonic_s
+            if ready:self._case_cleaned_key=key
+            return ready
         except Exception:
             return False
