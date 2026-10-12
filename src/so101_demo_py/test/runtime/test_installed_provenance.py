@@ -34,6 +34,7 @@ EXPECTED_EXECUTABLES = {
 EXPECTED_LAUNCHERS = {
     "so101_mujoco_act.launch.py",
     "so101_mujoco_act_execution_stack.launch.py",
+    "so101_mujoco_container_shard.launch.py",
     "so101_gazebo.launch.py",
     "so101_gazebo_pick_place.launch.py",
     "so101_mujoco.launch.py",

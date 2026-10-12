@@ -382,6 +382,7 @@ def test_yolo_predict_oom_has_infrastructure_type():
         raise RuntimeError('CUDA out of memory')
     detector._model = SimpleNamespace(predict=fail)
     detector._imgsz, detector.runtime_device = 640, 'cuda'
+    detector._score_threshold = 0.25
     with pytest.raises(ModelRuntimeInfrastructureError):
         detector._predict(np.zeros((2, 3, 3), dtype=np.uint8))
 
@@ -842,6 +843,7 @@ def test_yolo_completed_result_count_error_is_model_error(tmp_path, monkeypatch)
     detector = object.__new__(YoloSegDetector)
     detector._model = SimpleNamespace(predict=lambda **kwargs: [])
     detector._imgsz, detector.runtime_device = 640, 'cuda'
+    detector._score_threshold = 0.25
     detector._monotonic_ns = lambda: 1
     f.runtime.detectors[f.req.model_id] = (
         replace(f.runtime.detectors[f.req.model_id][0], detector=detector),
@@ -1100,6 +1102,7 @@ def test_yolo_completed_schema_vs_tensor_transfer_boundary(tmp_path, monkeypatch
     detector = object.__new__(YoloSegDetector)
     detector._model = SimpleNamespace(predict=lambda **kwargs: [result])
     detector._imgsz, detector.runtime_device = 640, 'cuda'
+    detector._score_threshold = 0.25
     detector._monotonic_ns = lambda: 1
     detector._model_id, detector._weights_sha256 = 'yolo', 'a' * 64
     detector._class_names = None if bad == 'class_mapping' else {0: 'plastic_cup'}

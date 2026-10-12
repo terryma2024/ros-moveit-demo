@@ -79,7 +79,7 @@ def test_gate_refuses_claims_missing_current_original_inputs(tmp_path,problem):
         module().validate_qualification_contract(document)
 
 
-def test_functional_run_cannot_include_qualification_or_accept_w8(tmp_path):
+def test_functional_run_cannot_include_qualification_or_accept_eight_workers(tmp_path):
     gate = fixture(tmp_path)
     with pytest.raises(ValueError,match='FUNCTIONAL_COLLECTION_CONTRACT_INVALID'):
         module().validate_functional_contract(gate)

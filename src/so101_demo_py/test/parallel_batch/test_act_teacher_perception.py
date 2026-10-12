@@ -49,7 +49,7 @@ def test_detected_candidate_still_requires_real_local_admission_and_durable_read
 
 
 @pytest.mark.parametrize("gate", ["geometry", "quality"])
-def test_local_r6_or_pose_rejection_is_failed_without_fallback(tmp_path, gate):
+def test_local_geometry_or_quality_gate_rejection_is_failed_without_fallback(tmp_path, gate):
     h = harness(tmp_path)
     policy = module().ActTeacherPerceptionPolicy(h.latch, yolo_model_id="yolo")
     policy.start_request(h.req, depth_timestamp_s=101.0, depth_sha256="b" * 64)
