@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 0529f342e637
+current_commit: 845a04d6dbd30bc0aa3f1d5e598e6909e5353e71
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3622
-next_experiment: NONE planned. The unified admission store holds the EXP-577 lease and slot after an unproven shard stop; no further real run can be admitted until that is resolved. Root-cause work on the two EXP-577 defects continues offline.
+latest_checkpoint: CP-3623
+next_experiment: NONE can be admitted. A third real functional run (repeat of EXP-577 with the fixes of 845a04d6d on rebuilt images) is prepared in principle but blocked: the unified admission store holds the EXP-577 GPU lease and slot and no designed path settles it; a human decision is required.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3623 — EXP-577 defects root-caused and fixed; gates PASS and images rebuilt on 845a04d6d; admission state held, human decision required
+
+- Commit `845a04d6d` (Sonnet-written, Opus-reviewed). PROVEN root causes: (1) the worker node inventory hard-coded MoveIt's node as /move_group/moveit, while under the container's single namespace rule the node is <ns>/moveit (confirmed with a real Jazzy context and by the sort order of the truncated `unexpected` list); (2) the native stop could not be confirmed because the reset left the simulation paused and only a successful gate resumes it - the shard log's last simulation line is "Simulation paused." with no periodic simulator line for the remaining 31 s, the stop observer needs an unpaused, advancing stack, and the confirmed runs show stack-stop evidence that this run lacks. Fixes: namespace-aware inventory that is otherwise as strict; a full gate observation file in the task directory referenced from the fault text; a recorded physics hold released when the case is retired, reported as a named proof, with the stop observer's conditions unchanged; observer and native-stop failure reasons carried into the evidence; the consumer readiness check compared against the stack namespace.
+- HYPOTHESIS-based change, flagged: the task revocation's 10 s unsettled result is attributed to action servers that never had a goal publishing no status; a lane without status is now settled only by an empty cancel-all answer, and the unsettled case logs per-lane detail. This touches a generic module (runtime/parallel_ros_ports/observations.py); the next real run's diagnostics will confirm or refute it.
+- Read-only scan of the next stages for the same class of defect: Recorder topic map, task camera source, pose publisher, pause and resume, MoveIt services, consumer child environment and Teacher safety are scoped by the existing remaps; one definite defect (consumer readiness node name) fixed; two suspects off the collection path left alone and listed in the review notes.
+- Host package gates on 845a04d6d, R/gates/845a04d6dbd3: fresh build rc 0; so101_demo_py rc 0, 12577 passed, 0 failed, 167 skipped, 430 s (demo-run.sZhZGvL4); other 13 packages rc 0, 2348 tests, 0 errors, 0 failures, 60 skipped, 512 s. Worktree unchanged and clean. PASSED.
+- Images rebuilt on 845a04d6d: shard R/image-build-20261012T224747Z (148.6 s), inference R/image-build-20261012T225024Z (73.8 s). Not yet run.
+- Held admission state, read back read-only and unchanged by the coordinator (mtimes of both SQLite files identical before and after): unified/intents.sqlite3 global state VALIDATION_ACTIVE owned by the operation of campaign w1f-20261012T220436Z, parent phase ACTIVE at generation 2, one GPU workload lease on GPU-28221cec…, worker slot w00 active; the run's host/launches.sqlite3 has no exit record for shard wave-0-w00-g1. Docker reports that container exited with code 1 and no process alive.
+- OBSERVED from code: no designed path settles this. `finish` requires every launch record terminated; `prove_terminated` requires the shard's own stop receipt to have all four facts true, and this run's receipt has all four false and is immutable evidence; the late re-proof re-reads the same receipt; there is no operator acknowledgement or campaign recovery command; the spec only says an unproven stop keeps the fence. The coordinator did not edit the store, did not use another evidence root to bypass the fence, and did not lower the proof. Releasing it is a human decision, requested from the user.
+- Blocked on the human: release of the held lease and slot (above). Also still open: explicit confirmation of the coordinator decisions of CP-3618 and CP-3619, quality pass counts, formal deadline handling.
+- Retained: both real run roots, prep directories, logs, gate and image build directories. Nothing deleted, nothing forced, no container removed.
 
 ## CP-3622 — EXP-577 VALID failure: namespaced node inventory at the initial gate; unproven stop holds the admission lease
 
