@@ -220,6 +220,7 @@ class ActFixedCollectionWorkload:
             raise ValueError("ACT_COLLECTION_SCENES_INVALID") from error
         self.scene_ids = frozenset(scene_ids)
         self.action_may_have_started = False
+        self.cleanup_unconfirmed = False
 
     def run_authorized(self, lease, *, runtime, broker, boundary, teacher_boundary,
                        stop_before_motion, recorder_stopped, start_event_id,
@@ -230,6 +231,8 @@ class ActFixedCollectionWorkload:
         from so101_demo.parallel_batch.contracts.identity import LeaseIdentity
         from so101_demo.runtime.parallel_ros_ports.observations import AdmittedPose
 
+        if self.cleanup_unconfirmed:
+            raise ValueError("ACT_COLLECTION_CLEANUP_UNCONFIRMED")
         self.action_may_have_started = False
         if type(lease) is not LeaseIdentity or lease.point_id not in self.scene_ids:
             raise ValueError("ACT_COLLECTION_SCENE_NOT_RESERVED")
@@ -253,9 +256,11 @@ class ActFixedCollectionWorkload:
             raise ValueError("ACT_COLLECTION_TERMINAL_LEASE_MISMATCH")
         if type(chain) is ActPerceptionTerminal:
             _decision, fenced, stopped, confirmed = stop_before_motion(lease)
-            return ActPerceptionDecision.from_terminal(chain, stop_facts=dict(fenced=fenced,
+            decision = ActPerceptionDecision.from_terminal(chain, stop_facts=dict(fenced=fenced,
                 motion_stopped=stopped, controllers_stopped=confirmed,
                 recorder_stopped=recorder_stopped(lease)))
+            self.cleanup_unconfirmed = not all(decision.stop_facts.values())
+            return decision
         admitted = boundary(lambda current: runtime.admit_pose(current, chain))
         if admitted is not chain:
             raise ValueError("ACT_COLLECTION_ADMITTED_POSE_CHANGED")

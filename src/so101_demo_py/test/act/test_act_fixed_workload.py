@@ -89,6 +89,29 @@ def test_unconfirmed_stop_never_becomes_normal_business_failure(tmp_path, flag):
     assert value.reason == "ACT_PERCEPTION_STOP_UNCONFIRMED"
 
 
+@pytest.mark.parametrize("flag", ["fenced", "motion_stopped", "controllers_stopped", "recorder_stopped"])
+def test_actual_worker_keeps_uncertain_act_cleanup_quarantined(tmp_path, flag):
+    _h, terminal = terminal_case(tmp_path, "NOT_DETECTED")
+    fake = Fake(RunMode.EXECUTE)
+    fake.broker.request_model = lambda *_args, **_kwargs: terminal
+    if flag == "fenced":
+        fake.broker.cancel_generation = lambda *_args: False
+    if flag == "motion_stopped":
+        fake.runtime.cancel_motion = lambda *_args: False
+    if flag == "controllers_stopped":
+        fake.runtime.confirm_no_controller_goal = lambda *_args: False
+    if flag == "recorder_stopped":
+        fake.runtime.recorder_stop_proven = lambda *_args: False
+    ports = fake.ports()
+    ports["workload"] = ActFixedCollectionWorkload(scene_ids=("p1",))
+    worker = ParallelWorker(ports)
+    result = worker.run_one()
+    assert result.terminal_status is AttemptStatus.INDETERMINATE
+    assert result.recovered is False
+    assert worker.run_one().stopped_reason == "WORKER_NOT_READY"
+    assert not fake.coordinator.recovery
+
+
 def test_generic_worker_keeps_its_existing_d8f_pre_motion_result(tmp_path):
     _h, terminal = terminal_case(tmp_path, "INFRA_ERROR")
     fake = Fake(RunMode.EXECUTE)

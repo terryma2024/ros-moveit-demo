@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 8fd833f3f0207457d6858c172c5a87e07672db11
+current_commit: 9a25d978ff0bf46508853c292e0d25bcdec7e386
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3574
+latest_checkpoint: CP-3575
 next_experiment: Publish and independently verify typed ACT pre-motion results with actual stop/namespace evidence, then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3575 — Uncertain ACT cleanup remains quarantined GREEN
+
+- Follow-up inline review exercised the full Worker loop for the four uncertain-stop cases from CP-3574. That checkpoint proved INDETERMINATE classification but did not prove availability remained fenced. Functional RED targeted.P6nT1Jaz actual rc 1, 4 failed/26 passed: the generic recovery path could override motion/controller uncertainty using pre-motion absence, and Recorder uncertainty was not part of its recovery conjunction.
+- Fixed the current ACT workload only: cleanup_unconfirmed latches permanently on any false fence/motion/controller/Recorder stop fact, refuses another direct workload call, quarantines the Worker and prevents recovery/readmission. Existing generic/Mac recovery behavior remains unchanged. No cleanup success, controller stop, owned process exit or resource release is manufactured.
+- Final targeted argv: run-targeted.zsh `src/so101_demo_py/test/act/test_act_fixed_workload.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_worker_fencing_recovery.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_worker_stop_commit.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_worker_coordinator.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_worker_gate_watchdog.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_worker_diagnostics.py -q`; targeted.vwjTZaRv actual rc 0, 176 passed in 14.90 s, wall 15 s. Each uncertain case retains INDETERMINATE, recovered=false, no recovery/readmission acknowledgement and no further lease. Fresh NVMe scratch, interpreter/tempfile proof, argv/log/JUnit retained. No full/package/benchmark gate.
+- Inline review checked the exact narrow diff and actual second run_one() refusal, and git diff --check passed. Exact scoped patch/hash retained as act-uncertain-cleanup-fence.patch and .sha256. This supersedes any inference that CP-3574's type-only stop tests proved Worker quarantine. CP-3574's 418-pass source/terminal evidence otherwise remains retained and valid for its stated scope.
+- Container stop/namespace receipts, result publisher/Host verifier, owned-resource cleanup and actual shard/CLI integration remain mandatory next boundaries. No live service/container/stack, hardware or training started. Goal active; all evidence retained, archived none, scratch deletion candidates only, no deletion/push/resume/new worktree.
 
 ## CP-3574 — One-scene ACT workload and typed pre-motion terminal boundary GREEN
 

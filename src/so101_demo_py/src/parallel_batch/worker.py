@@ -170,6 +170,8 @@ class ParallelWorker(WorkerRevocation, WorkerProtocol, WorkerCommit):
                     start_event_type=start_event_type, reset_epoch=reset_epoch,
                 )
                 action_may_have_started = self._workload.action_may_have_started
+                if self._workload.cleanup_unconfirmed:
+                    self._quarantined = True
                 return decision, action_may_have_started, None
             if self._mode is RunMode.DRY_RUN:
                 decision = self._boundary(

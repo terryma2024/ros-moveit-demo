@@ -205,6 +205,9 @@ class WorkerCommit:
         physical_action_proven_absent: bool,
     ) -> bool:
         self._stop_watchdog()
+        if self._workload is not None and self._workload.cleanup_unconfirmed:
+            self._quarantined = True
+            return False
         if (isinstance(deadline, bool)
                 or not isinstance(deadline, (int, float))
                 or not math.isfinite(deadline)
