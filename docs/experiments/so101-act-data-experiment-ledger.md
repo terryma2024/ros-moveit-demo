@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 7fac8bc41acfb5870c27f4b28edf08f6da0d2533
+current_commit: 5a8c5893483227d2d92d67f24217f2ecc92279bb
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,22 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3583
-next_experiment: Compose verified Worker transport and borrowed-stack case lifecycle into the collection shard handler and concrete run_worker callback, then replace the legacy CLI/builder; full pipeline and all final campaign gates remain required.
+latest_checkpoint: CP-3595
+next_experiment: Bind the tested collection driver to a concrete production Worker builder and native collection spec, implement run_worker, then replace the legacy CLI; full data chain and all final campaign gates remain required.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3595 — Collection control contract and single-use driver lifecycle GREEN
+
+- Native full goal remains ACTIVE. Same direct ai-station worktree/branch and single Codex writer; inline self review. Existing Claude pane%0/PID233376 and Codex pane%1/PID564888 preserved. No new runtime container or physical run was launched in this checkpoint.
+- Replaced collection-start's inherited single pick-place phase payload with one closed reference to the private frozen worker-spec.json, exact instance generation, and four original business hashes. Unknown/legacy phase fields, missing refs and boolean generations refuse. Pick-place and historical generic resume schema remain unchanged; this container driver refuses resume explicitly.
+- Added CollectionShardDriver: exact session/generation/business refs, private path/hash readback, one Worker run after native startup, generic motion refusal, ACT cancel and single-flight native retirement. This remains a driver with an injected Worker builder; campaign_shard still admits no_motion_readiness only. No concrete production collection builder, launcher or CLI assembly is claimed.
+- Inline self review identified stop-during-build losing late helper cleanup and Worker request_stop exceptions skipping native retirement. Reproduced both at the intended driver boundary: targeted.3MJkOt3W 2fail4pass0.30s. The driver now awaits and owns the in-flight builder before helper cleanup, fences run after closure, retains cleanup errors, retires native stack despite Worker stop failure and returns unproven cleanup on that failure. Controlled external Worker/retirement ports prove lifecycle ordering, not actual controller stop.
+- Added a real ContainerChildIpcServer/ContainerControlClient socket test that decodes the current collection contract, dispatches the actual driver, returns the original result envelope, routes ACT cancel and performs single-flight retirement. Worker and native retirement are controlled external ports. First socket test targeted.UdiD2tK7 was a missing fixture parent directory (1fail6pass0.29s), corrected without lowering any gate. No Teacher/Recorder/QC/Host commit or physical qualification is inferred from it.
+- Targeted.38ocrGJX rc0/22pass0.98s; targeted.jP89YAbl rc0/23pass0.93s; final related boundary targeted.4IS90ruJ rc0/209pass7.82s wall8, all container_campaign plus current/original IPC tests. Earlier targeted.LreYIvCz ran no tests because a guessed test path did not exist; it is not functional RED. All unique NVMe scratch, exact interpreter/tempfile checks, argv/log/JUnit retained. No full package or benchmark gate. Patch/source/JUnit hashes and inline review retained in collection-driver-review.json/.patch.
+- Next required production boundary remains concrete Worker builder/native spec/run_worker and actual CLI admission/owner/finish composition, followed by complete Teacher/record-only/exit-stop/bag-close/offline10Hz/QC/seal/Host commit. Independent40/formal report admission, production measurement/Head/live, final common source/install/two-image/full gates, fresh calibration/live, same8W1/W2, disjoint40/two20exactW8 and approved formal committed training-ready manifest remain open. No current genuine blocker or completion claim.
+- R6 naming request remains resolved by CupCandidateLocalizer and cup_geometry_filter without threshold changes; historical numbered snapshots retained. Retained all runs; archived none; scratch/socket/exited diagnostics remain deletion candidates only. No selfSSH/dst/agents/resume/new worktree/hardware/training/push/deletion/threshold downgrade.
 
 ## CP-3594 — Real Worker RPC/control exchanges; borrowed-stack case transition GREEN
 
