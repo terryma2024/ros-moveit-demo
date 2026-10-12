@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: e5c1b631079c3ad62d394ec5cfc3481042dd0286
+current_commit: 5aba8df8fee1
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,23 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3615
+latest_checkpoint: CP-3616
 next_experiment: NONE planned. Code path from CLI to formal admission is implemented, gated and imaged on e5c1b6310. The first real single-scene collection task (EXP to be planned) needs the human answer on the activation receipt for the formal freeze; scene lists, quality rule values and the formal deadline are also pending human input.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3616 — Simulator rendering moved from CPU (llvmpipe) to the NVIDIA GPU in the shard image; discovery rule aligned with the freeze
+
+- OBSERVED cause of the "EGL: Vendor: Mesa Project" log line (open observation of EXP-574): in the rebuilt shard image the simulator's own call, `eglGetPlatformDisplay(EGL_PLATFORM_SURFACELESS_MESA, EGL_DEFAULT_DISPLAY)` (third_party/mujoco_ros2_control/mujoco_ros2_control_plugins/src/camera_plugin.cpp:823), returned GL_RENDERER `llvmpipe (LLVM 20.1.2, 256 bits)`; /usr/share/glvnd/egl_vendor.d held only 50_mesa.json although libEGL_nvidia and the device were present. The same call on the Host returned `NVIDIA GeForce RTX 5060 Ti`. The earlier image native-shard-probe-561524b4c710 logged the same Mesa vendor line, so every earlier container run rendered both cameras on the CPU. `verify_selected_gpu` proves CUDA visibility and the UUID only, not the EGL device. Evidence: /tmp/so101-debug-act-data-66c42e4c/prep-a1b2 (b-run.out, host-gl-probe.out).
+- A throwaway container with the NVIDIA vendor registration mounted read-only returned vendor NVIDIA and the RTX 5060 Ti renderer for the simulator's exact call (prep-a1b2/b-run2.out); the surfaceless platform is accepted by the NVIDIA implementation, so the simulator code did not change.
+- Commit `5aba8df8f` writes /usr/share/glvnd/egl_vendor.d/10_nvidia.json in the final image stage (deps stage text unchanged, packaging test added). Images rebuilt on that commit: shard R/image-build-20261012T205921Z (145.3 s), inference R/image-build-20261012T210156Z (75.5 s).
+- Verification in a real no-motion shard on the rebuilt image (R/run-egl-renderer-check.zsh, control-path probe instance A, run REG/act-nomotion-968caefcecfa, samples /tmp/so101-debug-act-data-66c42e4c/egl-check-20261012T210334Z): simulator log "EGL: Vendor: NVIDIA, APIs: OpenGL_ES OpenGL"; nvidia-smi listed the shard's ros2_control_node as a graphics process using about 202 MiB in 21 of 40 two-second samples; all probe checks of instance A PASS; no container left running. Launched without a prior PLANNED entry for the worktree-cleanliness reason of CP-3613; single variable was the vendor registration file in the image, compared with REG/act-nomotion-587fae66d712 on the previous image.
+- INFERRED consequence, stated to the user: software and GPU rendering do not produce identical pixels, so images from container runs before this change were on a different render path from Host runs; no collection data was produced in containers in this phase, so nothing collected is affected. Eight shards at about 202 MiB each plus the Teacher process at about 298 MiB is well inside the 16 GB device; eight-way behaviour is still unmeasured.
+- The commit before it (`fix: discover contact proposals with the rule the freeze applies`) aligns input discovery with the freeze (one shared helper for verifying a disabled contact proposal in its own validation mode). OBSERVED from a real discovery run into /tmp/so101-debug-act-data-66c42e4c/prep-a1b2/candidates.json and candidates-post-fix.json: nine of twelve input roles have exactly one accepted candidate; contact_proposal and contact_activation have none and scene_model is unapproved, before and after the fix, because the ledger references the directory calibration/r12-decision-name-20261011 but not its proposal.json and activation-receipt.json and discovery follows ledger references to JSON files only. By code reading and pure-function checks the r12 proposal and activation receipt verify against the current compiled model identity (MuJoCo 3.12.0) and a formal freeze would accept them; the words "diagnostic use" occur only in the receipt's approval_reference text and in this ledger, not in any code path. Whether that receipt may back a formal freeze remains a human decision and no reference to those two files has been added.
+- OBSERVED minimum admissible real run: a functional contract needs exactly eight unique scenes with one or two workers, and the CLI freezes in formal mode even for the functional plane; so the first real collection needs the activation decision and seven further scene positions, both pending.
+- The targeted gate-environment runs for these two commits passed (test/act, test/cli, test/packaging, test/repo 6053 pass; container_campaign 616 pass); the full Host package gate has not been rerun on 5aba8df8f.
+- Retained all evidence; nothing deleted. Deletion candidates added: images of e5c1b6310 and 42acc787e, /tmp prep and egl-check directories.
 
 ## CP-3615 — Qualification report, verifier and formal admission committed; gates PASS and images rebuilt on e5c1b6310
 
