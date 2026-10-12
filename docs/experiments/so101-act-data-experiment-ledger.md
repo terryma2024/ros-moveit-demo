@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 4e50afec0
+current_commit: 110f1f88e90698be5688ebc8e49c39125e507f94
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3602
-next_experiment: Implement one-way plan Task3 local executor/real builder, then Host polling and actual child/entry composition; remove old protocol before final freeze/gates.
+latest_checkpoint: CP-3603
+next_experiment: Codex stopped at user request; Claude may continue approved one-way Task3 using claude-handoff-20261012.md, preserving executor drafts and all original campaign gates.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3603 — User stopped Codex and requested Claude handoff; executor core draft GREEN
+
+- User explicitly requested stop, a handoff document and startup prompt for Claude. Stopped implementation; fresh native get_goal reports paused for thread01a12d8d-d88c-7ea3-8054-9ae5fc5952c3. No goal completion/block mutation or old session restore. Claude supersedes the original Codex-only executor selection; task_id design/plan and cleanup already approved, no repeated execution approval required.
+- Task2 scoped commit110f1f88e completed. Uncommitted Task3 core in task_executor.py/test_task_executor.py implements async single task, local task result IO, status-only liveness, deadline, late-builder cleanup and single-flight helper/native retirement. Intended REDpd7lldYV rc1/6fail0.21s; first GREENMNUTNs75 rc0/6pass0.13s; expanded final k3ALZvK7 rc0/57pass2.18s wall2 across executor9 plus task control/output/contracts. External execution and native retirement controlled; no actual Teacher/bag/QC/child/CLI qualification. Real task_builder not yet created; entire Task3 remains in-progress and core uncommitted.
+- Saved all eight dirty source/test paths with SHA256/size readback in R/claude-transfer-wz9eb_og/manifest.json plus tracked diff/status. Six prior old-protocol drafts remain unchanged. Fresh checks found no running Docker container or lingering pytest/build/Recorder; preserved Claude pane PID233376 and Codex pane PID564888. No message or key sent to Claude and no executor launched.
+- Full handoff in R/claude-handoff-20261012.md records approved one-way/task_id-only semantics, current commits, all drafts/test evidence, known launcher field mistakes, native/task-root distinction, helper stop bool and actual builder/entry/cleanup/freeze/original campaign work. Only handoff bookkeeping performed after user stop; no further product implementation/tests.
+- Retained all; archived none; scratch/build/socket deletion candidates retained. No hardware/training/push/evidence deletion/threshold downgrade. Original full campaign incomplete; Codex stops, Claude may continue when user launches it.
 
 ## CP-3602 — Fixed task output and ID-only immutable result readback targeted GREEN
 

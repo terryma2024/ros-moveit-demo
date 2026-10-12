@@ -1,6 +1,6 @@
 # SO-101 容器单向控制实施计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 用户已指定 Codex 当前会话执行、inline self review；不使用 dst、subagent 或独立 reviewer。
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. 原由 Codex inline 执行；用户最新要求 Codex 停止、Claude 接续，继续使用同一 worktree、单写者和 inline 自审；不使用 dst、subagent 或独立 reviewer。
 
 **Goal:** 实现 Coordinator 发起的四操作容器协议、固定输出回收和执行故障清理，并在交付前移除旧协议专属源码与测试。
 
@@ -88,7 +88,7 @@ zsh "$ACT_RUN_ROOT/run-targeted-container.zsh" <本任务的测试路径> -q
 - [x] shard launch 为 act_collection 强制将实例 output 专属目录映射到 `/act/output`；native 控制/停止证据仍用原有私有目录。不同实例不能共用输出根。回收不修改已有结果内容；真实 producer 引用在 Tasks3–5 接入后验证。
 - [x] 容器注入边界使用 `tasks/<task_id>/attempts/<scene>/<attempt>`，保持原有 result store 的内部布局与内容检查，无需修改全局 ActCollectionResultStore 或新增租约证明。
 - [x] 运行新增测试及现有路径/artifacts/result schema/QC/commit 定向 GREEN，最终 165 passed，见 CP-3602。
-- [ ] inline self review 并 scoped commit：`feat: bind task results to fixed container output`。
+- [x] inline self review 并 scoped commit：`feat: bind task results to fixed container output`，`110f1f88e`；最终定向 gate 165 passed，见 CP-3602。
 
 ### Task 3: 容器本地完整任务执行与故障清理
 
@@ -162,4 +162,4 @@ Host 本地记录任务 ID、所属容器、固定目录映射和回收结果，
 
 自审确认新接口签名一致；任务归属只核对 task_id，没有改名保留执行身份或提交证明协议；原有本地执行安全条件与数据 QC保持。路径变化限制在实例 output 与其固定 mount；旧代码清理发生在完整门禁之前。所有步骤未执行，checkpoint 不宣称 GREEN。
 
-本计划已批准，用户已恢复原生 goal，source 实现前通过 get_goal 确认 active，见 CP-3601。继续沿用既定 Codex inline 执行方式，不能把 Markdown 状态当作 active goal。原有实施授权、禁止事项、批准快照及未完成的 campaign gates继续适用。
+本计划已批准。CP-3601 在 source 实现前确认原生 goal active；用户随后要求 Codex 停止、交由 Claude 接续，CP-3603 记录真实 native goal paused。Claude 从 Task3 接续，不重新审批 Task1/2 或恢复旧 Codex 会话争写；原有业务授权、禁止事项、批准快照及未完成的 campaign gates继续适用。完整交接在 dispatch R/claude-handoff-20261012.md。
