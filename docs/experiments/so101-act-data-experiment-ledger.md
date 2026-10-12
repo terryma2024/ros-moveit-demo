@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1b926731cf29cb6588b411790e30af807c253fe7
+current_commit: 555d747832a167878d20500ba1d45ec6a14d6067
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3597
-next_experiment: Construct the real ContainerCollectionWorker/Runtime/ActRosRuntimePorts/ActTeacherClient from the frozen Worker descriptor, bind native collection spec and launcher, then replace the legacy CLI; production Head/measurement/live, full data chain and all final campaign gates remain required.
+latest_checkpoint: CP-3598
+next_experiment: Review the written one-way four-operation container control design, then revise its implementation plan; preserve interrupted drafts and all original campaign gates.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3598 — Human-confirmed one-way control discussion; written design for review
+
+- User steered the task to design discussion and confirmed Coordinator-only calls with four operations: start, assign_task, get_status and terminate. Container output is fixed internally; execution faults such as process failure or timeout retire the owned instance, while business failures do not. User's subsequent "ok" approved the discussed design for writing its specification.
+- Wrote docs/superpowers/specs/2026-10-12-so101-container-one-way-control-design.md and performed inline consistency/prose review. Written specification awaits user review; no redesign implementation, runtime, test, image build or qualification was performed in this checkpoint.
+- Fresh native get_goal reports status paused, thread01a12d8d-d88c-7ea3-8054-9ae5fc5952c3; this checkpoint does not claim active execution or change goal status. Previous CP-3597 active observation remains historical. Work continues on the requested discussion/documentation only.
+- Direct ai-station, same branch/worktree, source HEAD555d747832a167878d20500ba1d45ec6a14d6067, submodulebab9841. Existing six source/test draft paths remain untouched. Task Codex PID564888 and Claude pane PID233376 preserved; unrelated home-directory/app-server/startup-trace processes left untouched.
+- Explicit design boundaries: fixed /act/output mount with per-task immutable directories, no output path in assignment; Host-only independent verification/commit; SUCCEEDED permits Teacher failure or QC INVALID after complete result sealing; uncertain cleanup retains capacity fences; status queries carry liveness without a fifth API; single-shard cleanup does not kill shared inference services. These are design requirements, not runtime observations.
+- Original approved snapshots/history/evidence retained. Same-eight W1/W2, independent40/two20 exact-W8, formal split/quota and training-ready manifest remain required and unproven. Retained all; archived none; existing scratch/build/socket deletion candidates remain only candidates. No hardware/training/push/deletion/threshold downgrade.
 
 ## CP-3597 — Scoped Python contexts and native Recorder/MCAP readback GREEN
 
