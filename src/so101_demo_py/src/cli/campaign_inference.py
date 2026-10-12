@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import signal
 import sys
@@ -19,7 +20,7 @@ from types import SimpleNamespace
 from so101_demo.runtime.inference.config import _open_regular, _service, verify_head_configuration
 from so101_demo.runtime.inference.executor import SpawnExecutor
 from so101_demo.runtime.inference.service import InferenceService, InferenceUnixServer
-from so101_demo.runtime.parallel_ipc.frames import _decode_payload, canonical_json
+from so101_demo.runtime.parallel_ipc.frames import _pairs, canonical_json
 
 
 def _document(path):
@@ -27,7 +28,14 @@ def _document(path):
         payload = stream.read(1024 * 1024 + 1)
     if len(payload) > 1024 * 1024:
         raise ValueError("INFERENCE_SERVICE_INPUT_INVALID: config size")
-    return _decode_payload(payload), payload
+    try:
+        document = json.loads(payload.decode("utf-8", errors="strict"), object_pairs_hook=_pairs,
+            parse_constant=lambda _value: (_ for _ in ()).throw(ValueError("nonfinite")))
+        if type(document) is not dict:
+            raise ValueError("object required")
+    except (ValueError, RuntimeError, UnicodeError) as error:
+        raise ValueError("INFERENCE_SERVICE_INPUT_INVALID: config JSON") from error
+    return document, payload
 
 
 def _inputs(arguments):

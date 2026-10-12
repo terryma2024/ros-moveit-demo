@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: c287b30fa33e9e78bd52a3cdc62a24d5669dae62
+current_commit: e73b2dc6eb675fe1c3d0fbb3477ab3269aea069e
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3578
+latest_checkpoint: CP-3579
 next_experiment: Implement the actual shard entry and two campaign images with namespace ownership and real stop receipts; then select the current workload and ports in shard/Host composition.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3579 — Actual inference image built; formatted config integration fixed
+
+- Real build image-build-20261012T043856Z rc0 in22.897s produced inference image sha256:0ce11e2f365c6329ba6a7650992071e255c113344d069662687af4d7edfe6b26 from source commit668b3e0479dd30c9fc435641bf73c320edb548ad/submodulebab9841a697e1edc1411ed620c55131003d21094. Actual image build/readback source SHA35374f410fa185ba835022bcb8fe88510aea5afee7f5bb94f255ac324859c89c, install SHA4b01afbfdcbf5dbcbb22e25a0d786b0f9306697c5aaabb125148b42c9e3cc675, module origin /act/install/lib/python3.12/site-packages/so101_demo/__init__.py, interpreter /act/venv/bin/python. Actual Torch2.13.0+cu130/ultralytics8.4.115 and Python/dpkg dependency inventory retained. Pre/post dependency-base ID check and actual resulting layer-ancestry comparison passed. This is one role image, not the final common two-image freeze.
+- Retained three terminal predecessor builds: 043614 frontend download timeout (no install ran); 043728 bare image ID interpreted by BuildKit as repository/tag (no install ran); 043815 actual install/freeze succeeded but ROS-generated setup accessed optional unset AMENT_TRACE_SETUP_FILES. Removed unused external frontend, selected the existing local tag with independently verified exact ID/layer ancestry, and scoped nounset around ROS setup while preserving strict checks for our own script. No shared tag/config changes, no base image or evidence deletion.
+- Real fixed-launch head image probe gpu-image-probe-10a40557f534 exited2 before model startup with NON_CANONICAL_JSON. Container25e1f827c6d64c82b7bcc14c3d5cda2f913a088d8a672ed9d7d22485210c7cf3 and startup stdout/stderr/inspect retained. The probe is explicitly unqualified/synthetic/no ROS/no motion/no calibration; its one-instance/one-thread test config is not a formal campaign config or Head promotion. Candidate weights were read from the preserved import path and matched SHA2afd550694abfbe6d1c37922c9ea0b4a0f8567bef94cf4c4ec85d4b50c0cc82a. The stale repository head runtime's old path is absent; that stale path/config is not a new calibration input.
+- Fixed campaign_inference's file reader to use normal strict JSON rather than the canonical wire decoder, consistent with the campaign config reader. Original payload bytes remain unchanged for descriptor hash readback; closed fields, duplicate keys, nonfinite values, object requirement and size cap remain. Binary wire decoding is unchanged. Targeted.qIkD0lCk rc1,2 failed/129 passed reproduces formatted config refusal and inconsistent direct parse exception. Final targeted.9ZYjgbrL rc0,214 passed in1.90s (wall2s), exact argv `run-targeted-container.zsh src/so101_demo_py/test/runtime/inference src/so101_demo_py/test/runtime/container_campaign src/so101_demo_py/test/cli/test_campaign_inference.py -q`. Fresh NVMe scratch/interpreter/tempfile/import/argv/log/JUnit retained, no full/package/benchmark gate.
+- Inline review covered exact JSON scope, unchanged wire contract, embedded source/install identities, actual base layer readback and shell/source environment fixes. Source fix invalidates the draft image for current execution: build a fresh image/context/generation, never restart the failed probe. Real CUDA/IPC request/response, proven service stop, second shard image/entry/ROS stop and all later campaign/calibration/live/W1/W2/W8/formal gates remain open. Goal ACTIVE; no task-owned running container/stack, all evidence/images/exited probes retained, archived none, completed scratch/socket/probe trees deletion candidates only; no deletion/push/hardware/training/threshold downgrade.
 
 ## CP-3578 — Installed image bootstrap source GREEN, actual image integration next
 

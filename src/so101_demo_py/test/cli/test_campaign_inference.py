@@ -44,3 +44,29 @@ def test_entry_without_ml_dependencies_reports_start_failure_without_fallback(tm
     assert module.main(argv(tmp_path)) == 1
     assert "EXECUTOR_START_FAILED" in capsys.readouterr().err
     assert not (tmp_path / "inference.sock").exists()
+
+
+def test_frozen_config_reads_normal_json_without_rewriting_original_bytes(tmp_path):
+    import json
+
+    module = importlib.import_module("so101_demo.cli.campaign_inference")
+    arguments = argv(tmp_path)
+    config = tmp_path / "service.json"
+    original = json.loads(config.read_bytes())
+    payload = (json.dumps(original, indent=2)+"\n").encode()
+    config.write_bytes(payload)
+    document, raw = module._document(config)
+    assert document == original and raw == payload
+    parsed, descriptor = module._inputs(module.build_parser().parse_args(arguments))
+    assert parsed == original and descriptor is None
+
+
+def test_config_duplicate_nonfinite_and_nonobject_still_refused(tmp_path):
+    import pytest
+
+    module = importlib.import_module("so101_demo.cli.campaign_inference")
+    for payload in (b'{"x":1,"x":2}', b'{"x":NaN}', b'[]'):
+        config = tmp_path / "input.json"
+        config.write_bytes(payload)
+        with pytest.raises(ValueError):
+            module._document(config)
