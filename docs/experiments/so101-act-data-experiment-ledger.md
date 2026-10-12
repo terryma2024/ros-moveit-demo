@@ -69,11 +69,17 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3619
-next_experiment: EXP-576 (PLANNED): first real container collection, functional run of eight scenes with one worker through the production CLI, simulation only.
+latest_checkpoint: CP-3620
+next_experiment: EXP-577 (to be planned after the fix): repeat of EXP-576 with a repeatable native readiness probe for task gates, on a rebuilt image, new run and campaign ids.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3620 — EXP-576 VALID failure: first real task stops at a reused single-use readiness probe
+
+- First real collection attempt through the production CLI. Everything up to task assignment worked on real containers; the first task failed immediately with ACT_STACK_READINESS_PROBE_REUSED and the campaign ended cleanly (details in the EXP-576 record). No episode was collected. Not retried: the next run is a new experiment after a source fix and an image rebuild.
+- The unified admission store now exists under the registered root (created by this run); campaign id w1f-20261012T214111Z is consumed. The CLI returned through its failure path after a proven stop; whether the admission was settled is to be read back from the store before the next run.
+- Retained: the run root, the prep directory, the log. Nothing deleted.
 
 ## CP-3619 — Correction of CP-3618 D-B; inputs authored and validated; EXP-576 planned
 
@@ -86,7 +92,7 @@ next_experiment: EXP-576 (PLANNED): first real container collection, functional 
 
 ```yaml
 experiment_id: EXP-576
-status: PLANNED
+status: VALID
 prior_experiment: EXP-574, EXP-575, CP-3616 rendering check; Host diagnostic run experiments/nonhead-qualified-inputs.5S5NYiCT (single-worker full restart, about 346 s)
 hypothesis: On the images of source commit 5aba8df8f the production CLI, in the qualification plane with a one-worker functional contract, carries eight scenes through the complete task chain in a real container (reset, Teacher perception and motion, Recorder, offline 10 Hz processing, QC, seal, Host collection, wave verification, frozen index) and settles admission.
 prediction: CLI exit 0; eight collected task records; host/wave-0-verified.json with eight rows; collection-index.json with eight collected tasks and no committed episode; campaign-cleanup terminated true; the default scene gives a Teacher PASS with VALID data and QC PASS. This is the first execution of any real collection task in a container, so a failure at any stage of the first task is a likely and informative outcome.
@@ -111,18 +117,25 @@ provenance:
   gz_partition: the shard's simulation session id written into its spec
 commands:
   - command: zsh <registered root>/act-w1-inputs-20261012T214111Z/inspect.zsh
-    exit_code: PENDING
+    exit_code: 0
   - command: zsh <registered root>/act-w1-inputs-20261012T214111Z/run-w1.zsh
-    exit_code: PENDING
+    exit_code: 1
 observed:
-  - PENDING
+  - Discovery listed twelve roles READY with one candidate each, the r12 proposal and activation receipt among them.
+  - The CLI passed input resolution, the formal freeze with the bound scene manifest, per-scene scope writing, operation preparation and unified admission (first creation of the unified store), built the campaign owner, started the Teacher service and one shard, and reached READY.
+  - The first task, wave-0-w00-default, was assigned and failed at once with fault ACT_STACK_READINESS_PROBE_REUSED; the instance reported the fault, stopped and exited 0 with cleanup_confirmed true; the task journal holds assigned.json and failed.json with reason CONTAINER_INSTANCE_REPORTED_FAULT: ACT_STACK_READINESS_PROBE_REUSED. The task directory holds only owned-runtime-processes.json; no reset, Recorder, inference or Teacher step ran.
+  - No further scene was dispatched (one worker). The CLI reported CAMPAIGN_RUN_FAILED: CONTAINER_WAVE_COMMIT_READBACK_INVALID and exited 1. host/campaign-cleanup.json records services and shard terminated true with stop_reason CAMPAIGN_RUN_INTERRUPTED; both containers exited 0; no container left running. No wave-0-verified.json, campaign-result.json or collection-index.json was written.
+  - Source of the fault, read in code - the shard gives the task builder the stack's own readiness probe (so101_teleop/unified/pick_place_startup_issuer.py InstalledActStackReadinessProbe), which is single-use by design (`_attempted` then ACT_STACK_READINESS_PROBE_REUSED) and was already consumed by the shard's start; the task's first step, start_physical_runtime, calls it again through build_collection_task's `ready_probe=lambda _requirements: stack.ready_probe()`.
+  - Observation outside the run - tmux session codex-act-container-20261012, preserved since the handoff, no longer exists at pre-flight; the coordinator never addressed it and does not know who closed it.
 inferred:
-  - NONE
-conclusion: PENDING
+  - The task chain beyond the readiness gate remains unexercised; every later stage of the failure map is still unknown.
+conclusion: VALID failure at the first step of the first task. The control, freeze, admission, service and shard start, fault reporting, per-instance stop and campaign cleanup all behaved as designed on a real run; the collection task cannot start because the borrowed native stack's single-use readiness probe is reused for task gates. A real integration defect that no unit test covered (the tests' stack double accepts repeated probes).
 evidence:
-  - PENDING
-decision: PENDING
-next_experiment: NONE
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-20261012T214111Z (host/campaign-cleanup.json, host/wave-0/task-journal/wave-0-w00-default, wave-0/w00/g1/instance-exit.json, inputs/)
+  - /data/work/so101-evidence/act-data/20260924-fbc25063-resume/act-w1-inputs-20261012T214111Z (inputs, candidates.json, cli-rc.txt)
+  - /tmp/so101-debug-act-data-66c42e4c/w1-20261012T214111Z.log
+decision: KEEP
+next_experiment: EXP-577
 ```
 
 ## CP-3618 — Coordinator decisions to unblock the first real functional run; no human answer was received
