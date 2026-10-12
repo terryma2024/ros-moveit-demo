@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python、ROS 2 Jazzy、MuJoCo、Docker、现有私有 Unix IPC、MCAP、pytest/xdist。
 
-**Spec:** [2026-10-12-so101-container-one-way-control-design.md](../specs/2026-10-12-so101-container-one-way-control-design.md)。用户于书面设计补充旧协议清理要求后回复 `ok`，书面设计已确认；本实施计划待审阅。
+**Spec:** [2026-10-12-so101-container-one-way-control-design.md](../specs/2026-10-12-so101-container-one-way-control-design.md)。用户已确认书面设计、task_id 简化及旧协议清理，并于本计划提交 `a36c1f1e5` 后回复 `ok` 批准实施。执行方式沿用当前 Codex inline；无需再次审批。
 
 ## Global Constraints
 
@@ -162,4 +162,4 @@ Host 本地记录任务 ID、所属容器、固定目录映射和回收结果，
 
 自审确认新接口签名一致；任务归属只核对 task_id，没有改名保留执行身份或提交证明协议；原有本地执行安全条件与数据 QC保持。路径变化限制在实例 output 与其固定 mount；旧代码清理发生在完整门禁之前。所有步骤未执行，checkpoint 不宣称 GREEN。
 
-当前 native goal 实际为 paused。审阅本计划后继续沿用既定 Codex inline 执行方式；执行开始时读回 native goal，不能把 Markdown 状态当作 active goal。原有实施授权、禁止事项、批准快照及未完成的 campaign gates继续适用。
+本计划已批准。执行前读回 native goal 仍为 paused；当前 native 工具无恢复接口，已请求恢复 goal 状态而非再次审批计划。恢复到 active 后继续沿用既定 Codex inline 执行方式，不能把 Markdown 状态当作 active goal。原有实施授权、禁止事项、批准快照及未完成的 campaign gates继续适用。

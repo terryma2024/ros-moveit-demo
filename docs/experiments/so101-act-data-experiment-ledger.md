@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 55db48a2a
+current_commit: a36c1f1e5a0dd6f79e2deeba70191b836e7323d2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,19 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3599
-next_experiment: Review the one-way container control implementation plan; preserve the chosen inline Codex execution method, interrupted drafts and all original campaign gates.
+latest_checkpoint: CP-3600
+next_experiment: Restore the existing native goal from paused to active, then execute the approved one-way plan Task 1; no further plan approval is required.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3600 — Plan execution approved; drafts preserved; native goal remains paused
+
+- User replied "ok" after written implementation plan commit a36c1f1e5, approving inline Codex execution. All plan/spec review requirements are satisfied, including sole task_id attribution and mandatory legacy source/test cleanup. No further authorization question is pending.
+- Read executing-plans and TDD; existing human overrides require inline self review, no independent agents, no evidence deletion, and low-frequency full gates. Native get_goal twice returned paused for thread01a12d8d-d88c-7ea3-8054-9ae5fc5952c3. Available native tools create/get/update do not expose resume; do not recreate an unfinished goal or fake ACTIVE in Markdown. Requested actual goal restoration through user input; implementation has not started while this prerequisite remains unmet.
+- Preserved all six interrupted draft files plus tracked diff in immutable new run subdirectory one-way-preflight-zs528tzp, with exact SHA256 and size readback in manifest.json. Direct ai-station, HEADa36c1f1e5a0dd6f79e2deeba70191b836e7323d2, existing branch/worktree and submodulebab9841 unchanged. Docker reports no running container, /data filesystem has1.3T free, GPU0 has15341MiB free of16311MiB. Preserved Claude pane PID233376 and current Codex PID564888; no runtime launched or stopped.
+- Ruling: keep this plan's execution ledger/evidence under the registered dispatch R rather than creating skill scratch under source .superpowers — single evidence-root requirement takes precedence; no capability change. Ruling: continue existing inline self review and low-frequency final full gates instead of skill-requested independent review/full suite per small task — explicit user dispatch controls the workflow.
+- No pytest, build, product dependency install, source change or qualification in this preflight. Native goal status remains honestly paused; no blocked/complete/pause mutation was sent. Retained all; archived none; previous deletion candidates remain undeleted. No selfSSH/dst/agents/resume/new worktree/hardware/training/push/deletion/threshold downgrade.
 
 ## CP-3599 — Written design approved; one-way implementation plan self-reviewed
 
