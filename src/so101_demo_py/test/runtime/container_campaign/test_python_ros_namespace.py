@@ -55,3 +55,92 @@ def test_current_worker_inventory_accepts_only_its_own_complete_scoped_graph():
         teacher_profile=True,namespace=namespace)
     assert not RuntimeBinding.worker_node_inventory_matches(tuple(n for n in scoped if not n.endswith('/neck_controller')),
         teacher_profile=True,namespace=namespace)
+
+
+# ---- reset and evidence contexts (argument construction only) -----------------------------------------------------
+# These tests build and inspect the arguments `rclpy.init` receives. They do not reach a ROS graph, so they do not prove that
+# a real namespaced stack answers the reset and evidence calls; that needs a later real-container run.
+
+NAMESPACE='/act/campaign/w00'
+RESET_WORLD='/mujoco_ros2_control_node/reset_world'
+
+
+class _InitReached(Exception):
+    """Raised by the node factory so the call under test stops right after `rclpy.init`."""
+
+
+@pytest.fixture
+def init_calls(monkeypatch):
+    import rclpy
+    from so101_demo.backends.mujoco import teleop_runtime
+    calls=[]
+    def init(*args,**kwargs):
+        calls.append((args,kwargs))
+    def create_node(*args,**kwargs):
+        raise _InitReached
+    monkeypatch.setattr(rclpy,'init',init)
+    monkeypatch.setattr(rclpy,'create_node',create_node)
+    return teleop_runtime,calls
+
+
+def reset_and_evidence_calls(teleop_runtime):
+    for call in (lambda:teleop_runtime.current_evidence('session',timeout_s=.1),
+                 lambda:teleop_runtime.transactional_reset('session',timeout_s=.1),
+                 lambda:teleop_runtime.transactional_reset('session',timeout_s=.1,act_profile=True)):
+        with pytest.raises(_InitReached):call()
+        yield
+
+
+def mark_container(monkeypatch):
+    monkeypatch.setenv('SO101_ACT_CONTAINER_NAMESPACE',NAMESPACE)
+    monkeypatch.setenv('ROS_NAMESPACE',NAMESPACE)
+
+
+def test_reset_and_evidence_init_carry_container_remaps(init_calls,monkeypatch):
+    teleop_runtime,calls=init_calls
+    mark_container(monkeypatch)
+    list(reset_and_evidence_calls(teleop_runtime))
+    assert len(calls)==3
+    for args,kwargs in calls:
+        assert args==() and '__ns:='+NAMESPACE in kwargs['args']
+        assert kwargs['args'][:2]==['--ros-args','-r']
+        assert RESET_WORLD+':='+NAMESPACE+RESET_WORLD in kwargs['args']
+        assert '/mujoco_ros2_control_node/set_pause:='+NAMESPACE+'/mujoco_ros2_control_node/set_pause' in kwargs['args']
+        assert '/so101/simulation/evidence:='+NAMESPACE+'/so101/simulation/evidence' in kwargs['args']
+        assert '/joint_states:='+NAMESPACE+'/joint_states' in kwargs['args']
+
+
+def test_reset_world_is_remapped():
+    import rclpy
+    assert (RESET_WORLD,NAMESPACE+RESET_WORLD) in module().namespace_remappings(NAMESPACE)
+    options=module().container_ros_init_options(environment=dict(
+        SO101_ACT_CONTAINER_NAMESPACE=NAMESPACE,ROS_NAMESPACE=NAMESPACE))
+    context=rclpy.context.Context()
+    context.init(**options,domain_id=232)
+    node=None
+    try:
+        node=rclpy.create_node('reset_probe',context=context)
+        assert node.resolve_service_name(RESET_WORLD)==NAMESPACE+RESET_WORLD
+    finally:
+        if node is not None:node.destroy_node()
+        context.shutdown()
+
+
+def test_marker_absent_keeps_bare_init(init_calls,monkeypatch):
+    teleop_runtime,calls=init_calls
+    monkeypatch.delenv('SO101_ACT_CONTAINER_NAMESPACE',raising=False)
+    monkeypatch.setenv('ROS_NAMESPACE','/generic')
+    list(reset_and_evidence_calls(teleop_runtime))
+    assert calls==[((),{}),((),{}),((),{})]
+
+
+def test_container_init_installs_no_signal_handlers(init_calls,monkeypatch):
+    from rclpy.signals import SignalHandlerOptions
+    teleop_runtime,calls=init_calls
+    mark_container(monkeypatch)
+    list(reset_and_evidence_calls(teleop_runtime))
+    assert [kwargs['signal_handler_options'] for _args,kwargs in calls]==[SignalHandlerOptions.NO]*3
+    # the shared options stay free of it: Context.init and the Recorder's own explicit option would otherwise collide
+    assert 'signal_handler_options' not in module().container_ros_init_options(environment=dict(
+        SO101_ACT_CONTAINER_NAMESPACE=NAMESPACE,ROS_NAMESPACE=NAMESPACE))
+    assert module().container_ros_global_init_options(environment={})=={}

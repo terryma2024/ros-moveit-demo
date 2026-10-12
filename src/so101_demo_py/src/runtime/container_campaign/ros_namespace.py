@@ -45,7 +45,7 @@ def namespace_remappings(namespace):
         "trajectory_execution_event", "display_planned_path")
     # Jazzy's installed rcl rejects wildcard remap rules. Keep all current
     # absolute endpoints explicit; relative names already use PushRosNamespace.
-    endpoints = set(names)|{'cup_pose','mujoco_ros2_control_node/set_pause'}
+    endpoints = set(names)|{'cup_pose','mujoco_ros2_control_node/set_pause','mujoco_ros2_control_node/reset_world'}
     controllers = ('arm_controller','gripper_controller','neck_controller')
     for controller in controllers:
         for topic in ('controller_state','state','joint_trajectory','speed_scaling_input',
@@ -95,3 +95,16 @@ def container_ros_init_options(*,environment=None):
     for source,target in namespace_remappings(namespace):
         args.extend(['-r',source+':='+target])
     return dict(args=args)
+
+
+def container_ros_global_init_options(*,environment=None):
+    """Arguments for `rclpy.init` on the default context of a container process that owns its signals.
+
+    The shard main is PID 1 and handles SIGTERM and SIGINT itself, so rclpy must not replace those handlers. Without the
+    marker this is empty and the call stays a bare `rclpy.init()`. The option is not part of `container_ros_init_options`
+    because `Context.init` does not take it and the raw Recorder passes its own.
+    """
+    options=container_ros_init_options(environment=environment)
+    if not options:return {}
+    from rclpy.signals import SignalHandlerOptions
+    return dict(options,signal_handler_options=SignalHandlerOptions.NO)

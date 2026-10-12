@@ -10,6 +10,7 @@ import time
 import rclpy
 from mujoco_ros2_control_msgs.srv import SetPause
 
+from ...runtime.container_campaign.ros_namespace import container_ros_global_init_options
 from .client import FreeJointResetOverride, JointResetOverride, MujocoRosClient
 from ...act.joints import ACT_JOINTS
 from .observer import EvidenceStale, MujocoWorldObserver
@@ -135,7 +136,7 @@ def _pause_snapshot(node, observer, timeout_s: float):
 def current_evidence(simulation_session_id: str, timeout_s: float = 5.0):
     """Return a fresh paused snapshot without advancing physics."""
 
-    rclpy.init()
+    rclpy.init(**container_ros_global_init_options())
     node = rclpy.create_node("so101_teleop_mujoco_evidence")
     observer = MujocoWorldObserver(node, simulation_session_id, max_age_s=1.0)
     try:
@@ -164,7 +165,7 @@ def transactional_reset(
     """
 
     teacher = act_profile is True
-    rclpy.init()
+    rclpy.init(**container_ros_global_init_options())
     service_node = rclpy.create_node("so101_teleop_mujoco_reset_services")
     joint_node = rclpy.create_node("so101_teleop_mujoco_reset_joints")
     observer_node = rclpy.create_node("so101_teleop_mujoco_reset_evidence")
