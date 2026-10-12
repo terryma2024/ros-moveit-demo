@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 421f8ac17
+current_commit: a3a918fde
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,22 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3609
-next_experiment: NONE (no runtime experiment planned); Sonnet writer implements Task 5 child and shard-owner wiring per R/one-way-task4-host-design.md sections 6-8; a read-only survey maps the remaining composition, provider, qualification, cleanup and gate work; first runtime experiment will be a no-motion real-container start/status/terminate after that wiring.
+latest_checkpoint: CP-3610
+next_experiment: NONE (no runtime experiment planned); Sonnet writer implements the Host per-scene input producer, then collection admission rule removal with a Teacher-only service set, per R/one-way-scope-admission-cli-design.md; then CLI composition, image rebuild and the first no-motion real-container start/status/terminate.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3610 — Shard wiring, old-protocol cleanup, ROS scoping, perception ruling and formal scene scope committed
+
+- Commits since CP-3607, each written by a Sonnet subagent and reviewed by Opus on the exact diff with an independent rerun: `777fafb83` child and shard-owner wiring without heartbeat (review R/one-way-task5-wiring-review.json/.patch); `4068b728e` removal of the superseded callback protocol (transport/proxy, worker runner, collection worker and driver, heartbeat channel, container watchdog and their tests, assertion-by-assertion mapping reported before deletion, source-scan test added); `3d4b1d16d` container remaps for reset and evidence plus `reset_world` endpoint and no rclpy signal handlers under the container marker; `dfb1e996c` perception no-pose as a business result; `a3a918fde` formal scope bound to the frozen scene manifest.
+- Reviewer reruns (targeted, not the package gate): targeted.2Yv33lWo after the wiring commit 2043 pass/5 fail, the five being obsolete heartbeat/driver tests later removed; targeted.7j7I1hZs after cleanup and perception 2070 pass/6 skip/0 fail; targeted.0xRIieSA after the scope change 2146 pass/6 skip/0 fail (test/runtime/container_campaign, test/parallel_batch, the scope and recorder-binding files, bundle, campaign_shard CLI tests, xdist 8). Teleop files targeted.MTAgx6rp 97 pass/3 obsolete fail before cleanup; writer run targeted.7ArgxIyK 95 pass after cleanup.
+- Coordinator correction during review: the writer first classed perception `MODEL_ERROR` as business; narrowed test-first to `PERCEPTION_NO_POSE` only (RED targeted.IzjKzpwt, GREEN targeted.QSfbf1c8). The real store and Host readback accept the manifest-free form unchanged.
+- Scope actually proven: unit and wiring level only. Docker, native stack, readiness probe, retirement, ROS graph and inference remain controlled doubles. The ROS scoping tests prove argument construction and name resolution, not that a namespaced stack answers reset or evidence. No real container has run on any commit after `5ac6305e5`.
+- OBSERVED environment limit: the targeted runner venv cannot serve as a gate for test/act as a whole (writer run targeted.NLxBZZH7: 407 failed/46 errors; a baseline run of the untouched HEAD tree targeted.uZK66fAv has 497 failing ids containing all of them; causes MuJoCo version mismatch, missing torch, a head scene safety policy fixture) and cannot collect the whole teleop unified directory (no fastapi). These are environment facts, not source RED; the final package gates need the real install environment.
+- Design saved verbatim as R/one-way-scope-admission-cli-design.md (sha256 ec7af479ebb42397fbe84064693810008f7b42a984541af778f550dd24f77adf). It reports rulings that cannot be executed as stated; asked back to the user, NOT assumed: (1) the ACT sampler does not generate positions, candidates and a reachability report must be supplied; (2) the contact activation receipt is also consumed at formal freeze, Recorder open and Teacher contact-limit construction, so only the admission check is removed, and the only non-candidate receipt on disk says "diagnostic use"; (3) the 5400 s campaign deadline does not cover a 70-scene formal campaign; (4) no rate thresholds exist for the QC valid rate and Teacher success rate. Recorded consequences: collection launches the Teacher service only; scenes are collected at neck 0 with no per-scene visibility proof; formal admission stays unreachable until the container qualification report and verifier replace the pick-place based check.
+- Housekeeping: a writer created a 142 MB source archive `full.tar` in the worktree root by mistake; the coordinator removed it (an accidental build artefact of this session, not evidence). A baseline copy of the HEAD tree under /tmp/so101-debug-act-data-66c42e4c/baseline and pre-edit copies under /tmp/so101-debug-task4-host are deletion candidates, not deleted.
+- Retained all evidence; archived none.
 
 ## CP-3609 — Human rulings: perception terminal is business, both collection admission gates removed, proposed values accepted
 
