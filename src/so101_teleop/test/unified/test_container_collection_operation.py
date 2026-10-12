@@ -43,7 +43,7 @@ def arguments(spec):
         source=Path(p['source_path']),
         runtime_config=Path(p['runtime_config_path']),collection_config=Path(p['collection_config_path']),
         campaign_config=Path(p['campaign_config_path']),root=Path(p['evidence_root']),
-        qualification=True,qualification_contract=None,resume=False,worker_count=1)
+        qualification=True,qualification_contract=None,worker_count=1)
 
 
 @pytest.mark.parametrize('worker_count',[1,2])
@@ -80,13 +80,12 @@ def test_preparation_has_no_resource_or_file_effect_and_actual_admission_persist
         store.close()
 
 
-@pytest.mark.parametrize('problem',['resume','workers','root','old_contract','formal_no_report'])
+@pytest.mark.parametrize('problem',['workers','root','old_contract','formal_no_report'])
 def test_preparation_refuses_invalid_inputs_without_allocating_generation(tmp_path,monkeypatch,problem):
     import so101_demo.runtime.act_fixed_collection_composition as module
     paths,slot,spec,store,workload,inspect = fixture(tmp_path,monkeypatch)
     args = arguments(spec)
-    if problem == 'resume': args.resume = True
-    elif problem == 'workers': args.worker_count = 4
+    if problem == 'workers': args.worker_count = 4
     elif problem == 'root': args.root = tmp_path
     elif problem == 'old_contract': args.manifest.write_text('{"kind":"SINGLE_WORKER"}')
     else: args.qualification=False; args.worker_count=8

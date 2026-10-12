@@ -1,25 +1,37 @@
-"""Prepare collection inputs and operation specs for unified campaign admission."""
+"""Prepare collection operation specs for unified campaign admission and build the campaign owner that runs them."""
 
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 
-from so101_demo.act.parallel_collection import (
-    create_qualification_contract, require_collection_mode,
-)
+from so101_demo.runtime.container_campaign.coordinator import ConcurrentCollectionCoordinator
+from so101_demo.runtime.container_campaign.owner import ContainerCampaignOwner
+from so101_demo.runtime.container_campaign.registry import ContainerLaunchRegistry
+from so101_demo.runtime.container_campaign.result_verifier import ContainerWaveResultVerifier
+from so101_demo.runtime.container_campaign.service_owner import ContainerServiceOwner
+from so101_demo.runtime.container_campaign.shard_launcher import ContainerShardLauncher
+from so101_demo.runtime.inference.config import validate_file_ref
+
+
+def collection_parallel_runtime(path):
+    """The parallel runtime file the collection config binds, as the `{path, sha256}` reference the shards are given.
+
+    The path is resolved against the installed package share, the hash is the collection config's own (the loader has already
+    compared it with the file's bytes)."""
+    from ament_index_python.packages import get_package_share_directory
+    from so101_demo.act.collection_config import load_collection_config
+
+    share = Path(get_package_share_directory('so101_demo_py'))
+    binding = load_collection_config(Path(path), package_share=share)['parallel_runtime']
+    return dict(path=str((share/binding['path']).resolve(strict=True)), sha256=binding['sha256'])
 
 
 def _collection_runtime(path):
     """Resolve lease/domain budgets from the frozen collection runtime binding."""
-    from ament_index_python.packages import get_package_share_directory
-    from so101_demo.act.collection_config import load_collection_config
     from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 
-    share = Path(get_package_share_directory('so101_demo_py'))
-    collection = load_collection_config(Path(path),package_share=share)
-    return _load_runtime_config(share/collection['parallel_runtime']['path'])
+    return _load_runtime_config(validate_file_ref(collection_parallel_runtime(path)))
 
 
 def prepare_collection_operation(arguments, *, services, contact_policy_fingerprint):
@@ -44,8 +56,6 @@ def prepare_collection_operation(arguments, *, services, contact_policy_fingerpr
     from so101_teleop.unified.contracts import Domain,OperationSpec
     from so101_teleop.unified.worker_slots import ActWorkerSlot
 
-    if arguments.resume is not False:
-        raise ValueError('ACT_CONTAINER_RESUME_FORBIDDEN')
     if (type(arguments.qualification) is not bool or type(arguments.worker_count) is not int
             or arguments.worker_count not in ((1,2,8) if arguments.qualification else (8,))):
         raise ValueError('COLLECTION_WORKER_COUNT_INVALID')
@@ -115,99 +125,48 @@ def _digest(path) -> str:
     return hashlib.sha256(target.read_bytes()).hexdigest()
 
 
-def _json(path) -> dict:
-    try:
-        document = json.loads(Path(path).read_bytes())
-    except ValueError as error:
-        raise ValueError("FIXED_COLLECTION_INPUT_INVALID") from error
-    if not isinstance(document, dict):
-        raise ValueError("FIXED_COLLECTION_INPUT_INVALID")
-    return document
+def build_container_campaign_owner(context, *, config, paths, slots, manifest_path, scene_manifest, case_inputs,
+                                   parallel_runtime, approved_inputs, qualification, approved_disk_floor_bytes,
+                                   docker_runner=None, service_query=None, namespace_reader=None, control_factory=None):
+    """Build the campaign owner for an admitted collection; spawns nothing and writes only the launch registry.
 
-
-def require_worker_count(worker_count: int, runtime_config: dict) -> int:
-    """The worker count must be explicit and match what the runtime config declares."""
-
-    if type(worker_count) is not int or worker_count < 1:
-        raise ValueError("FIXED_COLLECTION_WORKER_COUNT_INVALID")
-    declared = runtime_config.get("worker_count")
-    if declared is not None and declared != worker_count:
-        raise ValueError("FIXED_COLLECTION_WORKER_COUNT_MISMATCH")
-    return worker_count
-
-
-def _require_payload_schema(payload: dict) -> dict:
-    """Fail closed if the payload ever drifts from the key set admission enforces."""
-
-    from so101_teleop.unified.admission import _ACT_PAYLOAD_KEYS
-
-    if set(payload) != set(_ACT_PAYLOAD_KEYS):
-        raise ValueError("FIXED_COLLECTION_PAYLOAD_SCHEMA_DRIFT")
-    return payload
-
-
-def build_fixed_collection_spec(*, context, manifest, split_manifest=None, calibration_report,
-                                policy, activation_receipt, collection_config, runtime_config,
-                                root, qualification: bool, worker_count: int,
-                                qualification_contract=None, resume: bool = False) -> dict:
-    """Build the spec the unified service admits: a kind plus exactly admission's payload keys.
-
-    The fixed-collection metadata that admission has no key for lives in the evidence root beside the
-    campaign index -- which is the convention `--resume` already relies on. The epoch, binding,
-    proposal and children come from the admitted context, never from this builder.
+    Order: the launch registry first (admission's `finish` opens it with `create=False`, so a construction failure below can
+    still be settled), then the Teacher-only service owner, the shard launcher, the wave coordinator, the wave verifier and the
+    owner. No timeout is invented; each comes from a frozen field:
+      - Teacher startup budget = the parallel runtime's `initializing_hard_timeout_s`;
+      - Teacher receive budget = the campaign config's `teacher_service.queue_timeout_s + inference_timeout_s`;
+      - Teacher stop budget = the parallel runtime's `worker_recovery_timeout_s`;
+      - the shard launcher derives its own budgets from the same runtime; the coordinator reads the runtime itself;
+      - the campaign deadline is the one admission froze into `context` (`batch_hard_timeout_s`, not changed here).
+    `approved_disk_floor_bytes` is the caller's value from the frozen inputs. `docker_runner`, `service_query`,
+    `namespace_reader` and `control_factory` are the external edges (Docker, the Teacher socket, `/proc`, the container's control
+    channel); `None` keeps each owner's production default.
     """
+    from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 
-    from pathlib import Path as _Path
+    def given(**values):
+        return {name: value for name, value in values.items() if value is not None}
 
-    if type(qualification) is not bool or type(resume) is not bool:
-        raise ValueError("FIXED_COLLECTION_FLAG_INVALID")
-    evidence_root = _Path(root)
-    if (not evidence_root.is_absolute() or not evidence_root.is_dir() or evidence_root.is_symlink()
-            or ".." in evidence_root.parts):
-        raise ValueError("FIXED_COLLECTION_ROOT_INVALID")
-    manifest_document = _json(manifest)
-    runtime_document = _json(runtime_config)
-    require_worker_count(worker_count, runtime_document)
-    kind = manifest_document.get("kind")
-
-    contract_path = None
-    if qualification:
-        if qualification_contract is None:
-            raise ValueError("QUALIFICATION_CONTRACT_PATH_REQUIRED")
-        # created atomically from the not-yet-existing path, before any spawn
-        contract_path = create_qualification_contract(
-            qualification_contract,
-            payload={"scenes": len(manifest_document.get("scenarios", []) or [])},
-            kind=kind if kind in ("SINGLE_WORKER", "TWO_WORKER", "EIGHT_WORKER") else "EIGHT_WORKER")
-        contract = _json(contract_path)
-        require_collection_mode(manifest_kind=contract["kind"], qualification_mode=True)
-    else:
-        contract = _json(qualification_contract) if qualification_contract is not None else None
-        require_collection_mode(manifest_kind=kind, qualification_mode=False, contract=contract)
-
-    if resume:
-        if not (_Path(root) / "campaign-index.json").is_file():
-            raise ValueError("FIXED_COLLECTION_RESUME_INDEX_MISSING")
-
-    operation = "act_collection_resume" if resume else "act_collection_start"
-    payload = {
-        "campaign_id": context.campaign_id, "backend": "mujoco", "worker_count": worker_count,
-        "source_path": str(context.source_path), "source_sha256": _digest(context.source_path),
-        "manifest_path": str(manifest), "manifest_sha256": _digest(manifest),
-        "runtime_config_path": str(runtime_config),
-        "runtime_config_sha256": _digest(runtime_config),
-        "collection_config_path": str(collection_config),
-        "collection_config_sha256": _digest(collection_config),
-        "contact_policy_fingerprint": context.contact_policy_fingerprint,
-        "proposal_path": str(context.proposal_path),
-        "activation_receipt_path": str(activation_receipt),
-        "evidence_root": str(evidence_root), "service_epoch": context.service_epoch,
-        "resource_binding_id": context.resource_binding_id, "qualification_mode": qualification,
-        "qualification_receipt_path": (contract_path if qualification else
-                                       (str(qualification_contract)
-                                        if qualification_contract is not None else None)),
-        "children": list(context.children),
-        "calibration_report_path": str(calibration_report),
-        "calibration_report_sha256": _digest(calibration_report),
-    }
-    return {"kind": operation, "payload": _require_payload_schema(payload)}
+    registry = ContainerLaunchRegistry(Path(paths['host'])/'launches.sqlite3', create=True)
+    try:
+        runtime = _load_runtime_config(validate_file_ref(parallel_runtime))
+        teacher = config['teacher_service']
+        services = ContainerServiceOwner(admitted_context=context, config=config, paths=paths, roles=('teacher',),
+            registry=registry, startup_timeout_s=runtime.initializing_hard_timeout_s,
+            receive_budget_s=teacher['queue_timeout_s']+teacher['inference_timeout_s'],
+            stop_timeout_s=runtime.worker_recovery_timeout_s,
+            **given(docker_runner=docker_runner, query=service_query))
+        launcher = ContainerShardLauncher(context=context, config=config, paths=paths, registry=registry,
+            parallel_runtime=parallel_runtime, approved_inputs=tuple(approved_inputs),
+            config_paths=(Path(context.campaign_config_path),),
+            **given(docker_runner=docker_runner, namespace_reader=namespace_reader))
+        coordinator = ConcurrentCollectionCoordinator(context=context, config=runtime, case_inputs=case_inputs,
+            scene_manifest=scene_manifest, **given(control_factory=control_factory))
+        verifier = ContainerWaveResultVerifier(root=paths['run'], registry=registry, case_inputs=case_inputs,
+            qualification=qualification)
+        return ContainerCampaignOwner(admitted_context=context, config=config, root=paths['run'], service_owner=services,
+            slots=slots, manifest_path=manifest_path, qualification=qualification, launcher=launcher,
+            coordinator=coordinator, verifier=verifier, approved_disk_floor_bytes=approved_disk_floor_bytes)
+    except BaseException:
+        registry.close()
+        raise

@@ -31,26 +31,6 @@ def test_wave_partition_refuses_duplicates_emptiness_and_a_bad_size():
     assert partition_waves(("only-scene",), max_wave_size=20) == (("only-scene",),)
 
 
-def test_qualification_contract_is_created_once_before_any_spawn(tmp_path):
-    import json as _json
-
-    from so101_demo.act.parallel_collection import create_qualification_contract
-
-    target = tmp_path / "qualification-contract.json"
-    path = create_qualification_contract(target, payload={"scenes": 8}, kind="EIGHT_WORKER")
-    document = _json.loads(open(path).read())
-    assert document["kind"] == "EIGHT_WORKER" and document["scenes"] == 8
-    assert not (tmp_path / "qualification-contract.json.partial").exists()
-    # an existing contract is a refusal, never an overwrite: another run must not inherit its evidence
-    with pytest.raises(ValueError, match="QUALIFICATION_CONTRACT_EXISTS"):
-        create_qualification_contract(target, payload={"scenes": 8}, kind="EIGHT_WORKER")
-    with pytest.raises(ValueError, match="QUALIFICATION_KIND_INVALID"):
-        create_qualification_contract(tmp_path / "other.json", payload={"scenes": 8}, kind="W9")
-    with pytest.raises(ValueError, match="QUALIFICATION_CONTRACT_NOT_PERSISTABLE"):
-        create_qualification_contract(tmp_path / "absent" / "qualification-contract.json",
-                                      payload={"scenes": 8}, kind="EIGHT_WORKER")
-
-
 def test_campaign_index_is_atomic_and_records_the_partition(tmp_path):
     import json as _json
 
@@ -64,23 +44,6 @@ def test_campaign_index_is_atomic_and_records_the_partition(tmp_path):
         write_campaign_index(target, waves=(("a",),), qualification=False)
     with pytest.raises(ValueError, match="CAMPAIGN_INDEX_INVALID"):
         write_campaign_index(tmp_path / "bad.json", waves=((),), qualification=False)
-
-
-def test_formal_runs_require_exact_eight_worker_under_a_live_qualification_contract():
-    from so101_demo.act.parallel_collection import require_collection_mode
-
-    require_collection_mode(manifest_kind="SINGLE_WORKER", qualification_mode=True)
-    require_collection_mode(manifest_kind="TWO_WORKER", qualification_mode=True)
-    require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=True)
-    with pytest.raises(ValueError, match="QUALIFICATION_MANIFEST_KIND_INVALID"):
-        require_collection_mode(manifest_kind="train", qualification_mode=True)
-    live = {"revoked": False, "scenes": 40}
-    require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=False, contract=live)
-    with pytest.raises(ValueError, match="FORMAL_MANIFEST_NOT_EIGHT_WORKER"):
-        require_collection_mode(manifest_kind="SINGLE_WORKER", qualification_mode=False, contract=live)
-    for contract in (None, {"revoked": True, "scenes": 40}, {"revoked": False, "scenes": 8}):
-        with pytest.raises(ValueError, match="FORMAL_QUALIFICATION"):
-            require_collection_mode(manifest_kind="EIGHT_WORKER", qualification_mode=False, contract=contract)
 
 
 def _result(scene_id="act-1", **overrides):
@@ -162,8 +125,7 @@ def _campaign_fixture(tmp_path, *, scene_count=5, max_wave_size=2, terminal=(), 
     from so101_demo.act.parallel_collection import FixedActCollectionCampaign
 
     rows = [{"scene_id": f"act-{index}", "split": "train"} for index in range(scene_count)]
-    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
-                "qualification_contract": {"revoked": False, "scenes": 40}}
+    manifest = {"scenarios": rows}
     store = __import__("so101_demo.adapters.act.parallel_collection_results",
                        fromlist=["ActCollectionResultStore"]).ActCollectionResultStore(tmp_path)
     for scene_id in terminal:
@@ -245,8 +207,7 @@ def test_the_real_wave_size_partitions_a_full_formal_manifest(tmp_path):
         20, 20, 5)
 
     rows = [{"scene_id": scene_id, "split": "train"} for scene_id in scene_ids]
-    manifest = {"kind": "EIGHT_WORKER", "scenarios": rows,
-                "qualification_contract": {"revoked": False, "scenes": 40}}
+    manifest = {"scenarios": rows}
     campaign = FixedActCollectionCampaign(manifest, config, context=None, root=tmp_path,
                                           collect_port=_CollectPort(), claim=_Claim())
     outcome = campaign.run()

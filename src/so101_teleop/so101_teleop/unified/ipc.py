@@ -98,22 +98,7 @@ class _PickPlacePhasePayload(_PickPlacePayload):
     ]
 
 
-class _CollectionWorkerSpec(_ActPayload):
-    path: str = Field(min_length=1)
-    sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
-
-    @field_validator('path')
-    @classmethod
-    def _private_absolute_path(cls,value):
-        from pathlib import PurePosixPath
-        path=PurePosixPath(value)
-        if not path.is_absolute() or '..' in path.parts:
-            raise ValueError('IPC_COLLECTION_SPEC_PATH_INVALID')
-        return value
-
-
 class _CollectionStart(_ActPayload):
-    worker_spec: _CollectionWorkerSpec
     launch_generation: int = Field(gt=0,strict=True)
     manifest_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     runtime_config_sha256: str = Field(pattern=r'^[0-9a-f]{64}$')

@@ -114,8 +114,13 @@ def compose_domain_services(
     act_inventory=None,
     act_host_id=None,
     act_owner_identity=None,
+    act_container_inspect=None,
+    act_calibration_identity=None,
 ) -> UnifiedServices:
-    """Build the domain services on top of an already-owned child and store."""
+    """Build the domain services on top of an already-owned child and store.
+
+    The `act_*` arguments are the external probes of ACT admission (GPU inventory, host id, owner identity, Docker inspect, the
+    installed-profile identity). `None` selects the production probe in every case."""
     environment = dict(environment)
     evidence_root = Path(evidence_root)
     state_root = evidence_root / "unified"
@@ -202,6 +207,7 @@ def compose_domain_services(
                 visible_physical_uuids=visible, resource_binding_id=binding,
                 owner_pid=owner_pid, owner_started_ticks=owner_started_ticks,
                 clock_ns=clock, gpu_inventory_probe=inventory_probe,
+                calibration_identity_probe=act_calibration_identity, container_inspect=act_container_inspect,
                 root_registration=dict(path=str(evidence_root.resolve(strict=True)),
                                        uid=evidence_root.stat().st_uid, gid=evidence_root.stat().st_gid),
             )
@@ -245,8 +251,18 @@ def _guard_from_registry(registry: InstanceRegistry):
     return guard
 
 
-def compose_services(environment: Mapping[str, str] | None = None) -> UnifiedServices:
-    """The production entry point: own the child first, then compose the domains."""
+def compose_services(
+    environment: Mapping[str, str] | None = None,
+    *,
+    act_inventory=None,
+    act_host_id=None,
+    act_owner_identity=None,
+    act_container_inspect=None,
+    act_calibration_identity=None,
+) -> UnifiedServices:
+    """The production entry point: own the child first, then compose the domains.
+
+    The keyword arguments are the external ACT probes of `compose_domain_services`; `None` (the default) is production."""
     import os
 
     environment = dict(os.environ if environment is None else environment)
@@ -274,6 +290,11 @@ def compose_services(environment: Mapping[str, str] | None = None) -> UnifiedSer
         evidence_root=Path(evidence_root),
         worker=worker,
         bridge_owner=bridge_owner,
+        act_inventory=act_inventory,
+        act_host_id=act_host_id,
+        act_owner_identity=act_owner_identity,
+        act_container_inspect=act_container_inspect,
+        act_calibration_identity=act_calibration_identity,
     )
     if bridge_owner is not None:
         bridge_owner.bind(services.arbiter, services.safety)

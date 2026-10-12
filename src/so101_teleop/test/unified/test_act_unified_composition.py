@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 
-from so101_teleop.unified.compose import compose_domain_services, resolve_visible_physical_uuids
+from so101_teleop.unified.compose import compose_domain_services, compose_services, resolve_visible_physical_uuids
 
 
 def configured():
@@ -55,3 +55,24 @@ def test_visible_index_mapping_preserves_cuda_order_and_rejects_mismatch():
         assert "GPU_MAPPING_AMBIGUOUS" in str(error)
     else:
         raise AssertionError("conflicting GPU visibility must fail closed")
+
+
+def test_act_probes_reach_the_workload_service_through_both_entries(tmp_path):
+    """The Docker inspect and installed-profile probes are explicit arguments with production defaults (None)."""
+    inspected = lambda container_id: {}
+    profile = lambda: ("a" * 40, "b" * 64)
+    default = compose_domain_services(
+        environment=configured(), evidence_root=tmp_path / "default",
+        act_inventory=lambda: ("GPU-physical-a",), act_host_id=lambda: "host-1",
+        act_owner_identity=lambda: (os.getpid(), 123))
+    assert default.act_workload.calibration_identity_probe is None
+    assert default.act_workload.container_inspect is type(default.act_workload)._inspect_container
+    (tmp_path / "entry").mkdir()
+    services = compose_services(
+        {**configured(), "SO101_UNIFIED_EVIDENCE_ROOT": str(tmp_path / "entry")},
+        act_inventory=lambda: ("GPU-physical-a",), act_host_id=lambda: "host-1",
+        act_container_inspect=inspected, act_calibration_identity=profile)
+    assert services.act_workload.container_inspect is inspected
+    assert services.act_workload.calibration_identity_probe is profile
+    assert services.act_workload.visible_physical_uuids == ("GPU-physical-a",)
+    assert services.act_workload.stable_host_id == "host-1"

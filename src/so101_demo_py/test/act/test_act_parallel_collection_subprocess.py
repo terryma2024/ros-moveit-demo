@@ -55,9 +55,7 @@ def _child_environment():
 
 def test_the_campaign_runs_in_a_child_process_and_reports_what_it_wrote(tmp_path):
     scenes = [{"scene_id": f"act-{index}", "split": "train"} for index in range(4)]
-    (tmp_path / "manifest.json").write_text(json.dumps(
-        {"kind": "EIGHT_WORKER", "scenarios": scenes,
-         "qualification_contract": {"revoked": False, "scenes": 40}}))
+    (tmp_path / "manifest.json").write_text(json.dumps({"scenarios": scenes}))
     script = tmp_path / "child.py"
     script.write_text(_CHILD)
     completed = subprocess.run([sys.executable, str(script), str(tmp_path)],
@@ -76,7 +74,7 @@ def test_the_campaign_runs_in_a_child_process_and_reports_what_it_wrote(tmp_path
 
 
 def test_a_refusal_reaches_the_parent_as_a_non_zero_exit_with_its_reason(tmp_path):
-    (tmp_path / "manifest.json").write_text(json.dumps({"kind": "EIGHT_WORKER"}))   # no scenarios at all
+    (tmp_path / "manifest.json").write_text(json.dumps({}))   # no scenarios at all
     script = tmp_path / "child.py"
     script.write_text(_CHILD)
     completed = subprocess.run([sys.executable, str(script), str(tmp_path)],

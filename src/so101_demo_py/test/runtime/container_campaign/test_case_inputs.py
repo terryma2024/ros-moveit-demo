@@ -57,11 +57,13 @@ def policies():
                 runtime_policy=CONFIG / 'endpoint_pose_development_runtime.yaml')
 
 
-def bound_registry(base, snapshot, scene_bytes):
-    """Controlled registry whose scene identity and contact proposal match the real execution snapshot."""
+def bound_registry(base, snapshot, scene_bytes, **contents):
+    """Controlled registry whose scene identity and contact proposal match the real execution snapshot.
+
+    `contents` replaces the bytes of other roles (`runtime_config`, `collection_config`) of the synthetic registry."""
     identity = dict(model_sha256=snapshot['model_sha256'], scene_sha256=hashlib.sha256(scene_bytes).hexdigest(),
                     mujoco_version=snapshot['mujoco_version'])
-    registry = _registry(base, contents={'scene_model': scene_bytes})
+    registry = _registry(base, contents={'scene_model': scene_bytes, **contents})
     registry['roles']['scene_model']['identity'] = identity
     proposal_path, receipt_path = _proposal_and_receipt(base, model_sha=identity['model_sha256'], tag='-bound')
     proposal = json.loads(proposal_path.read_bytes())

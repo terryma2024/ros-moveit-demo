@@ -49,41 +49,6 @@ def reserve_qualification_scenes(scene_ids: tuple, worker_ids: tuple) -> dict:
                 for index,worker in enumerate(worker_ids)}, surplus=scene_ids[16:])
 
 
-QUALIFICATION_KINDS = frozenset({"SINGLE_WORKER", "TWO_WORKER", "EIGHT_WORKER"})
-_EIGHT_WORKER_SCENES = 40
-
-
-def create_qualification_contract(path, *, payload: dict, kind: str) -> str:
-    """Atomically create the qualification contract BEFORE any spawn, or refuse.
-
-    An existing or non-persistable path is a refusal, never an overwrite: a second campaign must not
-    inherit or silently replace another run's qualification evidence.
-    """
-
-    import json
-    import os
-    from pathlib import Path as _Path
-
-    if kind not in QUALIFICATION_KINDS:
-        raise ValueError("QUALIFICATION_KIND_INVALID")
-    if not isinstance(payload, dict) or not payload:
-        raise ValueError("QUALIFICATION_PAYLOAD_INVALID")
-    target = _Path(path)
-    if target.exists() or target.is_symlink():
-        raise ValueError("QUALIFICATION_CONTRACT_EXISTS")
-    parent = target.parent
-    if not parent.is_dir() or not os.access(parent, os.W_OK):
-        raise ValueError("QUALIFICATION_CONTRACT_NOT_PERSISTABLE")
-    document = {"schema_version": 1, "kind": kind, **payload}
-    temporary = target.with_name(target.name + ".partial")
-    with open(temporary, "w") as handle:
-        handle.write(json.dumps(document, sort_keys=True, indent=2) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(target)
-    return str(target)
-
-
 def write_campaign_index(path, *, waves, qualification: bool) -> str:
     """Atomically publish the campaign index: the wave partition and what it was for."""
 
@@ -115,24 +80,6 @@ def write_campaign_index(path, *, waves, qualification: bool) -> str:
     return str(target)
 
 
-def require_collection_mode(*, manifest_kind: str, qualification_mode: bool, contract=None) -> None:
-    """Qualification runs accept SINGLE_WORKER, TWO_WORKER and EIGHT_WORKER manifests; a formal run must be exactly
-    EIGHT_WORKER under a live 40-scene gate."""
-
-    if type(qualification_mode) is not bool:
-        raise ValueError("COLLECTION_QUALIFICATION_MODE_INVALID")
-    if qualification_mode:
-        if manifest_kind not in QUALIFICATION_KINDS:
-            raise ValueError("QUALIFICATION_MANIFEST_KIND_INVALID")
-        return
-    if manifest_kind != "EIGHT_WORKER":
-        raise ValueError("FORMAL_MANIFEST_NOT_EIGHT_WORKER")
-    if not isinstance(contract, dict) or contract.get("revoked") is not False:
-        raise ValueError("FORMAL_QUALIFICATION_CONTRACT_MISSING_OR_REVOKED")
-    if contract.get("scenes") != _EIGHT_WORKER_SCENES:
-        raise ValueError("FORMAL_QUALIFICATION_SCENE_COUNT_INVALID")
-
-
 _CONFIG_KEYS = frozenset({"max_wave_size", "qualification"})
 
 
@@ -158,10 +105,6 @@ class FixedActCollectionCampaign:
             raise ValueError("CAMPAIGN_MANIFEST_INVALID")
         if not isinstance(config, dict) or set(config) != _CONFIG_KEYS:
             raise ValueError("CAMPAIGN_CONFIG_INVALID")
-        qualification = config["qualification"]
-        require_collection_mode(manifest_kind=manifest.get("kind", "EIGHT_WORKER"),
-                                qualification_mode=qualification,
-                                contract=manifest.get("qualification_contract"))
         self.manifest = manifest
         self.config = config
         self.context = context

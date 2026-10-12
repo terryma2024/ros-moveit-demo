@@ -45,3 +45,16 @@ def test_removed_module_files_do_not_exist(name):
 def test_no_old_protocol_name_in_container_path_module(path):
     text=path.read_text()
     assert [token for token in FORBIDDEN if token in text]==[]
+
+
+# The collection entry points carry none of the superseded builder, injected factories, resume or worker-spec protocol.
+ENTRY_FORBIDDEN=('build_fixed_collection_spec','service_factory','context_factory','worker_spec','_CollectionWorkerSpec',
+                 '--resume')
+ENTRY_MODULES=(PACKAGE/'cli/act_collect_parallel.py',PACKAGE/'runtime/act_fixed_collection_composition.py',
+               TELEOP/'unified/ipc.py')
+
+
+@pytest.mark.parametrize('path',ENTRY_MODULES,ids=lambda path:path.name)
+def test_no_legacy_collection_entry_name_in_cli_composition_or_ipc(path):
+    text=path.read_text()
+    assert [token for token in ENTRY_FORBIDDEN if token in text]==[]

@@ -8,15 +8,17 @@ from so101_demo.cli.campaign_shard import instance_id_for,load_spec
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.container_campaign.launch import ShardLaunchArgs
 from so101_demo.runtime.container_campaign.registry import ContainerLaunch,ContainerLaunchRegistry
-from so101_demo.runtime.container_campaign.service_owner import _write
-from so101_demo.runtime.container_campaign.shard_owner import ContainerShardOwner
+from so101_demo.runtime.container_campaign.service_owner import _docker,_write
+from so101_demo.runtime.container_campaign.shard_owner import ContainerShardOwner,read_container_namespace
 from so101_demo.runtime.inference.config import load_campaign_config,validate_file_ref
 from so101_teleop.unified.contracts import AdmittedCampaignContext
 from so101_teleop.unified.worker_slots import ActWorkerSlot
 
 
 class ContainerShardLauncher:
-    def __init__(self,*,context,config,paths,registry,parallel_runtime,approved_inputs,config_paths):
+    def __init__(self,*,context,config,paths,registry,parallel_runtime,approved_inputs,config_paths,
+                 docker_runner=_docker,namespace_reader=read_container_namespace):
+        # `docker_runner` and `namespace_reader` are the owners' external edges; the defaults are the production ones.
         if (type(context) is not AdmittedCampaignContext or context.workload_kind!='act_collection_start'
                 or type(registry) is not ContainerLaunchRegistry or str(paths['run'])!=context.evidence_root
                 or type(approved_inputs) is not tuple or type(config_paths) is not tuple
@@ -27,6 +29,7 @@ class ContainerShardLauncher:
         self.parallel_runtime=dict(parallel_runtime)
         self.runtime=_load_runtime_config(validate_file_ref(parallel_runtime))
         self.approved_inputs,self.config_paths=approved_inputs,config_paths
+        self.docker_runner,self.namespace_reader=docker_runner,namespace_reader
         self._next_wave=0
         self._prepared={}
 
@@ -85,7 +88,8 @@ class ContainerShardLauncher:
                 config_paths=tuple(dict.fromkeys((*self.config_paths,spec_path))),service_token=token,
                 startup_timeout_s=self.runtime.initializing_hard_timeout_s,
                 status_timeout_s=self.runtime.heartbeat_timeout_s,max_frame_bytes=self.runtime.broker_max_frame_bytes,
-                stop_timeout_s=self.runtime.worker_recovery_timeout_s))
+                stop_timeout_s=self.runtime.worker_recovery_timeout_s,
+                docker_runner=self.docker_runner,namespace_reader=self.namespace_reader))
         self._prepared[wave]=tuple(owners)
         self._next_wave+=1
         return tuple(owners)
