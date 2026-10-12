@@ -46,6 +46,17 @@ def fixture(tmp_path):
     payload.update(worker_slots=[asdict(slot)], qualification_mode=True,
         registered_evidence_root=str(tmp_path), campaign_config_path=str(config_path),
         campaign_config_sha256=hashlib.sha256(config_path.read_bytes()).hexdigest())
+    scenes_path = root/'functional-scenes.json'
+    scenes_path.write_text(json.dumps({'scenarios':[{'scene_id':f'functional-{i:02d}','split':'validation'}
+                                                 for i in range(8)]}))
+    controlled = {name:payload[name] for name in ('source_sha256','runtime_config_sha256',
+                  'collection_config_sha256','contact_policy_fingerprint')}
+    controlled.update(gpu_uuid=GPU,image_source_install=dict(inference=image,shard=image))
+    functional_path = root/'functional-run.json'
+    functional_path.write_text(json.dumps(dict(schema_version=1,kind='ACT_COLLECTION_FUNCTIONAL_RUN',
+        run_id='functional-run',worker_count=1,controlled_identity=controlled,
+        scene_manifest=dict(path=str(scenes_path),sha256=hashlib.sha256(scenes_path.read_bytes()).hexdigest()))))
+    payload.update(manifest_path=str(functional_path),manifest_sha256=hashlib.sha256(functional_path.read_bytes()).hexdigest())
     spec = replace(base, kind='act_collection_start', payload=payload)
     store = IntentStore.open(tmp_path/'state')
     workload = _service(store)
@@ -152,7 +163,8 @@ def test_corrupt_launch_registry_keeps_resources_fenced(tmp_path):
         store.close()
 
 
-@pytest.mark.parametrize('problem',['old_children','unknown','root','config_hash','gpu','slot_count','resume'])
+@pytest.mark.parametrize('problem',['old_children','unknown','root','config_hash','gpu','slot_count','resume',
+                                  'old_manifest','manifest_identity','manifest_workers'])
 def test_closed_container_start_refuses_before_resources(tmp_path,problem):
     paths, slot, spec, store, workload, inspect = fixture(tmp_path)
     payload = dict(spec.payload)
@@ -164,6 +176,14 @@ def test_closed_container_start_refuses_before_resources(tmp_path,problem):
     elif problem == 'gpu': workload.visible_physical_uuids = ('GPU-foreign',)
     elif problem == 'slot_count': payload['worker_slots'] = []
     elif problem == 'resume': spec = replace(spec,kind='act_collection_resume')
+    elif problem in ('old_manifest','manifest_identity','manifest_workers'):
+        path = Path(payload['manifest_path'])
+        document = json.loads(path.read_text())
+        if problem == 'old_manifest': document = {'kind':'SINGLE_WORKER','scenarios':[{}]*8}
+        elif problem == 'manifest_identity': document['controlled_identity']['source_sha256'] = '0'*64
+        else: document['worker_count'] = 2
+        path.write_text(json.dumps(document))
+        payload['manifest_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
     try:
         with pytest.raises(ValueError):
             workload.start(replace(spec,payload=payload),allow_existing=False)

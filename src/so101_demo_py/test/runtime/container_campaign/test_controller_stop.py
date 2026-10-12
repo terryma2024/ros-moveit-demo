@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 
-def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None):
+def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None,idle=False,return_on_empty_ack=False):
     mod = importlib.import_module("so101_demo.runtime.container_campaign.controller_stop")
     clock = [1_000_000_000]
     endpoints = []
@@ -31,6 +31,7 @@ def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None):
         def spin_once(self, **kwargs):
             clock[0] += 10_000_000
             for topic, callback in self.node.callbacks.items():
+                if idle: continue
                 if missing and missing in topic: continue
                 status = 2 if active and active in topic else 4
                 callback(SimpleNamespace(status_list=[SimpleNamespace(status=status,
@@ -40,7 +41,7 @@ def run_probe(monkeypatch, *, missing=None, active=None, bad_ack=None):
     monkeypatch.setattr(mod, "_open_owner", lambda namespace: Owner())
     monkeypatch.setattr(mod, "_ros_types", lambda: (object, SimpleNamespace(Request=lambda: object()), object()))
     result = mod.observe_act_controller_stop(ros_namespace="/act/campaign/w00", timeout_s=0.1,
-                                            monotonic_ns=lambda: clock[0])
+                                            monotonic_ns=lambda: clock[0],return_on_empty_ack=return_on_empty_ack)
     assert closed == [True]
     return mod, result, endpoints
 
@@ -69,6 +70,15 @@ def test_missing_or_active_lane_does_not_prove_stop(monkeypatch, lane):
 def test_cancel_rejection_does_not_become_empty_goal_success(monkeypatch):
     _, observation, _ = run_probe(monkeypatch, bad_ack=1)
     assert not observation.proven
+
+
+def test_idle_ack_can_return_for_retirement_but_never_claims_standalone_stop(monkeypatch):
+    _,observation,_ = run_probe(monkeypatch,idle=True,return_on_empty_ack=True)
+    assert observation.empty_cancel_acknowledged is True
+    assert observation.proven is False
+    assert all(lane['statuses'] is None for lane in observation.document['lanes'].values())
+    _,rejected,_ = run_probe(monkeypatch,idle=True,bad_ack=1,return_on_empty_ack=True)
+    assert rejected.empty_cancel_acknowledged is False and rejected.proven is False
 
 
 @pytest.mark.parametrize("budget", [True, 0, -1, float("inf"), float("nan")])

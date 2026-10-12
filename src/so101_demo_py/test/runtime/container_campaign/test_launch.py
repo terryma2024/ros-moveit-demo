@@ -73,6 +73,10 @@ def test_fixed_image_private_namespaces_and_mounts(tmp_path, role):
     assert f"type=bind,src={owned},dst={owned}" in mounts
     assert f"type=bind,src={paths['config_paths'][0]},dst={paths['config_paths'][0]},readonly" in mounts
     assert not any("docker.sock" in mount or "dst=/act/source" in mount or "dst=/act/install" in mount for mount in mounts)
+    environment = [argv[index+1] for index,value in enumerate(argv) if value == '--env']
+    assert 'ROS_HOME='+str(paths['owned_root']/'tmp/ros-home') in environment
+    assert 'XDG_CONFIG_HOME='+str(paths['owned_root']/'tmp/config') in environment
+    assert 'MPLCONFIGDIR='+str(paths['owned_root']/'tmp/matplotlib') in environment
     if role == "shard":
         assert any("dst=/act/control" in mount for mount in mounts)
         assert all(any(f"dst=/act/ipc/{name},readonly" in mount for mount in mounts) for name in ("head", "teacher"))

@@ -115,12 +115,24 @@ class ControllerStopObservation:
                 return False
         return True
 
+    @property
+    def empty_cancel_acknowledged(self):
+        """Original empty ACKs; never standalone physical or goal-stop proof."""
+        for lane in self.document['lanes'].values():
+            if (lane['cancel_return_code'] != 0 or lane['cancel_received_monotonic_ns'] is None
+                    or lane['goals_canceling'] != []
+                    or lane['statuses'] is not None and any(item['status'] not in (4,5,6)
+                                                            for item in lane['statuses'])):
+                return False
+        return True
 
-def observe_act_controller_stop(*, ros_namespace, timeout_s, monotonic_ns=time.monotonic_ns):
+
+def observe_act_controller_stop(*, ros_namespace, timeout_s, monotonic_ns=time.monotonic_ns,
+                                return_on_empty_ack=False):
     if (type(ros_namespace) is not str
             or re.fullmatch(r"(?:/[a-zA-Z_][a-zA-Z0-9_]*)+", ros_namespace) is None
             or type(timeout_s) not in (int, float) or not math.isfinite(timeout_s)
-            or timeout_s <= 0 or int(timeout_s*1e9) <= 0):
+            or timeout_s <= 0 or int(timeout_s*1e9) <= 0 or type(return_on_empty_ack) is not bool):
         raise ValueError("ACT_CONTROLLER_STOP_CONFIG_INVALID")
     last = monotonic_ns()
     if type(last) is not int or last <= 0:
@@ -167,7 +179,7 @@ def observe_act_controller_stop(*, ros_namespace, timeout_s, monotonic_ns=time.m
                 ros_namespace=ros_namespace, started_monotonic_ns=started,
                 completed_monotonic_ns=clock(), lanes=lanes)
             observation = ControllerStopObservation(canonical_json(document))
-            if observation.proven:
+            if observation.proven or return_on_empty_ack and observation.empty_cancel_acknowledged:
                 return observation
             owner.spin_once(timeout_sec=min(0.01,max(0,(deadline-clock())/1e9)))
         return ControllerStopObservation(canonical_json(dict(schema_version=1,

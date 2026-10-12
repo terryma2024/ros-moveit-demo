@@ -64,6 +64,15 @@ def _native(raw, *, owner, session_id, ros_domain_id, after_ns):
     return value
 
 
+def _goals_stopped(goal,native):
+    # No-status idle servers still need a positive original ACK on every lane,
+    # physical stop and termination of every owned action-server process. No
+    # forced exit or ACK alone can close this proof. _native verifies identity,
+    # namespace/domain/session, chronology, group/graph and physical facts.
+    return goal is not None and (goal.proven or goal.empty_cancel_acknowledged
+        and native is not None and native['kill_sent'] is False)
+
+
 class NativeShardRetirement:
     def __init__(self, *, process_owner, launch_generation, evidence_root, stack, ros_namespace,
                  goal_stop_budget_s, stack_stop_budget_s, goal_stop_probe=observe_act_controller_stop):
@@ -106,7 +115,8 @@ class NativeShardRetirement:
         errors = []
         try:
             goal_observation = await asyncio.wait_for(asyncio.to_thread(self.goal_probe,
-                ros_namespace=self.namespace, timeout_s=self.goal_budget), timeout=self.goal_budget)
+                ros_namespace=self.namespace, timeout_s=self.goal_budget,
+                return_on_empty_ack=True), timeout=self.goal_budget)
             if type(goal_observation) is not ControllerStopObservation:
                 raise ValueError("ACT_CONTROLLER_STOP_OBSERVATION_REQUIRED")
             if goal_observation.document["ros_namespace"] != self.namespace:
@@ -133,7 +143,7 @@ class NativeShardRetirement:
             raise ValueError("SHARD_RETIREMENT_PROCESS_CHANGED")
         receipt = dict(schema_version=1, kind="shard_stop_receipt", generation=self.generation,
             process_owner=asdict(self.owner), pid_namespace_inode=self.namespace_inode,
-            goals_stopped=goal_observation is not None and goal_observation.proven,
+            goals_stopped=_goals_stopped(goal_observation,native_observation),
             controllers_stopped=native_observation is not None,
             ros_children_exited=native_observation is not None, ros_graph_empty=native_observation is not None,
             forced=native_observation is not None and native_observation["kill_sent"])
@@ -193,7 +203,7 @@ def read_shard_stop_evidence(root, *, process_owner, launch_generation, ros_name
             owner = ProcessOwnerKey(**audit["native_owner"])
             native = _native(raw, owner=OwnerKey(**asdict(owner)), session_id=session_id,
                 ros_domain_id=ros_domain_id, after_ns=goal.document["completed_monotonic_ns"] if goal else 1)
-        facts = dict(goals_stopped=goal is not None and goal.proven, controllers_stopped=native is not None,
+        facts = dict(goals_stopped=_goals_stopped(goal,native), controllers_stopped=native is not None,
             ros_children_exited=native is not None, ros_graph_empty=native is not None,
             forced=native is not None and native["kill_sent"])
         _require(all(type(receipt[name]) is bool and receipt[name] == value for name,value in facts.items()))

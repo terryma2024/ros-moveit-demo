@@ -97,7 +97,9 @@ def build_container_argv(*, role, image, gpu_uuid, host_paths, container_name, u
             "PYTHONNOUSERSITE=1", "PYTHONDONTWRITEBYTECODE=1",
             "YOLO_CONFIG_DIR="+str(temporary / "ultralytics"),
             "TORCH_HOME="+str(temporary / "torch"), "HF_HOME="+str(temporary / "huggingface"),
-            "XDG_CACHE_HOME="+str(temporary / "cache"), "ROS_LOG_DIR="+str(owned / "ros-logs")]
+            "XDG_CACHE_HOME="+str(temporary / "cache"), "XDG_CONFIG_HOME="+str(temporary / "config"),
+            "MPLCONFIGDIR="+str(temporary / "matplotlib"), "ROS_HOME="+str(temporary / "ros-home"),
+            "ROS_LOG_DIR="+str(owned / "ros-logs")]
         if role == "shard":
             _require(type(entry) is ShardLaunchArgs)
             _require(entry.spec in host_paths["config_paths"])

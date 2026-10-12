@@ -430,7 +430,7 @@ class UnifiedWorkloadService:
                 runtime_bytes = verified
         manifest_bytes = self._verify_artifact(
             payload["manifest_path"], payload["manifest_sha256"],
-            read_bytes=spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"),
+            read_bytes=pick_place_validation or container_collection,
         )
         if spec.kind in ("pick_place_validation_phase", "pick_place_validation_full"):
             from so101_demo.act.pick_place_validation_manifest import require_pick_place_validation_manifest
@@ -444,6 +444,24 @@ class UnifiedWorkloadService:
                 "contact_policy_fingerprint",
             )):
                 raise ValueError("PICK_PLACE_VALIDATION_MANIFEST_BINDING_MISMATCH")
+        if container_collection and payload['qualification_mode']:
+            from so101_demo.act.parallel_collection_contracts import (
+                validate_functional_contract, validate_qualification_contract)
+            from so101_demo.runtime.parallel_ipc.frames import _pairs
+            manifest = json.loads(manifest_bytes,object_pairs_hook=_pairs,
+                parse_constant=lambda name: (_ for _ in ()).throw(ValueError(name)))
+            contract = (validate_functional_contract(manifest) if payload['worker_count'] in (1,2)
+                        else validate_qualification_contract(manifest))
+            expected_identity = {name:payload[name] for name in ('source_sha256','runtime_config_sha256',
+                'collection_config_sha256','contact_policy_fingerprint')}
+            expected_identity.update(gpu_uuid=campaign_config['gpu_uuid'], image_source_install=dict(
+                inference=campaign_config['head_service']['image'], shard=campaign_config['shard_image']))
+            if contract['worker_count'] != payload['worker_count'] or contract['controlled_identity'] != expected_identity:
+                raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')
+            expected_ref = (dict(path=payload['manifest_path'],sha256=payload['manifest_sha256'])
+                            if payload['worker_count'] == 8 else None)
+            if campaign_config['qualification_contract'] != expected_ref:
+                raise ValueError('COLLECTION_RUN_CONTRACT_BINDING_MISMATCH')
         try:
             calibration_path = Path(payload["calibration_report_path"])
             if (not calibration_path.is_absolute() or ".." in calibration_path.parts
