@@ -90,11 +90,47 @@ def test_collection_spec_uses_original_controlled_json_and_builds_the_task_build
     actual,runtime=mod.load_spec(path)
     assert actual==document and runtime.heartbeat_timeout_s==5.
     stack=object()
-    builder=mod.shard_builder(actual,stack=stack,output_root=Path('/act/output'))
+    ready_check=lambda:True
+    builder=mod.shard_builder(actual,stack=stack,output_root=Path('/act/output'),ready_check=ready_check)
     from so101_demo.runtime.container_campaign.task_builder import build_collection_task
     assert type(builder) is functools.partial and builder.func is build_collection_task
-    assert builder.args==() and builder.keywords==dict(stack=stack,shard_spec=actual,output_root=Path('/act/output'))
+    assert builder.args==() and builder.keywords==dict(stack=stack,shard_spec=actual,output_root=Path('/act/output'),
+        ready_check=ready_check)
+    with pytest.raises(ValueError,match='CAMPAIGN_SHARD_READY_CHECK_REQUIRED'):
+        mod.shard_builder(actual,stack=stack,output_root=Path('/act/output'))
     assert not hasattr(mod,'build_shard_driver') and not hasattr(mod,'ChildRuntime')
+
+
+def test_shard_composition_gives_tasks_a_fresh_probe_per_call_and_keeps_the_start_probe_single_use(tmp_path):
+    """Real stack owner and probes over the namespaced launch; only the observer subprocess seam is a double."""
+    import subprocess
+    from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
+    from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
+    mod=importlib.import_module('so101_demo.cli.campaign_shard')
+    observer=tmp_path/'act_stack_ready';observer.write_text('#!/usr/bin/env python3\n');observer.chmod(0o700)
+    stack_root=tmp_path/'stack';stack_root.mkdir()
+    launch=ContainerActStackLaunch(ros2_executable=Path('/usr/bin/true'),session_id='session1',evidence_root=stack_root,
+        ros_domain_id=181,environment={'GZ_PARTITION':'session1'},ros_namespace='/act/campaign/w00',readiness_timeout_s=60.)
+    ready,ready_check,stack=mod.compose_stack(launch,observer)
+    assert stack.ready_probe is ready and ready_check is not ready
+    assert type(ready_check) is RepeatableActStackReadyProbe
+    assert ready_check.launch is launch and ready_check.executable==observer
+    now=1_000_000_000_000
+    document=json.dumps(dict(schema_version=1,session_id='session1',ros_domain_id=181,captured_monotonic_ns=now-10**9,
+        checks={name:True for name in ('mujoco_session','advancing_physics','controller_states','moveit_graph',
+                                       'physical_stop','head_rgb','wrist_rgb')})).encode()
+    runs=[]
+    def observe(argv,**kwargs):
+        runs.append(argv)
+        return subprocess.CompletedProcess(argv,0,document,b'')
+    ready.run=ready_check.run=observe
+    ready.clock_ns=ready_check.clock_ns=lambda:now
+    assert ready() is True and ready.readiness_bytes==document    # the shard start
+    assert [ready_check(),ready_check(),ready_check()]==[True,True,True]
+    assert len(runs)==4 and all(argv==runs[0] for argv in runs)
+    assert runs[0][runs[0].index('--ros-namespace')+1]=='/act/campaign/w00' and runs[0][0]==str(observer)
+    with pytest.raises(ValueError,match='ACT_STACK_READINESS_PROBE_REUSED'):
+        stack.ready_probe()
 
 
 def test_collection_spec_loads_without_head_weights_on_disk(tmp_path):

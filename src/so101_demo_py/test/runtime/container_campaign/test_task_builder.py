@@ -31,10 +31,15 @@ from so101_demo.act.collection_scope import build_collection_scope,write_collect
 from so101_demo.cli.mujoco_batch.request import _load_runtime_config
 from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
 from so101_demo.runtime.container_campaign.task_contracts import InputRef,TaskSpec
+from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
+from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
 from paths import PACKAGE_ROOT
 
 
 MODULE='so101_demo.runtime.container_campaign.task_builder'
+OBSERVER_NOW_NS=1_000_000_000_000
+OBSERVER_CHECKS=('mujoco_session','advancing_physics','controller_states','moveit_graph','physical_stop','head_rgb',
+                 'wrist_rgb')
 
 
 def builder():
@@ -72,8 +77,22 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
     stack=retirement.stack;old=stack.launch
     namespace='/act/campaign/w00'
     stack.launch=ContainerActStackLaunch(ros2_executable=old.ros2_executable,session_id=old.session_id,
-        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,environment=old.environment,
+        evidence_root=old.evidence_root,ros_domain_id=old.ros_domain_id,
+        environment=dict(old.environment)|{'GZ_PARTITION':'task-builder-partition'},
         ros_namespace=namespace,readiness_timeout_s=180.)
+    # The borrowed stack carries the REAL single-use start probe, already consumed by the shard start, exactly as in
+    # production; a task gate that reuses it fails with ACT_STACK_READINESS_PROBE_REUSED instead of passing silently.
+    observer=tmp_path/'act_stack_ready';observer.write_text('#!/usr/bin/env python3\n');observer.chmod(0o700)
+    observer_runs=[]
+    def observe(argv,**kwargs):
+        observer_runs.append(argv)
+        return subprocess.CompletedProcess(argv,0,json.dumps(dict(schema_version=1,session_id=old.session_id,
+            ros_domain_id=old.ros_domain_id,captured_monotonic_ns=OBSERVER_NOW_NS-10**9,
+            checks={name:True for name in OBSERVER_CHECKS}),sort_keys=True).encode()+b'\n',b'')
+    stack.ready_probe=InstalledActStackReadinessProbe(stack.launch,observer,run=observe,clock_ns=lambda:OBSERVER_NOW_NS)
+    assert stack.ready_probe() is True   # the shard start consumed it
+    observer_runs.clear()
+    ready_check=RepeatableActStackReadyProbe(stack.launch,observer,run=observe,clock_ns=lambda:OBSERVER_NOW_NS)
     runtime_path=PACKAGE_ROOT/'config/mujoco/parallel_batch_act_offline.yaml'
     runtime=_load_runtime_config(runtime_path)
     campaign=campaign_fixture(tmp_path)
@@ -108,7 +127,7 @@ def make_env(tmp_path,monkeypatch,*,bound_scene=None):
         SO101_MUJOCO_SESSION_ID=old.session_id,MUJOCO_GL='egl').items():monkeypatch.setenv(name,value)
     stack.process.poll=lambda:None
     return SimpleNamespace(document=document,spec=spec,stack=stack,calls=calls,root=root,output=output,
-        tmp=tmp_path,campaign=campaign,runtime=runtime,row=row,scope=scope,frozen_path=frozen_path)
+        observer=observer,observer_runs=observer_runs,ready_check=ready_check,tmp=tmp_path,campaign=campaign,runtime=runtime,row=row,scope=scope,frozen_path=frozen_path)
 
 
 @pytest.fixture(scope='module')
@@ -243,7 +262,7 @@ def test_bad_input_refuses_before_task_directory_exists(env,monkeypatch,damage):
         spec['campaign_config']=ref(write_config(env.tmp,campaign))
     task=make_task(env,document)
     with pytest.raises(ValueError):
-        builder().build_collection_task(task,stack=env.stack,shard_spec=spec,output_root=env.output)
+        builder().build_collection_task(task,stack=env.stack,shard_spec=spec,output_root=env.output,ready_check=env.ready_check)
     assert not (env.output/'tasks').exists() and not (env.root/'owned-runtime-processes.json').exists()
     assert env.calls==[]
 
@@ -305,7 +324,7 @@ def build(env,**kwargs):
     kwargs.setdefault('inference_client_factory',FakeInference)
     kwargs.setdefault('evidence',lambda session:SimpleNamespace(simulation_session_id=session,reset_epoch=2))
     return builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,
-        output_root=env.output,**kwargs)
+        output_root=env.output,ready_check=env.ready_check,**kwargs)
 
 
 def test_builder_constructs_real_runtime_ports_teacher_without_coordinator(env):
@@ -364,7 +383,7 @@ def test_foreign_stack_or_output_refused_before_task_directory_exists(env,monkey
                        'stack_root':env.tmp}[damage]
         monkeypatch.setattr(env.stack,'launch',type(old)(**fields))
     with pytest.raises(ValueError):
-        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output)
+        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=env.spec,output_root=output,ready_check=env.ready_check)
     assert not (output/'tasks').exists() and not (env.root/'owned-runtime-processes.json').exists()
 
 
@@ -497,7 +516,7 @@ def test_shard_spec_missing_a_required_key_is_a_value_error(env,missing):
     spec=copy.deepcopy(env.spec);del spec[missing]
     with pytest.raises(ValueError):builder().load_task_input(make_task(env),spec)
     with pytest.raises(ValueError):
-        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=spec,output_root=env.output)
+        builder().build_collection_task(make_task(env),stack=env.stack,shard_spec=spec,output_root=env.output,ready_check=env.ready_check)
     assert not (env.output/'tasks').exists()
 
 
@@ -800,7 +819,8 @@ class Rig:
             capture_numeric_evidence=lambda lease,localized,root,boundary:_write_numeric(root,boundary+1.0),
             publish_pose=lambda pose:True,execute_result=self.execute_result,cancel_motion=self.cancelled,
             confirm_no_controller_goal=self.confirmed,close_runtime=lambda:self.events.append(('closed',)))
-        self.build_kwargs=dict(stack=flow.stack,shard_spec=flow.spec,output_root=flow.output,evidence=self.evidence,
+        self.build_kwargs=dict(stack=flow.stack,shard_spec=flow.spec,output_root=flow.output,ready_check=flow.ready_check,
+            evidence=self.evidence,
             inference_client_factory=FakeInference,dependencies=dict(reset_point=self.reset,current_evidence=self.evidence),
             runtime_overrides=overrides,perception_runner=self.perceive,process_group_factory=group,**seams)
         if build:

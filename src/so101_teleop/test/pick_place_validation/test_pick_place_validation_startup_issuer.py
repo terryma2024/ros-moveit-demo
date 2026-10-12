@@ -145,3 +145,44 @@ def test_issuer_rejects_scope_mismatch_before_writing(tmp_path):
     with pytest.raises(MutationError, match="PICK_PLACE_VALIDATION_STARTUP_PROOF_INVALID"):
         issuer.issue(raw)
     assert not (root / "readiness.json").exists()
+
+
+def test_repeatable_ready_probe_observes_afresh_and_leaves_the_start_probe_alone(tmp_path):
+    from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
+
+    _, _, launch, _, artifact = prepared(tmp_path)
+    start, calls = observe(tmp_path, launch, artifact)
+    assert start() is True
+
+    def runner(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return subprocess.CompletedProcess(argv, 0, (json.dumps(artifact) + "\n").encode(), b"")
+
+    repeatable = RepeatableActStackReadyProbe(
+        launch, tmp_path / "act_stack_ready", run=runner, clock_ns=lambda: NOW_NS,
+    )
+    assert [repeatable() for _ in range(3)] == [True, True, True]
+    assert len(calls) == 4
+    assert all(argv == calls[0][0] for argv, _ in calls)
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_REUSED"):
+        start()
+
+
+def test_repeatable_ready_probe_refuses_a_bad_scope_when_built_and_reports_each_failure(tmp_path):
+    from so101_teleop.unified.act_stack_probes import RepeatableActStackReadyProbe
+
+    _, _, launch, _, artifact = prepared(tmp_path)
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_PROBE_CONFIG_INVALID"):
+        RepeatableActStackReadyProbe(launch, tmp_path / "missing")
+    observe(tmp_path, launch, artifact)   # writes the executable observer
+    codes = iter([1, 0])
+
+    def runner(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, next(codes), (json.dumps(artifact) + "\n").encode(), b"")
+
+    probe = RepeatableActStackReadyProbe(
+        launch, tmp_path / "act_stack_ready", run=runner, clock_ns=lambda: NOW_NS,
+    )
+    with pytest.raises(ValueError, match="ACT_STACK_READINESS_COMMAND_FAILED"):
+        probe()
+    assert probe() is True

@@ -35,6 +35,31 @@ class RepeatableActStackStopProbe:
         return self._new_probe()()
 
 
+class RepeatableActStackReadyProbe:
+    """Observe a borrowed, already-started stack's readiness as often as a caller asks.
+
+    `InstalledActStackReadinessProbe` is single use by design: the stack owner's start consumes one and keeps its
+    `readiness_bytes` as startup evidence. Every call here builds a fresh single-use probe from the same launch and
+    observer, so the start probe is never touched and each call is a new no-motion observation."""
+
+    def __init__(self, launch: ActStackLaunch, executable: Path, *,
+                 run=subprocess.run, clock_ns=time.monotonic_ns,
+                 timeout_s: float = 60.0, process_timeout_s: float | None = None) -> None:
+        self.launch, self.executable = launch, Path(executable)
+        self.run, self.clock_ns = run, clock_ns
+        self.timeout_s, self.process_timeout_s = timeout_s, process_timeout_s
+        self._new_probe()   # a bad launch, observer or budget is refused when the shard is composed, not mid-task
+
+    def _new_probe(self) -> InstalledActStackReadinessProbe:
+        return InstalledActStackReadinessProbe(
+            self.launch, self.executable, run=self.run, clock_ns=self.clock_ns,
+            timeout_s=self.timeout_s, process_timeout_s=self.process_timeout_s,
+        )
+
+    def __call__(self) -> bool:
+        return self._new_probe()()
+
+
 class RosGraphClearProbe:
     """Require no ROS nodes in this stack's exact domain after group retirement."""
 

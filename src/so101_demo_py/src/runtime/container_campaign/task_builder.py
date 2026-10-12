@@ -517,7 +517,8 @@ class CollectionTaskExecution:
             raise self._fault('TASK_STOP_REQUESTED')
         runtime.start_physical_runtime()
         if runtime.worker_ready_gate() is not True:
-            raise self._fault('TASK_RUNTIME_NOT_READY')
+            cause=runtime.ready_failure()
+            raise self._fault('TASK_RUNTIME_NOT_READY'+('' if cause is None else ': '+cause))
         issued=state.clock()
         scene=self.task_input.scene_id
         deadlines=dict(task_deadline=task.deadline_monotonic_s,shard_deadline=spec['deadline_monotonic_s'])
@@ -660,7 +661,23 @@ def classify_task_fault(decision,facts):
     return ('DATA_PIPELINE_FAULT: '+decision.act_data_status+' '+reason)[:200]
 
 
-def build_collection_task(task,*,stack,shard_spec,output_root,evidence=None,
+def _stack_ready(ports,ready_check):
+    """One gate's fresh observation. Only an exact True is ready; an exception or any other answer is not ready, and
+    the first cause stays on the ports until a later gate passes, so the fault names why."""
+    try:
+        answer=ready_check()
+        reason=None if answer is True else 'COLLECTION_READY_CHECK_NOT_TRUE'
+    except Exception as error:
+        reason=(str(error) or type(error).__name__)[:200]
+    if reason is None:
+        ports.ready_failure_message=None
+        return True
+    if getattr(ports,'ready_failure_message',None) is None:
+        ports.ready_failure_message=reason
+    return False
+
+
+def build_collection_task(task,*,stack,shard_spec,output_root,ready_check=None,evidence=None,
                           inference_client_factory=InferenceClient,dependencies=None,clock=time.monotonic,
                           runtime_overrides=None,perception_runner=None,teacher_bound_s=None,recovery_timeout_s=None,
                           process_group_factory=None):
@@ -668,7 +685,13 @@ def build_collection_task(task,*,stack,shard_spec,output_root,evidence=None,
 
     The keywords after `output_root` are test seams with production defaults: the Teacher context evidence reader, the
     inference client factory, port `dependencies`, the clock, runtime port overrides, the process group, the perception chain
-    runner and the two bounds that otherwise come from the frozen runtime config."""
+    runner and the two bounds that otherwise come from the frozen runtime config.
+
+    `ready_check` is the repeatable native readiness check of the borrowed stack: one call is one fresh no-motion
+    observation and returns exactly True when the stack is ready. It is required. The stack's own `ready_probe` is the
+    single-use start probe, consumed by the shard start, so it is never a fallback."""
+    if not callable(ready_check) or ready_check is getattr(stack,'ready_probe',None):
+        raise ValueError('COLLECTION_READY_CHECK_REQUIRED')
     loaded=load_task_input(task,shard_spec,clock=clock)
     _check_stack(stack,shard_spec,loaded.root,output_root)
     state=LocalTaskState(clock)
@@ -681,7 +704,7 @@ def build_collection_task(task,*,stack,shard_spec,output_root,evidence=None,
         broker_generation=resources.generation,dependencies=dict(act_profile=True,
             workspace_provider=artifacts.workspace,authorize=local_authorize(state),
             teacher_execution_policy=loaded.teacher_policy,
-            ready_probe=lambda _requirements:stack.ready_probe())|dict(dependencies or {}))
+            ready_probe=lambda requirements:_stack_ready(ports,ready_check))|dict(dependencies or {}))
     settings=loaded.campaign['teacher_service']
     model=settings['model']
     teacher=ActTeacherClient(client=inference_client_factory(socket_path=loaded.teacher['socket_path'],

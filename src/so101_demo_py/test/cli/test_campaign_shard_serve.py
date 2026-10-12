@@ -117,6 +117,27 @@ def test_status_is_starting_until_native_readiness(tmp_path):
     assert stack.timeouts == [runtime.initializing_hard_timeout_s]
 
 
+def test_serve_hands_the_repeatable_ready_check_to_the_task_builder(tmp_path, monkeypatch):
+    mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
+    root = Path(spec['owned_root'])
+    stack.release.set()
+    seen = {}
+    real = mod.shard_builder
+    def spy(loaded_spec, **kwargs):
+        seen.update(kwargs)
+        return real(loaded_spec, **kwargs)
+    monkeypatch.setattr(mod, 'shard_builder', spy)
+    check = lambda: True
+    async def run():
+        shard = asyncio.create_task(mod.serve_shard(spec, runtime, install_signals=False, ready_check=check, **arguments))
+        await wait_for(lambda: (root/'stack-readiness.json').exists())
+        await control_call(root, 'terminate', dict(reason='test end'))
+        return await asyncio.wait_for(shard, 5)
+    assert asyncio.run(run()) == 0
+    assert seen['ready_check'] is check and seen['stack'] is stack
+    assert seen['ready_check'] is not arguments['ready']
+
+
 def test_main_exits_after_executor_stop(tmp_path, monkeypatch):
     mod, spec, runtime, stack, arguments = shard_parts(tmp_path)
     root = Path(spec['owned_root'])

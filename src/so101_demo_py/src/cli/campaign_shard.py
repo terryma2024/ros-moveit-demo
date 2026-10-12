@@ -93,12 +93,17 @@ def _refuse_motion(_task):
     raise ValueError("SHARD_READINESS_HAS_NO_MOTION_PORT")
 
 
-def shard_builder(spec,*,stack,output_root):
-    """The executor's task builder for this workload; readiness shards have no motion port."""
+def shard_builder(spec,*,stack,output_root,ready_check=None):
+    """The executor's task builder for this workload; readiness shards have no motion port.
+
+    Collection tasks gate on `ready_check`, a repeatable fresh observation of the borrowed stack. The stack's own
+    `ready_probe` is the single-use start probe, already consumed by the shard start, so it is never the gate."""
     if spec['workload_kind']=='no_motion_readiness':return _refuse_motion
     if spec['workload_kind']=='act_collection':
         from so101_demo.runtime.container_campaign.task_builder import build_collection_task
-        return functools.partial(build_collection_task,stack=stack,shard_spec=spec,output_root=output_root)
+        if not callable(ready_check):raise ValueError('CAMPAIGN_SHARD_READY_CHECK_REQUIRED')
+        return functools.partial(build_collection_task,stack=stack,shard_spec=spec,output_root=output_root,
+            ready_check=ready_check)
     raise ValueError('CAMPAIGN_SHARD_WORKLOAD_UNKNOWN')
 
 
@@ -120,7 +125,7 @@ def instance_id_for(spec):
 
 
 async def serve_shard(spec, runtime_config, *, process, stack, ready, retirement, socket_root=Path("/act/control"),
-                      output_root=None, install_signals=True):
+                      output_root=None, install_signals=True, ready_check=None):
     """Serve the Host's task operations until the executor has stopped; return the process exit code."""
     from so101_demo.runtime.container_campaign import task_executor
     from so101_demo.runtime.container_campaign.retirement import _write
@@ -134,7 +139,8 @@ async def serve_shard(spec, runtime_config, *, process, stack, ready, retirement
     # Host status polling bounds owner silence (heartbeat_timeout_s); the frozen worker recovery bound covers
     # helper stop and native retirement.
     executor = task_executor.ContainerTaskExecutor(instance_id=instance_id_for(spec),
-        builder=shard_builder(spec,stack=stack,output_root=output_root),retirement=start_aware,output_root=output_root,
+        builder=shard_builder(spec,stack=stack,output_root=output_root,ready_check=ready_check),
+        retirement=start_aware,output_root=output_root,
         owner_timeout_s=runtime_config.heartbeat_timeout_s,stop_timeout_s=runtime_config.worker_recovery_timeout_s,
         retire_timeout_s=runtime_config.worker_recovery_timeout_s,ready=False)
     identity = ContainerChildIdentity(runtime_id=spec["runtime_id"],act_campaign_id=spec["campaign_id"],
@@ -183,13 +189,28 @@ async def serve_shard(spec, runtime_config, *, process, stack, ready, retirement
     return 0 if executor.cleanup_confirmed and not failed else 1
 
 
+def compose_stack(launch, observer):
+    """The shard's stack owner and its probes: returns `(start_probe, ready_check, stack)`.
+
+    The start probe is the single-use `InstalledActStackReadinessProbe` the stack owner consumes at start (its
+    `readiness_bytes` are the startup evidence). `ready_check` is the task gates' separate repeatable check, which builds
+    a fresh probe from the same launch and observer on every call and never touches the start probe."""
+    from so101_teleop.unified.act_stack import ActStackProcessOwner
+    from so101_teleop.unified.act_stack_probes import (
+        RepeatableActStackReadyProbe, RepeatableActStackStopProbe, RosGraphClearProbe)
+    from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
+
+    ready = InstalledActStackReadinessProbe(launch,observer)
+    ready_check = RepeatableActStackReadyProbe(launch,observer)
+    stack = ActStackProcessOwner(launch,ready_probe=ready,
+        stop_probe=RepeatableActStackStopProbe(launch,observer),graph_clear_probe=RosGraphClearProbe(launch))
+    return ready,ready_check,stack
+
+
 async def run_shard(spec, runtime_config):
     if os.getpid() != 1 or sys.executable != "/act/venv/bin/python":
         raise ValueError("CAMPAIGN_SHARD_PRIVATE_CONTAINER_REQUIRED")
     from ament_index_python.packages import get_package_prefix
-    from so101_teleop.unified.act_stack import ActStackProcessOwner
-    from so101_teleop.unified.act_stack_probes import RepeatableActStackStopProbe, RosGraphClearProbe
-    from so101_teleop.unified.pick_place_startup_issuer import InstalledActStackReadinessProbe
     from so101_demo.runtime.container_campaign.retirement import NativeShardRetirement, _write
     from so101_demo.runtime.container_campaign.stack_launch import ContainerActStackLaunch
     from so101_demo.runtime.container_campaign.gpu_driver import verify_selected_gpu
@@ -214,14 +235,13 @@ async def run_shard(spec, runtime_config):
     launch = ContainerActStackLaunch(ros2_executable=ros2,session_id=spec["simulation_session_id"],
         evidence_root=stack_root,ros_domain_id=spec["ros_domain_id"],environment=environment,
         ros_namespace=spec["ros_namespace"],readiness_timeout_s=runtime_config.initializing_hard_timeout_s)
-    ready = InstalledActStackReadinessProbe(launch,observer)
-    stack = ActStackProcessOwner(launch,ready_probe=ready,
-        stop_probe=RepeatableActStackStopProbe(launch,observer),graph_clear_probe=RosGraphClearProbe(launch))
+    ready,ready_check,stack = compose_stack(launch,observer)
     process = read_process_owner(os.getpid())
     retirement = NativeShardRetirement(process_owner=process,launch_generation=spec["launch_generation"],
         evidence_root=root,stack=stack,ros_namespace=spec["ros_namespace"],
         goal_stop_budget_s=runtime_config.heartbeat_timeout_s,stack_stop_budget_s=stack.stop_timeout_s)
-    return await serve_shard(spec,runtime_config,process=process,stack=stack,ready=ready,retirement=retirement)
+    return await serve_shard(spec,runtime_config,process=process,stack=stack,ready=ready,retirement=retirement,
+        ready_check=ready_check)
 
 
 def main(argv=None):

@@ -63,7 +63,8 @@ class ContainerCollectionRuntime(ActWorkerRuntime):
             raise ValueError('COLLECTION_STACK_ALREADY_ATTACHED')
         if (self.stack.owner is None or self.stack.process is None or self.stack.process.poll() is not None
                 or self._ready_probe(('controllers','move_group','joint_states','planning_scene')) is not True):
-            raise ValueError('COLLECTION_NATIVE_STACK_NOT_READY')
+            cause=self.ready_failure()
+            raise ValueError('COLLECTION_NATIVE_STACK_NOT_READY'+('' if cause is None else ': '+cause))
         # No launch command, generic station, replacement generation or second
         # simulator is started by the Worker. The shard owns this native stack.
         self._physical_started=True
