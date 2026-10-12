@@ -5,7 +5,7 @@ success_contract: Shared campaign-lifetime head/Teacher YOLO containers, one sha
 worktree: /home/matianyi/Projects/ros-moveit-demo/.worktrees/so101-act-data-0917a
 branch: codex/so101-act-data-0917a
 base_commit: a296a1e0d4a6a4e04233bb6941e98c478fa9ca8c
-current_commit: 1c6478e133dfe4e17bb9ed3a7e14274793f0c655
+current_commit: cf6d5354d62e4099f460b86a8c389cb081bbe8a2
 evidence_root: /data/work/so101-evidence/act-data/20260924-fbc25063-resume
 low_rate_logs: /tmp/so101-debug-act-data-66c42e4c
 confirmed_conclusions:
@@ -69,11 +69,20 @@ open_hypotheses:
   - Real SO-101 six-servo passive serial reads can sustain a proposed 30 Hz baseline; 60 Hz and read/write closed loop remain unmeasured candidates.
   - EXP-517 has source-only authenticated generation close and a Python wire client; controller plugin service lifecycle, per-run broker identity/secret delivery and driver prepare/send wiring remain unproved.
   - A controller-local, stop-proved owner-generation arm and private broker identity delivery can bind the source-only sequential admission to both production launch orders; this remains unproved.
-latest_checkpoint: CP-3570
-next_experiment: Teacher YOLO-only policy and in-memory request/R6 port integration; no transport staging and no generic fallback regression.
+latest_checkpoint: CP-3571
+next_experiment: ACT in-memory capture/request/R6 production port migration, preserving generic current contracts.
 ---
 
 # SO-101 ACT Data Experiment Ledger
+
+## CP-3571 — Teacher YOLO-only policy source sub-boundary GREEN
+
+- Added ActTeacherPerceptionPolicy as a separate ACT business policy. It reuses the existing guarded request/result/durable-admission methods but initializes no Grounded stage and has no fallback decision. Added closed eight-wire-outcome mapping; QUALIFIED remains only the internal readable-candidate value.
+- RED targeted.PoFHQIjo rc 1, 12 missing-module testcase failures. GREEN targeted.TeD0mKO6 rc 0, 169 passed in 0.38 s (wall 0 s); exact argv: run-targeted.zsh `src/so101_demo_py/test/parallel_batch/test_act_teacher_perception.py src/so101_demo_py/test/parallel_batch/test_parallel_batch_perception.py src/so101_demo_py/test/runtime/test_macos_two_worker_broker_port.py -q`.
+- Actual policy tests cover all eight wire outcomes, no pose acceptance on DETECTED alone, successful guarded durable pose write/readback before CONTINUE, geometry/quality rejection as FAILED without fallback, old generation cancellation, visible-write failure remaining INVALID/adjudication-fenced, and forced Grounded request refusal. Generic fallback policy/Mac Broker targeted tests remain green.
+- Inline self review: no existing generic policy/Broker/transport removed or made ACT-compatible; model ID is injected, no frozen-model name refusal; no physical success manufactured from DETECTED; infra/timeout retains INVALID and no next model; current source/stopping/durable-latch checks reused. Exact scoped patch/hash retained as act-teacher-policy.patch and .sha256.
+- This is policy source evidence only. These focused policy fixtures exercise the existing generic latch in isolation; they are not new ACT production input receipts and do not establish the in-memory ACT request/R6 migration or claim that legacy staging has been removed. Next boundary must introduce the scoped current local identity and update actual ACT capture/Worker/ports before selecting this policy in production.
+- No package/benchmark/live gate run. No image/controller/ROS processes started; owned test children stopped, preserved sessions unchanged. Retained all evidence; archived none; scratch remains deletion candidates only. Native goal active, no token budget.
 
 ## CP-3570 — Head IPC backend/local tracker source sub-boundary GREEN
 
